@@ -14,7 +14,7 @@
 
 #include <stddef.h>
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 #include <CoreGraphics/CoreGraphics.h>
 #else
 /** @brief Opaque provider handle for non-Apple parse and contract checking. */

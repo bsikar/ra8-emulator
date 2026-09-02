@@ -22,7 +22,7 @@
  * MMIO access to an owning block, and drops it -- read 0 / write ignored --
  * exactly as the silicon does when the block is stopped. The model half is
  * kept free of any Unicorn dependency so the gate table is unit-testable on the
- * host (tests/test_ra8_emulator_mstp_gate.c); the block glue that needs the engine
+ * host (tests/misc/src/test_ra8_emulator_mstp_gate.c); the block glue that needs the engine
  * lives in @c board_periph_mstp.c.
  *
  * @copyright Copyright (c) 2026 Brighton Sikarskie

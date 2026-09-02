@@ -129,7 +129,12 @@ RA8_INTERNAL static size_t internal_test_resident_pages(const emu_memmap_backing
   (void)memset(s_residency, 0, sizeof(s_residency));
   /* mincore rejects a misaligned address, so its success is also the proof
    * that the aperture is page-aligned -- which uc_mem_map_ptr requires. */
-  if (mincore(backing->host, pages * (size_t)k_page_size, s_residency) != 0) {
+#ifdef __APPLE__
+  char* residency = (char*)&s_residency[0];
+#else
+  unsigned char* residency = &s_residency[0];
+#endif
+  if (mincore(backing->host, pages * (size_t)k_page_size, residency) != 0) {
     return pages + 1U;
   }
   size_t resident = 0U;
@@ -207,10 +212,12 @@ RA8_INTERNAL static uint32_t internal_test_view_word(uc_engine* uc, uint64_t add
 RA8_INTERNAL static uint32_t
 internal_test_backing_word(const emu_memmap_workspace_t* workspace, size_t backing, size_t offset)
 {
-  const uint8_t* const bytes = &workspace->backings[backing].host[offset];
-  uint32_t             value = 0U;
+  const emu_memmap_backing_t* const aperture = &workspace->backings[backing];
+  uint32_t                          value    = 0U;
   for (size_t index = 0U; index < (size_t)k_test_backing_word_sz; index++) {
-    value |= (uint32_t)((uint32_t)bytes[index] << (index * (size_t)k_test_bits_per_byte));
+    const size_t byte_offset = offset + index;
+    value |=
+      (uint32_t)((uint32_t)aperture->host[byte_offset] << (index * (size_t)k_test_bits_per_byte));
   }
   return value;
 }

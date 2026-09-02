@@ -377,7 +377,7 @@ RA8_INTERNAL static int internal_test_requirements(void)
  * @note Test-only helper with no production ABI. @since 0.1.0
  */
 RA8_INTERNAL static int
-internal_test_open_rejects_bad_scratch(test_guarded_scratch_t*             guarded,
+internal_test_open_rejects_bad_scratch(const test_guarded_scratch_t*       guarded,
                                        uint8_t*                            scratch,
                                        emu_presentation_workspace_t*       workspace,
                                        const emu_presentation_workspace_t* saved)
@@ -602,8 +602,8 @@ RA8_INTERNAL static int internal_test_overlay_seed(emu_presentation_workspace_t*
  * @post Ownership of caller-supplied storage is unchanged.
  * @note Test-only helper with no production ABI. @since 0.1.0
  */
-RA8_INTERNAL static int internal_test_overlay_compare(emu_presentation_workspace_t* workspace,
-                                                      const uint8_t*                expected)
+RA8_INTERNAL static int internal_test_overlay_compare(const emu_presentation_workspace_t* workspace,
+                                                      const uint8_t*                      expected)
 {
   uint8_t actual[4096];
   for (size_t offset = 0U; offset < workspace->surface_bytes;) {
