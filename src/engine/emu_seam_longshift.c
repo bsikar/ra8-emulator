@@ -568,14 +568,8 @@ RA8_INTERNAL static bool internal_install_seg_hooks(long_shift_scan_t* scan,
     if (!internal_long_shift_decode(hw1, hw2, &insn)) {
       continue;
     }
-    if (insn.by_reg) {
-      /* The register form aliases to ORRS with Rm == SP, which the core refuses
-       * outright, so it arrives as a real undefined-instruction trap and is
-       * serviced by ::emulate_long_shift_reg off the seam dispatch chain. Only
-       * the immediate form -- which aliases to an ORRS the core happily
-       * MIS-EXECUTES -- has to be intercepted here. */
-      continue;
-    }
+    /* Both immediate and register forms of long-shift alias to ORRS/ORR.W
+     * which Unicorn mis-executes instead of trapping, so both must be intercepted here. */
     if (scan->n_hooks >= (uint32_t)k_lsh_sites_max) {
       (void)priv_emu_io_errf("  long-shift seam: site cap %u reached\n", (unsigned)k_lsh_sites_max);
       return false;
