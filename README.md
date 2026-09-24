@@ -14,12 +14,38 @@ and a display app shows its screen next to that state. Because it runs the
 actual cross-compiled binary through the genuine bring-up path, what you see is
 what the flashed firmware draws.
 
-`just apps::emulator::run <app>` from the repo root builds an app and opens it;
-`--help` covers the rest. The live window is a macOS Cocoa window
-(`just apps::emulator::setup` provisions
-the toolchain and dependencies); every other path -- headless boot, the MMIO
-report, frame capture, console capture -- builds and runs headless on Linux
-too, which is what lets the emulator gates run on a Linux CI runner.
+## Building
+
+```sh
+cmake -B build -S .
+cmake --build build -j
+./build/ra8_emulator path/to/app.elf
+```
+
+`--help` covers the rest. Two things have to be on the machine first: Unicorn
+and Capstone (`libunicorn-dev` and `libcapstone-dev` on Debian and Ubuntu,
+Homebrew Capstone plus a source build of the pinned Unicorn on macOS), and a
+compiler that speaks C23.
+
+That second one bites on a fresh Linux box. `cmake -B build -S .` selects the
+ambient `cc`, and on Debian 12 that is GCC 12, which cannot parse the typed
+enums and `nullptr` this tree uses in every file. Configuration now stops right
+there with a message naming a compiler on your machine that does work, instead
+of failing deep in the build with diagnostics that look like defects in the
+source. GCC 13 and Clang 16 (Apple clang 15) are the oldest that work; pick one
+with a fresh build directory:
+
+```sh
+cmake -B build -S . -DCMAKE_C_COMPILER=gcc-13
+CC=clang-16 cmake -B build -S .
+```
+
+The check itself is `-DRA8_C23_PREFLIGHT=OFF` if you ever need it out of the
+way. CI selects its own pinned compiler, so it never sees the check fire.
+
+The live window is a macOS Cocoa window. Every other path, headless boot, the
+MMIO report, frame capture and console capture, builds and runs headless on
+Linux too, which is what lets the emulator gates run on a Linux CI runner.
 
 ## Unicorn is version-pinned, deliberately
 

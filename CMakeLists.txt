@@ -8,13 +8,14 @@
 # ticked cooperatively so delays advance. Standalone dev tool under tools/,
 # outside the firmware CI gates.
 #
-# cmake -B build -S . && cmake --build build -j ./build/ra8_emulator
-# ../../examples/ek_ra8d2/.../<app>/build/<app>.elf
+# cmake -B build -S . && cmake --build build -j
+# ./build/ra8_emulator path/to/app.elf
 #
-# Needs Unicorn + Capstone: macOS: `just apps::emulator::setup` (Homebrew Capstone +
-# source-built pinned Unicorn) Linux: libunicorn-dev + libcapstone-dev (or a
-# source install) -- found via pkg-config, so the emulator smoke gate runs on
-# the Linux CI runner.
+# Needs Unicorn + Capstone (Linux: libunicorn-dev + libcapstone-dev, or a source
+# install, found via pkg-config; macOS: Homebrew Capstone plus a source build of
+# the pinned Unicorn) and a C23 compiler: GCC 13 or Clang 16 and newer. The
+# ambient `cc` on Debian 12 is GCC 12 and cannot parse this source, so the
+# preflight below refuses it by name rather than letting the build fail deep.
 #
 
 cmake_minimum_required(VERSION 3.20)
@@ -37,6 +38,65 @@ set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# C23 preflight. `cmake -B build -S .` selects the ambient `cc`, which on Debian
+# 12 is GCC 12: it cannot parse a typed enum or `nullptr`, both of which this
+# source tree uses throughout (525 typed enums, 403 `nullptr`s at the time of
+# writing). Without this check GCC 12 fails deep in the build with a scatter of
+# unused-variable and return-type diagnostics that read like defects in the
+# source and are not. Compile the two constructs here instead and refuse up
+# front, naming a compiler on this machine that does work.
+#
+# The source is valid C23 and stays that way; nothing below is ever "fixed" to
+# suit a compiler that cannot read the language. CI selects its own pinned,
+# C23-capable compiler, so this check simply passes there. Set
+# -DRA8_C23_PREFLIGHT=OFF to skip it.
+option(RA8_C23_PREFLIGHT "Refuse to configure with a compiler that cannot parse C23" ON)
+if(RA8_C23_PREFLIGHT)
+  set(RA8_C23_PROBE "${CMAKE_CURRENT_BINARY_DIR}/ra8_c23_probe.c")
+  file(
+    WRITE ${RA8_C23_PROBE}
+    "#include <stdint.h>\n"
+    "typedef enum : uint32_t { k_probe = 1U } probe_t;\n"
+    "[[nodiscard]] static void* probe(void) { return nullptr; }\n"
+    "int main(void) { return (probe() == nullptr) ? (int)(k_probe - 1U) : 1; }\n"
+  )
+  try_compile(
+    RA8_C23_OK ${CMAKE_CURRENT_BINARY_DIR}/ra8_c23_probe SOURCES ${RA8_C23_PROBE}
+    C_STANDARD 23 C_STANDARD_REQUIRED ON
+    OUTPUT_VARIABLE RA8_C23_PROBE_LOG
+  )
+  if(NOT RA8_C23_OK)
+    # Name something on this machine that would work, rather than leaving the
+    # reader to guess at a version.
+    set(RA8_C23_CANDIDATES "")
+    foreach(cand gcc-15 gcc-14 gcc-13 clang-20 clang-19 clang-18 clang-17 clang-16)
+      find_program(RA8_CAND_${cand} ${cand})
+      if(RA8_CAND_${cand})
+        list(APPEND RA8_C23_CANDIDATES "${RA8_CAND_${cand}}")
+      endif()
+    endforeach()
+    if(RA8_C23_CANDIDATES)
+      list(JOIN RA8_C23_CANDIDATES "\n    " RA8_C23_FOUND)
+      set(RA8_C23_HINT "Compilers on this machine that should work:\n    ${RA8_C23_FOUND}")
+    else()
+      set(RA8_C23_HINT "No C23-capable compiler was found on this machine; install one.")
+    endif()
+    message(
+      FATAL_ERROR
+        "${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION} (${CMAKE_C_COMPILER}) cannot compile "
+        "this project.\n"
+        "It is written in C23 and uses typed enums and nullptr throughout. The oldest compilers "
+        "that parse both are GCC 13 and Clang 16 (Apple clang 15).\n"
+        "${RA8_C23_HINT}\n"
+        "Select one with a fresh build directory, for example:\n"
+        "    cmake -B build -S . -DCMAKE_C_COMPILER=gcc-13\n"
+        "    CC=clang-16 cmake -B build -S .\n"
+        "This is a compiler limitation, not a defect in the source: do not change the code to "
+        "suit an older compiler. Set -DRA8_C23_PREFLIGHT=OFF to skip this check."
+    )
+  endif()
+endif()
 
 # Homebrew supplies Capstone on macOS. The pinned Unicorn source build lives in
 # a user-local prefix by default so cloning the repository never requires sudo.
