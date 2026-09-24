@@ -250,6 +250,20 @@ if(BUILD_TESTING)
   add_test(NAME test_emu_memmap COMMAND test_emu_memmap)
 
   add_executable(
+    test_emu_mve_vmov tests/src/test_emu_mve_vmov.c src/engine/emu_engine.c
+                      src/engine/emu_memory_access.c src/host/emu_host_io.c
+  )
+  target_include_directories(
+    test_emu_mve_vmov
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/engine
+            ${UNICORN_INCLUDE_DIR}
+  )
+  target_link_libraries(test_emu_mve_vmov PRIVATE ${UNICORN_LIBRARY})
+  target_compile_options(test_emu_mve_vmov PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME test_emu_mve_vmov COMMAND test_emu_mve_vmov)
+
+  add_executable(
     test_board_sd_storage tests/src/test_board_sd_storage.c src/host/emu_host_io.c
                           src/periph/board_periph_sd_image.c src/periph/board_periph_sd_format.c
   )
