@@ -17,7 +17,6 @@
  * @since 0.1.0
  */
 
-#include <capstone/capstone.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -35,9 +34,9 @@
  * The Q registers alias the FPU D registers (Qn == D[2n]:D[2n+1]) -- the M33 core
  * has those (the firmware uses the FPU) -- so the vector state is read/written
  * through Unicorn's D registers. Any other MVE form falls through and still
- * reports as invalid, so nothing is silently mis-executed. capstone (already
- * linked, and already decoding these for the error path) provides the operands;
- * the engine handle is opened once and reused. On real silicon all of this just
+ * reports as invalid, so nothing is silently mis-executed. Both forms are
+ * decoded straight from their encodings, so no disassembler sits on the
+ * emulation path at all. On real silicon all of this just
  * runs natively on Helium -- this only makes the M33-based emulator faithful to it.
  * ==========================================================================*/
 enum : uint32_t {
@@ -326,69 +325,152 @@ RA8_INTERNAL static bool internal_mve_mem_try(uc_engine* uc, const uint8_t code[
   return true;
 }
 
-/**
- * @brief Map capstone Q-reg @p qreg to its Unicorn D-register half (low/high).
- * @details Map capstone q-reg @p qreg to its unicorn d-register half (low/high); this step is contained within the emu seam mve model and uses bounded caller or module-owned storage.
- * @param[in] qreg Qreg input used by the operation.
- * @param[in] high High input used by the operation.
- * @return The mve q d result produced by the emu seam mve model.
- * @retval value The operation-specific mve q d value.
- * @pre Arguments satisfy the ranges documented for mve q d. @pre The call executes on the emulator's single owning thread.
- * @post State changes remain confined to the emu seam mve model and documented output objects. @post Ownership of caller-supplied storage is unchanged.
- * @note The operation is synchronous and does not transfer heap ownership.
- * @since 0.1.0
- */
-RA8_INTERNAL static int internal_mve_q_d(unsigned int qreg, bool high)
-{
-  const unsigned int idx = qreg - (unsigned int)ARM_REG_Q0; /* Q index 0..7. */
-  return (int)UC_ARM_REG_D0 + (int)(2U * idx) + (high ? 1 : 0);
-}
+/* ============================================================================
+ * VMOV.I32 Qd, #imm, decoded from the raw encoding.
+ *
+ * This used to run through capstone with CS_OPT_DETAIL, which put a
+ * disassembler on the EMULATION path: the operands it returned drove the
+ * emulated register writes, so the library version decided the run's verdict.
+ * Unicorn is pinned and probed; capstone was neither, and this file already
+ * distrusts its Armv8.1-M decode for the contiguous load/store family above.
+ * The fields are three masks and a shift, so they are taken from the encoding
+ * here and capstone is left where its version cannot change a verdict: the
+ * error-path disassembly in emu_insn_seams.c and main.c.
+ *
+ * T32 encoding (Armv8.1-M, one register and modified immediate):
+ *   hw1 = 111 i 1111 1 D 000 imm3
+ *   hw2 = Vd cmode 0 Q op 1 imm4
+ * with Q == 1 and op == 0 selecting the 128-bit vector form. MVE has Q0..Q7
+ * only, encoded as D:Vd == 2 * Qd, so D == 1 (Q8..Q15) and an odd Vd are both
+ * rejected rather than aliased onto a register that does not exist. imm8 is
+ * i:imm3:imm4 and cmode expands it: 0/2/4/6 shift it left by 0/8/16/24, 12 and
+ * 13 shift and fill the low bytes with ones. Every other cmode is a lane width
+ * this seam does not emulate and falls through to the invalid-instruction
+ * report. Cross-checked against capstone 5.0.7 over all 12288 Qd/cmode/imm8
+ * combinations of the .i32 form: identical register and immediate every time.
+ * ==========================================================================*/
+typedef enum : uint32_t {
+  k_mve_vmov_h1_mask   = 0xEFB8U, /**< hw1 fixed bits, i/D/imm3 excluded.      */
+  k_mve_vmov_h1_val    = 0xEF80U, /**< hw1 match for VMOV (immediate).         */
+  k_mve_vmov_h2_mask   = 0x00F0U, /**< Isolates hw2[7:4]: 0, Q, op, 1.         */
+  k_mve_vmov_h2_val    = 0x0050U, /**< hw2[7:4] == 0b0101: Q == 1, op == 0.    */
+  k_mve_vmov_d_bit     = 0x0040U, /**< hw1[6]: set names Q8..Q15, not MVE.     */
+  k_mve_vmov_i_bit     = 0x1000U, /**< hw1[12]: imm8 bit 7.                    */
+  k_mve_vmov_imm3_mask = 0x0007U, /**< hw1[2:0]: imm8 bits 6:4.                */
+  k_mve_vmov_imm4_mask = 0x000FU, /**< hw2[3:0]: imm8 bits 3:0.                */
+  k_mve_vmov_vd_shift  = 12U,     /**< Vd field position in hw2.               */
+  k_mve_vmov_vd_mask   = 0xFU,    /**< Vd field width (four bits).             */
+  k_mve_vmov_cmode_sh  = 8U,      /**< cmode field position in hw2.            */
+  k_mve_vmov_cmode_msk = 0xFU,    /**< cmode field width (four bits).          */
+  k_mve_vmov_i_shift   = 7U,      /**< Position of the i bit inside imm8.      */
+  k_mve_vmov_imm3_sh   = 4U,      /**< Position of imm3 inside imm8.           */
+  k_mve_vmov_shift_mul = 4U,      /**< cmode 0/2/4/6 -> left shift 0/8/16/24.  */
+  k_mve_vmov_cmode_max = 6U,      /**< Largest plain-shift .i32 cmode.         */
+  k_mve_vmov_cmode_o8  = 12U,     /**< cmode 0b1100: (imm8 << 8) | 0xFF.       */
+  k_mve_vmov_cmode_o16 = 13U,     /**< cmode 0b1101: (imm8 << 16) | 0xFFFF.    */
+  k_mve_vmov_ones8_sh  = 8U,      /**< Shift for the one-byte-of-ones form.    */
+  k_mve_vmov_ones16_sh = 16U,     /**< Shift for the two-bytes-of-ones form.   */
+  k_mve_vmov_ones8_fil = 0xFFU,   /**< Low byte the cmode 0b1100 form sets.    */
+  k_mve_vmov_ones16_fl = 0xFFFFU, /**< Low halfword the 0b1101 form sets.      */
+} mve_vmov_field_t;
 
 /**
- * @brief Execute one decoded MVE instruction (no PC change); true iff handled.
- * @details Execute one decoded mve instruction (no pc change); true iff handled; this step is contained within the emu seam mve model and uses bounded caller or module-owned storage.
- * @param[in,out] uc Unicorn engine whose emulated state is read or updated.
- * @param[in] insn Insn input used by the operation.
- * @return The mve exec one result produced by the emu seam mve model.
- * @retval true The mve exec one condition holds or completed successfully; false otherwise.
- * @pre Arguments satisfy the ranges documented for mve exec one. @pre The call executes on the emulator's single owning thread.
- * @post State changes remain confined to the emu seam mve model and documented output objects. @post Ownership of caller-supplied storage is unchanged.
+ * @brief Decode VMOV.I32 Qd, #imm from its two halfwords.
+ * @details Rejects every encoding this seam does not emulate -- the Q8..Q15
+ * register space MVE does not have, an odd Vd, and the cmode values that name
+ * a lane width other than 32-bit -- so an unhandled word is left to fault
+ * rather than executed as a neighbouring instruction.
+ * @param[in]  hw1   First instruction halfword.
+ * @param[in]  hw2   Second instruction halfword.
+ * @param[out] qd    Destination vector register 0..7; untouched unless true.
+ * @param[out] imm32 Expanded 32-bit lane value; untouched unless true.
+ * @return true iff @p hw1 / @p hw2 encode VMOV.I32 Qd, #imm.
+ * @retval true  @p qd and @p imm32 hold the decoded fields.
+ * @retval false Not this form; both outputs are unmodified.
+ * @pre @p qd and @p imm32 are non-null. @pre The call executes on the emulator's single owning thread.
+ * @post No emulated state changes here; decode is pure.
  * @note The operation is synchronous and does not transfer heap ownership.
  * @since 0.1.0
  */
-RA8_INTERNAL static bool internal_mve_exec_one(uc_engine* uc, const cs_insn* insn)
+RA8_INTERNAL static bool internal_mve_vmov_decode(uint16_t hw1, uint16_t hw2, uint32_t* qd,
+                                                  uint32_t* imm32)
 {
-  const cs_arm* d     = &insn->detail->arm;
-  const bool    op0_q = (d->op_count == 2) && (d->operands[0].type == ARM_OP_REG) &&
-                        (d->operands[0].reg >= ARM_REG_Q0) && (d->operands[0].reg <= ARM_REG_Q7);
-  if (!op0_q) {
+  if (((hw1 & (uint16_t)k_mve_vmov_h1_mask) != (uint16_t)k_mve_vmov_h1_val) ||
+      ((hw2 & (uint16_t)k_mve_vmov_h2_mask) != (uint16_t)k_mve_vmov_h2_val)) {
     return false;
   }
-  /* VMOV.I32 Qd, #imm -> replicate the 32-bit immediate into all four lanes. */
-  if ((insn->id == ARM_INS_VMOV) && (d->operands[1].type == ARM_OP_IMM) &&
-      (strstr(insn->mnemonic, ".i32") != nullptr)) {
-    const uint32_t imm  = (uint32_t)d->operands[1].imm;
-    const uint64_t pair = ((uint64_t)imm << (uint64_t)k_mve_lane_shift) | (uint64_t)imm;
-    (void)uc_reg_write(uc, internal_mve_q_d(d->operands[0].reg, false), &pair);
-    (void)uc_reg_write(uc, internal_mve_q_d(d->operands[0].reg, true), &pair);
-    return true;
+  if ((hw1 & (uint16_t)k_mve_vmov_d_bit) != 0U) {
+    return false; /* D:Vd would name Q8..Q15, which MVE does not have. */
   }
-  return false;
+  const uint32_t vd = ((uint32_t)hw2 >> (uint32_t)k_mve_vmov_vd_shift) & (uint32_t)k_mve_vmov_vd_mask;
+  if ((vd & 1U) != 0U) {
+    return false; /* Vd[0] is zero for every vector form. */
+  }
+  const uint32_t cmode =
+      ((uint32_t)hw2 >> (uint32_t)k_mve_vmov_cmode_sh) & (uint32_t)k_mve_vmov_cmode_msk;
+  const uint32_t i_bit = ((hw1 & (uint16_t)k_mve_vmov_i_bit) != 0U) ? 1U : 0U;
+  const uint32_t imm8  = (i_bit << (uint32_t)k_mve_vmov_i_shift) |
+                        (((uint32_t)hw1 & (uint32_t)k_mve_vmov_imm3_mask)
+                         << (uint32_t)k_mve_vmov_imm3_sh) |
+                        ((uint32_t)hw2 & (uint32_t)k_mve_vmov_imm4_mask);
+  uint32_t value = 0U;
+  if ((cmode <= (uint32_t)k_mve_vmov_cmode_max) && ((cmode & 1U) == 0U)) {
+    value = imm8 << (cmode * (uint32_t)k_mve_vmov_shift_mul);
+  } else if (cmode == (uint32_t)k_mve_vmov_cmode_o8) {
+    value = (imm8 << (uint32_t)k_mve_vmov_ones8_sh) | (uint32_t)k_mve_vmov_ones8_fil;
+  } else if (cmode == (uint32_t)k_mve_vmov_cmode_o16) {
+    value = (imm8 << (uint32_t)k_mve_vmov_ones16_sh) | (uint32_t)k_mve_vmov_ones16_fl;
+  } else {
+    return false; /* A lane width this seam does not emulate. */
+  }
+  *qd    = vd >> 1U;
+  *imm32 = value;
+  return true;
 }
 
-/** @brief Lazily open the shared Thumb/M-class Capstone handle; nullptr on failure. */
-RA8_INTERNAL static csh* internal_mve_capstone(void)
+/**
+ * @brief Map Q index @p qd to its Unicorn D-register half (low/high).
+ * @details The Q registers alias the FPU D registers (Qn == D[2n]:D[2n+1]), which the M33 core Unicorn provides; this step is contained within the emu seam mve model and uses bounded caller or module-owned storage.
+ * @param[in] qd Vector register index 0..7.
+ * @param[in] high True for the upper D half, false for the lower.
+ * @return The mve q d result produced by the emu seam mve model.
+ * @retval value The Unicorn register id of the requested half.
+ * @pre @p qd is in [0, 7]. @pre The call executes on the emulator's single owning thread.
+ * @post State changes remain confined to the emu seam mve model and documented output objects. @post Ownership of caller-supplied storage is unchanged.
+ * @note The operation is synchronous and does not transfer heap ownership.
+ * @since 0.1.0
+ */
+RA8_INTERNAL static int internal_mve_q_d(uint32_t qd, bool high)
 {
-  static csh  s_cs;
-  static bool s_cs_ok = false;
-  if (!s_cs_ok) {
-    if (cs_open(CS_ARCH_ARM, (cs_mode)(CS_MODE_THUMB | CS_MODE_MCLASS), &s_cs) != CS_ERR_OK) {
-      return nullptr;
-    }
-    (void)cs_option(s_cs, CS_OPT_DETAIL, CS_OPT_ON);
-    s_cs_ok = true;
+  return (int)UC_ARM_REG_D0 + (int)(2U * qd) + (high ? 1 : 0);
+}
+
+/**
+ * @brief Decode and perform one VMOV.I32 Qd, #imm; true iff it was that form.
+ * @details Writes the replicated immediate through the two D registers the destination Q aliases; this step is contained within the emu seam mve model and uses bounded caller or module-owned storage.
+ * @param[in,out] uc Unicorn engine whose emulated state is read or updated.
+ * @param[in] code The four instruction bytes to decode.
+ * @return The mve vmov try result produced by the emu seam mve model.
+ * @retval true The lanes were written; PC is NOT changed.
+ * @retval false Not this form; no state changed.
+ * @pre @p code holds four valid instruction bytes. @pre The call executes on the emulator's single owning thread.
+ * @post On true all four 32-bit lanes of the destination hold the immediate. @post Ownership of caller-supplied storage is unchanged.
+ * @note The operation is synchronous and does not transfer heap ownership.
+ * @since 0.1.0
+ */
+RA8_INTERNAL static bool internal_mve_vmov_try(uc_engine* uc, const uint8_t code[4])
+{
+  const uint16_t hw1 = (uint16_t)(code[0] | ((uint16_t)code[1] << (uint16_t)k_byte_bits));
+  const uint16_t hw2 = (uint16_t)(code[2] | ((uint16_t)code[3] << (uint16_t)k_byte_bits));
+  uint32_t       qd  = 0U;
+  uint32_t       imm = 0U;
+  if (!internal_mve_vmov_decode(hw1, hw2, &qd, &imm)) {
+    return false;
   }
-  return &s_cs;
+  const uint64_t pair = ((uint64_t)imm << (uint64_t)k_mve_lane_shift) | (uint64_t)imm;
+  (void)uc_reg_write(uc, internal_mve_q_d(qd, false), &pair);
+  (void)uc_reg_write(uc, internal_mve_q_d(qd, true), &pair);
+  return true;
 }
 
 /**
@@ -406,18 +488,13 @@ RA8_INTERNAL static csh* internal_mve_capstone(void)
  */
 bool emulate_mve(uc_engine* uc, uint32_t pc0, const uint8_t code0[4])
 {
-  csh* cs = internal_mve_capstone();
-  if (cs == nullptr) {
-    return false;
-  }
   uint32_t pc = pc0;
   uint8_t  code[4];
   (void)memcpy(code, code0, sizeof(code));
   uint32_t handled = 0U;
   while (handled < (uint32_t)k_mve_max_run) {
-    /* Contiguous load/store first: capstone renders this family as a legacy
-     * `stc p15`, so it must be decoded from the raw encoding, not through the
-     * disassembler below. */
+    /* Contiguous load/store first: it shares the legacy `stc p15` encoding, so
+     * it is matched before the immediate form. */
     if (internal_mve_mem_try(uc, code)) {
       handled++;
       pc += (uint32_t)k_mve_insn_len;
@@ -426,14 +503,7 @@ bool emulate_mve(uc_engine* uc, uint32_t pc0, const uint8_t code0[4])
       }
       continue;
     }
-    cs_insn*     insn = nullptr;
-    const size_t n    = cs_disasm(*cs, code, (size_t)k_mve_insn_len, pc, 1, &insn);
-    if (n != 1U) {
-      break;
-    }
-    const bool ok = internal_mve_exec_one(uc, &insn[0]);
-    cs_free(insn, n);
-    if (!ok) {
+    if (!internal_mve_vmov_try(uc, code)) {
       break; /* first non-MVE (valid) instruction -- relaunch resumes here. */
     }
     handled++;
