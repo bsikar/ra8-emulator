@@ -150,8 +150,7 @@ endif()
 # emu_* module-private cross-TU helpers.
 target_include_directories(
   ra8_emulator
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_hal/inc
-          ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
 )
 
 # Unicorn + Capstone discovery. macOS checks the source-built user prefix before
@@ -196,7 +195,6 @@ if(BUILD_TESTING)
   add_executable(test_emu_host_io tests/src/test_emu_host_io.c src/host/emu_host_io.c)
   target_include_directories(
     test_emu_host_io PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
-                             ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
   )
   target_compile_options(test_emu_host_io PRIVATE -Wall -Wextra -Werror)
   add_test(NAME test_emu_host_io COMMAND test_emu_host_io)
@@ -213,7 +211,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(
     test_emu_presentation
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
             ${UNICORN_INCLUDE_DIR}
   )
   target_link_libraries(test_emu_presentation PRIVATE ${UNICORN_LIBRARY})
@@ -231,7 +229,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(
     test_emu_elf_source
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
             ${UNICORN_INCLUDE_DIR}
   )
   target_link_libraries(test_emu_elf_source PRIVATE ${UNICORN_LIBRARY})
@@ -244,7 +242,7 @@ if(BUILD_TESTING)
   )
   target_include_directories(
     test_emu_memmap
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
             ${UNICORN_INCLUDE_DIR}
   )
   target_link_libraries(test_emu_memmap PRIVATE ${UNICORN_LIBRARY})
@@ -257,7 +255,6 @@ if(BUILD_TESTING)
   )
   target_include_directories(
     test_board_sd_storage PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
-                                  ${CMAKE_CURRENT_SOURCE_DIR}/../../libs/ra8_core/inc
   )
   target_compile_options(test_board_sd_storage PRIVATE -Wall -Wextra -Werror)
   add_test(NAME test_board_sd_storage COMMAND test_board_sd_storage)
