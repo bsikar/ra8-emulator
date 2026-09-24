@@ -218,23 +218,63 @@ target_include_directories(
 find_path(
   UNICORN_INCLUDE_DIR unicorn/unicorn.h
   HINTS ${RA8_UNICORN_PREFIX} ${BREW}
-  PATH_SUFFIXES include REQUIRED
+  PATH_SUFFIXES include
 )
 find_path(
   CAPSTONE_INCLUDE_DIR capstone/capstone.h
   HINTS ${BREW}
-  PATH_SUFFIXES include REQUIRED
+  PATH_SUFFIXES include
 )
 find_library(
   UNICORN_LIBRARY unicorn
   HINTS ${RA8_UNICORN_PREFIX} ${BREW}
-  PATH_SUFFIXES lib REQUIRED
+  PATH_SUFFIXES lib
 )
 find_library(
   CAPSTONE_LIBRARY capstone
   HINTS ${BREW}
-  PATH_SUFFIXES lib REQUIRED
+  PATH_SUFFIXES lib
 )
+
+# REQUIRED on the four calls above ends the configure with "Could NOT find
+# UNICORN_LIBRARY (missing: UNICORN_LIBRARY)" and nothing else, which tells a
+# newcomer neither what the library is for nor how to get it. Report the halves
+# that are actually missing, with the install route for this platform and the
+# variables to point at a private build.
+set(RA8_DEPS_MISSING "")
+foreach(part UNICORN_INCLUDE_DIR UNICORN_LIBRARY CAPSTONE_INCLUDE_DIR CAPSTONE_LIBRARY)
+  if(NOT ${part})
+    list(APPEND RA8_DEPS_MISSING ${part})
+  endif()
+endforeach()
+if(RA8_DEPS_MISSING)
+  list(JOIN RA8_DEPS_MISSING ", " RA8_DEPS_MISSING_TEXT)
+  if(APPLE)
+    set(RA8_DEPS_INSTALL
+        "    brew install capstone\n"
+        "    then build the pinned Unicorn from source into "
+        "$ENV{HOME}/.local/ra8-firmware/unicorn\n"
+        "    (the version pin lives in docs/TOOLCHAIN.md in the firmware repository)"
+    )
+  else()
+    set(RA8_DEPS_INSTALL "    sudo apt install libunicorn-dev libcapstone-dev\n"
+                         "    or build Unicorn from source and point RA8_UNICORN_PREFIX at it"
+    )
+  endif()
+  message(
+    FATAL_ERROR
+      "The emulator needs Unicorn (the CPU) and Capstone (error-path disassembly). Missing: "
+      "${RA8_DEPS_MISSING_TEXT}.\n"
+      "${RA8_DEPS_INSTALL}\n"
+      "Already have them somewhere else? Point the configure at that copy:\n"
+      "    cmake -B build -S . -DUNICORN_INCLUDE_DIR=<prefix>/include "
+      "-DUNICORN_LIBRARY=<prefix>/lib/libunicorn.so\n"
+      "      -DCAPSTONE_INCLUDE_DIR=<prefix>/include "
+      "-DCAPSTONE_LIBRARY=<prefix>/lib/libcapstone.so\n"
+      "Unicorn is version-pinned on purpose: its Armv8.1-M decode differs between releases, so "
+      "an unpinned one makes the same commit pass on one box and fault on another."
+  )
+endif()
 target_include_directories(ra8_emulator PRIVATE ${UNICORN_INCLUDE_DIR} ${CAPSTONE_INCLUDE_DIR})
 target_link_libraries(ra8_emulator PRIVATE ${UNICORN_LIBRARY} ${CAPSTONE_LIBRARY})
 

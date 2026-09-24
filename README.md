@@ -22,10 +22,10 @@ cmake --build build -j
 ./build/ra8_emulator path/to/app.elf
 ```
 
-`--help` covers the rest. Two things have to be on the machine first: Unicorn
-and Capstone (`libunicorn-dev` and `libcapstone-dev` on Debian and Ubuntu,
-Homebrew Capstone plus a source build of the pinned Unicorn on macOS), and a
-compiler that speaks C23.
+Run it with no arguments and it prints every option it takes. Two things have
+to be on the machine first: Unicorn and Capstone (`libunicorn-dev` and
+`libcapstone-dev` on Debian and Ubuntu, Homebrew Capstone plus a source build of
+the pinned Unicorn on macOS), and a compiler that speaks C23.
 
 That second one bites on a fresh Linux box. `cmake -B build -S .` selects the
 ambient `cc`, and on Debian 12 that is GCC 12, which cannot parse the typed
@@ -51,9 +51,10 @@ Linux too, which is what lets the emulator gates run on a Linux CI runner.
 
 The CPU is Unicorn, QEMU's core as a library. Its decode of Armv8.1-M
 (Helium/MVE) **differs between releases**, so an unpinned emulator makes the
-same commit pass on one box and fault on another (#354). The pin lives in
-[`docs/TOOLCHAIN.md`](../../docs/TOOLCHAIN.md) and the emulator gates fail
-loudly when the runtime library is not it. That is not caution: an earlier
+same commit pass on one box and fault on another
+(bsikar/ra8-firmware#354). The pin lives in `docs/TOOLCHAIN.md` in the firmware
+repository, and the emulator gates there fail loudly when the runtime library is
+not it. That is not caution: an earlier
 mismatch had one machine raising a spurious coprocessor fault on the Helium
 store family, which is exactly why the same commit faulted locally and passed
 in CI.
@@ -75,8 +76,8 @@ NPU-touching firmware does not spin on a phantom ready bit, every read returns a
 stable zero -- no fabricated identity register, no faked done bit, an inference
 is never pretended -- writes are recorded, and the end-of-run report prints a
 `MAPPED BUT UNMODELLED` line with the access tally whenever it was touched.
-Closed issue #222 delivered this honest RA8P1 profile and mapped stub; a real
-command-stream model remains under the open emulator-fidelity epic #67. On the
+bsikar/ra8-firmware#222 delivered this honest RA8P1 profile and mapped stub; a
+real command-stream model remains under the fidelity epic, #1 here. On the
 RA8D2 profile the block is gated off entirely, so that run is
 byte-for-behaviour unchanged.
 
@@ -146,6 +147,30 @@ irrelevant, and the optional hooks run in ascending descriptor order, so two
 blocks added in parallel cannot conflict. A block needing a board-view value
 declares its getter in the core header and implements it in its own file.
 
+## Capturing the board view
+
+The Cocoa window is macOS only. Everywhere else `board_view_stub.c` is compiled
+and `--view` falls back to headless, so the portable way to see what a run drew
+is the frame-dump path, which needs no display server at all:
+
+```sh
+# final composite (panel + status sidebar) as a single still
+./build/ra8_emulator app.elf --ppm run.ppm
+
+# ~20 fps of composites for the first 3 emulated seconds
+./build/ra8_emulator app.elf --record frames/ --record-secs 3
+```
+
+`--record` writes `frames/frame_NNNNNN.ppm`. `--size WxH` or `--panel <file>`
+sizes the panel (1024x600 by default) and `--rotate 90|180|270` turns it.
+Convert with anything that reads PPM, for example
+`magick run.ppm run.png` for a still or
+`ffmpeg -framerate 20 -i frames/frame_%06d.ppm out.gif` for the animation.
+
+If the binary starts but cannot find `libunicorn.so.2`, the library is
+installed somewhere the loader does not look: point `LD_LIBRARY_PATH` at it
+(`DYLD_LIBRARY_PATH` on macOS).
+
 ## What it is for, and what it is not
 
 It fakes hardware *handshakes*. It validates "does the firmware drive the
@@ -157,7 +182,8 @@ sidebar, so an overlay assertion is a pixel check rather than a human looking.
 
 Running the real binary for longer than a bench run does is how it earns its
 keep. It found a module-stop reference leak that only faults after the counter
-saturates, which no short HIL run ever reaches (#68); and tracing the USB
+saturates, which no short HIL run ever reaches (bsikar/ra8-firmware#68); and
+tracing the USB
 device worker showed two demos silently stalling because their USB memory pool
 was too small to satisfy a class's cache-safe buffer, so the device never
 asserted its pull-up and the failure looked like a link problem.
