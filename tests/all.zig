@@ -25,6 +25,7 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/sci_test.zig");
+    _ = @import("periph/wdt_test.zig");
     _ = @import("tools/gate_test.zig");
 
     const ra8 = @import("ra8");

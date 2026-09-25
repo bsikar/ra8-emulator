@@ -25,6 +25,7 @@ const doc = ra8.periph.doc;
 const prcr = ra8.periph.prcr;
 const bkup = ra8.periph.bkup;
 const sci = ra8.periph.sci;
+const wdt = ra8.periph.wdt;
 
 const Writer = std.fs.File.Writer;
 
@@ -116,6 +117,7 @@ const Board = struct {
     backup: bkup.Bkup,
     serial: sci.Sci,
     monitors: lvd.Lvd,
+    watchdog: wdt.Wdt,
 
     fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -131,6 +133,7 @@ const Board = struct {
             .backup = undefined,
             .serial = sci.Sci.init(),
             .monitors = lvd.Lvd.init(),
+            .watchdog = wdt.Wdt.init(),
         };
     }
 
@@ -157,6 +160,7 @@ const Board = struct {
         try self.bus.add(self.monitors.statusBlock());
         try self.bus.add(self.monitors.controlBlock());
         try self.bus.add(self.monitors.filterBlock());
+        try self.bus.add(self.watchdog.block());
         try core.attachPeriph(&self.bus);
     }
 
@@ -165,6 +169,7 @@ const Board = struct {
     /// The controller picks straight afterwards, so an interrupt raised here
     /// is entered in the same boundary rather than a chunk later.
     fn tick(self: *Board, core: engine.Engine) !void {
+        self.watchdog.tick();
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.events.raise(core, event);
         }
@@ -219,11 +224,27 @@ const Board = struct {
                 },
             );
         }
+        try self.reportWatchdog(out);
         try self.reportMonitors(out);
         try self.reportEvents(out);
         try self.reportSerial(out);
         try self.reportProtection(out);
         try self.reportLeds(out);
+    }
+
+    /// The refused refresh is the loud case: on silicon an early reload is a
+    /// refresh error that resets the part, and the C tree accepts it silently.
+    fn reportWatchdog(self: *Board, out: Writer) !void {
+        const unit = &self.watchdog;
+        if (unit.quiet()) return;
+        const note = if (unit.reset_requested) " RESET REQUESTED (RSTIRQS set: silicon reboots here)" else "";
+        if (unit.early != 0) {
+            try out.print("WDT0: refreshes={d} REFUSED={d} (refresh outside the RPSS/RPES window, REFEF latched){s}\n", .{ unit.refreshes, unit.early, note });
+        } else {
+            try out.print("WDT0: refreshes={d}, counter {d}/{d}, underflows={d}{s}\n", .{ unit.refreshes, unit.counter, unit.reload(), unit.underflows, note });
+        }
+        if (unit.bad_acks == 0) return;
+        try out.print("WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
     }
 
     /// One line per voltage monitor the firmware programmed. A monitor whose
