@@ -13,6 +13,7 @@ pub const core = struct {
 };
 
 pub const periph = struct {
+    pub const bkup = @import("periph/bkup.zig");
     pub const cac = @import("periph/cac.zig");
     pub const clocks = @import("periph/clocks.zig");
     pub const crc = @import("periph/crc.zig");
@@ -20,5 +21,6 @@ pub const periph = struct {
     pub const gpio = @import("periph/gpio.zig");
     pub const mstp = @import("periph/mstp.zig");
     pub const nvic = @import("periph/nvic.zig");
+    pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
 };

@@ -20,6 +20,8 @@ const mstp = ra8.periph.mstp;
 const gpio = ra8.periph.gpio;
 const crc = ra8.periph.crc;
 const doc = ra8.periph.doc;
+const prcr = ra8.periph.prcr;
+const bkup = ra8.periph.bkup;
 
 const Writer = std.fs.File.Writer;
 
@@ -105,6 +107,8 @@ const Board = struct {
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
+    protection: prcr.Prcr,
+    backup: bkup.Bkup,
 
     fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -113,6 +117,10 @@ const Board = struct {
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),
+            .protection = prcr.Prcr.init(),
+            // Patched in attach(): the backup file has to point at this
+            // board's own protection model, not a copy of it.
+            .backup = undefined,
         };
     }
 
@@ -131,6 +139,9 @@ const Board = struct {
         try self.bus.add(self.checksum.block());
         try self.bus.add(self.dataops.block());
         try self.bus.add(self.accuracy.block());
+        try self.bus.add(self.protection.block());
+        self.backup = bkup.Bkup.init(&self.protection);
+        try self.bus.add(self.backup.block());
         try core.attachPeriph(&self.bus);
     }
 
@@ -178,7 +189,37 @@ const Board = struct {
                 },
             );
         }
+        try self.reportProtection(out);
         try self.reportLeds(out);
+    }
+
+    /// PRCR and the domain it protects. Both stay quiet when the firmware
+    /// never touched them, and both go loud when a write was dropped: on
+    /// silicon those writes vanish with no fault and no flag, which is the
+    /// failure that is impossible to spot from the firmware side.
+    fn reportProtection(self: *Board, out: Writer) !void {
+        if (!self.protection.quiet()) {
+            if (self.protection.bad_key != 0) {
+                try out.print(
+                    "SYSC-PRCR: unlocks={d} REJECTED={d} (a PRCR write without the 0xA5 key unlocks nothing)\n",
+                    .{ self.protection.unlocks, self.protection.bad_key },
+                );
+            } else {
+                try out.print("SYSC-PRCR: unlocks={d}, groups 0x{X:0>4}\n", .{ self.protection.unlocks, self.protection.groups });
+            }
+        }
+        if (self.backup.quiet()) return;
+        switch (self.backup.lastDrop()) {
+            .locked => try out.print(
+                "VBATT-BKUP: VBTBKRn writes={d} DROPPED={d} (PRCR.PRC1 locked: unlock with 0xA502)\n",
+                .{ self.backup.writes, self.backup.dropped_locked },
+            ),
+            .disabled => try out.print(
+                "VBATT-BKUP: VBTBKRn writes={d} DROPPED={d} (VBTBER.VBAE is 0)\n",
+                .{ self.backup.writes, self.backup.dropped_disabled },
+            ),
+            .none => try out.print("VBATT-BKUP: VBTBKRn writes={d} (domain retained)\n", .{self.backup.writes}),
+        }
     }
 
     fn reportLeds(self: *Board, out: Writer) !void {
