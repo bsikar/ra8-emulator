@@ -197,6 +197,22 @@ not parity: nothing is driving the clocks or delivering interrupts yet, so the
 firmware is spinning rather than progressing. The next slices give it
 something to wait on.
 
+## Where the code lives
+
+```
+src/main.zig          the program: argument in, run, report out
+src/root.zig          the module index, imported as "ra8"
+src/core/             the machine: engine, elf, memmap, disasm, cli, c
+src/periph/           the peripheral bus and the blocks on it: registry,
+                      clocks, nvic, mstp, gpio, crc, doc
+tests/                one test file per source file, on the mirrored path,
+                      rooted at tests/all.zig
+```
+
+Source is grouped rather than flat, and tests never live in a `test` block at
+the bottom of a source file. `AGENTS.md` at the repository root carries the
+conventions in full.
+
 ## Adding a peripheral block
 
 Not yet. Blocks arrive with the peripheral bus; until then the shape they will

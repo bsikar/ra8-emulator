@@ -48,12 +48,3 @@ pub fn one(address: u32, bytes: []const u8) Error!Text {
     text.len = writer.pos;
     return text;
 }
-
-test "a Thumb store decodes to its mnemonic and operands" {
-    const text = try one(0x2200_0000, &[_]u8{ 0x01, 0x60 });
-    try std.testing.expectEqualStrings("str r1, [r0]", text.slice());
-}
-
-test "bytes that decode to nothing are an error, not a guess" {
-    try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }));
-}

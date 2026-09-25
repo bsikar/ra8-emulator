@@ -5,29 +5,18 @@
 //! say what happened. The peripherals, the display and the TUI are ported
 //! from the C tree on dev, slice by slice, and land here next.
 const std = @import("std");
-const elf = @import("elf.zig");
-const engine = @import("engine.zig");
-const memmap = @import("memmap.zig");
-const periph = @import("periph.zig");
-const disasm = @import("disasm.zig");
-const clocks = @import("clocks.zig");
-const nvic = @import("nvic.zig");
-const mstp = @import("mstp.zig");
-const gpio_mod = @import("gpio.zig");
-const crc_mod = @import("crc.zig");
-const doc_mod = @import("doc.zig");
+const ra8 = @import("ra8");
 
-const usage =
-    \\usage: ra8_emulator <firmware.elf> [--instructions N]
-    \\
-    \\  --instructions N   stop after N instructions (default 2000000)
-    \\
-;
-
-const Options = struct {
-    path: []const u8,
-    instructions: usize = 2_000_000,
-};
+const cli = ra8.core.cli;
+const elf = ra8.core.elf;
+const engine = ra8.core.engine;
+const periph = ra8.periph.registry;
+const clocks = ra8.periph.clocks;
+const nvic = ra8.periph.nvic;
+const mstp = ra8.periph.mstp;
+const gpio = ra8.periph.gpio;
+const crc = ra8.periph.crc;
+const doc = ra8.periph.doc;
 
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -35,8 +24,8 @@ pub fn main() !u8 {
     const allocator = arena.allocator();
 
     const argv = try std.process.argsAlloc(allocator);
-    const options = parse(argv) catch {
-        std.debug.print("{s}", .{usage});
+    const options = cli.parse(argv) catch {
+        std.debug.print("{s}", .{cli.usage});
         return 2;
     };
 
@@ -63,11 +52,11 @@ pub fn main() !u8 {
     bus.gate = modules.gate();
     // PORT is not module-stop gated on this part, so it is added after the
     // gate and answers regardless of MSTPCRx.
-    var pins = gpio_mod.Gpio.init();
+    var pins = gpio.Gpio.init();
     try bus.add(pins.block());
-    var checksum = crc_mod.Crc.init();
+    var checksum = crc.Crc.init();
     try bus.add(checksum.block());
-    var dataops = doc_mod.Doc.init();
+    var dataops = doc.Doc.init();
     try bus.add(dataops.block());
     try core.attachPeriph(&bus);
 
@@ -131,7 +120,7 @@ pub fn main() !u8 {
         try out.print("GPIO LEDs: none driven\n", .{});
     } else {
         try out.print("GPIO LEDs:", .{});
-        for (gpio_mod.leds, 0..) |led, i| {
+        for (gpio.leds, 0..) |led, i| {
             try out.print(" [{s} {s} x{d}]", .{
                 led.name,
                 if (pins.ledLevel(i) == 1) "ON" else "OFF",
@@ -151,45 +140,4 @@ pub fn main() !u8 {
     }
     try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
     return 0;
-}
-
-fn parse(argv: []const []const u8) !Options {
-    if (argv.len < 2) return error.MissingImage;
-    var options = Options{ .path = argv[1] };
-    var index: usize = 2;
-    while (index < argv.len) : (index += 1) {
-        if (std.mem.eql(u8, argv[index], "--instructions")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            options.instructions = try std.fmt.parseInt(usize, argv[index], 10);
-        } else return error.UnknownFlag;
-    }
-    return options;
-}
-
-test "the command line takes an image and an optional instruction budget" {
-    const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
-    try std.testing.expectEqualStrings("a.elf", defaults.path);
-    try std.testing.expectEqual(@as(usize, 2_000_000), defaults.instructions);
-
-    const bounded = try parse(&[_][]const u8{ "emu", "a.elf", "--instructions", "64" });
-    try std.testing.expectEqual(@as(usize, 64), bounded.instructions);
-
-    try std.testing.expectError(error.MissingImage, parse(&[_][]const u8{"emu"}));
-    try std.testing.expectError(error.UnknownFlag, parse(&[_][]const u8{ "emu", "a.elf", "--nope" }));
-}
-
-test {
-    std.testing.refAllDecls(@This());
-    _ = memmap;
-    _ = elf;
-    _ = engine;
-    _ = periph;
-    _ = disasm;
-    _ = clocks;
-    _ = nvic;
-    _ = mstp;
-    _ = gpio_mod;
-    _ = crc_mod;
-    _ = doc_mod;
 }
