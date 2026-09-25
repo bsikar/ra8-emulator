@@ -167,6 +167,30 @@ Convert with anything that reads PPM, for example
 `magick run.ppm run.png` for a still or
 `ffmpeg -framerate 20 -i frames/frame_%06d.ppm out.gif` for the animation.
 
+### What a run actually looks like
+
+Both captures below came out of that path, from a real firmware image: the
+`lcd_draw_x` example built from `bsikar/ra8-firmware` `main` with the pinned
+Arm GNU toolchain 13.3, then booted here with no board attached.
+
+![EK-RA8D2 board view: the panel with the drawn X, and the status sidebar](docs/media/board_view.png)
+
+The composite is one pixel buffer: the emulated LCD panel on the left, the
+status sidebar on the right (run state and PC, the three LEDs, I/O, the power
+and button widgets, and the live console). That is why an overlay assertion is
+a pixel check -- the sidebar is in the frame, not in a separate window.
+
+![the same run recorded: LED1 blinking and the console filling](docs/media/board_view.gif)
+
+The animation is the same run recorded over three emulated seconds, showing
+LED1 driven from P600 and the console filling as the firmware runs.
+
+Reproduce both:
+
+```sh
+./build/ra8_emulator lcd_draw_x.elf --ppm run.ppm --record frames/ --record-secs 3
+```
+
 If the binary starts but cannot find `libunicorn.so.2`, the library is
 installed somewhere the loader does not look: point `LD_LIBRARY_PATH` at it
 (`DYLD_LIBRARY_PATH` on macOS).
