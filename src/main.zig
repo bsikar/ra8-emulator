@@ -13,6 +13,7 @@ const disasm = @import("disasm.zig");
 const clocks = @import("clocks.zig");
 const nvic = @import("nvic.zig");
 const mstp = @import("mstp.zig");
+const gpio_mod = @import("gpio.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -58,6 +59,10 @@ pub fn main() !u8 {
     var modules = mstp.Mstp{};
     try bus.add(modules.block());
     bus.gate = modules.gate();
+    // PORT is not module-stop gated on this part, so it is added after the
+    // gate and answers regardless of MSTPCRx.
+    var pins = gpio_mod.Gpio.init();
+    try bus.add(pins.block());
     try core.attachPeriph(&bus);
 
     var watch = engine.Watch{};
@@ -104,6 +109,19 @@ pub fn main() !u8 {
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
+    if (pins.quiet()) {
+        try out.print("GPIO LEDs: none driven\n", .{});
+    } else {
+        try out.print("GPIO LEDs:", .{});
+        for (gpio_mod.leds, 0..) |led, i| {
+            try out.print(" [{s} {s} x{d}]", .{
+                led.name,
+                if (pins.ledLevel(i) == 1) "ON" else "OFF",
+                pins.ledEdges(i),
+            });
+        }
+        try out.print("\n", .{});
+    }
     if (fault) |taken| {
         try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
         if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});
@@ -153,4 +171,5 @@ test {
     _ = clocks;
     _ = nvic;
     _ = mstp;
+    _ = gpio_mod;
 }
