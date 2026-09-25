@@ -11,6 +11,7 @@ pub const core = struct {
 };
 
 pub const periph = struct {
+    pub const cac = @import("periph/cac.zig");
     pub const clocks = @import("periph/clocks.zig");
     pub const crc = @import("periph/crc.zig");
     pub const doc = @import("periph/doc.zig");
