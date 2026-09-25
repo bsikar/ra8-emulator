@@ -18,11 +18,13 @@ test {
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/doc_test.zig");
+    _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/icu_test.zig");
     _ = @import("periph/lvd_test.zig");
     _ = @import("periph/mstp_test.zig");
     _ = @import("periph/nvic_test.zig");
+    _ = @import("periph/pdctr_test.zig");
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
