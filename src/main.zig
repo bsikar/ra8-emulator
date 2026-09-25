@@ -15,6 +15,7 @@ const nvic = @import("nvic.zig");
 const mstp = @import("mstp.zig");
 const gpio_mod = @import("gpio.zig");
 const crc_mod = @import("crc.zig");
+const doc_mod = @import("doc.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -66,6 +67,8 @@ pub fn main() !u8 {
     try bus.add(pins.block());
     var checksum = crc_mod.Crc.init();
     try bus.add(checksum.block());
+    var dataops = doc_mod.Doc.init();
+    try bus.add(dataops.block());
     try core.attachPeriph(&bus);
 
     var watch = engine.Watch{};
@@ -116,6 +119,12 @@ pub fn main() !u8 {
         try out.print(
             "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
             .{ @intFromEnum(checksum.gps()), checksum.dor, checksum.bytes },
+        );
+    }
+    if (!dataops.quiet()) {
+        try out.print(
+            "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
+            .{ @intFromEnum(dataops.mode()), dataops.dodsr0, @intFromBool(dataops.flag), dataops.ops },
         );
     }
     if (pins.quiet()) {
@@ -182,4 +191,5 @@ test {
     _ = mstp;
     _ = gpio_mod;
     _ = crc_mod;
+    _ = doc_mod;
 }
