@@ -8,6 +8,7 @@ const Board = @import("board.zig").Board;
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const cac = @import("../periph/cac.zig");
+const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
 const reset = @import("../periph/reset.zig");
@@ -51,6 +52,8 @@ pub fn blocks(board: *Board, out: Writer) !void {
         );
     }
     if (!board.accuracy.quiet()) try accuracy(board, out);
+    try graphics(board, out);
+    try display(board, out);
     try watchdog(board, out);
     try causes(board, out);
     try control(board, out);
@@ -59,6 +62,53 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try serial(board, out);
     try protection(board, out);
     try leds(board, out);
+}
+
+/// What the panel is being scanned from, and the loud case behind it: the
+/// graphics power domain is gated off at reset, so a display controller
+/// programmed before PDCTRGD is cleared reaches no register at all. dev
+/// shadows those writes whatever the domain is doing, so the descriptor
+/// looks right there and the panel is dark on the bench.
+fn display(board: *Board, out: Writer) !void {
+    const unit = &board.display;
+    if (unit.quiet()) return;
+    if (unit.framebuffer()) |frame| {
+        try out.print(
+            "GLCDC: GR{d} scanning 0x{X:0>8}, {d}x{d}, stride {d}, {s}, output stage {s}\n",
+            .{
+                frame.layer,
+                frame.base,
+                frame.width,
+                frame.height,
+                frame.stride,
+                @tagName(frame.format),
+                if (frame.enabled) "on" else "OFF (BG_EN.EN clear, panel blank)",
+            },
+        );
+    } else {
+        try out.print("GLCDC: {d} write(s), no layer fetching a framebuffer\n", .{unit.writes});
+    }
+    if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
+    try out.print(
+        "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
+        .{ unit.dropped_unpowered, unit.dark_reads },
+    );
+}
+
+/// PDCTRGD itself, once the firmware has been near it. A write dropped by
+/// the PRC1 lock is the silent failure: no fault, no flag, domain still dark.
+fn graphics(board: *Board, out: Writer) !void {
+    const unit = &board.graphics;
+    if (unit.quiet()) return;
+    try out.print(
+        "PWR-GRAPHICS: domain {s}, {d} power-on(s), {d} power-off(s)\n",
+        .{ if (unit.powered()) "powered" else "GATED", unit.power_ons, unit.power_offs },
+    );
+    if (unit.dropped_locked == 0) return;
+    try out.print(
+        "PWR-GRAPHICS: DROPPED {d} write(s) with PRCR.PRC1 locked (unlock with 0xA502)\n",
+        .{unit.dropped_locked},
+    );
 }
 
 fn accuracy(board: *Board, out: Writer) !void {

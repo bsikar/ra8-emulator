@@ -14,10 +14,12 @@ const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
 const doc = @import("../periph/doc.zig");
+const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const icu = @import("../periph/icu.zig");
 const lvd = @import("../periph/lvd.zig");
 const mstp = @import("../periph/mstp.zig");
+const pdctr = @import("../periph/pdctr.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const scb = @import("../periph/scb.zig");
@@ -34,6 +36,11 @@ pub const Board = struct {
     accuracy: cac.Cac,
     protection: prcr.Prcr,
     backup: bkup.Bkup,
+    /// The graphics power domain, and the one block so far that lives in it.
+    /// Both are built in attach(): each needs a pointer to a model this board
+    /// owns, not a copy of one.
+    graphics: pdctr.Pdctr,
+    display: glcdc.Glcdc,
     serial: sci.Sci,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
@@ -56,6 +63,8 @@ pub const Board = struct {
             // Patched in attach(): the backup file has to point at this
             // board's own protection model, not a copy of it.
             .backup = undefined,
+            .graphics = undefined,
+            .display = undefined,
             .serial = sci.Sci.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
@@ -82,6 +91,10 @@ pub const Board = struct {
         try self.bus.add(self.protection.block());
         self.backup = bkup.Bkup.init(&self.protection);
         try self.bus.add(self.backup.block());
+        self.graphics = pdctr.Pdctr.init(&self.protection);
+        try self.bus.add(self.graphics.block());
+        self.display = glcdc.Glcdc.init(&self.graphics);
+        try self.bus.add(self.display.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.monitors.statusBlock());
