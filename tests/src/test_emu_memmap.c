@@ -107,9 +107,10 @@ void mmio_write(uc_engine* uc, uint64_t offset, unsigned size, uint64_t value, v
 /**
  * @brief Count how many pages of one aperture are resident in host memory.
  * @details Asks the kernel, through mincore, which pages of the aperture have
- * a present mapping. A freshly acquired anonymous aperture has none, which is
- * how the test proves the emulator does not pay 130 MiB of host memory for
- * 130 MiB of logical guest memory.
+ * a present mapping. On a host that commits lazily a freshly acquired
+ * anonymous aperture has none, which is how the test proves the emulator does
+ * not pay 130 MiB of host memory for 130 MiB of logical guest memory. See
+ * ::internal_test_host_commits_lazily for when that inference holds.
  * @param[in] backing Aperture whose residency is measured.
  * @param[in] pages Number of leading pages to measure.
  * @return The resident page count, or the page count plus one on error.
@@ -144,6 +145,26 @@ RA8_INTERNAL static size_t internal_test_resident_pages(const emu_memmap_backing
     }
   }
   return resident;
+}
+
+/**
+ * @brief Report whether this host leaves a fresh anonymous mapping unpopulated.
+ * @details The residency probe only says something about the emulator on a host that commits anonymous pages on first touch. Some kernels, and most container hosts, populate the whole mapping up front; there ::mincore truthfully reports every page resident and an absolute residency assertion measures the host rather than ::emu_memmap. Measuring a scratch mapping of the same size answers which kind of host this is before any aperture is judged. @param[in] pages Number of leading pages the scratch mapping is measured over. @return Whether a freshly acquired anonymous mapping of that size reports no resident pages. @retval true The host commits lazily and the absolute residency assertions mean something.
+ * @pre @p pages does not exceed the residency vector capacity. @pre The call executes on the emulator's single owning thread. @post The scratch mapping is released before the call returns. @post No aperture, workspace, or engine state changes.
+ * @note The operation is synchronous and does not transfer heap ownership. @since 0.1.0
+ */
+RA8_INTERNAL static bool internal_test_host_commits_lazily(size_t pages)
+{
+  const size_t length = pages * (size_t)k_page_size;
+  void*        scratch =
+    mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (scratch == MAP_FAILED) {
+    return false;
+  }
+  const emu_memmap_backing_t probe = {.host = (uint8_t*)scratch, .size = length};
+  const size_t               resident = internal_test_resident_pages(&probe, pages);
+  (void)munmap(scratch, length);
+  return resident == 0U;
 }
 
 /**
@@ -343,29 +364,44 @@ RA8_INTERNAL static int internal_test_open_geometry(emu_memmap_workspace_t* work
 
 /**
  * @brief Prove apertures commit lazily and exactly one written page lands.
- * @details Nothing is resident after the open or after an engine attaches; the single page a guest-visible write touches is the only one committed. @param[in,out] workspace Open workspace under measurement. @param[out] uc Engine opened and attached by this call. @return Zero on success, else the failing source line. @retval 0 Residency moved from zero to exactly one page.
+ * @details On a host that commits anonymous pages on first touch, nothing is resident after the open or after an engine attaches and the single page a guest-visible write touches is the only one committed; where the host populates up front those counts describe the kernel, so they are skipped and the write is checked through the guest view and the aperture bytes instead. @param[in,out] workspace Open workspace under measurement. @param[out] uc Engine opened and attached by this call. @return Zero on success, else the failing source line. @retval 0 Residency behaved as the host allows and the written word was visible.
  * @pre @p workspace is open and has no engine attached. @pre @p uc addresses a writable engine slot. @post Success leaves one engine attached for the caller to release. @post Ownership of caller-supplied storage is unchanged.
  * @note The operation is synchronous and does not transfer heap ownership. @since 0.1.0
  */
 RA8_INTERNAL static int internal_test_lazy_commit(emu_memmap_workspace_t* workspace, uc_engine** uc)
 {
+  /* What the residency numbers can prove depends on the host, so ask it
+   * first: on a kernel that populates anonymous mappings up front every
+   * count below is the host's, not the memory map's. */
+  const bool lazy_host = internal_test_host_commits_lazily(k_test_sdram_pages);
   TEST_CHECK(workspace->backings[k_test_backing_sdram].host != nullptr);
-  TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
-                                          k_test_sdram_pages) == 0U);
+  if (lazy_host) {
+    TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
+                                            k_test_sdram_pages) == 0U);
+  }
   TEST_CHECK(internal_test_engine_open(uc));
   TEST_CHECK(emu_memmap_attach(workspace, *uc).status == k_emu_memmap_ok);
-  TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
-                                          k_test_sdram_pages) == 0U);
+  if (lazy_host) {
+    TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
+                                            k_test_sdram_pages) == 0U);
+  }
   const uint32_t value = 0x0BADF00DU;
   TEST_CHECK(emu_mem_write(*uc, k_test_sdram_data, &value, sizeof(value)) == UC_ERR_OK);
-  TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
-                                          k_test_sdram_pages) == 1U);
+  if (lazy_host) {
+    TEST_CHECK(internal_test_resident_pages(&workspace->backings[k_test_backing_sdram],
+                                            k_test_sdram_pages) == 1U);
+  }
+  /* Host-independent, and the part that is actually about emu_memmap: the
+   * write landed in the aperture the guest address maps onto. */
+  TEST_CHECK(internal_test_view_word(*uc, k_test_sdram_data) == value);
+  TEST_CHECK(internal_test_backing_word(workspace, k_test_backing_sdram, k_test_sdram_data) ==
+             value);
   return 0;
 }
 
 /**
  * @brief Prove the exact geometry and that apertures commit lazily.
- * @details The apertures span 130 MiB of logical guest memory. This proves the emulator does not pay that in host memory: nothing is resident after the open or after an engine attaches, and exactly the one page a write lands on becomes resident. @return The test geometry and lazy backing result produced by the fixture. @retval value Zero on success, else the failing source line.
+ * @details The apertures span 130 MiB of logical guest memory. Where the host commits lazily this proves the emulator does not pay that in host memory: nothing is resident after the open or after an engine attaches, and exactly the one page a write lands on becomes resident. @return The test geometry and lazy backing result produced by the fixture. @retval value Zero on success, else the failing source line.
  * @pre No workspace is open in this process. @pre The call executes on the emulator's single owning thread. @post Every workspace and engine opened here is released again. @post Ownership of caller-supplied storage is unchanged.
  * @note The operation is synchronous and does not transfer heap ownership. @since 0.1.0
  */
