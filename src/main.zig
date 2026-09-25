@@ -14,6 +14,7 @@ const clocks = @import("clocks.zig");
 const nvic = @import("nvic.zig");
 const mstp = @import("mstp.zig");
 const gpio_mod = @import("gpio.zig");
+const crc_mod = @import("crc.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -63,6 +64,8 @@ pub fn main() !u8 {
     // gate and answers regardless of MSTPCRx.
     var pins = gpio_mod.Gpio.init();
     try bus.add(pins.block());
+    var checksum = crc_mod.Crc.init();
+    try bus.add(checksum.block());
     try core.attachPeriph(&bus);
 
     var watch = engine.Watch{};
@@ -109,6 +112,12 @@ pub fn main() !u8 {
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
+    if (!checksum.quiet()) {
+        try out.print(
+            "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
+            .{ @intFromEnum(checksum.gps()), checksum.dor, checksum.bytes },
+        );
+    }
     if (pins.quiet()) {
         try out.print("GPIO LEDs: none driven\n", .{});
     } else {
@@ -172,4 +181,5 @@ test {
     _ = nvic;
     _ = mstp;
     _ = gpio_mod;
+    _ = crc_mod;
 }
