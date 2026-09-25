@@ -12,6 +12,7 @@ const periph = @import("periph.zig");
 const disasm = @import("disasm.zig");
 const clocks = @import("clocks.zig");
 const nvic = @import("nvic.zig");
+const mstp = @import("mstp.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -54,6 +55,9 @@ pub fn main() !u8 {
 
     var bus = periph.Bus.init(allocator);
     defer bus.deinit();
+    var modules = mstp.Mstp{};
+    try bus.add(modules.block());
+    bus.gate = modules.gate();
     try core.attachPeriph(&bus);
 
     var watch = engine.Watch{};
@@ -82,6 +86,16 @@ pub fn main() !u8 {
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
     );
+    if (modules.clean()) {
+        try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
+    } else {
+        // Loud on purpose: on silicon these reads give zero and these writes
+        // vanish, which is the bug the emulator used to hide.
+        try out.print(
+            "module stop: DROPPED {d} read(s) and {d} write(s) to stopped peripheral(s), last {s}, firmware forgot to cancel module stop\n",
+            .{ modules.gated_reads, modules.gated_writes, modules.last_gated },
+        );
+    }
     try out.print(
         "time: {d} cycles charged, {d} SysTick periods, {d} pended\n",
         .{ timebase.cycles, timebase.ticks, timebase.pends },
@@ -138,4 +152,5 @@ test {
     _ = disasm;
     _ = clocks;
     _ = nvic;
+    _ = mstp;
 }

@@ -24,6 +24,21 @@ pub const ns_base: u32 = base + ns_offset;
 
 pub const Access = enum { read, write };
 
+/// A veto over the whole window, consulted before anything answers. The
+/// module-stop gate in src/mstp.zig is the one that exists: a peripheral whose
+/// module-stop bit is set is unclocked, so it does not answer the bus at all.
+pub const Gate = struct {
+    context: *anyopaque,
+    stoppedFn: *const fn (context: *anyopaque, address: u32) bool,
+    noteFn: *const fn (context: *anyopaque, address: u32, access: Access) void,
+
+    fn drops(self: Gate, address: u32, access: Access) bool {
+        if (!self.stoppedFn(self.context, address)) return false;
+        self.noteFn(self.context, address, access);
+        return true;
+    }
+};
+
 /// A modelled peripheral block: an absolute register range and the two
 /// handlers that answer for it. A block owns its own state; the bus only
 /// routes.
@@ -73,6 +88,9 @@ pub const Bus = struct {
     count: usize = 0,
     cells: std.AutoHashMap(u32, Cell),
     counters: Counters = .{},
+    /// Set once the module-stop model is attached; null leaves every address
+    /// clocked, which is what the smaller tests and the loader want.
+    gate: ?Gate = null,
 
     pub fn init(allocator: std.mem.Allocator) Bus {
         return .{ .cells = std.AutoHashMap(u32, Cell).init(allocator) };
@@ -105,6 +123,11 @@ pub const Bus = struct {
     pub fn read(self: *Bus, address: u32, width: u3) u32 {
         self.counters.reads += 1;
         const canonical = canonicalize(address);
+        // An unclocked peripheral reads zero on silicon, whether or not this
+        // emulator models the block behind the address.
+        if (self.gate) |gate| {
+            if (gate.drops(canonical, .read)) return 0;
+        }
         if (self.blockFor(canonical)) |block| {
             self.counters.modelled += 1;
             return block.readFn(block.context, canonical, width);
@@ -121,6 +144,9 @@ pub const Bus = struct {
     pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {
         self.counters.writes += 1;
         const canonical = canonicalize(address);
+        if (self.gate) |gate| {
+            if (gate.drops(canonical, .write)) return;
+        }
         if (self.blockFor(canonical)) |block| {
             self.counters.modelled += 1;
             block.writeFn(block.context, canonical, width, value);
