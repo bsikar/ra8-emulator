@@ -71,6 +71,18 @@ pub const syst = struct {
     pub const calib: u32 = 0xE000_E01C;
 };
 
+/// The NVIC's register file. Set and clear registers are separate on
+/// hardware, and against a plain-RAM PPB both are just words: src/nvic.zig
+/// folds the clear side into the set side at the chunk boundary.
+pub const nvic = struct {
+    pub const iser: u32 = 0xE000_E100;
+    pub const icer: u32 = 0xE000_E180;
+    pub const ispr: u32 = 0xE000_E200;
+    pub const icpr: u32 = 0xE000_E280;
+    pub const iabr: u32 = 0xE000_E300;
+    pub const ipr: u32 = 0xE000_E400;
+};
+
 /// The Data Watchpoint and Trace unit. Only the free-running cycle counter and
 /// its enable are named: that counter is the time base the firmware spins on
 /// with interrupts masked, which is the whole reason the emulator models it.
@@ -80,7 +92,7 @@ pub const dwt = struct {
 };
 
 test "every named PPB register falls inside the PPB window" {
-    inline for (.{ scb, syst, dwt }) |block| {
+    inline for (.{ scb, syst, nvic, dwt }) |block| {
         inline for (@typeInfo(block).@"struct".decls) |decl| {
             const address = @field(block, decl.name);
             try std.testing.expect(address >= ppb_base);

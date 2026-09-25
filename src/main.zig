@@ -11,6 +11,7 @@ const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
 const disasm = @import("disasm.zig");
 const clocks = @import("clocks.zig");
+const nvic = @import("nvic.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -71,7 +72,12 @@ pub fn main() !u8 {
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, stack_pointer, entry });
 
     var timebase = clocks.Clocks{};
-    const fault = try core.run(entry, options.instructions, &watch, &timebase);
+    var interrupts = nvic.Nvic{ .vector_base = vector_base };
+    const fault = try core.run(entry, options.instructions, .{
+        .watch = &watch,
+        .timebase = &timebase,
+        .interrupts = &interrupts,
+    });
     try out.print(
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
@@ -79,6 +85,10 @@ pub fn main() !u8 {
     try out.print(
         "time: {d} cycles charged, {d} SysTick periods, {d} pended\n",
         .{ timebase.cycles, timebase.ticks, timebase.pends },
+    );
+    try out.print(
+        "interrupts: {d} taken, {d} returned, {d} held\n",
+        .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
     if (fault) |taken| {
         try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
@@ -127,4 +137,5 @@ test {
     _ = periph;
     _ = disasm;
     _ = clocks;
+    _ = nvic;
 }

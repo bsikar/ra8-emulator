@@ -10,6 +10,7 @@ const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
 const disasm = @import("disasm.zig");
 const clocks = @import("clocks.zig");
+const nvic = @import("nvic.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -54,6 +55,25 @@ pub const Cortex = enum(c_int) {
     r0 = c.uc.UC_ARM_REG_R0,
     r1 = c.uc.UC_ARM_REG_R1,
     r2 = c.uc.UC_ARM_REG_R2,
+    // The rest of the caller-saved set, plus the two status registers:
+    // exception entry stacks them and the controller reads them.
+    r3 = c.uc.UC_ARM_REG_R3,
+    r12 = c.uc.UC_ARM_REG_R12,
+    xpsr = c.uc.UC_ARM_REG_XPSR,
+    primask = c.uc.UC_ARM_REG_PRIMASK,
+};
+
+/// What runs alongside the core for the length of a run. Everything here is
+/// optional and off by default: a bare `.{}` is one uninterrupted stretch of
+/// execution with no modelled time and no exceptions, which is what the
+/// loader and the smaller tests want.
+pub const Session = struct {
+    /// Records the invalid access behind a fault.
+    watch: ?*Watch = null,
+    /// Charged one chunk of time per chunk of execution.
+    timebase: ?*clocks.Clocks = null,
+    /// Consulted at each chunk boundary for an exception to take.
+    interrupts: ?*nvic.Nvic = null,
 };
 
 pub const Engine = struct {
@@ -207,24 +227,44 @@ pub const Engine = struct {
         try self.setRegister(.pc, reset_vector & ~@as(u32, 1));
     }
 
-    /// Run a bounded number of instructions. A fault is a result, not a crash:
-    /// it comes back with the PC that took it.
+    /// Run a bounded number of instructions. A fault is a result, not a
+    /// crash: it comes back with the PC that took it.
     ///
-    /// With a time base attached the run is cut into chunks and the clocks are
-    /// charged one chunk of time per chunk of execution, which is what keeps a
-    /// firmware that waits on DWT_CYCCNT or on SysTick from spinning out the
-    /// whole budget in one loop. Without one the run is a single stretch, the
-    /// behaviour every caller had before.
-    pub fn run(self: Engine, start: u32, instructions: usize, watch: ?*Watch, timebase: ?*clocks.Clocks) Error!?Fault {
-        if (watch) |w| w.clear();
-        const clock = timebase orelse return self.runChunk(start, instructions, watch);
+    /// With a time base attached the run is cut into chunks and the clocks
+    /// are charged one chunk of time per chunk of execution, which is what
+    /// keeps a firmware that waits on DWT_CYCCNT or on SysTick from spinning
+    /// out the whole budget in one loop. With a controller attached, each of
+    /// those boundaries is also where a pending exception is taken, and a
+    /// handler branching to its EXC_RETURN is unwound rather than reported:
+    /// Unicorn cannot fetch from 0xFFFFFFxx and does not have to.
+    pub fn run(self: Engine, start: u32, instructions: usize, session: Session) Error!?Fault {
+        if (session.watch) |w| w.clear();
+        if (session.timebase == null and session.interrupts == null) {
+            return self.runChunk(start, instructions, session.watch);
+        }
+        const per_chunk = if (session.timebase) |clock| clock.per_chunk else clocks.chunk_instructions;
         var remaining = instructions;
         var pc = start;
         while (remaining > 0) {
-            const chunk = @min(remaining, @as(usize, clock.per_chunk));
-            if (try self.runChunk(pc, chunk, watch)) |taken| return taken;
+            const chunk = @min(remaining, @as(usize, per_chunk));
+            if (try self.runChunk(pc, chunk, session.watch)) |taken| {
+                const controller = session.interrupts orelse return taken;
+                if (!nvic.isExceptionReturn(taken.pc)) return taken;
+                controller.exit(self) catch return Error.RunFailed;
+                pc = try self.register(.pc);
+                // The stretch that ended in the return cannot be measured, so
+                // it is charged one instruction: enough to keep the budget
+                // monotone and a bad frame from looping forever.
+                remaining -= 1;
+                continue;
+            }
             remaining -= chunk;
-            clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
+            if (session.timebase) |clock| clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
+            // The budget is spent: do not enter a handler there is no room
+            // left to run, which would report a run that ended inside an
+            // exception it never actually took.
+            if (remaining == 0) break;
+            if (session.interrupts) |controller| _ = controller.dispatch(self) catch return Error.RunFailed;
             pc = try self.register(.pc);
         }
         return null;
@@ -332,7 +372,7 @@ test "with the bus attached, a store into peripheral space is serviced" {
     };
     try engine.write(memmap.sram_base, &code);
     try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-    const fault = try engine.run(memmap.sram_base, 5, null, null);
+    const fault = try engine.run(memmap.sram_base, 5, .{});
     try std.testing.expect(fault == null);
     try std.testing.expect(bus.counters.writes >= 1);
     try std.testing.expectEqual(@as(u32, 0x55), bus.read(periph.base, 4));
@@ -357,7 +397,7 @@ test "a fault reports the address it reached for and the instruction that did it
     try engine.write(memmap.sram_base, &code);
     try engine.setRegister(.sp, memmap.sram_base + 0x1000);
 
-    const fault = (try engine.run(memmap.sram_base, 4, &watch, null)) orelse return error.TestExpectedFault;
+    const fault = (try engine.run(memmap.sram_base, 4, .{ .watch = &watch })) orelse return error.TestExpectedFault;
     const access = fault.access orelse return error.TestExpectedAccess;
     try std.testing.expectEqual(@as(u64, 0x9000_0000), access.address);
     try std.testing.expectEqual(@as(u8, 4), access.size);
@@ -383,7 +423,7 @@ test "a chunked run charges the clocks and lets a CYCCNT wait finish" {
     try core.setRegister(.sp, memmap.sram_base + 0x1000);
 
     var timebase = clocks.Clocks{ .per_chunk = 64 };
-    const fault = try core.run(memmap.sram_base, 256, null, &timebase);
+    const fault = try core.run(memmap.sram_base, 256, .{ .timebase = &timebase });
     try std.testing.expect(fault == null);
 
     // Four chunks of 64: the cycle counter moved, so a CYCCNT wait completes.
@@ -403,6 +443,6 @@ test "without a time base the run is one stretch and the clocks stand still" {
     try core.write(memmap.sram_base, &[_]u8{ 0xFE, 0xE7 });
     try core.setRegister(.sp, memmap.sram_base + 0x1000);
 
-    try std.testing.expect(try core.run(memmap.sram_base, 256, null, null) == null);
+    try std.testing.expect(try core.run(memmap.sram_base, 256, .{}) == null);
     try std.testing.expectEqual(@as(u32, 0), try core.readWord(memmap.dwt.cyccnt));
 }
