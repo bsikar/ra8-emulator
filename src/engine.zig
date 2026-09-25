@@ -8,6 +8,7 @@ const c = @import("c.zig");
 const elf = @import("elf.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
+const disasm = @import("disasm.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -21,6 +22,28 @@ pub const Error = error{
 pub const Fault = struct {
     pc: u32,
     detail: []const u8,
+    /// The access that took the fault, when Unicorn reported one.
+    access: ?Access = null,
+    /// The instruction at the PC, when it decoded.
+    instruction: ?disasm.Text = null,
+
+    pub const Access = struct {
+        kind: enum { read, write, fetch },
+        address: u64,
+        size: u8,
+        value: u64,
+    };
+};
+
+/// Catches the invalid access behind a fault. Unicorn reports the address and
+/// width in a hook and only the error code afterwards, so the hook writes here
+/// and `run` reads it back once the run has stopped.
+pub const Watch = struct {
+    last: ?Fault.Access = null,
+
+    pub fn clear(self: *Watch) void {
+        self.last = null;
+    }
 };
 
 pub const Cortex = enum(c_int) {
@@ -116,6 +139,24 @@ pub const Engine = struct {
         }
     }
 
+    /// Record the invalid accesses a run takes. Without this a fault is just
+    /// an error code and a PC; with it the report can say which address the
+    /// firmware reached for and how wide the access was.
+    pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
+        var hook: c.uc.uc_hook = 0;
+        if (c.uc.uc_hook_add(
+            self.handle,
+            &hook,
+            c.uc.UC_HOOK_MEM_INVALID,
+            @constCast(@as(*const anyopaque, @ptrCast(&onInvalid))),
+            watch,
+            1,
+            0,
+        ) != c.uc.UC_ERR_OK) {
+            return Error.AttachFailed;
+        }
+    }
+
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
     /// pages the image asks for that the board map does not already cover.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
@@ -153,12 +194,20 @@ pub const Engine = struct {
 
     /// Run a bounded number of instructions. A fault is a result, not a crash:
     /// it comes back with the PC that took it.
-    pub fn run(self: Engine, start: u32, instructions: usize) Error!?Fault {
+    pub fn run(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
+        if (watch) |w| w.clear();
         const err = c.uc.uc_emu_start(self.handle, start | 1, 0xFFFF_FFFF, 0, instructions);
         if (err == c.uc.UC_ERR_OK) return null;
+        const pc = self.register(.pc) catch 0;
+        var bytes: [4]u8 = undefined;
         return Fault{
-            .pc = self.register(.pc) catch 0,
+            .pc = pc,
             .detail = std.mem.span(c.uc.uc_strerror(err)),
+            .access = if (watch) |w| w.last else null,
+            .instruction = blk: {
+                self.read(pc, &bytes) catch break :blk null;
+                break :blk disasm.one(pc, &bytes) catch null;
+            },
         };
     }
 };
@@ -176,6 +225,30 @@ fn onWrite(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, value: u64, user: ?*
     _ = uc;
     const bus: *periph.Bus = @ptrCast(@alignCast(user.?));
     bus.write(periph.base + @as(u32, @truncate(offset)), widthOf(size), @truncate(value));
+}
+
+fn onInvalid(
+    uc: ?*c.uc.uc_engine,
+    kind: c_int,
+    address: u64,
+    size: c_int,
+    value: i64,
+    user: ?*anyopaque,
+) callconv(.C) bool {
+    _ = uc;
+    const watch: *Watch = @ptrCast(@alignCast(user.?));
+    watch.last = .{
+        .kind = switch (kind) {
+            c.uc.UC_MEM_WRITE_UNMAPPED, c.uc.UC_MEM_WRITE_PROT => .write,
+            c.uc.UC_MEM_FETCH_UNMAPPED, c.uc.UC_MEM_FETCH_PROT => .fetch,
+            else => .read,
+        },
+        .address = address,
+        .size = @intCast(size),
+        .value = @bitCast(value),
+    };
+    // false: do not pretend the access succeeded, let the run stop.
+    return false;
 }
 
 fn widthOf(size: c_uint) u3 {
@@ -222,9 +295,35 @@ test "with the bus attached, a store into peripheral space is serviced" {
     };
     try engine.write(memmap.sram_base, &code);
     try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-    const fault = try engine.run(memmap.sram_base, 5);
+    const fault = try engine.run(memmap.sram_base, 5, null);
     try std.testing.expect(fault == null);
     try std.testing.expect(bus.counters.writes >= 1);
     try std.testing.expectEqual(@as(u32, 0x55), bus.read(periph.base, 4));
     try std.testing.expectEqual(@as(u32, 0x55), try engine.register(.r2));
+}
+
+test "a fault reports the address it reached for and the instruction that did it" {
+    var engine = try Engine.open();
+    defer engine.close();
+    try engine.mapBoardRam();
+
+    var watch = Watch{};
+    try engine.attachWatch(&watch);
+
+    // r0 = 0x90000000 (nothing is mapped there); str r1, [r0].
+    const code = [_]u8{
+        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
+        0xC9, 0xF2, 0x00, 0x00, // movt r0, #0x9000
+        0x55, 0x21, //             movs r1, #0x55
+        0x01, 0x60, //             str  r1, [r0]
+    };
+    try engine.write(memmap.sram_base, &code);
+    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
+
+    const fault = (try engine.run(memmap.sram_base, 4, &watch)) orelse return error.TestExpectedFault;
+    const access = fault.access orelse return error.TestExpectedAccess;
+    try std.testing.expectEqual(@as(u64, 0x9000_0000), access.address);
+    try std.testing.expectEqual(@as(u8, 4), access.size);
+    try std.testing.expect(access.kind == .write);
+    try std.testing.expectEqualStrings("str r1, [r0]", (fault.instruction orelse return error.TestExpectedText).slice());
 }

@@ -173,21 +173,27 @@ Landed:
   one model, a block registry with disjoint ranges, and a sparse register file
   that reads back what was written and alternates an untouched address so a
   ready-bit poll falls through instead of spinning
+- the fault path: an invalid access comes back with the address it reached
+  for, the width and direction, and the instruction at the PC disassembled
 
-Still to port, roughly in engine order: the fault path with disassembly,
-clocks, the ICU/NVIC, GPT and the SCI console, GPIO and the LED path, GLCDC
-with the framebuffer and the PPM/GIF capture path, the TUI panel and sidebar,
-and USB. Each lands as its own slice on this branch, building and tested.
+Still to port, roughly in engine order: the system control block (the run
+stops in it today), clocks, the ICU/NVIC, GPT and the SCI console, GPIO and
+the LED path, GLCDC with the framebuffer and the PPM/GIF capture path, the TUI
+panel and sidebar, and USB. Each lands as its own slice on this branch, building and tested.
 
 Against a real `lcd_draw_x.elf` today:
 
 ```
 loaded 12904 bytes, vectors at 0x02000000, sp 0x220FFF00, pc 0x020007F0
-stopped at pc 0x020007F8: Invalid memory write (UC_ERR_WRITE_UNMAPPED)
+peripheral accesses: 0 read, 5 written, 4 distinct unmodelled registers
+stopped at pc 0x0200086E: Invalid memory write (UC_ERR_WRITE_UNMAPPED)
+  instruction: str.w r2, [r3, #0xd08]
+  write of 4 bytes at 0xE000ED08
 ```
 
-That fault is the firmware reaching peripheral space, which nothing models
-here yet. It is the next slice.
+Peripheral space is answered now. That last write is VTOR in the Cortex-M
+system control block at 0xE000E000, which is core space rather than a Renesas
+peripheral and is the next slice.
 
 ## Adding a peripheral block
 

@@ -9,6 +9,7 @@ const elf = @import("elf.zig");
 const engine = @import("engine.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
+const disasm = @import("disasm.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -52,6 +53,9 @@ pub fn main() !u8 {
     var bus = periph.Bus.init(allocator);
     defer bus.deinit();
     try core.attachPeriph(&bus);
+
+    var watch = engine.Watch{};
+    try core.attachWatch(&watch);
     const written = try core.loadImage(image);
 
     const vector_base = image.vectorBase() orelse {
@@ -65,13 +69,18 @@ pub fn main() !u8 {
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, stack_pointer, entry });
 
-    const fault = try core.run(entry, options.instructions);
+    const fault = try core.run(entry, options.instructions, &watch);
     try out.print(
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
     );
     if (fault) |taken| {
         try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
+        if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});
+        if (taken.access) |access| try out.print(
+            "  {s} of {d} bytes at 0x{X:0>8}\n",
+            .{ @tagName(access.kind), access.size, access.address },
+        );
         return 1;
     }
     try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
@@ -110,4 +119,5 @@ test {
     _ = elf;
     _ = engine;
     _ = periph;
+    _ = disasm;
 }
