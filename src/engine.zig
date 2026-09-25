@@ -9,6 +9,7 @@ const elf = @import("elf.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
 const disasm = @import("disasm.zig");
+const clocks = @import("clocks.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -104,6 +105,12 @@ pub const Engine = struct {
         var bytes: [4]u8 = undefined;
         try self.read(address, &bytes);
         return std.mem.readInt(u32, &bytes, .little);
+    }
+
+    pub fn writeWord(self: Engine, address: u32, value: u32) Error!void {
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, value, .little);
+        try self.write(address, &bytes);
     }
 
     pub fn setRegister(self: Engine, which: Cortex, value: u32) Error!void {
@@ -202,8 +209,30 @@ pub const Engine = struct {
 
     /// Run a bounded number of instructions. A fault is a result, not a crash:
     /// it comes back with the PC that took it.
-    pub fn run(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
+    ///
+    /// With a time base attached the run is cut into chunks and the clocks are
+    /// charged one chunk of time per chunk of execution, which is what keeps a
+    /// firmware that waits on DWT_CYCCNT or on SysTick from spinning out the
+    /// whole budget in one loop. Without one the run is a single stretch, the
+    /// behaviour every caller had before.
+    pub fn run(self: Engine, start: u32, instructions: usize, watch: ?*Watch, timebase: ?*clocks.Clocks) Error!?Fault {
         if (watch) |w| w.clear();
+        const clock = timebase orelse return self.runChunk(start, instructions, watch);
+        var remaining = instructions;
+        var pc = start;
+        while (remaining > 0) {
+            const chunk = @min(remaining, @as(usize, clock.per_chunk));
+            if (try self.runChunk(pc, chunk, watch)) |taken| return taken;
+            remaining -= chunk;
+            clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
+            pc = try self.register(.pc);
+        }
+        return null;
+    }
+
+    /// One uninterrupted stretch of execution. The clocks stand still inside
+    /// it: a chunk is the unit of modelled time.
+    fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
         const err = c.uc.uc_emu_start(self.handle, start | 1, 0xFFFF_FFFF, 0, instructions);
         if (err == c.uc.UC_ERR_OK) return null;
         const pc = self.register(.pc) catch 0;
@@ -303,7 +332,7 @@ test "with the bus attached, a store into peripheral space is serviced" {
     };
     try engine.write(memmap.sram_base, &code);
     try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-    const fault = try engine.run(memmap.sram_base, 5, null);
+    const fault = try engine.run(memmap.sram_base, 5, null, null);
     try std.testing.expect(fault == null);
     try std.testing.expect(bus.counters.writes >= 1);
     try std.testing.expectEqual(@as(u32, 0x55), bus.read(periph.base, 4));
@@ -328,10 +357,52 @@ test "a fault reports the address it reached for and the instruction that did it
     try engine.write(memmap.sram_base, &code);
     try engine.setRegister(.sp, memmap.sram_base + 0x1000);
 
-    const fault = (try engine.run(memmap.sram_base, 4, &watch)) orelse return error.TestExpectedFault;
+    const fault = (try engine.run(memmap.sram_base, 4, &watch, null)) orelse return error.TestExpectedFault;
     const access = fault.access orelse return error.TestExpectedAccess;
     try std.testing.expectEqual(@as(u64, 0x9000_0000), access.address);
     try std.testing.expectEqual(@as(u8, 4), access.size);
     try std.testing.expect(access.kind == .write);
     try std.testing.expectEqualStrings("str r1, [r0]", (fault.instruction orelse return error.TestExpectedText).slice());
+}
+
+test "a chunked run charges the clocks and lets a CYCCNT wait finish" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+
+    // What ra8_time_init arms before anything waits on the counter.
+    try core.writeWord(memmap.scb.demcr, clocks.demcr_trcena);
+    try core.writeWord(memmap.dwt.ctrl, clocks.dwt_ctrl_cyccntena);
+    try core.writeWord(memmap.dwt.cyccnt, 0);
+    try core.writeWord(memmap.syst.rvr, 99);
+    try core.writeWord(memmap.syst.cvr, 99);
+    try core.writeWord(memmap.syst.csr, clocks.csr_enable | clocks.csr_tickint);
+
+    // b . : the shape of every wait loop, and what one looks like to the core.
+    try core.write(memmap.sram_base, &[_]u8{ 0xFE, 0xE7 });
+    try core.setRegister(.sp, memmap.sram_base + 0x1000);
+
+    var timebase = clocks.Clocks{ .per_chunk = 64 };
+    const fault = try core.run(memmap.sram_base, 256, null, &timebase);
+    try std.testing.expect(fault == null);
+
+    // Four chunks of 64: the cycle counter moved, so a CYCCNT wait completes.
+    try std.testing.expectEqual(@as(u64, 256), timebase.cycles);
+    try std.testing.expectEqual(@as(u32, 256), try core.readWord(memmap.dwt.cyccnt));
+    // 256 instructions over a 100-tick period: two full periods and change.
+    try std.testing.expectEqual(@as(u64, 2), timebase.ticks);
+    try std.testing.expect(try core.readWord(memmap.scb.icsr) & clocks.icsr_pendstset != 0);
+}
+
+test "without a time base the run is one stretch and the clocks stand still" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try core.writeWord(memmap.scb.demcr, clocks.demcr_trcena);
+    try core.writeWord(memmap.dwt.ctrl, clocks.dwt_ctrl_cyccntena);
+    try core.write(memmap.sram_base, &[_]u8{ 0xFE, 0xE7 });
+    try core.setRegister(.sp, memmap.sram_base + 0x1000);
+
+    try std.testing.expect(try core.run(memmap.sram_base, 256, null, null) == null);
+    try std.testing.expectEqual(@as(u32, 0), try core.readWord(memmap.dwt.cyccnt));
 }

@@ -60,15 +60,32 @@ pub const scb = struct {
     pub const mpu_type: u32 = 0xE000_ED90;
     pub const mpu_ctrl: u32 = 0xE000_ED94;
     pub const demcr: u32 = 0xE000_EDFC;
-    pub const syst_csr: u32 = 0xE000_E010;
+};
+
+/// The SysTick block. Architectural on every Cortex-M, so these are constants
+/// like the rest of the PPB.
+pub const syst = struct {
+    pub const csr: u32 = 0xE000_E010;
+    pub const rvr: u32 = 0xE000_E014;
+    pub const cvr: u32 = 0xE000_E018;
+    pub const calib: u32 = 0xE000_E01C;
+};
+
+/// The Data Watchpoint and Trace unit. Only the free-running cycle counter and
+/// its enable are named: that counter is the time base the firmware spins on
+/// with interrupts masked, which is the whole reason the emulator models it.
+pub const dwt = struct {
+    pub const ctrl: u32 = 0xE000_1000;
+    pub const cyccnt: u32 = 0xE000_1004;
 };
 
 test "every named PPB register falls inside the PPB window" {
-    const fields = @typeInfo(scb).@"struct".decls;
-    inline for (fields) |decl| {
-        const address = @field(scb, decl.name);
-        try std.testing.expect(address >= ppb_base);
-        try std.testing.expect(address < ppb_base + ppb_size);
+    inline for (.{ scb, syst, dwt }) |block| {
+        inline for (@typeInfo(block).@"struct".decls) |decl| {
+            const address = @field(block, decl.name);
+            try std.testing.expect(address >= ppb_base);
+            try std.testing.expect(address < ppb_base + ppb_size);
+        }
     }
 }
 

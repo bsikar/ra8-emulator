@@ -10,6 +10,7 @@ const engine = @import("engine.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("periph.zig");
 const disasm = @import("disasm.zig");
+const clocks = @import("clocks.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -69,10 +70,15 @@ pub fn main() !u8 {
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, stack_pointer, entry });
 
-    const fault = try core.run(entry, options.instructions, &watch);
+    var timebase = clocks.Clocks{};
+    const fault = try core.run(entry, options.instructions, &watch, &timebase);
     try out.print(
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
+    );
+    try out.print(
+        "time: {d} cycles charged, {d} SysTick periods, {d} pended\n",
+        .{ timebase.cycles, timebase.ticks, timebase.pends },
     );
     if (fault) |taken| {
         try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
@@ -120,4 +126,5 @@ test {
     _ = engine;
     _ = periph;
     _ = disasm;
+    _ = clocks;
 }
