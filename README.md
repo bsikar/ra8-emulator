@@ -16,28 +16,21 @@ what the flashed firmware draws.
 
 ## Building
 
-The build is Zig. There is no CMake in this repository any more: the emulator
-is being rewritten from C to Zig (#14), and one build graph covers both trees
-until that reaches parity.
-
 ```sh
-zig build                       # both binaries into zig-out/bin
+zig build                       # the binary into zig-out/bin
 ./zig-out/bin/ra8_emulator path/to/app.elf
 ```
 
-`ra8_emulator` is the C emulator and is still the one that ships.
-`ra8_emulator_zig` is the rewrite, and today it loads an image and runs until
-the firmware touches peripheral space. `zig build test` runs the Zig unit tests
-and the six C test binaries. Run either binary with no arguments and it prints
-every option it takes.
+`zig build test` runs the unit tests. Run the binary with no arguments and it
+prints every option it takes.
 
 ### Installing the toolchain
 
 Zig **0.14.1**, pinned to match `ARG ZIG_VERSION` in
 `.devcontainer/Dockerfile` on the `zig/dev` branch of `bsikar/ra8-firmware`.
-Nothing else is pinned by us: Zig ships its own clang, so the C tree no longer
-needs a system compiler and the old "your `cc` is GCC 12" preflight is gone
-with CMake.
+That is the only compiler this needs: Zig carries its own clang for the two C
+libraries below, so there is no system compiler to pick and no C standard to
+select.
 
 Grab the release tarball, check it, and put it on `PATH`:
 
@@ -55,7 +48,7 @@ zig version   # 0.14.1
 `zig version` says 0.14.1. A different Zig is not supported: the build graph
 uses 0.14 APIs and 0.15 renamed several of them.
 
-### The two C libraries
+### Unicorn and Capstone
 
 Unicorn (the CPU) and Capstone (error-path disassembly) stay C libraries and
 have to be on the machine:
@@ -76,9 +69,9 @@ zig build -Ddeps-prefix="$HOME/.local/ra8-firmware/unicorn"
 If a built binary starts but cannot find `libunicorn.so.2`, point
 `LD_LIBRARY_PATH` at it (`DYLD_LIBRARY_PATH` on macOS).
 
-The live window is a macOS Cocoa window. Every other path, headless boot, the
-MMIO report, frame capture and console capture, builds and runs headless on
-Linux too, which is what lets the emulator gates run on a Linux CI runner.
+Everything here builds and runs headless on Linux, which is what lets the
+emulator gates run on a Linux CI runner. The macOS live window is part of the
+display slice and is not ported yet.
 
 ## Unicorn is version-pinned, deliberately
 
@@ -161,70 +154,44 @@ seams the first-party host primitives to a virtual keyboard or a virtual
 mass-storage disk, and the firmware's real host stack enumerates, mounts and
 browses it.
 
+## Where the rewrite is
+
+This branch is the Zig rewrite (#14) and holds no C of its own. The C
+emulator, all 55.5k lines of it, is on `dev` and `main` and stays the one that
+ships until this reaches parity; nothing here is a wrapper around it, and
+there is no second copy of the tree to keep in step.
+
+Landed:
+
+- the build graph, the Unicorn boundary and the memory map
+- the ELF32 loader: header and program headers as extern structs, every
+  segment bounds-checked against the file, the vector table found from the
+  lowest executable VMA
+- reset out of the vector table and a bounded run whose faults come back as
+  values
+
+Still to port, roughly in engine order: the peripheral bus and the fault path,
+then clocks, the ICU/NVIC, GPT and the SCI console, GPIO and the LED path,
+GLCDC with the framebuffer and the PPM/GIF capture path, the TUI panel and
+sidebar, and USB. Each lands as its own slice on this branch, building and
+tested.
+
+Against a real `lcd_draw_x.elf` today:
+
+```
+loaded 12904 bytes, vectors at 0x02000000, sp 0x220FFF00, pc 0x020007F0
+stopped at pc 0x020007F8: Invalid memory write (UC_ERR_WRITE_UNMAPPED)
+```
+
+That fault is the firmware reaching peripheral space, which nothing models
+here yet. It is the next slice.
+
 ## Adding a peripheral block
 
-The model is **decentralized**: the core owns only the block registry, MMIO
-dispatch and interrupt routing, and keeps no hand-maintained list of blocks. So
-blocks can be added in parallel without touching the core. Two steps:
-
-1. Add a `board_periph_<blk>.c`. Implement the block's read and write handlers,
-   plus optional tick, reset and report hooks; describe it with a static
-   descriptor giving its absolute register base, span and ordering; and
-   self-register it from a file-scope constructor. The emulator is a host
-   program, so the constructor runs before `main` and the block is registered
-   by the time the core resets it.
-2. Nothing else. `build.zig` discovers every `src/periph/board_periph_*.c`
-   at configure time, so there is no source list to edit and no conflict
-   between blocks added in parallel.
-
-MMIO is dispatched by disjoint address range, so registration order is
-irrelevant, and the optional hooks run in ascending descriptor order, so two
-blocks added in parallel cannot conflict. A block needing a board-view value
-declares its getter in the core header and implements it in its own file.
-
-## Capturing the board view
-
-The Cocoa window is macOS only. Everywhere else `board_view_stub.c` is compiled
-and `--view` falls back to headless, so the portable way to see what a run drew
-is the frame-dump path, which needs no display server at all:
-
-```sh
-# final composite (panel + status sidebar) as a single still
-./zig-out/bin/ra8_emulator app.elf --ppm run.ppm
-
-# ~20 fps of composites for the first 3 emulated seconds
-./zig-out/bin/ra8_emulator app.elf --record frames/ --record-secs 3
-```
-
-`--record` writes `frames/frame_NNNNNN.ppm`. `--size WxH` or `--panel <file>`
-sizes the panel (1024x600 by default) and `--rotate 90|180|270` turns it.
-Convert with anything that reads PPM, for example
-`magick run.ppm run.png` for a still or
-`ffmpeg -framerate 20 -i frames/frame_%06d.ppm out.gif` for the animation.
-
-### What a run actually looks like
-
-Both captures below came out of that path, from a real firmware image: the
-`lcd_draw_x` example built from `bsikar/ra8-firmware` `main` with the pinned
-Arm GNU toolchain 13.3, then booted here with no board attached.
-
-![EK-RA8D2 board view: the panel with the drawn X, and the status sidebar](docs/media/board_view.png)
-
-The composite is one pixel buffer: the emulated LCD panel on the left, the
-status sidebar on the right (run state and PC, the three LEDs, I/O, the power
-and button widgets, and the live console). That is why an overlay assertion is
-a pixel check -- the sidebar is in the frame, not in a separate window.
-
-![the same run recorded: LED1 blinking and the console filling](docs/media/board_view.gif)
-
-The animation is the same run recorded over three emulated seconds, showing
-LED1 driven from P600 and the console filling as the firmware runs.
-
-Reproduce both:
-
-```sh
-./zig-out/bin/ra8_emulator lcd_draw_x.elf --ppm run.ppm --record frames/ --record-secs 3
-```
+Not yet. Blocks arrive with the peripheral bus; until then the shape they will
+take is the C one on `dev`: a self-describing block with its own register base
+and span, a read and a write handler, optional tick and reset hooks, and no
+central list for a new block to be added to.
 
 ## What it is for, and what it is not
 

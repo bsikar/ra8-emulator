@@ -1,6 +1,6 @@
 //! The emulated RA8D2 address space.
 //!
-//! Ported from inc/emu_memmap.h. The regions are silicon facts, so they are
+//! The regions are silicon facts, so they are
 //! constants here, not options.
 const std = @import("std");
 

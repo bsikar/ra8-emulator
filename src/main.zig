@@ -1,16 +1,16 @@
-//! ra8_emulator_zig: the Zig rewrite of the RA8D2 board emulator (#14).
+//! ra8_emulator: the RA8D2 board emulator (#14, the Zig rewrite).
 //!
-//! This first slice is the spine the C engine grew from: read an ELF, map the
-//! board, load the image, reset out of the vector table, run a bounded number
-//! of instructions, and say what happened. The peripherals, the display and
-//! the TUI still live in the C tree and land here next.
+//! This first slice is the spine: read an ELF, map the board, load the image,
+//! reset out of the vector table, run a bounded number of instructions, and
+//! say what happened. The peripherals, the display and the TUI are ported
+//! from the C tree on dev, slice by slice, and land here next.
 const std = @import("std");
 const elf = @import("elf.zig");
 const engine = @import("engine.zig");
 const memmap = @import("memmap.zig");
 
 const usage =
-    \\usage: ra8_emulator_zig <firmware.elf> [--instructions N]
+    \\usage: ra8_emulator <firmware.elf> [--instructions N]
     \\
     \\  --instructions N   stop after N instructions (default 2000000)
     \\

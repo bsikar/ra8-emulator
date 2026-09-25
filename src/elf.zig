@@ -1,7 +1,7 @@
-//! ELF32 image services, ported from src/engine/emu_elf.c.
+//! ELF32 image services.
 //!
-//! The C version walked the file with named byte offsets because it parsed
-//! straight out of a byte buffer. Zig reads the same layout as packed structs,
+//! The C original walked the file with named byte offsets because it parsed
+//! straight out of a byte buffer. Zig reads the same layout as extern structs,
 //! so the offsets are the struct fields and the bounds checks are slices.
 const std = @import("std");
 const memmap = @import("memmap.zig");

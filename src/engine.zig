@@ -1,7 +1,7 @@
 //! The Unicorn engine, wrapped once so nothing above it touches C.
 //!
-//! Unicorn stays a C library: this is the boundary, and it is the only place
-//! in the rewrite that handles uc_err, raw pointers or C integer types.
+//! Unicorn stays a C library: this is the boundary, and with src/c.zig it is
+//! the only place that handles uc_err, raw pointers or C integer types.
 //! Callers get Zig errors, slices and named registers.
 const std = @import("std");
 const c = @import("c.zig");
