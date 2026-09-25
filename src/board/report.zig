@@ -54,6 +54,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try graphics(board, out);
     try display(board, out);
+    try raster(board, out);
     try watchdog(board, out);
     try causes(board, out);
     try control(board, out);
@@ -91,6 +92,39 @@ fn display(board: *Board, out: Writer) !void {
     if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
     try out.print(
         "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
+        .{ unit.dropped_unpowered, unit.dark_reads },
+    );
+}
+
+/// What the drawing engine actually put in the framebuffer. The loud case is
+/// a declined render: the configuration was one this model will not invent
+/// pixels for, so the app goes visibly blank here instead of passing on
+/// pixels the bench would not have produced.
+fn raster(board: *Board, out: Writer) !void {
+    const unit = &board.raster;
+    if (unit.quiet()) return;
+    try out.print(
+        "DRW: {d} box(es) rasterized, last {d}x{d}, {d} pixel(s)\n",
+        .{ unit.renders, unit.last_width, unit.last_height, unit.pixels },
+    );
+    if (unit.dlists != 0) {
+        try out.print(
+            "DRW: {d} display list(s), {d} stopped on an unmodelled entry\n",
+            .{ unit.dlists, unit.dlist_stops },
+        );
+    }
+    if (unit.declined != 0) {
+        try out.print(
+            "DRW: DECLINED {d} render(s), last because of {s} (unmodelled: nothing drawn)\n",
+            .{ unit.declined, @tagName(unit.last_decline.?) },
+        );
+    }
+    if (unit.faults != 0) {
+        try out.print("DRW: {d} pixel access(es) went nowhere mapped\n", .{unit.faults});
+    }
+    if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
+    try out.print(
+        "DRW: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
         .{ unit.dropped_unpowered, unit.dark_reads },
     );
 }
