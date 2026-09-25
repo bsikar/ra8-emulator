@@ -149,3 +149,43 @@ test "the block covers every channel and nothing past the last one" {
     try std.testing.expect(block.covers(sci.regAddress(sci.channels - 1, sci.off_csr)));
     try std.testing.expect(!block.covers(sci.win_base + sci.win_span));
 }
+
+test "no console event is due until the firmware arms one" {
+    var unit = sci.Sci.init();
+    try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
+}
+
+test "TXI and TEI are due while their enables stand with TE" {
+    var unit = sci.Sci.init();
+    unit.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.te | sci.ccr0.tie | sci.ccr0.teie);
+    const due = unit.dueEvents();
+    try std.testing.expectEqual(@as(usize, 2), due.len);
+    try std.testing.expectEqual(sci.event.txi, due.constSlice()[0]);
+    try std.testing.expectEqual(sci.event.tei, due.constSlice()[1]);
+}
+
+test "an armed transmit interrupt with TE clear is not due" {
+    var unit = sci.Sci.init();
+    unit.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.tie | sci.ccr0.teie);
+    try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
+}
+
+test "RXI is due only while a byte is actually queued" {
+    var unit = sci.Sci.init();
+    unit.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.re | sci.ccr0.rie);
+    try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
+
+    unit.feed(sci.console_channel, "x");
+    const due = unit.dueEvents();
+    try std.testing.expectEqual(@as(usize, 1), due.len);
+    try std.testing.expectEqual(sci.event.rxi, due.constSlice()[0]);
+
+    _ = unit.read(sci.regAddress(sci.console_channel, sci.off_rdr), 4);
+    try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
+}
+
+test "only the console channel raises events" {
+    var unit = sci.Sci.init();
+    unit.write(sci.regAddress(0, sci.off_ccr0), 4, sci.ccr0.te | sci.ccr0.tie);
+    try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
+}
