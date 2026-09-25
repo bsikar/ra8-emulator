@@ -25,6 +25,12 @@ pub const periph = struct {
     pub const nvic = @import("periph/nvic.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
+    pub const reset = @import("periph/reset.zig");
     pub const sci = @import("periph/sci.zig");
     pub const wdt = @import("periph/wdt.zig");
+};
+
+pub const board = struct {
+    pub const Board = @import("board/board.zig").Board;
+    pub const report = @import("board/report.zig");
 };

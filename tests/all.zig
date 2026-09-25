@@ -5,6 +5,7 @@
 const std = @import("std");
 
 test {
+    _ = @import("board/board_test.zig");
     _ = @import("core/cli_test.zig");
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");
@@ -24,6 +25,7 @@ test {
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
+    _ = @import("periph/reset_test.zig");
     _ = @import("periph/sci_test.zig");
     _ = @import("periph/wdt_test.zig");
     _ = @import("tools/gate_test.zig");
@@ -31,4 +33,5 @@ test {
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
     std.testing.refAllDecls(ra8.periph);
+    std.testing.refAllDecls(ra8.board);
 }
