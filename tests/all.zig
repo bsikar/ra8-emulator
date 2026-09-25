@@ -10,6 +10,7 @@ test {
     _ = @import("core/elf_test.zig");
     _ = @import("core/engine_test.zig");
     _ = @import("core/memmap_test.zig");
+    _ = @import("periph/cac_test.zig");
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/doc_test.zig");

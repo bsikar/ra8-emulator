@@ -12,6 +12,7 @@ const cli = ra8.core.cli;
 const elf = ra8.core.elf;
 const engine = ra8.core.engine;
 const periph = ra8.periph.registry;
+const cac = ra8.periph.cac;
 const clocks = ra8.periph.clocks;
 const nvic = ra8.periph.nvic;
 const mstp = ra8.periph.mstp;
@@ -99,6 +100,7 @@ const Board = struct {
     pins: gpio.Gpio,
     checksum: crc.Crc,
     dataops: doc.Doc,
+    accuracy: cac.Cac,
 
     fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -106,6 +108,7 @@ const Board = struct {
             .pins = gpio.Gpio.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
+            .accuracy = cac.Cac.init(),
         };
     }
 
@@ -123,6 +126,7 @@ const Board = struct {
         try self.bus.add(self.pins.block());
         try self.bus.add(self.checksum.block());
         try self.bus.add(self.dataops.block());
+        try self.bus.add(self.accuracy.block());
         try core.attachPeriph(&self.bus);
     }
 
@@ -156,6 +160,18 @@ const Board = struct {
             try out.print(
                 "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
                 .{ @intFromEnum(self.dataops.mode()), self.dataops.dodsr0, @intFromBool(self.dataops.flag), self.dataops.ops },
+            );
+        }
+        if (!self.accuracy.quiet()) {
+            try out.print(
+                "CAC: {d} measurement(s), count {d}, window [{d},{d}], FERRF={d}\n",
+                .{
+                    self.accuracy.measurements,
+                    self.accuracy.cacntbr,
+                    self.accuracy.callvr,
+                    self.accuracy.caulvr,
+                    @intFromBool(self.accuracy.flagSet(cac.status.ferrf)),
+                },
             );
         }
         try self.reportLeds(out);
