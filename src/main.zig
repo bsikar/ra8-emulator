@@ -22,6 +22,7 @@ const crc = ra8.periph.crc;
 const doc = ra8.periph.doc;
 const prcr = ra8.periph.prcr;
 const bkup = ra8.periph.bkup;
+const sci = ra8.periph.sci;
 
 const Writer = std.fs.File.Writer;
 
@@ -109,6 +110,7 @@ const Board = struct {
     accuracy: cac.Cac,
     protection: prcr.Prcr,
     backup: bkup.Bkup,
+    serial: sci.Sci,
 
     fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -121,6 +123,7 @@ const Board = struct {
             // Patched in attach(): the backup file has to point at this
             // board's own protection model, not a copy of it.
             .backup = undefined,
+            .serial = sci.Sci.init(),
         };
     }
 
@@ -142,6 +145,7 @@ const Board = struct {
         try self.bus.add(self.protection.block());
         self.backup = bkup.Bkup.init(&self.protection);
         try self.bus.add(self.backup.block());
+        try self.bus.add(self.serial.block());
         try core.attachPeriph(&self.bus);
     }
 
@@ -189,8 +193,31 @@ const Board = struct {
                 },
             );
         }
+        try self.reportSerial(out);
         try self.reportProtection(out);
         try self.reportLeds(out);
+    }
+
+    /// One line per SCI channel that moved bytes, plus the last console line
+    /// the firmware printed. A TDR write made with CCR0.TE clear never leaves
+    /// the transmitter on silicon, so those are reported apart from the bytes
+    /// that did go out.
+    fn reportSerial(self: *Board, out: Writer) !void {
+        if (self.serial.quiet()) return;
+        for (&self.serial.channels, 0..) |*channel, index| {
+            if (channel.quiet()) continue;
+            try out.print(
+                "SCI{d}: TX {d} bytes, RX {d} bytes, {d} dropped on a full queue",
+                .{ index, channel.transmitted, channel.received, channel.rx.dropped },
+            );
+            if (channel.unsent != 0) {
+                try out.print(", {d} WRITE(S) WITH TE CLEAR NEVER SENT", .{channel.unsent});
+            }
+            try out.print("\n", .{});
+        }
+        if (self.serial.line.lines != 0) {
+            try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ self.serial.line.lines, self.serial.line.slice() });
+        }
     }
 
     /// PRCR and the domain it protects. Both stay quiet when the firmware

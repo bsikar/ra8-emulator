@@ -23,4 +23,5 @@ pub const periph = struct {
     pub const nvic = @import("periph/nvic.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
+    pub const sci = @import("periph/sci.zig");
 };
