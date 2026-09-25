@@ -16,32 +16,65 @@ what the flashed firmware draws.
 
 ## Building
 
-```sh
-cmake -B build -S .
-cmake --build build -j
-./build/ra8_emulator path/to/app.elf
-```
-
-Run it with no arguments and it prints every option it takes. Two things have
-to be on the machine first: Unicorn and Capstone (`libunicorn-dev` and
-`libcapstone-dev` on Debian and Ubuntu, Homebrew Capstone plus a source build of
-the pinned Unicorn on macOS), and a compiler that speaks C23.
-
-That second one bites on a fresh Linux box. `cmake -B build -S .` selects the
-ambient `cc`, and on Debian 12 that is GCC 12, which cannot parse the typed
-enums and `nullptr` this tree uses in every file. Configuration now stops right
-there with a message naming a compiler on your machine that does work, instead
-of failing deep in the build with diagnostics that look like defects in the
-source. GCC 13 and Clang 16 (Apple clang 15) are the oldest that work; pick one
-with a fresh build directory:
+The build is Zig. There is no CMake in this repository any more: the emulator
+is being rewritten from C to Zig (#14), and one build graph covers both trees
+until that reaches parity.
 
 ```sh
-cmake -B build -S . -DCMAKE_C_COMPILER=gcc-13
-CC=clang-16 cmake -B build -S .
+zig build                       # both binaries into zig-out/bin
+./zig-out/bin/ra8_emulator path/to/app.elf
 ```
 
-The check itself is `-DRA8_C23_PREFLIGHT=OFF` if you ever need it out of the
-way. CI selects its own pinned compiler, so it never sees the check fire.
+`ra8_emulator` is the C emulator and is still the one that ships.
+`ra8_emulator_zig` is the rewrite, and today it loads an image and runs until
+the firmware touches peripheral space. `zig build test` runs the Zig unit tests
+and the six C test binaries. Run either binary with no arguments and it prints
+every option it takes.
+
+### Installing the toolchain
+
+Zig **0.14.1**, pinned to match `ARG ZIG_VERSION` in
+`.devcontainer/Dockerfile` on the `zig/dev` branch of `bsikar/ra8-firmware`.
+Nothing else is pinned by us: Zig ships its own clang, so the C tree no longer
+needs a system compiler and the old "your `cc` is GCC 12" preflight is gone
+with CMake.
+
+Grab the release tarball, check it, and put it on `PATH`:
+
+```sh
+# linux x86_64; swap the triple for aarch64-linux, x86_64-macos or aarch64-macos
+curl -fsSLO https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz
+sha256sum zig-x86_64-linux-0.14.1.tar.xz
+# 24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c
+tar xf zig-x86_64-linux-0.14.1.tar.xz -C "$HOME/.local"
+export PATH="$HOME/.local/zig-x86_64-linux-0.14.1:$PATH"
+zig version   # 0.14.1
+```
+
+`brew install zig` and a distribution package both work too, as long as
+`zig version` says 0.14.1. A different Zig is not supported: the build graph
+uses 0.14 APIs and 0.15 renamed several of them.
+
+### The two C libraries
+
+Unicorn (the CPU) and Capstone (error-path disassembly) stay C libraries and
+have to be on the machine:
+
+```sh
+sudo apt install libunicorn-dev libcapstone-dev      # Debian, Ubuntu
+brew install capstone                                # macOS, plus a source
+                                                     # build of the pinned Unicorn
+```
+
+Somewhere the loader does not look? Name the prefix, and the build adds its
+`include/`, `lib/` and an rpath:
+
+```sh
+zig build -Ddeps-prefix="$HOME/.local/ra8-firmware/unicorn"
+```
+
+If a built binary starts but cannot find `libunicorn.so.2`, point
+`LD_LIBRARY_PATH` at it (`DYLD_LIBRARY_PATH` on macOS).
 
 The live window is a macOS Cocoa window. Every other path, headless boot, the
 MMIO report, frame capture and console capture, builds and runs headless on
@@ -140,7 +173,9 @@ blocks can be added in parallel without touching the core. Two steps:
    self-register it from a file-scope constructor. The emulator is a host
    program, so the constructor runs before `main` and the block is registered
    by the time the core resets it.
-2. Add the file to the source list in `CMakeLists.txt`.
+2. Nothing else. `build.zig` discovers every `src/periph/board_periph_*.c`
+   at configure time, so there is no source list to edit and no conflict
+   between blocks added in parallel.
 
 MMIO is dispatched by disjoint address range, so registration order is
 irrelevant, and the optional hooks run in ascending descriptor order, so two
@@ -155,10 +190,10 @@ is the frame-dump path, which needs no display server at all:
 
 ```sh
 # final composite (panel + status sidebar) as a single still
-./build/ra8_emulator app.elf --ppm run.ppm
+./zig-out/bin/ra8_emulator app.elf --ppm run.ppm
 
 # ~20 fps of composites for the first 3 emulated seconds
-./build/ra8_emulator app.elf --record frames/ --record-secs 3
+./zig-out/bin/ra8_emulator app.elf --record frames/ --record-secs 3
 ```
 
 `--record` writes `frames/frame_NNNNNN.ppm`. `--size WxH` or `--panel <file>`
@@ -188,12 +223,8 @@ LED1 driven from P600 and the console filling as the firmware runs.
 Reproduce both:
 
 ```sh
-./build/ra8_emulator lcd_draw_x.elf --ppm run.ppm --record frames/ --record-secs 3
+./zig-out/bin/ra8_emulator lcd_draw_x.elf --ppm run.ppm --record frames/ --record-secs 3
 ```
-
-If the binary starts but cannot find `libunicorn.so.2`, the library is
-installed somewhere the loader does not look: point `LD_LIBRARY_PATH` at it
-(`DYLD_LIBRARY_PATH` on macOS).
 
 ## What it is for, and what it is not
 
