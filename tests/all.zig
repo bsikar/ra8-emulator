@@ -26,6 +26,7 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
+    _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
     _ = @import("periph/wdt_test.zig");
     _ = @import("tools/gate_test.zig");

@@ -106,6 +106,15 @@ pub const Icu = struct {
         }
     }
 
+    /// Take every latched IR down without touching the links. A system reset
+    /// clears IELSR outright on silicon; this tree keeps peripheral state
+    /// across a reboot, so clearing the flags is the part that matters: a line
+    /// still latched would be re-pended into a firmware that has not put its
+    /// vector table back yet.
+    pub fn clearLatches(self: *Icu) void {
+        for (&self.links) |*link| link.* &= ~field.ir;
+    }
+
     pub fn read(self: *Icu, address: u32, width: u3) u32 {
         _ = width;
         const slot = slotAt(address) orelse return 0;

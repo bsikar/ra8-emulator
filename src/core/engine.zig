@@ -14,6 +14,7 @@ const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
+const reboot = @import("reboot.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -81,6 +82,10 @@ pub const Session = struct {
     /// peripheral side of a tick, where a block that has something to raise
     /// raises it. The board hands one in; the engine only calls it.
     board: ?Tick = null,
+    /// Where a reset request the board took at the boundary is left for the
+    /// engine to perform. A reset resets the core, and the core is the
+    /// engine's, so the board asks and this loop does it.
+    reboot: ?*reboot.Reboot = null,
 };
 
 /// Something to run at the chunk boundary. A thin vtable rather than a
@@ -291,6 +296,13 @@ pub const Engine = struct {
             // exception it never actually took.
             if (remaining == 0) break;
             if (session.board) |tick| tick.run(self) catch return Error.RunFailed;
+            // A part that just reset has nothing pending, so the controller
+            // does not get to pick this boundary: carry straight on into the
+            // reset vector.
+            if (session.reboot) |pending| if (pending.requested) {
+                pc = pending.perform(self, session.interrupts) catch return Error.RunFailed;
+                continue;
+            };
             if (session.interrupts) |controller| _ = controller.dispatch(self) catch return Error.RunFailed;
             pc = try self.register(.pc);
         }
