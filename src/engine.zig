@@ -7,10 +7,12 @@ const std = @import("std");
 const c = @import("c.zig");
 const elf = @import("elf.zig");
 const memmap = @import("memmap.zig");
+const periph = @import("periph.zig");
 
 pub const Error = error{
     OpenFailed,
     MapFailed,
+    AttachFailed,
     WriteFailed,
     RegisterFailed,
     RunFailed,
@@ -25,6 +27,9 @@ pub const Cortex = enum(c_int) {
     pc = c.uc.UC_ARM_REG_PC,
     sp = c.uc.UC_ARM_REG_SP,
     lr = c.uc.UC_ARM_REG_LR,
+    r0 = c.uc.UC_ARM_REG_R0,
+    r1 = c.uc.UC_ARM_REG_R1,
+    r2 = c.uc.UC_ARM_REG_R2,
 };
 
 pub const Engine = struct {
@@ -90,6 +95,27 @@ pub const Engine = struct {
         for (memmap.ram) |region| try self.map(region.base, region.size);
     }
 
+    /// Put the peripheral bus behind the peripheral window and its Non-secure
+    /// alias. Until this runs, the first store a driver makes to a peripheral
+    /// register is an unmapped write and the run ends there; after it, every
+    /// access in the window reaches the bus and either a modelled block or the
+    /// sparse register file answers it.
+    pub fn attachPeriph(self: Engine, bus: *periph.Bus) Error!void {
+        for ([_]u32{ periph.base, periph.ns_base }) |window| {
+            if (c.uc.uc_mmio_map(
+                self.handle,
+                window,
+                periph.size,
+                onRead,
+                bus,
+                onWrite,
+                bus,
+            ) != c.uc.UC_ERR_OK) {
+                return Error.AttachFailed;
+            }
+        }
+    }
+
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
     /// pages the image asks for that the board map does not already cover.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
@@ -137,6 +163,29 @@ pub const Engine = struct {
     }
 };
 
+/// Unicorn hands an offset inside the mapped window, so the window base is
+/// added back before the bus sees it. These two functions and src/c.zig are
+/// the only places with a C calling convention in the emulator.
+fn onRead(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, user: ?*anyopaque) callconv(.C) u64 {
+    _ = uc;
+    const bus: *periph.Bus = @ptrCast(@alignCast(user.?));
+    return bus.read(periph.base + @as(u32, @truncate(offset)), widthOf(size));
+}
+
+fn onWrite(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, value: u64, user: ?*anyopaque) callconv(.C) void {
+    _ = uc;
+    const bus: *periph.Bus = @ptrCast(@alignCast(user.?));
+    bus.write(periph.base + @as(u32, @truncate(offset)), widthOf(size), @truncate(value));
+}
+
+fn widthOf(size: c_uint) u3 {
+    return switch (size) {
+        1 => 1,
+        2 => 2,
+        else => 4,
+    };
+}
+
 fn coveredByBoard(base: u32, size: u32) bool {
     for (memmap.ram) |region| {
         if (base >= region.base and @as(u64, base) + size <= region.end()) return true;
@@ -152,4 +201,30 @@ test "an engine opens, maps the board, and reads back what it wrote" {
     try std.testing.expectEqual(@as(u32, 0x0BADF00D), try engine.readWord(memmap.sram_base));
     try engine.setRegister(.sp, memmap.sram_base + 0x100);
     try std.testing.expectEqual(memmap.sram_base + 0x100, try engine.register(.sp));
+}
+
+test "with the bus attached, a store into peripheral space is serviced" {
+    var engine = try Engine.open();
+    defer engine.close();
+    try engine.mapBoardRam();
+
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    try engine.attachPeriph(&bus);
+
+    // r0 = 0x40000000; store a byte-sized constant there and read it back.
+    const code = [_]u8{
+        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
+        0xC4, 0xF2, 0x00, 0x00, // movt r0, #0x4000
+        0x55, 0x21, //             movs r1, #0x55
+        0x01, 0x60, //             str  r1, [r0]
+        0x02, 0x68, //             ldr  r2, [r0]
+    };
+    try engine.write(memmap.sram_base, &code);
+    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
+    const fault = try engine.run(memmap.sram_base, 5);
+    try std.testing.expect(fault == null);
+    try std.testing.expect(bus.counters.writes >= 1);
+    try std.testing.expectEqual(@as(u32, 0x55), bus.read(periph.base, 4));
+    try std.testing.expectEqual(@as(u32, 0x55), try engine.register(.r2));
 }

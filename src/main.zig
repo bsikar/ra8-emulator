@@ -8,6 +8,7 @@ const std = @import("std");
 const elf = @import("elf.zig");
 const engine = @import("engine.zig");
 const memmap = @import("memmap.zig");
+const periph = @import("periph.zig");
 
 const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N]
@@ -47,6 +48,10 @@ pub fn main() !u8 {
     var core = try engine.Engine.open();
     defer core.close();
     try core.mapBoardRam();
+
+    var bus = periph.Bus.init(allocator);
+    defer bus.deinit();
+    try core.attachPeriph(&bus);
     const written = try core.loadImage(image);
 
     const vector_base = image.vectorBase() orelse {
@@ -61,6 +66,10 @@ pub fn main() !u8 {
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, stack_pointer, entry });
 
     const fault = try core.run(entry, options.instructions);
+    try out.print(
+        "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
+        .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
+    );
     if (fault) |taken| {
         try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
         return 1;
@@ -100,4 +109,5 @@ test {
     _ = memmap;
     _ = elf;
     _ = engine;
+    _ = periph;
 }

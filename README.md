@@ -169,12 +169,15 @@ Landed:
   lowest executable VMA
 - reset out of the vector table and a bounded run whose faults come back as
   values
+- the peripheral bus: the 0x40000000 window and its Non-secure alias behind
+  one model, a block registry with disjoint ranges, and a sparse register file
+  that reads back what was written and alternates an untouched address so a
+  ready-bit poll falls through instead of spinning
 
-Still to port, roughly in engine order: the peripheral bus and the fault path,
-then clocks, the ICU/NVIC, GPT and the SCI console, GPIO and the LED path,
-GLCDC with the framebuffer and the PPM/GIF capture path, the TUI panel and
-sidebar, and USB. Each lands as its own slice on this branch, building and
-tested.
+Still to port, roughly in engine order: the fault path with disassembly,
+clocks, the ICU/NVIC, GPT and the SCI console, GPIO and the LED path, GLCDC
+with the framebuffer and the PPM/GIF capture path, the TUI panel and sidebar,
+and USB. Each lands as its own slice on this branch, building and tested.
 
 Against a real `lcd_draw_x.elf` today:
 
