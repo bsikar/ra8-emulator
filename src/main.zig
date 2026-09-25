@@ -18,6 +18,7 @@ const clocks = ra8.periph.clocks;
 const nvic = ra8.periph.nvic;
 const mstp = ra8.periph.mstp;
 const gpio = ra8.periph.gpio;
+const icu = ra8.periph.icu;
 const crc = ra8.periph.crc;
 const doc = ra8.periph.doc;
 const prcr = ra8.periph.prcr;
@@ -74,6 +75,7 @@ pub fn main() !u8 {
         .watch = &watch,
         .timebase = &timebase,
         .interrupts = &interrupts,
+        .board = board.ticker(),
     });
 
     try board.reportBus(out);
@@ -104,6 +106,7 @@ fn readImage(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
 const Board = struct {
     bus: periph.Bus,
     modules: mstp.Mstp = .{},
+    events: icu.Icu,
     pins: gpio.Gpio,
     checksum: crc.Crc,
     dataops: doc.Doc,
@@ -115,6 +118,7 @@ const Board = struct {
     fn init(allocator: std.mem.Allocator) Board {
         return .{
             .bus = periph.Bus.init(allocator),
+            .events = icu.Icu.init(),
             .pins = gpio.Gpio.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
@@ -146,7 +150,23 @@ const Board = struct {
         self.backup = bkup.Bkup.init(&self.protection);
         try self.bus.add(self.backup.block());
         try self.bus.add(self.serial.block());
+        try self.bus.add(self.events.block());
         try core.attachPeriph(&self.bus);
+    }
+
+    /// The chunk boundary, peripheral side: every block with an event due
+    /// raises it into the event links, then any line still latched re-pends.
+    /// The controller picks straight afterwards, so an interrupt raised here
+    /// is entered in the same boundary rather than a chunk later.
+    fn tick(self: *Board, core: engine.Engine) !void {
+        for (self.serial.dueEvents().constSlice()) |event| {
+            try self.events.raise(core, event);
+        }
+        try self.events.repend(core);
+    }
+
+    fn ticker(self: *Board) engine.Tick {
+        return .{ .context = self, .tickFn = tickThunk };
     }
 
     fn reportBus(self: *Board, out: Writer) !void {
@@ -193,9 +213,25 @@ const Board = struct {
                 },
             );
         }
+        try self.reportEvents(out);
         try self.reportSerial(out);
         try self.reportProtection(out);
         try self.reportLeds(out);
+    }
+
+    /// The event links, but only once something raised an event. A re-pend is
+    /// reported loudly: it means a handler returned with IELSR.IR still set,
+    /// which on silicon re-enters that handler forever.
+    fn reportEvents(self: *Board, out: Writer) !void {
+        if (self.events.quiet()) return;
+        try out.print(
+            "ICU: {d} event(s) raised, {d} line(s) pended, {d} unrouted",
+            .{ self.events.raised, self.events.pends, self.events.unlinked },
+        );
+        if (self.events.repends != 0) {
+            try out.print(", {d} RE-PENDED with IELSR.IR still latched", .{self.events.repends});
+        }
+        try out.print("\n", .{});
     }
 
     /// One line per SCI channel that moved bytes, plus the last console line
@@ -265,6 +301,11 @@ const Board = struct {
         try out.print("\n", .{});
     }
 };
+
+fn tickThunk(context: *anyopaque, core: engine.Engine) anyerror!void {
+    const board: *Board = @ptrCast(@alignCast(context));
+    return board.tick(core);
+}
 
 fn reportTiming(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void {
     try out.print(

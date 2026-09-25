@@ -18,6 +18,7 @@ test {
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/doc_test.zig");
     _ = @import("periph/gpio_test.zig");
+    _ = @import("periph/icu_test.zig");
     _ = @import("periph/mstp_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/prcr_test.zig");

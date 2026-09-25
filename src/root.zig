@@ -19,6 +19,7 @@ pub const periph = struct {
     pub const crc = @import("periph/crc.zig");
     pub const doc = @import("periph/doc.zig");
     pub const gpio = @import("periph/gpio.zig");
+    pub const icu = @import("periph/icu.zig");
     pub const mstp = @import("periph/mstp.zig");
     pub const nvic = @import("periph/nvic.zig");
     pub const prcr = @import("periph/prcr.zig");

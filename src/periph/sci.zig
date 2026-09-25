@@ -69,6 +69,23 @@ pub const fifo = struct {
     pub const ftsr_tdfe: u32 = 0x0000_0040;
 };
 
+/// The ELC event numbers the console channel raises (HUM Ch 19 Table 19.3,
+/// FSP `bsp_elc.h` for ra8d2: SCI8_RXI 0x122, _TXI 0x123, _TEI 0x124). A
+/// firmware that routes one of these writes the same number into an IELSR
+/// slot, and src/periph/icu.zig matches the raised event to that slot.
+///
+/// Only the console channel has modelled event numbers, the same limit dev
+/// draws: the other nine channels raise nothing until something needs them.
+pub const event = struct {
+    pub const rxi: u16 = 0x122;
+    pub const txi: u16 = 0x123;
+    pub const tei: u16 = 0x124;
+};
+
+/// The console events armed and satisfied at one moment. Bounded because
+/// there are exactly three of them.
+pub const Due = std.BoundedArray(u16, 3);
+
 pub const data_mask: u32 = 0xFF;
 
 /// Model sizing. The RX ring is per channel; the line buffer only ever holds
@@ -196,6 +213,23 @@ pub const Sci = struct {
     pub fn feed(self: *Sci, channel: usize, data: []const u8) void {
         if (channel >= channels) return;
         self.channels[channel].rx.push(data);
+    }
+
+    /// The console events that are due right now. The transmitter is always
+    /// drained in this model, so TXI and TEI are due whenever the firmware has
+    /// their enables set alongside TE; RXI is due only while the receiver is
+    /// enabled and a host byte is actually queued. Raised at the chunk
+    /// boundary by whoever owns the event links, which keeps this file free of
+    /// any knowledge of the interrupt controller.
+    pub fn dueEvents(self: *const Sci) Due {
+        var due = Due{};
+        const channel = &self.channels[console_channel];
+        if (channel.enabled(ccr0.te)) {
+            if (channel.enabled(ccr0.tie)) due.appendAssumeCapacity(event.txi);
+            if (channel.enabled(ccr0.teie)) due.appendAssumeCapacity(event.tei);
+        }
+        if (channel.enabled(ccr0.rie) and channel.readable()) due.appendAssumeCapacity(event.rxi);
+        return due;
     }
 
     pub fn read(self: *Sci, address: u32, width: u3) u32 {

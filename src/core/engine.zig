@@ -77,6 +77,22 @@ pub const Session = struct {
     timebase: ?*clocks.Clocks = null,
     /// Consulted at each chunk boundary for an exception to take.
     interrupts: ?*nvic.Nvic = null,
+    /// Run at each chunk boundary, before the controller picks: the
+    /// peripheral side of a tick, where a block that has something to raise
+    /// raises it. The board hands one in; the engine only calls it.
+    board: ?Tick = null,
+};
+
+/// Something to run at the chunk boundary. A thin vtable rather than a
+/// concrete type, for the same reason the peripheral bus takes one: the
+/// engine has no business knowing what a board is made of.
+pub const Tick = struct {
+    context: *anyopaque,
+    tickFn: *const fn (context: *anyopaque, core: Engine) anyerror!void,
+
+    pub fn run(self: Tick, core: Engine) !void {
+        return self.tickFn(self.context, core);
+    }
 };
 
 pub const Engine = struct {
@@ -274,6 +290,7 @@ pub const Engine = struct {
             // left to run, which would report a run that ended inside an
             // exception it never actually took.
             if (remaining == 0) break;
+            if (session.board) |tick| tick.run(self) catch return Error.RunFailed;
             if (session.interrupts) |controller| _ = controller.dispatch(self) catch return Error.RunFailed;
             pc = try self.register(.pc);
         }
