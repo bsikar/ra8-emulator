@@ -14,6 +14,7 @@ const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
 const doc = @import("../periph/doc.zig");
+const drw = @import("../periph/drw.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const icu = @import("../periph/icu.zig");
@@ -41,6 +42,9 @@ pub const Board = struct {
     /// owns, not a copy of one.
     graphics: pdctr.Pdctr,
     display: glcdc.Glcdc,
+    /// The 2D drawing engine, in the same domain and drawing into the same
+    /// framebuffer the display controller scans out.
+    raster: drw.Drw,
     serial: sci.Sci,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
@@ -65,6 +69,7 @@ pub const Board = struct {
             .backup = undefined,
             .graphics = undefined,
             .display = undefined,
+            .raster = undefined,
             .serial = sci.Sci.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
@@ -95,6 +100,11 @@ pub const Board = struct {
         try self.bus.add(self.graphics.block());
         self.display = glcdc.Glcdc.init(&self.graphics);
         try self.bus.add(self.display.block());
+        self.raster = drw.Drw.init(&self.graphics);
+        // The engine rasterizes into RAM, so it needs the machine that owns
+        // it. A board built by a test without one declines the render.
+        self.raster.memory = core.*;
+        try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.monitors.statusBlock());

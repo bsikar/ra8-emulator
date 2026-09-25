@@ -18,6 +18,8 @@ test {
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/doc_test.zig");
+    _ = @import("periph/drw_blend_test.zig");
+    _ = @import("periph/drw_test.zig");
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/icu_test.zig");
