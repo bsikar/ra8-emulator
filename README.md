@@ -175,25 +175,27 @@ Landed:
   ready-bit poll falls through instead of spinning
 - the fault path: an invalid access comes back with the address it reached
   for, the width and direction, and the instruction at the PC disassembled
+- the Private Peripheral Bus at 0xE0000000, mapped as plain RAM the way the C
+  emulator maps it, so SCB, NVIC, SysTick, MPU and SAU writes land and read
+  back; the named register addresses live in memmap.scb
 
-Still to port, roughly in engine order: the system control block (the run
-stops in it today), clocks, the ICU/NVIC, GPT and the SCI console, GPIO and
-the LED path, GLCDC with the framebuffer and the PPM/GIF capture path, the TUI
-panel and sidebar, and USB. Each lands as its own slice on this branch, building and tested.
+Still to port, roughly in engine order: clocks, ICU/NVIC exception delivery
+(the PPB stores the bits today but nothing acts on them), GPT and the SCI
+console, GPIO and the LED path, GLCDC with the framebuffer and the PPM/GIF
+capture path, the TUI panel and sidebar, and USB. Each lands as its own slice on this branch, building and tested.
 
 Against a real `lcd_draw_x.elf` today:
 
 ```
 loaded 12904 bytes, vectors at 0x02000000, sp 0x220FFF00, pc 0x020007F0
 peripheral accesses: 0 read, 5 written, 4 distinct unmodelled registers
-stopped at pc 0x0200086E: Invalid memory write (UC_ERR_WRITE_UNMAPPED)
-  instruction: str.w r2, [r3, #0xd08]
-  write of 4 bytes at 0xE000ED08
+ran 200000 instructions clean, pc 0x02000834
 ```
 
-Peripheral space is answered now. That last write is VTOR in the Cortex-M
-system control block at 0xE000E000, which is core space rather than a Renesas
-peripheral and is the next slice.
+That is the first app to run to the instruction budget without faulting. It is
+not parity: nothing is driving the clocks or delivering interrupts yet, so the
+firmware is spinning rather than progressing. The next slices give it
+something to wait on.
 
 ## Adding a peripheral block
 

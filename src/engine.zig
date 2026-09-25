@@ -73,7 +73,15 @@ pub const Engine = struct {
     }
 
     pub fn map(self: Engine, base: u32, size: u32) Error!void {
-        if (c.uc.uc_mem_map(self.handle, base, size, c.uc.UC_PROT_ALL) != c.uc.UC_ERR_OK) {
+        return self.mapWithPerms(base, size, .{});
+    }
+
+    pub fn mapWithPerms(self: Engine, base: u32, size: u32, perms: memmap.Region.Perms) Error!void {
+        var prot: c_uint = 0;
+        if (perms.read) prot |= c.uc.UC_PROT_READ;
+        if (perms.write) prot |= c.uc.UC_PROT_WRITE;
+        if (perms.exec) prot |= c.uc.UC_PROT_EXEC;
+        if (c.uc.uc_mem_map(self.handle, base, size, prot) != c.uc.UC_ERR_OK) {
             return Error.MapFailed;
         }
     }
@@ -115,7 +123,7 @@ pub const Engine = struct {
 
     /// Map the RAM regions the board has before any image lands in them.
     pub fn mapBoardRam(self: Engine) Error!void {
-        for (memmap.ram) |region| try self.map(region.base, region.size);
+        for (memmap.ram) |region| try self.mapWithPerms(region.base, region.size, region.perms);
     }
 
     /// Put the peripheral bus behind the peripheral window and its Non-secure
