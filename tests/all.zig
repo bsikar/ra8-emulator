@@ -9,6 +9,8 @@ test {
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");
     _ = @import("core/engine_test.zig");
+    _ = @import("core/lob_hook_test.zig");
+    _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/clocks_test.zig");

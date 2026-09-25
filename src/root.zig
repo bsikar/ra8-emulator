@@ -7,6 +7,8 @@ pub const core = struct {
     pub const disasm = @import("core/disasm.zig");
     pub const elf = @import("core/elf.zig");
     pub const engine = @import("core/engine.zig");
+    pub const lob = @import("core/lob.zig");
+    pub const lob_hook = @import("core/lob_hook.zig");
     pub const memmap = @import("core/memmap.zig");
 };
 

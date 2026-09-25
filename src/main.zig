@@ -11,6 +11,7 @@ const ra8 = @import("ra8");
 const cli = ra8.core.cli;
 const elf = ra8.core.elf;
 const engine = ra8.core.engine;
+const lob = ra8.core.lob;
 const periph = ra8.periph.registry;
 const cac = ra8.periph.cac;
 const clocks = ra8.periph.clocks;
@@ -49,6 +50,8 @@ pub fn main() !u8 {
 
     var watch = engine.Watch{};
     try core.attachWatch(&watch);
+    var loops = lob.Loops{};
+    try core.attachLoops(&loops);
     const written = try core.loadImage(image);
 
     const vector_base = image.vectorBase() orelse {
@@ -72,6 +75,7 @@ pub fn main() !u8 {
 
     try board.reportBus(out);
     try reportTiming(out, timebase, interrupts);
+    try reportLoops(out, loops);
     try board.reportBlocks(out);
     if (fault) |taken| {
         try reportFault(out, taken);
@@ -202,6 +206,17 @@ fn reportTiming(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !vo
     try out.print(
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
+    );
+}
+
+/// Only when the hook was needed: a run of Armv8.0-M code says nothing here,
+/// and a run of real Cortex-M85 code says how much of it the CPU model could
+/// not reach on its own.
+fn reportLoops(out: Writer, loops: lob.Loops) !void {
+    if (loops.quiet()) return;
+    try out.print(
+        "low-overhead loops: {d} stepped by hand, the CPU model cannot decode Armv8.1-M\n",
+        .{loops.stepped},
     );
 }
 
