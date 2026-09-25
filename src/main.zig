@@ -1,9 +1,10 @@
 //! ra8_emulator: the RA8D2 board emulator (#14, the Zig rewrite).
 //!
-//! This first slice is the spine: read an ELF, map the board, load the image,
-//! reset out of the vector table, run a bounded number of instructions, and
-//! say what happened. The peripherals, the display and the TUI are ported
-//! from the C tree on dev, slice by slice, and land here next.
+//! This file is wiring and nothing else: read an ELF, build the board, reset
+//! out of the vector table, run a bounded number of instructions, and say
+//! what happened. The machine lives in src/core, every block that answers on
+//! the peripheral bus lives in src/periph, and both are reached through the
+//! "ra8" module.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -18,6 +19,8 @@ const gpio = ra8.periph.gpio;
 const crc = ra8.periph.crc;
 const doc = ra8.periph.doc;
 
+const Writer = std.fs.File.Writer;
+
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -29,13 +32,7 @@ pub fn main() !u8 {
         return 2;
     };
 
-    const file = std.fs.cwd().openFile(options.path, .{}) catch |err| {
-        std.debug.print("cannot open {s}: {s}\n", .{ options.path, @errorName(err) });
-        return 1;
-    };
-    defer file.close();
-    const bytes = try file.readToEndAlloc(allocator, 64 * 1024 * 1024);
-
+    const bytes = readImage(allocator, options.path) catch return 1;
     const image = elf.Image.init(bytes) catch |err| {
         std.debug.print("{s} is not a loadable image: {s}\n", .{ options.path, @errorName(err) });
         return 1;
@@ -45,20 +42,9 @@ pub fn main() !u8 {
     defer core.close();
     try core.mapBoardRam();
 
-    var bus = periph.Bus.init(allocator);
-    defer bus.deinit();
-    var modules = mstp.Mstp{};
-    try bus.add(modules.block());
-    bus.gate = modules.gate();
-    // PORT is not module-stop gated on this part, so it is added after the
-    // gate and answers regardless of MSTPCRx.
-    var pins = gpio.Gpio.init();
-    try bus.add(pins.block());
-    var checksum = crc.Crc.init();
-    try bus.add(checksum.block());
-    var dataops = doc.Doc.init();
-    try bus.add(dataops.block());
-    try core.attachPeriph(&bus);
+    var board = Board.init(allocator);
+    defer board.deinit();
+    try board.attach(&core);
 
     var watch = engine.Watch{};
     try core.attachWatch(&watch);
@@ -82,20 +68,117 @@ pub fn main() !u8 {
         .timebase = &timebase,
         .interrupts = &interrupts,
     });
-    try out.print(
-        "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
-        .{ bus.counters.reads, bus.counters.writes, bus.unmodelledAddresses() },
-    );
-    if (modules.clean()) {
-        try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
-    } else {
+
+    try board.reportBus(out);
+    try reportTiming(out, timebase, interrupts);
+    try board.reportBlocks(out);
+    if (fault) |taken| {
+        try reportFault(out, taken);
+        return 1;
+    }
+    try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
+    return 0;
+}
+
+/// The file behind `path`, or a printed complaint and the error that caused
+/// it. The bytes outlive the file and are owned by the caller's arena.
+fn readImage(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        std.debug.print("cannot open {s}: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+    defer file.close();
+    return file.readToEndAlloc(allocator, 64 * 1024 * 1024);
+}
+
+/// The peripheral side of the board: the bus and every block that answers on
+/// it, held together so main() stays wiring.
+const Board = struct {
+    bus: periph.Bus,
+    modules: mstp.Mstp = .{},
+    pins: gpio.Gpio,
+    checksum: crc.Crc,
+    dataops: doc.Doc,
+
+    fn init(allocator: std.mem.Allocator) Board {
+        return .{
+            .bus = periph.Bus.init(allocator),
+            .pins = gpio.Gpio.init(),
+            .checksum = crc.Crc.init(),
+            .dataops = doc.Doc.init(),
+        };
+    }
+
+    fn deinit(self: *Board) void {
+        self.bus.deinit();
+    }
+
+    /// Order matters. The module-stop shadow goes on first and then becomes
+    /// the gate the rest of the bus is filtered through; PORT follows it
+    /// because PORT has no module-stop bit on this part and has to answer
+    /// regardless of MSTPCRx.
+    fn attach(self: *Board, core: *engine.Engine) !void {
+        try self.bus.add(self.modules.block());
+        self.bus.gate = self.modules.gate();
+        try self.bus.add(self.pins.block());
+        try self.bus.add(self.checksum.block());
+        try self.bus.add(self.dataops.block());
+        try core.attachPeriph(&self.bus);
+    }
+
+    fn reportBus(self: *Board, out: Writer) !void {
+        try out.print(
+            "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
+            .{ self.bus.counters.reads, self.bus.counters.writes, self.bus.unmodelledAddresses() },
+        );
+        if (self.modules.clean()) {
+            try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
+            return;
+        }
         // Loud on purpose: on silicon these reads give zero and these writes
         // vanish, which is the bug the emulator used to hide.
         try out.print(
             "module stop: DROPPED {d} read(s) and {d} write(s) to stopped peripheral(s), last {s}, firmware forgot to cancel module stop\n",
-            .{ modules.gated_reads, modules.gated_writes, modules.last_gated },
+            .{ self.modules.gated_reads, self.modules.gated_writes, self.modules.last_gated },
         );
     }
+
+    /// One line per block that was actually used, so a run only reports the
+    /// peripherals the firmware touched.
+    fn reportBlocks(self: *Board, out: Writer) !void {
+        if (!self.checksum.quiet()) {
+            try out.print(
+                "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
+                .{ @intFromEnum(self.checksum.gps()), self.checksum.dor, self.checksum.bytes },
+            );
+        }
+        if (!self.dataops.quiet()) {
+            try out.print(
+                "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
+                .{ @intFromEnum(self.dataops.mode()), self.dataops.dodsr0, @intFromBool(self.dataops.flag), self.dataops.ops },
+            );
+        }
+        try self.reportLeds(out);
+    }
+
+    fn reportLeds(self: *Board, out: Writer) !void {
+        if (self.pins.quiet()) {
+            try out.print("GPIO LEDs: none driven\n", .{});
+            return;
+        }
+        try out.print("GPIO LEDs:", .{});
+        for (gpio.leds, 0..) |led, i| {
+            try out.print(" [{s} {s} x{d}]", .{
+                led.name,
+                if (self.pins.ledLevel(i) == 1) "ON" else "OFF",
+                self.pins.ledEdges(i),
+            });
+        }
+        try out.print("\n", .{});
+    }
+};
+
+fn reportTiming(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void {
     try out.print(
         "time: {d} cycles charged, {d} SysTick periods, {d} pended\n",
         .{ timebase.cycles, timebase.ticks, timebase.pends },
@@ -104,40 +187,13 @@ pub fn main() !u8 {
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
-    if (!checksum.quiet()) {
-        try out.print(
-            "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
-            .{ @intFromEnum(checksum.gps()), checksum.dor, checksum.bytes },
-        );
-    }
-    if (!dataops.quiet()) {
-        try out.print(
-            "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
-            .{ @intFromEnum(dataops.mode()), dataops.dodsr0, @intFromBool(dataops.flag), dataops.ops },
-        );
-    }
-    if (pins.quiet()) {
-        try out.print("GPIO LEDs: none driven\n", .{});
-    } else {
-        try out.print("GPIO LEDs:", .{});
-        for (gpio.leds, 0..) |led, i| {
-            try out.print(" [{s} {s} x{d}]", .{
-                led.name,
-                if (pins.ledLevel(i) == 1) "ON" else "OFF",
-                pins.ledEdges(i),
-            });
-        }
-        try out.print("\n", .{});
-    }
-    if (fault) |taken| {
-        try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
-        if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});
-        if (taken.access) |access| try out.print(
-            "  {s} of {d} bytes at 0x{X:0>8}\n",
-            .{ @tagName(access.kind), access.size, access.address },
-        );
-        return 1;
-    }
-    try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
-    return 0;
+}
+
+fn reportFault(out: Writer, taken: engine.Fault) !void {
+    try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
+    if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});
+    if (taken.access) |access| try out.print(
+        "  {s} of {d} bytes at 0x{X:0>8}\n",
+        .{ @tagName(access.kind), access.size, access.address },
+    );
 }
