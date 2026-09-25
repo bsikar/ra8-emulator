@@ -11,6 +11,8 @@ const cac = @import("../periph/cac.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
 const reset = @import("../periph/reset.zig");
+const reboot = @import("../core/reboot.zig");
+const scb = @import("../periph/scb.zig");
 const engine = @import("../core/engine.zig");
 const lob = @import("../core/lob.zig");
 
@@ -51,6 +53,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try watchdog(board, out);
     try causes(board, out);
+    try control(board, out);
     try monitors(board, out);
     try events(board, out);
     try serial(board, out);
@@ -86,8 +89,8 @@ fn watchdog(board: *Board, out: Writer) !void {
 }
 
 /// Why the part booted, and whether anything asked it to boot again. A
-/// requested reset is reported loudly: silicon reboots there, and this tree
-/// latches the cause and keeps running instead.
+/// software request is carried out (the reboots line counts those); a
+/// watchdog one still only latches the cause and lets the run carry on.
 fn causes(board: *Board, out: Writer) !void {
     const unit = &board.causes;
     if (unit.quiet()) return;
@@ -99,7 +102,7 @@ fn causes(board: *Board, out: Writer) !void {
     try out.print(")\n", .{});
     if (unit.requests != 0) {
         try out.print(
-            "RESET: {d} RESET(S) REQUESTED (silicon reboots here; the cause is latched and the run carries on)\n",
+            "RESET: {d} RESET(S) REQUESTED (a software request is performed; a watchdog one only latches the cause)\n",
             .{unit.requests},
         );
     }
@@ -107,6 +110,23 @@ fn causes(board: *Board, out: Writer) !void {
     try out.print(
         "RESET: {d} ack(s) wrote a one at a cause flag and cleared nothing (RSTSRn is write-zero-to-clear)\n",
         .{unit.bad_acks},
+    );
+}
+
+/// What the firmware asked AIRCR for. A write the key gate dropped is the
+/// loud line here: dev honours a keyless SYSRESETREQ, so a driver that forgot
+/// the 0x05FA reboots there and is ignored by the silicon it runs on.
+fn control(board: *Board, out: Writer) !void {
+    const unit = &board.control;
+    if (unit.quiet()) return;
+    try out.print(
+        "AIRCR: {d} write(s), {d} reset request(s), priority group {d}\n",
+        .{ unit.writes, unit.requests, unit.priorityGroup() },
+    );
+    if (unit.rejected == 0) return;
+    try out.print(
+        "AIRCR: {d} write(s) DROPPED for a missing or wrong VECTKEY (0x{X:0>4} required)\n",
+        .{ unit.rejected, scb.key.write },
     );
 }
 
@@ -233,6 +253,16 @@ pub fn timing(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void
     try out.print(
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
+    );
+}
+
+/// Reboots the run actually performed. Silent on a run that never reset,
+/// which is nearly all of them.
+pub fn reboots(out: Writer, pending: reboot.Reboot) !void {
+    if (pending.performed == 0) return;
+    try out.print(
+        "reboots: {d} warm reset(s) performed from the vector table, peripheral state kept\n",
+        .{pending.performed},
     );
 }
 

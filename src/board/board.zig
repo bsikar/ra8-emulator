@@ -8,6 +8,7 @@
 const std = @import("std");
 
 const engine = @import("../core/engine.zig");
+const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
@@ -19,6 +20,7 @@ const lvd = @import("../periph/lvd.zig");
 const mstp = @import("../periph/mstp.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
+const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const wdt = @import("../periph/wdt.zig");
 
@@ -36,6 +38,11 @@ pub const Board = struct {
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
     causes: reset.Reset,
+    control: scb.Scb,
+    /// Where a reset this board decides on is left for the engine to perform.
+    /// main.zig points it at the run's own seam; a board built by a test that
+    /// never reboots leaves it null and the request is only latched.
+    reboot: ?*reboot.Reboot = null,
 
     pub fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -53,6 +60,7 @@ pub const Board = struct {
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
             .causes = reset.Reset.init(),
+            .control = scb.Scb.init(),
         };
     }
 
@@ -83,6 +91,9 @@ pub const Board = struct {
         try self.bus.add(self.causes.statusBlock());
         try self.bus.add(self.causes.causeBlock());
         try core.attachPeriph(&self.bus);
+        // AIRCR is PPB RAM, not a bus block, and RAM starts at zero: without
+        // this the first read of it is 0 rather than the key status.
+        try self.control.prime(core.*);
     }
 
     /// The chunk boundary, peripheral side: the watchdog counts, a block with
@@ -92,21 +103,28 @@ pub const Board = struct {
     /// raised here is entered in the same boundary rather than a chunk later.
     pub fn tick(self: *Board, core: engine.Engine) !void {
         self.watchdog.tick();
-        self.takeResetRequests();
+        try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.events.raise(core, event);
         }
         try self.events.repend(core);
     }
 
-    /// A watchdog that has asked for a reset hands the request to the reset
-    /// block once. Silicon reboots the part here; this tree has no reboot
-    /// path yet, so the cause is latched and the run carries on, which is
-    /// still the reading the firmware would get on the way back up.
-    pub fn takeResetRequests(self: *Board) void {
-        if (!self.watchdog.reset_requested) return;
-        self.watchdog.reset_requested = false;
-        self.causes.request(.watchdog);
+    /// Whoever asked for a reset this boundary hands the request to the reset
+    /// block, which latches the cause the firmware will read on the way back
+    /// up. A software request is then performed: the run has a reboot seam and
+    /// the firmware behind AIRCR is sitting in a wait loop expecting the part
+    /// to go away. A watchdog request still only latches, because the image
+    /// that tripped it has nothing waiting on the reboot.
+    pub fn takeResetRequests(self: *Board, core: anytype) !void {
+        if (self.watchdog.reset_requested) {
+            self.watchdog.reset_requested = false;
+            self.causes.request(.watchdog);
+        }
+        if (!try self.control.poll(core)) return;
+        self.causes.request(.software);
+        self.events.clearLatches();
+        if (self.reboot) |pending| pending.requested = true;
     }
 
     pub fn ticker(self: *Board) engine.Tick {

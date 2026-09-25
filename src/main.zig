@@ -62,15 +62,19 @@ pub fn main() !u8 {
 
     var timebase = clocks.Clocks{};
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
+    var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
+    board.reboot = &reboot;
     const fault = try core.run(entry, options.instructions, .{
         .watch = &watch,
         .timebase = &timebase,
         .interrupts = &interrupts,
         .board = board.ticker(),
+        .reboot = &reboot,
     });
 
     try report.bus(&board, out);
     try report.timing(out, timebase, interrupts);
+    try report.reboots(out, reboot);
     try report.loops(out, loops);
     try report.blocks(&board, out);
     if (fault) |taken| {
