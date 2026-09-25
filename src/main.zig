@@ -19,6 +19,7 @@ const nvic = ra8.periph.nvic;
 const mstp = ra8.periph.mstp;
 const gpio = ra8.periph.gpio;
 const icu = ra8.periph.icu;
+const lvd = ra8.periph.lvd;
 const crc = ra8.periph.crc;
 const doc = ra8.periph.doc;
 const prcr = ra8.periph.prcr;
@@ -114,6 +115,7 @@ const Board = struct {
     protection: prcr.Prcr,
     backup: bkup.Bkup,
     serial: sci.Sci,
+    monitors: lvd.Lvd,
 
     fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -128,6 +130,7 @@ const Board = struct {
             // board's own protection model, not a copy of it.
             .backup = undefined,
             .serial = sci.Sci.init(),
+            .monitors = lvd.Lvd.init(),
         };
     }
 
@@ -151,6 +154,9 @@ const Board = struct {
         try self.bus.add(self.backup.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.events.block());
+        try self.bus.add(self.monitors.statusBlock());
+        try self.bus.add(self.monitors.controlBlock());
+        try self.bus.add(self.monitors.filterBlock());
         try core.attachPeriph(&self.bus);
     }
 
@@ -213,10 +219,38 @@ const Board = struct {
                 },
             );
         }
+        try self.reportMonitors(out);
         try self.reportEvents(out);
         try self.reportSerial(out);
         try self.reportProtection(out);
         try self.reportLeds(out);
+    }
+
+    /// One line per voltage monitor the firmware programmed. A monitor whose
+    /// threshold sits over the rail is reported as below, which is the reading
+    /// the C tree cannot give: there every PVDmSR read says the rail is fine.
+    fn reportMonitors(self: *Board, out: Writer) !void {
+        if (self.monitors.quiet()) return;
+        for (&self.monitors.channels, lvd.names) |*channel, name| {
+            if (channel.quiet()) continue;
+            try out.print("{s}: {s}", .{ name, monitorState(channel) });
+            if (channel.crossings != 0) {
+                try out.print(", {d} crossing(s), DET={d}", .{ channel.crossings, @intFromBool(channel.det) });
+            }
+            if (channel.refused_clears != 0) {
+                try out.print(", {d} DET CLEAR(S) WRITTEN AS A 1 AND REFUSED", .{channel.refused_clears});
+            }
+            if (channel.reserved_level != 0) {
+                try out.print(", {d} RESERVED PVDLVL ENCODING(S)", .{channel.reserved_level});
+            }
+            try out.print("\n", .{});
+        }
+        if (self.monitors.dropped != 0) {
+            try out.print(
+                "SYSC-PVDLR: DROPPED {d} write(s) to PVD4/PVD5 with LOCK set (write 0 to PVDLR once to release it)\n",
+                .{self.monitors.dropped},
+            );
+        }
     }
 
     /// The event links, but only once something raised an event. A re-pend is
@@ -301,6 +335,12 @@ const Board = struct {
         try out.print("\n", .{});
     }
 };
+
+/// What the comparator is saying right now, in the words the report uses.
+fn monitorState(channel: *const lvd.Channel) []const u8 {
+    if (!channel.live) return "monitor off";
+    return if (channel.above) "VCC above Vdet" else "VCC BELOW Vdet";
+}
 
 fn tickThunk(context: *anyopaque, core: engine.Engine) anyerror!void {
     const board: *Board = @ptrCast(@alignCast(context));
