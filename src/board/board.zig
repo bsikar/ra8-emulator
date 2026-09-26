@@ -27,6 +27,7 @@ const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
+const ulpt = @import("../periph/ulpt.zig");
 const wdt = @import("../periph/wdt.zig");
 
 pub const Board = struct {
@@ -55,6 +56,9 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
+    /// The low-power timer, which keeps counting through Software Standby
+    /// and is how a sleeping part wakes itself back up.
+    lowpower: ulpt.Ulpt,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
     causes: reset.Reset,
@@ -82,6 +86,7 @@ pub const Board = struct {
             .display = undefined,
             .raster = undefined,
             .serial = sci.Sci.init(),
+            .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
             .causes = reset.Reset.init(),
@@ -117,6 +122,7 @@ pub const Board = struct {
         self.raster.memory = core.*;
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
+        try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
         try self.bus.add(self.transfers.block());
@@ -139,8 +145,12 @@ pub const Board = struct {
     /// raised here is entered in the same boundary rather than a chunk later.
     pub fn tick(self: *Board, core: engine.Engine) !void {
         self.watchdog.tick();
+        self.lowpower.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.lowpower.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.links.takeEvents().constSlice()) |event| {

@@ -62,6 +62,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try eventLinks(board, out);
     try transfers(board, out);
     try serial(board, out);
+    try lowpower(board, out);
     try protection(board, out);
     try leds(board, out);
 }
@@ -250,6 +251,38 @@ fn serial(board: *Board, out: Writer) !void {
     }
     if (board.serial.line.lines != 0) {
         try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
+    }
+}
+
+/// The low-power timer, which is how the deep-idle images wake themselves.
+/// dev raises the underflow event on the rising edge of TUNDF only, so a
+/// periodic image that never clears the flag gets one wake there and wakes
+/// every period on the bench; every underflow is an interrupt request here,
+/// and a forced stop through TSTOP is taken rather than discarded.
+fn lowpower(board: *Board, out: Writer) !void {
+    const unit = &board.lowpower;
+    if (unit.quiet()) return;
+    for (&unit.channels, 0..) |*channel, index| {
+        if (channel.underflows == 0 and !channel.running()) continue;
+        try out.print(
+            "ULPT{d}: counter 0x{X:0>8}, {d} underflow(s), divide by {d}, {s}\n",
+            .{
+                index,
+                channel.counter,
+                channel.underflows,
+                channel.divider(),
+                if (channel.running()) "running" else "stopped",
+            },
+        );
+        if (channel.forced_stops != 0) {
+            try out.print("ULPT{d}: {d} forced stop(s) through TSTOP\n", .{ index, channel.forced_stops });
+        }
+    }
+    if (unit.compare_touches != 0) {
+        try out.print(
+            "ULPT: {d} COMPARE-MATCH ACCESS(ES), NOT MODELLED (ULPTCMA/CMB are stored and never compared, so no compare event is raised)\n",
+            .{unit.compare_touches},
+        );
     }
 }
 

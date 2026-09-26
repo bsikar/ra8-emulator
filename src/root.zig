@@ -36,6 +36,7 @@ pub const periph = struct {
     pub const reset = @import("periph/reset.zig");
     pub const scb = @import("periph/scb.zig");
     pub const sci = @import("periph/sci.zig");
+    pub const ulpt = @import("periph/ulpt.zig");
     pub const wdt = @import("periph/wdt.zig");
 };
 
