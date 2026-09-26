@@ -25,3 +25,34 @@ pub fn sections(board: *Board, out: Writer) !void {
         try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
     }
 }
+
+/// One line per SPI channel the firmware touched. A store made with SPE
+/// clear never reaches a wire on silicon, and a read of an empty receive
+/// holding register is a frame dev would have served twice.
+pub fn spi(board: *Board, out: Writer) !void {
+    for (&board.spi.channels, 0..) |*unit, index| {
+        if (unit.quiet()) continue;
+        try out.print(
+            "SPI{d}: SPE={d}, {d} frame(s) clocked, last 0x{X:0>2}, loopback={s}\n",
+            .{
+                index,
+                @intFromBool(unit.enabled()),
+                unit.frames,
+                unit.last,
+                if (unit.loopback()) "on" else "off",
+            },
+        );
+        if (unit.refused != 0) {
+            try out.print(
+                "SPI{d}: REFUSED {d} SPDR store(s) with SPE clear, the channel was never started\n",
+                .{ index, unit.refused },
+            );
+        }
+        if (unit.starved != 0) {
+            try out.print(
+                "SPI{d}: {d} SPDR read(s) with the receive register empty, no frame had arrived\n",
+                .{ index, unit.starved },
+            );
+        }
+    }
+}
