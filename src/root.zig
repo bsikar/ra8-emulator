@@ -122,6 +122,7 @@ pub const periph = struct {
     pub const sram = @import("periph/sram.zig");
     pub const ssie = @import("periph/ssie.zig");
     pub const ulpt = @import("periph/ulpt.zig");
+    pub const ulpt_compare = @import("periph/ulpt_compare.zig");
     pub const usbhs = @import("periph/usbhs.zig");
     pub const usbhs_device = @import("periph/usbhs_device.zig");
     pub const usbhs_dfifo = @import("periph/usbhs_dfifo.zig");

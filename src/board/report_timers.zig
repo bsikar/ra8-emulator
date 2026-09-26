@@ -32,10 +32,19 @@ fn lowpower(board: *Board, out: Writer) !void {
             try out.print("ULPT{d}: {d} forced stop(s) through TSTOP\n", .{ index, channel.forced_stops });
         }
     }
-    if (unit.compare_touches != 0) {
+    try compares(board, out);
+}
+
+/// The compare values a channel was given, and how often the count passed
+/// one. A channel that was programmed and never reached its compare says so,
+/// because that is the shape of a period that is too long for the run.
+fn compares(board: *Board, out: Writer) !void {
+    for (&board.lowpower.channels, 0..) |*channel, index| {
+        const pair = &channel.compares;
+        if (pair.quiet()) continue;
         try out.print(
-            "ULPT: {d} COMPARE-MATCH ACCESS(ES), NOT MODELLED (ULPTCMA/CMB are stored and never compared, so no compare event is raised)\n",
-            .{unit.compare_touches},
+            "ULPT{d}: compare match A {d} time(s) on 0x{X:0>8}, B {d} time(s) on 0x{X:0>8}\n",
+            .{ index, pair.matches_a, pair.a, pair.matches_b, pair.b },
         );
     }
 }
