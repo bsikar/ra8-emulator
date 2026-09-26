@@ -35,6 +35,7 @@ const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
 const modem = @import("../periph/modem.zig");
+const net = @import("net.zig");
 const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
 const npu = @import("../periph/npu.zig");
@@ -105,6 +106,7 @@ pub const Board = struct {
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
+    rswitch: net.Rswitch = .{},
     /// The two SPI_B channels. No pin here, so the observable is the frames
     /// a channel actually clocked and the ones a disabled channel only wrote
     /// down.
@@ -282,6 +284,7 @@ pub const Board = struct {
         try self.bus.add(self.wire.block());
         try self.bus.add(self.wire.touchBlock());
         try self.wire.attach();
+        try self.rswitch.attach(&self.bus);
         self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
