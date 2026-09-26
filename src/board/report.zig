@@ -14,6 +14,7 @@ const audio = @import("report_audio.zig");
 const capture = @import("report_capture.zig");
 const cores = @import("report_cores.zig");
 const memory = @import("report_memory.zig");
+const network = @import("report_network.zig");
 const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
@@ -79,6 +80,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try capture.sections(board, out);
     try memory.sections(board, out);
     try storage.sections(board, out);
+    try network.sections(board, out);
     try cores.sections(board, out);
     try time.sections(board, out);
     try protection(board, out);
