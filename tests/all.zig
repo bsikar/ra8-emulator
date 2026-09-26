@@ -34,6 +34,9 @@ test {
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/icu_test.zig");
     _ = @import("periph/lvd_test.zig");
+    _ = @import("periph/maci_test.zig");
+    _ = @import("periph/mram_otp_test.zig");
+    _ = @import("periph/mram_test.zig");
     _ = @import("periph/mstp_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/pdctr_test.zig");
