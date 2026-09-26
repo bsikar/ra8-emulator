@@ -101,6 +101,7 @@ pub fn raster(board: *Board, out: Writer) !void {
             .{ unit.limited, unit.clipped, unit.hard_edges },
         );
     }
+    try texture(unit, out);
     if (unit.dlists != 0) {
         try out.print(
             "DRW: {d} display list(s), {d} stopped on an unmodelled entry\n",
@@ -120,6 +121,24 @@ pub fn raster(board: *Board, out: Writer) !void {
     try out.print(
         "DRW: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
         .{ unit.dropped_unpowered, unit.dark_reads },
+    );
+}
+
+/// The texture source behind a blit, which dev models not at all: it
+/// accepts the texture registers and discards them, then declines every
+/// render with a source enabled, so every image, glyph and icon came back
+/// to a blank framebuffer and the app passed.
+fn texture(unit: *const @TypeOf(@as(Board, undefined).raster), out: Writer) !void {
+    const source = &unit.texture;
+    if (source.quiet()) return;
+    try out.print(
+        "DRW: {d} texel(s) sampled, {d} colour-keyed out, {d} coordinate(s) folded back into the texture\n",
+        .{ source.texels, source.keyed, source.wrapped },
+    );
+    if (source.off_ram == 0 and source.faults == 0) return;
+    try out.print(
+        "DRW: REFUSED {d} texel read(s) aimed outside RAM, {d} that went nowhere mapped\n",
+        .{ source.off_ram, source.faults },
     );
 }
 

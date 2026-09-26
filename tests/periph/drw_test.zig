@@ -6,6 +6,7 @@ const ra8 = @import("ra8");
 
 const drw = ra8.periph.drw;
 const blend = ra8.periph.drw_blend;
+const dlist = ra8.periph.drw_dlist;
 const limit = ra8.periph.drw_limit;
 const pdctr = ra8.periph.pdctr;
 const prcr = ra8.periph.prcr;
@@ -99,7 +100,7 @@ test "an ORIGIN write with nothing programmed is not counted as declined" {
     try std.testing.expectEqual(drw.Decline.unprogrammed, unit.last_decline.?);
 }
 
-test "a quadratic coupling, the framebuffer cache and a texture source are all declined" {
+test "a quadratic coupling, the framebuffer cache and a pattern source are all declined" {
     const guard = unlockedGuard();
     const domain = poweredDomain(&guard);
     var unit = drw.Drw.init(&domain);
@@ -115,11 +116,17 @@ test "a quadratic coupling, the framebuffer cache and a texture source are all d
     try std.testing.expectEqual(drw.Decline.cache, unit.last_decline.?);
 
     unit.write(at(drw.off.cachectl), 4, 0);
+    unit.write(at(drw.off.control2), 4, blend.control2.pattern_enable);
+    unit.write(at(drw.off.origin), 4, fb_base);
+    try std.testing.expectEqual(drw.Decline.patterned, unit.last_decline.?);
+
+    // A texture source is read for real, so it is declined only while the
+    // texture itself is unprogrammed: TEXORIGIN is still zero here.
     unit.write(at(drw.off.control2), 4, blend.control2.texture_enable);
     unit.write(at(drw.off.origin), 4, fb_base);
-    try std.testing.expectEqual(drw.Decline.sourced, unit.last_decline.?);
+    try std.testing.expectEqual(drw.Decline.untexturable, unit.last_decline.?);
 
-    try std.testing.expectEqual(@as(u32, 3), unit.declined);
+    try std.testing.expectEqual(@as(u32, 4), unit.declined);
     try std.testing.expectEqual(@as(u32, 0), unit.renders);
 }
 
@@ -242,12 +249,12 @@ test "a display list programs registers and its ORIGIN entry draws" {
 
     const list = fb_base + 0x800;
     const entries = [_]u32{
-        drw.dlist.one_index | drw.off.control2 / 4, opaque_fill,
-        drw.dlist.one_index | drw.off.color1 / 4,   0xFF44_5566,
-        drw.dlist.one_index | drw.off.size / 4,     2 | 1 << 16,
-        drw.dlist.one_index | drw.off.pitch / 4,    2,
-        drw.dlist.one_index | drw.off.origin / 4,   fb_base,
-        drw.dlist.end_of_list,                      0,
+        dlist.encoding.one_index | drw.off.control2 / 4, opaque_fill,
+        dlist.encoding.one_index | drw.off.color1 / 4,   0xFF44_5566,
+        dlist.encoding.one_index | drw.off.size / 4,     2 | 1 << 16,
+        dlist.encoding.one_index | drw.off.pitch / 4,    2,
+        dlist.encoding.one_index | drw.off.origin / 4,   fb_base,
+        dlist.encoding.end_of_list,                      0,
     };
     for (entries, 0..) |word, index| try bench.core.writeWord(list + @as(u32, @intCast(index)) * 4, word);
     bench.unit.write(at(drw.off.dliststart), 4, list);
@@ -264,13 +271,13 @@ test "an end-of-list wait keeps reading, and a DLISTSTART entry stops" {
     defer bench.close();
 
     const list = fb_base + 0x800;
-    const wait = drw.dlist.end_of_list | drw.dlist.argument_wait << drw.dlist.argument_shift;
+    const wait = dlist.encoding.end_of_list | dlist.encoding.argument_wait << dlist.encoding.argument_shift;
     const entries = [_]u32{
         wait,
-        drw.dlist.one_index | drw.off.color1 / 4,
+        dlist.encoding.one_index | drw.off.color1 / 4,
         0x1122_3344,
-        drw.dlist.one_index | drw.dlist.dliststart_index,
-        drw.dlist.one_index | drw.off.color2 / 4,
+        dlist.encoding.one_index | dlist.encoding.dliststart_index,
+        dlist.encoding.one_index | drw.off.color2 / 4,
         0x5566_7788,
     };
     for (entries, 0..) |word, index| try bench.core.writeWord(list + @as(u32, @intCast(index)) * 4, word);
@@ -288,7 +295,7 @@ test "an unmodelled multi-index tag stops the reader instead of guessing" {
 
     const list = fb_base + 0x800;
     try bench.core.writeWord(list, 0x0000_0003);
-    try bench.core.writeWord(list + 4, drw.dlist.one_index | drw.off.color1 / 4);
+    try bench.core.writeWord(list + 4, dlist.encoding.one_index | drw.off.color1 / 4);
     bench.unit.write(at(drw.off.dliststart), 4, list);
 
     try std.testing.expectEqual(@as(u32, 1), bench.unit.dlist_stops);
