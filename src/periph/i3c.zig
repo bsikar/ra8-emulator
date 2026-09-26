@@ -1,0 +1,262 @@
+//! The I3C channel driven in legacy I2C mode (IIC_B): the controller a
+//! polling driver clocks through CNDCTL / NTDTBP0 / NTST / BST.
+//!
+//! One channel, one transfer machine: START, the address byte, the payload
+//! either way, then STOP. What answers on the line comes from the same
+//! device registry the RIIC controller uses, so this file is only about
+//! transfers, and the responder half lives in i3c_target.zig.
+//!
+//! dev drove this window from the data buffer alone. A byte written with no
+//! START became an address and selected a part, a read past what the part
+//! had to say kept the buffer flagged full and served zeros, and the two
+//! condition-detect flags it declared were never raised at all, so a driver
+//! waiting on one of them waited forever. Each of those is refused and
+//! counted here instead.
+const periph = @import("registry.zig");
+const bus = @import("riic_bus.zig");
+const flag = @import("i3c_flags.zig");
+const i3c_target = @import("i3c_target.zig");
+
+pub const win_base = flag.win_base;
+pub const win_span = flag.win_span;
+pub const reg = flag.reg;
+
+/// Bytes a device may stage for one read. dev's own bound, and more than any
+/// modelled part has to say.
+pub const stage_bytes: usize = 64;
+
+pub const I3c = struct {
+    shadow: [flag.reg.words]u32 = .{0} ** flag.reg.words,
+    /// The transmit side is empty out of reset, so a driver may put the
+    /// first address byte down without waiting for anything.
+    ntst: u32 = flag.ntst.tdbef0,
+    bst: u32 = 0,
+    busy: bool = false,
+    addressed: bool = false,
+    acked: bool = false,
+    reading: bool = false,
+    target_7b: u7 = 0,
+    /// What the addressed device staged for this read.
+    staged: [stage_bytes]u8 = .{0} ** stage_bytes,
+    staged_len: usize = 0,
+    served: usize = 0,
+    /// The receive flow does one dummy buffer read to start the clock before
+    /// the first real byte.
+    primed: bool = false,
+
+    devices: bus.Registry = .{},
+    /// The responder half, live once the firmware claims an own address.
+    responder: i3c_target.Target = .{},
+
+    /// Transactions that reached STOP with a device ACKing.
+    transfers: u32 = 0,
+    sent: u32 = 0,
+    received: u32 = 0,
+    /// Address bytes nothing on the bus answered. A scan is made of these.
+    nacks: u32 = 0,
+    /// Address bytes in the ranges I2C keeps for itself.
+    reserved: u32 = 0,
+    /// Buffer written with no transaction open. dev took the byte as an
+    /// address and began a transfer nobody asked for.
+    no_start: u32 = 0,
+    /// START requested while a transaction was already open. dev tore the
+    /// open one down and started again, losing a transfer silently.
+    st_busy: u32 = 0,
+    /// Repeated START on an idle bus. There is no condition to repeat; dev
+    /// treated it as a plain START.
+    rs_idle: u32 = 0,
+    /// Buffer read past what the device had to say. dev kept the buffer
+    /// flagged full and served zeros, so a driver reading too far got data
+    /// that looked real.
+    overdrain: u32 = 0,
+    /// A role change asked for while the other role was in the middle of
+    /// something. This model carries one role at a time; dev let the
+    /// responder take the data buffer out from under a live transfer, so the
+    /// transfer moved nothing and said nothing about it.
+    role_clash: u32 = 0,
+
+    pub fn quiet(self: *const I3c) bool {
+        return self.transfers == 0 and self.nacks == 0 and self.reserved == 0 and
+            self.no_start == 0 and self.st_busy == 0 and self.rs_idle == 0 and
+            self.overdrain == 0 and self.role_clash == 0 and self.responder.quiet();
+    }
+
+    pub fn attachDevice(self: *I3c, device: bus.Device) bus.Error!void {
+        try self.devices.attach(device);
+    }
+
+    fn openTransfer(self: *I3c) void {
+        self.busy = true;
+        self.addressed = false;
+        self.acked = false;
+        self.reading = false;
+        self.staged_len = 0;
+        self.served = 0;
+        self.primed = false;
+        // The transmit buffer is empty so the driver can put the address
+        // byte in it, and the previous phase's outcome is not this one's.
+        self.ntst = flag.ntst.tdbef0;
+        self.bst &= ~(flag.bst.nackdf | flag.bst.tendf);
+        self.bst |= flag.bst.stcnddf;
+    }
+
+    fn closeTransfer(self: *I3c) void {
+        if (self.acked) {
+            if (self.devices.find(self.target_7b)) |device| device.stop();
+            self.transfers += 1;
+        }
+        self.busy = false;
+        self.addressed = false;
+        self.ntst = flag.ntst.tdbef0;
+        self.bst |= flag.bst.spcnddf;
+    }
+
+    /// The address byte after a (re)START selects a part and it either
+    /// answers or it does not.
+    fn addressPhase(self: *I3c, byte: u8) void {
+        self.target_7b = bus.wire.addressOf(byte);
+        self.reading = bus.wire.readingOf(byte);
+        self.addressed = true;
+        if (bus.reserved.holds(self.target_7b)) {
+            self.acked = false;
+            self.reserved += 1;
+            self.bst |= flag.bst.nackdf;
+            return;
+        }
+        const device = self.devices.find(self.target_7b) orelse {
+            self.acked = false;
+            self.nacks += 1;
+            self.bst |= flag.bst.nackdf;
+            return;
+        };
+        self.acked = true;
+        self.bst |= flag.bst.tendf;
+        if (!self.reading) {
+            self.ntst |= flag.ntst.tdbef0;
+            return;
+        }
+        self.staged_len = device.read(self.staged[0..]);
+        self.served = 0;
+        self.primed = false;
+        if (self.staged_len != 0) self.ntst |= flag.ntst.rdbff0;
+    }
+
+    fn writeData(self: *I3c, byte: u8) void {
+        if (self.responder.armed) return self.responder.transmit(byte);
+        if (!self.busy) {
+            self.no_start += 1;
+            return;
+        }
+        if (!self.addressed) return self.addressPhase(byte);
+        if (!self.acked) return;
+        if (self.devices.find(self.target_7b)) |device| device.write(byte);
+        self.sent += 1;
+        self.ntst |= flag.ntst.tdbef0;
+    }
+
+    fn readData(self: *I3c) u32 {
+        if (self.responder.armed) return self.responder.receive();
+        if (!self.primed) {
+            self.primed = true;
+            return 0;
+        }
+        if (self.served >= self.staged_len) {
+            // Nothing left on the line. The full flag goes with the data.
+            self.overdrain += 1;
+            self.ntst &= ~flag.ntst.rdbff0;
+            return 0;
+        }
+        const byte = self.staged[self.served];
+        self.served += 1;
+        self.received += 1;
+        if (self.served < self.staged_len) {
+            self.ntst |= flag.ntst.rdbff0;
+        } else {
+            self.ntst &= ~flag.ntst.rdbff0;
+        }
+        return byte;
+    }
+
+    /// CNDCTL carries the three condition requests. A START needs an idle
+    /// bus and a repeated START needs a busy one; the request bits clear
+    /// once the condition is issued, which is what the driver spins on.
+    fn control(self: *I3c, value: u32) void {
+        if (self.responder.armed) {
+            self.role_clash += 1;
+            return;
+        }
+        if (value & flag.cndctl.stcnd != 0) {
+            if (self.busy) self.st_busy += 1 else self.openTransfer();
+        } else if (value & flag.cndctl.srcnd != 0) {
+            if (self.busy) self.openTransfer() else self.rs_idle += 1;
+        } else if (value & flag.cndctl.spcnd != 0) {
+            if (self.busy) self.closeTransfer();
+        }
+        self.shadow[flag.reg.cndctl / 4] = 0;
+    }
+
+    /// The firmware claiming an own address is the firmware coming up as the
+    /// addressed part. It may not do that on top of a live transfer.
+    fn claimAddress(self: *I3c, value: u32) void {
+        if (self.busy) {
+            self.role_clash += 1;
+            return;
+        }
+        self.responder.open(value);
+    }
+
+    pub fn readOffset(self: *I3c, offset: u32) u32 {
+        if (offset >= flag.win_span) return 0;
+        return switch (offset) {
+            flag.reg.ntst => if (self.responder.armed) self.responder.status() else self.ntst,
+            flag.reg.bst => self.bst,
+            flag.reg.bcst => if (self.busy) 0 else flag.bcst.bfref,
+            flag.reg.ntdtbp0 => self.readData(),
+            else => self.shadow[offset / 4],
+        };
+    }
+
+    pub fn writeOffset(self: *I3c, offset: u32, value: u32) void {
+        if (offset >= flag.win_span) return;
+        self.shadow[offset / 4] = value;
+        switch (offset) {
+            flag.reg.msdvad => self.claimAddress(value),
+            flag.reg.cndctl => self.control(value),
+            flag.reg.ntdtbp0 => self.writeData(@truncate(value)),
+            // The condition and fault flags are write-0-to-clear.
+            flag.reg.bst => self.bst &= value,
+            else => {},
+        }
+    }
+
+    pub fn read(self: *I3c, address: u32, width: u3) u32 {
+        _ = width;
+        return self.readOffset(address -% flag.win_base);
+    }
+
+    pub fn write(self: *I3c, address: u32, width: u3, value: u32) void {
+        _ = width;
+        self.writeOffset(address -% flag.win_base, value);
+    }
+
+    pub fn block(self: *I3c) periph.Block {
+        return .{
+            .name = "I3C",
+            .base = flag.win_base,
+            .size = flag.win_span,
+            .context = self,
+            .readFn = readThunk,
+            .writeFn = writeThunk,
+        };
+    }
+};
+
+fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    const self: *I3c = @ptrCast(@alignCast(context));
+    return self.read(address, width);
+}
+
+fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *I3c = @ptrCast(@alignCast(context));
+    self.write(address, width, value);
+}

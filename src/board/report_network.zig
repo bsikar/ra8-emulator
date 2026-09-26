@@ -7,6 +7,7 @@ const Writer = @import("report.zig").Writer;
 const modem_line = @import("../periph/modem.zig");
 const pi4ioe = @import("../periph/riic_pi4ioe.zig");
 const ov5640 = @import("../periph/riic_ov5640.zig");
+const gt911 = @import("../periph/i3c_gt911.zig");
 
 /// One block per controller that saw traffic. A transmit made out of
 /// operation mode moves nothing on silicon, and a delivery with no receive
@@ -67,6 +68,79 @@ fn i2c(board: *Board, out: Writer) !void {
     }
     try expander(board, out);
     try camera(board, out);
+    try touchline(board, out);
+    try panel(board, out);
+}
+
+/// The I3C channel driven in legacy I2C mode. A byte put in the buffer with
+/// no transaction open, a read past what the part had to say, and a role
+/// change on top of a live transfer are all things dev went along with, so
+/// each is reported apart from the transfers that completed.
+fn touchline(board: *Board, out: Writer) !void {
+    const unit = &board.wire.touchline;
+    if (unit.quiet()) return;
+    try out.print(
+        "I3C: {d} transfer(s), {d} byte(s) out, {d} byte(s) in, {d} address(es) NACKed",
+        .{ unit.transfers, unit.sent, unit.received, unit.nacks },
+    );
+    if (unit.reserved != 0) {
+        try out.print(", {d} ADDRESS(ES) I2C KEEPS FOR ITSELF REFUSED", .{unit.reserved});
+    }
+    if (unit.no_start != 0) {
+        try out.print(", {d} DATA WRITE(S) WITH NO TRANSACTION OPEN", .{unit.no_start});
+    }
+    if (unit.st_busy != 0) {
+        try out.print(", {d} START(S) ON A BUSY BUS REFUSED", .{unit.st_busy});
+    }
+    if (unit.rs_idle != 0) {
+        try out.print(", {d} REPEATED START(S) WITH NOTHING TO REPEAT", .{unit.rs_idle});
+    }
+    if (unit.overdrain != 0) {
+        try out.print(", {d} READ(S) PAST WHAT THE PART HAD TO SAY", .{unit.overdrain});
+    }
+    if (unit.role_clash != 0) {
+        try out.print(", {d} ROLE CHANGE(S) ON TOP OF A LIVE TRANSFER REFUSED", .{unit.role_clash});
+    }
+    try out.print("\n", .{});
+    try responder(board, out);
+}
+
+/// The channel's own responder half, live once the firmware claims an
+/// address of its own.
+fn responder(board: *Board, out: Writer) !void {
+    const half = &board.wire.touchline.responder;
+    if (half.quiet()) return;
+    try out.print(
+        "I3C target: own 0x{X:0>2}, {d} controller write+read cycle(s), echo {s}",
+        .{ @as(u8, half.own_address), half.cycles, if (half.mismatched) "MISMATCHED" else "matched" },
+    );
+    if (half.unprompted != 0) {
+        try out.print(", {d} ECHO(ES) WITH NOTHING TO ECHO REFUSED", .{half.unprompted});
+    }
+    if (half.starved != 0) {
+        try out.print(", {d} drain(s) with nothing written", .{half.starved});
+    }
+    if (half.refused != 0) {
+        try out.print(", {d} OWN ADDRESS(ES) I2C KEEPS FOR ITSELF REFUSED", .{half.refused});
+    }
+    try out.print("\n", .{});
+}
+
+/// The GT911 touch controller at 0x5D.
+fn panel(board: *Board, out: Writer) !void {
+    const part = &board.wire.panel;
+    if (part.quiet()) return;
+    try out.print(
+        "I2C touch 0x{X:0>2}: {d} contact(s) drained, {d} frame(s) acked",
+        .{ @as(u8, gt911.address), part.reported, part.acked },
+    );
+    if (part.phantom != 0) {
+        try out.print(", {d} POINT READ(S) WITH NO CONTACT REFUSED", .{part.phantom});
+    }
+    if (part.unknown != 0) {
+        try out.print(", {d} read(s) at a register this model does not carry", .{part.unknown});
+    }
+    try out.print("\n", .{});
 }
 
 /// The PI4IOE5V6408 port expander at 0x43.
