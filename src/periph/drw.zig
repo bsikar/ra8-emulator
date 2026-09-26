@@ -22,6 +22,7 @@ const std = @import("std");
 
 const engine = @import("../core/engine.zig");
 const blend = @import("drw_blend.zig");
+const limit = @import("drw_limit.zig");
 const pdctr = @import("pdctr.zig");
 const periph = @import("registry.zig");
 
@@ -46,8 +47,6 @@ pub const off = struct {
 };
 
 pub const field = struct {
-    /// CONTROL LIM1..LIM6, the spatial limiter enables (HUM Ch 62.2.1 p 3689).
-    pub const limiters: u32 = 0x3F;
     /// CACHECTL.CENABLEFX: the framebuffer cache (HUM Ch 62.2.4 p 3694).
     pub const cache_enable: u32 = 1 << 0;
     pub const size_mask: u32 = 0xFFFF;
@@ -87,9 +86,10 @@ pub const Decline = enum {
     unpowered,
     /// SIZE, PITCH or ORIGIN not programmed yet, e.g. the init ORIGIN write.
     unprogrammed,
-    /// A spatial limiter is enabled. The half-plane semantics are only
-    /// partly characterised on the bench, so they are not modelled.
-    limiter,
+    /// A quadratic limiter coupling (CONTROL.QUAD1/2/3) is enabled. It is a
+    /// different evaluation from the six linear edges, not a harder one, and
+    /// no in-tree primitive programs it.
+    quad,
     /// The framebuffer cache holds the pixels until a CFLUSHFX, and its
     /// geometry is undocumented.
     cache,
@@ -109,6 +109,9 @@ pub const Drw = struct {
     /// handle; a board built by a test that never rasterizes leaves it null
     /// and a render is declined as unbacked rather than silently counted.
     memory: ?engine.Engine = null,
+
+    /// The six edge limiters, and the tree CONTROL folds them down.
+    limits: limit.Set = .{},
 
     control: u32 = 0,
     control2: u32 = 0,
@@ -130,6 +133,13 @@ pub const Drw = struct {
     /// Renders declined, and why the most recent one was.
     declined: u32 = 0,
     last_decline: ?Decline = null,
+    /// Renders the limiters actually shaped, and the bounding-box pixels
+    /// they kept out.
+    limited: u32 = 0,
+    clipped: u64 = 0,
+    /// Pixels painted at full coverage that sit inside the sub-pixel band at
+    /// a limiter boundary, where an anti-aliasing engine would part-cover.
+    hard_edges: u64 = 0,
     /// Display lists executed, and entries whose encoding stopped the reader.
     dlists: u32 = 0,
     dlist_stops: u32 = 0,
@@ -192,10 +202,12 @@ pub const Drw = struct {
         }
     }
 
-    /// Take a value into the shadow. The limiter, texture, CLUT and IRQ
-    /// registers are accepted and dropped: a driver programs them, and this
-    /// model declines to rasterize anything that depends on them anyway.
+    /// Take a value into the shadow. The limiters keep their own state; the
+    /// texture, CLUT and IRQ registers are accepted and dropped, because a
+    /// driver programs them and this model declines to rasterize anything
+    /// that depends on them anyway.
     fn latch(self: *Drw, offset: u32, value: u32) void {
+        if (self.limits.latch(offset, value)) return;
         switch (offset) {
             off.control => self.control = value,
             off.control2 => self.control2 = value,
@@ -213,7 +225,7 @@ pub const Drw = struct {
         const shape = self.box();
         if (!self.domain.powered()) return .unpowered;
         if (shape.width == 0 or shape.height == 0 or self.pitch == 0 or self.origin == 0) return .unprogrammed;
-        if (self.control & field.limiters != 0) return .limiter;
+        if (self.control & limit.control.quads != 0) return .quad;
         if (self.cachectl & field.cache_enable != 0) return .cache;
         if (self.style().sourced) return .sourced;
         if (self.memory == null) return .unbacked;
@@ -230,23 +242,39 @@ pub const Drw = struct {
         const painting = self.style();
         const bytes = painting.format.bytesPerPixel();
         const memory = self.memory.?;
+        const shaped = limit.Set.active(self.control);
+        var drawn: u64 = 0;
         var row: u32 = 0;
         while (row < shape.height) : (row += 1) {
             const line = @as(u64, self.origin) + @as(u64, row) * self.pitch * bytes;
             var column: u32 = 0;
             while (column < shape.width) : (column += 1) {
+                if (shaped and !self.covered(column, row)) {
+                    self.clipped +%= 1;
+                    continue;
+                }
                 const at = line + @as(u64, column) * bytes;
                 if (at > std.math.maxInt(u32)) {
                     self.faults +%= 1;
                     continue;
                 }
                 self.paint(memory, @intCast(at), painting, bytes);
+                drawn += 1;
             }
         }
         self.renders +%= 1;
+        if (shaped) self.limited +%= 1;
         self.last_width = shape.width;
         self.last_height = shape.height;
-        self.pixels +%= @as(u64, shape.width) * shape.height;
+        self.pixels +%= drawn;
+    }
+
+    /// Whether the limiters admit this pixel of the bounding box, counting
+    /// the ones that land on a boundary the engine would soften.
+    fn covered(self: *Drw, column: u32, row: u32) bool {
+        if (!self.limits.admits(self.control, column, row)) return false;
+        if (self.limits.onEdge(self.control, column, row)) self.hard_edges +%= 1;
+        return true;
     }
 
     fn paint(self: *Drw, memory: engine.Engine, at: u32, painting: blend.Style, bytes: u32) void {
