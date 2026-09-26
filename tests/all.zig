@@ -59,6 +59,11 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
+    _ = @import("periph/riic_bus_test.zig");
+    _ = @import("periph/riic_ov5640_test.zig");
+    _ = @import("periph/riic_pi4ioe_test.zig");
+    _ = @import("periph/riic_target_test.zig");
+    _ = @import("periph/riic_test.zig");
     _ = @import("periph/rtc_clock_test.zig");
     _ = @import("periph/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
