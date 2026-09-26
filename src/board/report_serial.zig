@@ -103,3 +103,32 @@ pub fn trace(board: *Board, out: Writer) !void {
         );
     }
 }
+
+/// The USB host controller: where its bring-up got to, and what it refused on
+/// the way. A controller nothing touched says nothing.
+pub fn usb(board: *Board, out: Writer) !void {
+    const host = &board.usb.host;
+    if (host.quiet()) return;
+    try out.print(
+        "USBHS host: {s}, {s} role, {d} port reset(s), speed {s}\n",
+        .{
+            if (host.phy.powered()) "on" else "off",
+            if (host.phy.host()) "host" else "device",
+            host.phy.resets,
+            @tagName(host.phy.speed),
+        },
+    );
+    if (host.refusals() == 0) return;
+    try out.print(
+        "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++
+            "{d} in device role, {d} bad pipe, {d} packet size\n",
+        .{
+            host.misaligned,
+            host.off,
+            host.read_only + host.phy.read_only,
+            host.phy.not_host,
+            host.pipes.bad_pipe + host.pipes.dcp_config,
+            host.pipes.too_big,
+        },
+    );
+}

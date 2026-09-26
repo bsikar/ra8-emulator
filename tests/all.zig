@@ -97,6 +97,9 @@ test {
     _ = @import("periph/sram_test.zig");
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ulpt_test.zig");
+    _ = @import("periph/usbhs_phy_test.zig");
+    _ = @import("periph/usbhs_pipe_test.zig");
+    _ = @import("periph/usbhs_test.zig");
     _ = @import("periph/wdt_test.zig");
     _ = @import("periph/xspi_flash_test.zig");
     _ = @import("periph/xspi_test.zig");

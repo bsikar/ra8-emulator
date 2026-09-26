@@ -102,6 +102,10 @@ pub const periph = struct {
     pub const sram = @import("periph/sram.zig");
     pub const ssie = @import("periph/ssie.zig");
     pub const ulpt = @import("periph/ulpt.zig");
+    pub const usbhs = @import("periph/usbhs.zig");
+    pub const usbhs_phy = @import("periph/usbhs_phy.zig");
+    pub const usbhs_pipe = @import("periph/usbhs_pipe.zig");
+    pub const usbhs_regs = @import("periph/usbhs_regs.zig");
     pub const wdt = @import("periph/wdt.zig");
     pub const xspi = @import("periph/xspi.zig");
     pub const xspi_flash = @import("periph/xspi_flash.zig");
@@ -111,5 +115,6 @@ pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const i2c = @import("board/i2c.zig");
     pub const net = @import("board/net.zig");
+    pub const usb = @import("board/usb.zig");
     pub const report = @import("board/report.zig");
 };
