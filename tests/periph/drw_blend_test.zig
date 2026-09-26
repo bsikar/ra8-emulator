@@ -112,9 +112,10 @@ test "ARGB8888 passes through the pack unchanged" {
 }
 
 test "a pattern or texture source is flagged, and nothing else is" {
-    try std.testing.expect(!reset_style.sourced);
-    try std.testing.expect(blend.Style.decode(blend.control2.pattern_enable).sourced);
-    try std.testing.expect(blend.Style.decode(blend.control2.texture_enable).sourced);
+    try std.testing.expect(!reset_style.patterned);
+    try std.testing.expect(!reset_style.textured);
+    try std.testing.expect(blend.Style.decode(blend.control2.pattern_enable).patterned);
+    try std.testing.expect(blend.Style.decode(blend.control2.texture_enable).textured);
 }
 
 test "USEACB blends the alpha channel instead of using the mux" {

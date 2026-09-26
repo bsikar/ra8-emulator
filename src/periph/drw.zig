@@ -22,7 +22,9 @@ const std = @import("std");
 
 const engine = @import("../core/engine.zig");
 const blend = @import("drw_blend.zig");
+const dlist = @import("drw_dlist.zig");
 const limit = @import("drw_limit.zig");
+const tex = @import("drw_tex.zig");
 const pdctr = @import("pdctr.zig");
 const periph = @import("registry.zig");
 
@@ -58,26 +60,6 @@ pub const field = struct {
 /// cheapest "is my engine alive" check a driver can make.
 pub const hardware_revision: u32 = 0x0FBE_0107;
 
-/// The display-list encoding the ra8_drw builder emits and the bench
-/// confirmed for issue #247: a one-index tag (byte 1 bit 7 set, byte 0 the
-/// register index) followed by one value word, and end-of-list words whose
-/// low byte is 0xFF with the argument in byte 1. Multi-index packing was
-/// never observed, so the reader stops on it rather than guessing.
-pub const dlist = struct {
-    pub const index_mask: u32 = 0xFF;
-    pub const one_index: u32 = 0x0000_8000;
-    pub const end_of_list: u32 = 0xFF;
-    pub const argument_shift: u5 = 8;
-    /// Wait for the pipeline and cache, then keep reading.
-    pub const argument_wait: u32 = 2;
-    /// A DLISTSTART entry inside a list is a jump, which is where this
-    /// reader stops.
-    pub const dliststart_index: u32 = 50;
-    pub const bytes_per_word: u32 = 4;
-    /// A bound on the fetch, so a corrupt list cannot spin the run.
-    pub const max_words: u32 = 4096;
-};
-
 /// Why a render the firmware asked for produced no pixels. Both unmodelled
 /// cases fail SAFE: nothing is drawn, so an app relying on them goes visibly
 /// blank here rather than reporting a false pass on invented pixels.
@@ -93,8 +75,14 @@ pub const Decline = enum {
     /// The framebuffer cache holds the pixels until a CFLUSHFX, and its
     /// geometry is undocumented.
     cache,
-    /// A pattern or texture source, which this model does not read.
-    sourced,
+    /// A pattern source, which this model does not read. The texture
+    /// source next to it is read for real; see drw_tex.zig.
+    patterned,
+    /// A texture source programmed in a way drw_tex.zig will not sample:
+    /// an undocumented READFORMAT, an indexed format with the CLUT
+    /// disabled, bilinear filtering, an RLE source, or a texture whose
+    /// origin or pitch was never programmed.
+    untexturable,
     /// No memory to draw into, which only a board built without an engine
     /// hits: the geometry was fine and the pixels had nowhere to go.
     unbacked,
@@ -112,6 +100,8 @@ pub const Drw = struct {
 
     /// The six edge limiters, and the tree CONTROL folds them down.
     limits: limit.Set = .{},
+    /// The texture source: the U/V generators, the palette and the texels.
+    texture: tex.Source = .{},
 
     control: u32 = 0,
     control2: u32 = 0,
@@ -202,12 +192,12 @@ pub const Drw = struct {
         }
     }
 
-    /// Take a value into the shadow. The limiters keep their own state; the
-    /// texture, CLUT and IRQ registers are accepted and dropped, because a
-    /// driver programs them and this model declines to rasterize anything
-    /// that depends on them anyway.
+    /// Take a value into the shadow. The limiters and the texture source
+    /// keep their own state; the IRQ and performance registers are accepted
+    /// and dropped, because nothing in this model reads them back.
     fn latch(self: *Drw, offset: u32, value: u32) void {
         if (self.limits.latch(offset, value)) return;
+        if (self.texture.latch(offset, value)) return;
         switch (offset) {
             off.control => self.control = value,
             off.control2 => self.control2 = value,
@@ -227,7 +217,9 @@ pub const Drw = struct {
         if (shape.width == 0 or shape.height == 0 or self.pitch == 0 or self.origin == 0) return .unprogrammed;
         if (self.control & limit.control.quads != 0) return .quad;
         if (self.cachectl & field.cache_enable != 0) return .cache;
-        if (self.style().sourced) return .sourced;
+        const painting = self.style();
+        if (painting.patterned) return .patterned;
+        if (painting.textured and self.texture.refusal(self.control2) != null) return .untexturable;
         if (self.memory == null) return .unbacked;
         return null;
     }
@@ -258,7 +250,8 @@ pub const Drw = struct {
                     self.faults +%= 1;
                     continue;
                 }
-                self.paint(memory, @intCast(at), painting, bytes);
+                const source = self.sourceColour(memory, painting, column, row) orelse continue;
+                self.paint(memory, @intCast(at), painting, bytes, source);
                 drawn += 1;
             }
         }
@@ -277,14 +270,22 @@ pub const Drw = struct {
         return true;
     }
 
-    fn paint(self: *Drw, memory: engine.Engine, at: u32, painting: blend.Style, bytes: u32) void {
+    /// What this pixel starts as: COLOR1 for a plain fill, the texel under
+    /// it for a textured blit, and null when the texture says to leave the
+    /// framebuffer alone (a colour-keyed texel, or one that went nowhere).
+    fn sourceColour(self: *Drw, memory: engine.Engine, painting: blend.Style, column: u32, row: u32) ?u32 {
+        if (!painting.textured) return self.color1;
+        return self.texture.sample(memory, self.control2, column, row);
+    }
+
+    fn paint(self: *Drw, memory: engine.Engine, at: u32, painting: blend.Style, bytes: u32, source: u32) void {
         var cell = [_]u8{0} ** 4;
         const slot = cell[0..bytes];
         memory.read(at, slot) catch {
             self.faults +%= 1;
             return;
         };
-        const stored = painting.pack(painting.shade(self.color1, self.color2, load(slot)));
+        const stored = painting.pack(painting.shade(source, self.color2, load(slot)));
         store(slot, stored);
         memory.write(at, slot) catch {
             self.faults +%= 1;
@@ -299,49 +300,34 @@ pub const Drw = struct {
         self.declined +%= 1;
     }
 
-    /// The display-list reader: the same register writes, fetched from
-    /// memory instead of taken from the CPU (HUM Ch 62.6, TES D/AVE format).
+    /// Run a display list: drw_dlist.zig reads it, this executes what it
+    /// hands back, exactly as a CPU write to the same register would.
     pub fn runList(self: *Drw, at: u32) void {
         const memory = self.memory orelse {
             self.decline(.unbacked);
             return;
         };
         self.dlists +%= 1;
-        var cursor = at;
-        var fetched: u32 = 0;
-        while (fetched < dlist.max_words) : (fetched += 1) {
-            const tag = memory.readWord(cursor) catch {
-                self.faults +%= 1;
-                return;
-            };
-            cursor +%= dlist.bytes_per_word;
-            if (tag & dlist.one_index != 0) {
-                const index = tag & dlist.index_mask;
-                if (index == dlist.dliststart_index) return;
-                const value = memory.readWord(cursor) catch {
-                    self.faults +%= 1;
+        var reader = dlist.Reader.init(memory, at);
+        while (true) {
+            switch (reader.next()) {
+                .entry => |one| self.execute(one.index, one.value),
+                .stop => |why| {
+                    switch (why) {
+                        .ended => {},
+                        .fault => self.faults +%= 1,
+                        .unmodelled => self.dlist_stops +%= 1,
+                    }
                     return;
-                };
-                cursor +%= dlist.bytes_per_word;
-                self.execute(index, value);
-                continue;
+                },
             }
-            if (tag & dlist.index_mask == dlist.end_of_list) {
-                if (tag >> dlist.argument_shift & dlist.index_mask == dlist.argument_wait) continue;
-                return;
-            }
-            // Multi-index packing: never observed on the bench, so stop
-            // rather than invent the pixels it would have drawn.
-            self.dlist_stops +%= 1;
-            return;
         }
-        self.dlist_stops +%= 1;
     }
 
     /// One list entry. A register index is its byte offset over four, and an
     /// ORIGIN entry triggers exactly as a CPU write to it would.
     fn execute(self: *Drw, index: u32, value: u32) void {
-        const offset = index * dlist.bytes_per_word;
+        const offset = index * dlist.encoding.bytes_per_word;
         if (offset == off.origin) {
             self.origin = value;
             self.render();
