@@ -13,6 +13,8 @@ const periph = @import("../periph/registry.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
+const dma_bank = @import("../periph/dma_bank.zig");
+const dmac = @import("../periph/dmac.zig");
 const doc = @import("../periph/doc.zig");
 const drw = @import("../periph/drw.zig");
 const dtc = @import("../periph/dtc.zig");
@@ -41,6 +43,11 @@ pub const Board = struct {
     /// The data transfer controller: the other consumer of an event, which
     /// moves bytes on an interrupt instead of letting the CPU take it.
     transfers: dtc.Dtc,
+    /// The DMA module gate, and the eight channels behind it. Both are built
+    /// in attach(): the channels need a pointer to this board's own bank, and
+    /// the engine whose memory they copy.
+    dma: dmac.Dmac,
+    dma_module: dma_bank.Bank = .{},
     pins: gpio.Gpio,
     checksum: crc.Crc,
     dataops: doc.Doc,
@@ -74,6 +81,7 @@ pub const Board = struct {
             .events = icu.Icu.init(),
             .links = elc.Elc.init(),
             .transfers = dtc.Dtc.init(),
+            .dma = undefined,
             .pins = gpio.Gpio.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
@@ -126,6 +134,10 @@ pub const Board = struct {
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
         try self.bus.add(self.transfers.block());
+        try self.bus.add(self.dma_module.block());
+        self.dma = dmac.Dmac.init(&self.dma_module);
+        self.dma.memory = core.*;
+        try self.bus.add(self.dma.block());
         try self.bus.add(self.monitors.statusBlock());
         try self.bus.add(self.monitors.controlBlock());
         try self.bus.add(self.monitors.filterBlock());
@@ -151,6 +163,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.lowpower.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.dma.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.links.takeEvents().constSlice()) |event| {

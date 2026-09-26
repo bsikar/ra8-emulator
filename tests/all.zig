@@ -17,6 +17,9 @@ test {
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
+    _ = @import("periph/dma_bank_test.zig");
+    _ = @import("periph/dmac_test.zig");
+    _ = @import("periph/dmac_xfer_test.zig");
     _ = @import("periph/doc_test.zig");
     _ = @import("periph/drw_blend_test.zig");
     _ = @import("periph/drw_test.zig");
