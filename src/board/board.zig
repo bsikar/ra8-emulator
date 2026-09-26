@@ -33,6 +33,7 @@ const gptp = @import("../periph/gptp.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
+const modem = @import("../periph/modem.zig");
 const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
 const npu = @import("../periph/npu.zig");
@@ -106,6 +107,10 @@ pub const Board = struct {
     /// attach(), which is also where its ready line is driven, because a
     /// firmware HRDY poll reads the pin rather than the panel.
     panel: eink.Panel = .{},
+    /// The AT modem on the MikroBUS UART. Attached in attach(), the same
+    /// way the card and the panel go on the SPI line: it is a device on
+    /// SCI7's line, not a block of its own.
+    modem: modem.Modem = .{},
     /// The SD card on the SPI line, the other way an image reaches storage.
     /// Built in attach(): it holds only the blocks something wrote, so it
     /// needs the board's allocator, and attach() is where it goes on a line.
@@ -260,6 +265,7 @@ pub const Board = struct {
         self.spi.attachDevice(sd_card.line_channel, self.sd.device());
         self.spi.attachDevice(eink.line_channel, self.panel.device());
         self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
+        self.serial.attachDevice(modem.line_channel, self.modem.device());
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
         try self.bus.add(self.options.block());

@@ -189,3 +189,71 @@ test "only the console channel raises events" {
     unit.write(sci.regAddress(0, sci.off_ccr0), 4, sci.ccr0.te | sci.ccr0.tie);
     try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
 }
+
+/// A device that answers a fixed burst on one byte, so the seam can be
+/// checked without the modem's own rules riding along.
+const Echo = struct {
+    reply: []const u8 = "ok",
+    on: u8 = '!',
+    fed: u32 = 0,
+
+    fn feed(context: *anyopaque, byte: u8) []const u8 {
+        const self: *Echo = @ptrCast(@alignCast(context));
+        self.fed += 1;
+        return if (byte == self.on) self.reply else &.{};
+    }
+
+    fn device(self: *Echo) sci.Device {
+        return .{ .context = self, .feedFn = feed };
+    }
+};
+
+test "what a device drives back is queued for the firmware to read" {
+    var unit = sci.Sci.init();
+    var thing = Echo{};
+    unit.attachDevice(7, thing.device());
+    open(&unit, 7);
+    put(&unit, 7, "a!");
+    try std.testing.expectEqual(@as(u32, 2), thing.fed);
+    try std.testing.expectEqual(@as(u32, 'o'), unit.read(sci.regAddress(7, sci.off_rdr), 4));
+    try std.testing.expectEqual(@as(u32, 'k'), unit.read(sci.regAddress(7, sci.off_rdr), 4));
+}
+
+test "a reply arriving with the receiver disabled is lost, not banked" {
+    var unit = sci.Sci.init();
+    var thing = Echo{};
+    unit.attachDevice(7, thing.device());
+    unit.write(sci.regAddress(7, sci.off_ccr0), 4, sci.ccr0.te);
+    put(&unit, 7, "!");
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[7].unheard);
+    // Enabling the receiver afterwards does not bring the answer back.
+    unit.write(sci.regAddress(7, sci.off_ccr0), 4, sci.ccr0.te | sci.ccr0.re);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(sci.regAddress(7, sci.off_rdr), 4));
+}
+
+test "a byte the transmitter never sent never reaches the line" {
+    var unit = sci.Sci.init();
+    var thing = Echo{};
+    unit.attachDevice(7, thing.device());
+    unit.write(sci.regAddress(7, sci.off_ccr0), 4, sci.ccr0.re);
+    put(&unit, 7, "!");
+    try std.testing.expectEqual(@as(u32, 0), thing.fed);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[7].unsent);
+}
+
+test "a channel with nothing on its line is unchanged" {
+    var unit = sci.Sci.init();
+    open(&unit, 7);
+    put(&unit, 7, "AT\r");
+    try std.testing.expectEqual(@as(u32, 3), unit.channels[7].transmitted);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(sci.regAddress(7, sci.off_rdr), 4));
+}
+
+test "a device goes on one channel only" {
+    var unit = sci.Sci.init();
+    var thing = Echo{};
+    unit.attachDevice(7, thing.device());
+    open(&unit, 8);
+    put(&unit, 8, "!");
+    try std.testing.expectEqual(@as(u32, 0), thing.fed);
+}
