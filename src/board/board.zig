@@ -10,6 +10,7 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
+const adc = @import("../periph/adc.zig");
 const agt = @import("../periph/agt.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
@@ -73,6 +74,10 @@ pub const Board = struct {
     /// The two 12-bit D/A channels. No result readback on this part, so the
     /// code stream and DACR0.DACEN are the whole observable.
     analog: dac.Dac,
+    /// The 16-bit A/D converter. No analog core behind it, so the observable
+    /// is which scans actually ran and what they put in the result
+    /// registers.
+    adc: adc.Adc,
     /// Safe shutoff: the request flags that force the GPT outputs of a group
     /// into high impedance, and the state bit firmware reads back to prove it.
     shutoff: poeg.Poeg,
@@ -151,6 +156,7 @@ pub const Board = struct {
             .accuracy = cac.Cac.init(),
             .capture = ceu.Ceu.init(),
             .analog = dac.Dac.init(),
+            .adc = adc.Adc.init(),
             .shutoff = poeg.Poeg.init(),
             .protection = prcr.Prcr.init(),
             // Patched in attach(): the backup file has to point at this
@@ -199,6 +205,7 @@ pub const Board = struct {
         self.capture.memory = core.*;
         try self.bus.add(self.capture.block());
         try self.bus.add(self.analog.block());
+        try self.bus.add(self.adc.block());
         try self.bus.add(self.shutoff.block());
         try self.bus.add(self.protection.block());
         self.backup = bkup.Bkup.init(&self.protection);
@@ -280,6 +287,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.pwm.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.adc.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.dma.dueEvents().constSlice()) |event| {
