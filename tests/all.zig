@@ -13,6 +13,7 @@ test {
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");
+    _ = @import("periph/agt_test.zig");
     _ = @import("periph/bkup_test.zig");
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");
@@ -32,6 +33,7 @@ test {
     _ = @import("periph/elc_test.zig");
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");
+    _ = @import("periph/gpt_test.zig");
     _ = @import("periph/icu_test.zig");
     _ = @import("periph/lvd_test.zig");
     _ = @import("periph/maci_test.zig");
