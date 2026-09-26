@@ -28,6 +28,7 @@ const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const gpt = @import("../periph/gpt.zig");
+const gptp = @import("../periph/gptp.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
@@ -145,6 +146,10 @@ pub const Board = struct {
     /// The PWM timers: fourteen saw up-counters. No output pin in the model,
     /// so the observable is the count itself and the wrap past the period.
     pwm: gpt.Gpt,
+
+    /// The Ethernet PTP timers: two free-running counters an image puts on
+    /// network time and then reads back through a latched view.
+    ptp: gptp.Gptp,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
     causes: reset.Reset,
@@ -195,6 +200,7 @@ pub const Board = struct {
             .lowpower = ulpt.Ulpt.init(),
             .interval = agt.Agt.init(),
             .pwm = gpt.Gpt.init(),
+            .ptp = gptp.Gptp.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
             .causes = reset.Reset.init(),
@@ -259,6 +265,7 @@ pub const Board = struct {
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.interval.block());
         try self.bus.add(self.pwm.block());
+        try self.bus.add(self.ptp.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
         try self.bus.add(self.transfers.block());
@@ -290,6 +297,7 @@ pub const Board = struct {
         self.clock.tick();
         self.interval.tick();
         self.pwm.tick();
+        self.ptp.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.raise(core, event);

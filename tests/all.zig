@@ -37,6 +37,8 @@ test {
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/gpt_test.zig");
+    _ = @import("periph/gptp_test.zig");
+    _ = @import("periph/gptp_timer_test.zig");
     _ = @import("periph/icu_test.zig");
     _ = @import("periph/lvd_test.zig");
     _ = @import("periph/maci_test.zig");
