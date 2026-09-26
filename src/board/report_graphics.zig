@@ -4,6 +4,7 @@
 //! limit, and they belong together anyway: all three read the same domain.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
+const system = @import("report_glcdc_sys.zig");
 
 /// The three in the order a person reads them: what is powered, what the
 /// panel shows, what drew it.
@@ -85,6 +86,7 @@ pub fn display(board: *Board, out: Writer) !void {
     try composited(unit, out);
     try scanned(unit, out);
     try outputStage(unit, out);
+    try system.sections(unit, out);
     if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
     try out.print(
         "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",

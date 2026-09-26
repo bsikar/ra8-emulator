@@ -50,6 +50,9 @@ pub const Refusal = enum {
     too_big,
     /// Guest memory would not give the bytes up.
     fault,
+    /// The pixel clock was never started: SYSCNT.PANEL_CLK.CLKEN is clear,
+    /// so the controller scans nothing however well its layers are set up.
+    unclocked,
 };
 
 /// What one scan saw.
@@ -126,6 +129,13 @@ pub const Scanner = struct {
     /// framebuffer, which reads as a picture nobody can see.
     pub fn refuseOutputOff(self: *Scanner) ?Picture {
         return self.refuse(.output_off);
+    }
+
+    /// The pixel clock was never started, so no frame leaves the
+    /// controller at all. Everything upstream of the clock can be perfectly
+    /// programmed and the glass still stays dark.
+    pub fn refuseUnclocked(self: *Scanner) ?Picture {
+        return self.refuse(.unclocked);
     }
 
     /// Walk a framebuffer and decode it. `read` is how bytes come out of
