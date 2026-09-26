@@ -41,6 +41,8 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
+    _ = @import("periph/rtc_clock_test.zig");
+    _ = @import("periph/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
     _ = @import("periph/spi_test.zig");
