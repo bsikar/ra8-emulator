@@ -29,6 +29,7 @@ const blend = @import("glcdc_blend.zig");
 const mix = @import("glcdc_mix.zig");
 const output = @import("glcdc_out.zig");
 const descriptor = @import("glcdc_frame.zig");
+const tcon = @import("glcdc_tcon.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -105,6 +106,9 @@ pub const Glcdc = struct {
     mixer: mix.Mixer = .{},
     /// The output stage every composited pixel leaves through.
     output: output.Stage = .{},
+    /// The timing controller: how big the panel itself is, and which pin
+    /// carries which sync signal.
+    timing: tcon.Tcon = .{},
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -121,7 +125,7 @@ pub const Glcdc = struct {
     /// A run that never touched the block has nothing to narrate.
     pub fn quiet(self: *const Glcdc) bool {
         return self.writes == 0 and self.dropped_unpowered == 0 and self.dark_reads == 0 and
-            self.scanner.quiet() and self.output.quiet();
+            self.scanner.quiet() and self.output.quiet() and self.timing.quiet();
     }
 
     /// BG_EN.EN: the output stage. A layer can be fetching with this clear,
@@ -214,6 +218,7 @@ pub const Glcdc = struct {
         // The output stage keeps its own copy and the shadow keeps the word,
         // so a driver that reads OUT_SET back still finds it there.
         _ = self.output.latch(offset, value);
+        _ = self.timing.latch(offset, value);
         if (clut.slotOf(offset)) |slot| {
             self.palettes[slot.layer - 1].store(slot.plane, slot.index, value);
             return true;
@@ -273,14 +278,19 @@ pub const Glcdc = struct {
         stage.* = blend.implied(frame.width, frame.height);
     }
 
-    /// The panel is as wide and as tall as the layers programmed onto it
-    /// reach. BG.HSIZE and BG.VSIZE carry the panel's own timing, which the
-    /// in-tree driver programs from a panel table this model has no copy of.
+    /// The panel is as wide and as tall as TCON says it is: the driver
+    /// wrote the panel's own active area into STHB1 and STVB1 out of the
+    /// board's panel table. Until it does, the panel is taken as far as the
+    /// layers programmed onto it reach, which is all this model had before
+    /// the timing block and is still right for a unit test that only
+    /// programs a layer.
     fn panelWidth(self: *Glcdc) u32 {
+        if (self.timing.timing()) |found| return @min(found.h_active, max_dimension);
         return self.extent(true);
     }
 
     fn panelHeight(self: *Glcdc) u32 {
+        if (self.timing.timing()) |found| return @min(found.v_active, max_dimension);
         return self.extent(false);
     }
 

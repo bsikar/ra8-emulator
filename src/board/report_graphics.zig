@@ -81,6 +81,7 @@ pub fn display(board: *Board, out: Writer) !void {
         try out.print("GLCDC: {d} write(s), no layer fetching a framebuffer\n", .{unit.writes});
     }
     try palettes(unit, out);
+    try panelTiming(unit, out);
     try composited(unit, out);
     try scanned(unit, out);
     try outputStage(unit, out);
@@ -89,6 +90,50 @@ pub fn display(board: *Board, out: Writer) !void {
         "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
         .{ unit.dropped_unpowered, unit.dark_reads },
     );
+}
+
+/// The panel's own timing, which nothing in the C tree reads: dev snoops
+/// eleven GLCDC offsets and none of them are in the TCON block, so the
+/// active area the driver wrote out of the board's panel table, the sync
+/// widths and the pin routing all went into a shadow word. A layer bigger
+/// than the active area is clipped by the glass on silicon, so it is said
+/// here rather than scanned out whole and called the panel.
+fn panelTiming(unit: anytype, out: Writer) !void {
+    const found = unit.timing.timing() orelse {
+        if (unit.timing.quiet()) return;
+        try out.print(
+            "GLCDC timing: {d} TCON write(s), no active area (STHB1/STVB1 never programmed)\n",
+            .{unit.timing.writes},
+        );
+        return;
+    };
+    try out.print(
+        "GLCDC timing: panel {d}x{d}, hsync {d} + back {d}, vsync {d} + back {d}\n",
+        .{ found.h_active, found.v_active, found.h_sync, found.h_back, found.v_sync, found.v_back },
+    );
+    try pinning(unit, out);
+    if (unit.framebuffer()) |frame| {
+        if (!unit.timing.contains(frame.width, frame.height)) {
+            try out.print(
+                "GLCDC timing: GR{d} is {d}x{d}, past the {d}x{d} active area (the panel clips it)\n",
+                .{ frame.layer, frame.width, frame.height, found.h_active, found.v_active },
+            );
+        }
+    }
+}
+
+/// Which LCD_TCON pin carries which sync signal, and whether it leaves
+/// inverted. A panel wired for the other polarity still hashes a picture
+/// here, so the routing is worth reading back.
+fn pinning(unit: anytype, out: Writer) !void {
+    for (unit.timing.pin, 0..) |one, index| {
+        if (!one.programmed) continue;
+        try out.print("GLCDC timing: LCD_TCON{d} carries {s}{s}\n", .{
+            index,
+            one.signal.name(),
+            if (one.inverted) " (inverted)" else "",
+        });
+    }
 }
 
 /// What the panel actually shows, which dev stops one step short of. dev
