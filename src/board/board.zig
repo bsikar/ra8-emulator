@@ -13,6 +13,7 @@ const periph = @import("../periph/registry.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
+const dac = @import("../periph/dac.zig");
 const dma_bank = @import("../periph/dma_bank.zig");
 const dmac = @import("../periph/dmac.zig");
 const doc = @import("../periph/doc.zig");
@@ -53,6 +54,9 @@ pub const Board = struct {
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
+    /// The two 12-bit D/A channels. No result readback on this part, so the
+    /// code stream and DACR0.DACEN are the whole observable.
+    analog: dac.Dac,
     /// Safe shutoff: the request flags that force the GPT outputs of a group
     /// into high impedance, and the state bit firmware reads back to prove it.
     shutoff: poeg.Poeg,
@@ -90,6 +94,7 @@ pub const Board = struct {
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),
+            .analog = dac.Dac.init(),
             .shutoff = poeg.Poeg.init(),
             .protection = prcr.Prcr.init(),
             // Patched in attach(): the backup file has to point at this
@@ -122,6 +127,7 @@ pub const Board = struct {
         try self.bus.add(self.checksum.block());
         try self.bus.add(self.dataops.block());
         try self.bus.add(self.accuracy.block());
+        try self.bus.add(self.analog.block());
         try self.bus.add(self.shutoff.block());
         try self.bus.add(self.protection.block());
         self.backup = bkup.Bkup.init(&self.protection);
