@@ -76,6 +76,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try serial.sections(board, out);
     try serial.spi(board, out);
     try serial.trace(board, out);
+    try serial.usb(board, out);
     try shutoff(board, out);
     try analog.sections(board, out);
     try analog.converter(board, out);

@@ -287,6 +287,15 @@ pub const Mram = struct {
         return self.shadow[word];
     }
 
+    /// Put every window the option memory answers for on the bus, and hand
+    /// it the machine a landed program is written through to.
+    pub fn attach(self: *Mram, bus: *periph.Bus, machine: engine.Engine) periph.Error!void {
+        self.memory = machine;
+        try bus.add(self.block());
+        try bus.add(self.commandBlock());
+        try bus.add(self.codeBlock());
+    }
+
     pub fn block(self: *Mram) periph.Block {
         return .{
             .name = "MRAM",

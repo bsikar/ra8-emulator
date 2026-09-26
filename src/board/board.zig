@@ -55,6 +55,7 @@ const spi = @import("../periph/spi.zig");
 const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
 const ulpt = @import("../periph/ulpt.zig");
+const usb = @import("usb.zig");
 const wdt = @import("../periph/wdt.zig");
 const xspi = @import("../periph/xspi.zig");
 
@@ -107,6 +108,7 @@ pub const Board = struct {
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
     rswitch: net.Rswitch = .{},
+    usb: usb.Usb = .{},
     /// The two SPI_B channels. No pin here, so the observable is the frames
     /// a channel actually clocked and the ones a disabled channel only wrote
     /// down.
@@ -283,12 +285,10 @@ pub const Board = struct {
         self.serial.attachDevice(modem.line_channel, self.modem.device());
         try self.wire.attach(&self.bus);
         try self.rswitch.attach(&self.bus, core.*);
+        try self.usb.attach(&self.bus);
         self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
-        self.options.memory = core.*;
-        try self.bus.add(self.options.block());
-        try self.bus.add(self.options.commandBlock());
-        try self.bus.add(self.options.codeBlock());
+        try self.options.attach(&self.bus, core.*);
         try self.bus.add(self.card.block());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
