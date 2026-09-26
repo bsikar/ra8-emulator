@@ -27,6 +27,7 @@ const icu = @import("../periph/icu.zig");
 const lvd = @import("../periph/lvd.zig");
 const mstp = @import("../periph/mstp.zig");
 const pdctr = @import("../periph/pdctr.zig");
+const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
@@ -84,6 +85,9 @@ pub const Board = struct {
     /// The two I2S channels. No audio clock in the model, so the observable
     /// is the transmit handshake and the sample stream behind it.
     audio: ssie.Ssie,
+    /// The three digital-microphone channels. No mic behind them, so the
+    /// observable is whether the FIFO a capture loop drains was ever filled.
+    microphone: pdm.Pdm,
     /// The low-power timer, which keeps counting through Software Standby
     /// and is how a sleeping part wakes itself back up.
     lowpower: ulpt.Ulpt,
@@ -120,6 +124,7 @@ pub const Board = struct {
             .serial = sci.Sci.init(),
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
+            .microphone = pdm.Pdm.init(),
             .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
@@ -162,6 +167,7 @@ pub const Board = struct {
         try self.bus.add(self.serial.block());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
+        try self.bus.add(self.microphone.block());
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
@@ -190,6 +196,7 @@ pub const Board = struct {
     pub fn tick(self: *Board, core: engine.Engine) !void {
         self.watchdog.tick();
         self.lowpower.tick();
+        self.microphone.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.raise(core, event);

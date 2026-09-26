@@ -71,6 +71,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try shutoff(board, out);
     try analog.sections(board, out);
     try audio.sections(board, out);
+    try audio.microphone(board, out);
     try capture.sections(board, out);
     try memory.sections(board, out);
     try protection(board, out);
