@@ -3,6 +3,7 @@
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const ipc = @import("../periph/ipc.zig");
+const sync = @import("../periph/ipc_sync.zig");
 
 /// One line per channel that carried anything, plus the losses. A message a
 /// full FIFO dropped and a read that found nothing are both real failures of
@@ -37,5 +38,44 @@ pub fn sections(board: *Board, out: Writer) !void {
             "IPC: {d} poke(s) addressed to the secondary core, which this build does not run\n",
             .{mailbox.undelivered},
         );
+    }
+    try locks(&mailbox.locks, out);
+}
+
+/// The semaphore file and the two NMI doorbells. A lock still held at the end
+/// of a run is the interesting one: the core that took it never gave it back,
+/// and on a two-core part the other side is still spinning for it.
+fn locks(unit: *const sync.Sync, out: Writer) !void {
+    for (&unit.semaphores, 0..) |*one, index| {
+        if (one.quiet()) continue;
+        try out.print(
+            "IPCSEM{d}: {d} taken, {d} contended, {d} released, {s}\n",
+            .{
+                index,
+                one.takes,
+                one.contentions,
+                one.releases,
+                if (one.locked) "STILL HELD" else "free",
+            },
+        );
+        if (one.stray_releases != 0) {
+            try out.print(
+                "IPCSEM{d}: {d} release(s) of a lock nobody held\n",
+                .{ index, one.stray_releases },
+            );
+        }
+    }
+    for (&unit.doorbells, 0..) |*one, index| {
+        if (one.quiet()) continue;
+        try out.print(
+            "IPC{d} NMI: {d} sent, {d} acknowledged, {s}\n",
+            .{ index, one.sends, one.acks, if (one.pending) "PENDING" else "idle" },
+        );
+        if (one.coalesced != 0) {
+            try out.print(
+                "IPC{d} NMI: {d} send(s) onto a request already standing\n",
+                .{ index, one.coalesced },
+            );
+        }
     }
 }

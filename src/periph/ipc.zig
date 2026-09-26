@@ -21,13 +21,14 @@
 //! counted as addressed to a core that is not here and raises nothing, which
 //! is what the run should say rather than a wake that went the wrong way.
 //!
-//! THE SEMAPHORES KEEP WHAT WAS WRITTEN. dev answers zero to every read
-//! below the first channel window and drops every write there, so a driver
-//! that claims a semaphore and reads it back to see whether it won reads
-//! zero forever and can spin without end. The semaphore and NMI region is
-//! not modelled here either, but it is shadowed rather than swallowed: a
-//! read-modify-write survives, narrow stores keep the bytes they do not
-//! name, and nothing in it is interpreted.
+//! THE SEMAPHORES TAKE THE LOCK. dev answers zero to every read below the
+//! first channel window and drops every write there, so a driver that
+//! claims a semaphore and reads it back to see whether it won reads zero
+//! forever and can spin without end. Here IPCSEMn and the two NMI
+//! doorbells are a model of their own in ipc_sync.zig: a read of a
+//! semaphore takes the lock as a side effect and hands back the value from
+//! before it, the way HUM Ch 3.2.3 p 210 specifies, so the second claimant
+//! is told it lost. What is left of the region below 0xC0 is still shadow.
 //!
 //! A DROPPED MESSAGE IS COUNTED. dev latches FERR on a write into a full
 //! FIFO and RERR on a read of an empty one, and its end-of-run line prints
@@ -35,12 +36,14 @@
 //! like one that did not. The latches are kept, and the words the FIFO could
 //! not take and the reads that found nothing are counted and reported.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the semaphore protocol, the NMI window,
-//! and any IPC interrupt besides the two receive events. The event is queued
-//! for the chunk boundary rather than raised inside the store, which is how
-//! every other block on this board offers one.
+//! NOT MODELLED, AND NOT GUESSED: any IPC interrupt besides the two receive
+//! events, and NMI delivery, which is latched and counted here but reaches
+//! no core. The event is queued for the chunk boundary rather than raised
+//! inside the store, which is how every other block on this board offers
+//! one.
 const std = @import("std");
 const periph = @import("registry.zig");
+const sync = @import("ipc_sync.zig");
 
 /// IPC geometry (ra8_ipc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -48,7 +51,7 @@ pub const win_base: u32 = 0x4002_0000;
 pub const win_span: u32 = 0x140;
 
 /// The channel windows: four of them, 0x20 apart, starting at 0xC0. Below
-/// 0xC0 are the semaphores and the NMI window.
+/// 0xC0 are the semaphores and the NMI windows, which ipc_sync.zig owns.
 pub const ch0_offset: u32 = 0xC0;
 pub const ch_stride: u32 = 0x20;
 pub const ch_count: usize = 4;
@@ -184,13 +187,20 @@ pub const Channel = struct {
     }
 };
 
+/// The semaphore and NMI half of the block, re-exported so a caller
+/// reaches it the way it reaches the channels.
+pub const synchro = sync;
+
 /// Where an offset in the window lands.
 const Slot = struct { index: usize, reg: u32 };
 
 pub const Ipc = struct {
     channels: [ch_count]Channel = .{Channel{}} ** ch_count,
-    /// The semaphore and NMI region, and the padding inside each channel
-    /// window. Held so a read-modify-write survives, never interpreted.
+    /// IPCSEM0..15 and the two NMI doorbells, below the channel windows.
+    locks: sync.Sync = .{},
+    /// What neither the channels nor the locks own: the gap at 0x040 and
+    /// the padding inside each window. Held so a read-modify-write
+    /// survives, never interpreted.
     shadow: [shadow_words]u32 = .{0} ** shadow_words,
     /// An IPC0 poke waiting for the chunk boundary to be offered as an event.
     raised: bool = false,
@@ -205,6 +215,7 @@ pub const Ipc = struct {
 
     pub fn quiet(self: *const Ipc) bool {
         if (self.wakes != 0 or self.undelivered != 0) return false;
+        if (!self.locks.quiet()) return false;
         for (&self.channels) |*unit| {
             if (!unit.quiet()) return false;
         }
@@ -234,6 +245,8 @@ pub const Ipc = struct {
                 off_iset, off_txd, off_clr => return 0,
                 else => {},
             }
+        } else if (self.locks.read(offset)) |value| {
+            return part(value, byte, width);
         }
         return part(self.shadow[offset / 4], byte, width);
     }
@@ -254,6 +267,7 @@ pub const Ipc = struct {
             }
             return;
         }
+        if (self.locks.write(offset, merge(0, byte, width, value))) return;
         self.shadowWrite(offset, byte, width, value);
     }
 

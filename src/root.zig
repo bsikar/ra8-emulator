@@ -77,6 +77,7 @@ pub const periph = struct {
     pub const i3c_target = @import("periph/i3c_target.zig");
     pub const icu = @import("periph/icu.zig");
     pub const ipc = @import("periph/ipc.zig");
+    pub const ipc_sync = @import("periph/ipc_sync.zig");
     pub const lvd = @import("periph/lvd.zig");
     pub const maci = @import("periph/maci.zig");
     pub const modem = @import("periph/modem.zig");
