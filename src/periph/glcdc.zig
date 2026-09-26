@@ -21,6 +21,10 @@
 //! its domain is dark is the shape of the C tree's issue #247.
 const periph = @import("registry.zig");
 const pdctr = @import("pdctr.zig");
+const engine = @import("../core/engine.zig");
+const clut = @import("glcdc_clut.zig");
+const pixel = @import("glcdc_pixel.zig");
+const scan = @import("glcdc_scan.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -40,6 +44,8 @@ pub const off = struct {
     pub const flm3: u32 = 0x10;
     pub const flm5: u32 = 0x18;
     pub const flm6: u32 = 0x1C;
+    /// CLUTINT: which CLUT plane this layer's fetch unit reads.
+    pub const clutint: u32 = 0x50;
 };
 
 /// Field masks and shifts the descriptor decode applies (HUM Ch 63).
@@ -56,28 +62,9 @@ pub const field = struct {
     pub const format_mask: u32 = 0x7;
 };
 
-/// FLM6.FORMAT codes (HUM Ch 63 Table 63.11). A real enumeration: these are
-/// the eight pixel formats the fetch unit understands and nothing else.
-pub const Format = enum(u3) {
-    argb8888 = 0,
-    rgb888 = 1,
-    rgb565 = 2,
-    argb1555 = 3,
-    argb4444 = 4,
-    clut8 = 5,
-    clut4 = 6,
-    clut1 = 7,
-
-    /// Bytes fetched per pixel. The sub-byte CLUT modes round up to one,
-    /// which is what the width recovery below needs and all it needs.
-    pub fn bytesPerPixel(self: Format) u32 {
-        return switch (self) {
-            .argb8888, .rgb888 => 4,
-            .rgb565, .argb1555, .argb4444 => 2,
-            .clut8, .clut4, .clut1 => 1,
-        };
-    }
-};
+/// FLM6.FORMAT codes, and the decode behind them. Re-exported so a caller
+/// that only knows the block still names the format through it.
+pub const Format = pixel.Format;
 
 /// A RAM window a framebuffer may legally live in on this board.
 const Window = struct { base: u32, end: u32 };
@@ -116,7 +103,15 @@ pub const Glcdc = struct {
     /// The domain gate, held as a pointer so the answer is the board's live
     /// PDCTRGD rather than a copy of it taken at construction.
     domain: *const pdctr.Pdctr,
+    /// The machine whose RAM the panel is scanned out of. Null on a board
+    /// built without an engine, which is every unit test that only cares
+    /// about the register window.
+    memory: ?engine.Engine = null,
     registers: [words]u32 = [_]u32{0} ** words,
+    /// One palette pair per graphics layer, layer 1 first.
+    palettes: [2]clut.Palette = [_]clut.Palette{.{}} ** 2,
+    /// The scan-out: what the panel actually shows.
+    scanner: scan.Scanner = .{},
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -132,7 +127,8 @@ pub const Glcdc = struct {
 
     /// A run that never touched the block has nothing to narrate.
     pub fn quiet(self: *const Glcdc) bool {
-        return self.writes == 0 and self.dropped_unpowered == 0 and self.dark_reads == 0;
+        return self.writes == 0 and self.dropped_unpowered == 0 and self.dark_reads == 0 and
+            self.scanner.quiet();
     }
 
     /// BG_EN.EN: the output stage. A layer can be fetching with this clear,
@@ -163,7 +159,11 @@ pub const Glcdc = struct {
         const lines = (self.word(base_off + off.flm5) >> field.lnnum_shift & field.lnnum_mask) + 1;
         const format: Format = @enumFromInt(self.word(base_off + off.flm6) >> field.format_shift & field.format_mask);
         if (stride == 0) return null;
-        const width = stride / format.bytesPerPixel();
+        // Bits, not bytes: a CLUT4 line of `stride` bytes carries twice as
+        // many pixels as it has bytes, and a CLUT1 line eight times as many.
+        // dev divides by a bytes-per-pixel that rounds both up to one, so
+        // every sub-byte layer it has ever reported came out too narrow.
+        const width = format.pixelsIn(stride);
         if (width == 0 or width > max_dimension or lines > max_dimension) return null;
         return .{
             .base = base,
@@ -184,7 +184,13 @@ pub const Glcdc = struct {
             self.dark_reads +%= 1;
             return 0;
         }
-        return self.word(address - win_base);
+        const offset = address - win_base;
+        // A CLUT entry is a register and reads back: a driver that fills a
+        // palette and checks its work has to find it there.
+        if (clut.slotOf(offset)) |slot| {
+            return self.palettes[slot.layer - 1].load(slot.plane, slot.index);
+        }
+        return self.word(offset);
     }
 
     /// A write while the domain is gated reaches no flip-flop on silicon and
@@ -200,8 +206,46 @@ pub const Glcdc = struct {
         }
         const offset = address - win_base;
         if (self.isStart(offset, value)) self.starts +%= 1;
+        if (self.latchPalette(offset, value)) {
+            self.writes +%= 1;
+            return;
+        }
         self.setWord(offset, value);
         self.writes +%= 1;
+    }
+
+    /// A write into the four CLUT planes, or into a layer's CLUTINT plane
+    /// select. dev snoops neither, so a palette a driver spent its init
+    /// filling went into a register shadow nobody read back.
+    fn latchPalette(self: *Glcdc, offset: u32, value: u32) bool {
+        if (clut.slotOf(offset)) |slot| {
+            self.palettes[slot.layer - 1].store(slot.plane, slot.index, value);
+            return true;
+        }
+        for (0..2) |index| {
+            const at = off.layer_base + off.layer_stride * @as(u32, @intCast(index)) + off.clutint;
+            if (offset != at) continue;
+            self.palettes[index].select(value);
+            return false;
+        }
+        return false;
+    }
+
+    /// Scan the panel: read the framebuffer the active layer points at,
+    /// decode it through the format and that layer's palette, and hand back
+    /// what is in it. Null when there is nothing to show, and the scanner
+    /// keeps why.
+    pub fn scanOut(self: *Glcdc) ?scan.Picture {
+        const frame = self.framebuffer() orelse {
+            _ = self.scanner.refuseNoLayer();
+            return null;
+        };
+        if (!frame.enabled) {
+            _ = self.scanner.refuseOutputOff();
+            return null;
+        }
+        const memory = self.memory orelse return null;
+        return self.scanner.run(memory, shapeOf(frame), &self.palettes[frame.layer - 1]);
     }
 
     /// Whether this write is the edge that starts a layer fetching.
@@ -227,6 +271,15 @@ pub const Glcdc = struct {
         self.registers[index] = value;
     }
 
+    /// Put the controller on the bus with the machine its panel is scanned
+    /// out of. The block owns this the way the Ethernet and I2C sides own
+    /// theirs, so the board wires a display in one line.
+    pub fn attach(self: *Glcdc, bus: *periph.Bus, domain: *const pdctr.Pdctr, core: engine.Engine) !void {
+        self.* = Glcdc.init(domain);
+        self.memory = core;
+        try bus.add(self.block());
+    }
+
     pub fn block(self: *Glcdc) periph.Block {
         return .{
             .name = "GLCDC",
@@ -238,6 +291,33 @@ pub const Glcdc = struct {
         };
     }
 };
+
+/// The scan's view of a descriptor: the same framebuffer, said in the terms
+/// the scanner works in (bits per pixel, the decoder, where the RAM window
+/// the base sits in ends).
+pub fn shapeOf(frame: Framebuffer) scan.Shape {
+    return .{
+        .base = frame.base,
+        .width = frame.width,
+        .height = frame.height,
+        .stride = frame.stride,
+        .bits = frame.format.bits(),
+        .decode = frame.format.decoder(),
+        .indexed = frame.format.indexed(),
+        .window_end = windowEnd(frame.base),
+    };
+}
+
+/// Where the RAM window an address sits in ends, or null when it sits in
+/// none. The descriptor decode only asks whether the BASE is in RAM; a
+/// framebuffer whose base is fine and whose last line is past the end of
+/// the window is the failure this answers.
+pub fn windowEnd(address: u32) ?u32 {
+    for (ram_windows) |window| {
+        if (address >= window.base and address < window.end) return window.end;
+    }
+    return null;
+}
 
 /// Whether an address points into a RAM window a framebuffer can live in.
 pub fn addressIsRam(address: u32) bool {
