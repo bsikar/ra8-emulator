@@ -83,6 +83,7 @@ pub fn display(board: *Board, out: Writer) !void {
     try palettes(unit, out);
     try composited(unit, out);
     try scanned(unit, out);
+    try outputStage(unit, out);
     if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
     try out.print(
         "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
@@ -161,6 +162,35 @@ fn composited(unit: anytype, out: Writer) !void {
         "GLCDC: panel composited {d} time(s), {d} pixel(s) with two layers over each other, {d} showing the background colour\n",
         .{ mixer.mixes, mixer.overlapped, mixer.bare },
     );
+}
+
+/// The output stage: what the composited pixel became on the panel bus.
+/// dev models none of this window, so a run that dithered down to a 16-bit
+/// panel and one that drove a full 24-bit bus left the same witness behind.
+fn outputStage(unit: anytype, out: Writer) !void {
+    const stage = &unit.output;
+    if (stage.quiet()) return;
+    try out.print(
+        "GLCDC: output bus {s}, dither {s}, gamma {s}, {d} pixel(s) out\n",
+        .{
+            @tagName(stage.live.format()),
+            @tagName(stage.live.dither()),
+            if (stage.gamma_on) "on" else "off",
+            stage.pixels,
+        },
+    );
+    if (stage.narrowed != 0 or stage.dithered != 0 or stage.corrected != 0) {
+        try out.print(
+            "GLCDC: {d} pixel(s) narrowed to the bus, {d} dithered, {d} gamma-corrected, {d} clipped\n",
+            .{ stage.narrowed, stage.dithered, stage.corrected, stage.clipped },
+        );
+    }
+    if (stage.pending()) {
+        try out.print(
+            "GLCDC: output registers written but never committed (OUT_VLATCH.VEN unwritten), so the panel is still driven from the previous settings\n",
+            .{},
+        );
+    }
 }
 
 /// The palettes themselves, once a driver has filled one. dev snoops none of

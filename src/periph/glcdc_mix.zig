@@ -13,6 +13,7 @@ const engine = @import("../core/engine.zig");
 const clut = @import("glcdc_clut.zig");
 const scan = @import("glcdc_scan.zig");
 const blend = @import("glcdc_blend.zig");
+const output = @import("glcdc_out.zig");
 
 /// How many layers stack on the panel.
 pub const layers: u32 = 2;
@@ -23,6 +24,9 @@ pub const Panel = struct {
     height: u32,
     /// BG.BGC, shown wherever no layer reaches the panel.
     background: u32,
+    /// The output stage the composited pixel leaves through, or null on a
+    /// mix that only cares about what the layers put together.
+    stage: ?*output.Stage = null,
 };
 
 /// One layer as the mixer sees it: where its pixels come from, the palette
@@ -97,6 +101,9 @@ pub const Mixer = struct {
             }
             if (reached == 0) self.bare += 1;
             if (reached > 1) self.overlapped += 1;
+            // What the panel receives is what leaves the output stage, not
+            // what the mixer put together.
+            if (panel.stage) |stage| colour = stage.apply(colour, column, at);
             fold.pixel(colour);
         }
     }
