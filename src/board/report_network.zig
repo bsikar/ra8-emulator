@@ -4,6 +4,7 @@
 //! MikroBUS UART was asked.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
+const ether = @import("report_ether.zig");
 const modem_line = @import("../periph/modem.zig");
 const pi4ioe = @import("../periph/riic_pi4ioe.zig");
 const ov5640 = @import("../periph/riic_ov5640.zig");
@@ -20,6 +21,7 @@ pub fn sections(board: *Board, out: Writer) !void {
     try ptp(board, out);
     try modem(board, out);
     try i2c(board, out);
+    try ether.sections(board, out);
 }
 
 /// One line per RIIC channel that saw traffic, then a line for each part on
