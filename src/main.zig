@@ -45,6 +45,7 @@ pub fn main() !u8 {
     defer board.deinit();
     board.part = options.part;
     prepareCard(&board, options) catch return 2;
+    queueTouches(&board, options);
     try board.attach(&core);
 
     var watch = engine.Watch{};
@@ -105,6 +106,14 @@ fn prepareCard(board: *Board, options: cli.Options) !void {
         std.debug.print("--sd-new {s}: {s}\n", .{ kind.text(), @errorName(err) });
         return err;
     };
+}
+
+/// Put the contacts the command line asked for on the touch panel. The queue
+/// is the same depth as the flag allows, so nothing here can overflow it.
+fn queueTouches(board: *Board, options: cli.Options) void {
+    for (options.touches[0..options.touch_count]) |contact| {
+        board.wire.panel.queue(contact) catch return;
+    }
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused

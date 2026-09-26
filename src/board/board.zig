@@ -280,6 +280,7 @@ pub const Board = struct {
         self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
         self.serial.attachDevice(modem.line_channel, self.modem.device());
         try self.bus.add(self.wire.block());
+        try self.bus.add(self.wire.touchBlock());
         try self.wire.attach();
         self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
