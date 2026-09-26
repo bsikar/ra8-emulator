@@ -27,6 +27,7 @@ const gpio = @import("../periph/gpio.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
+const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
@@ -88,6 +89,11 @@ pub const Board = struct {
     /// observable is the frames a channel actually clocked and the ones a
     /// disabled channel only wrote down.
     spi: spi.Spi,
+    /// The extra-MRAM controller: the option-setting memory the MACI
+    /// sequencer programs, and the commands it refuses. Built in attach():
+    /// the cells are sparse and need the board's allocator, and a program
+    /// that lands is written through to the engine's memory.
+    options: mram.Mram,
     /// The octal NOR flash behind XSPI0, and the manual-command engine in
     /// front of it. Built in attach(): the part is sparse and needs the
     /// board's allocator to hold the sectors something actually wrote to.
@@ -148,6 +154,7 @@ pub const Board = struct {
             .serial = sci.Sci.init(),
             .spi = spi.Spi.init(),
             .flash = xspi.Xspi.init(allocator),
+            .options = mram.Mram.init(allocator),
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
@@ -163,6 +170,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.options.deinit();
         self.flash.deinit();
         self.bus.deinit();
     }
@@ -197,6 +205,10 @@ pub const Board = struct {
         try self.bus.add(self.serial.block());
         try self.bus.add(self.spi.block());
         try self.bus.add(self.flash.block());
+        self.options.memory = core.*;
+        try self.bus.add(self.options.block());
+        try self.bus.add(self.options.commandBlock());
+        try self.bus.add(self.options.codeBlock());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
