@@ -25,6 +25,8 @@ const engine = @import("../core/engine.zig");
 const clut = @import("glcdc_clut.zig");
 const pixel = @import("glcdc_pixel.zig");
 const scan = @import("glcdc_scan.zig");
+const blend = @import("glcdc_blend.zig");
+const mix = @import("glcdc_mix.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -46,6 +48,8 @@ pub const off = struct {
     pub const flm6: u32 = 0x1C;
     /// CLUTINT: which CLUT plane this layer's fetch unit reads.
     pub const clutint: u32 = 0x50;
+    /// BG.BGC: the background colour under both graphics layers.
+    pub const bg_bgc: u32 = 0x1014;
 };
 
 /// Field masks and shifts the descriptor decode applies (HUM Ch 63).
@@ -112,6 +116,10 @@ pub const Glcdc = struct {
     palettes: [2]clut.Palette = [_]clut.Palette{.{}} ** 2,
     /// The scan-out: what the panel actually shows.
     scanner: scan.Scanner = .{},
+    /// One blend stage per graphics layer, layer 1 first.
+    blends: [2]blend.Layer = [_]blend.Layer{.{}} ** 2,
+    /// The compositor that stacks those layers on the background.
+    mixer: mix.Mixer = .{},
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -223,29 +231,80 @@ pub const Glcdc = struct {
             return true;
         }
         for (0..2) |index| {
-            const at = off.layer_base + off.layer_stride * @as(u32, @intCast(index)) + off.clutint;
-            if (offset != at) continue;
-            self.palettes[index].select(value);
-            return false;
+            const base_off = off.layer_base + off.layer_stride * @as(u32, @intCast(index));
+            if (offset == base_off + off.clutint) {
+                self.palettes[index].select(value);
+                return false;
+            }
+            if (offset < base_off or offset >= base_off + off.layer_stride) continue;
+            // The blend stage keeps its own copy and the shadow keeps the
+            // word, so a driver that reads AB1 back still finds it there.
+            _ = self.blends[index].latch(offset - base_off, value);
         }
         return false;
     }
 
-    /// Scan the panel: read the framebuffer the active layer points at,
-    /// decode it through the format and that layer's palette, and hand back
-    /// what is in it. Null when there is nothing to show, and the scanner
-    /// keeps why.
+    /// Scan the panel: composite the graphics layers onto the background
+    /// colour and hand back what a viewer would see. Null when there is
+    /// nothing to show, and the scanner keeps why.
     pub fn scanOut(self: *Glcdc) ?scan.Picture {
-        const frame = self.framebuffer() orelse {
-            _ = self.scanner.refuseNoLayer();
-            return null;
-        };
-        if (!frame.enabled) {
-            _ = self.scanner.refuseOutputOff();
-            return null;
-        }
+        const frame = self.framebuffer() orelse return self.scanner.refuseNoLayer();
+        if (!frame.enabled) return self.scanner.refuseOutputOff();
         const memory = self.memory orelse return null;
-        return self.scanner.run(memory, shapeOf(frame), &self.palettes[frame.layer - 1]);
+        var planes: [mix.layers]mix.Plane = undefined;
+        var count: usize = 0;
+        for (1..mix.layers + 1) |layer| {
+            const found = self.decode(@intCast(layer)) orelse continue;
+            self.imply(found);
+            planes[count] = .{
+                .shape = shapeOf(found),
+                .palette = &self.palettes[layer - 1],
+                .stage = &self.blends[layer - 1],
+            };
+            count += 1;
+        }
+        const panel = mix.Panel{
+            .width = self.panelWidth(),
+            .height = self.panelHeight(),
+            .background = self.word(off.bg_bgc),
+        };
+        return switch (self.mixer.run(memory, panel, planes[0..count])) {
+            .picture => |picture| self.scanner.record(picture),
+            .refused => |why| self.scanner.refuseWith(why),
+        };
+    }
+
+    /// A layer whose AB registers were never written is taken as displayed
+    /// over the whole of its framebuffer, which is what this model did
+    /// before there was a blend stage. Once the driver programs AB1, the
+    /// register is believed instead.
+    fn imply(self: *Glcdc, frame: Framebuffer) void {
+        const stage = &self.blends[frame.layer - 1];
+        if (!stage.quiet()) return;
+        stage.* = blend.implied(frame.width, frame.height);
+    }
+
+    /// The panel is as wide and as tall as the layers programmed onto it
+    /// reach. BG.HSIZE and BG.VSIZE carry the panel's own timing, which the
+    /// in-tree driver programs from a panel table this model has no copy of.
+    fn panelWidth(self: *Glcdc) u32 {
+        return self.extent(true);
+    }
+
+    fn panelHeight(self: *Glcdc) u32 {
+        return self.extent(false);
+    }
+
+    fn extent(self: *Glcdc, horizontal: bool) u32 {
+        var reach: u32 = 0;
+        for (1..mix.layers + 1) |layer| {
+            const found = self.decode(@intCast(layer)) orelse continue;
+            const rect = self.blends[layer - 1].rect();
+            const edge = if (horizontal) rect.left + rect.width else rect.top + rect.height;
+            const own = if (horizontal) found.width else found.height;
+            reach = @max(reach, @max(edge, own));
+        }
+        return @min(reach, max_dimension);
     }
 
     /// Whether this write is the edge that starts a layer fetching.

@@ -96,6 +96,22 @@ pub const Scanner = struct {
         return null;
     }
 
+    /// Record a refusal the caller worked out for itself, so every reason
+    /// the panel produced no picture is counted in one place.
+    pub fn refuseWith(self: *Scanner, why: Refusal) ?Picture {
+        return self.refuse(why);
+    }
+
+    /// Note a picture the caller folded, so the report finds it where a
+    /// single-framebuffer scan would have left it.
+    pub fn record(self: *Scanner, picture: Picture) ?Picture {
+        self.scans += 1;
+        self.pixels += picture.pixels;
+        self.last_refusal = null;
+        self.last = picture;
+        return self.last;
+    }
+
     pub fn count(self: *const Scanner, why: Refusal) u32 {
         return self.refused[@intFromEnum(why)];
     }
@@ -120,12 +136,7 @@ pub const Scanner = struct {
         shape: Shape,
         palette: *const clut.Palette,
     ) ?Picture {
-        if (shape.needsPalette() and !palette.programmed()) return self.refuse(.no_palette);
-        const total = shape.bytes() orelse return self.refuse(.too_big);
-        if (total > limits.max_bytes) return self.refuse(.too_big);
-        if (shape.window_end) |end| {
-            if (@as(u64, shape.base) + total > end) return self.refuse(.off_ram);
-        } else return self.refuse(.off_ram);
+        if (validate(shape, palette)) |why| return self.refuse(why);
 
         var state = Fold{};
         var line: [limits.chunk]u8 = undefined;
@@ -145,6 +156,18 @@ pub const Scanner = struct {
         return self.last;
     }
 };
+
+/// What stops a framebuffer being readable at all: an empty palette under a
+/// CLUT format, a span this will not walk, or a last line past the end of
+/// the RAM window the base sits in. Null when it reads.
+pub fn validate(shape: Shape, palette: *const clut.Palette) ?Refusal {
+    if (shape.needsPalette() and !palette.programmed()) return .no_palette;
+    const total = shape.bytes() orelse return .too_big;
+    if (total > limits.max_bytes) return .too_big;
+    const end = shape.window_end orelse return .off_ram;
+    if (@as(u64, shape.base) + total > end) return .off_ram;
+    return null;
+}
 
 /// What a scan needs to know about the framebuffer, lifted out of the
 /// descriptor so this file does not have to know the register window.
@@ -183,15 +206,16 @@ pub const Shape = struct {
     }
 };
 
-/// The running fold over one framebuffer's pixels.
-const Fold = struct {
+/// The running fold over the pixels that reach the panel. Public because
+/// the mixer folds composited pixels through exactly this hash.
+pub const Fold = struct {
     hash: u32 = fnv.offset,
     pixels: u32 = 0,
     blank: u32 = 0,
     seen: [colour_sample]u32 = [_]u32{0} ** colour_sample,
     colours: u32 = 0,
 
-    fn row(self: *Fold, line: []const u8, shape: Shape, palette: *const clut.Palette) void {
+    pub fn row(self: *Fold, line: []const u8, shape: Shape, palette: *const clut.Palette) void {
         var column: u32 = 0;
         while (column < shape.width) : (column += 1) {
             const raw = fetch(line, column, shape.bits);
@@ -199,7 +223,7 @@ const Fold = struct {
         }
     }
 
-    fn pixel(self: *Fold, colour: u32) void {
+    pub fn pixel(self: *Fold, colour: u32) void {
         self.pixels += 1;
         if (colour >> 24 == 0) self.blank += 1;
         var byte: u32 = 0;
@@ -218,7 +242,7 @@ const Fold = struct {
         self.colours += 1;
     }
 
-    fn picture(self: *const Fold) Picture {
+    pub fn picture(self: *const Fold) Picture {
         return .{
             .hash = self.hash,
             .pixels = self.pixels,
