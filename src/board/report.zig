@@ -4,6 +4,7 @@
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
+const elc = @import("../periph/elc.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const cac = @import("../periph/cac.zig");
@@ -236,10 +237,13 @@ fn events(board: *Board, out: Writer) !void {
     try out.print("\n", .{});
 }
 
-/// The event link controller, and the loud case behind it: dev models no ELC
+/// The event link controller, and the loud cases behind it: dev models no ELC
 /// at all, so its registers fall through to the sparse register file. A
 /// firmware there runs the three-step ELSEGR sequence, reads the value back,
-/// and believes it raised a software event that never existed.
+/// and believes it raised a software event that never existed; and every
+/// event a peripheral raises there passes the link table without being
+/// offered to it, so a route that was never going to conduct looks identical
+/// to one that did.
 fn eventLinks(board: *Board, out: Writer) !void {
     const unit = &board.links;
     if (unit.quiet()) return;
@@ -253,10 +257,32 @@ fn eventLinks(board: *Board, out: Writer) !void {
             .{ unit.refused(), unit.inhibited, unit.unarmed, unit.disabled },
         );
     }
-    if (unit.unconsumed != 0) {
-        try out.print(", {d} EVENT(S) LINKED TO A PERIPHERAL NOTHING MODELS", .{unit.unconsumed});
+    try out.print("\n", .{});
+    try conduction(&unit.table, out);
+}
+
+/// What the link table actually conducted. The destination peripheral behind
+/// a slot is HUM Table 19.2 and is not in this tree, so an arrival is counted
+/// at the slot and stops there, which the line says rather than implying a
+/// peripheral ran.
+fn conduction(table: *const elc.route.Table, out: Writer) !void {
+    if (table.offered == 0) return;
+    try out.print(
+        "  links: {d} event(s) offered, {d} routed to {d} slot(s), {d} unrouted",
+        .{ table.offered, table.delivered, table.busySlots(), table.unrouted },
+    );
+    if (table.blocked != 0) {
+        try out.print(", {d} LINKED EVENT(S) LOST WITH ELCON CLEAR", .{table.blocked});
     }
     try out.print("\n", .{});
+    for (0..elc.route.slots) |index| {
+        const arrivals = table.arrivalsAt(index);
+        if (arrivals == 0) continue;
+        try out.print(
+            "  ELSR{d}: event 0x{X:0>3}, {d} arrival(s), destination not modelled (HUM Table 19.2)\n",
+            .{ index, table.source(index), arrivals },
+        );
+    }
 }
 
 /// What the transfer controller moved without waking the CPU, and the loud

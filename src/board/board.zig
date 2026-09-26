@@ -359,12 +359,13 @@ pub const Board = struct {
         for (events.constSlice()) |event| try self.raise(core, event);
     }
 
-    /// One event, offered to the transfer controller before the core. A slot
-    /// with IELSR.DTCE set belongs to the DTC: it moves its descriptor's
-    /// units and keeps the interrupt to itself until the descriptor runs out,
-    /// which is the whole reason firmware sets DTCE instead of handling every
-    /// byte in an ISR. Everything else goes straight to the event links.
+    /// One event, offered to all three consumers of one. The links first,
+    /// and they see EVERY event, not just the four the ELC generates: an
+    /// event fans out to the ICU and the ELC at once, and a link conducts
+    /// without consuming it. Then the transfer controller, before the core:
+    /// a DTCE slot belongs to the DTC until its descriptor runs out.
     pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
+        _ = self.links.conduct(event);
         if (self.transfers.activate(core, &self.events, event)) |moved| {
             if (!moved.interrupt) return;
         }

@@ -40,6 +40,7 @@ test {
     _ = @import("periph/dtc_xfer_test.zig");
     _ = @import("periph/eink_test.zig");
     _ = @import("periph/eink_wire_test.zig");
+    _ = @import("periph/elc_route_test.zig");
     _ = @import("periph/elc_test.zig");
     _ = @import("periph/eth_desc_test.zig");
     _ = @import("periph/eth_dma_test.zig");
