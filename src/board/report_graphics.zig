@@ -81,6 +81,7 @@ pub fn display(board: *Board, out: Writer) !void {
         try out.print("GLCDC: {d} write(s), no layer fetching a framebuffer\n", .{unit.writes});
     }
     try palettes(unit, out);
+    try composited(unit, out);
     try scanned(unit, out);
     if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
     try out.print(
@@ -128,6 +129,38 @@ fn scanned(unit: anytype, out: Writer) !void {
             .{panel_scan.count(.fault)},
         );
     }
+}
+
+/// How the two graphics layers reached the panel. dev picks one layer and
+/// hashes its framebuffer, so an overlay over a background image, which is
+/// the whole reason the block has two layers, was never in its witness: a
+/// layer the driver hid with AB1.DISPSEL was reported as the picture, and a
+/// layer positioned at a corner was reported as though it covered the panel.
+fn composited(unit: anytype, out: Writer) !void {
+    for (&unit.blends, 1..) |*stage, layer| {
+        if (stage.quiet()) continue;
+        const rect = stage.rect();
+        try out.print(
+            "GLCDC: GR{d} {s}, {d}x{d} at ({d},{d}), {d} pixel(s) shown, {d} held back, {d} chroma-keyed\n",
+            .{
+                layer,
+                @tagName(stage.display()),
+                rect.width,
+                rect.height,
+                rect.left,
+                rect.top,
+                stage.shown,
+                stage.hidden,
+                stage.keyed,
+            },
+        );
+    }
+    const mixer = &unit.mixer;
+    if (mixer.quiet()) return;
+    try out.print(
+        "GLCDC: panel composited {d} time(s), {d} pixel(s) with two layers over each other, {d} showing the background colour\n",
+        .{ mixer.mixes, mixer.overlapped, mixer.bare },
+    );
 }
 
 /// The palettes themselves, once a driver has filled one. dev snoops none of
