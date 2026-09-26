@@ -2,11 +2,13 @@
 const std = @import("std");
 const part = @import("part.zig");
 const gt911 = @import("../periph/i3c_gt911.zig");
+const max17048 = @import("../periph/i3c_max17048.zig");
 const sd_format = @import("../periph/sd_format.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--touch X,Y]
+    \\                    [--battery PCT] [--charge]
     \\
     \\  --instructions N   stop after N instructions (default 2000000)
     \\  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU
@@ -14,6 +16,9 @@ pub const usage =
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
+    \\  --battery PCT      state-of-charge the fuel gauge reports (default 72)
+    \\  --charge           report the charger attached, so the charge rate
+    \\                     the gauge answers with is positive
     \\
 ;
 
@@ -35,6 +40,9 @@ pub const Options = struct {
     /// firmware reads.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,
+    /// What the fuel gauge on the I2C line says is in the battery. The
+    /// percent is range-checked by the gauge itself, not here.
+    battery: max17048.Battery = .{},
 };
 
 pub fn parse(argv: []const []const u8) !Options {
@@ -67,6 +75,12 @@ pub fn parse(argv: []const []const u8) !Options {
             if (options.touch_count >= options.touches.len) return error.TooManyTouches;
             options.touches[options.touch_count] = try parseTouch(argv[index]);
             options.touch_count += 1;
+        } else if (std.mem.eql(u8, argv[index], "--battery")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.battery.soc_pct = try std.fmt.parseInt(u8, argv[index], 10);
+        } else if (std.mem.eql(u8, argv[index], "--charge")) {
+            options.battery.charging = true;
         } else return error.UnknownFlag;
     }
     return options;

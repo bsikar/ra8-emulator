@@ -8,6 +8,8 @@
 const bus = @import("../periph/riic_bus.zig");
 const gt911 = @import("../periph/i3c_gt911.zig");
 const i3c = @import("../periph/i3c.zig");
+const lsm6dso = @import("../periph/i3c_lsm6dso.zig");
+const max17048 = @import("../periph/i3c_max17048.zig");
 const ov5640 = @import("../periph/riic_ov5640.zig");
 const periph = @import("../periph/registry.zig");
 const pi4ioe = @import("../periph/riic_pi4ioe.zig");
@@ -17,9 +19,12 @@ pub const Wire = struct {
     controller: riic.Riic = riic.Riic.init(),
     expander: pi4ioe.Expander = .{},
     sensor: ov5640.Sensor = .{},
-    /// The I3C channel in legacy I2C mode, and the touch panel on it.
+    /// The I3C channel in legacy I2C mode, and the three parts on it: the
+    /// touch panel, the IMU and the fuel gauge that reports the battery.
     touchline: i3c.I3c = .{},
     panel: gt911.Panel = .{},
+    imu: lsm6dso.Imu = .{},
+    gauge: max17048.Gauge = .{},
 
     /// Put the board's parts on the bus. The controller holds pointers into
     /// this struct, so this runs once the board has stopped moving.
@@ -27,6 +32,8 @@ pub const Wire = struct {
         try self.controller.attachDevice(self.expander.device());
         try self.controller.attachDevice(self.sensor.device());
         try self.touchline.attachDevice(self.panel.device());
+        try self.touchline.attachDevice(self.imu.device());
+        try self.touchline.attachDevice(self.gauge.device());
     }
 
     pub fn block(self: *Wire) periph.Block {
@@ -39,6 +46,7 @@ pub const Wire = struct {
 
     pub fn quiet(self: *const Wire) bool {
         return self.controller.quiet() and self.expander.quiet() and self.sensor.quiet() and
-            self.touchline.quiet() and self.panel.quiet();
+            self.touchline.quiet() and self.panel.quiet() and self.imu.quiet() and
+            self.gauge.quiet();
     }
 };
