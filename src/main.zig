@@ -41,6 +41,7 @@ pub fn main() !u8 {
 
     var board = Board.init(allocator);
     defer board.deinit();
+    board.part = options.part;
     try board.attach(&core);
 
     var watch = engine.Watch{};

@@ -8,6 +8,7 @@
 const std = @import("std");
 
 const engine = @import("../core/engine.zig");
+const part = @import("../core/part.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
 const adc = @import("../periph/adc.zig");
@@ -32,6 +33,7 @@ const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
 const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
+const npu = @import("../periph/npu.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -130,6 +132,10 @@ pub const Board = struct {
     /// the observable is which pokes were for it and which messages the four
     /// stages actually carried.
     mailbox: ipc.Ipc,
+    /// The Ethos-U55 micro-NPU. Only the RA8P1 carries one, so `part`
+    /// decides whether attach() puts it on the bus at all; on the RA8D2 the
+    /// window falls through to the sparse bus exactly as it does on dev.
+    npu: npu.Npu,
     /// The low-power timer, which keeps counting through Software Standby
     /// and is how a sleeping part wakes itself back up.
     lowpower: ulpt.Ulpt,
@@ -147,6 +153,10 @@ pub const Board = struct {
     /// main.zig points it at the run's own seam; a board built by a test that
     /// never reboots leaves it null and the request is only latched.
     reboot: ?*reboot.Reboot = null,
+    /// Which part this board is. main.zig sets it from the command line
+    /// before attach(); a board built by a test is an RA8D2 unless it says
+    /// otherwise.
+    part: part.Part = .ra8d2,
 
     pub fn init(allocator: std.mem.Allocator) Board {
         return .{
@@ -181,6 +191,7 @@ pub const Board = struct {
             .clock = rtc.Rtc.init(),
             .can = canfd.Canfd.init(),
             .mailbox = ipc.Ipc.init(),
+            .npu = npu.Npu.init(),
             .lowpower = ulpt.Ulpt.init(),
             .interval = agt.Agt.init(),
             .pwm = gpt.Gpt.init(),
@@ -241,6 +252,10 @@ pub const Board = struct {
         try self.bus.add(self.can.block(0));
         try self.bus.add(self.can.block(1));
         try self.bus.add(self.mailbox.block());
+        if (self.part.hasNpu()) {
+            self.npu.memory = core.*;
+            try self.bus.add(self.npu.block());
+        }
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.interval.block());
         try self.bus.add(self.pwm.block());
@@ -286,6 +301,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.can.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.npu.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.clock.dueEvents().constSlice()) |event| {
