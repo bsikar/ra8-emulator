@@ -21,6 +21,7 @@ pub const periph = struct {
     pub const doc = @import("periph/doc.zig");
     pub const drw = @import("periph/drw.zig");
     pub const drw_blend = @import("periph/drw_blend.zig");
+    pub const elc = @import("periph/elc.zig");
     pub const glcdc = @import("periph/glcdc.zig");
     pub const gpio = @import("periph/gpio.zig");
     pub const icu = @import("periph/icu.zig");
