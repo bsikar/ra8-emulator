@@ -15,6 +15,7 @@ test {
     _ = @import("core/memmap_test.zig");
     _ = @import("periph/bkup_test.zig");
     _ = @import("periph/cac_test.zig");
+    _ = @import("periph/ceu_test.zig");
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/dac_test.zig");

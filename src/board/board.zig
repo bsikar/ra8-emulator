@@ -12,6 +12,7 @@ const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
+const ceu = @import("../periph/ceu.zig");
 const crc = @import("../periph/crc.zig");
 const dac = @import("../periph/dac.zig");
 const dma_bank = @import("../periph/dma_bank.zig");
@@ -56,6 +57,10 @@ pub const Board = struct {
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
+    /// The parallel-camera capture engine. No sensor behind it, so the
+    /// observable is whether a frame actually landed in the buffer CDAYR
+    /// points at. Built in attach(): it writes into the engine's memory.
+    capture: ceu.Ceu,
     /// The two 12-bit D/A channels. No result readback on this part, so the
     /// code stream and DACR0.DACEN are the whole observable.
     analog: dac.Dac,
@@ -102,6 +107,7 @@ pub const Board = struct {
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),
+            .capture = ceu.Ceu.init(),
             .analog = dac.Dac.init(),
             .shutoff = poeg.Poeg.init(),
             .protection = prcr.Prcr.init(),
@@ -137,6 +143,8 @@ pub const Board = struct {
         try self.bus.add(self.checksum.block());
         try self.bus.add(self.dataops.block());
         try self.bus.add(self.accuracy.block());
+        self.capture.memory = core.*;
+        try self.bus.add(self.capture.block());
         try self.bus.add(self.analog.block());
         try self.bus.add(self.shutoff.block());
         try self.bus.add(self.protection.block());
