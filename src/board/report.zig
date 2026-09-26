@@ -10,6 +10,8 @@ const cac = @import("../periph/cac.zig");
 const dtc = @import("../periph/dtc.zig");
 const analog = @import("report_analog.zig");
 const graphics = @import("report_graphics.zig");
+const audio = @import("report_audio.zig");
+const serial = @import("report_serial.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -62,10 +64,11 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try events(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
-    try serial(board, out);
+    try serial.sections(board, out);
     try lowpower(board, out);
     try shutoff(board, out);
     try analog.sections(board, out);
+    try audio.sections(board, out);
     try protection(board, out);
     try leds(board, out);
 }
@@ -257,28 +260,6 @@ fn transfers(board: *Board, out: Writer) !void {
         "DTC: REFUSED {d} activation(s), last because of {s} (nothing moved, the core took the interrupt)\n",
         .{ unit.refused, dtc.refusalName(unit.last_refusal.?) },
     );
-}
-
-/// One line per SCI channel that moved bytes, plus the last console line the
-/// firmware printed. A TDR write made with CCR0.TE clear never leaves the
-/// transmitter on silicon, so those are reported apart from the bytes that
-/// did go out.
-fn serial(board: *Board, out: Writer) !void {
-    if (board.serial.quiet()) return;
-    for (&board.serial.channels, 0..) |*channel, index| {
-        if (channel.quiet()) continue;
-        try out.print(
-            "SCI{d}: TX {d} bytes, RX {d} bytes, {d} dropped on a full queue",
-            .{ index, channel.transmitted, channel.received, channel.rx.dropped },
-        );
-        if (channel.unsent != 0) {
-            try out.print(", {d} WRITE(S) WITH TE CLEAR NEVER SENT", .{channel.unsent});
-        }
-        try out.print("\n", .{});
-    }
-    if (board.serial.line.lines != 0) {
-        try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
-    }
 }
 
 /// The low-power timer, which is how the deep-idle images wake themselves.
