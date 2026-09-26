@@ -20,6 +20,8 @@ test {
     _ = @import("periph/doc_test.zig");
     _ = @import("periph/drw_blend_test.zig");
     _ = @import("periph/drw_test.zig");
+    _ = @import("periph/dtc_test.zig");
+    _ = @import("periph/dtc_xfer_test.zig");
     _ = @import("periph/elc_test.zig");
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");
