@@ -24,6 +24,7 @@ const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const icu = @import("../periph/icu.zig");
+const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
 const mstp = @import("../periph/mstp.zig");
 const pdctr = @import("../periph/pdctr.zig");
@@ -98,6 +99,10 @@ pub const Board = struct {
     /// The three digital-microphone channels. No mic behind them, so the
     /// observable is whether the FIFO a capture loop drains was ever filled.
     microphone: pdm.Pdm,
+    /// The cross-core mailbox. Only the primary core runs in this build, so
+    /// the observable is which pokes were for it and which messages the four
+    /// stages actually carried.
+    mailbox: ipc.Ipc,
     /// The low-power timer, which keeps counting through Software Standby
     /// and is how a sleeping part wakes itself back up.
     lowpower: ulpt.Ulpt,
@@ -137,6 +142,7 @@ pub const Board = struct {
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
+            .mailbox = ipc.Ipc.init(),
             .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
@@ -183,6 +189,7 @@ pub const Board = struct {
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
+        try self.bus.add(self.mailbox.block());
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
@@ -217,6 +224,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.lowpower.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.mailbox.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.dma.dueEvents().constSlice()) |event| {

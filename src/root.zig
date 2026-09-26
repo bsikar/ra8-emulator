@@ -32,6 +32,7 @@ pub const periph = struct {
     pub const glcdc = @import("periph/glcdc.zig");
     pub const gpio = @import("periph/gpio.zig");
     pub const icu = @import("periph/icu.zig");
+    pub const ipc = @import("periph/ipc.zig");
     pub const lvd = @import("periph/lvd.zig");
     pub const mstp = @import("periph/mstp.zig");
     pub const nvic = @import("periph/nvic.zig");
