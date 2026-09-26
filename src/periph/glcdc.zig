@@ -27,6 +27,8 @@ const pixel = @import("glcdc_pixel.zig");
 const scan = @import("glcdc_scan.zig");
 const blend = @import("glcdc_blend.zig");
 const mix = @import("glcdc_mix.zig");
+const output = @import("glcdc_out.zig");
+const descriptor = @import("glcdc_frame.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -70,34 +72,15 @@ pub const field = struct {
 /// that only knows the block still names the format through it.
 pub const Format = pixel.Format;
 
-/// A RAM window a framebuffer may legally live in on this board.
-const Window = struct { base: u32, end: u32 };
-
-/// Data TCM, on-chip SRAM and the external SDRAM the display examples draw
-/// into. A base outside all three is not a framebuffer, whatever FLMRD says.
-pub const ram_windows = [_]Window{
-    .{ .base = 0x2000_0000, .end = 0x2001_0000 },
-    .{ .base = 0x2200_0000, .end = 0x2220_0000 },
-    .{ .base = 0x6800_0000, .end = 0x6C00_0000 },
-};
-
-/// Sanity cap on a decoded dimension, so a half-programmed layer does not
-/// read back as a plausible 60000-pixel-wide panel.
-pub const max_dimension: u32 = 4096;
-
-/// What the panel is being scanned from, recovered from one layer's
-/// registers.
-pub const Framebuffer = struct {
-    base: u32,
-    width: u32,
-    height: u32,
-    stride: u32,
-    format: Format,
-    /// 1 or 2: which graphics layer is fetching.
-    layer: u8,
-    /// Whether the output stage (BG_EN.EN) is on behind it.
-    enabled: bool,
-};
+/// The framebuffer descriptor and the RAM it may live in, re-exported so a
+/// caller that only knows the block still reaches them through it.
+pub const Framebuffer = descriptor.Framebuffer;
+pub const Window = descriptor.Window;
+pub const ram_windows = descriptor.ram_windows;
+pub const max_dimension = descriptor.max_dimension;
+pub const shapeOf = descriptor.shapeOf;
+pub const windowEnd = descriptor.windowEnd;
+pub const addressIsRam = descriptor.addressIsRam;
 
 const words = win_span / 4;
 
@@ -120,6 +103,8 @@ pub const Glcdc = struct {
     blends: [2]blend.Layer = [_]blend.Layer{.{}} ** 2,
     /// The compositor that stacks those layers on the background.
     mixer: mix.Mixer = .{},
+    /// The output stage every composited pixel leaves through.
+    output: output.Stage = .{},
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -136,7 +121,7 @@ pub const Glcdc = struct {
     /// A run that never touched the block has nothing to narrate.
     pub fn quiet(self: *const Glcdc) bool {
         return self.writes == 0 and self.dropped_unpowered == 0 and self.dark_reads == 0 and
-            self.scanner.quiet();
+            self.scanner.quiet() and self.output.quiet();
     }
 
     /// BG_EN.EN: the output stage. A layer can be fetching with this clear,
@@ -226,6 +211,9 @@ pub const Glcdc = struct {
     /// select. dev snoops neither, so a palette a driver spent its init
     /// filling went into a register shadow nobody read back.
     fn latchPalette(self: *Glcdc, offset: u32, value: u32) bool {
+        // The output stage keeps its own copy and the shadow keeps the word,
+        // so a driver that reads OUT_SET back still finds it there.
+        _ = self.output.latch(offset, value);
         if (clut.slotOf(offset)) |slot| {
             self.palettes[slot.layer - 1].store(slot.plane, slot.index, value);
             return true;
@@ -267,6 +255,7 @@ pub const Glcdc = struct {
             .width = self.panelWidth(),
             .height = self.panelHeight(),
             .background = self.word(off.bg_bgc),
+            .stage = &self.output,
         };
         return switch (self.mixer.run(memory, panel, planes[0..count])) {
             .picture => |picture| self.scanner.record(picture),
@@ -350,41 +339,6 @@ pub const Glcdc = struct {
         };
     }
 };
-
-/// The scan's view of a descriptor: the same framebuffer, said in the terms
-/// the scanner works in (bits per pixel, the decoder, where the RAM window
-/// the base sits in ends).
-pub fn shapeOf(frame: Framebuffer) scan.Shape {
-    return .{
-        .base = frame.base,
-        .width = frame.width,
-        .height = frame.height,
-        .stride = frame.stride,
-        .bits = frame.format.bits(),
-        .decode = frame.format.decoder(),
-        .indexed = frame.format.indexed(),
-        .window_end = windowEnd(frame.base),
-    };
-}
-
-/// Where the RAM window an address sits in ends, or null when it sits in
-/// none. The descriptor decode only asks whether the BASE is in RAM; a
-/// framebuffer whose base is fine and whose last line is past the end of
-/// the window is the failure this answers.
-pub fn windowEnd(address: u32) ?u32 {
-    for (ram_windows) |window| {
-        if (address >= window.base and address < window.end) return window.end;
-    }
-    return null;
-}
-
-/// Whether an address points into a RAM window a framebuffer can live in.
-pub fn addressIsRam(address: u32) bool {
-    for (ram_windows) |window| {
-        if (address >= window.base and address < window.end) return true;
-    }
-    return false;
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Glcdc = @ptrCast(@alignCast(context));
