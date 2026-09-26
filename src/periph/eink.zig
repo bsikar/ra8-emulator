@@ -61,7 +61,12 @@
 //! register besides LUTAFSR, which are shadowed and never interpreted.
 const std = @import("std");
 const proto = @import("eink_wire.zig");
+const busy = @import("eink_busy.zig");
 const spi = @import("spi.zig");
+
+/// The LUT busy model, re-exported so a caller reaches it through the
+/// panel rather than by a second import.
+pub const lut = busy;
 
 /// Which SPI_B channel the panel is wired to. The model's own rule; see the
 /// header.
@@ -111,6 +116,8 @@ pub const Panel = struct {
     load_height: u16 = 0,
     load_left: u32 = 0,
     pixels_per_word: u16 = 2,
+    /// The film: busy while a refresh is still being driven.
+    film: busy.Lut = .{},
     /// Commands the panel took.
     commands: u32 = 0,
     /// Pixels streamed into a load, and refreshes asked for.
@@ -135,7 +142,7 @@ pub const Panel = struct {
     }
 
     pub fn quiet(self: *const Panel) bool {
-        return self.commands == 0 and self.stray == 0 and self.asleep == 0;
+        return self.commands == 0 and self.stray == 0 and self.asleep == 0 and self.film.quiet();
     }
 
     /// One byte out, one byte back: the whole of the panel's side of the
@@ -191,6 +198,7 @@ pub const Panel = struct {
             self.refusing = true;
             return;
         }
+        _ = self.film.arrive();
         self.commands +%= 1;
         switch (command) {
             .sleep => self.awake = false,
@@ -270,6 +278,7 @@ pub const Panel = struct {
         if (self.data_index != proto.arg.display_waveform) return;
         self.last_waveform = word;
         self.refreshes +%= 1;
+        self.film.start();
     }
 
     /// What the next read burst carries. A refused command answers zero: the
@@ -278,7 +287,7 @@ pub const Panel = struct {
         const command = self.command orelse return 0;
         if (self.refusing) return 0;
         return switch (command) {
-            .reg_read => self.registerValue(self.reg_address),
+            .reg_read => self.readRegister(self.reg_address),
             .vcom => self.vcom_mv,
             .device_info => self.nextInfoWord(),
             else => 0,
@@ -295,8 +304,19 @@ pub const Panel = struct {
         return value;
     }
 
+    /// A register read on the wire. LUTAFSR is the controller's own and the
+    /// read of it is what advances the film, so this one is not const.
+    pub fn readRegister(self: *Panel, address: u16) u16 {
+        if (address == proto.reg.lutafsr) return self.film.poll();
+        return self.registerValue(address);
+    }
+
+    /// A register's value without touching the controller: what the report
+    /// and a test ask.
     pub fn registerValue(self: *const Panel, address: u16) u16 {
-        if (address == proto.reg.lutafsr) return proto.reg.idle;
+        if (address == proto.reg.lutafsr) {
+            return if (self.film.busy()) busy.status.busy else busy.status.idle;
+        }
         for (self.registers[0..self.register_count]) |entry| {
             if (entry.address == address) return entry.value;
         }
