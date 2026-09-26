@@ -30,6 +30,7 @@ test {
     _ = @import("periph/dmac_xfer_test.zig");
     _ = @import("periph/doc_test.zig");
     _ = @import("periph/drw_blend_test.zig");
+    _ = @import("periph/drw_cache_test.zig");
     _ = @import("periph/drw_clut_test.zig");
     _ = @import("periph/drw_limit_test.zig");
     _ = @import("periph/drw_tex_test.zig");

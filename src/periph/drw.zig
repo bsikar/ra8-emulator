@@ -22,6 +22,7 @@ const std = @import("std");
 
 const engine = @import("../core/engine.zig");
 const blend = @import("drw_blend.zig");
+const cache = @import("drw_cache.zig");
 const dlist = @import("drw_dlist.zig");
 const limit = @import("drw_limit.zig");
 const tex = @import("drw_tex.zig");
@@ -49,8 +50,6 @@ pub const off = struct {
 };
 
 pub const field = struct {
-    /// CACHECTL.CENABLEFX: the framebuffer cache (HUM Ch 62.2.4 p 3694).
-    pub const cache_enable: u32 = 1 << 0;
     pub const size_mask: u32 = 0xFFFF;
     pub const height_shift: u5 = 16;
 };
@@ -72,9 +71,6 @@ pub const Decline = enum {
     /// different evaluation from the six linear edges, not a harder one, and
     /// no in-tree primitive programs it.
     quad,
-    /// The framebuffer cache holds the pixels until a CFLUSHFX, and its
-    /// geometry is undocumented.
-    cache,
     /// A pattern source, which this model does not read. The texture
     /// source next to it is read for real; see drw_tex.zig.
     patterned,
@@ -102,6 +98,10 @@ pub const Drw = struct {
     limits: limit.Set = .{},
     /// The texture source: the U/V generators, the palette and the texels.
     texture: tex.Source = .{},
+    /// The framebuffer cache a painted pixel goes into while CENABLEFX is
+    /// set, and the texture cache next to it.
+    pixel_cache: cache.Framebuffer = .{},
+    texel_cache: cache.Texture = .{},
 
     control: u32 = 0,
     control2: u32 = 0,
@@ -110,7 +110,6 @@ pub const Drw = struct {
     size: u32 = 0,
     pitch: u32 = 0,
     origin: u32 = 0,
-    cachectl: u32 = 0,
 
     writes: u32 = 0,
     dropped_unpowered: u32 = 0,
@@ -157,9 +156,12 @@ pub const Drw = struct {
         };
     }
 
-    /// STATUS reads as idle: this model rasterizes inside the ORIGIN write,
-    /// so the engine is never busy by the time firmware can look. Every
-    /// other register is write-only and reads back zero, HWREVISION aside.
+    /// STATUS reads as idle apart from CACHEDIRTY: this model rasterizes
+    /// inside the ORIGIN write, so the engine is never busy by the time
+    /// firmware can look, but pixels the framebuffer cache is still holding
+    /// are a thing a driver polls for before it reads the framebuffer.
+    /// Every other register is write-only and reads back zero, HWREVISION
+    /// aside.
     pub fn read(self: *Drw, address: u32, width: u3) u32 {
         _ = width;
         if (!self.domain.powered()) {
@@ -167,6 +169,7 @@ pub const Drw = struct {
             return 0;
         }
         return switch (address - win_base) {
+            off.control => if (self.pixel_cache.dirty()) cache.status.cache_dirty else 0,
             off.control2 => hardware_revision,
             else => 0,
         };
@@ -198,6 +201,14 @@ pub const Drw = struct {
     fn latch(self: *Drw, offset: u32, value: u32) void {
         if (self.limits.latch(offset, value)) return;
         if (self.texture.latch(offset, value)) return;
+        if (offset == off.cachectl) {
+            // The one register whose write does work rather than landing in
+            // the shadow: a flush moves pixels, an enable changes where the
+            // next painted one goes.
+            self.pixel_cache.control(self.memory, value);
+            self.texel_cache.control(value);
+            return;
+        }
         switch (offset) {
             off.control => self.control = value,
             off.control2 => self.control2 = value,
@@ -205,7 +216,6 @@ pub const Drw = struct {
             off.color2 => self.color2 = value,
             off.size => self.size = value,
             off.pitch => self.pitch = value,
-            off.cachectl => self.cachectl = value,
             else => {},
         }
     }
@@ -216,7 +226,6 @@ pub const Drw = struct {
         if (!self.domain.powered()) return .unpowered;
         if (shape.width == 0 or shape.height == 0 or self.pitch == 0 or self.origin == 0) return .unprogrammed;
         if (self.control & limit.control.quads != 0) return .quad;
-        if (self.cachectl & field.cache_enable != 0) return .cache;
         const painting = self.style();
         if (painting.patterned) return .patterned;
         if (painting.textured and self.texture.refusal(self.control2) != null) return .untexturable;
@@ -279,17 +288,30 @@ pub const Drw = struct {
     }
 
     fn paint(self: *Drw, memory: engine.Engine, at: u32, painting: blend.Style, bytes: u32, source: u32) void {
+        const under = self.destination(memory, at, bytes) orelse return;
+        const stored = painting.pack(painting.shade(source, self.color2, under));
+        if (self.pixel_cache.store(self.memory, at, bytes, stored)) return;
         var cell = [_]u8{0} ** 4;
         const slot = cell[0..bytes];
-        memory.read(at, slot) catch {
-            self.faults +%= 1;
-            return;
-        };
-        const stored = painting.pack(painting.shade(source, self.color2, load(slot)));
         store(slot, stored);
         memory.write(at, slot) catch {
             self.faults +%= 1;
         };
+    }
+
+    /// What is under this pixel before the blend: whatever the framebuffer
+    /// cache is holding for it, else the word in memory. Reading memory
+    /// while the cache holds a newer value is how a second primitive over
+    /// the same pixel composites against the wrong colour.
+    fn destination(self: *Drw, memory: engine.Engine, at: u32, bytes: u32) ?u32 {
+        if (self.pixel_cache.load(at)) |held| return held;
+        var cell = [_]u8{0} ** 4;
+        const slot = cell[0..bytes];
+        memory.read(at, slot) catch {
+            self.faults +%= 1;
+            return null;
+        };
+        return load(slot);
     }
 
     /// An init ORIGIN write with nothing programmed yet is not a failed
