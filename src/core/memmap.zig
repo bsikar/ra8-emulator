@@ -90,3 +90,13 @@ pub const dwt = struct {
     pub const ctrl: u32 = 0xE000_1000;
     pub const cyccnt: u32 = 0xE000_1004;
 };
+
+/// Whether a span of `len` bytes at `at` lies inside the board's SRAM. A
+/// model that follows a pointer the firmware gave it asks this first: a
+/// half-built descriptor points anywhere, and the peripheral window is not
+/// somewhere a frame may be read out of or written into.
+pub fn ramHolds(at: u32, len: u32) bool {
+    if (len == 0) return false;
+    if (at < sram_base) return false;
+    return @as(u64, at) + len <= @as(u64, sram_end);
+}

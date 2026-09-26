@@ -36,9 +36,13 @@ test {
     _ = @import("periph/eink_test.zig");
     _ = @import("periph/eink_wire_test.zig");
     _ = @import("periph/elc_test.zig");
+    _ = @import("periph/eth_desc_test.zig");
+    _ = @import("periph/eth_dma_test.zig");
     _ = @import("periph/eth_gateway_test.zig");
     _ = @import("periph/eth_mode_test.zig");
+    _ = @import("periph/eth_peer_test.zig");
     _ = @import("periph/eth_phy_test.zig");
+    _ = @import("periph/eth_queue_test.zig");
     _ = @import("periph/eth_test.zig");
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/gpio_test.zig");

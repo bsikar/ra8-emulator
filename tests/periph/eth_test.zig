@@ -2,6 +2,7 @@
 //! MDIO window it brings the link up through.
 const std = @import("std");
 const ra8 = @import("ra8");
+const engine = ra8.core.engine;
 const periph = ra8.periph.registry;
 const regs = ra8.periph.eth_regs;
 const eth = ra8.periph.eth;
@@ -72,7 +73,9 @@ test "the cluster answers on the bus at every window it claims" {
     var bus = periph.Bus.init(std.testing.allocator);
     defer bus.deinit();
     var cluster = net.Rswitch{};
-    try cluster.attach(&bus);
+    var core = try engine.Engine.open();
+    defer core.close();
+    try cluster.attach(&bus, core);
     bus.write(regs.cluster.etha0 + regs.etha.eamc, 4, 1);
     try std.testing.expectEqual(@as(u32, 1), bus.read(regs.cluster.etha0 + regs.etha.eams, 4));
     bus.write(regs.cluster.gwca0 + regs.gwca.gwmc, 4, 1);
@@ -83,7 +86,9 @@ test "the cluster's config registers still read back off the bus" {
     var bus = periph.Bus.init(std.testing.allocator);
     defer bus.deinit();
     var cluster = net.Rswitch{};
-    try cluster.attach(&bus);
+    var core = try engine.Engine.open();
+    defer core.close();
+    try cluster.attach(&bus, core);
     // An ETHA queue register nothing models: the bus remembers it, which is
     // all the C tree's flat shadow did for this address.
     bus.write(regs.cluster.etha0 + 0x0018, 4, 0xABCD);

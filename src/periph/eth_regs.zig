@@ -42,6 +42,23 @@ pub const gwca = struct {
     pub const ariog: u32 = 1 << 0;
     pub const arr: u32 = 1 << 1;
     pub const opc_mask: u32 = 0x3;
+    /// The descriptor control: where the chains are, the TX request words,
+    /// and the per-queue configuration.
+    pub const gwdcbac0: u32 = 0x0194;
+    pub const gwdcbac1: u32 = 0x0198;
+    pub const base_span: u32 = 0x0008;
+    pub const gwtrc0: u32 = 0x0200;
+    pub const gwtrc1: u32 = 0x0204;
+    pub const request_span: u32 = 0x0008;
+    /// Queues one GWTRC word carries, bit zero being the lowest of them.
+    pub const request_bits: u32 = 32;
+    pub const gwdcc: u32 = 0x0400;
+    pub const queue_count: u32 = 32;
+    pub const config_span: u32 = queue_count * 4;
+    /// GWDCC.DQT: clear marks a reception queue, set a transmission one.
+    pub const dqt: u32 = 1 << 11;
+    /// GWDCC.BALR asks for a base-address reload and is done when read.
+    pub const balr: u32 = 1 << 24;
 };
 
 /// COMA, the cluster's common block. The buffer-pool init handshake.
