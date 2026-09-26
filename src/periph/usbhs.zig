@@ -5,9 +5,12 @@
 //! from a machine rather than the shadow, and which a store cannot reach at
 //! all. The machines themselves live beside it: the power and port side in
 //! usbhs_phy.zig, the pipe table in usbhs_pipe.zig, and the control transfer
-//! (CFIFO staging, SETUP, the device on the far end) in usbhs_xfer.zig.
+//! (CFIFO staging, SETUP, the device on the far end) in usbhs_xfer.zig, with
+//! the two data ports a bulk driver actually moves payload through in
+//! usbhs_dfifo.zig.
 const periph = @import("registry.zig");
 const regs = @import("usbhs_regs.zig");
+const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_phy = @import("usbhs_phy.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_xfer = @import("usbhs_xfer.zig");
@@ -61,6 +64,7 @@ pub const Host = struct {
             return 0;
         }
         if (isFifoPort(offset)) return self.xfer.port.readData(width);
+        if (usbhs_dfifo.portOf(offset)) |which| return self.readDataPort(which, offset, width);
         return switch (offset) {
             regs.reg.syscfg => self.phy.syscfg,
             regs.reg.syssts0 => self.phy.lineState(),
@@ -105,6 +109,10 @@ pub const Host = struct {
             self.off += 1;
             return;
         }
+        if (usbhs_dfifo.portOf(offset)) |which| {
+            self.writeDataPort(which, offset, width, value, v);
+            return;
+        }
         switch (offset) {
             // What the port found is the port's to report, not the driver's
             // to set. dev let both land in the shadow and read back.
@@ -143,6 +151,27 @@ pub const Host = struct {
     /// (CFIFOH, CFIFOHH) are inside these, reached by the access width.
     fn isFifoPort(offset: u32) bool {
         return offset == regs.reg.cfifo or offset == regs.reg.cfifo + regs.window.word;
+    }
+
+    /// A read of one of the two data ports: its data register answers from
+    /// the pipe's staging, its selector reads back, and its control register
+    /// reports what the staging really holds.
+    fn readDataPort(self: *Host, which: u32, offset: u32, width: u3) u32 {
+        if (usbhs_dfifo.isData(offset)) return self.xfer.readData(which, width, &self.pipes);
+        if (usbhs_dfifo.isControl(offset)) return self.xfer.dataStatus(which, &self.pipes);
+        return self.xfer.data.ports[which].sel;
+    }
+
+    fn writeDataPort(self: *Host, which: u32, offset: u32, width: u3, value: u32, v: u16) void {
+        if (usbhs_dfifo.isData(offset)) {
+            self.xfer.writeData(which, width, value, &self.pipes);
+            return;
+        }
+        if (usbhs_dfifo.isControl(offset)) {
+            self.xfer.dataControl(which, v, &self.pipes);
+            return;
+        }
+        self.xfer.selectData(which, v);
     }
 
     /// What the pipe the FIFO port is aimed at may carry. The control pipe
