@@ -32,6 +32,7 @@ const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
+const rtc = @import("../periph/rtc.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const spi = @import("../periph/spi.zig");
@@ -99,6 +100,9 @@ pub const Board = struct {
     /// The three digital-microphone channels. No mic behind them, so the
     /// observable is whether the FIFO a capture loop drains was ever filled.
     microphone: pdm.Pdm,
+    /// The calendar. It keeps its own time and raises the alarm and
+    /// periodic events an image would otherwise wait on forever.
+    clock: rtc.Rtc,
     /// The cross-core mailbox. Only the primary core runs in this build, so
     /// the observable is which pokes were for it and which messages the four
     /// stages actually carried.
@@ -142,6 +146,7 @@ pub const Board = struct {
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
+            .clock = rtc.Rtc.init(),
             .mailbox = ipc.Ipc.init(),
             .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
@@ -189,6 +194,7 @@ pub const Board = struct {
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
+        try self.bus.add(self.clock.block());
         try self.bus.add(self.mailbox.block());
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
@@ -219,6 +225,7 @@ pub const Board = struct {
         self.watchdog.tick();
         self.lowpower.tick();
         self.microphone.tick();
+        self.clock.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
@@ -227,6 +234,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.mailbox.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.clock.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.dma.dueEvents().constSlice()) |event| {
