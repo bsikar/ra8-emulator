@@ -11,6 +11,46 @@ pub fn sections(board: *Board, out: Writer) !void {
     try domain(board, out);
     try display(board, out);
     try raster(board, out);
+    try panel(board, out);
+}
+
+/// The other display path: the e-paper panel on the SPI line. A command
+/// sent to a sleeping panel, a stream longer than the rectangle it declared,
+/// a drain past the end of the device-info block, a write to a register the
+/// controller owns, and a data word with no command behind it are all things
+/// dev let pass, so each is reported apart from the pixels that landed.
+pub fn panel(board: *Board, out: Writer) !void {
+    const unit = &board.panel;
+    if (unit.quiet()) return;
+    try out.print(
+        "IT8951 e-ink: {d} command(s), {d} pixel(s) loaded, {d} refresh(es), last waveform 0x{X}, VCOM {d}mV, {s}\n",
+        .{
+            unit.commands,
+            unit.pixels,
+            unit.refreshes,
+            unit.last_waveform,
+            unit.vcom_mv,
+            if (unit.awake) "awake" else "ASLEEP",
+        },
+    );
+    if (unit.asleep != 0) {
+        try out.print(
+            "IT8951 e-ink: REFUSED {d} command(s) with the panel asleep (wake it with SYS_RUN first)\n",
+            .{unit.asleep},
+        );
+    }
+    if (unit.overrun != 0) {
+        try out.print(
+            "IT8951 e-ink: REFUSED {d} pixel word(s) past the {d}x{d} rectangle the load declared\n",
+            .{ unit.overrun, unit.load_width, unit.load_height },
+        );
+    }
+    if (unit.overdrain != 0 or unit.stray != 0 or unit.read_only != 0 or unit.spilled != 0) {
+        try out.print(
+            "IT8951 e-ink: {d} read(s) past the device-info block, {d} data word(s) with no command, {d} write(s) to LUTAFSR, {d} register write(s) dropped\n",
+            .{ unit.overdrain, unit.stray, unit.read_only, unit.spilled },
+        );
+    }
 }
 
 /// What the panel is being scanned from, and the loud case behind it: the
