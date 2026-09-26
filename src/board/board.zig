@@ -43,6 +43,7 @@ const reset = @import("../periph/reset.zig");
 const rtc = @import("../periph/rtc.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
+const sd_card = @import("../periph/sd_card.zig");
 const sdhi = @import("../periph/sdhi.zig");
 const spi = @import("../periph/spi.zig");
 const sram = @import("../periph/sram.zig");
@@ -96,10 +97,14 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
-    /// The two SPI_B channels. No pin and no device on the line, so the
-    /// observable is the frames a channel actually clocked and the ones a
-    /// disabled channel only wrote down.
+    /// The two SPI_B channels. No pin here, so the observable is the frames
+    /// a channel actually clocked and the ones a disabled channel only wrote
+    /// down.
     spi: spi.Spi,
+    /// The SD card on the SPI line, the other way an image reaches storage.
+    /// Built in attach(): it holds only the blocks something wrote, so it
+    /// needs the board's allocator, and attach() is where it goes on a line.
+    sd: sd_card.Card,
     /// The extra-MRAM controller: the option-setting memory the MACI
     /// sequencer programs, and the commands it refuses. Built in attach():
     /// the cells are sparse and need the board's allocator, and a program
@@ -187,6 +192,7 @@ pub const Board = struct {
             .raster = undefined,
             .serial = sci.Sci.init(),
             .spi = spi.Spi.init(),
+            .sd = sd_card.Card.init(allocator),
             .flash = xspi.Xspi.init(allocator),
             .card = sdhi.Sdhi.init(allocator),
             .options = mram.Mram.init(allocator),
@@ -209,6 +215,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.sd.deinit();
         self.card.deinit();
         self.options.deinit();
         self.flash.deinit();
@@ -245,6 +252,7 @@ pub const Board = struct {
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.spi.block());
+        self.spi.attachDevice(sd_card.line_channel, self.sd.device());
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
         try self.bus.add(self.options.block());

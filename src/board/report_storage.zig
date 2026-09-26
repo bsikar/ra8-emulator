@@ -1,14 +1,55 @@
 //! The storage part of the end-of-run report: what the firmware did to the
-//! octal NOR flash and to the SD card, and the commands each engine
-//! refused.
+//! octal NOR flash and to the two cards, one on the SD host controller and
+//! one on the SPI line, and the commands each engine refused.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 
-/// Both storage paths, in the order they were added to the board: the
-/// octal NOR flash first, then the SD card.
+/// Every storage path, in the order it was added to the board: the octal NOR
+/// flash, the card on the SD host controller, then the card on the SPI line.
 pub fn sections(board: *Board, out: Writer) !void {
     try flash(board, out);
     try card(board, out);
+    try spiCard(board, out);
+}
+
+/// One line per run that clocked SD commands down the SPI line. A transfer
+/// before the card was brought up, a block off the end of it, a payload whose
+/// checksum did not match, and an erase with no range latched are all things
+/// dev let pass, so each is reported apart from the blocks that moved.
+fn spiCard(board: *Board, out: Writer) !void {
+    const sd = &board.sd;
+    if (sd.quiet()) return;
+    try out.print(
+        "SD over SPI: {d} command(s), {d} block read(s), {d} block write(s), {d} block(s) holding data\n",
+        .{ sd.commands, sd.reads, sd.writes, sd.img.held() },
+    );
+    if (sd.uninit != 0) {
+        try out.print(
+            "SD over SPI: REFUSED {d} transfer(s), the card never completed ACMD41\n",
+            .{sd.uninit},
+        );
+    }
+    if (sd.past_end != 0) {
+        try out.print(
+            "SD over SPI: REFUSED {d} block(s) addressed past the end of the card\n",
+            .{sd.past_end},
+        );
+    }
+    if (sd.crc_rejects != 0) {
+        try out.print(
+            "SD over SPI: REFUSED {d} write payload(s) whose CRC16 did not match\n",
+            .{sd.crc_rejects},
+        );
+    }
+    if (sd.erase_seq != 0) {
+        try out.print(
+            "SD over SPI: REFUSED {d} erase(s) with no block range latched\n",
+            .{sd.erase_seq},
+        );
+    }
+    if (sd.erased != 0) {
+        try out.print("SD over SPI: {d} block(s) erased back to zeros\n", .{sd.erased});
+    }
 }
 
 /// One line per run that touched the flash. A program or erase that arrived

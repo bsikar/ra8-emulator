@@ -39,12 +39,17 @@
 //! on the non-inverting one, which cannot both be right; here both paths use
 //! the same width, and a store with bits above it keeps only the frame.
 //!
+//! A DEVICE CAN BE ON THE LINE. A channel with no loopback and nothing
+//! attached clocks in an idle zero, as it does on dev with no card and no
+//! display; a channel with a device attached hands it the frame and takes
+//! back what it drives. Only one device per channel, and the loopback ties
+//! are checked first, which is dev's own order: an internal tie replaces the
+//! wire, so whatever is on the wire does not get the frame.
+//!
 //! NOT MODELLED, AND NOT GUESSED: SPCMD frame length and bit order, SPBR bit
 //! rate, SPSSR slave select, and the mode-fault, overrun and parity errors.
 //! The rest of the window is shadowed so a read-modify-write survives, and
-//! never read. No device model is attached to the line either, so without
-//! loopback the receive shifter clocks in an idle zero, as it does on dev
-//! with no card and no display attached.
+//! never read.
 const std = @import("std");
 const periph = @import("registry.zig");
 
@@ -86,6 +91,18 @@ pub const field = struct {
 /// not a register read.
 pub const frame_mask: u32 = 0xFF;
 
+/// Something on the other end of the line: one frame out, one frame back.
+/// The SD card is the first of them; a display controller is the other one
+/// dev drives this way.
+pub const Device = struct {
+    context: *anyopaque,
+    exchangeFn: *const fn (*anyopaque, u8) u8,
+
+    pub fn exchange(self: Device, byte: u8) u8 {
+        return self.exchangeFn(self.context, byte);
+    }
+};
+
 /// Words of a channel's window this model shadows rather than interprets.
 const shadow_words: usize = channel_stride / 4;
 
@@ -112,6 +129,8 @@ pub const Channel = struct {
     refused: u32 = 0,
     /// SPDR reads made with the holding register empty.
     starved: u32 = 0,
+    /// What is on the wire, when anything is.
+    device: ?Device = null,
 
     pub fn enabled(self: *const Channel) bool {
         return self.spcr & field.spe != 0;
@@ -149,10 +168,11 @@ pub const Channel = struct {
     /// What the receive shifter clocks in behind that frame. The inverting
     /// tie is checked first because SPLP and SPLP2 can both be set and only
     /// one line comes back.
-    fn receive(self: *const Channel, word: u32) u32 {
+    fn receive(self: *Channel, word: u32) u32 {
         if (self.inverting()) return ~word & frame_mask;
         if (self.loopback()) return word;
-        // Nothing drives the line: no device model is attached here.
+        if (self.device) |on_line| return on_line.exchange(@intCast(word & frame_mask));
+        // Nothing drives the line.
         return 0;
     }
 
@@ -192,6 +212,13 @@ pub const Spi = struct {
 
     pub fn init() Spi {
         return .{};
+    }
+
+    /// Put a device on one channel's line. Attaching twice replaces what was
+    /// there; a real board has one thing per chip select.
+    pub fn attachDevice(self: *Spi, index: usize, on_line: Device) void {
+        if (index >= channel_count) return;
+        self.channels[index].device = on_line;
     }
 
     pub fn quiet(self: *const Spi) bool {
