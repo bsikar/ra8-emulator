@@ -7,6 +7,7 @@ const ra8 = @import("ra8");
 const drw = ra8.periph.drw;
 const blend = ra8.periph.drw_blend;
 const dlist = ra8.periph.drw_dlist;
+const cache = ra8.periph.drw_cache;
 const limit = ra8.periph.drw_limit;
 const pdctr = ra8.periph.pdctr;
 const prcr = ra8.periph.prcr;
@@ -83,12 +84,13 @@ test "the shadow takes the registers this model rasterizes from" {
     unit.write(at(drw.off.control), 4, 0x1);
     unit.write(at(drw.off.color2), 4, 0x8000_0000);
     unit.write(at(drw.off.size), 4, 16 | 8 << 16);
-    unit.write(at(drw.off.cachectl), 4, drw.field.cache_enable);
+    unit.write(at(drw.off.cachectl), 4, cache.bits.enable_fb);
     try std.testing.expectEqual(@as(u32, 0x1), unit.control);
     try std.testing.expectEqual(@as(u32, 0x8000_0000), unit.color2);
     try std.testing.expectEqual(@as(u32, 16), unit.box().width);
     try std.testing.expectEqual(@as(u32, 8), unit.box().height);
-    try std.testing.expectEqual(drw.field.cache_enable, unit.cachectl);
+    // CACHECTL does not land in the shadow: it drives the caches.
+    try std.testing.expect(unit.pixel_cache.enabled);
 }
 
 test "an ORIGIN write with nothing programmed is not counted as declined" {
@@ -100,7 +102,7 @@ test "an ORIGIN write with nothing programmed is not counted as declined" {
     try std.testing.expectEqual(drw.Decline.unprogrammed, unit.last_decline.?);
 }
 
-test "a quadratic coupling, the framebuffer cache and a pattern source are all declined" {
+test "a quadratic coupling and a pattern source are declined" {
     const guard = unlockedGuard();
     const domain = poweredDomain(&guard);
     var unit = drw.Drw.init(&domain);
@@ -111,11 +113,6 @@ test "a quadratic coupling, the framebuffer cache and a pattern source are all d
     try std.testing.expectEqual(drw.Decline.quad, unit.last_decline.?);
 
     unit.write(at(drw.off.control), 4, 0);
-    unit.write(at(drw.off.cachectl), 4, drw.field.cache_enable);
-    unit.write(at(drw.off.origin), 4, fb_base);
-    try std.testing.expectEqual(drw.Decline.cache, unit.last_decline.?);
-
-    unit.write(at(drw.off.cachectl), 4, 0);
     unit.write(at(drw.off.control2), 4, blend.control2.pattern_enable);
     unit.write(at(drw.off.origin), 4, fb_base);
     try std.testing.expectEqual(drw.Decline.patterned, unit.last_decline.?);
@@ -126,8 +123,37 @@ test "a quadratic coupling, the framebuffer cache and a pattern source are all d
     unit.write(at(drw.off.origin), 4, fb_base);
     try std.testing.expectEqual(drw.Decline.untexturable, unit.last_decline.?);
 
-    try std.testing.expectEqual(@as(u32, 4), unit.declined);
+    try std.testing.expectEqual(@as(u32, 3), unit.declined);
     try std.testing.expectEqual(@as(u32, 0), unit.renders);
+}
+
+test "the framebuffer cache is no longer a decline: the render happens and the pixels are held" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = drw.Drw.init(&domain);
+    var memory = try engine.Engine.open();
+    defer memory.close();
+    try memory.mapBoardRam();
+    unit.memory = memory;
+
+    const ram: u32 = 0x2200_0000;
+    try memory.writeWord(ram, 0);
+    programFill(&unit, 2, 2, 2, 0xFF00_FF00);
+    // What the HAL writes ahead of every line and every triangle.
+    unit.write(at(drw.off.cachectl), 4, cache.bits.enable_fb | cache.bits.enable_tx | cache.bits.flush_fb);
+    unit.write(at(drw.off.origin), 4, ram);
+
+    try std.testing.expectEqual(@as(u32, 0), unit.declined);
+    try std.testing.expectEqual(@as(u32, 1), unit.renders);
+    try std.testing.expectEqual(@as(u64, 4), unit.pixels);
+    // Painted, held, and not in memory until the flush: STATUS says so.
+    try std.testing.expect(unit.pixel_cache.dirty());
+    try std.testing.expectEqual(@as(u32, 0), try memory.readWord(ram));
+    try std.testing.expectEqual(cache.status.cache_dirty, unit.read(at(drw.off.control), 4));
+
+    unit.write(at(drw.off.cachectl), 4, cache.bits.enable_fb | cache.bits.flush_fb);
+    try std.testing.expectEqual(@as(u32, 0xFF00_FF00), try memory.readWord(ram));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(at(drw.off.control), 4));
 }
 
 test "a render with no memory behind it is declined, not silently counted" {

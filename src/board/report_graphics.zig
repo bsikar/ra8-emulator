@@ -102,6 +102,7 @@ pub fn raster(board: *Board, out: Writer) !void {
         );
     }
     try texture(unit, out);
+    try caches(unit, out);
     if (unit.dlists != 0) {
         try out.print(
             "DRW: {d} display list(s), {d} stopped on an unmodelled entry\n",
@@ -122,6 +123,35 @@ pub fn raster(board: *Board, out: Writer) !void {
         "DRW: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
         .{ unit.dropped_unpowered, unit.dark_reads },
     );
+}
+
+/// The framebuffer cache, which dev declines rather than models: the HAL
+/// enables it ahead of every stroked line and every triangle, so on dev
+/// every one of those came back to a blank framebuffer and passed. Here the
+/// render happens and the pixels sit in the cache until a CFLUSHFX, which
+/// is worth saying out loud when a run ends with some still held.
+fn caches(unit: anytype, out: Writer) !void {
+    const fb = &unit.pixel_cache;
+    if (fb.quiet()) return;
+    try out.print(
+        "DRW: framebuffer cache held {d} pixel write(s), wrote back {d} over {d} flush(es), {d} evicted to make room, {d} destination read(s) served from it\n",
+        .{ fb.held, fb.written_back, fb.flushes, fb.evicted, fb.forwarded },
+    );
+    if (fb.dirty()) {
+        try out.print(
+            "DRW: {d} pixel(s) are STILL IN THE CACHE and not in memory (no CFLUSHFX since they were painted)\n",
+            .{fb.used},
+        );
+    }
+    if (fb.disabled_dirty != 0) {
+        try out.print(
+            "DRW: the framebuffer cache was switched off {d} time(s) with pixels still held (silicon leaves that undefined; written back here)\n",
+            .{fb.disabled_dirty},
+        );
+    }
+    if (fb.faults != 0) {
+        try out.print("DRW: {d} cache write-back(s) went nowhere mapped\n", .{fb.faults});
+    }
 }
 
 /// The texture source behind a blit, which dev models not at all: it
