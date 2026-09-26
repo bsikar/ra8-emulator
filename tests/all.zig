@@ -18,6 +18,7 @@ test {
     _ = @import("periph/adc_test.zig");
     _ = @import("periph/agt_test.zig");
     _ = @import("periph/bkup_test.zig");
+    _ = @import("periph/bkup_ctrl_test.zig");
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");
     _ = @import("periph/canfd_test.zig");

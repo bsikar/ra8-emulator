@@ -15,6 +15,7 @@ const audio = @import("report_audio.zig");
 const capture = @import("report_capture.zig");
 const compute = @import("report_compute.zig");
 const cores = @import("report_cores.zig");
+const backup = @import("report_backup.zig");
 const memory = @import("report_memory.zig");
 const network = @import("report_network.zig");
 const options = @import("report_options.zig");
@@ -92,7 +93,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try compute.sections(board, out);
     try time.sections(board, out);
     try timers.sections(board, out);
-    try protection(board, out);
+    try backup.sections(board, out);
     try leds(board, out);
 }
 
@@ -315,31 +316,6 @@ fn transfers(board: *Board, out: Writer) !void {
 /// periodic image that never clears the flag gets one wake there and wakes
 /// every period on the bench; every underflow is an interrupt request here,
 /// and a forced stop through TSTOP is taken rather than discarded.
-fn protection(board: *Board, out: Writer) !void {
-    if (!board.protection.quiet()) {
-        if (board.protection.bad_key != 0) {
-            try out.print(
-                "SYSC-PRCR: unlocks={d} REJECTED={d} (a PRCR write without the 0xA5 key unlocks nothing)\n",
-                .{ board.protection.unlocks, board.protection.bad_key },
-            );
-        } else {
-            try out.print("SYSC-PRCR: unlocks={d}, groups 0x{X:0>4}\n", .{ board.protection.unlocks, board.protection.groups });
-        }
-    }
-    if (board.backup.quiet()) return;
-    switch (board.backup.lastDrop()) {
-        .locked => try out.print(
-            "VBATT-BKUP: VBTBKRn writes={d} DROPPED={d} (PRCR.PRC1 locked: unlock with 0xA502)\n",
-            .{ board.backup.writes, board.backup.dropped_locked },
-        ),
-        .disabled => try out.print(
-            "VBATT-BKUP: VBTBKRn writes={d} DROPPED={d} (VBTBER.VBAE is 0)\n",
-            .{ board.backup.writes, board.backup.dropped_disabled },
-        ),
-        .none => try out.print("VBATT-BKUP: VBTBKRn writes={d} (domain retained)\n", .{board.backup.writes}),
-    }
-}
-
 fn leds(board: *Board, out: Writer) !void {
     if (board.pins.quiet()) {
         try out.print("GPIO LEDs: none driven\n", .{});
