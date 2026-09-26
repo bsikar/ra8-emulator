@@ -29,11 +29,11 @@ test "a written block comes back and is held" {
 test "a block past the end of the card is not a block" {
     var img = unit();
     defer img.deinit();
-    const past = image.geometry.capacity_blocks;
+    const past = image.geometry.default_capacity_blocks;
     var block: image.Block = .{1} ** image.geometry.block_bytes;
     try std.testing.expect(!img.write(past, &block));
     try std.testing.expect(!img.read(past, &block));
-    try std.testing.expect(image.Image.inRange(past - 1));
+    try std.testing.expect(img.inRange(past - 1));
 }
 
 test "an erase gives the blocks back instead of filling them with zeros" {
@@ -56,10 +56,29 @@ test "an erase of blocks nobody wrote clears nothing" {
     try std.testing.expectEqual(@as(u32, 0), img.zero(0, 31));
 }
 
+test "a blank card takes another size, and a card holding data does not" {
+    var img = unit();
+    defer img.deinit();
+    try std.testing.expect(img.resize(128 * 1024));
+    try std.testing.expectEqual(@as(u32, 128 * 1024), img.capacity_blocks);
+    try std.testing.expect(img.inRange(100 * 1024));
+    try std.testing.expectEqual(@as(u32, 127), img.csize());
+
+    try std.testing.expect(!img.resize(0));
+    try std.testing.expect(!img.resize(1500));
+
+    const block: image.Block = .{7} ** image.geometry.block_bytes;
+    try std.testing.expect(img.write(1, &block));
+    try std.testing.expect(!img.resize(64 * 1024));
+    try std.testing.expectEqual(@as(u32, 128 * 1024), img.capacity_blocks);
+}
+
 test "the CSD capacity field matches the card's own size" {
+    var blank = unit();
+    defer blank.deinit();
     try std.testing.expectEqual(
-        image.geometry.capacity_blocks / image.geometry.csize_unit - 1,
-        image.Image.csize(),
+        image.geometry.default_capacity_blocks / image.geometry.csize_unit - 1,
+        blank.csize(),
     );
 }
 

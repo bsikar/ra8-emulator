@@ -18,6 +18,24 @@ pub fn sections(board: *Board, out: Writer) !void {
 /// dev let pass, so each is reported apart from the blocks that moved.
 fn spiCard(board: *Board, out: Writer) !void {
     const sd = &board.sd;
+    if (board.sd_volume) |volume| {
+        try out.print(
+            "SD over SPI: card formatted {s}, {d} sector(s), {d} per cluster, {d} cluster(s), FAT {d} sector(s) x2\n",
+            .{
+                volume.kind.text(),
+                volume.layout.total_sectors,
+                volume.layout.sectors_per_cluster,
+                volume.layout.clusters,
+                volume.layout.fat_sectors,
+            },
+        );
+        if (volume.cleared != 0) {
+            try out.print(
+                "SD over SPI: format cleared {d} block(s) the card was still holding in the metadata region\n",
+                .{volume.cleared},
+            );
+        }
+    }
     if (sd.quiet()) return;
     try out.print(
         "SD over SPI: {d} command(s), {d} block read(s), {d} block write(s), {d} block(s) holding data\n",

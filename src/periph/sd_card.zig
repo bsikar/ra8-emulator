@@ -339,12 +339,12 @@ pub const Card = struct {
             self.reply.one(status);
             return;
         }
-        if (!image.Image.inRange(lo)) {
+        if (!self.img.inRange(lo)) {
             self.past_end +%= 1;
             self.reply.one(r1.parameter);
             return;
         }
-        const last = @min(hi, image.geometry.capacity_blocks - 1);
+        const last = @min(hi, self.img.capacity_blocks - 1);
         self.erased +%= self.img.zero(lo, last);
         self.reply.one(status);
     }
@@ -354,7 +354,7 @@ pub const Card = struct {
     fn sendCsd(self: *Card) void {
         var block: [csd.length]u8 = .{0} ** csd.length;
         block[0] = csd.version;
-        const size = image.Image.csize();
+        const size = self.img.csize();
         block[csd.csize_high] = @intCast((size >> 16) & csd.high_mask);
         block[csd.csize_mid] = @intCast((size >> 8) & 0xFF);
         block[csd.csize_low] = @intCast(size & 0xFF);
