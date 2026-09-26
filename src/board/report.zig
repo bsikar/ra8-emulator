@@ -77,6 +77,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try lowpower(board, out);
     try shutoff(board, out);
     try analog.sections(board, out);
+    try analog.converter(board, out);
     try audio.sections(board, out);
     try audio.microphone(board, out);
     try capture.sections(board, out);

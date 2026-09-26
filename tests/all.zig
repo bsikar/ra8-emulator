@@ -13,6 +13,8 @@ test {
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");
+    _ = @import("periph/adc_scan_test.zig");
+    _ = @import("periph/adc_test.zig");
     _ = @import("periph/agt_test.zig");
     _ = @import("periph/bkup_test.zig");
     _ = @import("periph/cac_test.zig");
