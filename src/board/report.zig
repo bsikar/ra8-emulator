@@ -60,6 +60,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try control(board, out);
     try monitors(board, out);
     try events(board, out);
+    try eventLinks(board, out);
     try serial(board, out);
     try protection(board, out);
     try leds(board, out);
@@ -258,6 +259,29 @@ fn events(board: *Board, out: Writer) !void {
     );
     if (board.events.repends != 0) {
         try out.print(", {d} RE-PENDED with IELSR.IR still latched", .{board.events.repends});
+    }
+    try out.print("\n", .{});
+}
+
+/// The event link controller, and the loud case behind it: dev models no ELC
+/// at all, so its registers fall through to the sparse register file. A
+/// firmware there runs the three-step ELSEGR sequence, reads the value back,
+/// and believes it raised a software event that never existed.
+fn eventLinks(board: *Board, out: Writer) !void {
+    const unit = &board.links;
+    if (unit.quiet()) return;
+    try out.print(
+        "ELC: {s}, {d} link(s) programmed, {d} software event(s) generated",
+        .{ if (unit.enabled()) "ELCON set" else "ELCON CLEAR, nothing conducts", unit.linkCount(), unit.generated },
+    );
+    if (unit.refused() != 0) {
+        try out.print(
+            ", {d} TRIGGER(S) REFUSED ({d} write-inhibited, {d} unarmed, {d} with the block off)",
+            .{ unit.refused(), unit.inhibited, unit.unarmed, unit.disabled },
+        );
+    }
+    if (unit.unconsumed != 0) {
+        try out.print(", {d} EVENT(S) LINKED TO A PERIPHERAL NOTHING MODELS", .{unit.unconsumed});
     }
     try out.print("\n", .{});
 }

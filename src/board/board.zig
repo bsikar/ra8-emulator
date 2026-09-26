@@ -15,6 +15,7 @@ const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
 const doc = @import("../periph/doc.zig");
 const drw = @import("../periph/drw.zig");
+const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
 const icu = @import("../periph/icu.zig");
@@ -31,6 +32,10 @@ pub const Board = struct {
     bus: periph.Bus,
     modules: mstp.Mstp = .{},
     events: icu.Icu,
+    /// The event link controller: the other half of the event path, where a
+    /// source event drives a peripheral rather than an NVIC line, and the
+    /// only way firmware raises an event itself.
+    links: elc.Elc,
     pins: gpio.Gpio,
     checksum: crc.Crc,
     dataops: doc.Doc,
@@ -59,6 +64,7 @@ pub const Board = struct {
         return .{
             .bus = periph.Bus.init(allocator),
             .events = icu.Icu.init(),
+            .links = elc.Elc.init(),
             .pins = gpio.Gpio.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
@@ -107,6 +113,7 @@ pub const Board = struct {
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.events.block());
+        try self.bus.add(self.links.block());
         try self.bus.add(self.monitors.statusBlock());
         try self.bus.add(self.monitors.controlBlock());
         try self.bus.add(self.monitors.filterBlock());
@@ -128,6 +135,9 @@ pub const Board = struct {
         self.watchdog.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
+            try self.events.raise(core, event);
+        }
+        for (self.links.takeEvents().constSlice()) |event| {
             try self.events.raise(core, event);
         }
         try self.events.repend(core);
