@@ -128,6 +128,20 @@ pub const Ring = struct {
     }
 };
 
+/// Something listening on a channel's line. It is handed each byte the
+/// channel actually sends and answers with the bytes it drives back, which
+/// the channel queues for the firmware to read out of RDR. Only one device
+/// per channel: the AT modem sits on SCI7 this way (src/periph/modem.zig),
+/// the same shape the SPI channels use for the card and the panel.
+pub const Device = struct {
+    context: *anyopaque,
+    feedFn: *const fn (*anyopaque, u8) []const u8,
+
+    pub fn feed(self: Device, byte: u8) []const u8 {
+        return self.feedFn(self.context, byte);
+    }
+};
+
 /// One channel: the control shadow, the byte counters and the RX ring.
 pub const Channel = struct {
     control: u32 = 0,
@@ -135,14 +149,21 @@ pub const Channel = struct {
     received: u32 = 0,
     /// TDR writes made while CCR0.TE was clear, which silicon does not send.
     unsent: u32 = 0,
+    /// Bytes a device on the line drove back while CCR0.RE was clear. A
+    /// receiver that was never enabled hears nothing on silicon, so these
+    /// are gone rather than waiting in the ring.
+    unheard: u32 = 0,
     rx: Ring = .{},
+    /// What is on this channel's line, if anything.
+    device: ?Device = null,
 
     pub fn enabled(self: *const Channel, bit: u32) bool {
         return self.control & bit != 0;
     }
 
     pub fn quiet(self: *const Channel) bool {
-        return self.transmitted == 0 and self.received == 0 and self.unsent == 0;
+        return self.transmitted == 0 and self.received == 0 and
+            self.unsent == 0 and self.unheard == 0;
     }
 
     /// CSR: the transmitter is always drained, RXDMON idles high the way an
@@ -213,6 +234,12 @@ pub const Sci = struct {
     pub fn feed(self: *Sci, channel: usize, data: []const u8) void {
         if (channel >= channels) return;
         self.channels[channel].rx.push(data);
+    }
+
+    /// Put a device on one channel's line.
+    pub fn attachDevice(self: *Sci, channel: usize, on_line: Device) void {
+        if (channel >= channels) return;
+        self.channels[channel].device = on_line;
     }
 
     /// The console events that are due right now. The transmitter is always
@@ -297,6 +324,24 @@ pub const Sci = struct {
         }
         channel.transmitted += 1;
         if (index == console_channel) self.line.feed(byte);
+        self.deliver(index, byte);
+    }
+
+    /// Hand a sent byte to whatever is on the line and queue what it drives
+    /// back. A reply arriving with CCR0.RE clear is lost, not banked: the
+    /// receiver is not running, and an emulator that queues it anyway lets a
+    /// driver that never enabled the receiver read its answers later and
+    /// pass a run it would fail on the bench.
+    fn deliver(self: *Sci, index: usize, byte: u8) void {
+        const channel = &self.channels[index];
+        const on_line = channel.device orelse return;
+        const reply = on_line.feed(byte);
+        if (reply.len == 0) return;
+        if (!channel.enabled(ccr0.re)) {
+            channel.unheard +%= @intCast(reply.len);
+            return;
+        }
+        channel.rx.push(reply);
     }
 
     pub fn block(self: *Sci) periph.Block {

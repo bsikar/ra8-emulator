@@ -1,8 +1,10 @@
 //! The network part of the end-of-run report: the frames a CAN controller
 //! actually put on its internal loopback and the ones it only wrote down,
-//! then where the Ethernet PTP timers got to.
+//! where the Ethernet PTP timers got to, and what the AT modem on the
+//! MikroBUS UART was asked.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
+const modem_line = @import("../periph/modem.zig");
 
 /// One block per controller that saw traffic. A transmit made out of
 /// operation mode moves nothing on silicon, and a delivery with no receive
@@ -11,6 +13,7 @@ const Writer = @import("report.zig").Writer;
 pub fn sections(board: *Board, out: Writer) !void {
     try can(board, out);
     try ptp(board, out);
+    try modem(board, out);
 }
 
 /// One block per CAN controller that saw traffic.
@@ -86,5 +89,34 @@ fn ptp(board: *Board, out: Writer) !void {
     }
     if (unit.read_only != 0) {
         try out.print("GPTP: REFUSED {d} store(s) into PTPIPV, which is read-only\n", .{unit.read_only});
+    }
+}
+
+/// What the modem answered, then the two ways a run can look answered and
+/// not be: a line too long to be the command the driver sent, and a command
+/// left on the line when the run ended.
+fn modem(board: *Board, out: Writer) !void {
+    const unit = &board.modem;
+    if (unit.quiet()) return;
+    try out.print(
+        "AT modem: {d} command(s) answered, {d} refused with +CME ERROR\n",
+        .{ unit.answered, unit.errors },
+    );
+    if (unit.overlong != 0) {
+        try out.print(
+            "AT modem: REFUSED {d} command line(s) longer than the modem accepts\n",
+            .{unit.overlong},
+        );
+    }
+    const left = unit.pending();
+    if (left.len != 0) {
+        try out.print("AT modem: \"{s}\" was left on the line, never terminated\n", .{left});
+    }
+    const channel = &board.serial.channels[modem_line.line_channel];
+    if (channel.unheard != 0) {
+        try out.print(
+            "SCI{d}: {d} reply byte(s) LOST, the receiver was never enabled\n",
+            .{ modem_line.line_channel, channel.unheard },
+        );
     }
 }
