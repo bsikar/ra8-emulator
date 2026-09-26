@@ -40,6 +40,7 @@ const reset = @import("../periph/reset.zig");
 const rtc = @import("../periph/rtc.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
+const sdhi = @import("../periph/sdhi.zig");
 const spi = @import("../periph/spi.zig");
 const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
@@ -105,6 +106,10 @@ pub const Board = struct {
     /// front of it. Built in attach(): the part is sparse and needs the
     /// board's allocator to hold the sectors something actually wrote to.
     flash: xspi.Xspi,
+    /// The SD host controller, and the card behind it. Built in attach():
+    /// the card holds only the blocks something wrote, so it needs the
+    /// board's allocator.
+    card: sdhi.Sdhi,
     /// The SRAM controller's ECC side: what the decoder self-test latched.
     /// The banks themselves are host memory, so this is the whole window.
     ecc: sram.Sram,
@@ -168,6 +173,7 @@ pub const Board = struct {
             .serial = sci.Sci.init(),
             .spi = spi.Spi.init(),
             .flash = xspi.Xspi.init(allocator),
+            .card = sdhi.Sdhi.init(allocator),
             .options = mram.Mram.init(allocator),
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
@@ -186,6 +192,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.card.deinit();
         self.options.deinit();
         self.flash.deinit();
         self.bus.deinit();
@@ -226,6 +233,7 @@ pub const Board = struct {
         try self.bus.add(self.options.block());
         try self.bus.add(self.options.commandBlock());
         try self.bus.add(self.options.codeBlock());
+        try self.bus.add(self.card.block());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
