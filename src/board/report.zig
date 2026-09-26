@@ -11,6 +11,7 @@ const dtc = @import("../periph/dtc.zig");
 const analog = @import("report_analog.zig");
 const graphics = @import("report_graphics.zig");
 const audio = @import("report_audio.zig");
+const memory = @import("report_memory.zig");
 const serial = @import("report_serial.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
@@ -69,6 +70,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try shutoff(board, out);
     try analog.sections(board, out);
     try audio.sections(board, out);
+    try memory.sections(board, out);
     try protection(board, out);
     try leds(board, out);
 }

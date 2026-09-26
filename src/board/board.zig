@@ -31,6 +31,7 @@ const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
+const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
 const ulpt = @import("../periph/ulpt.zig");
 const wdt = @import("../periph/wdt.zig");
@@ -72,6 +73,9 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
+    /// The SRAM controller's ECC side: what the decoder self-test latched.
+    /// The banks themselves are host memory, so this is the whole window.
+    ecc: sram.Sram,
     /// The two I2S channels. No audio clock in the model, so the observable
     /// is the transmit handshake and the sample stream behind it.
     audio: ssie.Ssie,
@@ -108,6 +112,7 @@ pub const Board = struct {
             .display = undefined,
             .raster = undefined,
             .serial = sci.Sci.init(),
+            .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
@@ -147,6 +152,7 @@ pub const Board = struct {
         self.raster.memory = core.*;
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
+        try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
