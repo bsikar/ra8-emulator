@@ -38,6 +38,7 @@ const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
 const ulpt = @import("../periph/ulpt.zig");
 const wdt = @import("../periph/wdt.zig");
+const xspi = @import("../periph/xspi.zig");
 
 pub const Board = struct {
     bus: periph.Bus,
@@ -84,6 +85,10 @@ pub const Board = struct {
     /// observable is the frames a channel actually clocked and the ones a
     /// disabled channel only wrote down.
     spi: spi.Spi,
+    /// The octal NOR flash behind XSPI0, and the manual-command engine in
+    /// front of it. Built in attach(): the part is sparse and needs the
+    /// board's allocator to hold the sectors something actually wrote to.
+    flash: xspi.Xspi,
     /// The SRAM controller's ECC side: what the decoder self-test latched.
     /// The banks themselves are host memory, so this is the whole window.
     ecc: sram.Sram,
@@ -128,6 +133,7 @@ pub const Board = struct {
             .raster = undefined,
             .serial = sci.Sci.init(),
             .spi = spi.Spi.init(),
+            .flash = xspi.Xspi.init(allocator),
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
@@ -140,6 +146,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.flash.deinit();
         self.bus.deinit();
     }
 
@@ -172,6 +179,7 @@ pub const Board = struct {
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
         try self.bus.add(self.spi.block());
+        try self.bus.add(self.flash.block());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());

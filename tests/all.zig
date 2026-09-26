@@ -47,6 +47,8 @@ test {
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ulpt_test.zig");
     _ = @import("periph/wdt_test.zig");
+    _ = @import("periph/xspi_flash_test.zig");
+    _ = @import("periph/xspi_test.zig");
     _ = @import("tools/gate_test.zig");
 
     const ra8 = @import("ra8");

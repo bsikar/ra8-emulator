@@ -14,6 +14,7 @@ const audio = @import("report_audio.zig");
 const capture = @import("report_capture.zig");
 const memory = @import("report_memory.zig");
 const serial = @import("report_serial.zig");
+const storage = @import("report_storage.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -75,6 +76,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try audio.microphone(board, out);
     try capture.sections(board, out);
     try memory.sections(board, out);
+    try storage.sections(board, out);
     try protection(board, out);
     try leds(board, out);
 }
