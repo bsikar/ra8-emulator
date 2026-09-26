@@ -30,6 +30,7 @@ const mix = @import("glcdc_mix.zig");
 const output = @import("glcdc_out.zig");
 const descriptor = @import("glcdc_frame.zig");
 const tcon = @import("glcdc_tcon.zig");
+const sys = @import("glcdc_sys.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -109,6 +110,9 @@ pub const Glcdc = struct {
     /// The timing controller: how big the panel itself is, and which pin
     /// carries which sync signal.
     timing: tcon.Tcon = .{},
+    /// The system control block: the pixel clock gate and the status word a
+    /// driver polls a frame on.
+    system: sys.Syscnt = .{},
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -125,7 +129,8 @@ pub const Glcdc = struct {
     /// A run that never touched the block has nothing to narrate.
     pub fn quiet(self: *const Glcdc) bool {
         return self.writes == 0 and self.dropped_unpowered == 0 and self.dark_reads == 0 and
-            self.scanner.quiet() and self.output.quiet() and self.timing.quiet();
+            self.scanner.quiet() and self.output.quiet() and self.timing.quiet() and
+            self.system.quiet();
     }
 
     /// BG_EN.EN: the output stage. A layer can be fetching with this clear,
@@ -187,6 +192,10 @@ pub const Glcdc = struct {
         if (clut.slotOf(offset)) |slot| {
             return self.palettes[slot.layer - 1].load(slot.plane, slot.index);
         }
+        // STMON is not a shadow word: the status is the block's own, and a
+        // driver waiting a frame out reads it here rather than reading back
+        // whatever it last wrote.
+        if (self.system.read(offset)) |value| return value;
         return self.word(offset);
     }
 
@@ -219,6 +228,7 @@ pub const Glcdc = struct {
         // so a driver that reads OUT_SET back still finds it there.
         _ = self.output.latch(offset, value);
         _ = self.timing.latch(offset, value);
+        _ = self.system.latch(offset, value);
         if (clut.slotOf(offset)) |slot| {
             self.palettes[slot.layer - 1].store(slot.plane, slot.index, value);
             return true;
@@ -243,8 +253,10 @@ pub const Glcdc = struct {
     pub fn scanOut(self: *Glcdc) ?scan.Picture {
         const frame = self.framebuffer() orelse return self.scanner.refuseNoLayer();
         if (!frame.enabled) return self.scanner.refuseOutputOff();
+        if (!self.system.startFrame()) return self.scanner.refuseUnclocked();
         const memory = self.memory orelse return null;
         var planes: [mix.layers]mix.Plane = undefined;
+        var fetching: [mix.layers]u8 = undefined;
         var count: usize = 0;
         for (1..mix.layers + 1) |layer| {
             const found = self.decode(@intCast(layer)) orelse continue;
@@ -254,6 +266,7 @@ pub const Glcdc = struct {
                 .palette = &self.palettes[layer - 1],
                 .stage = &self.blends[layer - 1],
             };
+            fetching[count] = @intCast(layer);
             count += 1;
         }
         const panel = mix.Panel{
@@ -263,9 +276,26 @@ pub const Glcdc = struct {
             .stage = &self.output,
         };
         return switch (self.mixer.run(memory, panel, planes[0..count])) {
-            .picture => |picture| self.scanner.record(picture),
-            .refused => |why| self.scanner.refuseWith(why),
+            .picture => |picture| self.frameLanded(picture),
+            .refused => |why| self.frameLost(why, fetching[0..count]),
         };
+    }
+
+    /// A frame reached the panel: the status block raises VPOS for a driver
+    /// waiting on it, and the picture is what the report prints.
+    fn frameLanded(self: *Glcdc, picture: scan.Picture) ?scan.Picture {
+        self.system.completeFrame();
+        return self.scanner.record(picture);
+    }
+
+    /// The scan wanted bytes it could not have. On silicon that is an
+    /// underflow on the layer that was fetching, which is a status bit and
+    /// an interrupt source, not a silent blank frame.
+    fn frameLost(self: *Glcdc, why: scan.Refusal, fetching: []const u8) ?scan.Picture {
+        if (why == .off_ram or why == .fault or why == .too_big) {
+            for (fetching) |layer| self.system.underflow(layer);
+        }
+        return self.scanner.refuseWith(why);
     }
 
     /// A layer whose AB registers were never written is taken as displayed
