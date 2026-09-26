@@ -46,10 +46,37 @@ pub fn panel(board: *Board, out: Writer) !void {
             .{ unit.overrun, unit.load_width, unit.load_height },
         );
     }
+    try film(unit, out);
     if (unit.overdrain != 0 or unit.stray != 0 or unit.read_only != 0 or unit.spilled != 0) {
         try out.print(
             "IT8951 e-ink: {d} read(s) past the device-info block, {d} data word(s) with no command, {d} write(s) to LUTAFSR, {d} register write(s) dropped\n",
             .{ unit.overdrain, unit.stray, unit.read_only, unit.spilled },
+        );
+    }
+}
+
+/// The film, which dev has no notion of at all. LUTAFSR read zero here too,
+/// so every refresh was over the instant it was asked for: a driver's wait
+/// loop exited on its first pass and a second refresh clocked in on top of
+/// one still being driven looked like two clean ones. The dwell is counted
+/// in host polls, not wall time; see eink_busy.zig.
+fn film(unit: anytype, out: Writer) !void {
+    const lut = &unit.film;
+    if (lut.quiet()) return;
+    try out.print(
+        "IT8951 film: {d} refresh(es), {d} settled, {d} busy poll(s), {d} idle poll(s)\n",
+        .{ lut.started, lut.settled, lut.waited, lut.cleared },
+    );
+    if (lut.unsettled() != 0) {
+        try out.print(
+            "IT8951 film: {d} refresh(es) never polled out to idle (the image was left mid-refresh)\n",
+            .{lut.unsettled()},
+        );
+    }
+    if (lut.overlapped != 0) {
+        try out.print(
+            "IT8951 film: {d} command(s) arrived with the film still being driven (poll LUTAFSR to idle first)\n",
+            .{lut.overlapped},
         );
     }
 }
