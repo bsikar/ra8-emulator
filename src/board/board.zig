@@ -33,6 +33,7 @@ const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
+const spi = @import("../periph/spi.zig");
 const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
 const ulpt = @import("../periph/ulpt.zig");
@@ -79,6 +80,10 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
+    /// The two SPI_B channels. No pin and no device on the line, so the
+    /// observable is the frames a channel actually clocked and the ones a
+    /// disabled channel only wrote down.
+    spi: spi.Spi,
     /// The SRAM controller's ECC side: what the decoder self-test latched.
     /// The banks themselves are host memory, so this is the whole window.
     ecc: sram.Sram,
@@ -122,6 +127,7 @@ pub const Board = struct {
             .display = undefined,
             .raster = undefined,
             .serial = sci.Sci.init(),
+            .spi = spi.Spi.init(),
             .ecc = sram.Sram.init(),
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
@@ -165,6 +171,7 @@ pub const Board = struct {
         self.raster.memory = core.*;
         try self.bus.add(self.raster.block());
         try self.bus.add(self.serial.block());
+        try self.bus.add(self.spi.block());
         try self.bus.add(self.ecc.block());
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
