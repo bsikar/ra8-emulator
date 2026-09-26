@@ -48,6 +48,8 @@ pub const periph = struct {
     pub const ssie = @import("periph/ssie.zig");
     pub const ulpt = @import("periph/ulpt.zig");
     pub const wdt = @import("periph/wdt.zig");
+    pub const xspi = @import("periph/xspi.zig");
+    pub const xspi_flash = @import("periph/xspi_flash.zig");
 };
 
 pub const board = struct {
