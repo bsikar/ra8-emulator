@@ -4,11 +4,11 @@
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
-
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const cac = @import("../periph/cac.zig");
 const dtc = @import("../periph/dtc.zig");
+const analog = @import("report_analog.zig");
 const graphics = @import("report_graphics.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
@@ -65,6 +65,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try serial(board, out);
     try lowpower(board, out);
     try shutoff(board, out);
+    try analog.sections(board, out);
     try protection(board, out);
     try leds(board, out);
 }
