@@ -8,6 +8,8 @@ const modem_line = @import("../periph/modem.zig");
 const pi4ioe = @import("../periph/riic_pi4ioe.zig");
 const ov5640 = @import("../periph/riic_ov5640.zig");
 const gt911 = @import("../periph/i3c_gt911.zig");
+const lsm6dso = @import("../periph/i3c_lsm6dso.zig");
+const max17048 = @import("../periph/i3c_max17048.zig");
 
 /// One block per controller that saw traffic. A transmit made out of
 /// operation mode moves nothing on silicon, and a delivery with no receive
@@ -70,6 +72,72 @@ fn i2c(board: *Board, out: Writer) !void {
     try camera(board, out);
     try touchline(board, out);
     try panel(board, out);
+    try imu(board, out);
+    try gauge(board, out);
+}
+
+/// The LSM6DSO IMU at 0x6B. A store into a register the part measures for
+/// itself and an output read taken while that half of the part was still in
+/// power-down are both things dev answered anyway, so each is reported apart
+/// from the bursts that were served.
+fn imu(board: *Board, out: Writer) !void {
+    const part = &board.wire.imu;
+    if (part.quiet()) return;
+    try out.print(
+        "I2C imu 0x{X:0>2}: {d} burst(s) read, {d} configuration write(s), accelerometer {s}, gyroscope {s}",
+        .{
+            @as(u8, lsm6dso.address),
+            part.reads,
+            part.writes,
+            if (part.accelRunning()) "running" else "in power-down",
+            if (part.gyroRunning()) "running" else "in power-down",
+        },
+    );
+    if (part.unstarted != 0) {
+        try out.print(", {d} OUTPUT READ(S) FROM A PART THAT WAS NEVER STARTED REFUSED", .{part.unstarted});
+    }
+    if (part.read_only != 0) {
+        try out.print(", {d} STORE(S) INTO A REGISTER THE PART OWNS REFUSED", .{part.read_only});
+    }
+    if (part.bad_pointer != 0) {
+        try out.print(", {d} POINTER(S) PAST THE END OF THE MAP REFUSED", .{part.bad_pointer});
+    }
+    if (part.past_end != 0) {
+        try out.print(", {d} byte(s) asked for past the end of the map", .{part.past_end});
+    }
+    try out.print("\n", .{});
+}
+
+/// The MAX17048 fuel gauge at 0x36, and the battery state the run gave it.
+fn gauge(board: *Board, out: Writer) !void {
+    const part = &board.wire.gauge;
+    if (part.quiet()) return;
+    try out.print(
+        "I2C fuel gauge 0x{X:0>2}: {d}% and {s}, {d} word(s) read, {d} write(s)",
+        .{
+            @as(u8, max17048.address),
+            part.battery.soc_pct,
+            if (part.battery.charging) "charging" else "discharging",
+            part.reads,
+            part.writes,
+        },
+    );
+    if (part.read_only != 0) {
+        try out.print(", {d} STORE(S) INTO A REGISTER THE GAUGE MEASURES REFUSED", .{part.read_only});
+    }
+    if (part.misaligned != 0) {
+        try out.print(", {d} POINTER(S) INSIDE A WORD REFUSED", .{part.misaligned});
+    }
+    if (part.unmapped != 0) {
+        try out.print(", {d} POINTER(S) AT A REGISTER IT DOES NOT HAVE REFUSED", .{part.unmapped});
+    }
+    if (part.torn != 0) {
+        try out.print(", {d} half-written word(s) lost at STOP", .{part.torn});
+    }
+    if (part.resets != 0) {
+        try out.print(", {d} power-on-reset command(s) carried out", .{part.resets});
+    }
+    try out.print("\n", .{});
 }
 
 /// The I3C channel driven in legacy I2C mode. A byte put in the buffer with

@@ -46,6 +46,7 @@ pub fn main() !u8 {
     board.part = options.part;
     prepareCard(&board, options) catch return 2;
     queueTouches(&board, options);
+    setBattery(&board, options) catch return 2;
     try board.attach(&core);
 
     var watch = engine.Watch{};
@@ -114,6 +115,15 @@ fn queueTouches(board: *Board, options: cli.Options) void {
     for (options.touches[0..options.touch_count]) |contact| {
         board.wire.panel.queue(contact) catch return;
     }
+}
+
+/// Tell the fuel gauge what is in the battery. A state-of-charge over full
+/// is refused here rather than clamped into a number nothing measured.
+fn setBattery(board: *Board, options: cli.Options) !void {
+    board.wire.gauge.setBattery(options.battery) catch |err| {
+        std.debug.print("--battery {d}: not a state-of-charge a cell can hold\n", .{options.battery.soc_pct});
+        return err;
+    };
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused

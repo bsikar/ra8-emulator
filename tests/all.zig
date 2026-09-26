@@ -42,6 +42,8 @@ test {
     _ = @import("periph/gptp_test.zig");
     _ = @import("periph/gptp_timer_test.zig");
     _ = @import("periph/i3c_gt911_test.zig");
+    _ = @import("periph/i3c_lsm6dso_test.zig");
+    _ = @import("periph/i3c_max17048_test.zig");
     _ = @import("periph/i3c_target_test.zig");
     _ = @import("periph/i3c_test.zig");
     _ = @import("periph/icu_test.zig");
