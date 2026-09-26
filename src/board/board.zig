@@ -12,6 +12,7 @@ const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
+const canfd = @import("../periph/canfd.zig");
 const ceu = @import("../periph/ceu.zig");
 const crc = @import("../periph/crc.zig");
 const dac = @import("../periph/dac.zig");
@@ -103,6 +104,10 @@ pub const Board = struct {
     /// The calendar. It keeps its own time and raises the alarm and
     /// periodic events an image would otherwise wait on forever.
     clock: rtc.Rtc,
+    /// The two CAN-FD controllers. No bus and no other node here, so the
+    /// observable is the internal loopback: which frames actually left a
+    /// running channel, and which of those a receive stage took.
+    can: canfd.Canfd,
     /// The cross-core mailbox. Only the primary core runs in this build, so
     /// the observable is which pokes were for it and which messages the four
     /// stages actually carried.
@@ -147,6 +152,7 @@ pub const Board = struct {
             .audio = ssie.Ssie.init(),
             .microphone = pdm.Pdm.init(),
             .clock = rtc.Rtc.init(),
+            .can = canfd.Canfd.init(),
             .mailbox = ipc.Ipc.init(),
             .lowpower = ulpt.Ulpt.init(),
             .monitors = lvd.Lvd.init(),
@@ -195,6 +201,8 @@ pub const Board = struct {
         try self.bus.add(self.audio.block());
         try self.bus.add(self.microphone.block());
         try self.bus.add(self.clock.block());
+        try self.bus.add(self.can.block(0));
+        try self.bus.add(self.can.block(1));
         try self.bus.add(self.mailbox.block());
         try self.bus.add(self.lowpower.block());
         try self.bus.add(self.events.block());
@@ -234,6 +242,9 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.mailbox.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.can.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.clock.dueEvents().constSlice()) |event| {
