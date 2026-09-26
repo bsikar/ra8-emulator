@@ -105,6 +105,41 @@ pub const fifo = struct {
     pub const dtln_mask: u16 = 0x0FFF;
 };
 
+/// DCPCTR: the control pipe's own control register, and the two edges the
+/// host drives a control transfer with.
+pub const dcpctr = struct {
+    pub const pid_mask: u16 = 0x0003;
+    pub const ccpl: u16 = 1 << 2;
+    pub const sureq: u16 = 1 << 6;
+    pub const bsts: u16 = 1 << 15;
+};
+
+/// INTSTS1 bits the SIE raises on a control transfer.
+pub const int1 = struct {
+    pub const sack: u16 = 1 << 4;
+    pub const sign: u16 = 1 << 5;
+};
+
+/// BRDYSTS / NRDYSTS / BEMPSTS are one bit per pipe; bit 0 is the DCP.
+pub const status = struct {
+    pub const dcp: u16 = 1 << 0;
+};
+
+/// SETUP packet vocabulary: the wire fields and the direction bit.
+pub const setup = struct {
+    pub const len: u32 = 8;
+    /// bmRequestType device-to-host (USB 2.0 section 9.3).
+    pub const dir_in: u8 = 0x80;
+};
+
+/// How much this model stages on either side of the FIFO port.
+pub const staging = struct {
+    /// The largest packet a pipe carries, so the staging matches the wire.
+    pub const packet_cap: u32 = 512;
+    /// A control-read answer is a descriptor, not a payload.
+    pub const reply_cap: u32 = 64;
+};
+
 /// True when the offset names a PIPECTR array slot.
 pub fn isPipeCtr(offset: u32) bool {
     return offset >= reg.pipectr and

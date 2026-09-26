@@ -118,6 +118,17 @@ pub fn usb(board: *Board, out: Writer) !void {
             @tagName(host.phy.speed),
         },
     );
+    if (host.xfer.setups != 0) {
+        try out.print(
+            "  {d} SETUP(s), device {s} at address {d}, {d} stalled\n",
+            .{
+                host.xfer.setups,
+                @tagName(host.xfer.device.state),
+                host.xfer.device.address,
+                host.xfer.stalls,
+            },
+        );
+    }
     if (host.refusals() == 0) return;
     try out.print(
         "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++
@@ -127,8 +138,22 @@ pub fn usb(board: *Board, out: Writer) !void {
             host.off,
             host.read_only + host.phy.read_only,
             host.phy.not_host,
-            host.pipes.bad_pipe + host.pipes.dcp_config,
-            host.pipes.too_big,
+            host.pipes.bad_pipe + host.pipes.dcp_config + host.xfer.port.bad_pipe,
+            host.pipes.too_big + host.xfer.port.oversize,
+        },
+    );
+    if (host.xfer.refusals() == host.xfer.stalls) return;
+    try out.print(
+        "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, " ++
+            "{d} on an unarmed pipe, {d} FIFO not ready, {d} drained past the packet, " ++
+            "{d} out of order at the device\n",
+        .{
+            host.xfer.no_device,
+            host.xfer.stray_ccpl,
+            host.xfer.unarmed,
+            host.xfer.port.not_ready,
+            host.xfer.port.overdrain,
+            host.xfer.device.out_of_order,
         },
     );
 }
