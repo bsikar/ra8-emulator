@@ -56,3 +56,50 @@ pub fn spi(board: *Board, out: Writer) !void {
         }
     }
 }
+
+/// The RTT ring, once a firmware has published one. A run with no RTT user
+/// says nothing here. The unfinished tail is reported rather than dropped:
+/// text the firmware never ended with a newline is still text it wrote, and
+/// a line this model cut short is counted apart from the lines it did end.
+pub fn trace(board: *Board, out: Writer) !void {
+    const probe = &board.trace;
+    if (probe.quiet()) return;
+    if (probe.found) |at| {
+        try out.print(
+            "SEGGER RTT: control block @0x{X:0>8}, {d} byte(s) drained, {d} line(s)\n",
+            .{ at, probe.drained, probe.line.lines },
+        );
+    } else {
+        try out.print(
+            "SEGGER RTT: no live control block, {d} byte(s) drained, {d} line(s)\n",
+            .{ probe.drained, probe.line.lines },
+        );
+    }
+    if (probe.line.lines != 0) {
+        try out.print("SEGGER RTT: last \"{s}\"\n", .{probe.line.slice()});
+    }
+    if (probe.line.pending().len != 0) {
+        try out.print(
+            "SEGGER RTT: {d} byte(s) drained with no newline behind them, \"{s}\"\n",
+            .{ probe.line.pending().len, probe.line.pending() },
+        );
+    }
+    if (probe.line.wrapped != 0) {
+        try out.print(
+            "SEGGER RTT: {d} line(s) CUT at {d} characters, the firmware never ended them\n",
+            .{ probe.line.wrapped, @as(u32, @intCast(probe.line.pending().len + probe.line.slice().len)) },
+        );
+    }
+    if (probe.off_ram != 0) {
+        try out.print(
+            "SEGGER RTT: REFUSED {d} control block(s) whose ring was not in RAM\n",
+            .{probe.off_ram},
+        );
+    }
+    if (probe.forgotten != 0) {
+        try out.print(
+            "SEGGER RTT: {d} block(s) went away mid-run and the scan was re-armed\n",
+            .{probe.forgotten},
+        );
+    }
+}

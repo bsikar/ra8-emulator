@@ -63,6 +63,9 @@ test {
     _ = @import("periph/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
+    _ = @import("periph/rtt_block_test.zig");
+    _ = @import("periph/rtt_line_test.zig");
+    _ = @import("periph/rtt_test.zig");
     _ = @import("periph/sd_card_test.zig");
     _ = @import("periph/sd_crc_test.zig");
     _ = @import("periph/sd_fat_test.zig");
