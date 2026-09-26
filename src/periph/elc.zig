@@ -24,6 +24,9 @@
 //! The register layout here is ra8_elc_regs.h and HUM Ch 19 p 817..836.
 const std = @import("std");
 const periph = @import("registry.zig");
+/// The link table lives next door; re-exported so a caller that has the
+/// block also has the slot vocabulary.
+pub const route = @import("elc_route.zig");
 
 /// ELC geometry (FSP R_ELC_Type, size 0x11C at 0x4020_1000).
 pub const win_base: u32 = 0x4020_1000;
@@ -42,7 +45,7 @@ pub const off = struct {
 
 /// How many of each the RA8D2 has.
 pub const generators: usize = 4;
-pub const links: usize = 53;
+pub const links: usize = route.slots;
 /// Attribution registers: three security words then three privilege words.
 pub const attributions: usize = 6;
 
@@ -88,7 +91,8 @@ pub const Elc = struct {
     /// The live WE bit of each generator. WI reads back set, so it is not
     /// stored: it is a write-side gate, not a state bit.
     armed: [generators]bool = [_]bool{false} ** generators,
-    elsr: [links]u16 = [_]u16{0} ** links,
+    /// The ELSR slots and what has reached them (src/periph/elc_route.zig).
+    table: route.Table = .{},
     attribution: [attributions]u32 = [_]u32{0} ** attributions,
     pending: Due = .{},
     /// Software events actually generated.
@@ -97,9 +101,6 @@ pub const Elc = struct {
     inhibited: u32 = 0,
     unarmed: u32 = 0,
     disabled: u32 = 0,
-    /// Events generated whose ELSR link names a peripheral no block models,
-    /// so the link exists and conducts to nothing.
-    unconsumed: u32 = 0,
 
     pub fn init() Elc {
         return .{};
@@ -107,7 +108,7 @@ pub const Elc = struct {
 
     /// A run that never touched the block stays out of the report.
     pub fn quiet(self: *const Elc) bool {
-        return self.generated == 0 and self.refused() == 0 and self.linkCount() == 0;
+        return self.generated == 0 and self.refused() == 0 and self.table.quiet();
     }
 
     pub fn refused(self: *const Elc) u32 {
@@ -121,22 +122,28 @@ pub const Elc = struct {
 
     /// How many peripheral slots have a source event programmed.
     pub fn linkCount(self: *const Elc) u32 {
-        var total: u32 = 0;
-        for (self.elsr) |slot| {
-            if (slot & field.els != 0) total += 1;
-        }
-        return total;
+        return self.table.programmed();
     }
 
     /// The first peripheral slot linked to `event`, or null. Several slots may
     /// take the same source, so this answers "is anything listening" rather
-    /// than standing in for the whole set.
+    /// than standing in for the whole set; `table.takers` answers the set.
     pub fn target(self: *const Elc, event: u16) ?usize {
-        if (event == 0) return null;
-        for (self.elsr, 0..) |slot, index| {
-            if (slot & field.els == event) return index;
-        }
-        return null;
+        return self.table.firstTaker(event);
+    }
+
+    /// Offer one event to the link table. The board calls this for EVERY
+    /// event it raises, not just the four this block generates: on silicon a
+    /// peripheral event reaches the ICU and the ELC at the same time, and
+    /// which one acts on it is the firmware's choice, not the event's.
+    ///
+    /// The answer is deliberately not "it ran": what sits behind slot n is
+    /// HUM Table 19.2 and is not in this tree, so a conducted event is
+    /// counted at the slot and stops there. What is worth having anyway is
+    /// the gate: with ELCON clear a linked event conducts NOTHING, and every
+    /// register involved still reads back exactly as it would working.
+    pub fn conduct(self: *Elc, event: u16) route.Arrival {
+        return self.table.offer(event, self.enabled());
     }
 
     /// The software events generated since the last drain. The board raises
@@ -153,7 +160,7 @@ pub const Elc = struct {
         const offset = address -% win_base;
         if (offset == off.elcr) return self.elcr;
         if (self.generatorAt(offset)) |index| return self.readGenerator(index);
-        if (self.linkAt(offset)) |index| return self.elsr[index];
+        if (self.linkAt(offset)) |index| return self.table.els[index];
         if (self.attributionAt(offset)) |index| return self.attribution[index];
         return 0;
     }
@@ -167,7 +174,7 @@ pub const Elc = struct {
         }
         if (self.generatorAt(offset)) |index| return self.writeGenerator(index, @truncate(value));
         if (self.linkAt(offset)) |index| {
-            self.elsr[index] = @truncate(value);
+            self.table.latch(index, @truncate(value));
             return;
         }
         if (self.attributionAt(offset)) |index| self.attribution[index] = value;
@@ -209,10 +216,8 @@ pub const Elc = struct {
             self.disabled +%= 1;
             return;
         }
-        const event = softwareEvent(index);
         self.generated +%= 1;
-        if (self.target(event) != null) self.unconsumed +%= 1;
-        self.pending.append(event) catch {};
+        self.pending.append(softwareEvent(index)) catch {};
     }
 
     fn generatorAt(self: *const Elc, offset: u32) ?usize {

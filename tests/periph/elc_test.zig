@@ -137,21 +137,53 @@ test "ELS zero is no link, so event zero never matches" {
     try std.testing.expectEqual(@as(u32, 0), unit.linkCount());
 }
 
-test "an event with a link that nothing models is counted as unconsumed" {
+test "generating a software event does not conduct it: the board raises it" {
     var unit = elc.Elc.init();
     enable(&unit);
     unit.write(elc.linkAddress(12), 2, elc.softwareEvent(1));
     fire(&unit, 1);
     try std.testing.expectEqual(@as(u32, 1), unit.generated);
-    try std.testing.expectEqual(@as(u32, 1), unit.unconsumed);
+    try std.testing.expectEqual(@as(u32, 0), unit.table.delivered);
+    try std.testing.expectEqual(@as(usize, 1), unit.takeEvents().len);
 }
 
-test "an event with no link generates but is not counted as unconsumed" {
+test "an event offered to a linked slot conducts and is counted there" {
     var unit = elc.Elc.init();
     enable(&unit);
-    fire(&unit, 2);
-    try std.testing.expectEqual(@as(u32, 1), unit.generated);
-    try std.testing.expectEqual(@as(u32, 0), unit.unconsumed);
+    unit.write(elc.linkAddress(12), 2, elc.softwareEvent(1));
+    try std.testing.expectEqual(
+        elc.route.Arrival.conducted,
+        unit.conduct(elc.softwareEvent(1)),
+    );
+    try std.testing.expectEqual(@as(u32, 1), unit.table.arrivalsAt(12));
+}
+
+test "an event no slot links is unrouted rather than refused" {
+    var unit = elc.Elc.init();
+    enable(&unit);
+    try std.testing.expectEqual(elc.route.Arrival.unrouted, unit.conduct(0x120));
+    try std.testing.expectEqual(@as(u32, 1), unit.table.unrouted);
+    try std.testing.expectEqual(@as(u32, 0), unit.table.delivered);
+}
+
+test "with ELCON clear a linked event is lost, and every register still reads back" {
+    var unit = elc.Elc.init();
+    unit.write(elc.linkAddress(3), 2, 0x120);
+    try std.testing.expectEqual(elc.route.Arrival.blocked, unit.conduct(0x120));
+    try std.testing.expectEqual(@as(u32, 1), unit.table.blocked);
+    try std.testing.expectEqual(@as(u32, 0), unit.table.arrivalsAt(3));
+    try std.testing.expectEqual(@as(u32, 0x120), unit.read(elc.linkAddress(3), 2));
+}
+
+test "two slots on one source both take a conducted event" {
+    var unit = elc.Elc.init();
+    enable(&unit);
+    unit.write(elc.linkAddress(0), 2, 0x080);
+    unit.write(elc.linkAddress(41), 2, 0x080);
+    try std.testing.expectEqual(elc.route.Arrival.conducted, unit.conduct(0x080));
+    try std.testing.expectEqual(@as(u32, 1), unit.table.arrivalsAt(0));
+    try std.testing.expectEqual(@as(u32, 1), unit.table.arrivalsAt(41));
+    try std.testing.expectEqual(@as(u32, 2), unit.table.delivered);
 }
 
 test "draining the pending set empties it" {
