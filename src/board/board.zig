@@ -281,10 +281,8 @@ pub const Board = struct {
         self.spi.attachDevice(eink.line_channel, self.panel.device());
         self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
         self.serial.attachDevice(modem.line_channel, self.modem.device());
-        try self.bus.add(self.wire.block());
-        try self.bus.add(self.wire.touchBlock());
-        try self.wire.attach();
-        try self.rswitch.attach(&self.bus);
+        try self.wire.attach(&self.bus);
+        try self.rswitch.attach(&self.bus, core.*);
         self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
@@ -340,6 +338,7 @@ pub const Board = struct {
         self.pwm.tick();
         self.ptp.tick();
         self.trace.tick();
+        self.rswitch.tick();
         try self.takeResetRequests(core);
         try self.drain(core, self.serial.dueEvents());
         try self.drain(core, self.lowpower.dueEvents());

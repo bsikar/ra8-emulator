@@ -25,6 +25,49 @@ pub fn sections(board: *Board, out: Writer) !void {
         try mdio(index, &port.phy, out);
     }
     try gateway(cluster, out);
+    try rings(cluster, out);
+}
+
+/// The descriptor side: what actually moved through the rings, and every
+/// frame the engine would not move.
+fn rings(cluster: *const net.Rswitch, out: Writer) !void {
+    const window = &cluster.queues;
+    if (window.quiet()) return;
+    const dma = &window.rings;
+    try out.print(
+        "GWCA rings: {d} TX kick(s), {d} frame(s) out, {d} frame(s) in",
+        .{ dma.kicks, dma.tx_frames, dma.rx_frames },
+    );
+    try refusedFrames(&dma.refused, out);
+    if (window.base_late != 0) try out.print(
+        ", {d} RING BASE WRITE(S) OFF A GATEWAY IN CONFIG REFUSED",
+        .{window.base_late},
+    );
+    try out.print("\n", .{});
+}
+
+fn refusedFrames(refused: anytype, out: Writer) !void {
+    if (refused.stopped != 0) try out.print(
+        ", {d} KICK(S) ON A GATEWAY NOT IN OPERATION REFUSED",
+        .{refused.stopped},
+    );
+    if (refused.off_ram != 0) try out.print(
+        ", {d} DESCRIPTOR(S) POINTING OUTSIDE RAM REFUSED",
+        .{refused.off_ram},
+    );
+    if (refused.too_big != 0) try out.print(
+        ", {d} FRAME(S) TOO BIG FOR THE SLOT LEFT QUEUED",
+        .{refused.too_big},
+    );
+    if (refused.blocked != 0) try out.print(
+        ", {d} FRAME(S) THE FAR END HAD NO ROOM FOR",
+        .{refused.blocked},
+    );
+    if (refused.looped != 0) try out.print(", {d} RING(S) THAT LINK BACK ON THEMSELVES", .{refused.looped});
+    if (refused.runt != 0) try out.print(", {d} DESCRIPTOR(S) TOO SHORT TO BE A FRAME", .{refused.runt});
+    if (refused.oversize != 0) try out.print(", {d} DESCRIPTOR(S) OVER THE FRAME LIMIT", .{refused.oversize});
+    if (refused.fragment != 0) try out.print(", {d} MULTI-FRAGMENT HEAD(S) LEFT ALONE", .{refused.fragment});
+    if (refused.ring_full != 0) try out.print(", {d} FULL RING(S)", .{refused.ring_full});
 }
 
 fn refusedSteps(machine: anytype, out: Writer) !void {

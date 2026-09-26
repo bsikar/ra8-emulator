@@ -26,9 +26,12 @@ pub const Wire = struct {
     imu: lsm6dso.Imu = .{},
     gauge: max17048.Gauge = .{},
 
-    /// Put the board's parts on the bus. The controller holds pointers into
-    /// this struct, so this runs once the board has stopped moving.
-    pub fn attach(self: *Wire) bus.Error!void {
+    /// Put both lines and the board's parts on the bus. The blocks hold
+    /// pointers into this struct, so this runs once the board has stopped
+    /// moving.
+    pub fn attach(self: *Wire, window: *periph.Bus) !void {
+        try window.add(self.block());
+        try window.add(self.touchBlock());
         try self.controller.attachDevice(self.expander.device());
         try self.controller.attachDevice(self.sensor.device());
         try self.touchline.attachDevice(self.panel.device());
