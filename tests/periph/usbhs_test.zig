@@ -124,17 +124,35 @@ test "PIPECTR slots address PIPE1 upwards" {
 
 test "an interrupt status bit clears by writing zero to it" {
     var host = broughtUp();
-    host.write(at(regs.reg.brdysts), 2, 0xFFFF);
-    try std.testing.expectEqual(@as(u32, 0), host.read(at(regs.reg.brdysts), 2));
-    host.shadow[regs.reg.brdysts / regs.window.word] = 0x0003;
+    host.write(at(regs.reg.nrdysts), 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 0), host.read(at(regs.reg.nrdysts), 2));
+    host.shadow[regs.reg.nrdysts / regs.window.word] = 0x0003;
+    host.write(at(regs.reg.nrdysts), 2, 0x0002);
+    try std.testing.expectEqual(@as(u32, 0x0002), host.read(at(regs.reg.nrdysts), 2));
+}
+
+test "a ready flag the transfer raised clears by writing zero to it" {
+    var host = broughtUp();
+    host.xfer.brdy = 0x0003;
     host.write(at(regs.reg.brdysts), 2, 0x0002);
-    try std.testing.expectEqual(@as(u32, 0x0002), host.read(at(regs.reg.brdysts), 2));
+    try std.testing.expectEqual(@as(u16, 0x0002), host.xfer.brdy);
+    host.xfer.bemp = 0x0005;
+    host.write(at(regs.reg.bempsts), 2, 0x0004);
+    try std.testing.expectEqual(@as(u32, 0x0004), host.read(at(regs.reg.bempsts), 2));
 }
 
 test "a register the model does not own remembers what was written" {
     var host = broughtUp();
+    host.write(at(regs.reg.buswait), 2, 0x000F);
+    try std.testing.expectEqual(@as(u32, 0x000F), host.read(at(regs.reg.buswait), 2));
+}
+
+test "the SETUP staging registers read back what the host programmed" {
+    var host = broughtUp();
     host.write(at(regs.reg.usbreq), 2, 0x0680);
+    host.write(at(regs.reg.usbleng), 2, 18);
     try std.testing.expectEqual(@as(u32, 0x0680), host.read(at(regs.reg.usbreq), 2));
+    try std.testing.expectEqual(@as(u32, 18), host.read(at(regs.reg.usbleng), 2));
 }
 
 test "the PHY page answers with the module off" {
