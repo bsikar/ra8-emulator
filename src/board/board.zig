@@ -43,6 +43,7 @@ const poeg = @import("../periph/poeg.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const rtc = @import("../periph/rtc.zig");
+const rtt = @import("../periph/rtt.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -112,6 +113,10 @@ pub const Board = struct {
     /// way the card and the panel go on the SPI line: it is a device on
     /// SCI7's line, not a block of its own.
     modem: modem.Modem = .{},
+    /// The debug probe draining the firmware's SEGGER RTT ring out of RAM.
+    /// It owns no register window at all, so it is not on the bus: attach()
+    /// only hands it the machine whose memory it reads.
+    trace: rtt.Rtt = .{},
     /// The SD card on the SPI line, the other way an image reaches storage.
     /// Built in attach(): it holds only the blocks something wrote, so it
     /// needs the board's allocator, and attach() is where it goes on a line.
@@ -270,6 +275,7 @@ pub const Board = struct {
         self.spi.attachDevice(eink.line_channel, self.panel.device());
         self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
         self.serial.attachDevice(modem.line_channel, self.modem.device());
+        self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
         try self.bus.add(self.options.block());
@@ -323,41 +329,25 @@ pub const Board = struct {
         self.interval.tick();
         self.pwm.tick();
         self.ptp.tick();
+        self.trace.tick();
         try self.takeResetRequests(core);
-        for (self.serial.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.lowpower.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.mailbox.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.can.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.npu.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.clock.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.interval.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.pwm.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.adc.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.dma.dueEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
-        for (self.links.takeEvents().constSlice()) |event| {
-            try self.raise(core, event);
-        }
+        try self.drain(core, self.serial.dueEvents());
+        try self.drain(core, self.lowpower.dueEvents());
+        try self.drain(core, self.mailbox.dueEvents());
+        try self.drain(core, self.can.dueEvents());
+        try self.drain(core, self.npu.dueEvents());
+        try self.drain(core, self.clock.dueEvents());
+        try self.drain(core, self.interval.dueEvents());
+        try self.drain(core, self.pwm.dueEvents());
+        try self.drain(core, self.adc.dueEvents());
+        try self.drain(core, self.dma.dueEvents());
+        try self.drain(core, self.links.takeEvents());
         try self.events.repend(core);
+    }
+
+    /// Every event one block has due this boundary, offered one at a time.
+    fn drain(self: *Board, core: engine.Engine, events: anytype) !void {
+        for (events.constSlice()) |event| try self.raise(core, event);
     }
 
     /// One event, offered to the transfer controller before the core. A slot
