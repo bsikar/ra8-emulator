@@ -12,6 +12,7 @@ const dtc = @import("../periph/dtc.zig");
 const graphics = @import("report_graphics.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
+const poeg = @import("../periph/poeg.zig");
 const reset = @import("../periph/reset.zig");
 const reboot = @import("../core/reboot.zig");
 const scb = @import("../periph/scb.zig");
@@ -63,6 +64,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try transfers(board, out);
     try serial(board, out);
     try lowpower(board, out);
+    try shutoff(board, out);
     try protection(board, out);
     try leds(board, out);
 }
@@ -78,6 +80,30 @@ fn accuracy(board: *Board, out: Writer) !void {
             @intFromBool(board.accuracy.flagSet(cac.status.ferrf)),
         },
     );
+}
+
+/// Safe shutoff, one line per group the firmware moved. The refused store is
+/// the loud case: PIDF, IOCF and OSTPF belong to a pin and the two detectors,
+/// so an image that wrote one proved nothing about its shutoff path.
+fn shutoff(board: *Board, out: Writer) !void {
+    for (&board.shutoff.groups, 0..) |*group, index| {
+        if (group.quiet()) continue;
+        try out.print(
+            "POEG{d}: {d} shutoff(s), {d} re-enable(s), outputs {s}\n",
+            .{
+                index,
+                group.asserts,
+                group.clears,
+                if (group.disabled()) "high-impedance" else "driven",
+            },
+        );
+        if (group.faked != 0) {
+            try out.print(
+                "POEG{d}: REFUSED {d} store(s) to PIDF/IOCF/OSTPF, firmware cannot raise a trigger flag itself\n",
+                .{ index, group.faked },
+            );
+        }
+    }
 }
 
 /// The refused refresh is the loud case: on silicon an early reload is a

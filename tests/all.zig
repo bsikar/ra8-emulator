@@ -33,6 +33,7 @@ test {
     _ = @import("periph/mstp_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/pdctr_test.zig");
+    _ = @import("periph/poeg_test.zig");
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");

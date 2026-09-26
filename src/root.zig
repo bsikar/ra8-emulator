@@ -34,6 +34,7 @@ pub const periph = struct {
     pub const mstp = @import("periph/mstp.zig");
     pub const nvic = @import("periph/nvic.zig");
     pub const pdctr = @import("periph/pdctr.zig");
+    pub const poeg = @import("periph/poeg.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
     pub const reset = @import("periph/reset.zig");
