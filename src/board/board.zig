@@ -25,6 +25,7 @@ const icu = @import("../periph/icu.zig");
 const lvd = @import("../periph/lvd.zig");
 const mstp = @import("../periph/mstp.zig");
 const pdctr = @import("../periph/pdctr.zig");
+const poeg = @import("../periph/poeg.zig");
 const prcr = @import("../periph/prcr.zig");
 const reset = @import("../periph/reset.zig");
 const scb = @import("../periph/scb.zig");
@@ -52,6 +53,9 @@ pub const Board = struct {
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
+    /// Safe shutoff: the request flags that force the GPT outputs of a group
+    /// into high impedance, and the state bit firmware reads back to prove it.
+    shutoff: poeg.Poeg,
     protection: prcr.Prcr,
     backup: bkup.Bkup,
     /// The graphics power domain, and the one block so far that lives in it.
@@ -86,6 +90,7 @@ pub const Board = struct {
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),
+            .shutoff = poeg.Poeg.init(),
             .protection = prcr.Prcr.init(),
             // Patched in attach(): the backup file has to point at this
             // board's own protection model, not a copy of it.
@@ -117,6 +122,7 @@ pub const Board = struct {
         try self.bus.add(self.checksum.block());
         try self.bus.add(self.dataops.block());
         try self.bus.add(self.accuracy.block());
+        try self.bus.add(self.shutoff.block());
         try self.bus.add(self.protection.block());
         self.backup = bkup.Bkup.init(&self.protection);
         try self.bus.add(self.backup.block());
