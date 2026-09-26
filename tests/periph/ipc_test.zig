@@ -135,20 +135,23 @@ test "channels do not share a FIFO or a pending byte" {
     try std.testing.expectEqual(@as(u32, 0), mailbox.channels[1].pushes);
 }
 
-test "the semaphore region keeps what was written instead of reading zero" {
+test "the semaphore region is a lock now, not a shadow word" {
     var mailbox = unit();
     // dev answers 0 here and drops the store, so a claim never reads back.
-    mailbox.write(ipc.win_base + 0x10, 4, 0x0000_0001);
+    // Here the read itself takes IPCSEM4, so the next one is told it lost.
+    try std.testing.expectEqual(@as(u32, 0), mailbox.read(ipc.win_base + 0x10, 4));
     try std.testing.expectEqual(@as(u32, 0x0000_0001), mailbox.read(ipc.win_base + 0x10, 4));
-    try std.testing.expect(mailbox.quiet());
+    try std.testing.expect(!mailbox.quiet());
 }
 
 test "a narrow store to the shadow keeps the bytes it does not name" {
+    // 0x40 is the gap between the semaphore file and the NMI windows, one of
+    // the stretches below the channels that nothing interprets.
     var mailbox = unit();
-    mailbox.write(ipc.win_base + 0x20, 4, 0x5A5A_5A5A);
-    mailbox.write(ipc.win_base + 0x20, 1, 0xC3);
-    try std.testing.expectEqual(@as(u32, 0x5A5A_5AC3), mailbox.read(ipc.win_base + 0x20, 4));
-    try std.testing.expectEqual(@as(u32, 0x5A), mailbox.read(ipc.win_base + 0x23, 1));
+    mailbox.write(ipc.win_base + 0x40, 4, 0x5A5A_5A5A);
+    mailbox.write(ipc.win_base + 0x40, 1, 0xC3);
+    try std.testing.expectEqual(@as(u32, 0x5A5A_5AC3), mailbox.read(ipc.win_base + 0x40, 4));
+    try std.testing.expectEqual(@as(u32, 0x5A), mailbox.read(ipc.win_base + 0x43, 1));
 }
 
 test "a byte store to the top of ISET names no line" {

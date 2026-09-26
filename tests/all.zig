@@ -84,6 +84,7 @@ test {
     _ = @import("periph/pdctr_test.zig");
     _ = @import("periph/pdm_test.zig");
     _ = @import("periph/ipc_test.zig");
+    _ = @import("periph/ipc_sync_test.zig");
     _ = @import("periph/poeg_test.zig");
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
