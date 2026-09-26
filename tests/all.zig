@@ -98,6 +98,7 @@ test {
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ulpt_test.zig");
     _ = @import("periph/usbhs_device_test.zig");
+    _ = @import("periph/usbhs_dfifo_test.zig");
     _ = @import("periph/usbhs_fifo_test.zig");
     _ = @import("periph/usbhs_phy_test.zig");
     _ = @import("periph/usbhs_pipe_test.zig");

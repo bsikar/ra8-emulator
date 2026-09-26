@@ -142,7 +142,21 @@ pub fn usb(board: *Board, out: Writer) !void {
             host.pipes.too_big + host.xfer.port.oversize,
         },
     );
-    if (host.xfer.refusals() == host.xfer.stalls) return;
+    const data = &host.xfer.data;
+    if (data.refusals() != 0) {
+        try out.print(
+            "  data ports refused: {d} bad pipe, {d} aimed at the control pipe, " ++
+                "{d} pipe already held, {d} wrong access width, {d} against the pipe's direction\n",
+            .{
+                data.ports[0].bad_pipe + data.ports[1].bad_pipe,
+                data.ports[0].dcp_aim + data.ports[1].dcp_aim,
+                data.ports[0].contended + data.ports[1].contended,
+                data.ports[0].bad_width + data.ports[1].bad_width,
+                data.ports[0].wrong_way + data.ports[1].wrong_way,
+            },
+        );
+    }
+    if (host.xfer.refusals() == host.xfer.stalls + data.refusals()) return;
     try out.print(
         "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, " ++
             "{d} on an unarmed pipe, {d} FIFO not ready, {d} drained past the packet, " ++

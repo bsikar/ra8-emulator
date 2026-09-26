@@ -104,6 +104,7 @@ pub const periph = struct {
     pub const ulpt = @import("periph/ulpt.zig");
     pub const usbhs = @import("periph/usbhs.zig");
     pub const usbhs_device = @import("periph/usbhs_device.zig");
+    pub const usbhs_dfifo = @import("periph/usbhs_dfifo.zig");
     pub const usbhs_fifo = @import("periph/usbhs_fifo.zig");
     pub const usbhs_phy = @import("periph/usbhs_phy.zig");
     pub const usbhs_pipe = @import("periph/usbhs_pipe.zig");

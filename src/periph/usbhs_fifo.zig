@@ -98,17 +98,7 @@ pub const Port = struct {
             self.bad_pipe += 1;
             return;
         };
-        const staging = &self.out[index];
-        var i: u3 = 0;
-        while (i < width) : (i += 1) {
-            if (staging.len >= maxp or staging.len >= staging.data.len) {
-                self.oversize += 1;
-                return;
-            }
-            staging.data[staging.len] = @truncate(value >> (@as(u5, i) * 8));
-            staging.len += 1;
-        }
-        staging.ready = true;
+        fillWord(&self.out[index], value, width, maxp, &self.oversize);
     }
 
     /// A host load from the data port. dev served zeros past the staged
@@ -124,18 +114,7 @@ pub const Port = struct {
             self.not_ready += 1;
             return 0;
         }
-        var value: u32 = 0;
-        var i: u3 = 0;
-        while (i < width) : (i += 1) {
-            if (staging.cursor >= staging.len) {
-                self.overdrain += 1;
-                break;
-            }
-            value |= @as(u32, staging.data[staging.cursor]) << (@as(u5, i) * 8);
-            staging.cursor += 1;
-        }
-        if (staging.cursor >= staging.len) staging.ready = false;
-        return value;
+        return drainWord(staging, width, &self.overdrain);
     }
 
     /// CFIFOCTR.BCLR: throw away whichever side the port is aimed at.
@@ -155,3 +134,36 @@ pub const Port = struct {
         return self.refusals() == 0 and self.sel == 0;
     }
 };
+
+/// Take one access-width word out of a staging buffer, LSB first, the way the
+/// data register is wired. Shared by the control port and the two data ports
+/// so a byte crosses the same code whichever port it went through.
+pub fn drainWord(staging: *Staging, width: u3, overdrain: *u32) u32 {
+    var value: u32 = 0;
+    var i: u3 = 0;
+    while (i < width) : (i += 1) {
+        if (staging.cursor >= staging.len) {
+            overdrain.* += 1;
+            break;
+        }
+        value |= @as(u32, staging.data[staging.cursor]) << (@as(u5, i) * 8);
+        staging.cursor += 1;
+    }
+    if (staging.cursor >= staging.len) staging.ready = false;
+    return value;
+}
+
+/// Put one access-width word into a staging buffer, stopping at the packet
+/// size the pipe was given rather than cutting the transfer silently.
+pub fn fillWord(staging: *Staging, value: u32, width: u3, maxp: u16, oversize: *u32) void {
+    var i: u3 = 0;
+    while (i < width) : (i += 1) {
+        if (staging.len >= maxp or staging.len >= staging.data.len) {
+            oversize.* += 1;
+            return;
+        }
+        staging.data[staging.len] = @truncate(value >> (@as(u5, i) * 8));
+        staging.len += 1;
+    }
+    staging.ready = true;
+}

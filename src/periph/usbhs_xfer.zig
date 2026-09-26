@@ -8,12 +8,14 @@
 //! device, and a step the transfer is not in is refused.
 const regs = @import("usbhs_regs.zig");
 const usbhs_device = @import("usbhs_device.zig");
+const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_setup = @import("usbhs_setup.zig");
 
 pub const Transfer = struct {
     port: usbhs_fifo.Port = .{},
+    data: usbhs_dfifo.Ports = .{},
     device: usbhs_device.Device = .{},
 
     /// The SETUP staging registers, as the host wrote them.
@@ -123,6 +125,14 @@ pub const Transfer = struct {
             self.port.bad_pipe += 1;
             return;
         };
+        self.commitPipe(index, pipes);
+    }
+
+    /// Hand one pipe's staged OUT bytes to the device, whichever port staged
+    /// them. A pipe the host has not armed moves nothing: dev committed
+    /// whatever PIPECTR said, so a packet went out on a pipe the driver had
+    /// left NAKing.
+    fn commitPipe(self: *Transfer, index: u32, pipes: *usbhs_pipe.Table) void {
         if (index != 0 and !pipes.pipes[index].armed()) {
             self.unarmed += 1;
             return;
@@ -143,6 +153,73 @@ pub const Transfer = struct {
         self.bemp &= value;
     }
 
+    /// DnFIFOSEL. The CFIFO's own aim is passed in so the pair can refuse a
+    /// data port aimed at the pipe the control port already holds.
+    pub fn selectData(self: *Transfer, which: u32, value: u16) void {
+        self.data.select(which, value, self.port.pipe());
+    }
+
+    /// DnFIFOCTR. A port aimed at nothing is never ready, and the length it
+    /// reports is what its pipe's staging actually holds.
+    pub fn dataStatus(self: *Transfer, which: u32, pipes: *usbhs_pipe.Table) u16 {
+        const index = self.data.ports[which].pipe() orelse return 0;
+        if (!pipes.pipes[index].in) return regs.fifo.frdy;
+        const staging = &self.port.in[index];
+        if (!staging.ready) return 0;
+        return regs.fifo.frdy | (staging.remaining() & regs.fifo.dtln_mask);
+    }
+
+    /// A host load from a data port. Three gates the control port does not
+    /// have: the access width MBW asked for, the direction the pipe was
+    /// configured for, and DCLRM taking the buffer away once it runs dry.
+    pub fn readData(self: *Transfer, which: u32, access: u3, pipes: *usbhs_pipe.Table) u32 {
+        const index = self.data.ports[which].pipe() orelse {
+            self.data.ports[which].bad_pipe += 1;
+            return 0;
+        };
+        if (!self.data.accepts(which, access)) return 0;
+        if (!self.data.runs(which, pipes.pipes[index].in, true)) return 0;
+        const staging = &self.port.in[index];
+        if (!staging.ready) {
+            self.port.not_ready += 1;
+            return 0;
+        }
+        const value = usbhs_fifo.drainWord(staging, access, &self.port.overdrain);
+        if (!staging.ready and self.data.ports[which].autoClears()) staging.clear();
+        return value;
+    }
+
+    /// A host store into a data port, staged against the pipe's own maximum
+    /// packet size rather than the control pipe's reply cap.
+    pub fn writeData(self: *Transfer, which: u32, access: u3, value: u32, pipes: *usbhs_pipe.Table) void {
+        const index = self.data.ports[which].pipe() orelse {
+            self.data.ports[which].bad_pipe += 1;
+            return;
+        };
+        if (!self.data.accepts(which, access)) return;
+        if (!self.data.runs(which, pipes.pipes[index].in, false)) return;
+        usbhs_fifo.fillWord(
+            &self.port.out[index],
+            value,
+            access,
+            pipes.pipes[index].maxp,
+            &self.port.oversize,
+        );
+    }
+
+    /// DnFIFOCTR: BCLR throws the aimed-at side away, BVAL hands a staged
+    /// OUT packet to the device, the same two edges CFIFOCTR carries.
+    pub fn dataControl(self: *Transfer, which: u32, value: u16, pipes: *usbhs_pipe.Table) void {
+        const index = self.data.ports[which].pipe() orelse {
+            self.data.ports[which].bad_pipe += 1;
+            return;
+        };
+        if (value & regs.fifo.bclr != 0) {
+            if (pipes.pipes[index].in) self.port.in[index].clear() else self.port.out[index].clear();
+        }
+        if (value & regs.fifo.bval != 0) self.commitPipe(index, pipes);
+    }
+
     /// USBRST released: the device drops back to Default and every staged
     /// packet on the bus goes with it.
     pub fn busReset(self: *Transfer) void {
@@ -152,14 +229,16 @@ pub const Transfer = struct {
         self.bemp = 0;
         for (&self.port.in) |*staging| staging.clear();
         for (&self.port.out) |*staging| staging.clear();
+        self.data.release();
     }
 
     pub fn refusals(self: *const Transfer) u32 {
         return self.no_device + self.stray_ccpl + self.unarmed + self.stalls +
-            self.port.refusals() + self.device.refusals();
+            self.port.refusals() + self.data.refusals() + self.device.refusals();
     }
 
     pub fn quiet(self: *const Transfer) bool {
-        return self.setups == 0 and self.refusals() == 0 and self.port.quiet();
+        return self.setups == 0 and self.refusals() == 0 and self.port.quiet() and
+            self.data.quiet();
     }
 };

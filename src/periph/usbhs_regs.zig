@@ -23,8 +23,14 @@ pub const reg = struct {
     pub const syssts0: u32 = 0x004;
     pub const dvstctr0: u32 = 0x008;
     pub const cfifo: u32 = 0x014;
+    pub const d0fifo: u32 = 0x018;
+    pub const d1fifo: u32 = 0x01C;
     pub const cfifosel: u32 = 0x020;
     pub const cfifoctr: u32 = 0x022;
+    pub const d0fifosel: u32 = 0x028;
+    pub const d0fifoctr: u32 = 0x02A;
+    pub const d1fifosel: u32 = 0x02C;
+    pub const d1fifoctr: u32 = 0x02E;
     pub const intenb0: u32 = 0x030;
     pub const intenb1: u32 = 0x032;
     pub const intsts0: u32 = 0x040;
@@ -103,6 +109,33 @@ pub const fifo = struct {
     pub const bval: u16 = 1 << 15;
     pub const frdy: u16 = 1 << 13;
     pub const dtln_mask: u16 = 0x0FFF;
+};
+
+/// DnFIFOSEL: the two data ports' own selector. It is not CFIFOSEL with a
+/// different offset: there is no ISEL here, because a data port runs the
+/// direction its pipe was configured for, and MBW says how wide an access
+/// the port answers.
+pub const dfifo = struct {
+    /// How many data ports the controller has: D0FIFO and D1FIFO.
+    pub const count: u32 = 2;
+    pub const mbw_shift: u4 = 10;
+    pub const mbw_mask: u16 = 0x3 << mbw_shift;
+    pub const mbw_8: u16 = 0;
+    pub const mbw_16: u16 = 1;
+    pub const mbw_32: u16 = 2;
+    pub const dreqe: u16 = 1 << 12;
+    /// DCLRM: clear the buffer automatically at the end of a short packet.
+    pub const dclrm: u16 = 1 << 13;
+
+    /// The access width, in bytes, that MBW asks the port to answer.
+    pub fn accessWidth(sel: u16) ?u3 {
+        return switch ((sel & mbw_mask) >> mbw_shift) {
+            mbw_8 => 1,
+            mbw_16 => 2,
+            mbw_32 => 4,
+            else => null,
+        };
+    }
 };
 
 /// DCPCTR: the control pipe's own control register, and the two edges the
