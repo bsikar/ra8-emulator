@@ -12,6 +12,7 @@ const analog = @import("report_analog.zig");
 const graphics = @import("report_graphics.zig");
 const audio = @import("report_audio.zig");
 const capture = @import("report_capture.zig");
+const compute = @import("report_compute.zig");
 const cores = @import("report_cores.zig");
 const memory = @import("report_memory.zig");
 const network = @import("report_network.zig");
@@ -74,7 +75,6 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try transfers(board, out);
     try serial.sections(board, out);
     try serial.spi(board, out);
-    try lowpower(board, out);
     try shutoff(board, out);
     try analog.sections(board, out);
     try analog.converter(board, out);
@@ -86,6 +86,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try options.sections(board, out);
     try network.sections(board, out);
     try cores.sections(board, out);
+    try compute.sections(board, out);
     try time.sections(board, out);
     try timers.sections(board, out);
     try protection(board, out);
@@ -286,37 +287,6 @@ fn transfers(board: *Board, out: Writer) !void {
 /// periodic image that never clears the flag gets one wake there and wakes
 /// every period on the bench; every underflow is an interrupt request here,
 /// and a forced stop through TSTOP is taken rather than discarded.
-fn lowpower(board: *Board, out: Writer) !void {
-    const unit = &board.lowpower;
-    if (unit.quiet()) return;
-    for (&unit.channels, 0..) |*channel, index| {
-        if (channel.underflows == 0 and !channel.running()) continue;
-        try out.print(
-            "ULPT{d}: counter 0x{X:0>8}, {d} underflow(s), divide by {d}, {s}\n",
-            .{
-                index,
-                channel.counter,
-                channel.underflows,
-                channel.divider(),
-                if (channel.running()) "running" else "stopped",
-            },
-        );
-        if (channel.forced_stops != 0) {
-            try out.print("ULPT{d}: {d} forced stop(s) through TSTOP\n", .{ index, channel.forced_stops });
-        }
-    }
-    if (unit.compare_touches != 0) {
-        try out.print(
-            "ULPT: {d} COMPARE-MATCH ACCESS(ES), NOT MODELLED (ULPTCMA/CMB are stored and never compared, so no compare event is raised)\n",
-            .{unit.compare_touches},
-        );
-    }
-}
-
-/// PRCR and the domain it protects. Both stay quiet when the firmware never
-/// touched them, and both go loud when a write was dropped: on silicon those
-/// writes vanish with no fault and no flag, which is the failure that is
-/// impossible to spot from the firmware side.
 fn protection(board: *Board, out: Writer) !void {
     if (!board.protection.quiet()) {
         if (board.protection.bad_key != 0) {

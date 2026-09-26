@@ -10,6 +10,7 @@ pub const core = struct {
     pub const lob = @import("core/lob.zig");
     pub const lob_hook = @import("core/lob_hook.zig");
     pub const memmap = @import("core/memmap.zig");
+    pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
 };
 
@@ -44,6 +45,8 @@ pub const periph = struct {
     pub const mram = @import("periph/mram.zig");
     pub const mram_otp = @import("periph/mram_otp.zig");
     pub const mstp = @import("periph/mstp.zig");
+    pub const npu = @import("periph/npu.zig");
+    pub const npu_cmd = @import("periph/npu_cmd.zig");
     pub const nvic = @import("periph/nvic.zig");
     pub const pdctr = @import("periph/pdctr.zig");
     pub const pdm = @import("periph/pdm.zig");
