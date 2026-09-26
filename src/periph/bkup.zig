@@ -23,6 +23,7 @@
 //!
 //! Reads are never gated: PRCR gates writes only (HUM Ch 13.1 p 520), so a
 //! dropped write shows up as a read-back of the old value rather than a fault.
+const ctrl = @import("bkup_ctrl.zig");
 const prcr = @import("prcr.zig");
 const periph = @import("registry.zig");
 
@@ -30,17 +31,12 @@ const periph = @import("registry.zig");
 pub const win_base: u32 = 0x4001_EC40;
 pub const win_span: u32 = 0x180;
 
-pub const off_vbtber: u32 = 0x000;
+pub const off_vbtber: u32 = ctrl.off.vbtber;
 pub const off_vbtbkr0: u32 = 0x0C0;
 pub const reg_count: u32 = 128;
 
-/// VBTBER fields (HUM Ch 12.2.6 p 504).
-pub const vbtber = struct {
-    /// VBAE at bit 3: 1 enables VBTBKRn access.
-    pub const vbae: u8 = 0x08;
-    /// "Value after reset" row: VBAE is already armed.
-    pub const reset: u8 = 0x08;
-};
+/// VBTBER fields, owned by the control file next door.
+pub const vbtber = ctrl.vbtber;
 
 /// Why a write was dropped, so the report can name the cause instead of
 /// leaving it to be inferred from a failing banner.
@@ -53,10 +49,13 @@ pub const Bkup = struct {
     /// they clear only when the emulator process starts, which models the
     /// first-ever boot with a dead battery.
     data: [reg_count]u8 = [_]u8{0} ** reg_count,
-    enable: u8 = vbtber.reset,
+    /// Every BAT*/VBT* register in the window that is not a data byte.
+    control: ctrl.Control = ctrl.Control.init(),
     writes: u32 = 0,
     dropped_locked: u32 = 0,
     dropped_disabled: u32 = 0,
+    /// Stores to a control register that PRC1 dropped.
+    control_locked: u32 = 0,
     /// The protection model this block asks before accepting a store.
     protection: *const prcr.Prcr,
 
@@ -72,10 +71,11 @@ pub const Bkup = struct {
     /// A peripheral reset clears the control state and keeps the data, which
     /// is what makes the domain survive a reboot into the same process.
     pub fn resetControl(self: *Bkup) void {
-        self.enable = vbtber.reset;
+        self.control.reset();
         self.writes = 0;
         self.dropped_locked = 0;
         self.dropped_disabled = 0;
+        self.control_locked = 0;
     }
 
     /// What stopped the last write, for the report.
@@ -87,11 +87,16 @@ pub const Bkup = struct {
 
     pub fn read(self: *Bkup, address: u32, width: u3) u32 {
         const offset = address -% win_base;
-        if (offset == off_vbtber) return self.enable;
-        if (offset < off_vbtbkr0) return 0;
-        const index = offset - off_vbtbkr0;
         var value: u32 = 0;
         var i: u32 = 0;
+        if (offset < off_vbtbkr0) {
+            while (i < width) : (i += 1) {
+                const byte = self.control.read(offset + i);
+                value |= @as(u32, byte) << @intCast(i * 8);
+            }
+            return value;
+        }
+        const index = offset - off_vbtbkr0;
         while (i < width and index + i < reg_count) : (i += 1) {
             value |= @as(u32, self.data[index + i]) << @intCast(i * 8);
         }
@@ -101,15 +106,18 @@ pub const Bkup = struct {
     pub fn write(self: *Bkup, address: u32, width: u3, value: u32) void {
         const offset = address -% win_base;
         if (!self.protection.unlocked(prcr.group.lpm)) {
-            if (offset >= off_vbtbkr0) self.dropped_locked +%= 1;
+            if (offset >= off_vbtbkr0) self.dropped_locked +%= 1 else self.control_locked +%= 1;
             return;
         }
-        if (offset == off_vbtber) {
-            self.enable = @truncate(value);
+        if (offset < off_vbtbkr0) {
+            var byte: u32 = 0;
+            while (byte < width) : (byte += 1) {
+                const taken: u8 = @truncate(value >> @intCast(byte * 8));
+                self.control.write(offset + byte, taken);
+            }
             return;
         }
-        if (offset < off_vbtbkr0) return;
-        if (self.enable & vbtber.vbae == 0) {
+        if (!self.control.vbaeSet()) {
             self.dropped_disabled +%= 1;
             return;
         }
