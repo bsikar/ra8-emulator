@@ -15,6 +15,7 @@ const cac = @import("../periph/cac.zig");
 const crc = @import("../periph/crc.zig");
 const doc = @import("../periph/doc.zig");
 const drw = @import("../periph/drw.zig");
+const dtc = @import("../periph/dtc.zig");
 const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
@@ -36,6 +37,9 @@ pub const Board = struct {
     /// source event drives a peripheral rather than an NVIC line, and the
     /// only way firmware raises an event itself.
     links: elc.Elc,
+    /// The data transfer controller: the other consumer of an event, which
+    /// moves bytes on an interrupt instead of letting the CPU take it.
+    transfers: dtc.Dtc,
     pins: gpio.Gpio,
     checksum: crc.Crc,
     dataops: doc.Doc,
@@ -65,6 +69,7 @@ pub const Board = struct {
             .bus = periph.Bus.init(allocator),
             .events = icu.Icu.init(),
             .links = elc.Elc.init(),
+            .transfers = dtc.Dtc.init(),
             .pins = gpio.Gpio.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
@@ -114,6 +119,7 @@ pub const Board = struct {
         try self.bus.add(self.serial.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
+        try self.bus.add(self.transfers.block());
         try self.bus.add(self.monitors.statusBlock());
         try self.bus.add(self.monitors.controlBlock());
         try self.bus.add(self.monitors.filterBlock());
@@ -135,12 +141,24 @@ pub const Board = struct {
         self.watchdog.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
-            try self.events.raise(core, event);
+            try self.raise(core, event);
         }
         for (self.links.takeEvents().constSlice()) |event| {
-            try self.events.raise(core, event);
+            try self.raise(core, event);
         }
         try self.events.repend(core);
+    }
+
+    /// One event, offered to the transfer controller before the core. A slot
+    /// with IELSR.DTCE set belongs to the DTC: it moves its descriptor's
+    /// units and keeps the interrupt to itself until the descriptor runs out,
+    /// which is the whole reason firmware sets DTCE instead of handling every
+    /// byte in an ISR. Everything else goes straight to the event links.
+    pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
+        if (self.transfers.activate(core, &self.events, event)) |moved| {
+            if (!moved.interrupt) return;
+        }
+        try self.events.raise(core, event);
     }
 
     /// Whoever asked for a reset this boundary hands the request to the reset

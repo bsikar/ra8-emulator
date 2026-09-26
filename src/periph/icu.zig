@@ -14,7 +14,7 @@
 //!   IELSR[0..95] (+0x6300, 32-bit each, one per NVIC line)
 //!     IELS[9:0]  the event this line listens for, 0 = unlinked
 //!     IR    [16] the latched interrupt status flag, WRITE ZERO to clear
-//!     DTCE  [24] DTC activation, retained here and consumed by nothing yet
+//!     DTCE  [24] DTC activation: the slot hands its event to the DTC
 //!
 //! Only IELSR is registered on the bus. The rest of the ICU (IRQCR, the NMI
 //! block, the wake-up masks, SELSR) is nobody's yet, and the sparse register
@@ -37,7 +37,7 @@ pub const field = struct {
     pub const iels: u32 = 0x0000_03FF;
     /// IR[16]: the latched status flag. Cleared by writing ZERO, not one.
     pub const ir: u32 = 0x0001_0000;
-    /// DTCE[24]: DTC activation enable. Retained, and nothing reads it yet.
+    /// DTCE[24]: DTC activation enable. src/periph/dtc.zig reads it.
     pub const dtce: u32 = 0x0100_0000;
 };
 
@@ -72,6 +72,26 @@ pub const Icu = struct {
             if (link & field.iels == event) return index;
         }
         return null;
+    }
+
+    /// The slot that activates the DTC for `event`: one linked to it with
+    /// DTCE set. A slot can link the same event with DTCE clear, which is an
+    /// ordinary CPU interrupt and none of the controller's business, so this
+    /// keeps scanning rather than filtering slotFor's answer after the fact.
+    pub fn dtcSlotFor(self: *const Icu, event: u16) ?usize {
+        if (event == 0) return null;
+        for (self.links, 0..) |link, index| {
+            if (link & field.iels != event) continue;
+            if (link & field.dtce != 0) return index;
+        }
+        return null;
+    }
+
+    /// Take a slot's DTCE down. The controller does this when a descriptor
+    /// runs out (HUM Ch 18 Figure 18.5 p 801), so the next time that event
+    /// fires the CPU takes the interrupt instead of the DTC moving nothing.
+    pub fn clearDtce(self: *Icu, slot: usize) void {
+        self.links[slot] &= ~field.dtce;
     }
 
     pub fn latched(self: *const Icu, slot: usize) bool {
