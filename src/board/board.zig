@@ -270,8 +270,8 @@ pub const Board = struct {
         try self.bus.add(self.backup.block());
         self.graphics = pdctr.Pdctr.init(&self.protection);
         try self.bus.add(self.graphics.block());
-        self.display = glcdc.Glcdc.init(&self.graphics);
-        try self.bus.add(self.display.block());
+        // The panel is scanned out of the same RAM the engine paints into.
+        try self.display.attach(&self.bus, &self.graphics, core.*);
         self.raster = drw.Drw.init(&self.graphics);
         // The engine rasterizes into RAM, so it needs the machine that owns
         // it. A board built by a test without one declines the render.

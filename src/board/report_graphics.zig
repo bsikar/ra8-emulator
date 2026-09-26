@@ -61,6 +61,9 @@ pub fn panel(board: *Board, out: Writer) !void {
 pub fn display(board: *Board, out: Writer) !void {
     const unit = &board.display;
     if (unit.quiet()) return;
+    // The run has ended, so whatever the drawing engine left in the
+    // framebuffer is what the panel is showing: scan it now.
+    _ = unit.scanOut();
     if (unit.framebuffer()) |frame| {
         try out.print(
             "GLCDC: GR{d} scanning 0x{X:0>8}, {d}x{d}, stride {d}, {s}, output stage {s}\n",
@@ -77,11 +80,67 @@ pub fn display(board: *Board, out: Writer) !void {
     } else {
         try out.print("GLCDC: {d} write(s), no layer fetching a framebuffer\n", .{unit.writes});
     }
+    try palettes(unit, out);
+    try scanned(unit, out);
     if (unit.dropped_unpowered == 0 and unit.dark_reads == 0) return;
     try out.print(
         "GLCDC: DROPPED {d} write(s) and {d} read(s) with the graphics domain gated off (clear PDCTRGD.PDDE first)\n",
         .{ unit.dropped_unpowered, unit.dark_reads },
     );
+}
+
+/// What the panel actually shows, which dev stops one step short of. dev
+/// folds a hash over the raw framebuffer bytes: a CLUT layer is hashed as
+/// index bytes, so the palette a driver spent its init writing is not in the
+/// witness and a run with no palette hashes the same as a run with one.
+/// Here the pixels are decoded through the format and the layer's palette
+/// first, and the cases that are not a picture are said out loud.
+fn scanned(unit: anytype, out: Writer) !void {
+    const panel_scan = &unit.scanner;
+    if (panel_scan.quiet()) return;
+    if (panel_scan.last) |picture| {
+        try out.print(
+            "GLCDC: panel scanned, {d} pixel(s), {d} distinct colour(s), {d} fully transparent, content {X:0>8}\n",
+            .{ picture.pixels, picture.colours, picture.blank, picture.hash },
+        );
+    }
+    if (panel_scan.count(.no_palette) != 0) {
+        try out.print(
+            "GLCDC: REFUSED {d} scan(s) of a CLUT layer with an empty palette plane (fill the CLUT, or point CLUTINT.SEL at the plane you filled)\n",
+            .{panel_scan.count(.no_palette)},
+        );
+    }
+    if (panel_scan.count(.off_ram) != 0 or panel_scan.count(.too_big) != 0) {
+        try out.print(
+            "GLCDC: REFUSED {d} scan(s) whose framebuffer ran past the end of its RAM window, {d} larger than this will walk\n",
+            .{ panel_scan.count(.off_ram), panel_scan.count(.too_big) },
+        );
+    }
+    if (panel_scan.count(.output_off) != 0) {
+        try out.print(
+            "GLCDC: {d} scan(s) with a layer fetching and the output stage off: the panel was dark\n",
+            .{panel_scan.count(.output_off)},
+        );
+    }
+    if (panel_scan.count(.fault) != 0) {
+        try out.print(
+            "GLCDC: {d} scan(s) where the framebuffer would not read back\n",
+            .{panel_scan.count(.fault)},
+        );
+    }
+}
+
+/// The palettes themselves, once a driver has filled one. dev snoops none of
+/// the four CLUT planes, so every entry written went into a register shadow
+/// nobody ever read back.
+fn palettes(unit: anytype, out: Writer) !void {
+    for (&unit.palettes, 1..) |*palette, layer| {
+        if (palette.quiet()) continue;
+        try out.print(
+            "GLCDC: GR{d} CLUT plane 0 has {d} entry(s), plane 1 has {d}, CLUTINT.SEL reads plane {d}\n",
+            .{ layer, palette.filled[0], palette.filled[1], palette.selected },
+        );
+    }
 }
 
 /// What the drawing engine actually put in the framebuffer. The loud case is

@@ -50,6 +50,9 @@ test {
     _ = @import("periph/eth_queue_test.zig");
     _ = @import("periph/eth_test.zig");
     _ = @import("periph/glcdc_test.zig");
+    _ = @import("periph/glcdc_clut_test.zig");
+    _ = @import("periph/glcdc_pixel_test.zig");
+    _ = @import("periph/glcdc_scan_test.zig");
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/gpt_test.zig");
     _ = @import("periph/gptp_test.zig");
