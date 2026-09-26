@@ -60,6 +60,12 @@ pub const periph = struct {
     pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
     pub const reset = @import("periph/reset.zig");
+    pub const riic = @import("periph/riic.zig");
+    pub const riic_bus = @import("periph/riic_bus.zig");
+    pub const riic_flags = @import("periph/riic_flags.zig");
+    pub const riic_ov5640 = @import("periph/riic_ov5640.zig");
+    pub const riic_pi4ioe = @import("periph/riic_pi4ioe.zig");
+    pub const riic_target = @import("periph/riic_target.zig");
     pub const rtc = @import("periph/rtc.zig");
     pub const rtc_clock = @import("periph/rtc_clock.zig");
     pub const rtt = @import("periph/rtt.zig");
@@ -88,5 +94,6 @@ pub const periph = struct {
 
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
+    pub const i2c = @import("board/i2c.zig");
     pub const report = @import("board/report.zig");
 };

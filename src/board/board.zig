@@ -8,6 +8,7 @@
 const std = @import("std");
 
 const engine = @import("../core/engine.zig");
+const i2c = @import("i2c.zig");
 const part = @import("../core/part.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
@@ -101,6 +102,9 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
+    /// The system I2C bus: the RIIC controller and the port expander and
+    /// camera on it. Populated in attach(), the way the SPI line is.
+    wire: i2c.Wire = .{},
     /// The two SPI_B channels. No pin here, so the observable is the frames
     /// a channel actually clocked and the ones a disabled channel only wrote
     /// down.
@@ -275,6 +279,8 @@ pub const Board = struct {
         self.spi.attachDevice(eink.line_channel, self.panel.device());
         self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
         self.serial.attachDevice(modem.line_channel, self.modem.device());
+        try self.bus.add(self.wire.block());
+        try self.wire.attach();
         self.trace.memory = core.*;
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
