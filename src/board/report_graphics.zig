@@ -95,6 +95,12 @@ pub fn raster(board: *Board, out: Writer) !void {
         "DRW: {d} box(es) rasterized, last {d}x{d}, {d} pixel(s)\n",
         .{ unit.renders, unit.last_width, unit.last_height, unit.pixels },
     );
+    if (unit.limited != 0) {
+        try out.print(
+            "DRW: {d} render(s) shaped by the spatial limiters, {d} pixel(s) clipped out, {d} on a boundary this model paints hard\n",
+            .{ unit.limited, unit.clipped, unit.hard_edges },
+        );
+    }
     if (unit.dlists != 0) {
         try out.print(
             "DRW: {d} display list(s), {d} stopped on an unmodelled entry\n",

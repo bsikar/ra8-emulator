@@ -6,6 +6,7 @@ const ra8 = @import("ra8");
 
 const drw = ra8.periph.drw;
 const blend = ra8.periph.drw_blend;
+const limit = ra8.periph.drw_limit;
 const pdctr = ra8.periph.pdctr;
 const prcr = ra8.periph.prcr;
 const engine = ra8.core.engine;
@@ -98,15 +99,15 @@ test "an ORIGIN write with nothing programmed is not counted as declined" {
     try std.testing.expectEqual(drw.Decline.unprogrammed, unit.last_decline.?);
 }
 
-test "a limiter, the framebuffer cache and a texture source are all declined" {
+test "a quadratic coupling, the framebuffer cache and a texture source are all declined" {
     const guard = unlockedGuard();
     const domain = poweredDomain(&guard);
     var unit = drw.Drw.init(&domain);
     programFill(&unit, 16, 16, 480, 0xFF00_FF00);
 
-    unit.write(at(drw.off.control), 4, 0x1);
+    unit.write(at(drw.off.control), 4, limit.control.quads);
     unit.write(at(drw.off.origin), 4, fb_base);
-    try std.testing.expectEqual(drw.Decline.limiter, unit.last_decline.?);
+    try std.testing.expectEqual(drw.Decline.quad, unit.last_decline.?);
 
     unit.write(at(drw.off.control), 4, 0);
     unit.write(at(drw.off.cachectl), 4, drw.field.cache_enable);

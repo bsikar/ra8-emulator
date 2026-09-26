@@ -32,6 +32,7 @@ pub const periph = struct {
     pub const doc = @import("periph/doc.zig");
     pub const drw = @import("periph/drw.zig");
     pub const drw_blend = @import("periph/drw_blend.zig");
+    pub const drw_limit = @import("periph/drw_limit.zig");
     pub const dtc = @import("periph/dtc.zig");
     pub const dtc_xfer = @import("periph/dtc_xfer.zig");
     pub const eink = @import("periph/eink.zig");
