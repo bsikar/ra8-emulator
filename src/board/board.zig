@@ -10,6 +10,7 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
+const agt = @import("../periph/agt.zig");
 const bkup = @import("../periph/bkup.zig");
 const cac = @import("../periph/cac.zig");
 const canfd = @import("../periph/canfd.zig");
@@ -24,6 +25,7 @@ const dtc = @import("../periph/dtc.zig");
 const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
+const gpt = @import("../periph/gpt.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
@@ -121,6 +123,12 @@ pub const Board = struct {
     /// The low-power timer, which keeps counting through Software Standby
     /// and is how a sleeping part wakes itself back up.
     lowpower: ulpt.Ulpt,
+    /// The interval timers: ten reloading down-counters, the block an image
+    /// asks for a periodic tick from.
+    interval: agt.Agt,
+    /// The PWM timers: fourteen saw up-counters. No output pin in the model,
+    /// so the observable is the count itself and the wrap past the period.
+    pwm: gpt.Gpt,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
     causes: reset.Reset,
@@ -162,6 +170,8 @@ pub const Board = struct {
             .can = canfd.Canfd.init(),
             .mailbox = ipc.Ipc.init(),
             .lowpower = ulpt.Ulpt.init(),
+            .interval = agt.Agt.init(),
+            .pwm = gpt.Gpt.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
             .causes = reset.Reset.init(),
@@ -217,6 +227,8 @@ pub const Board = struct {
         try self.bus.add(self.can.block(1));
         try self.bus.add(self.mailbox.block());
         try self.bus.add(self.lowpower.block());
+        try self.bus.add(self.interval.block());
+        try self.bus.add(self.pwm.block());
         try self.bus.add(self.events.block());
         try self.bus.add(self.links.block());
         try self.bus.add(self.transfers.block());
@@ -246,6 +258,8 @@ pub const Board = struct {
         self.lowpower.tick();
         self.microphone.tick();
         self.clock.tick();
+        self.interval.tick();
+        self.pwm.tick();
         try self.takeResetRequests(core);
         for (self.serial.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
@@ -260,6 +274,12 @@ pub const Board = struct {
             try self.raise(core, event);
         }
         for (self.clock.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.interval.dueEvents().constSlice()) |event| {
+            try self.raise(core, event);
+        }
+        for (self.pwm.dueEvents().constSlice()) |event| {
             try self.raise(core, event);
         }
         for (self.dma.dueEvents().constSlice()) |event| {

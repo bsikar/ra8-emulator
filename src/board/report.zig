@@ -19,6 +19,7 @@ const options = @import("report_options.zig");
 const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
+const timers = @import("report_timers.zig");
 const gpio = @import("../periph/gpio.zig");
 const lvd = @import("../periph/lvd.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -85,6 +86,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try network.sections(board, out);
     try cores.sections(board, out);
     try time.sections(board, out);
+    try timers.sections(board, out);
     try protection(board, out);
     try leds(board, out);
 }
