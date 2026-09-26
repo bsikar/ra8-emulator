@@ -14,6 +14,8 @@ const elf = ra8.core.elf;
 const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
+const sd_format = ra8.periph.sd_format;
+const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
 const Board = ra8.board.Board;
 const report = ra8.board.report;
@@ -42,6 +44,7 @@ pub fn main() !u8 {
     var board = Board.init(allocator);
     defer board.deinit();
     board.part = options.part;
+    prepareCard(&board, options) catch return 2;
     try board.attach(&core);
 
     var watch = engine.Watch{};
@@ -84,6 +87,24 @@ pub fn main() !u8 {
     }
     try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
     return 0;
+}
+
+/// Size and format the card on the SPI line, when the command line asked for
+/// it. A card that cannot carry the volume it was asked for is refused here
+/// rather than stamped with a BPB that contradicts it.
+fn prepareCard(board: *Board, options: cli.Options) !void {
+    if (options.sd_size_mb) |megabytes| {
+        const blocks = megabytes *| (1024 * 1024 / sd_image.geometry.block_bytes);
+        if (!board.sd.img.resize(blocks)) {
+            std.debug.print("--sd-size {d}: not a card size this model can state exactly\n", .{megabytes});
+            return error.BadCardSize;
+        }
+    }
+    const kind = options.sd_new orelse return;
+    board.sd_volume = sd_format.apply(&board.sd.img, kind, options.sd_label) catch |err| {
+        std.debug.print("--sd-new {s}: {s}\n", .{ kind.text(), @errorName(err) });
+        return err;
+    };
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused

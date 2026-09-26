@@ -46,6 +46,7 @@ const rtc = @import("../periph/rtc.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const sd_card = @import("../periph/sd_card.zig");
+const sd_format = @import("../periph/sd_format.zig");
 const sdhi = @import("../periph/sdhi.zig");
 const spi = @import("../periph/spi.zig");
 const sram = @import("../periph/sram.zig");
@@ -115,6 +116,9 @@ pub const Board = struct {
     /// Built in attach(): it holds only the blocks something wrote, so it
     /// needs the board's allocator, and attach() is where it goes on a line.
     sd: sd_card.Card,
+    /// The volume a `--sd-new` format put on that card, for the report. Null
+    /// when the card came up blank, which is every run that did not ask.
+    sd_volume: ?sd_format.Volume = null,
     /// The extra-MRAM controller: the option-setting memory the MACI
     /// sequencer programs, and the commands it refuses. Built in attach():
     /// the cells are sparse and need the board's allocator, and a program

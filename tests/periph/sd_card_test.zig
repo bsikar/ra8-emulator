@@ -159,7 +159,7 @@ test "a block past the end of the card is a read error, not zeros" {
     var card = unit();
     defer card.deinit();
     try bringUp(&card);
-    const past = image.geometry.capacity_blocks;
+    const past = image.geometry.default_capacity_blocks;
     try std.testing.expectEqual(sd_card.r1.parameter, command(&card, 17, past));
     try std.testing.expectEqual(sd_card.token.read_error, card.exchange(sd_card.token.idle));
     try std.testing.expectEqual(@as(u32, 1), card.past_end);
@@ -169,7 +169,7 @@ test "a write past the end of the card is not stored" {
     var card = unit();
     defer card.deinit();
     try bringUp(&card);
-    const past = image.geometry.capacity_blocks;
+    const past = image.geometry.default_capacity_blocks;
     _ = command(&card, 24, past);
     const filled: [block_bytes]u8 = .{7} ** block_bytes;
     try std.testing.expectEqual(sd_card.token.write_error, sendBlock(&card, 7, sd_crc.crc16(&filled)));
@@ -239,7 +239,7 @@ test "CMD9 sizes the card the image actually gives" {
     var csd: [16]u8 = undefined;
     try takeBlock(&card, &csd);
     const csize = (@as(u32, csd[7] & 0x3F) << 16) | (@as(u32, csd[8]) << 8) | csd[9];
-    try std.testing.expectEqual(image.Image.csize(), csize);
+    try std.testing.expectEqual(card.img.csize(), csize);
     try std.testing.expectEqual(@as(u8, 0x40), csd[0]);
 }
 
