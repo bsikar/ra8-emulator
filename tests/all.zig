@@ -40,6 +40,7 @@ test {
     _ = @import("periph/reset_test.zig");
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
+    _ = @import("periph/sram_test.zig");
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ulpt_test.zig");
     _ = @import("periph/wdt_test.zig");
