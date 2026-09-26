@@ -24,6 +24,7 @@ const dmac = @import("../periph/dmac.zig");
 const doc = @import("../periph/doc.zig");
 const drw = @import("../periph/drw.zig");
 const dtc = @import("../periph/dtc.zig");
+const eink = @import("../periph/eink.zig");
 const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
@@ -101,6 +102,10 @@ pub const Board = struct {
     /// a channel actually clocked and the ones a disabled channel only wrote
     /// down.
     spi: spi.Spi,
+    /// The e-paper panel, the other thing on the SPI line. Attached in
+    /// attach(), which is also where its ready line is driven, because a
+    /// firmware HRDY poll reads the pin rather than the panel.
+    panel: eink.Panel = .{},
     /// The SD card on the SPI line, the other way an image reaches storage.
     /// Built in attach(): it holds only the blocks something wrote, so it
     /// needs the board's allocator, and attach() is where it goes on a line.
@@ -253,6 +258,8 @@ pub const Board = struct {
         try self.bus.add(self.serial.block());
         try self.bus.add(self.spi.block());
         self.spi.attachDevice(sd_card.line_channel, self.sd.device());
+        self.spi.attachDevice(eink.line_channel, self.panel.device());
+        self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
         try self.bus.add(self.flash.block());
         self.options.memory = core.*;
         try self.bus.add(self.options.block());
