@@ -39,9 +39,18 @@
 //! nothing. There is no absolute time here either, but ULPTMR2's prescaler is
 //! at least ORDERED: the step is scaled down by the selected divider, so a
 //! slower configured source really does underflow less often.
+//!
+//! Four: neither tree compared the compare values. ULPTCMA and ULPTCMB were
+//! storage on both, so a count could run straight past one and nothing said
+//! so. The comparison lives in ulpt_compare.zig now, and the flags it raises
+//! are AGTCR's TCMAF and TCMBF, which ULPTCR mirrors.
 const std = @import("std");
 
 const periph = @import("registry.zig");
+const compare = @import("ulpt_compare.zig");
+
+/// The compare pair, re-exported so a caller reaches it through the block.
+pub const match = compare;
 
 /// ULPT geometry (ra8_ulpt_regs.h; HUM Ch 25.1 p 1187).
 pub const win_base: u32 = 0x4022_0000;
@@ -66,7 +75,11 @@ pub const control = struct {
     pub const tstart: u8 = 0x01;
     pub const tcstf: u8 = 0x02;
     pub const tstop: u8 = 0x04;
-    pub const tundf: u8 = 0x20;
+    pub const tundf: u8 = compare.flag.undf;
+    pub const tcmaf: u8 = compare.flag.cmaf;
+    pub const tcmbf: u8 = compare.flag.cmbf;
+    /// The bits a control write keeps rather than sets.
+    pub const flags: u8 = compare.flag.all;
 };
 
 /// ULPTMR2 (HUM Ch 25.2.3 p 1192): the low-order field selects the divider in
@@ -97,8 +110,8 @@ pub const Due = std.BoundedArray(u16, 1);
 pub const Channel = struct {
     counter: u32 = 0,
     reload: u32 = 0,
-    cmpa: u32 = 0,
-    cmpb: u32 = 0,
+    /// ULPTCMA and ULPTCMB, and what they have matched.
+    compares: compare.Pair = .{},
     cr: u8 = 0,
     mr1: u8 = 0,
     mr2: u8 = 0,
@@ -120,33 +133,38 @@ pub const Channel = struct {
     }
 
     /// One chunk of counting. Returns true when this chunk underflowed, which
-    /// is one interrupt request on silicon whatever TUNDF already reads.
+    /// is one interrupt request on silicon whatever TUNDF already reads. A
+    /// compare value the chunk passed raises its own flag either way.
     pub fn tick(self: *Channel) bool {
         if (!self.running()) return false;
         const step = @max(1, ticks_per_chunk / self.divider());
-        if (self.counter >= step) {
+        const before = self.counter;
+        if (before >= step) {
             // Reaching exactly zero is not an underflow yet: the borrow
             // happens on the next decrement past it. dev's port takes the
             // underflow branch here and then wraps `step - counter - 1`
             // through zero, which lands the counter on a junk reload.
-            self.counter -= step;
+            self.counter = before - step;
+            self.cr |= self.compares.step(before, self.counter, false, self.reload);
             return false;
         }
         // Periodic: reload and carry the overshoot, so a period shorter than
         // one chunk still lands on a sane count rather than wrapping.
         const span = @as(u64, self.reload) + 1;
-        const deficit = step - self.counter;
+        const deficit = step - before;
         self.counter = self.reload - @as(u32, @intCast((deficit - 1) % span));
         self.cr |= control.tundf;
         self.underflows +%= 1;
+        self.cr |= self.compares.step(before, self.counter, true, self.reload);
         return true;
     }
 
     /// TSTOP beats TSTART in the same write: the driver stops a channel with
     /// both bits set, and silicon takes the stop. TCSTF follows the state the
-    /// write leaves, and TUNDF only survives a write that set it.
+    /// write leaves, and a status flag only survives a write that carried its
+    /// own bit set, which is how AGTCR's flags clear too.
     fn writeControl(self: *Channel, value: u8) void {
-        const keep = self.cr & value & control.tundf;
+        const keep = self.cr & value & control.flags;
         if (value & control.tstop != 0) {
             if (self.running()) self.forced_stops +%= 1;
             self.cr = keep;
@@ -161,9 +179,6 @@ pub const Ulpt = struct {
     channels: [channels]Channel = @splat(.{}),
     /// Channel 0 underflows that have not been handed to the event path yet.
     pending: u32 = 0,
-    /// Reads and writes of ULPTCMA/ULPTCMB. Compare match is not modelled,
-    /// so an image driving it is told rather than quietly given nothing.
-    compare_touches: u32 = 0,
 
     pub fn init() Ulpt {
         return .{};
@@ -190,8 +205,9 @@ pub const Ulpt = struct {
     pub fn quiet(self: *const Ulpt) bool {
         for (self.channels) |channel| {
             if (channel.underflows != 0 or channel.running()) return false;
+            if (!channel.compares.quiet()) return false;
         }
-        return self.compare_touches == 0;
+        return true;
     }
 
     pub fn read(self: *Ulpt, address: u32, width: u3) u32 {
@@ -218,14 +234,8 @@ pub const Ulpt = struct {
                 channel.counter = value;
                 channel.reload = value;
             },
-            off.cma => {
-                channel.cmpa = value;
-                self.compare_touches +%= 1;
-            },
-            off.cmb => {
-                channel.cmpb = value;
-                self.compare_touches +%= 1;
-            },
+            off.cma => channel.compares.set(.a, value),
+            off.cmb => channel.compares.set(.b, value),
             off.cr => channel.writeControl(@truncate(value)),
             off.mr1 => channel.mr1 = @truncate(value),
             off.mr2 => channel.mr2 = @truncate(value),
@@ -235,16 +245,17 @@ pub const Ulpt = struct {
         }
     }
 
-    fn cellValue(self: *Ulpt, channel: *const Channel, local: u32) u32 {
+    fn cellValue(self: *Ulpt, channel: *Channel, local: u32) u32 {
+        _ = self;
         return switch (cellBase(local)) {
             off.cnt => channel.counter,
             off.cma => blk: {
-                self.compare_touches +%= 1;
-                break :blk channel.cmpa;
+                channel.compares.touch();
+                break :blk channel.compares.a;
             },
             off.cmb => blk: {
-                self.compare_touches +%= 1;
-                break :blk channel.cmpb;
+                channel.compares.touch();
+                break :blk channel.compares.b;
             },
             off.cr => channel.cr,
             off.mr1 => channel.mr1,

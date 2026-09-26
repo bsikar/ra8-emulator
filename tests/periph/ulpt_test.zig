@@ -163,13 +163,53 @@ test "the mode and io bytes read back what was written" {
     try std.testing.expectEqual(@as(u32, 0x04), unit.read(ch0 + ulpt.off.ioc, 1));
 }
 
-test "compare match is stored, counted and not modelled" {
+test "a compare value is stored, given back and counted as a touch" {
     var unit = ulpt.Ulpt.init();
     unit.write(ch0 + ulpt.off.cma, 4, 0x200);
     unit.write(ch0 + ulpt.off.cmb, 4, 0x300);
     try std.testing.expectEqual(@as(u32, 0x200), unit.read(ch0 + ulpt.off.cma, 4));
-    try std.testing.expect(unit.compare_touches >= 3);
+    try std.testing.expect(unit.channels[0].compares.touches >= 3);
     try std.testing.expect(!unit.quiet());
+}
+
+test "a running channel that passes its compare raises TCMAF" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 4, 0x8000);
+    unit.write(ch0 + ulpt.off.cma, 4, 0x4000);
+    unit.write(ch0 + ulpt.off.cr, 1, ulpt.control.tstart);
+    unit.tick();
+    try std.testing.expect(unit.read(ch0 + ulpt.off.cr, 1) & ulpt.control.tcmaf != 0);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].compares.matches_a);
+}
+
+test "a stopped channel never reaches its compare" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 4, 0x8000);
+    unit.write(ch0 + ulpt.off.cma, 4, 0x4000);
+    unit.tick();
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].compares.matches_a);
+    try std.testing.expect(unit.read(ch0 + ulpt.off.cr, 1) & ulpt.control.tcmaf == 0);
+}
+
+test "a compare flag clears by writing its bit zero, like TUNDF" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 4, 0x8000);
+    unit.write(ch0 + ulpt.off.cmb, 4, 0x4000);
+    unit.write(ch0 + ulpt.off.cr, 1, ulpt.control.tstart);
+    unit.tick();
+    try std.testing.expect(unit.read(ch0 + ulpt.off.cr, 1) & ulpt.control.tcmbf != 0);
+    // Writing the bit back keeps it; writing without it clears it.
+    unit.write(ch0 + ulpt.off.cr, 1, ulpt.control.tstart | ulpt.control.tcmbf);
+    try std.testing.expect(unit.read(ch0 + ulpt.off.cr, 1) & ulpt.control.tcmbf != 0);
+    unit.write(ch0 + ulpt.off.cr, 1, ulpt.control.tstart);
+    try std.testing.expect(unit.read(ch0 + ulpt.off.cr, 1) & ulpt.control.tcmbf == 0);
+}
+
+test "a channel programmed with a compare it never reaches is not quiet" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cma, 4, 0x1234);
+    try std.testing.expect(!unit.quiet());
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].compares.matches_a);
 }
 
 test "an address past the last channel answers zero and changes nothing" {
