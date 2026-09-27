@@ -47,6 +47,11 @@
 //! no image can tell the difference today.
 const std = @import("std");
 const periph = @import("registry.zig");
+const prot = @import("sram_lock.zig");
+
+/// SRAMPRCR and the registers its key guards, re-exported so a caller that
+/// has the controller has the lock too.
+pub const protection = prot;
 
 /// SRAM-controller geometry (ra8_sram_regs.h).
 pub const win_base: u32 = 0x4000_2000;
@@ -114,13 +119,17 @@ pub const Sram = struct {
     latches: u32 = 0,
     /// Stores to SRAMESR that tried to raise a flag firmware cannot raise.
     faked: u32 = 0,
+    /// SRAMPRCR, and whether the configuration registers are open to a
+    /// store at all.
+    lock: prot.Lock = .{},
 
     pub fn init() Sram {
         return .{};
     }
 
     pub fn quiet(self: *const Sram) bool {
-        return self.latches == 0 and self.faked == 0 and self.esr == 0;
+        return self.latches == 0 and self.faked == 0 and self.esr == 0 and
+            self.lock.quiet();
     }
 
     pub fn flagged(self: *const Sram, bank: usize, slot: Slot) bool {
@@ -160,7 +169,12 @@ pub const Sram = struct {
             self.refuse(@truncate(merge(self.esr, inner, width, value)));
             return;
         }
-        self.shadow[word] = merge(self.shadow[word], inner, width, value);
+        // The key is read from the value the register will hold, so a byte
+        // store that completes a half-word key still opens the lock.
+        const merged = merge(self.shadow[word], inner, width, value);
+        if (self.lock.admit(offset - inner) == .blocked) return;
+        self.shadow[word] = merged;
+        _ = self.lock.latch(offset - inner, merged);
         if (word >= off_cr0 / 4 and word < off_cr0 / 4 + bank_count) {
             self.stepPhase(word - off_cr0 / 4, @truncate(self.shadow[word]));
         }

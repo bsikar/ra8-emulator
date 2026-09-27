@@ -5,8 +5,21 @@ const sram = @import("ra8").periph.sram;
 const esr = sram.win_base + sram.off_esr;
 const esclr = sram.win_base + sram.off_esclr;
 
+/// A controller with the configuration registers already open, which is
+/// what every self-test here is about. The lock itself is covered in
+/// sram_lock_test.zig.
 fn unit() sram.Sram {
-    return sram.Sram.init();
+    var block = sram.Sram.init();
+    unlock(&block);
+    return block;
+}
+
+fn unlock(block: *sram.Sram) void {
+    block.write(sram.win_base + sram.protection.off.prcr_s, 2, sram.protection.key.unlock);
+}
+
+fn relock(block: *sram.Sram) void {
+    block.write(sram.win_base + sram.protection.off.prcr_s, 2, sram.protection.key.lock);
 }
 
 /// The three phases ra8_sram_self_test drives on one bank, in order.
@@ -18,7 +31,7 @@ fn selfTest(block: *sram.Sram, bank: usize) void {
 }
 
 test "a fresh controller has no errors and nothing to report" {
-    var block = unit();
+    var block = sram.Sram.init();
     try std.testing.expectEqual(@as(u32, 0), block.read(esr, 2));
     try std.testing.expect(block.quiet());
 }
@@ -136,8 +149,45 @@ test "inject is the seam a real fault source comes in through" {
 }
 
 test "an access past the window is ignored" {
-    var block = unit();
+    var block = sram.Sram.init();
     block.write(sram.win_base + sram.win_span, 4, 0xFFFF_FFFF);
     try std.testing.expectEqual(@as(u32, 0), block.read(sram.win_base + sram.win_span, 4));
     try std.testing.expect(block.quiet());
+}
+
+test "a locked controller refuses the self-test's first phase" {
+    var block = sram.Sram.init();
+    selfTest(&block, 1);
+    try std.testing.expectEqual(@as(u32, 0), block.latches);
+    try std.testing.expectEqual(@as(u32, 3), block.lock.blocked);
+    try std.testing.expectEqual(@as(u32, 0), block.read(sram.crAddress(1), 1));
+}
+
+test "the driver's unlock, write, re-lock is what gets a phase through" {
+    var block = sram.Sram.init();
+    const cr = sram.crAddress(0);
+    unlock(&block);
+    block.write(cr, 1, sram.phase.write);
+    relock(&block);
+    try std.testing.expectEqual(@as(u32, sram.phase.write), block.read(cr, 1));
+    block.write(cr, 1, sram.phase.bypass);
+    try std.testing.expectEqual(@as(u32, sram.phase.write), block.read(cr, 1));
+    try std.testing.expectEqual(@as(u32, 1), block.lock.blocked);
+}
+
+test "a wrong key does not open the controller" {
+    var block = sram.Sram.init();
+    block.write(sram.win_base + sram.protection.off.prcr_s, 2, 0x0001);
+    block.write(sram.crAddress(2), 1, sram.phase.write);
+    try std.testing.expectEqual(@as(u32, 0), block.read(sram.crAddress(2), 1));
+    try std.testing.expectEqual(@as(u32, 1), block.lock.ignored);
+}
+
+test "the error side of the block answers with the controller locked" {
+    var block = sram.Sram.init();
+    block.inject(1, .uncorrectable);
+    try std.testing.expect(block.flagged(1, .uncorrectable));
+    block.write(esclr, 2, sram.bit(1, .uncorrectable));
+    try std.testing.expect(!block.flagged(1, .uncorrectable));
+    try std.testing.expectEqual(@as(u32, 0), block.lock.blocked);
 }

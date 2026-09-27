@@ -114,6 +114,7 @@ test {
     _ = @import("periph/sdhi_test.zig");
     _ = @import("periph/sdhi_xfer_test.zig");
     _ = @import("periph/spi_test.zig");
+    _ = @import("periph/sram_lock_test.zig");
     _ = @import("periph/sram_test.zig");
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ulpt_compare_test.zig");

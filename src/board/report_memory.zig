@@ -25,4 +25,28 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{memory.faked},
         );
     }
+    try protection(&memory.lock, out);
+}
+
+/// SRAMPRCR. Quiet unless a key was written or a guarded store happened,
+/// and loud when one was turned away: a configuration write that never
+/// landed is the kind of thing a driver does not notice until the bench.
+fn protection(lock: *const @import("../periph/sram_lock.zig").Lock, out: Writer) !void {
+    if (lock.quiet()) return;
+    try out.print(
+        "SRAMPRCR: {s}, {d} key write(s), {d} guarded store(s) through\n",
+        .{ if (lock.open()) "unlocked" else "locked", lock.accepted, lock.allowed },
+    );
+    if (lock.ignored != 0) {
+        try out.print(
+            "SRAMPRCR: {d} key write(s) IGNORED, the KW field was not 0xA5\n",
+            .{lock.ignored},
+        );
+    }
+    if (lock.blocked != 0) {
+        try out.print(
+            "SRAMPRCR: REFUSED {d} store(s) to a guarded register with the controller locked\n",
+            .{lock.blocked},
+        );
+    }
 }
