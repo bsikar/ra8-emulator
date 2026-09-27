@@ -3,22 +3,29 @@
 //!
 //! Split out of glcdc.zig, which is about the register window: this is about
 //! the thing the window describes. A descriptor whose BASE is outside every
-//! RAM window on the board is not a framebuffer however well formed the rest
-//! of it reads, and a descriptor whose last line runs past the end of the
-//! window it started in is the failure the scan refuses on.
+//! RAM window a bus master can reach is not a framebuffer however well
+//! formed the rest of it reads, and a descriptor whose last line runs past
+//! the end of the window it started in is the failure the scan refuses on.
+const memmap = @import("../core/memmap.zig");
 const pixel = @import("glcdc_pixel.zig");
 const scan = @import("glcdc_scan.zig");
 
 /// A RAM window a framebuffer may legally live in on this board.
-pub const Window = struct { base: u32, end: u32 };
+pub const Window = memmap.Window;
 
-/// Data TCM, on-chip SRAM and the external SDRAM the display examples draw
-/// into. A base outside all three is not a framebuffer, whatever FLMRD says.
-pub const ram_windows = [_]Window{
-    .{ .base = 0x2000_0000, .end = 0x2001_0000 },
-    .{ .base = 0x2200_0000, .end = 0x2220_0000 },
-    .{ .base = 0x6800_0000, .end = 0x6C00_0000 },
-};
+/// The controller fetches over the fabric like any other bus master, so the
+/// RAM it may be pointed at is `memmap.master_ram` and nothing else: the
+/// on-chip SRAM and the external SDRAM through both of its aliases.
+///
+/// This used to be a private table of its own, and it disagreed with the
+/// address space in two ways that both showed up as the panel going dark
+/// for the wrong reason. It ran the SRAM window to 0x2220_0000, a megabyte
+/// past where the SRAM actually ends, so a framebuffer over that edge was
+/// accepted and then refused a second time as unreadable memory. And it did
+/// not carry the Non-secure SDRAM alias at all, so a framebuffer at
+/// 0x7800_0000, which the loader maps as RAM like any other, was not a
+/// framebuffer here however well formed the descriptor was.
+pub const ram_windows = memmap.master_ram;
 
 /// Sanity cap on a decoded dimension, so a half-programmed layer does not
 /// read back as a plausible 60000-pixel-wide panel.
@@ -59,16 +66,11 @@ pub fn shapeOf(frame: Framebuffer) scan.Shape {
 /// framebuffer whose base is fine and whose last line is past the end of
 /// the window is the failure this answers.
 pub fn windowEnd(address: u32) ?u32 {
-    for (ram_windows) |window| {
-        if (address >= window.base and address < window.end) return window.end;
-    }
-    return null;
+    const window = memmap.masterWindow(address) orelse return null;
+    return window.end;
 }
 
 /// Whether an address points into a RAM window a framebuffer can live in.
 pub fn addressIsRam(address: u32) bool {
-    for (ram_windows) |window| {
-        if (address >= window.base and address < window.end) return true;
-    }
-    return false;
+    return memmap.masterWindow(address) != null;
 }

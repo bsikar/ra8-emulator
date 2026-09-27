@@ -63,3 +63,17 @@ test "a span that runs off the end of a window is not held by it" {
 test "an empty span is nowhere" {
     try std.testing.expect(!masterHolds(mod.sram_base, 0));
 }
+
+test "the window a bus master address sits in comes back whole" {
+    try std.testing.expectEqual(mod.sram_end, mod.masterWindow(mod.sram_base).?.end);
+    try std.testing.expectEqual(mod.sram_base, mod.masterWindow(mod.sram_end - 1).?.base);
+    try std.testing.expectEqual(mod.sdram_end, mod.masterWindow(mod.sdram_base).?.end);
+    try std.testing.expectEqual(mod.ns_sdram_end, mod.masterWindow(mod.ns_sdram_base).?.end);
+}
+
+test "an address in no master window sits in none" {
+    try std.testing.expect(mod.masterWindow(mod.dtcm_base) == null);
+    try std.testing.expect(mod.masterWindow(mod.sram_end) == null);
+    try std.testing.expect(mod.masterWindow(mod.sdram_end) == null);
+    try std.testing.expect(mod.masterWindow(0x4000_0000) == null);
+}
