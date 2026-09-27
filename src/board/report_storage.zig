@@ -196,4 +196,10 @@ fn card(board: *Board, out: Writer) !void {
             .{host.card.past_end},
         );
     }
+    if (host.lost != 0) {
+        try out.print(
+            "SDHI card: {d} data phase(s) ENDED on a block the card refused, the blocks before it stayed\n",
+            .{host.lost},
+        );
+    }
 }

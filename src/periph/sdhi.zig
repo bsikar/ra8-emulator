@@ -54,6 +54,8 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 const card = @import("sdhi_card.zig");
+const fifo = @import("sdhi_fifo.zig");
+const bus_lanes = @import("lanes.zig");
 const xfer = @import("sdhi_xfer.zig");
 
 pub const win_base: u32 = 0x4025_2000;
@@ -141,6 +143,8 @@ pub const Sdhi = struct {
     starved: u32 = 0,
     /// FIFO accesses narrower than the port.
     narrow: u32 = 0,
+    /// Blocks the card refused, each of which ended its data phase.
+    lost: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Sdhi {
         var self = Sdhi{ .card = card.Card.init(allocator) };
@@ -156,7 +160,7 @@ pub const Sdhi = struct {
     pub fn quiet(self: *const Sdhi) bool {
         return self.reads == 0 and self.writes == 0 and self.out_of_state == 0 and
             self.while_reset == 0 and self.faked == 0 and self.starved == 0 and
-            self.narrow == 0 and self.card.held() == 0;
+            self.narrow == 0 and self.lost == 0 and self.card.held() == 0;
     }
 
     /// Lanes SD_OPTION currently asks for.
@@ -172,7 +176,7 @@ pub const Sdhi = struct {
         const aligned = offset & ~@as(u32, 3);
         if (aligned == off.sd_buf0) return self.fifoRead(width);
         if (word(aligned) >= words) return 0;
-        return part(self.regs[word(aligned)], offset & 3, width);
+        return bus_lanes.part(self.regs[word(aligned)], offset & 3, width);
     }
 
     pub fn write(self: *Sdhi, at: u32, width: u3, value: u32) void {
@@ -184,7 +188,7 @@ pub const Sdhi = struct {
             self.faked += 1;
             return;
         }
-        const merged = merge(self.regs[word(aligned)], offset & 3, width, value);
+        const merged = bus_lanes.merge(self.regs[word(aligned)], offset & 3, width, value);
         if (aligned == off.sd_info1 or aligned == off.sd_info2) return self.acknowledge(aligned, merged);
         if (aligned == off.soft_rst) return self.reset(merged);
         self.regs[word(aligned)] = merged;
@@ -271,7 +275,13 @@ pub const Sdhi = struct {
             return illegal(rsp);
         }
         self.data.arm(.read, arg, self.transferCount(multi));
-        self.loadBlock();
+        // A card that refuses the first block arms nothing, so BRE never
+        // comes up and the driver is not served a block of zeros.
+        if (!fifo.load(&self.data, &self.card)) {
+            self.lost += 1;
+            return;
+        }
+        self.regs[word(off.sd_info2)] |= status.bre;
     }
 
     fn beginWrite(self: *Sdhi, multi: bool, arg: u32, rsp: *[4]u32) void {
@@ -288,12 +298,6 @@ pub const Sdhi = struct {
         return self.regs[word(off.sd_seccnt)];
     }
 
-    /// The block at the current address, staged for the FIFO to serve.
-    fn loadBlock(self: *Sdhi) void {
-        _ = self.card.read(self.data.lba, &self.data.stage);
-        self.regs[word(off.sd_info2)] |= status.bre;
-    }
-
     fn publish(self: *Sdhi, rsp: [4]u32) void {
         self.regs[word(off.sd_rsp10)] = rsp[0];
         self.regs[word(off.sd_rsp32)] = rsp[1];
@@ -303,37 +307,47 @@ pub const Sdhi = struct {
     }
 
     fn fifoRead(self: *Sdhi, width: u3) u32 {
-        if (width < 4) {
-            self.narrow += 1;
-            return 0;
+        const served = fifo.read(&self.data, &self.card, width);
+        switch (served.outcome) {
+            .narrow => self.narrow += 1,
+            .starved => self.starved += 1,
+            .word => {},
+            .block => self.reads += 1,
+            .ended => {
+                self.reads += 1;
+                self.clear(status.bre);
+            },
+            // The block that word finished was real; the next one was not.
+            .lost => {
+                self.reads += 1;
+                self.lost += 1;
+                self.clear(status.bre);
+            },
         }
-        if (self.data.phase != .read) {
-            self.starved += 1;
-            return 0;
-        }
-        const taken = self.data.pop();
-        if (!taken.done) return taken.value;
-        self.reads += 1;
-        if (self.data.advance()) {
-            self.loadBlock();
-        } else {
-            self.regs[word(off.sd_info2)] &= ~status.bre;
-        }
-        return taken.value;
+        return served.value;
     }
 
     fn fifoWrite(self: *Sdhi, width: u3, value: u32) void {
-        if (width < 4) {
-            self.narrow += 1;
-            return;
+        switch (fifo.write(&self.data, &self.card, width, value)) {
+            .narrow => self.narrow += 1,
+            .starved => self.starved += 1,
+            .word => {},
+            .block => self.writes += 1,
+            .ended => {
+                self.writes += 1;
+                self.clear(status.bwe);
+            },
+            .lost => {
+                self.lost += 1;
+                self.clear(status.bwe);
+            },
         }
-        if (self.data.phase != .write) {
-            self.starved += 1;
-            return;
-        }
-        if (!self.data.push(value)) return;
-        if (self.card.write(self.data.lba, &self.data.stage)) self.writes += 1;
-        if (!self.data.advance()) self.regs[word(off.sd_info2)] &= ~status.bwe;
+    }
+
+    /// Take a buffer flag down, so a polling driver is not left waiting on a
+    /// FIFO with nothing behind it.
+    fn clear(self: *Sdhi, flag: u32) void {
+        self.regs[word(off.sd_info2)] &= ~flag;
     }
 
     pub fn block(self: *Sdhi) periph.Block {
@@ -363,24 +377,6 @@ fn isResponse(aligned: u32) bool {
 /// The card understood the command and refused it in this state.
 fn illegal(rsp: *[4]u32) void {
     rsp[0] = card.response.r1_ready | card.response.r1_illegal;
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const shifted = value >> shift;
-    return if (width == 1) shifted & 0xFF else shifted & 0xFFFF;
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits: u32 = if (width == 1) 0xFF else 0xFFFF;
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
 }
 
 fn readThunk(context: *anyopaque, at: u32, width: u3) u32 {
