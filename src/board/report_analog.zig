@@ -95,3 +95,35 @@ pub fn converter(board: *Board, out: Writer) !void {
         );
     }
 }
+
+/// The comparators. A headless run cannot show an analog level, so what this
+/// says is what firmware actually drove: whether the channel is operating,
+/// the polarity it presents its result through, the edge it asked to be told
+/// about, and the reads that landed on a channel monitoring nothing.
+pub fn comparators(board: *Board, out: Writer) !void {
+    for (&board.comparators.channels, 0..) |*unit, index| {
+        if (unit.quiet()) continue;
+        try out.print(
+            "ACMPHS{d}: {s}, {d} monitor read(s), output {s}, {s}\n",
+            .{
+                index,
+                if (unit.operating()) "operating" else "off",
+                unit.polls,
+                if (unit.inverted()) "inverted" else "direct",
+                unit.edge().name(),
+            },
+        );
+        if (unit.dark_polls != 0) {
+            try out.print(
+                "ACMPHS{d}: {d} monitor read(s) with HCMPON clear, monitoring nothing\n",
+                .{ index, unit.dark_polls },
+            );
+        }
+        if (unit.refused != 0) {
+            try out.print(
+                "ACMPHS{d}: REFUSED {d} store(s) into CMPMON, which the comparator owns\n",
+                .{ index, unit.refused },
+            );
+        }
+    }
+}
