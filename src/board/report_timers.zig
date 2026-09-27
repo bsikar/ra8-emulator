@@ -92,6 +92,7 @@ fn pwm(board: *Board, out: Writer) !void {
         );
         try pwmSource(index, channel.source(), out);
         try pwmCompares(index, &channel.compares, out);
+        try pwmProtection(index, &channel.guard, out);
     }
 }
 
@@ -112,6 +113,18 @@ fn pwmCompares(index: usize, pair: *const gpt.match.Pair, out: Writer) !void {
     try out.print(
         "GPT{d}: compare A 0x{X:0>8} matched {d} time(s), B 0x{X:0>8} matched {d} time(s)\n",
         .{ index, pair.value(.a), pair.matches(.a), pair.value(.b), pair.matches(.b) },
+    );
+}
+
+/// GTWP, but only when the protection actually cost a store. A shut channel
+/// is ordinary: the HAL locks every channel it finishes with. A store the
+/// lock turned away is the line worth reading, because the driver that made
+/// it thinks it landed.
+fn pwmProtection(index: usize, guard: *const gpt.protection.Lock, out: Writer) !void {
+    if (guard.refused == 0) return;
+    try out.print(
+        "GPT{d}: REFUSED {d} write(s), GTWP shut\n",
+        .{ index, guard.refused },
     );
 }
 
