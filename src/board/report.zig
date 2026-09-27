@@ -17,6 +17,7 @@ const compute = @import("report_compute.zig");
 const cores = @import("report_cores.zig");
 const backup = @import("report_backup.zig");
 const memory = @import("report_memory.zig");
+const modules = @import("report_modules.zig");
 const mipi = @import("report_mipi.zig");
 const network = @import("report_network.zig");
 const options = @import("report_options.zig");
@@ -40,16 +41,7 @@ pub fn bus(board: *Board, out: Writer) !void {
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ board.bus.counters.reads, board.bus.counters.writes, board.bus.unmodelledAddresses() },
     );
-    if (board.modules.clean()) {
-        try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
-        return;
-    }
-    // Loud on purpose: on silicon these reads give zero and these writes
-    // vanish, which is the bug the emulator used to hide.
-    try out.print(
-        "module stop: DROPPED {d} read(s) and {d} write(s) to stopped peripheral(s), last {s}, firmware forgot to cancel module stop\n",
-        .{ board.modules.gated_reads, board.modules.gated_writes, board.modules.last_gated },
-    );
+    try modules.section(board, out);
 }
 
 /// One line per block that was actually used, so a run only reports the

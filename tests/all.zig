@@ -109,6 +109,7 @@ test {
     _ = @import("periph/modem_script_test.zig");
     _ = @import("periph/modem_test.zig");
     _ = @import("periph/mram_test.zig");
+    _ = @import("periph/mstp_drops_test.zig");
     _ = @import("periph/mstp_test.zig");
     _ = @import("periph/npu_cmd_test.zig");
     _ = @import("periph/npu_test.zig");
