@@ -40,6 +40,15 @@
 //! CPE and still counts a frame. Here the capture is abandoned at the first
 //! refused line and CPE stays clear.
 //!
+//! A CAPTURE CUT SHORT STILL WROTE WHAT IT WROTE. The frame is painted line
+//! by line, so a destination that walks off mapped memory partway through
+//! leaves every line before the refused address sitting in the firmware's
+//! buffer. Those lines are booked under short_frames/short_lines/short_bytes
+//! and named in the end-of-run report. What the firmware sees does NOT
+//! change: CETCR.CPE stays clear, CAPSR.CE stays set, frames is not counted
+//! and CDSSR still answers with the last frame that ran to its last line,
+//! because the frame the firmware armed did not arrive.
+//!
 //! NOT MODELLED, AND NOT GUESSED: everything CETCR carries besides CPE (the
 //! field, overflow and CHDW events), the capture-format and clipping
 //! registers, and the Plane-B address path. No header for this part is in
@@ -128,6 +137,14 @@ pub const Geometry = struct {
     stride: u32,
 };
 
+/// What a capture actually put in the destination buffer before it ended.
+/// `lines` counts only lines painted whole; `bytes` counts every byte that
+/// landed, including the part of a line the memory refused halfway.
+pub const Landed = struct {
+    lines: u32 = 0,
+    bytes: u32 = 0,
+};
+
 pub const Ceu = struct {
     /// Where the frame goes. A board built by a test that never captures
     /// leaves it null and the arm is declined as unbacked.
@@ -146,6 +163,11 @@ pub const Ceu = struct {
     /// Guest writes the memory refused.
     faults: u32 = 0,
     resets: u32 = 0,
+    /// Captures the memory ended partway with something already in the
+    /// buffer, and the lines and bytes those captures left behind.
+    short_frames: u32 = 0,
+    short_lines: u32 = 0,
+    short_bytes: u32 = 0,
 
     pub fn init() Ceu {
         return .{};
@@ -243,15 +265,21 @@ pub const Ceu = struct {
         if (self.declineReason()) |reason| return self.decline(reason);
         const shape = self.geometry();
         const destination = self.word(off.cdayr);
+        var landed = Landed{};
         var row: u32 = 0;
         while (row < shape.lines) : (row += 1) {
             const line = @as(u64, destination) + @as(u64, row) * shape.stride;
-            if (!self.fill(line, shape.width, row)) return self.decline(.faulted);
+            const wrote = self.fill(line, shape.width, row);
+            landed.bytes += wrote;
+            if (wrote < shape.width) return self.cutShort(landed);
+            landed.lines += 1;
         }
         self.complete(shape);
     }
 
-    fn fill(self: *Ceu, line: u64, width: u32, row: u32) bool {
+    /// How many bytes of one line reached memory. Short of `width` means the
+    /// memory refused the chunk starting there; the bytes before it stay.
+    fn fill(self: *Ceu, line: u64, width: u32, row: u32) u32 {
         const memory = self.memory.?;
         var scratch: [pattern.chunk]u8 = undefined;
         var column: u32 = 0;
@@ -264,15 +292,27 @@ pub const Ceu = struct {
             const at = line + column;
             if (at > std.math.maxInt(u32)) {
                 self.faults +%= 1;
-                return false;
+                return column;
             }
             memory.write(@intCast(at), slice) catch {
                 self.faults +%= 1;
-                return false;
+                return column;
             };
             column += span;
         }
-        return true;
+        return column;
+    }
+
+    /// A capture the memory ended partway. The lines before the refused
+    /// address are in the buffer, so they are booked; the arm is still a
+    /// failed one, because the frame the firmware asked for did not arrive.
+    fn cutShort(self: *Ceu, landed: Landed) void {
+        if (landed.bytes != 0) {
+            self.short_frames +%= 1;
+            self.short_lines +%= landed.lines;
+            self.short_bytes +%= landed.bytes;
+        }
+        self.decline(.faulted);
     }
 
     fn complete(self: *Ceu, shape: Geometry) void {

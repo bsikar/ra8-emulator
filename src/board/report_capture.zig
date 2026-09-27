@@ -25,6 +25,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{ camera.declined, @tagName(reason) },
         );
     }
+    if (camera.short_frames != 0) {
+        try out.print(
+            "CEU: {d} capture(s) CUT SHORT by memory, {d} whole line(s) / {d} byte(s) had already reached the buffer\n",
+            .{ camera.short_frames, camera.short_lines, camera.short_bytes },
+        );
+    }
     if (camera.faked != 0) {
         try out.print(
             "CEU: REFUSED {d} store(s) to CETCR, firmware cannot raise a capture-end flag itself\n",

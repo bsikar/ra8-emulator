@@ -226,3 +226,70 @@ test "a store to CDSSR cannot dress up the byte count" {
     bench.arm();
     try std.testing.expectEqual(@as(u32, 32), bench.unit.read(at(ceu.off.cdssr), 4));
 }
+
+test "a capture the memory ends partway books the lines that landed" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    // One 0x1000 page is mapped, so lines 0 and 1 land whole and line 2
+    // starts at the first address past the end of it.
+    bench.program(0x800, 4, 0x800, frame_base);
+    bench.arm();
+    try std.testing.expectEqual(ceu.Decline.faulted, bench.unit.last_decline.?);
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.short_frames);
+    try std.testing.expectEqual(@as(u32, 2), bench.unit.short_lines);
+    try std.testing.expectEqual(@as(u32, 0x1000), bench.unit.short_bytes);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.frames);
+}
+
+test "the lines a cut-short capture painted stay in the buffer" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    bench.program(0x800, 4, 0x800, frame_base);
+    bench.arm();
+    // (x + y) & 0xFF: the first byte of row 0, and of row 1 a line in.
+    try std.testing.expectEqual(@as(u8, 0), try bench.byte(frame_base));
+    try std.testing.expectEqual(@as(u8, 1), try bench.byte(frame_base + 0x800));
+}
+
+test "a cut-short capture leaves CPE, CE and CDSSR as the firmware sees them" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    bench.program(8, 4, 8, frame_base);
+    bench.arm();
+    bench.unit.write(at(ceu.off.cetcr), 4, 0);
+    // A second arm that runs off the end of the page changes nothing the
+    // firmware can read: the byte count is still the frame that finished.
+    bench.program(0x800, 4, 0x800, frame_base);
+    bench.arm();
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.read(at(ceu.off.cetcr), 4));
+    try std.testing.expectEqual(ceu.field.capture_enable, bench.unit.read(at(ceu.off.capsr), 4));
+    try std.testing.expectEqual(@as(u32, 32), bench.unit.read(at(ceu.off.cdssr), 4));
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.frames);
+}
+
+test "a capture refused on its very first chunk books no short frame" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    bench.program(8, 4, 8, frame_base + 0x1000);
+    bench.arm();
+    try std.testing.expectEqual(ceu.Decline.faulted, bench.unit.last_decline.?);
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.faults);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.short_frames);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.short_bytes);
+}
+
+test "a line refused halfway books the bytes before the refused chunk" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    // One line of 0x900 bytes starting 0x800 into the page: 0x800 of it fits.
+    bench.program(0x900, 1, 0x900, frame_base + 0x800);
+    bench.arm();
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.short_frames);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.short_lines);
+    try std.testing.expectEqual(@as(u32, 0x800), bench.unit.short_bytes);
+}
