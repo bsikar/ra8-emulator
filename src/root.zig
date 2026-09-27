@@ -122,6 +122,7 @@ pub const periph = struct {
     pub const sdhi_xfer = @import("periph/sdhi_xfer.zig");
     pub const spi = @import("periph/spi.zig");
     pub const sram = @import("periph/sram.zig");
+    pub const sram_lock = @import("periph/sram_lock.zig");
     pub const ssie = @import("periph/ssie.zig");
     pub const ulpt = @import("periph/ulpt.zig");
     pub const ulpt_compare = @import("periph/ulpt_compare.zig");
