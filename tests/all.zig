@@ -70,7 +70,9 @@ test {
     _ = @import("periph/gpt_buffer_test.zig");
     _ = @import("periph/gpt_clock_test.zig");
     _ = @import("periph/gpt_compare_test.zig");
+    _ = @import("periph/gpt_lock_test.zig");
     _ = @import("periph/gpt_mode_test.zig");
+    _ = @import("periph/gpt_window_test.zig");
     _ = @import("periph/gptp_test.zig");
     _ = @import("periph/gptp_timer_test.zig");
     _ = @import("periph/i3c_gt911_test.zig");

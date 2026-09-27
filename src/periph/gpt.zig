@@ -71,15 +71,22 @@
 //! arriving at all. This file's note used to say a buffered duty took effect
 //! at once; it did not take effect, because nothing read the buffer.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the write-protection register, so GTWP
-//! neither locks nor rejects anything; and the per-source interrupt enables
-//! in GTINTAD, so channel 0's overflow always raises and a compare match
-//! never does.
+//! THE WRITE PROTECTION lives in src/periph/gpt_lock.zig: GTWP (+0x00)
+//! carries a password in its upper byte and WP in bit 0, and the HAL
+//! brackets every channel it touches between the two keys, so a channel the
+//! HAL has finished with is shut and a store that skips the key is dropped
+//! instead of landing.
+//!
+//! NOT MODELLED, AND NOT GUESSED: the per-source interrupt enables in
+//! GTINTAD, so channel 0's overflow always raises and a compare match never
+//! does.
 const std = @import("std");
 
 const buf = @import("gpt_buffer.zig");
 const clk = @import("gpt_clock.zig");
 const compare = @import("gpt_compare.zig");
+const lk = @import("gpt_lock.zig");
+const win = @import("gpt_window.zig");
 const md = @import("gpt_mode.zig");
 const periph = @import("registry.zig");
 
@@ -96,21 +103,21 @@ pub const mode = md;
 /// The compare buffers, reached as `gpt.buffers`.
 pub const buffers = buf;
 
+/// The write protection, reached as `gpt.protection`.
+pub const protection = lk;
+
+/// The channel window's addressing, reached as `gpt.window`.
+pub const window = win;
+
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
 pub const stride: u32 = 0x100;
 pub const channels: usize = 14;
 pub const win_span: u32 = stride * @as(u32, channels);
 
-pub const off = struct {
-    pub const gtstr: u32 = 0x04;
-    pub const gtstp: u32 = 0x08;
-    pub const gtclr: u32 = 0x0C;
-    pub const gtcr: u32 = 0x2C;
-    pub const gtst: u32 = 0x3C;
-    pub const gtcnt: u32 = 0x48;
-    pub const gtpr: u32 = 0x64;
-};
+/// Where each register this model interprets sits in a channel, re-exported
+/// from the window so callers reach it as `gpt.off` the way they always did.
+pub const off = win.off;
 
 /// GTCR: the count-start bit. The rest of the register's fields live in
 /// gpt_clock.zig, which reads the prescaler out of it.
@@ -161,6 +168,7 @@ pub const Channel = struct {
     rising: bool = true,
     compares: compare.Pair = .{},
     buffered: buf.Buffers = .{},
+    guard: lk.Lock = .{},
 
     pub fn running(self: Channel) bool {
         return self.cr & control.cst != 0;
@@ -225,20 +233,21 @@ pub const Channel = struct {
     }
 
     fn readByte(self: *const Channel, local: u32) u8 {
+        if (local < lk.off.gtwp + 4) return win.lane(self.guard.value(), local - lk.off.gtwp);
         if (compare.which(local)) |side| {
             const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
-            return lane(self.compares.value(side), local - base);
+            return win.lane(self.compares.value(side), local - base);
         }
         if (buf.which(local)) |side| {
             const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
-            return lane(self.buffered.value(side), local - base);
+            return win.lane(self.buffered.value(side), local - base);
         }
-        return switch (cellOf(local)) {
-            buf.off.gtber => lane(self.buffered.ber, local - buf.off.gtber),
-            off.gtcnt => lane(self.cnt, local - off.gtcnt),
-            off.gtpr => lane(self.period, local - off.gtpr),
-            off.gtcr => lane(self.cr, local - off.gtcr),
-            off.gtst => lane(self.st, local - off.gtst),
+        return switch (win.cellOf(local)) {
+            buf.off.gtber => win.lane(self.buffered.ber, local - buf.off.gtber),
+            off.gtcnt => win.lane(self.cnt, local - off.gtcnt),
+            off.gtpr => win.lane(self.period, local - off.gtpr),
+            off.gtcr => win.lane(self.cr, local - off.gtcr),
+            off.gtst => win.lane(self.st, local - off.gtst),
             else => self.shadow[local],
         };
     }
@@ -246,22 +255,22 @@ pub const Channel = struct {
     fn writeByte(self: *Channel, local: u32, byte: u8) void {
         if (compare.which(local)) |side| {
             const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
-            self.compares.set(side, merge(self.compares.value(side), local - base, byte));
+            self.compares.set(side, win.merge(self.compares.value(side), local - base, byte));
             return;
         }
         if (buf.which(local)) |side| {
             const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
-            self.buffered.set(side, merge(self.buffered.value(side), local - base, byte));
+            self.buffered.set(side, win.merge(self.buffered.value(side), local - base, byte));
             return;
         }
-        switch (cellOf(local)) {
-            buf.off.gtber => self.buffered.ber = merge(self.buffered.ber, local - buf.off.gtber, byte),
-            off.gtcnt => self.cnt = merge(self.cnt, local - off.gtcnt, byte),
-            off.gtpr => self.period = merge(self.period, local - off.gtpr, byte),
-            off.gtcr => self.cr = merge(self.cr, local - off.gtcr, byte),
+        switch (win.cellOf(local)) {
+            buf.off.gtber => self.buffered.ber = win.merge(self.buffered.ber, local - buf.off.gtber, byte),
+            off.gtcnt => self.cnt = win.merge(self.cnt, local - off.gtcnt, byte),
+            off.gtpr => self.period = win.merge(self.period, local - off.gtpr, byte),
+            off.gtcr => self.cr = win.merge(self.cr, local - off.gtcr, byte),
             // GTST is cleared by writing the word back with the target bits
             // zero, so a store can only take bits away.
-            off.gtst => self.st &= merge(self.st, local - off.gtst, byte),
+            off.gtst => self.st &= win.merge(self.st, local - off.gtst, byte),
             off.gtstr => self.request(local == off.gtstr, byte, .start),
             off.gtstp => self.request(local == off.gtstp, byte, .stop),
             off.gtclr => self.request(local == off.gtclr, byte, .clear),
@@ -284,7 +293,7 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: Channel) bool {
-        if (!self.compares.quiet() or !self.buffered.quiet()) return false;
+        if (!self.compares.quiet() or !self.buffered.quiet() or !self.guard.quiet()) return false;
         return self.overflows == 0 and self.underflows == 0 and !self.running();
     }
 };
@@ -295,29 +304,6 @@ pub const Channel = struct {
 fn endedCycle(kind: md.Mode, moved: md.Step) bool {
     if (kind.symmetric()) return moved.troughs != 0;
     return moved.peaks != 0;
-}
-
-/// The register a byte offset belongs to, so a narrow store lands on the
-/// right word instead of falling through to the shadow.
-fn cellOf(local: u32) u32 {
-    const cells = [_]u32{
-        off.gtstr, off.gtstp, off.gtclr, off.gtcr,
-        off.gtst,  off.gtcnt, off.gtpr,  buf.off.gtber,
-    };
-    for (cells) |cell| {
-        if (local >= cell and local < cell + 4) return cell;
-    }
-    return local;
-}
-
-fn lane(value: u32, index: u32) u8 {
-    return @truncate(value >> @intCast(index * 8));
-}
-
-fn merge(value: u32, index: u32, byte: u8) u32 {
-    const shift: u5 = @intCast(index * 8);
-    const mask = ~(@as(u32, 0xFF) << shift);
-    return (value & mask) | (@as(u32, byte) << shift);
 }
 
 pub const Gpt = struct {
@@ -369,6 +355,15 @@ pub const Gpt = struct {
         if (offset >= win_span) return;
         const channel = &self.channels[offset / stride];
         const local = offset % stride;
+        // GTWP takes the whole access at once, so the key is judged on the
+        // word the store leaves behind rather than on a byte of it.
+        if (local < lk.off.gtwp + 4) {
+            channel.guard.store(local - lk.off.gtwp, width, value);
+            return;
+        }
+        // One store, one refusal: the protection turns the access away, not
+        // each of its byte lanes.
+        if (!channel.guard.admits(local, win.interpreted(local))) return;
         var index: u32 = 0;
         while (index < width and local + index < stride) : (index += 1) {
             const shift: u5 = @intCast(index * 8);
