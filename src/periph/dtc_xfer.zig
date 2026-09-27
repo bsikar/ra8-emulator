@@ -134,13 +134,22 @@ pub const Info = struct {
     /// has come down. Block mode leaves CRA alone on purpose, because a whole
     /// block moves at once and CRAL ends back at the CRAH it reloads from.
     pub fn advance(self: *Info) void {
-        const moved: i64 = @intCast(self.burst());
-        self.sar = walk(self.sar, self.step(self.source) * moved);
-        self.dar = walk(self.dar, self.step(self.destination) * moved);
+        self.walkBy(self.burst());
         switch (self.mode) {
             .block => self.crb -%= 1,
             else => self.cra -%= 1,
         }
+    }
+
+    /// Walk the two addresses over `units` and spend NO count. This is the
+    /// half of an advance a short activation earns: memory refused a unit
+    /// partway through a block, so the addresses stand where the copy
+    /// stopped, but the block did not complete and its count has not been
+    /// paid. A whole activation is this followed by the count coming down.
+    pub fn walkBy(self: *Info, units: u32) void {
+        const moved: i64 = @intCast(units);
+        self.sar = walk(self.sar, self.step(self.source) * moved);
+        self.dar = walk(self.dar, self.step(self.destination) * moved);
     }
 
     /// Nothing left to move, which is when the controller takes the slot's

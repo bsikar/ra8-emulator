@@ -290,3 +290,108 @@ test "the last transfer's vector number lands in DTCSTS" {
         unit.read(dtc.win_base + dtc.off.dtcsts, 2),
     );
 }
+
+/// Block mode, byte units, both addresses incrementing, interrupt on the last
+/// block. CRAH is the block size, so it is set per test.
+const block_copy = mode(0b1000_1000, 0b0000_1000);
+
+/// The window the Memory above serves ends here, so a block aimed at the last
+/// bytes of it is refused partway through.
+const past_window: u32 = 0x2000_0200;
+
+/// A short-block scene laid out clear of the descriptor, the vector table and
+/// each other: 0x30 bytes a block, of which only the first 0x20 have anywhere
+/// to go. Overlapping the two would have the copy read what it just wrote.
+const short_source: u32 = 0x2000_0040;
+const short_dest: u32 = 0x2000_01E0;
+const short_block: u32 = 0x30;
+const short_fits: u32 = 0x20;
+
+/// scene() with the two addresses moved and a block size that runs off the
+/// end of the window.
+fn shortScene(memory: Memory, links: *icu.Icu) dtc.Dtc {
+    const unit = scene(memory, links, block_copy, 2, @intCast(short_block << 8));
+    memory.writeWord(ti_at + xfer.off.sar, short_source) catch unreachable;
+    memory.writeWord(ti_at + xfer.off.dar, short_dest) catch unreachable;
+    return unit;
+}
+
+test "a block that walks off the end keeps the bytes that landed" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = shortScene(memory, &links);
+    memory.poke(short_source, 0x11);
+    memory.poke(short_source + short_fits - 1, 0x22);
+
+    try std.testing.expectEqual(@as(?dtc.Outcome, null), unit.activate(memory, &links, event));
+    try std.testing.expectEqual(dtc.Refusal.unreadable, unit.last_refusal.?);
+    try std.testing.expectEqual(@as(u8, 0x11), memory.byteAt(short_dest));
+    try std.testing.expectEqual(@as(u8, 0x22), memory.byteAt(short_dest + short_fits - 1));
+}
+
+test "a short block books the bytes it moved and still leaves DTCE up" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = shortScene(memory, &links);
+    _ = unit.activate(memory, &links, event);
+    try std.testing.expectEqual(@as(u64, short_fits), unit.units);
+    try std.testing.expectEqual(@as(u64, short_fits), unit.bytes);
+    try std.testing.expectEqual(@as(u32, 0), unit.activations);
+    try std.testing.expectEqual(@as(u32, 0), unit.completions);
+    try std.testing.expect(links.dtcSlotFor(event) != null);
+}
+
+test "a short block leaves the descriptor where the copy stopped" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = shortScene(memory, &links);
+    _ = unit.activate(memory, &links, event);
+    try std.testing.expectEqual(short_source + short_fits, try memory.readWord(ti_at + xfer.off.sar));
+    try std.testing.expectEqual(past_window, try memory.readWord(ti_at + xfer.off.dar));
+    // The block never completed, so neither count has been paid.
+    try std.testing.expectEqual(@as(u32, 2 | (short_block << 24)), try memory.readWord(ti_at + xfer.off.counts));
+}
+
+test "the next activation carries on rather than copying the same bytes again" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = shortScene(memory, &links);
+    _ = unit.activate(memory, &links, event);
+    // Still nowhere to put them, so the second activation moves nothing at
+    // all: the destination is already past the end, not back at the start.
+    _ = unit.activate(memory, &links, event);
+    try std.testing.expectEqual(@as(u64, short_fits), unit.units);
+    try std.testing.expectEqual(@as(u32, 2), unit.refused);
+    try std.testing.expectEqual(past_window, try memory.readWord(ti_at + xfer.off.dar));
+}
+
+test "a normal-mode unit memory refuses moves nothing and spends nothing" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = scene(memory, &links, byte_copy, 0, 4);
+    memory.writeWord(ti_at + xfer.off.dar, 0x3000_0000) catch unreachable;
+
+    try std.testing.expectEqual(@as(?dtc.Outcome, null), unit.activate(memory, &links, event));
+    try std.testing.expectEqual(dtc.Refusal.unreadable, unit.last_refusal.?);
+    try std.testing.expectEqual(@as(u64, 0), unit.bytes);
+    try std.testing.expectEqual(@as(u32, source_at), try memory.readWord(ti_at + xfer.off.sar));
+    try std.testing.expectEqual(@as(u32, 4 << 16), try memory.readWord(ti_at + xfer.off.counts));
+}
+
+test "a whole block still spends its count and moves every unit" {
+    var cells = Cells{};
+    const memory = Memory{ .cells = &cells };
+    var links = icu.Icu.init();
+    var unit = scene(memory, &links, block_copy, 2, 0x10 << 8);
+    memory.poke(source_at + 0x0F, 0x33);
+    const moved = unit.activate(memory, &links, event).?;
+    try std.testing.expectEqual(@as(u32, 0x10), moved.units);
+    try std.testing.expectEqual(@as(u32, 0x10), moved.bytes);
+    try std.testing.expectEqual(@as(u8, 0x33), memory.byteAt(dest_at + 0x0F));
+    try std.testing.expectEqual(@as(u32, 1 | (0x10 << 24)), try memory.readWord(ti_at + xfer.off.counts));
+}

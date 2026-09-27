@@ -318,7 +318,7 @@ fn transfers(board: *Board, out: Writer) !void {
     }
     if (unit.refused == 0) return;
     try out.print(
-        "DTC: REFUSED {d} activation(s), last because of {s} (nothing moved, the core took the interrupt)\n",
+        "DTC: REFUSED {d} activation(s), last because of {s} (the core took the interrupt)\n",
         .{ unit.refused, dtc.refusalName(unit.last_refusal.?) },
     );
 }
