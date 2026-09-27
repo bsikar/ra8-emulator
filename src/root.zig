@@ -186,4 +186,5 @@ pub const board = struct {
     pub const net = @import("board/net.zig");
     pub const usb = @import("board/usb.zig");
     pub const report = @import("board/report.zig");
+    pub const report_dma = @import("board/report_dma.zig");
 };
