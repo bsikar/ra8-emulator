@@ -10,6 +10,7 @@ const elf = @import("elf.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("../periph/registry.zig");
 const disasm = @import("disasm.zig");
+const cadence = @import("cadence.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const lob = @import("lob.zig");
@@ -273,11 +274,13 @@ pub const Engine = struct {
         if (session.timebase == null and session.interrupts == null) {
             return self.runChunk(start, instructions, session.watch);
         }
-        const per_chunk = if (session.timebase) |clock| clock.per_chunk else clocks.chunk_instructions;
+        const pace = cadence.Cadence{
+            .per_boundary = if (session.timebase) |clock| clock.per_chunk else cadence.instructions,
+        };
         var remaining = instructions;
         var pc = start;
         while (remaining > 0) {
-            const chunk = @min(remaining, @as(usize, per_chunk));
+            const chunk = pace.chunk(remaining);
             if (try self.runChunk(pc, chunk, session.watch)) |taken| {
                 const controller = session.interrupts orelse return taken;
                 if (!nvic.isExceptionReturn(taken.pc)) return taken;
@@ -294,7 +297,7 @@ pub const Engine = struct {
             // The budget is spent: do not enter a handler there is no room
             // left to run, which would report a run that ended inside an
             // exception it never actually took.
-            if (remaining == 0) break;
+            if (!pace.closes(remaining)) break;
             if (session.board) |tick| tick.run(self) catch return Error.RunFailed;
             // A part that just reset has nothing pending, so the controller
             // does not get to pick this boundary: carry straight on into the

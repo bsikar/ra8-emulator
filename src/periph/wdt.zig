@@ -34,6 +34,7 @@
 //! and absolute time is not modelled, but TOPS and CKS are at least ordered
 //! here: the reload is the configured cycle count scaled down to ticks, so a
 //! longer configured timeout takes proportionally longer to trip.
+const cadence = @import("../core/cadence.zig");
 const periph = @import("registry.zig");
 
 /// WDT0 geometry (ra8_wdt_regs.h, r_wdt_regs_t; HUM Ch 27.2 p 1070).
@@ -91,11 +92,20 @@ pub const window_start_percent = [4]u8{ 25, 50, 75, 100 };
 /// RPES[1:0]: where the window closes. 0% means it stays open to underflow.
 pub const window_end_percent = [4]u8{ 75, 50, 25, 0 };
 
-/// One emulated tick is one run-loop chunk, and this is how many watchdog
-/// cycles that stands for. Chosen so the shortest timeout (1024 cycles,
+/// How many instructions one watchdog cycle stands for. dev charged 128
+/// cycles per 500000-instruction chunk, which is this number, and pinning the
+/// watchdog to instructions rather than to boundaries is what keeps a
+/// timeout the same length of run whatever the cadence is: a finer boundary
+/// (src/core/cadence.zig) has to make the counter last proportionally more
+/// ticks, or a firmware that refreshed in time starts tripping its watchdog
+/// for no reason it can see.
+pub const instructions_per_cycle: u32 = 3906;
+
+/// One emulated tick is one run-loop boundary, and this is how many watchdog
+/// cycles that stands for. Derived, so the shortest timeout (1024 cycles,
 /// divide by 1) still takes several ticks to run out and the longest stays
 /// inside a normal run budget.
-pub const cycles_per_tick: u32 = 128;
+pub const cycles_per_tick: u32 = @max(1, cadence.instructions / instructions_per_cycle);
 
 /// The largest reload the counter can hold, so a long timeout saturates
 /// instead of wrapping into a short one.
