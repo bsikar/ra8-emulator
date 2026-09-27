@@ -9,12 +9,14 @@ const std = @import("std");
 
 const engine = @import("../core/engine.zig");
 const i2c = @import("i2c.zig");
+const wiring = @import("wiring.zig");
 const part = @import("../core/part.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
 const adc = @import("../periph/adc.zig");
 const agt = @import("../periph/agt.zig");
 const bkup = @import("../periph/bkup.zig");
+const acmphs = @import("../periph/acmphs.zig");
 const cac = @import("../periph/cac.zig");
 const canfd = @import("../periph/canfd.zig");
 const ceu = @import("../periph/ceu.zig");
@@ -79,6 +81,7 @@ pub const Board = struct {
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
+    comparators: acmphs.Acmphs,
     /// The parallel-camera capture engine. No sensor behind it, so the
     /// observable is whether a frame actually landed in the buffer CDAYR
     /// points at. Built in attach(): it writes into the engine's memory.
@@ -206,6 +209,7 @@ pub const Board = struct {
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),
+            .comparators = acmphs.Acmphs.init(),
             .capture = ceu.Ceu.init(),
             .analog = dac.Dac.init(),
             .adc = adc.Adc.init(),
@@ -249,79 +253,10 @@ pub const Board = struct {
         self.bus.deinit();
     }
 
-    /// Order matters. The module-stop shadow goes on first and then becomes
-    /// the gate the rest of the bus is filtered through; PORT follows it
-    /// because PORT has no module-stop bit on this part and has to answer
-    /// regardless of MSTPCRx.
+    /// Put every block on the bus. The order is load-bearing and lives
+    /// next door in wiring.zig.
     pub fn attach(self: *Board, core: *engine.Engine) !void {
-        try self.bus.add(self.modules.block());
-        self.bus.gate = self.modules.gate();
-        try self.bus.add(self.pins.block());
-        try self.bus.add(self.checksum.block());
-        try self.bus.add(self.dataops.block());
-        try self.bus.add(self.accuracy.block());
-        self.capture.memory = core.*;
-        try self.bus.add(self.capture.block());
-        try self.bus.add(self.analog.block());
-        try self.bus.add(self.adc.block());
-        try self.bus.add(self.shutoff.block());
-        try self.bus.add(self.protection.block());
-        self.backup = bkup.Bkup.init(&self.protection);
-        try self.bus.add(self.backup.block());
-        self.graphics = pdctr.Pdctr.init(&self.protection);
-        try self.bus.add(self.graphics.block());
-        // The panel is scanned out of the same RAM the engine paints into.
-        try self.display.attach(&self.bus, &self.graphics, core.*);
-        self.raster = drw.Drw.init(&self.graphics);
-        // The engine rasterizes into RAM, so it needs the machine that owns
-        // it. A board built by a test without one declines the render.
-        self.raster.memory = core.*;
-        try self.bus.add(self.raster.block());
-        try self.bus.add(self.serial.block());
-        try self.bus.add(self.spi.block());
-        self.spi.attachDevice(sd_card.line_channel, self.sd.device());
-        self.spi.attachDevice(eink.line_channel, self.panel.device());
-        self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
-        self.serial.attachDevice(modem.line_channel, self.modem.device());
-        try self.wire.attach(&self.bus);
-        try self.rswitch.attach(&self.bus, core.*);
-        try self.usb.attach(&self.bus);
-        self.trace.memory = core.*;
-        try self.bus.add(self.flash.block());
-        try self.options.attach(&self.bus, core.*);
-        try self.bus.add(self.card.block());
-        try self.bus.add(self.ecc.block());
-        try self.bus.add(self.audio.block());
-        try self.bus.add(self.microphone.block());
-        try self.bus.add(self.clock.block());
-        try self.bus.add(self.can.block(0));
-        try self.bus.add(self.can.block(1));
-        try self.bus.add(self.mailbox.block());
-        if (self.part.hasNpu()) {
-            self.npu.memory = core.*;
-            try self.bus.add(self.npu.block());
-        }
-        try self.bus.add(self.lowpower.block());
-        try self.bus.add(self.interval.block());
-        try self.bus.add(self.pwm.block());
-        try self.bus.add(self.ptp.block());
-        try self.bus.add(self.events.block());
-        try self.bus.add(self.links.block());
-        try self.bus.add(self.transfers.block());
-        try self.bus.add(self.dma_module.block());
-        self.dma = dmac.Dmac.init(&self.dma_module);
-        self.dma.memory = core.*;
-        try self.bus.add(self.dma.block());
-        try self.bus.add(self.monitors.statusBlock());
-        try self.bus.add(self.monitors.controlBlock());
-        try self.bus.add(self.monitors.filterBlock());
-        try self.bus.add(self.watchdog.block());
-        try self.bus.add(self.causes.statusBlock());
-        try self.bus.add(self.causes.causeBlock());
-        try core.attachPeriph(&self.bus);
-        // AIRCR is PPB RAM, not a bus block, and RAM starts at zero: without
-        // this the first read of it is 0 rather than the key status.
-        try self.control.prime(core.*);
+        return wiring.attach(self, core);
     }
 
     /// The chunk boundary, peripheral side: the watchdog counts, a block with
