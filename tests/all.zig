@@ -15,6 +15,7 @@ test {
     _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");
     _ = @import("core/part_test.zig");
+    _ = @import("periph/adc_intr_test.zig");
     _ = @import("periph/adc_scan_test.zig");
     _ = @import("periph/adc_test.zig");
     _ = @import("periph/agt_test.zig");
