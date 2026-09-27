@@ -35,6 +35,16 @@
 //! wipes the bytes above it, and a byte store one past a register lands on
 //! the register itself. Here narrow accesses merge.
 //!
+//! A NARROW READ OF THE DATA PORT IS THE LANES IT NAMES. PDDRR carries one
+//! 20-bit sample, so bits 31:20 are zero, the top halfword is bits 19:16 and
+//! the top byte is nothing at all. A read of the port served the sample's
+//! LOW bits whatever lane it named, so a capture loop taking the sample in
+//! two halfword reads was handed the low half twice and bits 19:16 were
+//! unreachable. The read is now cut to the lanes the access names, the way
+//! `lanes.zig` states the rule for the rest of the tree. The take itself is
+//! per access and stays that way: the port is a FIFO and a read of it is a
+//! read, so a loop that reads it twice has taken two samples.
+//!
 //! KEPT FROM DEV DELIBERATELY: a channel produces nothing until it has BOTH
 //! been started and had its read path enabled, and the tone is dev's own
 //! triangle plus LCG dither with the same constants, so a given channel's
@@ -225,7 +235,7 @@ pub const Pdm = struct {
         const byte = inner % 4;
         return switch (inner & ~@as(u32, 3)) {
             off_ddrcr => part(if (unit.read_enable) field.datre else 0, byte, width),
-            off_ddrr => unit.take() & widthMask(width),
+            off_ddrr => part(unit.take(), byte, width),
             off_ddsr => part(unit.status(), byte, width),
             else => part(unit.shadow[inner / 4], byte, width),
         };

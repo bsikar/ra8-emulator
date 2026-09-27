@@ -165,3 +165,61 @@ test "an access past the window is refused" {
     try std.testing.expectEqual(@as(u32, 0), unit.read(pdm.win_base + pdm.win_span, 4));
     try std.testing.expect(unit.quiet());
 }
+
+/// Stage one known sample on a live channel, so a lane assertion is about
+/// the cut and not about the tone.
+fn staged(unit: *pdm.Pdm, sample: u32) void {
+    unit.channels[0].running = true;
+    unit.channels[0].read_enable = true;
+    unit.channels[0].fifo[0] = sample;
+    unit.channels[0].filled = 1;
+}
+
+test "a word read of PDDRR is the whole 20-bit sample" {
+    var unit = pdm.Pdm.init();
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0xA_BCDE), unit.read(channel(0, pdm.off_ddrr), 4));
+}
+
+test "a narrow read of PDDRR is served the lanes it names" {
+    var unit = pdm.Pdm.init();
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0xDE), unit.read(channel(0, pdm.off_ddrr), 1));
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0xBC), unit.read(channel(0, pdm.off_ddrr) + 1, 1));
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0x0A), unit.read(channel(0, pdm.off_ddrr) + 2, 1));
+    // Bits 31:24 of a 20-bit sample are nothing at all.
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0x00), unit.read(channel(0, pdm.off_ddrr) + 3, 1));
+}
+
+test "the top halfword of PDDRR is bits 19:16, not the low half again" {
+    var unit = pdm.Pdm.init();
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0xBCDE), unit.read(channel(0, pdm.off_ddrr), 2));
+    staged(&unit, 0xA_BCDE);
+    try std.testing.expectEqual(@as(u32, 0x000A), unit.read(channel(0, pdm.off_ddrr) + 2, 2));
+}
+
+test "every read of the port takes a sample, whatever lanes it names" {
+    var unit = pdm.Pdm.init();
+    unit.write(pdm.win_base + pdm.off_cstrtr, 4, 0b001);
+    unit.write(channel(0, pdm.off_ddrcr), 4, pdm.field.datre);
+    unit.tick();
+    try std.testing.expectEqual(pdm.fifo_depth, unit.channels[0].filled);
+    _ = unit.read(channel(0, pdm.off_ddrr) + 3, 1);
+    _ = unit.read(channel(0, pdm.off_ddrr) + 2, 2);
+    _ = unit.read(channel(0, pdm.off_ddrr), 4);
+    try std.testing.expectEqual(pdm.fifo_depth - 3, unit.channels[0].filled);
+    try std.testing.expectEqual(@as(u32, 3), unit.channels[0].read);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].starved);
+}
+
+test "a narrow read of an empty port starves rather than inventing a lane" {
+    var unit = pdm.Pdm.init();
+    unit.write(pdm.win_base + pdm.off_cstrtr, 4, 0b001);
+    unit.write(channel(0, pdm.off_ddrcr), 4, pdm.field.datre);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(channel(0, pdm.off_ddrr) + 2, 2));
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].starved);
+}
