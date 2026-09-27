@@ -93,4 +93,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     // AIRCR is PPB RAM, not a bus block, and RAM starts at zero: without
     // this the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);
+    // Same reason for the cache window: CTR read as zero, so the firmware
+    // computed a four-byte line and walked every range eight times over.
+    try self.caches.prime(core.*);
 }
