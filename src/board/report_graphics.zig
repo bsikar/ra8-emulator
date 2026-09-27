@@ -363,7 +363,7 @@ fn texture(unit: *const @TypeOf(@as(Board, undefined).raster), out: Writer) !voi
     );
     if (source.off_ram == 0 and source.faults == 0) return;
     try out.print(
-        "DRW: REFUSED {d} texel read(s) aimed outside RAM, {d} that went nowhere mapped\n",
+        "DRW: REFUSED {d} texel read(s) aimed outside the RAM the engine reaches, {d} that went nowhere mapped\n",
         .{ source.off_ram, source.faults },
     );
 }

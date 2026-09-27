@@ -14,11 +14,14 @@
 //! on a gateway still in CONFIG has its frame delivered in the emulator and
 //! nothing on the bench. Refused and counted here.
 //!
-//! A BUFFER HAS TO BE IN RAM. dev follows the descriptor's pointer wherever
-//! it points, reads the frame out of it and writes a received frame into it,
-//! so a half-built ring has the emulator marshalling the peripheral window
-//! into a frame and writing frame bytes over whatever the pointer happened to
-//! hold. Descriptor and buffer must lie in the mapped SRAM window here.
+//! A BUFFER HAS TO BE SOMEWHERE THE GATEWAY CAN REACH. dev follows the
+//! descriptor's pointer wherever it points, reads the frame out of it and
+//! writes a received frame into it, so a half-built ring has the emulator
+//! marshalling the peripheral window into a frame and writing frame bytes
+//! over whatever the pointer happened to hold. Descriptor and buffer must lie
+//! in RAM a bus master reaches here, which is the on-chip SRAM and the
+//! external SDRAM through either alias; memmap.master_ram says why DTCM is
+//! not one of them.
 //!
 //! A RING THAT LINKS BACK ON ITSELF IS NOT WALKED SIXTY-FOUR TIMES. dev
 //! refuses only a link straight back to the same descriptor, so a cycle two
@@ -140,7 +143,7 @@ pub const Dma = struct {
             self.refused.oversize += 1;
             return null;
         }
-        if (!memmap.ramHolds(head.ptr, head.ds)) {
+        if (!memmap.masterHolds(head.ptr, head.ds)) {
             self.refused.off_ram += 1;
             return null;
         }
@@ -169,7 +172,7 @@ pub const Dma = struct {
     fn stageInto(self: *Dma, slot: u32, len: u32) bool {
         const at = self.read(slot) orelse return false;
         if (at.ds == 0) return false;
-        if (!memmap.ramHolds(at.ptr, at.ds)) {
+        if (!memmap.masterHolds(at.ptr, at.ds)) {
             self.refused.off_ram += 1;
             return false;
         }
@@ -213,7 +216,7 @@ pub const Dma = struct {
     }
 
     fn read(self: *Dma, at: u32) ?desc.Desc {
-        if (!memmap.ramHolds(at, desc.size)) {
+        if (!memmap.masterHolds(at, desc.size)) {
             self.refused.off_ram += 1;
             return null;
         }
