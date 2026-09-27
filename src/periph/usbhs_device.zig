@@ -51,12 +51,21 @@ pub const Device = struct {
 
     /// USBRST released: the device drops back to Default and forgets its
     /// address, the way silicon does.
+    ///
+    /// The endpoint goes with it. A device in Default has no endpoints but
+    /// the control pipe, so a bulk packet this one was holding when the
+    /// reset came cannot be answered afterwards: the endpoint that owed it
+    /// stopped existing. Leaving it staged hands the next host to arm that
+    /// pipe a packet from before the reset, on a device that has not been
+    /// configured since.
     pub fn busReset(self: *Device) void {
         self.state = .default;
         self.address = 0;
         self.configuration = 0;
         self.reply_len = 0;
         self.reply_ready = false;
+        self.echo_len = 0;
+        self.echo_ready = false;
     }
 
     /// Answer a SETUP. False means the device stalled it, which is what the

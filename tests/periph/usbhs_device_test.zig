@@ -117,6 +117,51 @@ test "a bus reset drops the device back to Default" {
     try std.testing.expectEqual(@as(u8, 0), part.configuration);
 }
 
+test "a bus reset takes the endpoint's packet with it" {
+    var part = device.Device{};
+    _ = part.handle(set(setup.request.set_address, 7));
+    _ = part.handle(set(setup.request.set_configuration, 1));
+    try std.testing.expect(part.bulkOut(&[_]u8{ 0xEF, 0xBE }));
+    try std.testing.expect(part.echo_ready);
+    part.busReset();
+    try std.testing.expect(!part.echo_ready);
+    try std.testing.expectEqual(@as(u16, 0), part.echo_len);
+}
+
+test "a device in Default cannot be made to answer from the endpoint" {
+    var part = device.Device{};
+    _ = part.handle(set(setup.request.set_address, 7));
+    _ = part.handle(set(setup.request.set_configuration, 1));
+    _ = part.bulkOut(&[_]u8{ 0x55, 0xAA });
+    part.busReset();
+    var into: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(u16, 0), part.takeEcho(&into));
+}
+
+test "the endpoint works again once the device is configured anew" {
+    var part = device.Device{};
+    _ = part.handle(set(setup.request.set_address, 7));
+    _ = part.handle(set(setup.request.set_configuration, 1));
+    _ = part.bulkOut(&[_]u8{ 0x55, 0xAA });
+    part.busReset();
+    _ = part.handle(set(setup.request.set_address, 7));
+    _ = part.handle(set(setup.request.set_configuration, 1));
+    try std.testing.expect(part.bulkOut(&[_]u8{ 0x0D, 0xF0, 0x01 }));
+    var into: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(u16, 3), part.takeEcho(&into));
+    try std.testing.expectEqual(@as(u8, 0x0D), into[0]);
+}
+
+test "a bus reset does not count as a refusal" {
+    var part = device.Device{};
+    _ = part.handle(set(setup.request.set_address, 7));
+    _ = part.handle(set(setup.request.set_configuration, 1));
+    _ = part.bulkOut(&[_]u8{ 0x55, 0xAA });
+    const before = part.refusals();
+    part.busReset();
+    try std.testing.expectEqual(before, part.refusals());
+}
+
 test "GET_CONFIGURATION reports what the device took" {
     var part = device.Device{};
     _ = part.handle(set(setup.request.set_address, 3));
