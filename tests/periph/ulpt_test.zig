@@ -235,3 +235,65 @@ test "the block covers both channels and nothing else" {
     try std.testing.expect(window.covers(ch1 + ulpt.off.ioc));
     try std.testing.expect(!window.covers(ulpt.win_base + ulpt.win_span));
 }
+
+test "a 32-bit period loaded in two halfword stores lands whole" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 2, 0xBEEF);
+    unit.write(ch0 + ulpt.off.cnt + 2, 2, 0xDEAD);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), unit.read(ch0 + ulpt.off.cnt, 4));
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), unit.channels[0].reload);
+}
+
+test "a narrow read answers the lanes it names, not the whole register" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 0xBEEF), unit.read(ch0 + ulpt.off.cnt, 2));
+    try std.testing.expectEqual(@as(u32, 0xDEAD), unit.read(ch0 + ulpt.off.cnt + 2, 2));
+    try std.testing.expectEqual(@as(u32, 0xAD), unit.read(ch0 + ulpt.off.cnt + 2, 1));
+}
+
+test "a halfword store at the control register starts the channel and selects its source" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cnt, 4, 0x4000);
+    const both: u32 = ulpt.control.tstart | (@as(u32, 0x03) << 8);
+    unit.write(ch0 + ulpt.off.cr, 2, both);
+    try std.testing.expect(unit.channels[0].running());
+    try std.testing.expectEqual(@as(u8, 0x03), unit.channels[0].mr1);
+}
+
+test "a word read of the control group answers all four of its registers" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.mr1, 1, 0x11);
+    unit.write(ch0 + ulpt.off.mr2, 1, 0x22);
+    unit.write(ch0 + ulpt.off.mr3, 1, 0x33);
+    unit.write(ch0 + ulpt.off.cr, 1, ulpt.control.tstart);
+    const word = unit.read(ch0 + ulpt.off.cr, 4);
+    try std.testing.expectEqual(@as(u32, 0x11), (word >> 8) & 0xFF);
+    try std.testing.expectEqual(@as(u32, 0x22), (word >> 16) & 0xFF);
+    try std.testing.expectEqual(@as(u32, 0x33), (word >> 24) & 0xFF);
+    try std.testing.expect(word & ulpt.control.tstart != 0);
+}
+
+test "a byte store into a compare value leaves the rest of it standing" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cma, 4, 0x1234_5678);
+    unit.write(ch0 + ulpt.off.cma + 3, 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0xFF34_5678), unit.read(ch0 + ulpt.off.cma, 4));
+}
+
+test "one access is one compare touch, however many bytes it names" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.cma, 4, 0x20);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].compares.touches);
+    _ = unit.read(ch0 + ulpt.off.cma, 4);
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[0].compares.touches);
+    _ = unit.read(ch0 + ulpt.off.cr, 1);
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[0].compares.touches);
+}
+
+test "a byte past the I/O control register holds nothing and reads zero" {
+    var unit = ulpt.Ulpt.init();
+    unit.write(ch0 + ulpt.off.ioc + 1, 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + ulpt.off.ioc + 1, 1));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch1 - 1, 1));
+}

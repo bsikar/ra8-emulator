@@ -46,8 +46,10 @@
 //! are AGTCR's TCMAF and TCMBF, which ULPTCR mirrors.
 const std = @import("std");
 
+const bytelanes = @import("bytelanes.zig");
 const periph = @import("registry.zig");
 const compare = @import("ulpt_compare.zig");
+const regs = @import("ulpt_regs.zig");
 
 /// The compare pair, re-exported so a caller reaches it through the block.
 pub const match = compare;
@@ -58,16 +60,9 @@ pub const stride: u32 = 0x100;
 pub const channels: usize = 2;
 pub const win_span: u32 = stride * channels;
 
-pub const off = struct {
-    pub const cnt: u32 = 0x00;
-    pub const cma: u32 = 0x04;
-    pub const cmb: u32 = 0x08;
-    pub const cr: u32 = 0x0C;
-    pub const mr1: u32 = 0x0D;
-    pub const mr2: u32 = 0x0E;
-    pub const mr3: u32 = 0x0F;
-    pub const ioc: u32 = 0x10;
-};
+/// Register offsets inside a channel. The map owns them, because the map is
+/// what an access is resolved against.
+pub const off = regs.at;
 
 /// ULPTCR (HUM Ch 25.2.1 p 1190). TSTART is RW, TCSTF read-only, TSTOP
 /// write-only, TUNDF write-ZERO-to-clear like the watchdog's status flags.
@@ -210,60 +205,40 @@ pub const Ulpt = struct {
         return true;
     }
 
+    /// AN ACCESS IS THE BYTES IT NAMES, LOW LANE FIRST. The answer is
+    /// assembled right-justified, which is what `registry.mask` hands back to
+    /// the core, so a word read of the ULPTCR..ULPTMR3 group answers all four
+    /// of those registers and a byte read of one answers that one.
     pub fn read(self: *Ulpt, address: u32, width: u3) u32 {
         const offset = address -% win_base;
         const index = offset / stride;
         if (index >= channels) return 0;
         const channel = &self.channels[index];
-        const local = offset % stride;
-        const cell = self.cellValue(channel, local);
-        const lane = local - cellBase(local);
-        return extract(cell, lane, width);
+        const start = offset % stride;
+        var answer: u32 = 0;
+        var lane: u32 = 0;
+        while (lane < bytelanes.span(width)) : (lane += 1) {
+            answer = bytelanes.place(answer, readByte(channel, start +% lane), lane);
+        }
+        if (namesCompare(start, width)) channel.compares.touch();
+        return answer;
     }
 
+    /// The same rule for a store, in ascending lane order: a halfword store at
+    /// ULPTCR carries the control byte in the low lane and the count source
+    /// above it, and the driver that wrote it meant start, then mode. A byte
+    /// no register owns holds nothing.
     pub fn write(self: *Ulpt, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% win_base;
         const index = offset / stride;
         if (index >= channels) return;
         const channel = &self.channels[index];
-        switch (cellBase(offset % stride)) {
-            off.cnt => {
-                // A write seeds both the live count and the period the
-                // counter reloads from (ra8_ulpt_start writes one value).
-                channel.counter = value;
-                channel.reload = value;
-            },
-            off.cma => channel.compares.set(.a, value),
-            off.cmb => channel.compares.set(.b, value),
-            off.cr => channel.writeControl(@truncate(value)),
-            off.mr1 => channel.mr1 = @truncate(value),
-            off.mr2 => channel.mr2 = @truncate(value),
-            off.mr3 => channel.mr3 = @truncate(value),
-            off.ioc => channel.ioc = @truncate(value),
-            else => {},
+        const start = offset % stride;
+        var lane: u32 = 0;
+        while (lane < bytelanes.span(width)) : (lane += 1) {
+            writeByte(channel, start +% lane, bytelanes.byteAt(value, lane));
         }
-    }
-
-    fn cellValue(self: *Ulpt, channel: *Channel, local: u32) u32 {
-        _ = self;
-        return switch (cellBase(local)) {
-            off.cnt => channel.counter,
-            off.cma => blk: {
-                channel.compares.touch();
-                break :blk channel.compares.a;
-            },
-            off.cmb => blk: {
-                channel.compares.touch();
-                break :blk channel.compares.b;
-            },
-            off.cr => channel.cr,
-            off.mr1 => channel.mr1,
-            off.mr2 => channel.mr2,
-            off.mr3 => channel.mr3,
-            off.ioc => channel.ioc,
-            else => 0,
-        };
+        if (namesCompare(start, width)) channel.compares.touch();
     }
 
     pub fn block(self: *Ulpt) periph.Block {
@@ -278,25 +253,63 @@ pub const Ulpt = struct {
     }
 };
 
-/// Which register cell an offset lands in. The three 32-bit cells cover four
-/// bytes each; everything above them is one byte of its own.
-fn cellBase(local: u32) u32 {
-    if (local < off.cma) return off.cnt;
-    if (local < off.cmb) return off.cma;
-    if (local < off.cr) return off.cmb;
-    return local;
+/// One byte out of the register that owns it. A byte past ULPTIOC, or past
+/// the end of a channel, belongs to nothing and reads zero.
+fn readByte(channel: *const Channel, local: u32) u8 {
+    const place = regs.owner(local) orelse return 0;
+    const shift = bytelanes.shift(place.index);
+    return switch (place.reg) {
+        .cnt => @truncate(channel.counter >> shift),
+        .cma => @truncate(channel.compares.a >> shift),
+        .cmb => @truncate(channel.compares.b >> shift),
+        .cr => channel.cr,
+        .mr1 => channel.mr1,
+        .mr2 => channel.mr2,
+        .mr3 => channel.mr3,
+        .ioc => channel.ioc,
+    };
 }
 
-/// The bytes of `cell` an access of `width` starting at byte `lane` sees.
-fn extract(cell: u32, lane: u32, width: u3) u32 {
-    var value: u32 = 0;
-    var i: u32 = 0;
-    while (i < width) : (i += 1) {
-        const byte = lane + i;
-        if (byte >= @sizeOf(u32)) break;
-        value |= ((cell >> @intCast(byte * 8)) & 0xFF) << @intCast(i * 8);
+/// One byte into the register that owns it, leaving the rest of that register
+/// where it was: a driver is free to load a 32-bit period in two halfword
+/// stores, and both of them have to land.
+fn writeByte(channel: *Channel, local: u32, byte: u8) void {
+    const place = regs.owner(local) orelse return;
+    switch (place.reg) {
+        .cnt => {
+            // A write seeds both the live count and the period the counter
+            // reloads from (ra8_ulpt_start writes one value).
+            const seeded = fold(channel.counter, place.index, byte);
+            channel.counter = seeded;
+            channel.reload = seeded;
+        },
+        .cma => channel.compares.a = fold(channel.compares.a, place.index, byte),
+        .cmb => channel.compares.b = fold(channel.compares.b, place.index, byte),
+        .cr => channel.writeControl(byte),
+        .mr1 => channel.mr1 = byte,
+        .mr2 => channel.mr2 = byte,
+        .mr3 => channel.mr3 = byte,
+        .ioc => channel.ioc = byte,
     }
-    return value;
+}
+
+/// Whether an access reaches either compare register. The pair counts the
+/// accesses that reach it, so one access is one touch however many of its
+/// bytes land there.
+fn namesCompare(start: u32, width: u3) bool {
+    var lane: u32 = 0;
+    while (lane < bytelanes.span(width)) : (lane += 1) {
+        const place = regs.owner(start +% lane) orelse continue;
+        if (regs.isCompare(place.reg)) return true;
+    }
+    return false;
+}
+
+/// Put one byte back into a 32-bit register at its lane.
+fn fold(current: u32, index: u32, byte: u8) u32 {
+    const shift = bytelanes.shift(index);
+    const window = @as(u32, 0xFF) << shift;
+    return (current & ~window) | (@as(u32, byte) << shift);
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
