@@ -164,3 +164,72 @@ test "a fresh transfer is quiet" {
     try std.testing.expect(transfer.quiet());
     try std.testing.expectEqual(@as(u32, 0), transfer.refusals());
 }
+
+test "a packet the device refuses stays staged instead of vanishing" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    // Armed pipe, but the device is still in Default: no bulk endpoint yet.
+    _ = pipes.setControl(2, regs.pipe.pid_buf);
+    transfer.port.select(regs.fifo.isel | 2);
+    transfer.port.writeData(0xBEEF, 2, 64);
+    transfer.commit(&pipes);
+    try std.testing.expectEqual(@as(u16, 0), transfer.bemp);
+    try std.testing.expectEqual(@as(u32, 1), transfer.refused_out);
+    try std.testing.expectEqual(@as(u32, 2), transfer.refused_bytes);
+    // The bytes the host wrote are still in the buffer.
+    try std.testing.expectEqualSlices(
+        u8,
+        &[_]u8{ 0xEF, 0xBE },
+        transfer.port.out[2].staged(),
+    );
+}
+
+test "the refused packet goes out on the next BVAL, once the device is configured" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    _ = pipes.setControl(2, regs.pipe.pid_buf);
+    transfer.port.select(regs.fifo.isel | 2);
+    transfer.port.writeData(0xBEEF, 2, 64);
+    transfer.commit(&pipes);
+    try std.testing.expectEqual(@as(u32, 1), transfer.refused_out);
+    // Enumerate, then hand the same staged packet over again.
+    transfer.usbreq = 0x0500;
+    transfer.usbval = 3;
+    transfer.launch(true);
+    transfer.usbreq = 0x0900;
+    transfer.usbval = 1;
+    transfer.launch(true);
+    transfer.commit(&pipes);
+    try std.testing.expect(transfer.bemp & (@as(u16, 1) << 2) != 0);
+    try std.testing.expect(transfer.device.echo_ready);
+    try std.testing.expectEqual(@as(u16, 0), transfer.port.out[2].len);
+    try std.testing.expectEqual(@as(u32, 1), transfer.refused_out);
+}
+
+test "a taken packet empties the buffer" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    transfer.usbreq = 0x0500;
+    transfer.usbval = 3;
+    transfer.launch(true);
+    transfer.usbreq = 0x0900;
+    transfer.usbval = 1;
+    transfer.launch(true);
+    _ = pipes.setControl(2, regs.pipe.pid_buf);
+    transfer.port.select(regs.fifo.isel | 2);
+    transfer.port.writeData(0x44332211, 4, 64);
+    transfer.commit(&pipes);
+    try std.testing.expectEqual(@as(u16, 0), transfer.port.out[2].len);
+    try std.testing.expectEqual(@as(u32, 0), transfer.refused_out);
+}
+
+test "a refused packet counts as a refusal the run can report" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    _ = pipes.setControl(1, regs.pipe.pid_buf);
+    transfer.port.select(regs.fifo.isel | 1);
+    transfer.port.writeData(0xAA, 1, 64);
+    transfer.commit(&pipes);
+    try std.testing.expect(!transfer.quiet());
+    try std.testing.expect(transfer.refusals() >= 1);
+}

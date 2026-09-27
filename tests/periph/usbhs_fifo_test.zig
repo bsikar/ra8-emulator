@@ -123,3 +123,13 @@ test "draining a staging hands the bytes over and empties it" {
     try std.testing.expectEqual(@as(u16, 0), staging.len);
     try std.testing.expect(!staging.ready);
 }
+
+test "peeking at a staging leaves it exactly as it was" {
+    var staging = fifo.Staging{};
+    staging.fill(&[_]u8{ 4, 5, 6 });
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 5, 6 }, staging.staged());
+    // Looking is not taking: a caller that goes on to refuse the bytes has
+    // not emptied the buffer by asking what is in it.
+    try std.testing.expectEqual(@as(u16, 3), staging.len);
+    try std.testing.expect(staging.ready);
+}

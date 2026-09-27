@@ -147,6 +147,12 @@ pub fn usb(board: *Board, out: Writer) !void {
             },
         );
     }
+    if (host.xfer.refused_out != 0) {
+        try out.print(
+            "  {d} OUT packet(s) the device REFUSED, {d} byte(s) still staged for a retry\n",
+            .{ host.xfer.refused_out, host.xfer.refused_bytes },
+        );
+    }
     if (host.refusals() == 0) return;
     try out.print(
         "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++
