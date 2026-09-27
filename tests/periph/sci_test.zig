@@ -257,3 +257,80 @@ test "a device goes on one channel only" {
     put(&unit, 8, "!");
     try std.testing.expectEqual(@as(u32, 0), thing.fed);
 }
+
+test "a byte poll of CSR's top byte sees TDRE, which is bit 29" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const top = unit.read(sci.regAddress(sci.console_channel, sci.off_csr) + 3, 1);
+    try std.testing.expect(top & (sci.csr.tdre >> 24) != 0);
+    try std.testing.expect(top & (sci.csr.tend >> 24) != 0);
+}
+
+test "a halfword poll of CSR's low half sees RXDMON, which is bit 15" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const low = unit.read(sci.regAddress(sci.console_channel, sci.off_csr), 2);
+    try std.testing.expect(low & sci.csr.rxdmon != 0);
+}
+
+test "a byte read of FTSR carries TDFE" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const byte = unit.read(sci.regAddress(sci.console_channel, sci.off_ftsr), 1);
+    try std.testing.expect(byte & sci.fifo.ftsr_tdfe != 0);
+}
+
+test "a byte store to CCR0 leaves the interrupt enables above it alone" {
+    var unit = sci.Sci.init();
+    const at = sci.regAddress(sci.console_channel, sci.off_ccr0);
+    unit.write(at, 4, sci.ccr0.te | sci.ccr0.tie);
+    unit.write(at, 1, sci.ccr0.te | sci.ccr0.re);
+    try std.testing.expectEqual(
+        sci.ccr0.te | sci.ccr0.re | sci.ccr0.tie,
+        unit.read(at, 4),
+    );
+}
+
+test "a byte-wide polled put still sends, and the console line captures it" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const tdr = sci.regAddress(sci.console_channel, sci.off_tdr);
+    for ("hi\n") |byte| unit.write(tdr, 1, byte);
+    try std.testing.expectEqual(@as(u32, 3), unit.console().transmitted);
+    try std.testing.expectEqualStrings("hi", unit.line.slice());
+}
+
+test "a narrow store above TDAT carries no character" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.write(sci.regAddress(sci.console_channel, sci.off_tdr) + 1, 1, 'Z');
+    try std.testing.expectEqual(@as(u32, 0), unit.console().transmitted);
+}
+
+test "a store to CSR is refused and counted, and the word still derives" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const at = sci.regAddress(sci.console_channel, sci.off_csr);
+    unit.write(at, 4, 0);
+    unit.write(at + 3, 1, 0);
+    try std.testing.expectEqual(@as(u32, 2), unit.console().status_stores);
+    try std.testing.expect(unit.read(at, 4) & sci.csr.tdre != 0);
+}
+
+test "a store to FRSR or FTSR is refused the same way" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.write(sci.regAddress(sci.console_channel, sci.off_frsr), 4, 0xFFFF_FFFF);
+    unit.write(sci.regAddress(sci.console_channel, sci.off_ftsr), 4, 0);
+    try std.testing.expectEqual(@as(u32, 2), unit.console().status_stores);
+    try std.testing.expect(unit.read(sci.regAddress(sci.console_channel, sci.off_ftsr), 4) & sci.fifo.ftsr_tdfe != 0);
+}
+
+test "the clear strobes are accepted no-ops, not refusals" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.write(sci.regAddress(sci.console_channel, sci.off_cfclr), 4, 0xFFFF_FFFF);
+    unit.write(sci.regAddress(sci.console_channel, sci.off_ffclr), 4, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0), unit.console().status_stores);
+    try std.testing.expect(unit.read(sci.regAddress(sci.console_channel, sci.off_csr), 4) & sci.csr.tdre != 0);
+}

@@ -20,6 +20,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             try out.print(", {d} WRITE(S) WITH TE CLEAR NEVER SENT", .{channel.unsent});
         }
         try out.print("\n", .{});
+        if (channel.status_stores != 0) {
+            try out.print(
+                "SCI{d}: REFUSED {d} store(s) to CSR/FRSR/FTSR, the controller owns those words\n",
+                .{ index, channel.status_stores },
+            );
+        }
     }
     if (board.serial.line.lines != 0) {
         try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
