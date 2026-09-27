@@ -251,9 +251,10 @@ pub const Source = struct {
             return null;
         }
         const address: u32 = @intCast(byte);
-        // A texture lives in memory, not in the peripheral window: dev never
-        // read one at all, so this is the first chance to say where it is.
-        if (!memmap.ramHolds(address, 4)) {
+        // A texture lives in memory the engine can reach, not in the
+        // peripheral window and not in the core's own TCM: dev never read one
+        // at all, so this is the first chance to say where it is.
+        if (!memmap.masterHolds(address, 4)) {
             self.off_ram +%= 1;
             return null;
         }

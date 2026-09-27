@@ -7,6 +7,7 @@ const dwt = mod.dwt;
 const nvic = mod.nvic;
 const ppb_base = mod.ppb_base;
 const ppb_size = mod.ppb_size;
+const masterHolds = mod.masterHolds;
 const ram = mod.ram;
 const scb = mod.scb;
 const syst = mod.syst;
@@ -32,4 +33,33 @@ test "regions are ordered, non-overlapping and page aligned" {
         try std.testing.expectEqual(@as(u32, 0), region.size % 0x1000);
         previous_end = region.end();
     }
+}
+
+test "a bus master reaches the SRAM and both SDRAM aliases" {
+    try std.testing.expect(masterHolds(mod.sram_base, 4));
+    try std.testing.expect(masterHolds(mod.sram_end - 4, 4));
+    try std.testing.expect(masterHolds(mod.sdram_base, 4));
+    try std.testing.expect(masterHolds(mod.sdram_end - 4, 4));
+    try std.testing.expect(masterHolds(mod.ns_sdram_base, 4));
+    try std.testing.expect(masterHolds(mod.ns_sdram_end - 4, 4));
+}
+
+test "a bus master does not reach the core's own TCM" {
+    try std.testing.expect(!masterHolds(mod.dtcm_base, 4));
+    try std.testing.expect(!masterHolds(mod.dtcm_end - 4, 4));
+}
+
+test "the peripheral window and the PPB are not somewhere a frame lives" {
+    try std.testing.expect(!masterHolds(0x4000_0000, 4));
+    try std.testing.expect(!masterHolds(mod.ppb_base, 4));
+}
+
+test "a span that runs off the end of a window is not held by it" {
+    try std.testing.expect(!masterHolds(mod.sram_end - 2, 4));
+    try std.testing.expect(!masterHolds(mod.sdram_end - 2, 4));
+    try std.testing.expect(!masterHolds(0xFFFF_FFFC, 8));
+}
+
+test "an empty span is nowhere" {
+    try std.testing.expect(!masterHolds(mod.sram_base, 0));
 }

@@ -52,7 +52,7 @@ fn refusedFrames(refused: anytype, out: Writer) !void {
         .{refused.stopped},
     );
     if (refused.off_ram != 0) try out.print(
-        ", {d} DESCRIPTOR(S) POINTING OUTSIDE RAM REFUSED",
+        ", {d} DESCRIPTOR(S) POINTING SOMEWHERE THE GATEWAY CANNOT REACH REFUSED",
         .{refused.off_ram},
     );
     if (refused.too_big != 0) try out.print(

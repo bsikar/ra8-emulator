@@ -28,6 +28,7 @@ pub const sram_end: u32 = 0x2210_0000;
 pub const sdram_base: u32 = 0x6800_0000;
 pub const sdram_end: u32 = 0x6C00_0000;
 pub const ns_sdram_base: u32 = 0x7800_0000;
+pub const ns_sdram_end: u32 = ns_sdram_base + (sdram_end - sdram_base);
 
 /// The Cortex-M Private Peripheral Bus: SCB, NVIC, SysTick, MPU, SAU and the
 /// debug block. The C emulator maps this as plain RAM rather than callback
@@ -42,7 +43,7 @@ pub const ram = [_]Region{
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
     .{ .name = "SRAM", .base = sram_base, .size = sram_end - sram_base, .perms = .{} },
     .{ .name = "SDRAM", .base = sdram_base, .size = sdram_end - sdram_base, .perms = .{} },
-    .{ .name = "NS SDRAM", .base = ns_sdram_base, .size = sdram_end - sdram_base, .perms = .{} },
+    .{ .name = "NS SDRAM", .base = ns_sdram_base, .size = ns_sdram_end - ns_sdram_base, .perms = .{} },
     .{ .name = "PPB", .base = ppb_base, .size = ppb_size, .perms = .{ .exec = false } },
 };
 
@@ -107,12 +108,40 @@ pub const dwt = struct {
     pub const cyccnt: u32 = 0xE000_1004;
 };
 
-/// Whether a span of `len` bytes at `at` lies inside the board's SRAM. A
-/// model that follows a pointer the firmware gave it asks this first: a
-/// half-built descriptor points anywhere, and the peripheral window is not
-/// somewhere a frame may be read out of or written into.
-pub fn ramHolds(at: u32, len: u32) bool {
+/// A span of addresses, as a base and the first address past it.
+pub const Window = struct {
+    base: u32,
+    end: u32,
+
+    /// Whether `len` bytes at `at` lie wholly inside this window.
+    pub fn holds(self: Window, at: u32, len: u32) bool {
+        return at >= self.base and @as(u64, at) + len <= @as(u64, self.end);
+    }
+};
+
+/// The RAM a bus master other than the CPU can reach: the on-chip SRAM and
+/// the external SDRAM, through both its Secure and its Non-secure alias.
+///
+/// DTCM is deliberately not here. It is the core's own tightly coupled
+/// memory, reached over the CPU's private port rather than over the fabric
+/// the descriptor engines and the drawing engine issue on, so a ring or a
+/// texture pointed into it is a programming bug on the bench as much as it
+/// is here. The peripheral window is not here either, for the same reason it
+/// never was: it is registers, not somewhere a frame may be read out of or
+/// written into.
+pub const master_ram = [_]Window{
+    .{ .base = sram_base, .end = sram_end },
+    .{ .base = sdram_base, .end = sdram_end },
+    .{ .base = ns_sdram_base, .end = ns_sdram_end },
+};
+
+/// Whether a span of `len` bytes at `at` is somewhere a bus master may read
+/// or write. A model that follows a pointer the firmware gave it asks this
+/// first, because a half-built descriptor points anywhere.
+pub fn masterHolds(at: u32, len: u32) bool {
     if (len == 0) return false;
-    if (at < sram_base) return false;
-    return @as(u64, at) + len <= @as(u64, sram_end);
+    for (master_ram) |window| {
+        if (window.holds(at, len)) return true;
+    }
+    return false;
 }

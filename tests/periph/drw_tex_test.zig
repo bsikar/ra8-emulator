@@ -8,7 +8,7 @@ const tex = ra8.periph.drw_tex;
 const texel = ra8.periph.drw_texel;
 const engine = ra8.core.engine;
 
-/// An SRAM address a texture can live at, which memmap.ramHolds admits.
+/// An SRAM address a texture can live at, which memmap.masterHolds admits.
 const tex_base: u32 = 0x2200_0000;
 
 fn readFormat(code: u32) u32 {
