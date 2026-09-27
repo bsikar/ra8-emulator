@@ -37,7 +37,7 @@ test "DADR is twelve bits: the rest of the store does not read back" {
     enable(&block, ch0);
     block.write(ch0 + dac.off_dadr, 4, 0xF123);
     try std.testing.expectEqual(@as(u32, 0x0123), block.read(ch0 + dac.off_dadr, 4));
-    try std.testing.expectEqual(@as(u16, 0x0123), block.channels[0].code);
+    try std.testing.expectEqual(@as(u16, 0x0123), block.channels[0].code());
 }
 
 test "a code written with DACEN clear is stored but is not an output" {
@@ -66,7 +66,7 @@ test "peak keeps the largest code, not the last" {
     block.write(ch0 + dac.off_dadr, 2, 0x0800);
     block.write(ch0 + dac.off_dadr, 2, 0x0010);
     try std.testing.expectEqual(@as(u16, 0x0800), block.channels[0].peak);
-    try std.testing.expectEqual(@as(u16, 0x0010), block.channels[0].code);
+    try std.testing.expectEqual(@as(u16, 0x0010), block.channels[0].code());
     try std.testing.expectEqual(@as(u32, 2), block.channels[0].outputs);
 }
 
@@ -101,8 +101,8 @@ test "the two channels are separate" {
 
 test "an uninterpreted register in the window reads back what was written" {
     var block = unit();
-    block.write(ch0 + 0x08, 4, 0xDEAD_BEEF);
-    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), block.read(ch0 + 0x08, 4));
+    block.write(ch0 + 0x0C, 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), block.read(ch0 + 0x0C, 4));
     try std.testing.expect(block.quiet());
 }
 

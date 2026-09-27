@@ -8,7 +8,7 @@
 //! here is its own control state read back, and what a headless run can
 //! observe is the code stream itself.
 //!
-//! Ported from board_periph_dac.c on dev, with three things that model does
+//! Ported from board_periph_dac.c on dev, with four things that model does
 //! not do.
 //!
 //! A NARROW WRITE ONLY TOUCHES THE BYTES IT NAMES. dev ignores the access
@@ -28,13 +28,23 @@
 //! the report says so, because an image whose enable never took is exactly
 //! the failure the count was supposed to catch.
 //!
-//! NOT MODELLED, AND NOT GUESSED: DACR0 carries DAE and DAOUTDIS beside
-//! DACEN, and DACR1/DACR2 carry DPSEL and OFSSEL, but no header for this part
-//! is in this tree to say which bits those are. Only DACEN, bit 0, which
-//! dev's own mask names, is interpreted; everything else in the window is
-//! shadowed so a read-modify-write survives, and never read.
+//! A DISABLED OUTPUT CONVERTS NOTHING, ENABLE OR NO ENABLE. DACR0.DAOUTDIS
+//! is how a driver opened without the internal route, and how the block's own
+//! deinit, shuts a channel; a code stored to one is staged, not driven. The
+//! placement of those twelve bits inside DADR is DACR1.DPSEL's call, not a
+//! fixed low-twelve. Both live in src/periph/dac_output.zig, which carries
+//! the bit map and what is deliberately left alone in it.
+//!
+//! NOT MODELLED, AND NOT GUESSED: DACR0.DAE and DACR2.OFSSEL, for the reasons
+//! that file gives. The rest of the window is shadowed so a read-modify-write
+//! survives, and never read.
 const std = @import("std");
+const output = @import("dac_output.zig");
 const periph = @import("registry.zig");
+
+/// The output gate and the data placement, reached as `dac.gate` the way the
+/// other split blocks in this tree re-export their halves.
+pub const gate = output;
 
 /// DAC_B geometry. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4023_3000;
@@ -45,13 +55,16 @@ pub const win_span: u32 = channel_stride * @as(u32, channel_count);
 /// The two registers this model interprets.
 pub const off_dadr: u32 = 0x00;
 pub const off_dacr0: u32 = 0x04;
+pub const off_dacr1: u32 = output.off.dacr1;
 
 /// The fields dev's own masks name.
 pub const field = struct {
     /// DADR's data field. The channel converts these twelve bits.
     pub const data: u32 = 0x0000_0FFF;
     /// DACR0.DACEN, the channel enable.
-    pub const dacen: u32 = 0x0000_0001;
+    pub const dacen: u32 = output.mask.dacen;
+    /// DACR0.DAOUTDIS, the output disable.
+    pub const daoutdis: u32 = output.mask.daoutdis;
 };
 
 /// Words of a channel's window this model shadows rather than interprets.
@@ -60,10 +73,12 @@ const shadow_words: usize = channel_stride / 4;
 /// One DAC_B channel: the code it holds, its control state, and what the run
 /// should be told about the codes it was given.
 pub const Channel = struct {
-    /// DADR, masked to the data field on every store.
-    code: u16 = 0,
-    /// DACR0. Only bit 0 is read; the rest rides along untouched.
+    /// DADR, masked on every store to the bits the placement has.
+    dadr: u16 = 0,
+    /// DACR0. DACEN and DAOUTDIS are read; the rest rides along untouched.
     dacr0: u32 = 0,
+    /// DACR1. DPSEL is read; the rest rides along untouched.
+    dacr1: u32 = 0,
     shadow: [shadow_words]u32 = .{0} ** shadow_words,
     /// Codes accepted while the channel was enabled.
     outputs: u32 = 0,
@@ -71,23 +86,42 @@ pub const Channel = struct {
     peak: u16 = 0,
     /// Codes written while DACEN was clear: stored, but not an output.
     dark: u32 = 0,
+    /// Codes written to an enabled channel whose output was disabled.
+    blocked: u32 = 0,
 
     pub fn enabled(self: *const Channel) bool {
         return self.dacr0 & field.dacen != 0;
     }
 
-    pub fn quiet(self: *const Channel) bool {
-        return self.outputs == 0 and self.dark == 0;
+    /// Enabled, and the output not disabled: the only state that converts.
+    pub fn driving(self: *const Channel) bool {
+        return output.driving(self.dacr0);
     }
 
-    /// Take a code. Whether it counts as an output is DACEN's call, but the
+    pub fn placement(self: *const Channel) output.Placement {
+        return output.Placement.of(self.dacr1);
+    }
+
+    /// The code DADR is carrying, wherever DPSEL put it.
+    pub fn code(self: *const Channel) u16 {
+        return self.placement().code(self.dadr);
+    }
+
+    pub fn quiet(self: *const Channel) bool {
+        return self.outputs == 0 and self.dark == 0 and self.blocked == 0;
+    }
+
+    /// Take a code. Whether it converts is the output gate's call, but the
     /// register latches either way: firmware can stage a code and enable the
     /// channel afterwards, and reading DADR back has to show what it staged.
     fn latch(self: *Channel, value: u32) void {
-        self.code = @intCast(value & field.data);
-        if (self.enabled()) {
+        self.dadr = @as(u16, @truncate(value)) & self.placement().held();
+        if (self.driving()) {
             self.outputs +%= 1;
-            if (self.code > self.peak) self.peak = self.code;
+            const now = self.code();
+            if (now > self.peak) self.peak = now;
+        } else if (self.enabled()) {
+            self.blocked +%= 1;
         } else {
             self.dark +%= 1;
         }
@@ -115,8 +149,9 @@ pub const Dac = struct {
         const unit = &self.channels[index];
         const inner = offset % channel_stride;
         return switch (inner & ~@as(u32, 3)) {
-            off_dadr => part(unit.code, inner % 4, width),
+            off_dadr => part(unit.dadr, inner % 4, width),
             off_dacr0 => part(unit.dacr0, inner % 4, width),
+            off_dacr1 => part(unit.dacr1, inner % 4, width),
             else => part(unit.shadow[inner / 4], inner % 4, width),
         };
     }
@@ -129,8 +164,9 @@ pub const Dac = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_dadr => unit.latch(merge(unit.code, byte, width, value)),
+            off_dadr => unit.latch(merge(unit.dadr, byte, width, value)),
             off_dacr0 => unit.dacr0 = merge(unit.dacr0, byte, width, value),
+            off_dacr1 => unit.dacr1 = merge(unit.dacr1, byte, width, value),
             else => {
                 const word = inner / 4;
                 unit.shadow[word] = merge(unit.shadow[word], byte, width, value);

@@ -2,7 +2,8 @@
 //!
 //! DAC_B has no conversion-result readback on this part, so a headless run's
 //! only window onto the channel is the code stream firmware wrote and whether
-//! DACR0.DACEN was set when it wrote it.
+//! the channel was in a state that converts it: DACR0.DACEN set and
+//! DACR0.DAOUTDIS clear.
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
@@ -21,15 +22,27 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{
                 index,
                 unit.outputs,
-                unit.code,
+                unit.code(),
                 unit.peak,
-                if (unit.enabled()) "enabled" else "disabled",
+                if (unit.driving()) "driving" else if (unit.enabled()) "output disabled" else "disabled",
             },
         );
         if (unit.dark != 0) {
             try out.print(
                 "DAC_B{d}: {d} code(s) written with DACEN clear, latched but not converted\n",
                 .{ index, unit.dark },
+            );
+        }
+        if (unit.blocked != 0) {
+            try out.print(
+                "DAC_B{d}: {d} code(s) written with DAOUTDIS set, latched but not driven\n",
+                .{ index, unit.blocked },
+            );
+        }
+        if (unit.placement() != .right) {
+            try out.print(
+                "DAC_B{d}: DADR read {s}, per DACR1.DPSEL\n",
+                .{ index, unit.placement().name() },
             );
         }
     }
