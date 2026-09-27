@@ -25,6 +25,12 @@ pub const Staging = struct {
         return self.len - self.cursor;
     }
 
+    /// The bytes sitting in the buffer, without taking them. A caller that
+    /// may yet refuse them looks here first and drains only once it has.
+    pub fn staged(self: *const Staging) []const u8 {
+        return self.data[0..self.len];
+    }
+
     /// Take the staged bytes and hand them to a caller that owns them now.
     pub fn drain(self: *Staging, into: []u8) u16 {
         const len: usize = @min(self.len, into.len);

@@ -40,6 +40,10 @@ pub const Transfer = struct {
     no_device: u32 = 0,
     stray_ccpl: u32 = 0,
     unarmed: u32 = 0,
+    /// OUT packets the device would not take, and the bytes still staged
+    /// behind them. They are not gone: the host can send them again.
+    refused_out: u32 = 0,
+    refused_bytes: u32 = 0,
 
     /// DCPCTR.SUREQ: send the staged SETUP. A token needs something on the
     /// bus that has been through a reset; dev delivered it whatever the port
@@ -132,6 +136,13 @@ pub const Transfer = struct {
     /// them. A pipe the host has not armed moves nothing: dev committed
     /// whatever PIPECTR said, so a packet went out on a pipe the driver had
     /// left NAKing.
+    ///
+    /// The buffer is emptied by the device taking it, never before. A device
+    /// that refuses the packet, because it is not configured and has no bulk
+    /// endpoint yet, leaves the bytes where the host put them: BEMP stays
+    /// down, and the same BVAL after enumeration sends the same packet. The
+    /// buffer was drained ahead of the answer before, so a refused packet was
+    /// gone from both ends at once and the retry sent nothing.
     fn commitPipe(self: *Transfer, index: u32, pipes: *usbhs_pipe.Table) void {
         if (index != 0 and !pipes.pipes[index].armed()) {
             self.unarmed += 1;
@@ -139,13 +150,17 @@ pub const Transfer = struct {
         }
         const staging = &self.port.out[index];
         if (staging.len == 0) return;
-        var packet: [regs.staging.packet_cap]u8 = undefined;
-        const len = staging.drain(&packet);
         if (index == 0) {
+            staging.clear();
             self.bemp |= regs.status.dcp;
             return;
         }
-        if (!self.device.bulkOut(packet[0..len])) return;
+        if (!self.device.bulkOut(staging.staged())) {
+            self.refused_out += 1;
+            self.refused_bytes +%= staging.len;
+            return;
+        }
+        staging.clear();
         self.bemp |= @as(u16, 1) << @intCast(index);
     }
 
@@ -234,7 +249,8 @@ pub const Transfer = struct {
 
     pub fn refusals(self: *const Transfer) u32 {
         return self.no_device + self.stray_ccpl + self.unarmed + self.stalls +
-            self.port.refusals() + self.data.refusals() + self.device.refusals();
+            self.refused_out + self.port.refusals() + self.data.refusals() +
+            self.device.refusals();
     }
 
     pub fn quiet(self: *const Transfer) bool {
