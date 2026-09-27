@@ -304,6 +304,12 @@ fn transfers(board: *Board, out: Writer) !void {
             .{unit.suppressed},
         );
     }
+    if (unit.cache.skips != 0 or unit.cache.drops != 0) {
+        try out.print(
+            "DTC: DTCCR.RRS skipped {d} descriptor read(s) on a repeated vector, {d} read from memory, {d} copy(s) dropped\n",
+            .{ unit.cache.skips, unit.cache.reads, unit.cache.drops },
+        );
+    }
     if (unit.refused == 0) return;
     try out.print(
         "DTC: REFUSED {d} activation(s), last because of {s} (nothing moved, the core took the interrupt)\n",
