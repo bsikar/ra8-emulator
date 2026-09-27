@@ -99,8 +99,9 @@ test "a status flag is cleared by writing its bit zero, not one" {
     try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + agt.off.cr, 1) & agt.control.tundf);
 }
 
-test "a count passing the compare value sets TCMAF, which dev never raises" {
+test "a count passing an enabled compare value sets TCMAF, which dev never raises" {
     var unit = agt.Agt.init();
+    unit.write(ch0 + agt.off.cmsr, 1, agt.compare_fn.mask.tcmea);
     unit.write(ch0 + agt.off.cma, 2, 0x3800);
     armed(&unit, ch0, 0x4000);
     unit.tick();
@@ -110,18 +111,22 @@ test "a count passing the compare value sets TCMAF, which dev never raises" {
 
 test "a compare value the count has not reached does not match" {
     var unit = agt.Agt.init();
+    unit.write(ch0 + agt.off.cmsr, 1, agt.compare_fn.mask.tcmeb);
     unit.write(ch0 + agt.off.cmb, 2, 0x0100);
     armed(&unit, ch0, 0x4000);
     unit.tick();
     try std.testing.expectEqual(@as(u32, 0), unit.channels[0].matches_b);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].masked);
 }
 
-test "a compare left at zero is unarmed and never matches" {
+test "a compare AGTCMSR never enabled raises nothing and is counted instead" {
     var unit = agt.Agt.init();
-    armed(&unit, ch0, 0x0400);
+    unit.write(ch0 + agt.off.cma, 2, 0x3800);
+    armed(&unit, ch0, 0x4000);
     unit.tick();
     try std.testing.expectEqual(@as(u32, 0), unit.channels[0].matches_a);
-    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].matches_b);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + agt.off.cr, 1) & agt.control.tcmaf);
+    try std.testing.expect(unit.channels[0].masked != 0);
 }
 
 test "a counter write with the count running is refused" {
