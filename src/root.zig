@@ -30,6 +30,7 @@ pub const periph = struct {
     pub const clocks = @import("periph/clocks.zig");
     pub const crc = @import("periph/crc.zig");
     pub const dac = @import("periph/dac.zig");
+    pub const dac_output = @import("periph/dac_output.zig");
     pub const dma_bank = @import("periph/dma_bank.zig");
     pub const dmac = @import("periph/dmac.zig");
     pub const dmac_xfer = @import("periph/dmac_xfer.zig");
