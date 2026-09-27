@@ -45,14 +45,24 @@
 //! gives its offset, so it is not invented; without that, an armed-at-zero
 //! compare would match on every single wrap.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the count source and prescaler in AGTMR1 /
-//! AGTMR2, so every channel steps at one modelled rate; the event output and
-//! I/O pins; and the compare-match interrupts, which have event numbers this
-//! tree does not carry. Only the AGT0 combined event is raised, on underflow,
-//! which is what dev raises too.
+//! THE COUNT SOURCE IS THE ONE AGTMR1 SELECTS. That field used to be a
+//! shadow byte on both trees, so every channel stepped at one rate whatever
+//! a driver asked for. agt_clock.zig now reads TCK out of it: a divided
+//! source counts proportionally slower, and AGT1 set to cascade steps on
+//! AGT0's underflow instead of on a clock of its own.
+//!
+//! NOT MODELLED, AND NOT GUESSED: AGTMR2's own CKS divider, which has an
+//! offset in the header and no field table; the event output and I/O pins;
+//! and the compare-match interrupts, which have event numbers this tree does
+//! not carry. Only the AGT0 combined event is raised, on underflow, which is
+//! what dev raises too.
 const std = @import("std");
 
 const periph = @import("registry.zig");
+const clk = @import("agt_clock.zig");
+
+/// The count source, re-exported so a caller reaches it through the block.
+pub const source = clk;
 
 /// AGT geometry (ra8_agt_regs.h).
 pub const win_base: u32 = 0x4022_1000;
@@ -86,7 +96,8 @@ pub const event = struct {
     pub const agt0: u16 = 0x0DF;
 };
 
-/// Counts one chunk boundary stands for, carried from dev unchanged.
+/// Counts one chunk boundary stands for at the undivided source, carried
+/// from dev unchanged. AGTMR1's divider scales it down from here.
 pub const step_per_tick: u16 = 0x0800;
 
 /// At most one event per boundary, from channel 0.
@@ -100,6 +111,7 @@ pub const Channel = struct {
     cmpa: u16 = 0,
     cmpb: u16 = 0,
     cr: u8 = 0,
+    mr1: u8 = 0,
     shadow: [stride]u8 = @splat(0),
     underflows: u32 = 0,
     matches_a: u32 = 0,
@@ -108,25 +120,46 @@ pub const Channel = struct {
     forced_stops: u32 = 0,
     /// Counter and compare writes refused because the count was running.
     refused_running: u32 = 0,
+    /// Boundaries this channel was stepped by the channel it cascades from.
+    cascaded_steps: u32 = 0,
 
     pub fn running(self: Channel) bool {
         return self.cr & control.tstart != 0;
     }
 
-    /// One chunk of counting. Returns true when the count underflowed, which
-    /// is one interrupt request on silicon whatever TUNDF already reads.
-    pub fn tick(self: *Channel) bool {
-        if (!self.running()) return false;
+    /// What AGTMR1 selects for this channel. The index matters: only
+    /// channel 1 can take AGT0's underflow as its source.
+    pub fn source(self: Channel, index: usize) clk.Source {
+        return clk.sourceOf(self.mr1, index);
+    }
+
+    /// One chunk of counting at whatever source AGTMR1 selects. Returns true
+    /// when the count underflowed, which is one interrupt request on silicon
+    /// whatever TUNDF already reads.
+    pub fn tick(self: *Channel, index: usize) bool {
+        return self.advance(clk.step(step_per_tick, self.source(index)));
+    }
+
+    /// A cascaded channel counts the underflows handed to it, not a clock.
+    pub fn tickCascade(self: *Channel, underflows: u16) bool {
+        if (underflows == 0) return false;
+        if (self.running()) self.cascaded_steps +%= 1;
+        return self.advance(underflows);
+    }
+
+    /// Step the count down by `step`, flagging whatever it passed.
+    fn advance(self: *Channel, step: u16) bool {
+        if (!self.running() or step == 0) return false;
         const before = self.counter;
-        if (before >= step_per_tick) {
+        if (before >= step) {
             // Reaching exactly zero is not the underflow: the borrow happens
             // on the next decrement past it.
-            self.counter = before - step_per_tick;
+            self.counter = before - step;
             self.match(before, false);
             return false;
         }
         const span = @as(u32, self.reload) + 1;
-        const deficit = @as(u32, step_per_tick) - before;
+        const deficit = @as(u32, step) - before;
         self.counter = self.reload - @as(u16, @intCast((deficit - 1) % span));
         self.cr |= control.tundf;
         self.underflows +%= 1;
@@ -166,6 +199,7 @@ pub const Channel = struct {
             off.cma, off.cma + 1 => lane(self.cmpa, local - off.cma),
             off.cmb, off.cmb + 1 => lane(self.cmpb, local - off.cmb),
             off.cr => self.cr,
+            off.mr1 => self.mr1,
             else => self.shadow[local],
         };
     }
@@ -176,6 +210,7 @@ pub const Channel = struct {
             off.cma, off.cma + 1 => self.compare(&self.cmpa, local - off.cma, byte),
             off.cmb, off.cmb + 1 => self.compare(&self.cmpb, local - off.cmb, byte),
             off.cr => self.writeControl(byte),
+            off.mr1 => self.mr1 = byte,
             else => self.shadow[local] = byte,
         }
     }
@@ -201,7 +236,8 @@ pub const Channel = struct {
 
     pub fn quiet(self: Channel) bool {
         return self.underflows == 0 and self.matches_a == 0 and self.matches_b == 0 and
-            self.forced_stops == 0 and self.refused_running == 0 and !self.running();
+            self.forced_stops == 0 and self.refused_running == 0 and
+            self.cascaded_steps == 0 and !self.running();
     }
 };
 
@@ -232,9 +268,18 @@ pub const Agt = struct {
         return .{};
     }
 
+    /// One boundary. Channels count in index order, so AGT0's underflow is
+    /// already known by the time the cascade pair's high half is reached.
     pub fn tick(self: *Agt) void {
+        var carried: u16 = 0;
         for (&self.channels, 0..) |*channel, index| {
-            if (channel.tick() and index == 0) self.pending +%= 1;
+            const cascaded = channel.source(index).cascaded();
+            const underflowed = if (cascaded)
+                channel.tickCascade(carried)
+            else
+                channel.tick(index);
+            if (index == clk.cascade.low and underflowed) carried += 1;
+            if (index == 0 and underflowed) self.pending +%= 1;
         }
     }
 
