@@ -22,32 +22,25 @@
 //! the three-step ELSEGR0 sequence, reads 0x41 back, and believes it fired a
 //! software event, while no event exists and nothing downstream ever runs.
 //! The register layout here is ra8_elc_regs.h and HUM Ch 19 p 817..836.
+//!
+//! The map itself, and which lanes of a word each register occupies, is
+//! src/periph/elc_regs.zig; this file is the behaviour behind it.
 const std = @import("std");
 const periph = @import("registry.zig");
+const lanes = @import("lanes.zig");
+const regs = @import("elc_regs.zig");
 /// The link table lives next door; re-exported so a caller that has the
 /// block also has the slot vocabulary.
 pub const route = @import("elc_route.zig");
 
-/// ELC geometry (FSP R_ELC_Type, size 0x11C at 0x4020_1000).
-pub const win_base: u32 = 0x4020_1000;
-pub const win_span: u32 = 0x11C;
-
-/// Register byte offsets inside the window (ra8_elc_regs.h).
-pub const off = struct {
-    pub const elcr: u32 = 0x000;
-    pub const elsegr: u32 = 0x004;
-    pub const elsegr_stride: u32 = 0x004;
-    pub const elsr: u32 = 0x020;
-    pub const elsr_stride: u32 = 0x004;
-    pub const elcsara: u32 = 0x100;
-    pub const elcpara: u32 = 0x110;
-};
-
-/// How many of each the RA8D2 has.
-pub const generators: usize = 4;
-pub const links: usize = route.slots;
-/// Attribution registers: three security words then three privilege words.
-pub const attributions: usize = 6;
+/// Geometry, offsets and counts live with the map, and are re-exported so a
+/// caller that has the block does not have to reach past it.
+pub const win_base = regs.win_base;
+pub const win_span = regs.win_span;
+pub const off = regs.off;
+pub const generators = regs.generators;
+pub const links = regs.links;
+pub const attributions = regs.attributions;
 
 /// Field masks.
 pub const field = struct {
@@ -155,29 +148,43 @@ pub const Elc = struct {
         return due;
     }
 
+    /// A read of any width: the word the access lands in, cut to the lanes it
+    /// names. A lane the register does not occupy reads zero, because on the
+    /// part it is reserved space and not the register beside it.
     pub fn read(self: *Elc, address: u32, width: u3) u32 {
-        _ = width;
         const offset = address -% win_base;
-        if (offset == off.elcr) return self.elcr;
-        if (self.generatorAt(offset)) |index| return self.readGenerator(index);
-        if (self.linkAt(offset)) |index| return self.table.els[index];
-        if (self.attributionAt(offset)) |index| return self.attribution[index];
-        return 0;
+        const reg = regs.decode(lanes.word(offset)) orelse return 0;
+        return lanes.part(self.wordValue(reg), lanes.lane(offset), width);
     }
 
+    /// A store of any width, folded into the word it lands in so the lanes it
+    /// does not name keep what they had. ELS is ten bits across two, so the
+    /// byte store at ELSR+1 that carries the top of an event number reaches
+    /// the top of the register and not the bottom.
     pub fn write(self: *Elc, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% win_base;
-        if (offset == off.elcr) {
-            self.elcr = @truncate(value);
-            return;
+        const reg = regs.decode(lanes.word(offset)) orelse return;
+        const at = lanes.lane(offset);
+        // Reserved lanes only. Nothing happens on the part, so nothing happens
+        // here: not a trigger, not a stored value, and not a refusal either.
+        if (!regs.reaches(reg, at, width)) return;
+        const next = lanes.merge(self.wordValue(reg), at, width, value) & regs.occupied(reg);
+        switch (reg) {
+            .control => self.elcr = @truncate(next),
+            .generator => |index| self.writeGenerator(index, @truncate(next)),
+            .link => |index| self.table.latch(index, @truncate(next)),
+            .attribution => |index| self.attribution[index] = next,
         }
-        if (self.generatorAt(offset)) |index| return self.writeGenerator(index, @truncate(value));
-        if (self.linkAt(offset)) |index| {
-            self.table.latch(index, @truncate(value));
-            return;
-        }
-        if (self.attributionAt(offset)) |index| self.attribution[index] = value;
+    }
+
+    /// What a whole word in the window reads as, before it is cut to width.
+    fn wordValue(self: *const Elc, reg: regs.Reg) u32 {
+        return switch (reg) {
+            .control => self.elcr,
+            .generator => |index| self.readGenerator(index),
+            .link => |index| self.table.els[index],
+            .attribution => |index| self.attribution[index],
+        };
     }
 
     /// WI reads back set, so a driver reading the register before writing it
@@ -218,35 +225,6 @@ pub const Elc = struct {
         }
         self.generated +%= 1;
         self.pending.append(softwareEvent(index)) catch {};
-    }
-
-    fn generatorAt(self: *const Elc, offset: u32) ?usize {
-        _ = self;
-        if (offset < off.elsegr or offset >= off.elsr) return null;
-        const index = (offset - off.elsegr) / off.elsegr_stride;
-        return if (index < generators) index else null;
-    }
-
-    fn linkAt(self: *const Elc, offset: u32) ?usize {
-        _ = self;
-        if (offset < off.elsr or offset >= off.elcsara) return null;
-        const index = (offset - off.elsr) / off.elsr_stride;
-        return if (index < links) index else null;
-    }
-
-    /// ELCSARA/B/C then ELCPARA/B/C, six words in two groups of three. They
-    /// are stored and read back and NOT enforced: every access in this
-    /// emulator is treated as secure and privileged, so a firmware that locks
-    /// itself out of the block on silicon still gets through here.
-    fn attributionAt(self: *const Elc, offset: u32) ?usize {
-        _ = self;
-        if (offset >= off.elcsara and offset < off.elcsara + 12) {
-            return (offset - off.elcsara) / 4;
-        }
-        if (offset >= off.elcpara and offset < off.elcpara + 12) {
-            return 3 + (offset - off.elcpara) / 4;
-        }
-        return null;
     }
 
     pub fn block(self: *Elc) periph.Block {

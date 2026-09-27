@@ -56,6 +56,7 @@ test {
     _ = @import("periph/eink_busy_test.zig");
     _ = @import("periph/eink_test.zig");
     _ = @import("periph/eink_wire_test.zig");
+    _ = @import("periph/elc_regs_test.zig");
     _ = @import("periph/elc_route_test.zig");
     _ = @import("periph/elc_test.zig");
     _ = @import("periph/eth_desc_test.zig");
@@ -93,6 +94,7 @@ test {
     _ = @import("periph/i3c_target_test.zig");
     _ = @import("periph/i3c_test.zig");
     _ = @import("periph/icu_test.zig");
+    _ = @import("periph/lanes_test.zig");
     _ = @import("periph/lvd_test.zig");
     _ = @import("periph/maci_test.zig");
     _ = @import("periph/mram_code_test.zig");
