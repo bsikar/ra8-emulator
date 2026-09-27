@@ -86,6 +86,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.monitors.controlBlock());
     try self.bus.add(self.monitors.filterBlock());
     try self.bus.add(self.watchdog.block());
+    try self.bus.add(self.heartbeat.block());
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
     try core.attachPeriph(&self.bus);

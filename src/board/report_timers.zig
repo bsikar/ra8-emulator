@@ -3,6 +3,7 @@
 //! here: the low-power timer that counts through standby, the interval
 //! timers, and the PWM timers.
 const gpt = @import("../periph/gpt.zig");
+const iwdt = @import("../periph/iwdt.zig");
 
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
@@ -13,6 +14,32 @@ pub fn sections(board: *Board, out: Writer) !void {
     try lowpower(board, out);
     try interval(board, out);
     try pwm(board, out);
+    try independent(board, out);
+}
+
+/// The independent watchdog. An image that never touched it says nothing.
+fn independent(board: *Board, out: Writer) !void {
+    const unit = &board.heartbeat;
+    if (unit.quiet()) return;
+    try out.print(
+        "IWDT: {d} refresh(es), counter {d}/{d}, {d} underflow(s), {s}\n",
+        .{ unit.refreshes, unit.counter, iwdt.full_scale, unit.underflows, if (unit.armed) "running" else "stopped" },
+    );
+    if (unit.dropped != 0) {
+        try out.print(
+            "IWDT: {d} IWDTRR write(s) refreshed nothing (0x00 then 0xFF, in order, or the counter keeps falling)\n",
+            .{unit.dropped},
+        );
+    }
+    if (unit.nmis != 0) {
+        try out.print("IWDT: {d} underflow(s) asked for an NMI, IWDTRCR.RSTIRQS clear\n", .{unit.nmis});
+    }
+    if (unit.bad_acks != 0) {
+        try out.print("IWDT: {d} ack(s) wrote a one at a flag and cleared nothing (IWDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
+    }
+    if (unit.frozen_writes != 0) {
+        try out.print("IWDT: {d} store(s) carried CNTVAL bits, dropped (the counter is the hardware's)\n", .{unit.frozen_writes});
+    }
 }
 
 fn lowpower(board: *Board, out: Writer) !void {

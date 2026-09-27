@@ -102,6 +102,9 @@ test {
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/pdctr_test.zig");
     _ = @import("periph/pdm_test.zig");
+    _ = @import("periph/iwdt_test.zig");
+    _ = @import("periph/iwdt_refresh_test.zig");
+    _ = @import("periph/iwdt_status_test.zig");
     _ = @import("periph/ipc_test.zig");
     _ = @import("periph/ipc_sync_test.zig");
     _ = @import("periph/poeg_test.zig");
