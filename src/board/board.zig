@@ -59,6 +59,7 @@ const sram = @import("../periph/sram.zig");
 const ssie = @import("../periph/ssie.zig");
 const ulpt = @import("../periph/ulpt.zig");
 const usb = @import("usb.zig");
+const iwdt = @import("../periph/iwdt.zig");
 const wdt = @import("../periph/wdt.zig");
 const xspi = @import("../periph/xspi.zig");
 
@@ -192,6 +193,9 @@ pub const Board = struct {
     ptp: gptp.Gptp,
     monitors: lvd.Lvd,
     watchdog: wdt.Wdt,
+    /// The independent watchdog: OFS0 starts it, software cannot stop it,
+    /// and only the two-byte IWDTRR sequence keeps it fed.
+    heartbeat: iwdt.Iwdt,
     causes: reset.Reset,
     control: scb.Scb,
     /// Where a reset this board decides on is left for the engine to perform.
@@ -246,6 +250,7 @@ pub const Board = struct {
             .ptp = gptp.Gptp.init(),
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
+            .heartbeat = iwdt.Iwdt.init(),
             .causes = reset.Reset.init(),
             .control = scb.Scb.init(),
         };
@@ -272,6 +277,7 @@ pub const Board = struct {
     /// raised here is entered in the same boundary rather than a chunk later.
     pub fn tick(self: *Board, core: engine.Engine) !void {
         self.watchdog.tick();
+        self.heartbeat.tick();
         self.lowpower.tick();
         self.microphone.tick();
         self.clock.tick();
@@ -323,6 +329,10 @@ pub const Board = struct {
         if (self.watchdog.reset_requested) {
             self.watchdog.reset_requested = false;
             self.causes.request(.watchdog);
+        }
+        if (self.heartbeat.reset_requested) {
+            self.heartbeat.reset_requested = false;
+            self.causes.request(.iwdt);
         }
         if (!try self.control.poll(core)) return;
         self.causes.request(.software);
