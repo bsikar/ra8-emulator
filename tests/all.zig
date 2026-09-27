@@ -111,6 +111,7 @@ test {
     _ = @import("periph/riic_target_test.zig");
     _ = @import("periph/riic_test.zig");
     _ = @import("periph/rtc_clock_test.zig");
+    _ = @import("periph/rtc_reset_test.zig");
     _ = @import("periph/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
