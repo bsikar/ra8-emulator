@@ -183,3 +183,104 @@ test "slot n vectors through exception 16 + n" {
     try std.testing.expectEqual(@as(u16, 51), icu.exceptionFor(35));
     try std.testing.expectEqual(icu.win_base + 4 * 35, icu.slotAddress(35));
 }
+
+test "a byte read of the flag lane answers IR, not the bottom of the event" {
+    var unit = icu.Icu.init();
+    unit.links[7] = 0x0000_0120 | icu.field.ir;
+
+    const address = icu.slotAddress(7);
+    try std.testing.expectEqual(@as(u32, 0x20), unit.read(address, 1));
+    try std.testing.expectEqual(@as(u32, 0x01), unit.read(address + 1, 1));
+    try std.testing.expectEqual(@as(u32, 0x01), unit.read(address + 2, 1));
+    try std.testing.expectEqual(@as(u32, 0x00), unit.read(address + 3, 1));
+}
+
+test "a halfword read is cut to the half it names" {
+    var unit = icu.Icu.init();
+    unit.links[3] = 0x0000_0120 | icu.field.ir | icu.field.dtce;
+
+    const address = icu.slotAddress(3);
+    try std.testing.expectEqual(@as(u32, 0x0120), unit.read(address, 2));
+    try std.testing.expectEqual(@as(u32, 0x0101), unit.read(address + 2, 2));
+}
+
+test "a byte store that takes IR down keeps the event number below it" {
+    var unit = icu.Icu.init();
+    unit.links[9] = 0x0000_0120 | icu.field.ir | icu.field.dtce;
+
+    // The bitfield write a driver makes to acknowledge the interrupt.
+    unit.write(icu.slotAddress(9) + 2, 1, 0x00);
+
+    try std.testing.expectEqual(@as(u32, 0x120), unit.links[9] & icu.field.iels);
+    try std.testing.expectEqual(@as(u32, 0), unit.links[9] & icu.field.ir);
+    try std.testing.expect(unit.links[9] & icu.field.dtce != 0);
+}
+
+test "a byte store that does not name the flag lane leaves it latched" {
+    var unit = icu.Icu.init();
+    unit.links[4] = 0x0000_0033 | icu.field.ir;
+
+    unit.write(icu.slotAddress(4), 1, 0x44);
+
+    try std.testing.expectEqual(@as(u32, 0x44), unit.links[4] & icu.field.iels);
+    try std.testing.expect(unit.links[4] & icu.field.ir != 0);
+}
+
+test "a byte store into the flag lane cannot raise a flag nothing latched" {
+    var unit = icu.Icu.init();
+    unit.links[5] = 0x0000_0012;
+
+    unit.write(icu.slotAddress(5) + 2, 1, 0x01);
+
+    try std.testing.expectEqual(@as(u32, 0), unit.links[5] & icu.field.ir);
+    try std.testing.expectEqual(@as(u32, 0x12), unit.links[5] & icu.field.iels);
+}
+
+test "the top half of the event number survives a byte store to the low half" {
+    var unit = icu.Icu.init();
+    unit.links[11] = 0x0000_0120;
+
+    unit.write(icu.slotAddress(11), 1, 0x21);
+
+    try std.testing.expectEqual(@as(u32, 0x0121), unit.links[11] & icu.field.iels);
+}
+
+test "a lane the register does not occupy reads zero and stores nowhere" {
+    var unit = icu.Icu.init();
+    unit.links[2] = 0x0000_0044;
+
+    // Byte 3 holds DTCE alone; the seven bits above it are reserved.
+    unit.write(icu.slotAddress(2) + 3, 1, 0xFF);
+
+    try std.testing.expectEqual(@as(u32, icu.field.dtce), unit.links[2] & ~icu.field.iels);
+    try std.testing.expectEqual(@as(u32, 0x01), unit.read(icu.slotAddress(2) + 3, 1));
+}
+
+test "a word store still reaches every field at once" {
+    var unit = icu.Icu.init();
+    unit.links[1] = icu.field.ir;
+
+    unit.write(icu.slotAddress(1), 4, 0x0000_0099 | icu.field.dtce);
+
+    try std.testing.expectEqual(@as(u32, 0x99), unit.links[1] & icu.field.iels);
+    try std.testing.expect(unit.links[1] & icu.field.dtce != 0);
+    try std.testing.expectEqual(@as(u32, 0), unit.links[1] & icu.field.ir);
+}
+
+test "a halfword store into the low half leaves the flag and DTCE standing" {
+    var unit = icu.Icu.init();
+    unit.links[6] = 0x0000_0001 | icu.field.ir | icu.field.dtce;
+
+    unit.write(icu.slotAddress(6), 2, 0x0155);
+
+    try std.testing.expectEqual(@as(u32, 0x0155), unit.links[6] & icu.field.iels);
+    try std.testing.expect(unit.links[6] & icu.field.ir != 0);
+    try std.testing.expect(unit.links[6] & icu.field.dtce != 0);
+}
+
+test "an access outside the table is not served" {
+    var unit = icu.Icu.init();
+    unit.write(icu.win_base + icu.win_span, 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(icu.win_base + icu.win_span, 1));
+    try std.testing.expectEqual(@as(u32, 0), unit.links[icu.slots - 1]);
+}
