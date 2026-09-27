@@ -7,7 +7,12 @@
 //! answered both as soon as the request bit was seen, which is faithful, and
 //! that part is kept. What dev did not do is hold the gateway to its mode
 //! machine, so that is where this file differs.
+//!
+//! Both windows are 32-bit registers, so an access narrower than a word takes
+//! the `lanes.zig` rule: a read is cut to the lanes it names, a store keeps
+//! the lanes it does not.
 const std = @import("std");
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
@@ -21,34 +26,44 @@ pub const Gateway = struct {
     arirm: u32 = 0,
 
     pub fn modeRead(self: *Gateway, address: u32, width: u3) u32 {
-        _ = width;
-        return switch (address -% self.base) {
-            regs.gwca.gwmc => self.mode.status(),
-            regs.gwca.gwms => self.mode.status(),
+        const offset = address -% self.base;
+        const whole: u32 = switch (lanes.word(offset)) {
+            regs.gwca.gwmc, regs.gwca.gwms => self.mode.status(),
             else => 0,
         };
+        return lanes.part(whole, lanes.lane(offset), width);
     }
 
     pub fn modeWrite(self: *Gateway, address: u32, width: u3, value: u32) void {
-        _ = width;
-        if (address -% self.base != regs.gwca.gwmc) return;
-        self.mode.command(value & regs.gwca.opc_mask);
+        const offset = address -% self.base;
+        if (lanes.word(offset) != regs.gwca.gwmc) return;
+        const at = lanes.lane(offset);
+        // OPC is the bottom of the word: a store reaching none of its lanes
+        // is not a mode command.
+        if (lanes.named(at, width) & regs.gwca.opc_mask == 0) return;
+        const asked = lanes.merge(self.mode.status(), at, width, value);
+        self.mode.command(asked & regs.gwca.opc_mask);
     }
 
     /// ARR follows ARIOG: the init the firmware asked for has finished by the
     /// time it reads back.
     pub fn arirmRead(self: *Gateway, address: u32, width: u3) u32 {
-        _ = address;
-        _ = width;
-        if (self.arirm & regs.gwca.ariog == 0) return self.arirm;
-        return self.arirm | regs.gwca.arr;
+        const whole = if (self.arirm & regs.gwca.ariog == 0)
+            self.arirm
+        else
+            self.arirm | regs.gwca.arr;
+        return lanes.part(whole, lanes.lane(address -% self.arirmBase()), width);
     }
 
     pub fn arirmWrite(self: *Gateway, address: u32, width: u3, value: u32) void {
-        _ = address;
-        _ = width;
-        if (value & regs.gwca.ariog != 0 and self.arirm & regs.gwca.ariog == 0) self.inits += 1;
-        self.arirm = value;
+        const at = lanes.lane(address -% self.arirmBase());
+        const asked = lanes.merge(self.arirm, at, width, value);
+        if (asked & regs.gwca.ariog != 0 and self.arirm & regs.gwca.ariog == 0) self.inits += 1;
+        self.arirm = asked;
+    }
+
+    fn arirmBase(self: *const Gateway) u32 {
+        return self.base + regs.gwca.gwarirm;
     }
 
     pub fn quiet(self: *const Gateway) bool {
@@ -86,17 +101,22 @@ pub const Pool = struct {
     cabpirm: u32 = 0,
 
     pub fn read(self: *Pool, address: u32, width: u3) u32 {
-        _ = address;
-        _ = width;
-        if (self.cabpirm & regs.coma.bpiog == 0) return self.cabpirm;
-        return self.cabpirm | regs.coma.bpr;
+        const whole = if (self.cabpirm & regs.coma.bpiog == 0)
+            self.cabpirm
+        else
+            self.cabpirm | regs.coma.bpr;
+        return lanes.part(whole, lanes.lane(address -% self.registerBase()), width);
     }
 
     pub fn write(self: *Pool, address: u32, width: u3, value: u32) void {
-        _ = address;
-        _ = width;
-        if (value & regs.coma.bpiog != 0 and self.cabpirm & regs.coma.bpiog == 0) self.inits += 1;
-        self.cabpirm = value;
+        const at = lanes.lane(address -% self.registerBase());
+        const asked = lanes.merge(self.cabpirm, at, width, value);
+        if (asked & regs.coma.bpiog != 0 and self.cabpirm & regs.coma.bpiog == 0) self.inits += 1;
+        self.cabpirm = asked;
+    }
+
+    fn registerBase(self: *const Pool) u32 {
+        return self.base + regs.coma.cabpirm;
     }
 
     pub fn quiet(self: *const Pool) bool {

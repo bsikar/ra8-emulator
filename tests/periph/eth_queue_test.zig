@@ -117,3 +117,41 @@ test "a window nothing asked of is quiet" {
     fix.window.baseWrite(gwca + regs.gwca.gwdcbac1, 4, 1);
     try std.testing.expect(!fix.window.quiet());
 }
+
+test "a ring base laid down in two halfword stores is taken whole" {
+    var fix = Fixture{};
+    fix.wire(.config);
+    const at = gwca + regs.gwca.gwdcbac1;
+    fix.window.baseWrite(at, 2, 0x1000);
+    fix.window.baseWrite(at + 2, 2, 0x2200);
+    try std.testing.expectEqual(@as(u32, 0x2200_1000), fix.window.rings.linkfix);
+    try std.testing.expectEqual(@as(u32, 0x2200_1000), fix.window.baseRead(at, 4));
+}
+
+test "a halfword read of the base answers the half it names" {
+    var fix = Fixture{};
+    fix.wire(.config);
+    const at = gwca + regs.gwca.gwdcbac1;
+    fix.window.baseWrite(at, 4, 0x2200_1000);
+    try std.testing.expectEqual(@as(u32, 0x2200), fix.window.baseRead(at + 2, 2));
+}
+
+test "a halfword at the top of GWTRC0 kicks the queues it names" {
+    var fix = Fixture{};
+    fix.wire(.operation);
+    // Queue 16 is configured and queue 0 is not, so only a request that
+    // reaches the top half of the word finds a chain to look for.
+    fix.window.configWrite(gwca + regs.gwca.gwdcc + 16 * 4, 4, 0);
+    fix.window.requestWrite(gwca + regs.gwca.gwtrc0 + 2, 2, 1);
+    try std.testing.expectEqual(@as(u32, 1), fix.window.rings.kicks);
+}
+
+test "a narrow config store keeps the lanes it does not name" {
+    var fix = Fixture{};
+    fix.wire(.config);
+    const at = gwca + regs.gwca.gwdcc;
+    fix.window.configWrite(at, 4, regs.gwca.dqt | 0x00FF_0000);
+    fix.window.configWrite(at, 1, 0x12);
+    try std.testing.expectEqual(@as(u32, 0x00FF_0012 | regs.gwca.dqt), fix.window.configRead(at, 4));
+    try std.testing.expectEqual(@as(u64, 0), fix.window.rings.receiving & 1);
+}
