@@ -25,6 +25,7 @@ const dac = @import("../periph/dac.zig");
 const dma_bank = @import("../periph/dma_bank.zig");
 const dmac = @import("../periph/dmac.zig");
 const doc = @import("../periph/doc.zig");
+const dotf = @import("../periph/dotf.zig");
 const drw = @import("../periph/drw.zig");
 const dtc = @import("../periph/dtc.zig");
 const eink = @import("../periph/eink.zig");
@@ -144,6 +145,10 @@ pub const Board = struct {
     /// front of it. Built in attach(): the part is sparse and needs the
     /// board's allocator to hold the sectors something actually wrote to.
     flash: xspi.Xspi,
+    /// The decryption-on-the-fly stage in front of each xSPI controller.
+    /// No AES core here, so what it answers for is the control word the
+    /// driver polls and the conversion area it programmes.
+    cipher: dotf.Dotf,
     /// The SD host controller, and the card behind it. Built in attach():
     /// the card holds only the blocks something wrote, so it needs the
     /// board's allocator.
@@ -225,6 +230,7 @@ pub const Board = struct {
             .spi = spi.Spi.init(),
             .sd = sd_card.Card.init(allocator),
             .flash = xspi.Xspi.init(allocator),
+            .cipher = dotf.Dotf.init(),
             .card = sdhi.Sdhi.init(allocator),
             .options = mram.Mram.init(allocator),
             .ecc = sram.Sram.init(),

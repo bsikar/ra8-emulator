@@ -37,6 +37,9 @@ test {
     _ = @import("periph/dmac_test.zig");
     _ = @import("periph/dmac_xfer_test.zig");
     _ = @import("periph/doc_test.zig");
+    _ = @import("periph/dotf_control_test.zig");
+    _ = @import("periph/dotf_region_test.zig");
+    _ = @import("periph/dotf_test.zig");
     _ = @import("periph/doc_compare_test.zig");
     _ = @import("periph/drw_blend_test.zig");
     _ = @import("periph/drw_cache_test.zig");

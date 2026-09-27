@@ -8,8 +8,47 @@ const Writer = @import("report.zig").Writer;
 /// flash, the card on the SD host controller, then the card on the SPI line.
 pub fn sections(board: *Board, out: Writer) !void {
     try flash(board, out);
+    try cipher(board, out);
     try card(board, out);
     try spiCard(board, out);
+}
+
+/// One line per DOTF channel the firmware touched. Nothing is decrypted
+/// here, so what is worth saying is what the driver asked the block for: the
+/// conversion area it programmed, the cipher it selected, the self-tests it
+/// ran, and the key or IV words it pushed into the staging window.
+fn cipher(board: *Board, out: Writer) !void {
+    for (&board.cipher.channels, 0..) |*unit, index| {
+        if (unit.quiet()) continue;
+        try out.print(
+            "DOTF{d}: {s}, {s}, {d} page(s) from 0x{X:0>8}\n",
+            .{ index, unit.mode().name(), unit.keySize().name(), unit.pages(), unit.start() },
+        );
+        if (unit.self_tests != 0) {
+            try out.print(
+                "DOTF{d}: {d} self-test(s), REG00 bit 20 auto-cleared\n",
+                .{ index, unit.self_tests },
+            );
+        }
+        if (unit.staged != 0) {
+            try out.print(
+                "DOTF{d}: {d} word(s) staged through REG03\n",
+                .{ index, unit.staged },
+            );
+        }
+        if (unit.staged_dark != 0) {
+            try out.print(
+                "DOTF{d}: {d} word(s) staged with the AES core switched off\n",
+                .{ index, unit.staged_dark },
+            );
+        }
+        if (unit.out_of_window != 0) {
+            try out.print(
+                "DOTF{d}: {d} conversion area(s) programmed outside this channel's XSPI window\n",
+                .{ index, unit.out_of_window },
+            );
+        }
+    }
 }
 
 /// One line per run that clocked SD commands down the SPI line. A transfer
