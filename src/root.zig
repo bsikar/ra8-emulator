@@ -111,6 +111,7 @@ pub const periph = struct {
     pub const modem = @import("periph/modem.zig");
     pub const modem_script = @import("periph/modem_script.zig");
     pub const mram = @import("periph/mram.zig");
+    pub const mram_code = @import("periph/mram_code.zig");
     pub const mram_otp = @import("periph/mram_otp.zig");
     pub const mstp = @import("periph/mstp.zig");
     pub const npu = @import("periph/npu.zig");

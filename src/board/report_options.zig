@@ -52,6 +52,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.read_only},
         );
     }
+    if (unit.code.refused != 0) {
+        try out.print(
+            "Extra-MRAM: REFUSED {d} store(s) to MRCPS, the code-MRAM status word is the controller's\n",
+            .{unit.code.refused},
+        );
+    }
     if (unit.faulted != 0) {
         try out.print("Extra-MRAM: {d} program(s) LOST, the option window refused the write\n", .{unit.faulted});
     }
