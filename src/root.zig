@@ -35,6 +35,7 @@ pub const periph = struct {
     pub const dmac = @import("periph/dmac.zig");
     pub const dmac_xfer = @import("periph/dmac_xfer.zig");
     pub const doc = @import("periph/doc.zig");
+    pub const doc_compare = @import("periph/doc_compare.zig");
     pub const drw = @import("periph/drw.zig");
     pub const drw_blend = @import("periph/drw_blend.zig");
     pub const drw_cache = @import("periph/drw_cache.zig");
