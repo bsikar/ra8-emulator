@@ -17,6 +17,7 @@
 //! everything below is tested directly rather than only through a full run.
 const std = @import("std");
 const periph = @import("registry.zig");
+const drops = @import("mstp_drops.zig");
 
 /// R_MSTP geometry (HUM Ch 11.2.6..11.2.10). The Non-secure alias at
 /// 0x5020_3000 is folded onto this base by the bus before it ever gets here.
@@ -139,6 +140,9 @@ pub const Mstp = struct {
     gated_reads: u32 = 0,
     gated_writes: u32 = 0,
     last_gated: []const u8 = "-",
+    /// The same drops, split by peripheral, so the end of the run can ask the
+    /// gate again and tell a probe from a driver that never ungated.
+    dropped: drops.Log = .{},
 
     pub fn reset(self: *Mstp) void {
         self.* = .{};
@@ -158,15 +162,30 @@ pub const Mstp = struct {
 
     /// Record an access the gate dropped, so the end of the run can say so.
     pub fn note(self: *Mstp, address: u32, access: periph.Access) void {
-        if (ownerOf(address)) |owner| self.last_gated = owner.family.name;
+        const name = if (ownerOf(address)) |owner| owner.family.name else "-";
+        self.last_gated = name;
         switch (access) {
-            .read => self.gated_reads += 1,
-            .write => self.gated_writes += 1,
+            .read => {
+                self.gated_reads += 1;
+                self.dropped.noteRead(name, address);
+            },
+            .write => {
+                self.gated_writes += 1;
+                self.dropped.noteWrite(name, address);
+            },
         }
     }
 
     pub fn clean(self: *const Mstp) bool {
         return self.gated_reads == 0 and self.gated_writes == 0;
+    }
+
+    /// The drops split by whether the peripheral is still stopped NOW. An
+    /// image that pokes a dead window to prove it is dead, then clears the
+    /// bit, drops exactly what a driver that never ungated drops; only the
+    /// gate afterwards tells them apart, so it is asked here and not earlier.
+    pub fn verdict(self: *const Mstp) drops.Verdict {
+        return self.dropped.verdict(self, stillStopped);
     }
 
     /// Read the shadow, so the read-back the firmware is required to do after
@@ -208,6 +227,11 @@ pub const Mstp = struct {
     fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
         const self: *Mstp = @ptrCast(@alignCast(context));
         self.applyWrite(address, width, value);
+    }
+
+    fn stillStopped(context: *const anyopaque, address: u32) bool {
+        const self: *const Mstp = @ptrCast(@alignCast(context));
+        return self.stopped(address);
     }
 
     fn stoppedThunk(context: *anyopaque, address: u32) bool {
