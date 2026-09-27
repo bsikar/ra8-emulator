@@ -58,6 +58,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.in_place},
         );
     }
+    if (unit.short_jobs != 0) {
+        try out.print(
+            "NPU(Ethos-U55): {d} kick(s) CUT SHORT by an arena, {d} byte(s) had already reached the destination\n",
+            .{ unit.short_jobs, unit.short_bytes },
+        );
+    }
     if (unit.faked != 0) {
         try out.print(
             "NPU(Ethos-U55): REFUSED {d} store(s) to ID or STATUS\n",

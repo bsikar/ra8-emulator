@@ -42,6 +42,15 @@
 //! halfword store to QBASE's low half wipe the high half of the address, and
 //! its read hands back the whole word whatever the access width was.
 //!
+//! A REFUSED ARENA DOES NOT UNDO THE BYTES THAT LANDED. The copy runs in
+//! bounded chunks, so an arena that walks off mapped memory partway through
+//! leaves everything before that address transformed and written, and the
+//! kick still faults with no cmd_end, which is right. What was wrong was the
+//! book-keeping: the chunks that landed were forgotten with the rest, so a
+//! run whose destination ended mid-job said nothing moved while a kilobyte
+//! of it sat in the arena. A short job now books what got through and is
+//! counted as its own kind, separately from the jobs that finished.
+//!
 //! MODEL RULES, stated rather than implied: execution is instantaneous, so
 //! STATUS.state never reads running and STATUS.reset never reads asserted;
 //! and a guest address is 32 bits here, so a BASEPn with anything in its
@@ -100,6 +109,14 @@ pub const Due = std.BoundedArray(u16, 1);
 
 const words: usize = win_span / 4;
 
+/// What a copy actually moved. `short` means an arena refused an access and
+/// the job ended there; the bytes counted are in the destination already.
+pub const Moved = struct {
+    bytes: u32 = 0,
+    check: u32 = 0,
+    short: bool = false,
+};
+
 pub const Npu = struct {
     reg: [words]u32 = .{0} ** words,
     /// STATUS as this model computes it, held rather than shadowed.
@@ -124,6 +141,10 @@ pub const Npu = struct {
     /// Kicks naming a region whose BASEPn was never programmed, or one above
     /// the 32-bit guest space.
     unmapped_region: u32 = 0,
+    /// Kicks an arena refused partway, after some bytes had already landed.
+    short_jobs: u32 = 0,
+    /// Bytes those kicks left in the destination arena before the refusal.
+    short_bytes: u32 = 0,
     /// Completed jobs whose source and destination were the same region.
     in_place: u32 = 0,
     /// Stores to NPU_ID or NPU_STATUS: firmware cannot write its own result.
@@ -231,9 +252,9 @@ pub const Npu = struct {
             field.status_parse,
             &self.unmapped_region,
         );
-        const check = self.transfer(memory, program, source, destination) orelse
-            return self.fault(field.status_bus_error, &self.unreachable_memory);
-        self.complete(program, check);
+        const moved = transfer(memory, program, source, destination);
+        if (moved.short) return self.cutShort(moved);
+        self.complete(program, moved.check);
     }
 
     /// The five header words at QBASE, or null if guest memory refused one.
@@ -250,15 +271,15 @@ pub const Npu = struct {
     }
 
     /// Move the bytes one bounded chunk at a time, folding the result into
-    /// the checkword as it goes. Null if either arena refused an access.
+    /// the checkword as it goes. A refused access ends the copy where it
+    /// stands: the chunk it refused moved nothing, the chunks before it are
+    /// in the destination arena, and that is what comes back.
     fn transfer(
-        self: *Npu,
         memory: engine.Engine,
         program: cmd.Command,
         source: u32,
         destination: u32,
-    ) ?u32 {
-        _ = self;
+    ) Moved {
         var buffer: [cmd.limits.chunk_bytes]u8 = undefined;
         var check = cmd.Check{};
         var done: u32 = 0;
@@ -266,13 +287,13 @@ pub const Npu = struct {
             const left = program.count - done;
             const take = @min(left, @as(u32, cmd.limits.chunk_bytes));
             const slice = buffer[0..take];
-            memory.read(source + done, slice) catch return null;
+            memory.read(source + done, slice) catch return cut(done, check);
             for (slice) |*byte| byte.* = program.transform(byte.*);
-            memory.write(destination + done, slice) catch return null;
+            memory.write(destination + done, slice) catch return cut(done, check);
             check.fold(slice);
             done += take;
         }
-        return check.value;
+        return .{ .bytes = done, .check = check.value };
     }
 
     /// The AXI base programmed into BASEPn. Null when it was never
@@ -301,6 +322,17 @@ pub const Npu = struct {
         self.due_irq = true;
     }
 
+    /// A kick an arena refused partway. The bytes before the refused address
+    /// are in the destination arena, so they are booked; the job still
+    /// faults, so cmd_end stays clear and a driver polling for completion
+    /// never sees one. last_op and the checkword are left alone deliberately:
+    /// they describe the last job that finished, and this one did not.
+    fn cutShort(self: *Npu, moved: Moved) void {
+        self.short_jobs +%= 1;
+        self.short_bytes +%= moved.bytes;
+        self.fault(field.status_bus_error, &self.unreachable_memory);
+    }
+
     /// A kick that produced no job: the fault bit, the interrupt, and the
     /// counter that says which kind it was. cmd_end is deliberately absent,
     /// so a driver polling for completion never sees one.
@@ -321,6 +353,11 @@ pub const Npu = struct {
         };
     }
 };
+
+/// A copy that stopped at a refused access, carrying what got through.
+fn cut(done: u32, check: cmd.Check) Moved {
+    return .{ .bytes = done, .check = check.value, .short = true };
+}
 
 /// The part of a 32-bit register a narrow access names.
 fn part(value: u32, byte_offset: u32, width: u3) u32 {
