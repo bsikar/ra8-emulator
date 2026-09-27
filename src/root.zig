@@ -93,6 +93,7 @@ pub const periph = struct {
     pub const gptp_timer = @import("periph/gptp_timer.zig");
     pub const i3c = @import("periph/i3c.zig");
     pub const i3c_flags = @import("periph/i3c_flags.zig");
+    pub const i3c_regs = @import("periph/i3c_regs.zig");
     pub const i3c_gt911 = @import("periph/i3c_gt911.zig");
     pub const i3c_lsm6dso = @import("periph/i3c_lsm6dso.zig");
     pub const i3c_max17048 = @import("periph/i3c_max17048.zig");
