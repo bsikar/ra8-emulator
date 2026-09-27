@@ -40,10 +40,13 @@
 //! its first readback. Everything uninterpreted is shadowed per channel with
 //! narrow-write merge.
 //!
-//! MODEL'S OWN RULE, not a register: a compare value of zero counts as
-//! unarmed. AGTCMSR carries the real enable bits and no header in this tree
-//! gives its offset, so it is not invented; without that, an armed-at-zero
-//! compare would match on every single wrap.
+//! A COMPARE MATCHES ONLY WHEN AGTCMSR ARMED IT. This model used to stand a
+//! rule of its own in for the register it could not read: a compare value of
+//! zero counted as unarmed, everything else as armed. agt_compare.zig now
+//! reads TCMEA and TCMEB out of AGTCMSR at +0x0E, so a side the driver never
+//! enabled raises nothing and a side it parked at 0xFFFF is not mistaken for
+//! an armed one. A count that passes a compare value with the function
+//! disabled is counted, so the run says what the flag would have been.
 //!
 //! THE COUNT SOURCE IS THE ONE AGTMR1 SELECTS. That field used to be a
 //! shadow byte on both trees, so every channel stepped at one rate whatever
@@ -52,17 +55,22 @@
 //! AGT0's underflow instead of on a clock of its own.
 //!
 //! NOT MODELLED, AND NOT GUESSED: AGTMR2's own CKS divider, which has an
-//! offset in the header and no field table; the event output and I/O pins;
-//! and the compare-match interrupts, which have event numbers this tree does
-//! not carry. Only the AGT0 combined event is raised, on underflow, which is
+//! offset in the header and no field table; AGTCMSR's output-enable and
+//! polarity bits, which select and invert a pin a headless run has nothing
+//! to show on; and the compare-match interrupts, which have event numbers
+//! this tree does not carry. Only the AGT0 combined event is raised, on underflow, which is
 //! what dev raises too.
 const std = @import("std");
 
 const periph = @import("registry.zig");
 const clk = @import("agt_clock.zig");
+const cmp = @import("agt_compare.zig");
 
 /// The count source, re-exported so a caller reaches it through the block.
 pub const source = clk;
+
+/// The compare-match function select, re-exported the same way.
+pub const compare_fn = cmp;
 
 /// AGT geometry (ra8_agt_regs.h).
 pub const win_base: u32 = 0x4022_1000;
@@ -76,6 +84,7 @@ pub const off = struct {
     pub const cmb: u32 = 0x04;
     pub const cr: u32 = 0x08;
     pub const mr1: u32 = 0x09;
+    pub const cmsr: u32 = cmp.off_cmsr;
 };
 
 /// AGTCR. TSTART is read/write, TCSTF read-only, TSTOP write-only, and the
@@ -112,10 +121,14 @@ pub const Channel = struct {
     cmpb: u16 = 0,
     cr: u8 = 0,
     mr1: u8 = 0,
+    cmsr: u8 = 0,
     shadow: [stride]u8 = @splat(0),
     underflows: u32 = 0,
     matches_a: u32 = 0,
     matches_b: u32 = 0,
+    /// Compare values the count passed while AGTCMSR had that side
+    /// disabled, so a flag nobody armed is reported rather than raised.
+    masked: u32 = 0,
     /// Stops taken through TSTOP, the bit dev discards.
     forced_stops: u32 = 0,
     /// Counter and compare writes refused because the count was running.
@@ -167,17 +180,33 @@ pub const Channel = struct {
         return true;
     }
 
-    /// Flag the compare values this chunk counted past. A compare of zero is
-    /// unarmed (see the model rule in the file header).
+    /// Flag the compare values this chunk counted past, on the sides
+    /// AGTCMSR armed. A side the driver never enabled counts the crossing
+    /// and raises nothing.
     fn match(self: *Channel, before: u16, wrapped: bool) void {
-        if (self.cmpa != 0 and crossed(before, self.counter, wrapped, self.reload, self.cmpa)) {
-            self.cr |= control.tcmaf;
-            self.matches_a +%= 1;
+        if (crossed(before, self.counter, wrapped, self.reload, self.cmpa)) {
+            self.side(.a, control.tcmaf, &self.matches_a);
         }
-        if (self.cmpb != 0 and crossed(before, self.counter, wrapped, self.reload, self.cmpb)) {
-            self.cr |= control.tcmbf;
-            self.matches_b +%= 1;
+        if (crossed(before, self.counter, wrapped, self.reload, self.cmpb)) {
+            self.side(.b, control.tcmbf, &self.matches_b);
         }
+    }
+
+    /// One crossing, on one side: the flag when the function is enabled,
+    /// the masked count when it is not.
+    fn side(self: *Channel, which: cmp.Side, flag: u8, count: *u32) void {
+        if (!cmp.enabled(self.cmsr, which)) {
+            self.masked +%= 1;
+            return;
+        }
+        self.cr |= flag;
+        count.* +%= 1;
+    }
+
+    /// Whether either compare side is armed, which is what makes a compare
+    /// value worth printing at all.
+    pub fn comparing(self: Channel) bool {
+        return cmp.enabled(self.cmsr, .a) or cmp.enabled(self.cmsr, .b);
     }
 
     /// TSTOP beats TSTART in the same write, and a status flag only survives
@@ -200,6 +229,7 @@ pub const Channel = struct {
             off.cmb, off.cmb + 1 => lane(self.cmpb, local - off.cmb),
             off.cr => self.cr,
             off.mr1 => self.mr1,
+            off.cmsr => self.cmsr,
             else => self.shadow[local],
         };
     }
@@ -211,6 +241,7 @@ pub const Channel = struct {
             off.cmb, off.cmb + 1 => self.compare(&self.cmpb, local - off.cmb, byte),
             off.cr => self.writeControl(byte),
             off.mr1 => self.mr1 = byte,
+            off.cmsr => self.cmsr = byte,
             else => self.shadow[local] = byte,
         }
     }
@@ -236,7 +267,7 @@ pub const Channel = struct {
 
     pub fn quiet(self: Channel) bool {
         return self.underflows == 0 and self.matches_a == 0 and self.matches_b == 0 and
-            self.forced_stops == 0 and self.refused_running == 0 and
+            self.masked == 0 and self.forced_stops == 0 and self.refused_running == 0 and
             self.cascaded_steps == 0 and !self.running();
     }
 };

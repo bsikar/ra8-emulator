@@ -68,6 +68,12 @@ fn interval(board: *Board, out: Writer) !void {
                 .{ index, channel.matches_a, channel.matches_b },
             );
         }
+        if (channel.masked != 0) {
+            try out.print(
+                "AGT{d}: {d} compare crossing(s) raised nothing, AGTCMSR disabled\n",
+                .{ index, channel.masked },
+            );
+        }
         if (channel.forced_stops != 0) {
             try out.print(
                 "AGT{d}: {d} forced stop(s) through AGTCR.TSTOP\n",

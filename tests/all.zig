@@ -20,6 +20,7 @@ test {
     _ = @import("periph/adc_test.zig");
     _ = @import("periph/agt_test.zig");
     _ = @import("periph/agt_clock_test.zig");
+    _ = @import("periph/agt_compare_test.zig");
     _ = @import("periph/bkup_test.zig");
     _ = @import("periph/bkup_ctrl_test.zig");
     _ = @import("periph/cac_test.zig");
