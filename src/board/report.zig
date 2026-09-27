@@ -17,6 +17,7 @@ const compute = @import("report_compute.zig");
 const cores = @import("report_cores.zig");
 const backup = @import("report_backup.zig");
 const memory = @import("report_memory.zig");
+const mipi = @import("report_mipi.zig");
 const network = @import("report_network.zig");
 const options = @import("report_options.zig");
 const serial = @import("report_serial.zig");
@@ -78,6 +79,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
         }
     }
     if (!board.accuracy.quiet()) try accuracy(board, out);
+    try mipi.sections(board, out);
     try graphics.sections(board, out);
     try watchdog(board, out);
     try causes(board, out);
