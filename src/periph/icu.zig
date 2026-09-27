@@ -16,12 +16,18 @@
 //!     IR    [16] the latched interrupt status flag, WRITE ZERO to clear
 //!     DTCE  [24] DTC activation: the slot hands its event to the DTC
 //!
+//! An access carries a width, and IELSR is a word whose three fields sit in
+//! three different bytes of it: IELS at the bottom, IR in byte 2, DTCE in
+//! byte 3. A byte or halfword access is served through src/periph/lanes.zig,
+//! the same rule the SCI, PORT and ELC blocks already apply.
+//!
 //! Only IELSR is registered on the bus. The rest of the ICU (IRQCR, the NMI
 //! block, the wake-up masks, SELSR) is nobody's yet, and the sparse register
 //! file answers a poll of an unmodelled register better than a block that
 //! flatly returns zero for it, so the block claims the table and no more.
 const memmap = @import("../core/memmap.zig");
 const periph = @import("registry.zig");
+const lanes = @import("lanes.zig");
 
 /// R_ICU geometry (ra8_icu_regs.h): the block is at 0x4000_6000 and the
 /// event-link table sits 0x6300 into it.
@@ -39,6 +45,9 @@ pub const field = struct {
     pub const ir: u32 = 0x0001_0000;
     /// DTCE[24]: DTC activation enable. src/periph/dtc.zig reads it.
     pub const dtce: u32 = 0x0100_0000;
+    /// Every bit the register occupies. The rest of the word is reserved: it
+    /// reads zero and a store into it is kept nowhere.
+    pub const occupied: u32 = iels | ir | dtce;
 };
 
 /// The event-link table and the counters behind the end-of-run line.
@@ -135,10 +144,13 @@ pub const Icu = struct {
         for (&self.links) |*link| link.* &= ~field.ir;
     }
 
+    /// A read is served from the IELSR word the access lands in and then cut
+    /// to the byte lanes the width names, so a byte poll of the flag at +2
+    /// answers IR rather than the bottom of the event number.
     pub fn read(self: *Icu, address: u32, width: u3) u32 {
-        _ = width;
         const slot = slotAt(address) orelse return 0;
-        return self.links[slot];
+        const word = self.links[slot] & field.occupied;
+        return lanes.part(word, lanes.lane(address - win_base), width);
     }
 
     /// IR is WRITE-ZERO-to-clear: a written 0 takes the latched flag down and
@@ -147,11 +159,16 @@ pub const Icu = struct {
     /// that ORs a 1 into IR to "clear" it clears nothing on silicon, and the
     /// re-pend above then re-enters the handler forever, which is the storm
     /// the bench hit while the emulator ran the same image clean.
+    /// A narrow store is merged into the word first, so the lanes it does not
+    /// name keep what they had: the byte store at +2 that takes IR down is
+    /// the way a bitfield write reaches this register, and it must not carry
+    /// away the event number sitting in the bytes below it.
     pub fn write(self: *Icu, address: u32, width: u3, value: u32) void {
-        _ = width;
         const slot = slotAt(address) orelse return;
-        const keep: u32 = if (value & field.ir != 0) self.links[slot] & field.ir else 0;
-        self.links[slot] = (value & ~field.ir) | keep;
+        const current = self.links[slot];
+        const next = lanes.merge(current, lanes.lane(address - win_base), width, value) & field.occupied;
+        const keep: u32 = if (next & field.ir != 0) current & field.ir else 0;
+        self.links[slot] = (next & ~field.ir) | keep;
     }
 
     pub fn block(self: *Icu) periph.Block {
