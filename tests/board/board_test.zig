@@ -18,19 +18,41 @@ fn board() Board {
     return Board.init(std.testing.allocator);
 }
 
-/// The one PPB word the boundary reads, standing in for the engine. AIRCR is
-/// the only address takeResetRequests touches on the core.
+/// The PPB words the boundary reads, standing in for the engine. AIRCR is
+/// the one this file is about; the Arm cache window is read at the same
+/// boundary, so the rest of the addresses are plain RAM here, which is what
+/// the real mapping gives them.
 const Ppb = struct {
     word: u32 = scb.key.status,
+    slots: [16]Slot = .{Slot{}} ** 16,
+
+    const Slot = struct { at: u32 = 0, value: u32 = 0, used: bool = false };
 
     pub fn readWord(self: *Ppb, address: u32) !u32 {
-        try std.testing.expectEqual(memmap.scb.aircr, address);
-        return self.word;
+        if (address == memmap.scb.aircr) return self.word;
+        for (&self.slots) |*slot| {
+            if (slot.used and slot.at == address) return slot.value;
+        }
+        return 0;
     }
 
     pub fn writeWord(self: *Ppb, address: u32, value: u32) !void {
-        try std.testing.expectEqual(memmap.scb.aircr, address);
-        self.word = value;
+        if (address == memmap.scb.aircr) {
+            self.word = value;
+            return;
+        }
+        for (&self.slots) |*slot| {
+            if (slot.used and slot.at == address) {
+                slot.value = value;
+                return;
+            }
+        }
+        for (&self.slots) |*slot| {
+            if (slot.used) continue;
+            slot.* = .{ .at = address, .value = value, .used = true };
+            return;
+        }
+        return error.TooManyWords;
     }
 
     /// The store `ra8_reset_software_reset` makes.

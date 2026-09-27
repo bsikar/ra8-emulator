@@ -26,6 +26,8 @@ test {
     _ = @import("periph/bkup_test.zig");
     _ = @import("periph/bkup_ctrl_test.zig");
     _ = @import("periph/cac_test.zig");
+    _ = @import("periph/cache_geometry_test.zig");
+    _ = @import("periph/cache_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");
     _ = @import("periph/canfd_test.zig");
     _ = @import("periph/ceu_test.zig");

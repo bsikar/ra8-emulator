@@ -2,10 +2,13 @@
 //!
 //! On-chip SRAM is host memory here, so the only window onto the ECC path is
 //! what the decoder self-test latched in SRAMESR and what it left in
-//! SRAMEAR.
+//! SRAMEAR. The Arm cache window rides here too: it is the other thing
+//! standing between the firmware and memory, and what it has to say is the
+//! line size the firmware read and the maintenance it asked for.
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
+const cache = @import("../periph/cache.zig");
 
 const Writer = std.fs.File.Writer;
 
@@ -13,6 +16,7 @@ const Writer = std.fs.File.Writer;
 /// case: SRAMESR is what the decoder found, so an image that wrote it was
 /// claiming a caught fault it never injected.
 pub fn sections(board: *Board, out: Writer) !void {
+    try caches(board, out);
     const memory = &board.ecc;
     if (memory.quiet()) return;
     try out.print(
@@ -47,6 +51,43 @@ fn protection(lock: *const @import("../periph/sram_lock.zig").Lock, out: Writer)
         try out.print(
             "SRAMPRCR: REFUSED {d} store(s) to a guarded register with the controller locked\n",
             .{lock.blocked},
+        );
+    }
+}
+
+/// The Arm cache window. The line size leads because it is the number every
+/// by-address call multiplies by: against the zero CTR used to read, the
+/// same clean did eight times the stores. A boundary is not a store, and the
+/// wording says so: the PPB is read at the chunk boundary, so a run of
+/// maintenance inside one chunk is counted once.
+fn caches(board: *Board, out: Writer) !void {
+    const unit = &board.caches;
+    if (unit.quiet()) return;
+    try out.print(
+        "CACHE: D-cache line {d} bytes (CTR 0x{X:0>8}), I-cache {s}, D-cache {s}\n",
+        .{
+            unit.lineBytes(),
+            unit.ctr,
+            if (unit.icacheOn()) "on" else "off",
+            if (unit.dcacheOn()) "on" else "off",
+        },
+    );
+    for (0..cache.op_count) |index| {
+        const which: cache.Op = @enumFromInt(index);
+        const count = unit.count(which);
+        if (count == 0) continue;
+        try out.print("CACHE: {s} at {d} boundary(s)\n", .{ which.name(), count });
+    }
+    if (unit.walkDeclined() and unit.setWayAsked() != 0) {
+        try out.print(
+            "CACHE: the set/way walk found no geometry in CCSIDR and maintained nothing\n",
+            .{},
+        );
+    }
+    if (unit.refused != 0) {
+        try out.print(
+            "CACHE: REFUSED {d} store(s) to CTR or CCSIDR, both read-only on this core\n",
+            .{unit.refused},
         );
     }
 }

@@ -62,6 +62,22 @@ pub const scb = struct {
     pub const demcr: u32 = 0xE000_EDFC;
 };
 
+/// The Arm v8-M cache maintenance window, the other half of the SCB the
+/// firmware drives. CTR and CCSIDR report the geometry and are read-only;
+/// CSSELR picks which cache CCSIDR describes; the rest are write-only
+/// maintenance ports. Architectural, so constants like the rest of the PPB.
+pub const cache = struct {
+    pub const ctr: u32 = 0xE000_ED7C;
+    pub const ccsidr: u32 = 0xE000_ED80;
+    pub const csselr: u32 = 0xE000_ED84;
+    pub const iciallu: u32 = 0xE000_EF50;
+    pub const dcimvac: u32 = 0xE000_EF5C;
+    pub const dcisw: u32 = 0xE000_EF60;
+    pub const dccmvac: u32 = 0xE000_EF68;
+    pub const dccimvac: u32 = 0xE000_EF70;
+    pub const dccisw: u32 = 0xE000_EF74;
+};
+
 /// The SysTick block. Architectural on every Cortex-M, so these are constants
 /// like the rest of the PPB.
 pub const syst = struct {
