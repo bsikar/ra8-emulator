@@ -115,6 +115,7 @@ test {
     _ = @import("periph/sdhi_card_test.zig");
     _ = @import("periph/sdhi_test.zig");
     _ = @import("periph/sdhi_xfer_test.zig");
+    _ = @import("periph/spi_frame_test.zig");
     _ = @import("periph/spi_test.zig");
     _ = @import("periph/sram_lock_test.zig");
     _ = @import("periph/sram_test.zig");
