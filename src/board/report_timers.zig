@@ -2,6 +2,8 @@
 //! and the writes a running channel refused. All three timer families live
 //! here: the low-power timer that counts through standby, the interval
 //! timers, and the PWM timers.
+const gpt = @import("../periph/gpt.zig");
+
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 
@@ -88,7 +90,19 @@ fn pwm(board: *Board, out: Writer) !void {
             "GPT{d}: GTCNT 0x{X:0>8} of 0x{X:0>8}, {d} overflow(s), running={s}\n",
             .{ index, channel.cnt, channel.periodOrDefault(), channel.overflows, yesno(channel.running()) },
         );
+        try pwmCompares(index, &channel.compares, out);
     }
+}
+
+/// GTCCRA and GTCCRB, but only for a channel that programmed one. A compare
+/// armed and never reached is the interesting line, so it is printed with its
+/// value rather than dropped for having matched nothing.
+fn pwmCompares(index: usize, pair: *const gpt.match.Pair, out: Writer) !void {
+    if (pair.writes == 0) return;
+    try out.print(
+        "GPT{d}: compare A 0x{X:0>8} matched {d} time(s), B 0x{X:0>8} matched {d} time(s)\n",
+        .{ index, pair.value(.a), pair.matches(.a), pair.value(.b), pair.matches(.b) },
+    );
 }
 
 fn yesno(value: bool) []const u8 {

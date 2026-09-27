@@ -49,14 +49,23 @@
 //! here. The count of them is reported, but they are not stacked into a
 //! backlog that would fire long after the counter moved on.
 //!
-//! NOT MODELLED, AND NOT GUESSED: compare match, so GTST.TCFA stays clear
-//! (dev names it and never raises it either, and no header in this tree gives
-//! GTCCRA's offset); the count direction and buffer registers, so every
-//! channel counts up in saw mode; the write-protection register; and the
-//! per-source interrupt enables, so channel 0's overflow always raises.
+//! COMPARE MATCH lives in src/periph/gpt_compare.zig: GTCCRA (+0x4C) and
+//! GTCCRB (+0x50) are compared against the count rather than shadowed, and a
+//! crossing raises GTST.TCFA or TCFB. Everything that file does not claim is
+//! still shadowed.
+//!
+//! NOT MODELLED, AND NOT GUESSED: the count direction and buffer registers,
+//! so every channel counts up in saw mode; the write-protection register; and
+//! the per-source interrupt enables in GTINTAD, so channel 0's overflow
+//! always raises and a compare match never does.
 const std = @import("std");
 
+const compare = @import("gpt_compare.zig");
 const periph = @import("registry.zig");
+
+/// The compare pair, reached as `gpt.match` the way the other split blocks in
+/// this tree re-export their halves.
+pub const match = compare;
 
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
@@ -81,7 +90,8 @@ pub const control = struct {
 
 /// GTST: the status bits dev's enumeration names.
 pub const status = struct {
-    pub const tcfa: u32 = 0x0000_0001;
+    pub const tcfa: u32 = compare.flag.tcfa;
+    pub const tcfb: u32 = compare.flag.tcfb;
     pub const tcfpo: u32 = 0x0000_0040;
     pub const tcfpu: u32 = 0x0000_0080;
 };
@@ -114,6 +124,7 @@ pub const Channel = struct {
     st: u32 = 0,
     shadow: [stride]u8 = @splat(0),
     overflows: u32 = 0,
+    compares: compare.Pair = .{},
 
     pub fn running(self: Channel) bool {
         return self.cr & control.cst != 0;
@@ -130,19 +141,26 @@ pub const Channel = struct {
         if (!self.running()) return 0;
         const period = self.periodOrDefault();
         const span = @as(u64, period) + 1;
+        const before = self.cnt;
         const next = @as(u64, self.cnt) + step_per_tick;
+        var wraps: u32 = 0;
         if (next <= period) {
             self.cnt = @intCast(next);
-            return 0;
+        } else {
+            wraps = @intCast(next / span);
+            self.cnt = @intCast(next % span);
+            self.st |= status.tcfpo;
+            self.overflows +%= wraps;
         }
-        const wraps: u32 = @intCast(next / span);
-        self.cnt = @intCast(next % span);
-        self.st |= status.tcfpo;
-        self.overflows +%= wraps;
+        self.st |= self.compares.step(before, self.cnt, wraps);
         return wraps;
     }
 
     fn readByte(self: *const Channel, local: u32) u8 {
+        if (compare.which(local)) |side| {
+            const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
+            return lane(self.compares.value(side), local - base);
+        }
         return switch (cellOf(local)) {
             off.gtcnt => lane(self.cnt, local - off.gtcnt),
             off.gtpr => lane(self.period, local - off.gtpr),
@@ -153,6 +171,11 @@ pub const Channel = struct {
     }
 
     fn writeByte(self: *Channel, local: u32, byte: u8) void {
+        if (compare.which(local)) |side| {
+            const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
+            self.compares.set(side, merge(self.compares.value(side), local - base, byte));
+            return;
+        }
         switch (cellOf(local)) {
             off.gtcnt => self.cnt = merge(self.cnt, local - off.gtcnt, byte),
             off.gtpr => self.period = merge(self.period, local - off.gtpr, byte),
@@ -182,7 +205,7 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: Channel) bool {
-        return self.overflows == 0 and !self.running();
+        return self.overflows == 0 and !self.running() and self.compares.quiet();
     }
 };
 
