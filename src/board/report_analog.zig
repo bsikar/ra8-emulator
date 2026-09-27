@@ -75,4 +75,10 @@ pub fn converter(board: *Board, out: Writer) !void {
     if (unit.stops != 0) {
         try out.print("ADC_B: {d} force-stop(s) through ADSTOPR\n", .{unit.stops});
     }
+    if (unit.masked != 0) {
+        try out.print(
+            "ADC_B: {d} scan(s) raised nothing, ADINTCR clear\n",
+            .{unit.masked},
+        );
+    }
 }

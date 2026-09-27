@@ -53,14 +53,24 @@
 //! and not obviously wrong, though the empty scan is counted so a run that
 //! never enrolled anything says so.
 //!
-//! NOT MODELLED AND NOT GUESSED: ADINTCR's per-group interrupt enable (the
-//! event is raised whatever it holds), ADTRGENR and every hardware trigger,
+//! THE SCAN-END INTERRUPT ENABLE lives in src/periph/adc_intr.zig: ADINTCR
+//! (+0x005C) decides whether a finished scan raises anything at all, so an
+//! image the HAL brought up, which writes ADINTCR = 0 in `ra8_adc_init`,
+//! converts and reports and owes the core nothing. The event used to be
+//! raised whatever that register held.
+//!
+//! NOT MODELLED AND NOT GUESSED: ADTRGENR and every hardware trigger,
 //! the A/D error and overflow status bits, ADSR for units other than 0, and
 //! the sampling-time and gain registers. They are shadowed so a read-modify-
 //! write survives, and never read.
 const std = @import("std");
 const periph = @import("registry.zig");
 const scan = @import("adc_scan.zig");
+const intr = @import("adc_intr.zig");
+
+/// The scan-end interrupt enable, reached as `adc.interrupt` the way the
+/// other split blocks in this tree re-export their halves.
+pub const interrupt = intr;
 
 /// The window. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4033_8000;
@@ -70,6 +80,7 @@ pub const win_span: u32 = 0x2224;
 /// shadowed.
 pub const off = struct {
     pub const adsger: u32 = 0x0048;
+    pub const adintcr: u32 = intr.off_adintcr;
     pub const adsgdcr0: u32 = 0x0200;
     pub const adchcr0: u32 = 0x0600;
     pub const addopcrc0: u32 = 0x060C;
@@ -126,6 +137,8 @@ pub const Adc = struct {
     unbacked: u32 = 0,
     /// Force-stops taken through ADSTOPR.
     stops: u32 = 0,
+    /// Scans that finished with ADINTCR clear, so no event was raised.
+    masked: u32 = 0,
     due_scan: bool = false,
 
     pub fn init() Adc {
@@ -208,7 +221,12 @@ pub const Adc = struct {
         if (converted == 0) self.empty +%= 1;
         self.converted +%= converted;
         self.scans +%= 1;
-        self.due_scan = true;
+        // The conversion happened either way; only the interrupt is at stake.
+        if (intr.enabled(self.reg[off.adintcr / 4])) {
+            self.due_scan = true;
+        } else {
+            self.masked +%= 1;
+        }
     }
 
     /// Every slot enrolled in the group converts. A pin channel reports to
