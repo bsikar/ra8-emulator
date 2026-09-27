@@ -3,6 +3,7 @@
 //! imports this as "ra8"; so does src/main.zig.
 pub const core = struct {
     pub const c = @import("core/c.zig");
+    pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("core/cli.zig");
     pub const disasm = @import("core/disasm.zig");
     pub const elf = @import("core/elf.zig");

@@ -6,6 +6,7 @@ const std = @import("std");
 
 test {
     _ = @import("board/board_test.zig");
+    _ = @import("core/cadence_test.zig");
     _ = @import("core/cli_test.zig");
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");

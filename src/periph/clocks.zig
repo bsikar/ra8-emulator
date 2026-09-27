@@ -14,11 +14,14 @@
 //! outer chunk and arms one SysTick period in the same place. This is that
 //! cadence, with SysTick counted down properly rather than armed.
 const std = @import("std");
+const cadence = @import("../core/cadence.zig");
 const memmap = @import("../core/memmap.zig");
 
-/// Instructions per outer chunk: the C tree's k_run_chunk_insns, which is also
-/// the number of cycles it charges per chunk (~1 IPC on the M85).
-pub const chunk_instructions: u32 = 500_000;
+/// Instructions per outer chunk, and the cycles charged for one (~1 IPC on
+/// the M85). The width itself is the run's cadence (src/core/cadence.zig):
+/// dev's 500000 was one number for both, and splitting them is what let the
+/// boundary get fine enough for a bounded poll loop to see a counter move.
+pub const chunk_instructions: u32 = cadence.instructions;
 
 /// SYST_CSR bits.
 pub const csr_enable: u32 = 1 << 0;
