@@ -65,6 +65,17 @@ pub fn blocks(board: *Board, out: Writer) !void {
             "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
             .{ @intFromEnum(board.dataops.mode()), board.dataops.dodsr0, @intFromBool(board.dataops.flag), board.dataops.ops },
         );
+        if (board.dataops.windows != 0) {
+            try out.print(
+                "DOC: {d} window compare(s), {s}, DODSR0 0x{X:0>4}..DODSR1 0x{X:0>4}\n",
+                .{
+                    board.dataops.windows,
+                    board.dataops.relation().name(),
+                    board.dataops.dodsr0 & 0xFFFF,
+                    board.dataops.dodsr1 & 0xFFFF,
+                },
+            );
+        }
     }
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try graphics.sections(board, out);

@@ -15,18 +15,25 @@
 //!   DOSCR  (+0x08, 8b)  write DOPCFCL to clear the flag
 //!   DODIR  (+0x0C)      write-only operand in: each write runs one operation
 //!   DODSR0 (+0x10)      reference in, running result out, seedable
-//!   DODSR1 (+0x14)      upper threshold, shadowed
+//!   DODSR1 (+0x14)      upper threshold, read by the two window relations
 //!
 //! One DODIR write is one operation, and DOCR.OMS picks which:
 //!   add      DODSR0 += DODIR, masked to the DOBW width, DOPCF on carry out
 //!   subtract DODSR0 -= DODIR, masked, DOPCF on borrow
-//!   compare  DODSR0 is left alone, DOPCF latches when the relation holds
+//!   compare  DODSR0 is left alone, DOPCF latches when the relation holds,
+//!            and which relation that is comes from DOCR.DCSEL: see
+//!            doc_compare.zig, which owns the six encodings and reads DODSR1
+//!            as the upper bound for the two window ones.
 //!
 //! DOPCF latches: once set it stays set until DOSCR clears it, which is what
 //! lets a driver run a whole block through the unit and check overflow once at
 //! the end rather than after every operand.
 const std = @import("std");
 const periph = @import("registry.zig");
+const doc_compare = @import("doc_compare.zig");
+
+/// The detection condition DOCR.DCSEL selects, in its own file.
+pub const compare = doc_compare;
 
 /// DOC geometry (HUM Ch 57.2). The Non-secure alias is folded onto this base
 /// by the bus before anything here sees it.
@@ -42,8 +49,6 @@ pub const off_dodsr1: u32 = 0x14;
 
 const oms_mask: u8 = 0x03;
 pub const dobw_32: u8 = 0x08;
-const dcsel_mask: u8 = 0x70;
-pub const dcsel_shift: u3 = 4;
 pub const dopcf: u8 = 0x01;
 
 /// DOCR.OMS: what a DODIR write does.
@@ -61,6 +66,8 @@ pub const Doc = struct {
     dodsr0: u32 = 0,
     dodsr1: u32 = 0,
     ops: u32 = 0,
+    /// Compares run under one of the two DODSR1 window relations.
+    windows: u32 = 0,
 
     pub fn init() Doc {
         return .{};
@@ -73,6 +80,11 @@ pub const Doc = struct {
     /// DOCR.DOBW picks the arithmetic width: clear is 16-bit, set is 32-bit.
     pub fn widthMask(self: *const Doc) u32 {
         return if (self.docr & dobw_32 != 0) 0xFFFF_FFFF else 0x0000_FFFF;
+    }
+
+    /// The detection condition a compare currently answers.
+    pub fn relation(self: *const Doc) compare.Relation {
+        return compare.Relation.of(self.docr);
     }
 
     /// Untouched units stay out of the end-of-run report.
@@ -102,14 +114,12 @@ pub const Doc = struct {
             },
             else => {
                 // Compare leaves the accumulator alone; only the flag moves.
-                // DCSEL=1 latches on a match, every other encoding latches on
-                // a mismatch, which is how dev models it: no in-tree app
-                // selects the remaining relations, so inventing them here
-                // would be inventing behaviour nothing checks.
-                const dcsel = (self.docr & dcsel_mask) >> dcsel_shift;
-                const equal = in == current;
-                const hit = if (dcsel == 1) equal else !equal;
-                if (hit) self.flag = true;
+                // Which question is being asked is DOCR.DCSEL's to answer, and
+                // the two window relations weigh the operand against DODSR1 as
+                // well as DODSR0.
+                const condition = compare.Relation.of(self.docr);
+                if (condition.windowed()) self.windows +%= 1;
+                if (compare.hit(condition, in, current, self.dodsr1 & mask)) self.flag = true;
             },
         }
         self.ops +%= 1;
