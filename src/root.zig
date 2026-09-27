@@ -156,6 +156,7 @@ pub const periph = struct {
     pub const sd_write = @import("periph/sd_write.zig");
     pub const sdhi = @import("periph/sdhi.zig");
     pub const sdhi_card = @import("periph/sdhi_card.zig");
+    pub const sdhi_fifo = @import("periph/sdhi_fifo.zig");
     pub const sdhi_xfer = @import("periph/sdhi_xfer.zig");
     pub const spi = @import("periph/spi.zig");
     pub const spi_frame = @import("periph/spi_frame.zig");
