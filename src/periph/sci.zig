@@ -25,6 +25,7 @@
 //! RDRF is a fact about queued bytes rather than a value a driver wrote.
 const std = @import("std");
 const periph = @import("registry.zig");
+const sci_status = @import("sci_status.zig");
 
 /// SCI_B geometry. The Non-secure alias is folded onto this base by the bus
 /// before anything here sees it.
@@ -39,11 +40,13 @@ pub const console_channel: usize = 8;
 pub const off_rdr: u32 = 0x00;
 pub const off_tdr: u32 = 0x04;
 pub const off_ccr0: u32 = 0x08;
-pub const off_csr: u32 = 0x48;
-pub const off_frsr: u32 = 0x50;
-pub const off_ftsr: u32 = 0x54;
-pub const off_cfclr: u32 = 0x68;
-pub const off_ffclr: u32 = 0x70;
+/// The status words and the clear strobes live in src/periph/sci_status.zig,
+/// which owns what they answer and what a store to one does.
+pub const off_csr: u32 = sci_status.off.csr;
+pub const off_frsr: u32 = sci_status.off.frsr;
+pub const off_ftsr: u32 = sci_status.off.ftsr;
+pub const off_cfclr: u32 = sci_status.off.cfclr;
+pub const off_ffclr: u32 = sci_status.off.ffclr;
 
 /// CCR0 enables (ra8_sci_ccr0_bit_t).
 pub const ccr0 = struct {
@@ -54,20 +57,8 @@ pub const ccr0 = struct {
     pub const teie: u32 = 0x0020_0000;
 };
 
-/// CSR status bits (ra8_sci_csr_bit_t).
-pub const csr = struct {
-    pub const rxdmon: u32 = 0x0000_8000;
-    pub const tdre: u32 = 0x2000_0000;
-    pub const tend: u32 = 0x4000_0000;
-    pub const rdrf: u32 = 0x8000_0000;
-};
-
-/// FIFO status bits a read of FRSR / FTSR reports.
-pub const fifo = struct {
-    pub const frsr_dr: u32 = 0x0000_0001;
-    pub const frsr_rdf: u32 = 0x0000_0040;
-    pub const ftsr_tdfe: u32 = 0x0000_0040;
-};
+pub const csr = sci_status.csr;
+pub const fifo = sci_status.fifo;
 
 /// The ELC event numbers the console channel raises (HUM Ch 19 Table 19.3,
 /// FSP `bsp_elc.h` for ra8d2: SCI8_RXI 0x122, _TXI 0x123, _TEI 0x124). A
@@ -153,6 +144,8 @@ pub const Channel = struct {
     /// receiver that was never enabled hears nothing on silicon, so these
     /// are gone rather than waiting in the ring.
     unheard: u32 = 0,
+    /// Stores aimed at CSR, FRSR or FTSR: the controller owns those words.
+    status_stores: u32 = 0,
     rx: Ring = .{},
     /// What is on this channel's line, if anything.
     device: ?Device = null,
@@ -163,16 +156,13 @@ pub const Channel = struct {
 
     pub fn quiet(self: *const Channel) bool {
         return self.transmitted == 0 and self.received == 0 and
-            self.unsent == 0 and self.unheard == 0;
+            self.unsent == 0 and self.unheard == 0 and self.status_stores == 0;
     }
 
-    /// CSR: the transmitter is always drained, RXDMON idles high the way an
-    /// idle line does, and RDRF is true only while the receiver is enabled and
-    /// a byte is queued.
+    /// CSR as this channel answers it. What those bits mean, and why they
+    /// read the way they do, is src/periph/sci_status.zig's.
     pub fn status(self: *const Channel) u32 {
-        var value: u32 = csr.tdre | csr.tend | csr.rxdmon;
-        if (self.readable()) value |= csr.rdrf;
-        return value;
+        return sci_status.common(self.readable());
     }
 
     pub fn readable(self: *const Channel) bool {
@@ -259,12 +249,16 @@ pub const Sci = struct {
         return due;
     }
 
+    /// A read of any width. The window is 32-bit registers, so the access is
+    /// served from the word it lands in and then cut to the bytes it names:
+    /// TDRE is bit 29, and a driver polling it with a byte load reads CSR+3.
     pub fn read(self: *Sci, address: u32, width: u3) u32 {
-        _ = width;
         const offset = address -% win_base;
         const index = offset / stride;
         if (index >= channels) return 0;
-        return self.readRegister(@intCast(index), offset % stride);
+        const local = offset % stride;
+        const word = self.readRegister(@intCast(index), local & ~@as(u32, 3));
+        return part(word, local % 4, width);
     }
 
     fn readRegister(self: *Sci, index: usize, offset: u32) u32 {
@@ -273,10 +267,8 @@ pub const Sci = struct {
             off_rdr => self.readData(index),
             off_ccr0 => channel.control,
             off_csr => channel.status(),
-            off_frsr => if (channel.readable()) fifo.frsr_dr | fifo.frsr_rdf else 0,
-            // The transmit FIFO is always empty in this model, for the same
-            // reason TDRE is always set.
-            off_ftsr => fifo.ftsr_tdfe,
+            off_frsr => sci_status.receive(channel.readable()),
+            off_ftsr => sci_status.transmit,
             // The clear strobes are write-only, and nothing else in the
             // channel answers: zero beats the sparse file's alternating
             // stand-in here, because these are registers with no value.
@@ -294,18 +286,31 @@ pub const Sci = struct {
         return byte;
     }
 
+    /// A store of any width, judged on the word it lands in and on the byte
+    /// lanes it actually names.
     pub fn write(self: *Sci, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% win_base;
         const index = offset / stride;
         if (index >= channels) return;
-        self.writeRegister(@intCast(index), offset % stride, value);
+        const local = offset % stride;
+        self.writeRegister(@intCast(index), local & ~@as(u32, 3), local % 4, width, value);
     }
 
-    fn writeRegister(self: *Sci, index: usize, offset: u32, value: u32) void {
-        switch (offset) {
-            off_tdr => self.writeData(index, @truncate(value & data_mask)),
-            off_ccr0 => self.channels[index].control = value,
+    fn writeRegister(self: *Sci, index: usize, word: u32, lane: u32, width: u3, value: u32) void {
+        const channel = &self.channels[index];
+        if (sci_status.readOnly(word)) {
+            channel.status_stores +%= 1;
+            return;
+        }
+        switch (word) {
+            // TDAT is TDR[7:0]. A narrow store that does not name that byte
+            // carries no character, and the bits above it are the parity and
+            // multiprocessor fields nothing here interprets.
+            off_tdr => if (lane == 0) self.writeData(index, @truncate(value & data_mask)),
+            // A narrow store leaves the bytes it does not name where they
+            // were, so setting RE with a byte store to CCR0+0 keeps the
+            // interrupt enables sitting in the bytes above it.
+            off_ccr0 => channel.control = merge(channel.control, lane, width, value),
             // CFCLR and FFCLR are write-1-to-clear over flags this model
             // derives rather than latches: TDRE and TEND never go down, and
             // RDRF follows the queue, so clearing them changes nothing.
@@ -355,6 +360,24 @@ pub const Sci = struct {
         };
     }
 };
+
+/// The part of a 32-bit register a narrow access names.
+fn part(value: u32, lane: u32, width: u3) u32 {
+    if (width >= 4) return value;
+    const shift: u5 = @intCast(lane * 8);
+    const shifted = value >> shift;
+    return if (width == 1) shifted & 0xFF else shifted & 0xFFFF;
+}
+
+/// Fold a narrow store into a 32-bit register, leaving the bytes the access
+/// does not name where they were.
+fn merge(current: u32, lane: u32, width: u3, value: u32) u32 {
+    if (width >= 4) return value;
+    const shift: u5 = @intCast(lane * 8);
+    const bits: u32 = if (width == 1) 0xFF else 0xFFFF;
+    const window: u32 = bits << shift;
+    return (current & ~window) | ((value & bits) << shift);
+}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Sci = @ptrCast(@alignCast(context));
