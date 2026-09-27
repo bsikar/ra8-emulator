@@ -38,6 +38,7 @@ pub const periph = struct {
     pub const dac_output = @import("periph/dac_output.zig");
     pub const dma_bank = @import("periph/dma_bank.zig");
     pub const dmac = @import("periph/dmac.zig");
+    pub const dmac_regs = @import("periph/dmac_regs.zig");
     pub const dmac_xfer = @import("periph/dmac_xfer.zig");
     pub const doc = @import("periph/doc.zig");
     pub const doc_compare = @import("periph/doc_compare.zig");
