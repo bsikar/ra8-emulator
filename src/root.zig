@@ -81,6 +81,7 @@ pub const periph = struct {
     pub const glcdc_sys = @import("periph/glcdc_sys.zig");
     pub const glcdc_tcon = @import("periph/glcdc_tcon.zig");
     pub const gpio = @import("periph/gpio.zig");
+    pub const gpio_regs = @import("periph/gpio_regs.zig");
     pub const gpt = @import("periph/gpt.zig");
     pub const gpt_buffer = @import("periph/gpt_buffer.zig");
     pub const gpt_clock = @import("periph/gpt_clock.zig");

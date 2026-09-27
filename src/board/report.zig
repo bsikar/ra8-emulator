@@ -337,6 +337,12 @@ fn transfers(board: *Board, out: Writer) !void {
 /// every period on the bench; every underflow is an interrupt request here,
 /// and a forced stop through TSTOP is taken rather than discarded.
 fn leds(board: *Board, out: Writer) !void {
+    if (board.pins.refusedStores() != 0) {
+        try out.print(
+            "GPIO PORT: REFUSED {d} store(s) into PCNTR2, which the pads drive\n",
+            .{board.pins.refusedStores()},
+        );
+    }
     if (board.pins.quiet()) {
         try out.print("GPIO LEDs: none driven\n", .{});
         return;
