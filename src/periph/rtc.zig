@@ -36,16 +36,24 @@
 //! read its own invention back out of a free-running counter. Refused and
 //! counted here.
 //!
+//! RCR2.RESET IS A COMMAND, NOT A SETTING. The bit auto-clears on silicon
+//! and the driver polls it until it falls, so a shadow that answers 1 is an
+//! image that never leaves bring-up. It is interpreted in rtc_reset.zig,
+//! which carries the rule and says what the reset does and does not touch.
+//!
 //! NOT MODELLED, AND NOT GUESSED: RCR1.PES, so a periodic-enabled clock
 //! offers one periodic event per modelled second whatever interval was
-//! selected; the day-of-week counter and its alarm, which dev does not
-//! maintain either; RCR2's reset, adjustment and sub-clock bits; and RCR4's
-//! count source. No header for this part is in this tree, so those are
-//! shadowed for readback and never interpreted.
+//! selected (ra8_rtc_regs.h names PES[3:0] at bits 4..7 and gives no
+//! encoding table, and the driver only ever writes the register as zero);
+//! the day-of-week counter and its alarm, which dev does not maintain
+//! either; RCR2's adjustment and output bits, for the reasons rtc_reset.zig
+//! gives; and RCR4's count source. Those are shadowed for readback and
+//! never interpreted.
 const std = @import("std");
 
 const periph = @import("registry.zig");
 const clock = @import("rtc_clock.zig");
+const reset = @import("rtc_reset.zig");
 
 /// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -75,6 +83,9 @@ pub const off = struct {
     pub const rcr2: u32 = 0x24;
     pub const rcr4: u32 = 0x28;
 };
+
+/// The RCR2 rule: which bits mean what, and the reset that auto-clears.
+pub const software_reset = reset;
 
 /// RCR1 interrupt enables and the RCR2 run bit.
 pub const control = struct {
@@ -126,6 +137,8 @@ pub const Rtc = struct {
     refused_running: u32 = 0,
     /// Stores into R64CNT, which is read-only.
     refused_read_only: u32 = 0,
+    /// Software resets RCR2.RESET asked for and this model performed.
+    resets: u32 = 0,
     due_alarm: bool = false,
     due_periodic: bool = false,
 
@@ -137,11 +150,12 @@ pub const Rtc = struct {
 
     pub fn quiet(self: *const Rtc) bool {
         return self.seconds == 0 and self.matches == 0 and self.periodics == 0 and
-            self.refused_running == 0 and self.refused_read_only == 0;
+            self.refused_running == 0 and self.refused_read_only == 0 and
+            self.resets == 0;
     }
 
     pub fn running(self: *const Rtc) bool {
-        return self.reg[off.rcr2] & control.start != 0;
+        return reset.running(self.reg[off.rcr2]);
     }
 
     /// One chunk boundary. A stopped clock holds its time, which is what
@@ -210,6 +224,11 @@ pub const Rtc = struct {
             self.refused_read_only +%= 1;
             return false;
         }
+        if (offset == off.rcr2) {
+            self.reg[offset] = reset.stored(byte);
+            if (reset.requested(byte)) self.softwareReset();
+            return false;
+        }
         if (!isCalendar(offset)) {
             self.reg[offset] = byte;
             return false;
@@ -220,6 +239,16 @@ pub const Rtc = struct {
         }
         self.reg[offset] = byte;
         return true;
+    }
+
+    /// The reset RCR2.RESET asks for: the sub-second prescaler goes back to
+    /// zero, and the calendar it feeds is left as firmware wrote it. What
+    /// else silicon initialises here is not written down in this tree, so
+    /// nothing else is touched.
+    fn softwareReset(self: *Rtc) void {
+        self.resets +%= 1;
+        self.r64 = 0;
+        self.reg[off.r64cnt] = 0;
     }
 
     /// Publish the binary time into the BCD counters firmware reads.

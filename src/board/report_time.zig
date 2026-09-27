@@ -30,6 +30,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.refused_running},
         );
     }
+    if (unit.resets != 0) {
+        try out.print(
+            "RTC: {d} software reset(s), RCR2.RESET auto-cleared\n",
+            .{unit.resets},
+        );
+    }
     if (unit.refused_read_only != 0) {
         try out.print(
             "RTC: REFUSED {d} store(s) into R64CNT, which is read-only\n",
