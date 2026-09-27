@@ -13,10 +13,10 @@
 //!
 //! THE TRANSMIT FIFO IS REAL, NOT A HOLE IN THE FLOOR. dev pins SSIFSR.TDE
 //! set and drops every SSIFTDR store straight into a tally, so the register
-//! never fills, never stalls, and never loses anything. Here the stage count
-//! is the model's own (see `tx_depth`), but it is finite: TDE reads clear
-//! while the FIFO holds a sample, and a store past the last stage is dropped
-//! and counted rather than silently becoming a transmitted sample.
+//! never fills, never stalls, and never loses anything. Here it is a FIFO of
+//! the part's own depth: TDE reads clear while it holds a sample, TDC reports
+//! how many, and a store past the last stage is dropped and counted rather
+//! than silently becoming a transmitted sample.
 //!
 //! A SAMPLE IS TRANSMITTED WHEN THE TRANSMITTER IS ON. dev counts every
 //! SSIFTDR store whatever SSICR says, so an image whose TEN never took
@@ -30,14 +30,25 @@
 //! neither set a flag nor clear one and cannot tell which happened. Here the
 //! register is computed on read and a write to it changes nothing.
 //!
-//! NOT MODELLED, AND NOT GUESSED: SSIFCR's FIFO resets and SSIFSR's data
-//! counts and receive flags. No header for this part is in this tree to say
-//! which bits those are, so only the three fields dev's own masks name are
-//! interpreted, SSICR.REN/TEN, SSISR.IIRQ and SSIFSR.TDE. The rest of the
-//! window is shadowed so a read-modify-write survives, and never read. There
-//! is no receive source, so SSIFRDR reads zero, as it does on dev.
+//! THE FIFO ITSELF lives in src/periph/ssie_fifo.zig: the part's 32 stages,
+//! SSIFSR's TDC count, and the SSIFCR resets that empty it. That file carries
+//! the register fields and what is deliberately left alone in them.
+//!
+//! NOT MODELLED, AND NOT GUESSED: SSIFSR's receive flags, and the write-0-to
+//! -clear the header describes for RDF and TDE. TDE is computed from what the
+//! FIFO is holding rather than latched, so a store to SSIFSR still changes
+//! nothing; latching it would need the clear rule stated somewhere in one of
+//! these trees, and it is not. The rest of the window is shadowed so a
+//! read-modify-write survives, and never read. There is no receive source, so
+//! SSIFRDR reads zero and RDC reads zero, as they do on dev.
 const std = @import("std");
+
+const fifo = @import("ssie_fifo.zig");
 const periph = @import("registry.zig");
+
+/// The staging FIFO, reached as `ssie.stage` the way the other split blocks
+/// in this tree re-export their halves.
+pub const stage = fifo;
 
 /// SSIE geometry. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4025_D000;
@@ -63,13 +74,11 @@ pub const field = struct {
     /// SSISR.IIRQ, the idle flag the driver waits on before enabling.
     pub const iirq: u32 = 0x0200_0000;
     /// SSIFSR.TDE, transmit FIFO empty.
-    pub const tde: u32 = 0x0001_0000;
+    pub const tde: u32 = fifo.status.tde;
 };
 
-/// Stages in the transmit FIFO. The count is the model's, not a number read
-/// from a header in this tree; what matters against dev is that it is finite,
-/// so TDE means something and an overrun is visible.
-pub const tx_depth: usize = 8;
+/// Stages in the transmit FIFO, from the part's own header.
+pub const tx_depth: usize = fifo.depth.stages;
 
 /// Words of a channel's window this model shadows rather than interprets.
 const shadow_words: usize = channel_stride / 4;
@@ -81,14 +90,11 @@ pub const Channel = struct {
     ssicr: u32 = 0,
     shadow: [shadow_words]u32 = .{0} ** shadow_words,
     /// Samples written while the transmitter was off, oldest first.
-    fifo: [tx_depth]u32 = .{0} ** tx_depth,
-    staged: usize = 0,
+    tx: fifo.Stage = .{},
     /// Samples shifted out with TEN set.
     transmitted: u32 = 0,
     /// The last sample shifted out.
     last: u32 = 0,
-    /// Samples written to a full FIFO with the transmitter off.
-    dropped: u32 = 0,
 
     pub fn transmitting(self: *const Channel) bool {
         return self.ssicr & field.ten != 0;
@@ -101,8 +107,22 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: *const Channel) bool {
-        return self.ssicr == 0 and self.transmitted == 0 and
-            self.staged == 0 and self.dropped == 0;
+        return self.ssicr == 0 and self.transmitted == 0 and self.tx.quiet();
+    }
+
+    /// Samples still waiting behind a transmitter that never came on.
+    pub fn staged(self: *const Channel) usize {
+        return self.tx.held;
+    }
+
+    /// Samples a full FIFO refused.
+    pub fn dropped(self: *const Channel) u32 {
+        return self.tx.overruns;
+    }
+
+    /// Samples a FIFO reset threw away before they were shifted out.
+    pub fn discarded(self: *const Channel) u32 {
+        return self.tx.discarded;
     }
 
     /// Take a sample. With the transmitter on it goes out; with it off the
@@ -111,12 +131,7 @@ pub const Channel = struct {
     /// than one more sample on the wire.
     fn push(self: *Channel, sample: u32) void {
         if (self.transmitting()) return self.shift(sample);
-        if (self.staged >= tx_depth) {
-            self.dropped +%= 1;
-            return;
-        }
-        self.fifo[self.staged] = sample;
-        self.staged += 1;
+        _ = self.tx.push(sample);
     }
 
     fn shift(self: *Channel, sample: u32) void {
@@ -127,16 +142,26 @@ pub const Channel = struct {
     /// Enabling the transmitter starts shifting whatever the FIFO already
     /// holds, oldest first.
     fn drain(self: *Channel) void {
-        for (self.fifo[0..self.staged]) |sample| self.shift(sample);
-        self.staged = 0;
+        for (self.tx.pending()) |sample| self.shift(sample);
+        self.tx.clear();
     }
 
     fn status(self: *const Channel) u32 {
         return if (self.idle()) field.iirq else 0;
     }
 
+    /// SSIFSR: the empty flag a driver gates its first store on, and the
+    /// count it does flow control with after that.
     fn fifoStatus(self: *const Channel) u32 {
-        return if (self.staged == 0) field.tde else 0;
+        const empty: u32 = if (self.tx.empty()) field.tde else 0;
+        return empty | fifo.transmitCount(self.tx.held);
+    }
+
+    /// A write to SSIFCR. A reset bit going up empties the FIFO it names;
+    /// the word itself stays in the shadow, so the driver's readback and its
+    /// poll for the bit to clear both see what it wrote.
+    fn fifoControl(self: *Channel, before: u32, after: u32) void {
+        if (fifo.asserted(before, after) & fifo.reset.transmit != 0) self.tx.flush();
     }
 };
 
@@ -180,6 +205,12 @@ pub const Ssie = struct {
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
             off_ssicr => control(unit, merge(unit.ssicr, byte, width, value)),
+            off_ssifcr => {
+                const word = inner / 4;
+                const before = unit.shadow[word];
+                unit.shadow[word] = merge(before, byte, width, value);
+                unit.fifoControl(before, unit.shadow[word]);
+            },
             off_ssiftdr => unit.push(value & widthMask(width)),
             // Status, and a status register does not take a store.
             off_ssisr, off_ssifsr => {},

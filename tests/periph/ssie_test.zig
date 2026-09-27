@@ -37,22 +37,75 @@ test "a sample written with TEN set is transmitted" {
     block.write(ch0 + ssie.off_ssiftdr, 4, 0x1234_5678);
     try std.testing.expectEqual(@as(u32, 1), block.channels[0].transmitted);
     try std.testing.expectEqual(@as(u32, 0x1234_5678), block.channels[0].last);
-    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged);
+    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged());
 }
 
 test "a sample written with TEN clear is staged, not transmitted" {
     var block = unit();
     block.write(ch0 + ssie.off_ssiftdr, 4, 0x0AAA);
     try std.testing.expectEqual(@as(u32, 0), block.channels[0].transmitted);
-    try std.testing.expectEqual(@as(usize, 1), block.channels[0].staged);
+    try std.testing.expectEqual(@as(usize, 1), block.channels[0].staged());
 }
 
 test "TDE reads clear while the FIFO holds a sample" {
     var block = unit();
     block.write(ch0 + ssie.off_ssiftdr, 4, 1);
-    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + ssie.off_ssifsr, 4));
+    const held = block.read(ch0 + ssie.off_ssifsr, 4);
+    try std.testing.expectEqual(@as(u32, 0), held & ssie.field.tde);
     try startTx(&block, ch0);
     try std.testing.expectEqual(ssie.field.tde, block.read(ch0 + ssie.off_ssifsr, 4));
+}
+
+test "SSIFSR reports how many stages the FIFO is holding" {
+    var block = unit();
+    const tdc = ssie.stage.status.tdc_mask;
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + ssie.off_ssifsr, 4) & tdc);
+    for (0..5) |i| block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
+    try std.testing.expectEqual(
+        ssie.stage.transmitCount(5),
+        block.read(ch0 + ssie.off_ssifsr, 4) & tdc,
+    );
+}
+
+test "a full FIFO reports the depth, so a driver stops writing" {
+    var block = unit();
+    for (0..ssie.tx_depth + 4) |i| block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
+    try std.testing.expectEqual(
+        ssie.stage.transmitCount(ssie.tx_depth),
+        block.read(ch0 + ssie.off_ssifsr, 4) & ssie.stage.status.tdc_mask,
+    );
+}
+
+test "a TFRST pulse empties the transmit FIFO" {
+    var block = unit();
+    for (0..3) |i| block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
+    try std.testing.expectEqual(@as(usize, 3), block.channels[0].staged());
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.stage.reset.both);
+    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged());
+    try std.testing.expectEqual(@as(u32, 3), block.channels[0].discarded());
+    try std.testing.expectEqual(ssie.field.tde, block.read(ch0 + ssie.off_ssifsr, 4));
+}
+
+test "SSIFCR still reads back what was written, reset bits included" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssifcr, 4, 0x0000_0033);
+    try std.testing.expectEqual(@as(u32, 0x0000_0033), block.read(ch0 + ssie.off_ssifcr, 4));
+}
+
+test "a reset bit left set does not re-empty the FIFO on a later store" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.stage.reset.both);
+    for (0..2) |i| block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.stage.reset.both | 0x40);
+    try std.testing.expectEqual(@as(usize, 2), block.channels[0].staged());
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].discarded());
+}
+
+test "a receive FIFO reset alone leaves the transmit stages alone" {
+    var block = unit();
+    for (0..2) |i| block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.stage.reset.receive);
+    try std.testing.expectEqual(@as(usize, 2), block.channels[0].staged());
 }
 
 test "setting TEN drains what is staged, oldest first" {
@@ -62,7 +115,7 @@ test "setting TEN drains what is staged, oldest first" {
     try startTx(&block, ch0);
     try std.testing.expectEqual(@as(u32, 2), block.channels[0].transmitted);
     try std.testing.expectEqual(@as(u32, 0x22), block.channels[0].last);
-    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged);
+    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged());
 }
 
 test "a store past the last stage is dropped, not transmitted" {
@@ -70,8 +123,8 @@ test "a store past the last stage is dropped, not transmitted" {
     for (0..ssie.tx_depth + 3) |i| {
         block.write(ch0 + ssie.off_ssiftdr, 4, @intCast(i));
     }
-    try std.testing.expectEqual(ssie.tx_depth, block.channels[0].staged);
-    try std.testing.expectEqual(@as(u32, 3), block.channels[0].dropped);
+    try std.testing.expectEqual(ssie.tx_depth, block.channels[0].staged());
+    try std.testing.expectEqual(@as(u32, 3), block.channels[0].dropped());
     try startTx(&block, ch0);
     try std.testing.expectEqual(@as(u32, ssie.tx_depth), block.channels[0].transmitted);
 }

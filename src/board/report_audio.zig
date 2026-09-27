@@ -7,6 +7,7 @@
 //! holding when the run ended. PDM is the same question from the other side:
 //! whether the samples a capture loop read were ever produced.
 const Board = @import("board.zig").Board;
+const ssie = @import("../periph/ssie.zig");
 const Writer = @import("report.zig").Writer;
 
 /// One line per channel the firmware touched, plus the two loud cases. A
@@ -25,16 +26,22 @@ pub fn sections(board: *Board, out: Writer) !void {
                 unit.last,
             },
         );
-        if (unit.staged != 0) {
+        if (unit.staged() != 0) {
             try out.print(
-                "SSIE{d}: {d} sample(s) left in the transmit FIFO with TEN clear, never shifted out\n",
-                .{ index, unit.staged },
+                "SSIE{d}: {d} of {d} FIFO stage(s) still held with TEN clear, never shifted out\n",
+                .{ index, unit.staged(), ssie.tx_depth },
             );
         }
-        if (unit.dropped != 0) {
+        if (unit.dropped() != 0) {
             try out.print(
                 "SSIE{d}: {d} sample(s) DROPPED on a full transmit FIFO\n",
-                .{ index, unit.dropped },
+                .{ index, unit.dropped() },
+            );
+        }
+        if (unit.discarded() != 0) {
+            try out.print(
+                "SSIE{d}: {d} sample(s) thrown away by a FIFO reset before they went out\n",
+                .{ index, unit.discarded() },
             );
         }
     }
