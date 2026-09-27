@@ -37,6 +37,7 @@ const gptp = @import("../periph/gptp.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
+const mipi_phy = @import("../periph/mipi_phy.zig");
 const modem = @import("../periph/modem.zig");
 const net = @import("net.zig");
 const mram = @import("../periph/mram.zig");
@@ -197,6 +198,9 @@ pub const Board = struct {
     /// The independent watchdog: OFS0 starts it, software cannot stop it,
     /// and only the two-byte IWDTRR sequence keeps it fed.
     heartbeat: iwdt.Iwdt,
+    /// The MIPI D-PHY under both display and camera: the LDO and PLL flags
+    /// the bring-up sequence waits on before either link is worth starting.
+    link: mipi_phy.MipiPhy,
     causes: reset.Reset,
     control: scb.Scb,
     /// The Arm cache window in the PPB: the geometry the firmware reads out
@@ -257,6 +261,7 @@ pub const Board = struct {
             .monitors = lvd.Lvd.init(),
             .watchdog = wdt.Wdt.init(),
             .heartbeat = iwdt.Iwdt.init(),
+            .link = mipi_phy.MipiPhy.init(),
             .causes = reset.Reset.init(),
             .control = scb.Scb.init(),
             .caches = cache.Cache.init(),
