@@ -57,6 +57,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.usb.attach(&self.bus);
     self.trace.memory = core.*;
     try self.bus.add(self.flash.block());
+    try self.bus.add(self.cipher.block());
     try self.options.attach(&self.bus, core.*);
     try self.bus.add(self.card.block());
     try self.bus.add(self.ecc.block());
