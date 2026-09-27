@@ -97,6 +97,8 @@ test {
     _ = @import("periph/mram_otp_test.zig");
     _ = @import("periph/mipi_csi_short_test.zig");
     _ = @import("periph/mipi_csi_test.zig");
+    _ = @import("periph/mipi_dsi_link_test.zig");
+    _ = @import("periph/mipi_dsi_test.zig");
     _ = @import("periph/mipi_phy_status_test.zig");
     _ = @import("periph/mipi_phy_test.zig");
     _ = @import("periph/modem_script_test.zig");

@@ -48,6 +48,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.raster.block());
     try self.bus.add(self.link.block());
     try self.bus.add(self.receiver.block());
+    try self.bus.add(self.host.block());
     try self.bus.add(self.serial.block());
     try self.bus.add(self.spi.block());
     self.spi.attachDevice(sd_card.line_channel, self.sd.device());
