@@ -159,6 +159,7 @@ test {
     _ = @import("periph/ssie_fifo_test.zig");
     _ = @import("periph/ulpt_compare_test.zig");
     _ = @import("periph/ulpt_test.zig");
+    _ = @import("periph/ulpt_regs_test.zig");
     _ = @import("periph/usbhs_device_test.zig");
     _ = @import("periph/usbhs_dfifo_test.zig");
     _ = @import("periph/usbhs_fifo_test.zig");
