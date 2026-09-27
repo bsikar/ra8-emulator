@@ -40,6 +40,7 @@ test {
     _ = @import("periph/drw_texel_test.zig");
     _ = @import("periph/drw_test.zig");
     _ = @import("periph/dtc_test.zig");
+    _ = @import("periph/dtc_skip_test.zig");
     _ = @import("periph/dtc_xfer_test.zig");
     _ = @import("periph/eink_busy_test.zig");
     _ = @import("periph/eink_test.zig");

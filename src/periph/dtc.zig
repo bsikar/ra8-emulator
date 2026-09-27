@@ -9,7 +9,7 @@
 //! That is why this block is the first consumer of the DTCE bit
 //! src/periph/icu.zig has been carrying with nothing reading it.
 //!
-//!   DTCCR  (+0x00, 8b)  RRS, the read-skip bit; stored, not acted on
+//!   DTCCR  (+0x00, 8b)  RRS, the read-skip bit (src/periph/dtc_skip.zig)
 //!   DTCVBR (+0x04, 32b) the vector table: one TI pointer per ICU slot
 //!   DTCST  (+0x0C, 8b)  DTCST b0, the module start bit
 //!   DTCSTS (+0x0E, 16b) ACT b15 and the vector number of the last transfer
@@ -29,6 +29,10 @@
 const periph = @import("registry.zig");
 const icu = @import("icu.zig");
 const xfer = @import("dtc_xfer.zig");
+const skip = @import("dtc_skip.zig");
+/// The read-skip cache lives next door; re-exported so a caller holding the
+/// block also has the RRS vocabulary.
+pub const readskip = skip;
 
 /// R_DTC geometry (ra8_dtc_regs.h): DTCCR..DTCSTS sit in the first 0x40.
 pub const win_base: u32 = 0x4000_AC00;
@@ -109,6 +113,8 @@ pub const Dtc = struct {
     suppressed: u32 = 0,
     refused: u32 = 0,
     last_refusal: ?Refusal = null,
+    /// DTCCR.RRS: the descriptor copy the controller is holding.
+    cache: skip.Cache = .{},
 
     pub fn init() Dtc {
         return .{};
@@ -131,13 +137,24 @@ pub const Dtc = struct {
         const slot = events.dtcSlotFor(event) orelse return null;
         if (!self.started()) return self.refuse(.stopped);
         const at = self.descriptorAt(core, slot) orelse return self.refuse(.unprogrammed);
-        var info = readInfo(core, at) orelse return self.refuse(.unreadable);
+        const vector = vectorOf(slot);
+        var info = self.fetch(core, at, vector) orelse return self.refuse(.unreadable);
         if (info.unsupported()) |reason| return self.refuse(.{ .unsupported = reason });
         if (info.exhausted()) return self.refuse(.exhausted);
         const moved = self.copy(core, info) orelse return self.refuse(.unreadable);
         info.advance();
         writeInfo(core, at, info);
+        self.cache.keep(vector, info);
         return self.settle(events, slot, info, moved);
+    }
+
+    /// The descriptor this activation runs. With RRS set and the same vector
+    /// as last time the controller never looks at RAM, so an edit made there
+    /// since is not seen; that is the whole point of the bit, and the reason
+    /// the in-tree driver toggles it after rewriting the table.
+    fn fetch(self: *Dtc, core: anytype, at: u32, vector: u8) ?xfer.Info {
+        if (self.cache.fetch(self.dtccr, vector)) |held| return held;
+        return readInfo(core, at);
     }
 
     /// Book the activation and decide who gets the interrupt. With DISEL
@@ -145,7 +162,7 @@ pub const Dtc = struct {
     /// point of the controller: an ISR per byte would cost more than the copy.
     fn settle(self: *Dtc, events: *icu.Icu, slot: usize, info: xfer.Info, moved: u32) Outcome {
         self.activations +%= 1;
-        self.dtcsts = @as(u16, @intCast(icu.exceptionFor(slot))) & field.vector;
+        self.dtcsts = vectorOf(slot);
         const complete = info.exhausted();
         if (complete) {
             events.clearDtce(slot);
@@ -217,7 +234,11 @@ pub const Dtc = struct {
     pub fn write(self: *Dtc, address: u32, width: u3, value: u32) void {
         _ = width;
         switch (address -% win_base) {
-            off.dtccr => self.dtccr = @truncate(value),
+            off.dtccr => {
+                const written: u8 = @truncate(value);
+                self.cache.latch(self.dtccr, written);
+                self.dtccr = written;
+            },
             off.dtcvbr => self.dtcvbr = value,
             off.dtcst => self.dtcst = @truncate(value),
             else => {},
@@ -263,6 +284,12 @@ fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Dtc = @ptrCast(@alignCast(context));
     self.write(address, width, value);
+}
+
+/// The vector number behind an ICU slot, which is what DTCSTS reports and
+/// what the read skip compares one activation against the next.
+pub fn vectorOf(slot: usize) u8 {
+    return @truncate(@as(u16, @intCast(icu.exceptionFor(slot))) & field.vector);
 }
 
 /// The address of one vector-table entry, so a test or a later slice does not
