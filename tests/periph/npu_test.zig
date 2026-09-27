@@ -235,6 +235,97 @@ test "an arena the guest cannot reach faults rather than half-moving" {
 
     try std.testing.expectEqual(@as(u32, 1), bench.unit.unreachable_memory);
     try std.testing.expectEqual(@as(u32, 0), bench.unit.jobs);
+    // The first chunk was the refused one, so the job is short of nothing.
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.short_jobs);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.short_bytes);
+}
+
+test "a destination that walks off mapped memory ends the job where it stands" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.close();
+
+    // One chunk fits below the top of the arena, the next one does not.
+    const edge = arena_base + arena_size - cmd.limits.chunk_bytes;
+    const count: u32 = cmd.limits.chunk_bytes * 2;
+    try bench.submit(.{ .op = .copy, .source = 0, .destination = 1, .count = count, .addend = 0 });
+    bench.unit.write(npu.regionAddress(1), 4, edge);
+    bench.kick();
+
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.short_jobs);
+    try std.testing.expectEqual(@as(u32, cmd.limits.chunk_bytes), bench.unit.short_bytes);
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.unreachable_memory);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.jobs);
+    // The job did not finish, so a driver polling for completion sees none.
+    const status = peek(&bench.unit, npu.off.status);
+    try std.testing.expect(status & npu.field.status_bus_error != 0);
+    try std.testing.expect(status & npu.field.status_cmd_end == 0);
+}
+
+test "the bytes a short job moved are in the destination arena" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.close();
+
+    var payload: [cmd.limits.chunk_bytes]u8 = undefined;
+    for (&payload, 0..) |*byte, index| byte.* = @truncate(index);
+    try bench.core.write(source_at, &payload);
+
+    const edge = arena_base + arena_size - cmd.limits.chunk_bytes;
+    const count: u32 = cmd.limits.chunk_bytes * 2;
+    try bench.submit(.{ .op = .add_constant, .source = 0, .destination = 1, .count = count, .addend = 1 });
+    bench.unit.write(npu.regionAddress(1), 4, edge);
+    bench.kick();
+
+    var read_back: [cmd.limits.chunk_bytes]u8 = undefined;
+    try bench.core.read(edge, &read_back);
+    for (read_back, payload) |got, want| {
+        try std.testing.expectEqual(want +% 1, got);
+    }
+    try std.testing.expectEqual(@as(u32, cmd.limits.chunk_bytes), bench.unit.short_bytes);
+}
+
+test "a source that walks off the arena is short at the same boundary" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.close();
+
+    const edge = arena_base + arena_size - cmd.limits.chunk_bytes;
+    const count: u32 = cmd.limits.chunk_bytes * 2;
+    try bench.submit(.{ .op = .copy, .source = 0, .destination = 1, .count = count, .addend = 0 });
+    bench.unit.write(npu.regionAddress(0), 4, edge);
+    bench.kick();
+
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.short_jobs);
+    try std.testing.expectEqual(@as(u32, cmd.limits.chunk_bytes), bench.unit.short_bytes);
+}
+
+test "a short job leaves the last completed job's result alone" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.close();
+
+    try bench.core.write(source_at, "ra8");
+    try bench.submit(.{ .op = .copy, .source = 0, .destination = 1, .count = 3, .addend = 0 });
+    bench.kick();
+    const check = bench.unit.last_check;
+    try std.testing.expectEqual(@as(u32, 3), bench.unit.moved);
+
+    const edge = arena_base + arena_size - cmd.limits.chunk_bytes;
+    try bench.submit(.{
+        .op = .copy,
+        .source = 0,
+        .destination = 1,
+        .count = cmd.limits.chunk_bytes * 2,
+        .addend = 0,
+    });
+    bench.unit.write(npu.regionAddress(1), 4, edge);
+    bench.kick();
+
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.jobs);
+    try std.testing.expectEqual(@as(u32, 3), bench.unit.moved);
+    try std.testing.expectEqual(check, bench.unit.last_check);
+    try std.testing.expectEqual(@as(u32, 3), bench.unit.last_bytes);
 }
 
 test "a job that runs a region onto itself is counted as the no-op it is" {
