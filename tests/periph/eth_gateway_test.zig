@@ -63,3 +63,40 @@ test "an agent nothing touched is quiet" {
     const agent = gateway.Gateway{};
     try std.testing.expect(agent.quiet());
 }
+
+test "a store above OPC is not a gateway mode command" {
+    var agent = gateway.Gateway{};
+    agent.modeWrite(regs.cluster.gwca0 + regs.gwca.gwmc + 2, 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 0), agent.mode.commands);
+}
+
+test "a byte store at GWMC commands the gateway" {
+    var agent = gateway.Gateway{};
+    agent.modeWrite(regs.cluster.gwca0 + regs.gwca.gwmc, 1, 1);
+    try std.testing.expectEqual(@as(u32, 1), agent.modeRead(regs.cluster.gwca0 + regs.gwca.gwms, 1));
+}
+
+test "a byte store at GWARIRM still asks for the AXI init" {
+    var agent = gateway.Gateway{};
+    const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
+    agent.arirmWrite(at, 1, regs.gwca.ariog);
+    try std.testing.expectEqual(@as(u32, 1), agent.inits);
+    try std.testing.expect(agent.arirmRead(at, 1) & regs.gwca.arr != 0);
+}
+
+test "a store above ARIOG keeps the request bit where it was" {
+    var agent = gateway.Gateway{};
+    const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
+    agent.arirmWrite(at, 4, regs.gwca.ariog);
+    agent.arirmWrite(at + 2, 2, 0x1234);
+    try std.testing.expectEqual(@as(u32, 1), agent.inits);
+    try std.testing.expect(agent.arirm & regs.gwca.ariog != 0);
+}
+
+test "a byte store at CABPIRM still asks for the pool init" {
+    var pool = gateway.Pool{};
+    const at = regs.cluster.coma + regs.coma.cabpirm;
+    pool.write(at, 1, regs.coma.bpiog);
+    try std.testing.expectEqual(@as(u32, 1), pool.inits);
+    try std.testing.expect(pool.read(at, 1) & regs.coma.bpr != 0);
+}

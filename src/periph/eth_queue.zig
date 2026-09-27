@@ -14,7 +14,12 @@
 //! WHEN IT IS RECONFIGURED: dev records a reception queue on a GWDCC write
 //! with DQT clear and never unrecords one, so a queue turned into a transmit
 //! queue is still drained into.
+//!
+//! Every register in the three windows is 32 bits, so an access narrower than
+//! a word takes the `lanes.zig` rule: a read is cut to the lanes it names, a
+//! store keeps the lanes it does not.
 const std = @import("std");
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
@@ -42,24 +47,31 @@ pub const Queues = struct {
     }
 
     pub fn baseRead(self: *Queues, address: u32, width: u3) u32 {
-        _ = width;
-        return switch (address -% self.base) {
+        const offset = address -% self.base;
+        const whole: u32 = switch (lanes.word(offset)) {
             regs.gwca.gwdcbac0 => self.chain_base[0],
             regs.gwca.gwdcbac1 => self.chain_base[1],
             else => 0,
         };
+        return lanes.part(whole, lanes.lane(offset), width);
     }
 
+    /// A ring base is an address, and a driver is entitled to lay one down in
+    /// two halfword stores. The engine takes the whole register afterwards,
+    /// not the half that happened to arrive last.
     pub fn baseWrite(self: *Queues, address: u32, width: u3, value: u32) void {
-        _ = width;
-        switch (address -% self.base) {
+        const offset = address -% self.base;
+        const at = lanes.lane(offset);
+        switch (lanes.word(offset)) {
             // The upper half of a 64-bit AXI address. Nothing in this part's
             // map lives above four gigabytes, so it is remembered and unused.
-            regs.gwca.gwdcbac0 => self.chain_base[0] = value,
+            regs.gwca.gwdcbac0 => {
+                self.chain_base[0] = lanes.merge(self.chain_base[0], at, width, value);
+            },
             regs.gwca.gwdcbac1 => {
-                self.chain_base[1] = value;
+                self.chain_base[1] = lanes.merge(self.chain_base[1], at, width, value);
                 if (self.configuring()) {
-                    self.rings.linkfix = value;
+                    self.rings.linkfix = self.chain_base[1];
                 } else {
                     self.base_late += 1;
                 }
@@ -76,28 +88,37 @@ pub const Queues = struct {
         return 0;
     }
 
+    /// One bit per queue, so which lanes a store names is which queues it
+    /// kicks: a halfword at the top of GWTRC0 asks for queues 16 to 31, not
+    /// for the sixteen at the bottom of the word.
     pub fn requestWrite(self: *Queues, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% self.base;
-        const first: u32 = if (offset == regs.gwca.gwtrc1) regs.gwca.request_bits else 0;
-        if (offset != regs.gwca.gwtrc0 and offset != regs.gwca.gwtrc1) return;
-        self.rings.kick(value, first, self.operational());
+        const register = lanes.word(offset);
+        if (register != regs.gwca.gwtrc0 and register != regs.gwca.gwtrc1) return;
+        const first: u32 = if (register == regs.gwca.gwtrc1) regs.gwca.request_bits else 0;
+        // The register is consumed when written, so there is nothing under a
+        // narrow store to keep: the bits it carries just land in their lanes.
+        const asked = lanes.merge(0, lanes.lane(offset), width, value);
+        self.rings.kick(asked, first, self.operational());
     }
 
     /// GWDCC.BALR is the reload request, and it is finished by the time the
     /// driver reads the register back.
     pub fn configRead(self: *Queues, address: u32, width: u3) u32 {
-        _ = width;
         const queue = self.queueOf(address) orelse return 0;
-        return self.config[queue] & ~regs.gwca.balr;
+        const whole = self.config[queue] & ~regs.gwca.balr;
+        return lanes.part(whole, lanes.lane(address), width);
     }
 
+    /// DQT decides which way a queue runs, and it is the register that says
+    /// so, not the store: a narrow write that never reaches DQT's lane leaves
+    /// the direction where the configuration already had it.
     pub fn configWrite(self: *Queues, address: u32, width: u3, value: u32) void {
-        _ = width;
         const queue = self.queueOf(address) orelse return;
-        self.config[queue] = value;
+        const asked = lanes.merge(self.config[queue], lanes.lane(address), width, value);
+        self.config[queue] = asked;
         const mask = @as(u64, 1) << @as(u6, @intCast(queue));
-        if (value & regs.gwca.dqt == 0) {
+        if (asked & regs.gwca.dqt == 0) {
             self.rings.receiving |= mask;
         } else {
             self.rings.receiving &= ~mask;

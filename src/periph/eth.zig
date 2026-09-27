@@ -5,7 +5,13 @@
 //! two blocks rather than claiming the gap between them. Everything else in
 //! the port's two kilobytes is configuration the driver writes and reads back,
 //! which the bus already does for an address nothing models.
+//!
+//! Every register here is 32 bits, so an access narrower than a word is the
+//! `lanes.zig` rule: a read is served from the word the address lands in and
+//! then cut, and a store is merged into that word so the lanes it does not
+//! name keep what they had.
 const std = @import("std");
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
@@ -27,36 +33,47 @@ pub const Port = struct {
 
     /// EAMC reads back the command; EAMS reports where the machine is.
     pub fn ethaRead(self: *Port, address: u32, width: u3) u32 {
-        _ = width;
-        return switch (address -% self.etha_base) {
-            regs.etha.eamc => self.mode.status(),
-            regs.etha.eams => self.mode.status(),
+        const offset = address -% self.etha_base;
+        const whole: u32 = switch (lanes.word(offset)) {
+            regs.etha.eamc, regs.etha.eams => self.mode.status(),
             else => 0,
         };
+        return lanes.part(whole, lanes.lane(offset), width);
     }
 
     pub fn ethaWrite(self: *Port, address: u32, width: u3, value: u32) void {
-        _ = width;
+        const offset = address -% self.etha_base;
         // EAMS is the machine's own to report. A store there moves nothing.
-        if (address -% self.etha_base != regs.etha.eamc) return;
-        self.mode.command(value & regs.etha.opc_mask);
+        if (lanes.word(offset) != regs.etha.eamc) return;
+        const at = lanes.lane(offset);
+        // OPC is the bottom of the word, so a store that reaches none of its
+        // lanes carries no command however wide the rest of it is.
+        if (lanes.named(at, width) & regs.etha.opc_mask == 0) return;
+        const asked = lanes.merge(self.mode.status(), at, width, value);
+        self.mode.command(asked & regs.etha.opc_mask);
     }
 
     pub fn rmacRead(self: *Port, address: u32, width: u3) u32 {
-        _ = width;
-        if (address -% self.rmac_base != regs.rmac.mpsm) return 0;
-        return self.mpsm;
+        const offset = address -% self.rmac_base;
+        if (lanes.word(offset) != regs.rmac.mpsm) return 0;
+        return lanes.part(self.mpsm, lanes.lane(offset), width);
     }
 
+    /// PRD is the top half of MPSM and the control fields are the bottom, so
+    /// a driver that builds a frame in two halfword stores only has a whole
+    /// frame once the second one lands. The merge is what makes the order of
+    /// those two stores stop mattering, and PSME in the merged word is what
+    /// decides whether anything goes out on the wire.
     pub fn rmacWrite(self: *Port, address: u32, width: u3, value: u32) void {
-        _ = width;
-        if (address -% self.rmac_base != regs.rmac.mpsm) return;
-        if (value & regs.rmac.psme == 0) {
+        const offset = address -% self.rmac_base;
+        if (lanes.word(offset) != regs.rmac.mpsm) return;
+        const asked = lanes.merge(self.mpsm, lanes.lane(offset), width, value);
+        if (asked & regs.rmac.psme == 0) {
             // No frame asked for: the register just holds what was written.
-            self.mpsm = value;
+            self.mpsm = asked;
             return;
         }
-        self.mpsm = self.phy.transact(value);
+        self.mpsm = self.phy.transact(asked);
     }
 
     pub fn quiet(self: *const Port) bool {

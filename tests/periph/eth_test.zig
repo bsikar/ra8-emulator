@@ -64,6 +64,45 @@ test "the two ports keep their own PHY" {
     try std.testing.expectEqual(eth_phy.seed.anar, regs.dataOf(two.rmacRead(regs.cluster.rmac1, 4)));
 }
 
+test "a frame built in two halfword stores goes out whole" {
+    var port = portZero();
+    const at = regs.cluster.rmac0;
+    const frame = mdio(eth_phy.reg.anar, .write, 0x0041);
+    // Data half first, control half second: the order a driver that lays the
+    // value down before arming the frame would use.
+    port.rmacWrite(at + 2, 2, frame >> 16);
+    port.rmacWrite(at, 2, frame & 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 1), port.phy.writes);
+    try std.testing.expectEqual(@as(u16, 0x0041), port.phy.value(eth_phy.reg.anar));
+}
+
+test "the control half of MPSM leaves the data half alone" {
+    var port = portZero();
+    const at = regs.cluster.rmac0;
+    port.rmacWrite(at + 2, 2, 0xBEEF);
+    port.rmacWrite(at, 2, eth_phy.address << regs.rmac.pda_shift);
+    try std.testing.expectEqual(@as(u16, 0xBEEF), regs.dataOf(port.rmacRead(at, 4)));
+}
+
+test "a halfword read of MPSM answers the half it names" {
+    var port = portZero();
+    port.rmacWrite(regs.cluster.rmac0, 4, mdio(eth_phy.reg.bmsr, .read, 0));
+    const high = port.rmacRead(regs.cluster.rmac0 + 2, 2);
+    try std.testing.expectEqual(@as(u32, eth_phy.seed.bmsr), high);
+}
+
+test "a store above OPC is not a mode command" {
+    var port = portZero();
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc + 2, 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 0), port.mode.commands);
+}
+
+test "a byte store at EAMC commands the port" {
+    var port = portZero();
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 1, 1);
+    try std.testing.expectEqual(@as(u32, 1), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 1));
+}
+
 test "a port nothing touched is quiet" {
     const port = portZero();
     try std.testing.expect(port.quiet());
