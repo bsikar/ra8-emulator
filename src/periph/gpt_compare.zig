@@ -111,6 +111,23 @@ pub const Pair = struct {
         }
         return raised;
     }
+
+    /// The flags a chunk that visited every count in [lo, hi] raises. This is
+    /// the triangle's entry point: a chunk that turned is not an up-count, so it
+    /// is described by the span it covered instead of by a direction. A target
+    /// sitting exactly where the chunk started was not passed by it.
+    pub fn stepSpan(self: *Pair, before: u32, lo: u32, hi: u32) u32 {
+        var raised: u32 = 0;
+        if (self.armed(.a) and within(before, lo, hi, self.a)) {
+            self.matches_a +%= 1;
+            raised |= flag.tcfa;
+        }
+        if (self.armed(.b) and within(before, lo, hi, self.b)) {
+            self.matches_b +%= 1;
+            raised |= flag.tcfb;
+        }
+        return raised;
+    }
 };
 
 /// Did an up-count from `before` to `after` pass `target`?
@@ -123,6 +140,11 @@ pub fn crossed(before: u32, after: u32, wraps: u32, target: u32) bool {
     if (wraps >= 2) return true;
     if (wraps == 1) return target > before or target <= after;
     return target > before and target <= after;
+}
+
+/// Did a chunk covering [lo, hi] pass `target`?
+pub fn within(before: u32, lo: u32, hi: u32, target: u32) bool {
+    return target >= lo and target <= hi and target != before;
 }
 
 /// The register a channel-local offset belongs to, or null when it is not one

@@ -1,0 +1,155 @@
+//! GTCR.MD: the shape a GPT channel counts in.
+//!
+//! GTCR (+0x2C) carries MD at bits 16..19 (ra8_gpt.c `ra8_gpt_gtcr_bits_t`,
+//! `k_ra8_gpt_gtcr_md_shift = 16`, citing HUM Ch 22.2.5 "GTCR : General PWM
+//! Timer Control Register" p 904..906). `ra8_gpt_mode_t` in ra8_gpt.h names
+//! five encodings and no others:
+//!
+//!   0  saw-wave PWM, up-count
+//!   1  saw-wave one-shot
+//!   4  triangle-wave PWM, symmetric
+//!   5  triangle-wave PWM 1
+//!   6  triangle-wave PWM 2
+//!
+//! The field was stored and never read, so every channel counted up and
+//! wrapped whatever its driver selected. `ra8_gpt_init` writes the mode on
+//! every channel it brings up (line 345, `internal_gtcr(cfg->mode, ...)`) and
+//! `ra8_gpt_three_phase_init` hands the same one to all three motor channels,
+//! so a triangle channel sawed: a driver sampling GTCNT to find which half of
+//! the cycle it was in read a ramp that only ever rose, and a one-shot
+//! channel kept counting forever instead of stopping at the period. dev's
+//! board_periph_timer.c has the same hole.
+//!
+//! A TRIANGLE COUNTS UP AND BACK DOWN. The cycle is twice the period: the
+//! count rises to GTPR, turns, falls to zero, and turns again. Reaching the
+//! period is the overflow (GTST.TCFPO) and returning to zero is the underflow
+//! (GTST.TCFPU), which is the bit dev names and nothing in this tree could
+//! raise before. A chunk of counting wider than the cycle folds, so the
+//! direction after it is where the fold landed, not where it started.
+//!
+//! A ONE-SHOT STOPS AT THE PERIOD. It counts up once, raises the overflow,
+//! and clears GTCR.CST, so the count stands at GTPR and a driver polling for
+//! the stop sees it. That is the model's reading of "one-shot": the part also
+//! holds the output at its final level, and there is no output here.
+//!
+//! NOT MODELLED, AND NOT GUESSED: what separates the three triangle
+//! encodings. ra8_gpt.h names 4, 5 and 6 as "symmetric", "PWM 1" and "PWM 2",
+//! and neither tree says how their duty loading differs; they count the same
+//! triangle here, which is the part of the difference GTCNT can show. The
+//! encodings nobody names (2, 3 and 7..15) count in saw mode rather than
+//! being given an invented shape, and `name()` says the mode is unknown so
+//! the run does not claim to have recognised it.
+const std = @import("std");
+
+/// Where MD sits in GTCR (ra8_gpt.c, HUM Ch 22.2.5 p 904..906).
+pub const field = struct {
+    pub const md: u32 = 0x000F_0000;
+    pub const shift: u5 = 16;
+};
+
+/// The MD encodings ra8_gpt.h names.
+pub const Mode = enum(u32) {
+    saw_pwm = 0,
+    saw_one_shot = 1,
+    triangle_pwm = 4,
+    triangle_pwm2 = 5,
+    triangle_pwm3 = 6,
+    _,
+
+    /// Does the count come back down after the period?
+    pub fn symmetric(self: Mode) bool {
+        return switch (self) {
+            .triangle_pwm, .triangle_pwm2, .triangle_pwm3 => true,
+            else => false,
+        };
+    }
+
+    /// Does the channel stop itself at the end of one period?
+    pub fn once(self: Mode) bool {
+        return self == .saw_one_shot;
+    }
+
+    pub fn name(self: Mode) []const u8 {
+        return switch (self) {
+            .saw_pwm => "saw PWM",
+            .saw_one_shot => "saw one-shot",
+            .triangle_pwm => "triangle PWM",
+            .triangle_pwm2 => "triangle PWM 1",
+            .triangle_pwm3 => "triangle PWM 2",
+            _ => "unknown counter mode",
+        };
+    }
+};
+
+/// The mode GTCR selects.
+pub fn modeOf(cr: u32) Mode {
+    return @enumFromInt((cr & field.md) >> field.shift);
+}
+
+/// Where one chunk of counting left a channel.
+pub const Step = struct {
+    cnt: u32,
+    /// Which way the count is going now. Always true outside a triangle.
+    rising: bool = true,
+    /// Times the count reached the period: GTST.TCFPO.
+    peaks: u32 = 0,
+    /// Times a triangle came back to zero: GTST.TCFPU.
+    troughs: u32 = 0,
+    /// A one-shot finished, so the channel clears its own start bit.
+    halted: bool = false,
+};
+
+/// Count `delta` from `cnt` in the shape `mode` selects. `period` is the
+/// channel's GTPR with its zero already resolved, so it is never zero.
+pub fn advance(mode: Mode, cnt: u32, rising: bool, period: u32, delta: u64) Step {
+    if (mode.symmetric()) return fold(cnt, rising, period, delta);
+    const next = @as(u64, cnt) + delta;
+    if (mode.once()) {
+        if (next <= period) return .{ .cnt = @intCast(next) };
+        return .{ .cnt = period, .peaks = 1, .halted = true };
+    }
+    const span = @as(u64, period) + 1;
+    if (next <= period) return .{ .cnt = @intCast(next) };
+    return .{ .cnt = @intCast(next % span), .peaks = @intCast(next / span) };
+}
+
+/// The triangle. A position on the rising half is the count itself; one on
+/// the falling half is the cycle less the count, so the whole ramp is a
+/// single phase that advances and folds back.
+fn fold(cnt: u32, rising: bool, period: u32, delta: u64) Step {
+    const cycle = 2 * @as(u64, period);
+    if (cycle == 0) return .{ .cnt = 0 };
+    const phase = if (rising) @as(u64, cnt) else cycle - @min(@as(u64, cnt), cycle);
+    const total = phase + delta;
+    const landed = total % cycle;
+    return .{
+        .cnt = if (landed <= period) @intCast(landed) else @intCast(cycle - landed),
+        .rising = landed < period,
+        .peaks = @intCast(reached(total, period, cycle) - reached(phase, period, cycle)),
+        .troughs = @intCast(total / cycle),
+    };
+}
+
+/// How many peaks a phase of 0 up to `at` has passed. A peak sits at
+/// `period` and every cycle after it, so the count of them in a chunk is the
+/// difference between the two ends.
+fn reached(at: u64, period: u32, cycle: u64) u64 {
+    if (at < period) return 0;
+    return (at - period) / cycle + 1;
+}
+
+/// The counts a chunk visited, so a compare can tell whether it was passed.
+/// A turn widens the span to the end it turned at: reaching the period means
+/// everything up to it was seen, and returning to zero means everything down
+/// to it was.
+pub const Span = struct {
+    lo: u32,
+    hi: u32,
+};
+
+pub fn visited(before: u32, step: Step, period: u32) Span {
+    return .{
+        .lo = if (step.troughs != 0) 0 else @min(before, step.cnt),
+        .hi = if (step.peaks != 0) period else @max(before, step.cnt),
+    };
+}
