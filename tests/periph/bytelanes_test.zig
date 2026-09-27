@@ -1,8 +1,8 @@
-//! A RIIC access is the bytes it names, low lane first.
+//! An access is the bytes it names, low lane first, on the RIIC window.
 const std = @import("std");
 const ra8 = @import("ra8");
 const riic = ra8.periph.riic;
-const access = ra8.periph.riic_access;
+const access = ra8.periph.bytelanes;
 const flag = ra8.periph.riic_flags;
 const bus = ra8.periph.riic_bus;
 const pi4ioe = ra8.periph.riic_pi4ioe;

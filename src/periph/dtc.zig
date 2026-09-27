@@ -30,6 +30,8 @@ const periph = @import("registry.zig");
 const icu = @import("icu.zig");
 const xfer = @import("dtc_xfer.zig");
 const skip = @import("dtc_skip.zig");
+const regs = @import("dtc_regs.zig");
+const bytelanes = @import("bytelanes.zig");
 /// The read-skip cache lives next door; re-exported so a caller holding the
 /// block also has the RRS vocabulary.
 pub const readskip = skip;
@@ -218,30 +220,56 @@ pub const Dtc = struct {
         return null;
     }
 
+    /// An access is the bytes it names, low lane first. DTCST and DTCSTS share
+    /// the word at +0x0C, so a word read there answers both: the start bit in
+    /// the low lane and the status word two lanes up, which is what a driver
+    /// that reads the pair in one go is asking for.
     pub fn read(self: *Dtc, address: u32, width: u3) u32 {
-        _ = width;
-        return switch (address -% win_base) {
-            off.dtccr => self.dtccr,
-            off.dtcvbr => self.dtcvbr,
-            off.dtcst => self.dtcst,
-            off.dtcsts => self.dtcsts,
-            else => 0,
+        const start = address -% win_base;
+        var answer: u32 = 0;
+        var index: u32 = 0;
+        while (index < bytelanes.span(width)) : (index += 1) {
+            answer = bytelanes.place(answer, self.readByte(start +% index), index);
+        }
+        return answer;
+    }
+
+    /// The same rule for a store, in ascending lane order. A byte no register
+    /// owns holds nothing, and DTCSTS is written by the controller rather than
+    /// the firmware, so a store there is dropped rather than shadowed.
+    pub fn write(self: *Dtc, address: u32, width: u3, value: u32) void {
+        const start = address -% win_base;
+        var index: u32 = 0;
+        while (index < bytelanes.span(width)) : (index += 1) {
+            self.writeByte(start +% index, bytelanes.byteAt(value, index));
+        }
+    }
+
+    fn readByte(self: *const Dtc, offset: u32) u8 {
+        const place = regs.owner(offset) orelse return 0;
+        const shift = bytelanes.shift(place.index);
+        return switch (place.reg) {
+            .dtccr => self.dtccr,
+            .dtcvbr => @truncate(self.dtcvbr >> shift),
+            .dtcst => self.dtcst,
+            .dtcsts => @truncate(@as(u32, self.dtcsts) >> shift),
         };
     }
 
-    /// DTCSTS is read-only on silicon (the controller writes it), so a store
-    /// there is dropped rather than shadowed.
-    pub fn write(self: *Dtc, address: u32, width: u3, value: u32) void {
-        _ = width;
-        switch (address -% win_base) {
-            off.dtccr => {
-                const written: u8 = @truncate(value);
-                self.cache.latch(self.dtccr, written);
-                self.dtccr = written;
+    /// One byte into the register that owns it, leaving the rest of that
+    /// register where it was: a driver is free to program the vector base in
+    /// two halfword stores, and both of them have to land.
+    fn writeByte(self: *Dtc, offset: u32, byte: u8) void {
+        const place = regs.owner(offset) orelse return;
+        if (!regs.writable(place.reg)) return;
+        switch (place.reg) {
+            .dtccr => {
+                self.cache.latch(self.dtccr, byte);
+                self.dtccr = byte;
             },
-            off.dtcvbr => self.dtcvbr = value,
-            off.dtcst => self.dtcst = @truncate(value),
-            else => {},
+            .dtcvbr => self.dtcvbr = fold(self.dtcvbr, place.index, byte),
+            .dtcst => self.dtcst = byte,
+            .dtcsts => {},
         }
     }
 
@@ -274,6 +302,13 @@ fn writeInfo(core: anytype, at: u32, info: xfer.Info) void {
     core.writeWord(at +% xfer.off.sar, info.sar) catch {};
     core.writeWord(at +% xfer.off.dar, info.dar) catch {};
     core.writeWord(at +% xfer.off.counts, info.packedCounts()) catch {};
+}
+
+/// Put one byte back into a wider register at its own lane.
+fn fold(current: u32, index: u32, byte: u8) u32 {
+    const shift = bytelanes.shift(index);
+    const window = @as(u32, 0xFF) << shift;
+    return (current & ~window) | (@as(u32, byte) << shift);
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {

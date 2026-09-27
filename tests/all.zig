@@ -37,6 +37,7 @@ test {
     _ = @import("periph/dac_output_test.zig");
     _ = @import("periph/dma_bank_test.zig");
     _ = @import("periph/dmac_test.zig");
+    _ = @import("periph/bytelanes_test.zig");
     _ = @import("periph/dmac_regs_test.zig");
     _ = @import("periph/dmac_xfer_test.zig");
     _ = @import("periph/doc_test.zig");
@@ -52,6 +53,7 @@ test {
     _ = @import("periph/drw_texel_test.zig");
     _ = @import("periph/drw_test.zig");
     _ = @import("periph/dtc_test.zig");
+    _ = @import("periph/dtc_regs_test.zig");
     _ = @import("periph/dtc_skip_test.zig");
     _ = @import("periph/dtc_xfer_test.zig");
     _ = @import("periph/eink_busy_test.zig");
@@ -126,7 +128,6 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
-    _ = @import("periph/riic_access_test.zig");
     _ = @import("periph/riic_bus_test.zig");
     _ = @import("periph/riic_ov5640_test.zig");
     _ = @import("periph/riic_pi4ioe_test.zig");

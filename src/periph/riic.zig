@@ -16,7 +16,7 @@ const periph = @import("registry.zig");
 const bus = @import("riic_bus.zig");
 const flag = @import("riic_flags.zig");
 const riic_target = @import("riic_target.zig");
-const access = @import("riic_access.zig");
+const access = @import("bytelanes.zig");
 
 pub const win_base = flag.win_base;
 pub const win_span = flag.win_span;
