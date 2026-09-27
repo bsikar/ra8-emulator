@@ -64,6 +64,7 @@ test {
     _ = @import("periph/glcdc_tcon_test.zig");
     _ = @import("periph/gpio_test.zig");
     _ = @import("periph/gpt_test.zig");
+    _ = @import("periph/gpt_compare_test.zig");
     _ = @import("periph/gptp_test.zig");
     _ = @import("periph/gptp_timer_test.zig");
     _ = @import("periph/i3c_gt911_test.zig");
