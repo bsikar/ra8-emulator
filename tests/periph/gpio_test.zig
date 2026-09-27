@@ -3,11 +3,13 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const periph = ra8.periph.registry;
 const mod = ra8.periph.gpio;
+const regs = ra8.periph.gpio_regs;
 
 const Gpio = mod.Gpio;
 const pcntr1 = mod.pcntr1;
 const pcntr2 = mod.pcntr2;
 const pcntr3 = mod.pcntr3;
+const pcntr4 = mod.pcntr4;
 const regAddress = mod.regAddress;
 const sw1_pin = mod.sw1_pin;
 const sw2_pin = mod.sw2_pin;
@@ -15,7 +17,6 @@ const sw_port = mod.sw_port;
 const win_base = mod.win_base;
 const win_span = mod.win_span;
 
-const pcntr4: u32 = 0x0C;
 test "a port resets with nothing driven and both switches released" {
     const gpio = Gpio.init();
     try std.testing.expectEqual(@as(u32, 0), gpio.readReg(regAddress(6, pcntr1), 4));
@@ -127,4 +128,72 @@ test "the port block answers on the bus, on both security aliases" {
     bus.write(regAddress(6, pcntr1), 4, (@as(u32, 1) << 16) | 1);
     try std.testing.expectEqual(@as(u32, 1), bus.read(periph.ns_base - periph.base + regAddress(6, pcntr2), 4));
     try std.testing.expectEqual(@as(u32, 0), bus.unmodelledAddresses());
+}
+
+test "a halfword store to PODR drives the latch and leaves PDR alone" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr1), 4, 0x0000_FFFF);
+    gpio.applyWrite(regAddress(6, regs.off.podr), 2, 0x0001);
+    try std.testing.expectEqual(@as(u32, 0x0001_FFFF), gpio.readReg(regAddress(6, pcntr1), 4));
+    try std.testing.expectEqual(@as(u1, 1), gpio.ledLevel(0));
+}
+
+test "a halfword read of PODR answers the latch, not zero" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(3, pcntr1), 4, (@as(u32, 0xBEEF) << 16) | 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 0xBEEF), gpio.readReg(regAddress(3, regs.off.podr), 2));
+    try std.testing.expectEqual(@as(u32, 0xFFFF), gpio.readReg(regAddress(3, regs.off.pdr), 2));
+}
+
+test "a halfword store to PDR leaves the latch above it alone" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr1), 4, (@as(u32, 0x0001) << 16) | 0x0001);
+    gpio.applyWrite(regAddress(6, regs.off.pdr), 2, 0x00FF);
+    try std.testing.expectEqual(@as(u32, 0x0001_00FF), gpio.readReg(regAddress(6, pcntr1), 4));
+    try std.testing.expectEqual(@as(u32, 1), gpio.ledEdges(0));
+}
+
+test "a byte store names one lane of the latch" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(10, pcntr1), 4, 0x0000_FFFF);
+    gpio.applyWrite(regAddress(10, regs.off.podr + 1), 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0xFF00_FFFF), gpio.readReg(regAddress(10, pcntr1), 4));
+}
+
+test "a halfword read of PIDR answers the live level" {
+    var gpio = Gpio.init();
+    try std.testing.expectEqual(
+        @as(u32, (@as(u32, 1) << sw1_pin) | (@as(u32, 1) << sw2_pin)),
+        gpio.readReg(regAddress(sw_port, regs.off.pidr), 2),
+    );
+}
+
+test "a store into PCNTR2 is refused, at any width and either half" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr2), 4, 0xFFFF_FFFF);
+    gpio.applyWrite(regAddress(6, regs.off.eidr), 2, 0xFFFF);
+    gpio.applyWrite(regAddress(6, regs.off.pidr), 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 3), gpio.refusedStores());
+    try std.testing.expectEqual(@as(u32, 0), gpio.readReg(regAddress(6, pcntr2), 4));
+}
+
+test "a halfword store to PORR clears without the other half clearing everything" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr1), 4, (@as(u32, 0x0003) << 16) | 0x0003);
+    gpio.applyWrite(regAddress(6, regs.off.porr), 2, 0x0001);
+    try std.testing.expectEqual(@as(u32, 0x0002_0003), gpio.readReg(regAddress(6, pcntr1), 4));
+}
+
+test "a halfword store to POSR sets without clearing" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr1), 4, (@as(u32, 0x0002) << 16) | 0x0003);
+    gpio.applyWrite(regAddress(6, regs.off.posr), 2, 0x0001);
+    try std.testing.expectEqual(@as(u32, 0x0003_0003), gpio.readReg(regAddress(6, pcntr1), 4));
+}
+
+test "a store into PCNTR4 is taken and forgotten, not refused" {
+    var gpio = Gpio.init();
+    gpio.applyWrite(regAddress(6, pcntr4), 4, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0), gpio.refusedStores());
+    try std.testing.expectEqual(@as(u32, 0), gpio.readReg(regAddress(6, pcntr4), 4));
 }

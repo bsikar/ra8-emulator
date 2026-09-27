@@ -27,6 +27,7 @@
 //! pressed.
 const std = @import("std");
 const periph = @import("registry.zig");
+const regs = @import("gpio_regs.zig");
 
 /// PORT geometry (HUM Ch 20.2 p 730). The Non-secure alias is folded onto this
 /// base by the bus before anything here sees it.
@@ -37,12 +38,13 @@ pub const win_span: u32 = port_stride * port_count;
 
 pub const pins_per_port: u32 = 16;
 
-pub const pcntr1: u32 = 0x00;
-pub const pcntr2: u32 = 0x04;
-pub const pcntr3: u32 = 0x08;
+pub const pcntr1: u32 = regs.off.pcntr1;
+pub const pcntr2: u32 = regs.off.pcntr2;
+pub const pcntr3: u32 = regs.off.pcntr3;
+pub const pcntr4: u32 = regs.off.pcntr4;
 
-const half_shift: u5 = 16;
-const half_mask: u32 = 0xFFFF;
+const half_shift: u5 = regs.half_shift;
+const half_mask: u32 = regs.half_mask;
 
 /// One PORT instance. Four 16-bit halves is the whole of it: what the firmware
 /// drives, which way each pin faces, and which pins the board drives back.
@@ -92,6 +94,8 @@ pub const Gpio = struct {
     /// Last level seen on each board LED, and how many times it changed.
     led_level: [led_count]u1 = .{0} ** led_count,
     led_edges: [led_count]u32 = .{0} ** led_count,
+    /// Stores into PCNTR2, which the pads drive and firmware does not.
+    refused: u32 = 0,
 
     pub fn init() Gpio {
         var self = Gpio{};
@@ -106,6 +110,7 @@ pub const Gpio = struct {
         self.ports = [1]Port{.{}} ** port_count;
         self.led_level = .{0} ** led_count;
         self.led_edges = .{0} ** led_count;
+        self.refused = 0;
         self.setInput(sw_port, sw1_pin, true);
         self.setInput(sw_port, sw2_pin, true);
     }
@@ -144,6 +149,11 @@ pub const Gpio = struct {
         return self.led_edges[index];
     }
 
+    /// How many stores the port refused, for the run report.
+    pub fn refusedStores(self: *const Gpio) u32 {
+        return self.refused;
+    }
+
     pub fn quiet(self: *const Gpio) bool {
         for (self.led_edges) |edges| {
             if (edges != 0) return false;
@@ -169,42 +179,68 @@ pub const Gpio = struct {
         }
     }
 
+    /// A read of any width. The window is 32-bit registers spelled as pairs
+    /// of 16-bit ones, so the word the access lands in answers it and the
+    /// answer is then cut to the lanes the access names.
     pub fn readReg(self: *const Gpio, address: u32, width: u3) u32 {
-        _ = width;
         const offset = address -% win_base;
         const index = offset / port_stride;
         if (index >= port_count) return 0;
+        const local = offset % port_stride;
+        return regs.part(self.wordValue(index, regs.word(local)), regs.lane(local), width);
+    }
+
+    /// What a whole PCNTR word reads as.
+    fn wordValue(self: *const Gpio, index: u32, word: u32) u32 {
         const port = self.ports[index];
-        return switch (offset % port_stride) {
-            pcntr1 => (@as(u32, port.podr) << half_shift) | @as(u32, port.pdr),
-            pcntr2 => @as(u32, port.level()),
+        return switch (word) {
+            regs.off.pcntr1 => (@as(u32, port.podr) << half_shift) | @as(u32, port.pdr),
+            regs.off.pcntr2 => @as(u32, port.level()),
             // PCNTR3 is write-only and PCNTR4's event output is unmodelled;
             // both read zero rather than borrowing the sparse file's toggle.
             else => 0,
         };
     }
 
+    /// A store of any width, judged on the word it lands in and on the byte
+    /// lanes it actually names. A halfword at +0x02 is PODR alone: it moves
+    /// the latch and leaves the direction mask below it untouched.
     pub fn applyWrite(self: *Gpio, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% win_base;
         const index = offset / port_stride;
         if (index >= port_count) return;
-        switch (offset % port_stride) {
-            pcntr1 => {
-                self.ports[index].pdr = @truncate(value & half_mask);
-                self.setLatch(index, @truncate((value >> half_shift) & half_mask));
+        const local = offset % port_stride;
+        const word = regs.word(local);
+        const lane = regs.lane(local);
+        if (regs.readOnly(word)) {
+            self.refused += 1;
+            return;
+        }
+        switch (word) {
+            regs.off.pcntr1 => {
+                const current = (@as(u32, self.ports[index].podr) << half_shift) |
+                    @as(u32, self.ports[index].pdr);
+                const next = regs.merge(current, lane, width, value);
+                self.ports[index].pdr = @truncate(next & half_mask);
+                self.setLatch(index, @truncate((next >> half_shift) & half_mask));
             },
-            pcntr3 => {
+            regs.off.pcntr3 => {
                 // POSR sets, PORR clears, in that order, so a word that names
                 // the same pin in both halves leaves it clear the way the
-                // hardware's clear-dominant pair does.
-                const posr: u16 = @truncate(value & half_mask);
-                const porr: u16 = @truncate((value >> half_shift) & half_mask);
+                // hardware's clear-dominant pair does. The strobe does not
+                // read back, so a narrow store names only its own half and
+                // the other half is no set and no clear, not a stale value.
+                const named = regs.merge(0, lane, width, value);
+                const posr: u16 = @truncate(named & half_mask);
+                const porr: u16 = @truncate((named >> half_shift) & half_mask);
                 var latch = self.ports[index].podr;
                 latch |= posr;
                 latch &= ~porr;
                 self.setLatch(index, latch);
             },
+            // PCNTR4 is the event output link: writable on silicon, not
+            // modelled here, so the store is taken and forgotten rather than
+            // refused.
             else => {},
         }
     }
