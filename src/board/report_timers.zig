@@ -90,8 +90,18 @@ fn pwm(board: *Board, out: Writer) !void {
             "GPT{d}: GTCNT 0x{X:0>8} of 0x{X:0>8}, {d} overflow(s), running={s}\n",
             .{ index, channel.cnt, channel.periodOrDefault(), channel.overflows, yesno(channel.running()) },
         );
+        try pwmSource(index, channel.source(), out);
         try pwmCompares(index, &channel.compares, out);
     }
+}
+
+/// The clock GTCR.TPCS picked for this channel. An undivided channel says
+/// nothing, because that is the reset state every channel starts in; a
+/// channel a driver deliberately slowed is the line worth reading, and so is
+/// an encoding this model does not recognise.
+fn pwmSource(index: usize, source: gpt.clock.Source, out: Writer) !void {
+    if (source == .pclkd) return;
+    try out.print("GPT{d}: counting on {s}\n", .{ index, source.name() });
 }
 
 /// GTCCRA and GTCCRB, but only for a channel that programmed one. A compare

@@ -49,6 +49,11 @@
 //! here. The count of them is reported, but they are not stacked into a
 //! backlog that would fire long after the counter moved on.
 //!
+//! THE COUNT SOURCE lives in src/periph/gpt_clock.zig: GTCR's TPCS field
+//! picks the divider a channel counts at, so a channel slowed to PCLKD/1024
+//! really is a thousand times slower than an undivided one instead of every
+//! channel counting at the same rate.
+//!
 //! COMPARE MATCH lives in src/periph/gpt_compare.zig: GTCCRA (+0x4C) and
 //! GTCCRB (+0x50) are compared against the count rather than shadowed, and a
 //! crossing raises GTST.TCFA or TCFB. Everything that file does not claim is
@@ -60,12 +65,16 @@
 //! always raises and a compare match never does.
 const std = @import("std");
 
+const clk = @import("gpt_clock.zig");
 const compare = @import("gpt_compare.zig");
 const periph = @import("registry.zig");
 
 /// The compare pair, reached as `gpt.match` the way the other split blocks in
 /// this tree re-export their halves.
 pub const match = compare;
+
+/// The count source, reached as `gpt.clock` the same way.
+pub const clock = clk;
 
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
@@ -83,9 +92,10 @@ pub const off = struct {
     pub const gtpr: u32 = 0x64;
 };
 
-/// GTCR: the count-start bit.
+/// GTCR: the count-start bit. The rest of the register's fields live in
+/// gpt_clock.zig, which reads the prescaler out of it.
 pub const control = struct {
-    pub const cst: u32 = 0x0000_0001;
+    pub const cst: u32 = clk.field.cst;
 };
 
 /// GTST: the status bits dev's enumeration names.
@@ -101,7 +111,8 @@ pub const event = struct {
     pub const gpt0_overflow: u16 = 0x0C1;
 };
 
-/// The advance one chunk boundary stands for, carried from dev with its
+/// The advance one chunk boundary stands for at the UNDIVIDED clock, carried
+/// from dev with its
 /// reason: it is ODD, so it is coprime to the 2^16 and 2^32 saw periods the
 /// drivers use. A power-of-two advance divides those periods evenly, GTCNT
 /// then visits a handful of values, and a demo sampling on a power-of-two
@@ -130,6 +141,11 @@ pub const Channel = struct {
         return self.cr & control.cst != 0;
     }
 
+    /// The clock this channel counts on, out of GTCR.TPCS.
+    pub fn source(self: Channel) clk.Source {
+        return clk.sourceOf(self.cr);
+    }
+
     /// The period a zero GTPR stands for.
     pub fn periodOrDefault(self: Channel) u32 {
         return if (self.period == 0) default_period else self.period;
@@ -142,7 +158,7 @@ pub const Channel = struct {
         const period = self.periodOrDefault();
         const span = @as(u64, period) + 1;
         const before = self.cnt;
-        const next = @as(u64, self.cnt) + step_per_tick;
+        const next = @as(u64, self.cnt) + clk.step(step_per_tick, self.source());
         var wraps: u32 = 0;
         if (next <= period) {
             self.cnt = @intCast(next);
