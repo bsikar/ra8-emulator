@@ -73,6 +73,15 @@ pub fn refusalName(reason: Refusal) []const u8 {
 
 pub const Due = std.BoundedArray(u16, channel_count);
 
+/// A channel's two running counts, taken together so they can be put back as
+/// they stood.
+pub const Counts = struct {
+    /// Units left in the current block.
+    pending: u32,
+    /// Blocks left.
+    blocks: u32,
+};
+
 /// One channel: its registers, the counts it latched when it was armed, and
 /// what it has moved.
 pub const Channel = struct {
@@ -94,7 +103,7 @@ pub const Channel = struct {
     units: u64 = 0,
     bytes: u64 = 0,
     completions: u32 = 0,
-    /// Units a memory fault cut short.
+    /// Requests a memory fault cut short before the last of their units.
     faults: u32 = 0,
 
     pub fn armed(self: *const Channel) bool {
@@ -114,6 +123,17 @@ pub const Channel = struct {
     pub fn arm(self: *Channel) void {
         self.pending = xfer.latchedCount(self.dmcra);
         self.blocks = xfer.latchedBlocks(self.dmcrb);
+    }
+
+    /// The counts as they stand, so a request memory cuts short can put back
+    /// what it was going to pay for and never moved.
+    pub fn latched(self: *const Channel) Counts {
+        return .{ .pending = self.pending, .blocks = self.blocks };
+    }
+
+    pub fn relatch(self: *Channel, saved: Counts) void {
+        self.pending = saved.pending;
+        self.blocks = saved.blocks;
     }
 
     /// Spend one request's worth of counts and answer the units it is worth.
@@ -182,24 +202,42 @@ pub const Dmac = struct {
         if (self.memory == null) return self.refuse(.unbacked);
         self.channels[index].dmsts |= field.act;
         while (true) {
-            self.transfer(index, shape);
+            // A continuous request drains the count, but not over an address
+            // memory has just refused: that walks the rest of the count into
+            // the same wall one unit at a time.
+            if (self.transfer(index, shape)) break;
             if (!continuous or self.channels[index].done(shape)) break;
         }
         self.settle(index, shape);
     }
 
     /// One request's worth of units, with the addresses and the running count
-    /// left where they now stand so a polling driver sees progress.
-    fn transfer(self: *Dmac, index: usize, shape: xfer.Plan) void {
+    /// left where they now stand so a polling driver sees progress. Answers
+    /// whether memory cut the request short of the units it asked for.
+    ///
+    /// A SHORT REQUEST PAYS FOR NOTHING. The units that reached the
+    /// destination stay there and the addresses stand over them, but the
+    /// counts go back as they were, because this request did not deliver what
+    /// they were spent on. That is also what keeps the channel from claiming
+    /// it finished: settle() only takes DTE down and raises DTIF once the
+    /// counts are done, and counts that were put back are not. Same rule
+    /// dtc.zig takes for a block that ran off the end of memory.
+    fn transfer(self: *Dmac, index: usize, shape: xfer.Plan) bool {
         const channel = &self.channels[index];
+        const saved = channel.latched();
         const units = @min(channel.spend(shape), max_units);
         const moved = self.copy(channel, shape, units);
         channel.requests +%= 1;
         channel.units += moved;
         channel.bytes += moved * shape.unit();
-        if (moved != units) channel.faults +%= 1;
+        const short = moved != units;
+        if (short) {
+            channel.faults +%= 1;
+            channel.relatch(saved);
+        }
         channel.dmcra = xfer.withCount(channel.dmcra, channel.pending);
         channel.dmcrb = channel.blocks;
+        return short;
     }
 
     /// Move `units` units, walking each address by what its mode says. A unit

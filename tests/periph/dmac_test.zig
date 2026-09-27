@@ -311,3 +311,90 @@ test "a run that never touched the controller stays out of the report" {
     unit.write(at(dmac.off.dmcnt), 1, dmac.field.dte);
     try std.testing.expect(!unit.quiet());
 }
+
+/// One past the last mapped byte of board RAM, so a copy aimed just below it
+/// walks off the end partway through and memory refuses the rest.
+const ram_edge: u32 = memmap.sram_end;
+
+/// Channel 0 programmed for a block of `size` byte units aimed so only `fits`
+/// of them have anywhere to go, armed and triggered once.
+fn shortBlock(unit: *dmac.Dmac, size: u32, fits: u32) void {
+    unit.write(at(dmac.off.dmsar), 4, source_at);
+    unit.write(at(dmac.off.dmdar), 4, ram_edge - fits);
+    unit.write(at(dmac.off.dmcra), 4, size << xfer.count.high_shift | size);
+    unit.write(at(dmac.off.dmcrb), 4, 1);
+    unit.write(at(dmac.off.dmtmd), 2, 2 << xfer.field.md_shift);
+    unit.write(at(dmac.off.dmamd), 2, 2 << xfer.field.sm_shift | 2 << xfer.field.dm_shift);
+    unit.write(at(dmac.off.dmcnt), 1, dmac.field.dte);
+    unit.write(at(dmac.off.dmreq), 1, dmac.field.swreq);
+}
+
+test "a block memory cut short keeps the units that landed, addresses over them" {
+    var core = try engine.Engine.open();
+    defer core.close();
+    try scene(core);
+    try core.write(source_at, &[_]u8{0x11} ** 8);
+    const bank = startedBank();
+    var unit = dmac.Dmac.init(&bank);
+    unit.memory = core;
+    shortBlock(&unit, 8, 4);
+    try std.testing.expectEqual(@as(u64, 4), unit.channels[channel].units);
+    try std.testing.expectEqual(@as(u64, 4), unit.channels[channel].bytes);
+    try std.testing.expectEqual(@as(u8, 0x11), try byteAt(core, ram_edge - 1));
+    try std.testing.expectEqual(source_at + 4, unit.read(at(dmac.off.dmsar), 4));
+    try std.testing.expectEqual(ram_edge, unit.read(at(dmac.off.dmdar), 4));
+}
+
+test "a block memory cut short neither ends the transfer nor pays its counts" {
+    var core = try engine.Engine.open();
+    defer core.close();
+    try scene(core);
+    const bank = startedBank();
+    var unit = dmac.Dmac.init(&bank);
+    unit.memory = core;
+    shortBlock(&unit, 8, 4);
+    const control = unit.read(at(dmac.off.dmcnt), 4);
+    try std.testing.expect(control & dmac.field.dte != 0);
+    try std.testing.expectEqual(@as(u32, 0), control >> 16 & dmac.field.dtif);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[channel].completions);
+    try std.testing.expectEqual(@as(u32, 8), unit.read(at(dmac.off.dmcra), 4) & xfer.count.low_mask);
+    try std.testing.expectEqual(@as(u32, 1), unit.read(at(dmac.off.dmcrb), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[channel].faults);
+}
+
+test "a continuous request stops at the address memory refused" {
+    var core = try engine.Engine.open();
+    defer core.close();
+    try scene(core);
+    const bank = startedBank();
+    var unit = dmac.Dmac.init(&bank);
+    unit.memory = core;
+    // Normal mode, 64 units, destination one byte short of the end of RAM:
+    // the first unit lands, the second is refused, and the rest of the count
+    // must not be walked into the same wall.
+    unit.write(at(dmac.off.dmsar), 4, source_at);
+    unit.write(at(dmac.off.dmdar), 4, ram_edge - 1);
+    unit.write(at(dmac.off.dmcra), 4, 64);
+    unit.write(at(dmac.off.dmtmd), 2, 0);
+    unit.write(at(dmac.off.dmamd), 2, 2 << xfer.field.sm_shift | 2 << xfer.field.dm_shift);
+    unit.write(at(dmac.off.dmcnt), 1, dmac.field.dte);
+    unit.write(at(dmac.off.dmreq), 1, dmac.field.swreq | dmac.field.clrs);
+    try std.testing.expectEqual(@as(u64, 1), unit.channels[channel].units);
+    try std.testing.expectEqual(@as(u32, 63), unit.read(at(dmac.off.dmcra), 4) & xfer.count.low_mask);
+    try std.testing.expect(unit.read(at(dmac.off.dmcnt), 4) & dmac.field.dte != 0);
+}
+
+test "a request nothing refuses still ends the transfer as it did" {
+    var core = try engine.Engine.open();
+    defer core.close();
+    try scene(core);
+    const bank = startedBank();
+    var unit = dmac.Dmac.init(&bank);
+    unit.memory = core;
+    programCopy(&unit, 4);
+    unit.write(at(dmac.off.dmreq), 1, dmac.field.swreq | dmac.field.clrs);
+    try std.testing.expectEqual(@as(u64, 4), unit.channels[channel].units);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[channel].faults);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[channel].completions);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(at(dmac.off.dmcnt), 4) & dmac.field.dte);
+}
