@@ -15,6 +15,7 @@
 const periph = @import("registry.zig");
 const bus = @import("riic_bus.zig");
 const flag = @import("i3c_flags.zig");
+const regs = @import("i3c_regs.zig");
 const i3c_target = @import("i3c_target.zig");
 
 pub const win_base = flag.win_base;
@@ -205,38 +206,51 @@ pub const I3c = struct {
         self.responder.open(value);
     }
 
-    pub fn readOffset(self: *I3c, offset: u32) u32 {
-        if (offset >= flag.win_span) return 0;
-        return switch (offset) {
+    /// The whole word an access lands in. The live registers answer for
+    /// themselves and everything else reflects what was written, so
+    /// "configure then verify" still works across the window.
+    fn readWord(self: *I3c, access: regs.Access) u32 {
+        return switch (access.word) {
             flag.reg.ntst => if (self.responder.armed) self.responder.status() else self.ntst,
             flag.reg.bst => self.bst,
             flag.reg.bcst => if (self.busy) 0 else flag.bcst.bfref,
-            flag.reg.ntdtbp0 => self.readData(),
-            else => self.shadow[offset / 4],
+            // The port moves a byte, and only for an access that reaches it.
+            flag.reg.ntdtbp0 => if (access.carriesData()) self.readData() else 0,
+            else => self.shadow[access.index()],
         };
     }
 
-    pub fn writeOffset(self: *I3c, offset: u32, value: u32) void {
-        if (offset >= flag.win_span) return;
-        self.shadow[offset / 4] = value;
-        switch (offset) {
-            flag.reg.msdvad => self.claimAddress(value),
-            flag.reg.cndctl => self.control(value),
-            flag.reg.ntdtbp0 => self.writeData(@truncate(value)),
-            // The condition and fault flags are write-0-to-clear.
-            flag.reg.bst => self.bst &= value,
+    pub fn read(self: *I3c, address: u32, width: u3) u32 {
+        const offset = address -% flag.win_base;
+        if (!regs.inside(offset)) return 0;
+        const access = regs.Access.of(offset, width);
+        return access.cut(self.readWord(access));
+    }
+
+    pub fn write(self: *I3c, address: u32, width: u3, value: u32) void {
+        const offset = address -% flag.win_base;
+        if (!regs.inside(offset)) return;
+        const access = regs.Access.of(offset, width);
+        const merged = access.fold(self.shadow[access.index()], value);
+        self.shadow[access.index()] = merged;
+        switch (access.word) {
+            flag.reg.msdvad => self.claimAddress(merged),
+            flag.reg.cndctl => self.control(merged),
+            flag.reg.ntdtbp0 => if (access.carriesData()) self.writeData(regs.Access.dataByte(value)),
+            // BST is write-0-to-clear, and only in the lanes this store named.
+            flag.reg.bst => self.bst &= access.clearing(value),
             else => {},
         }
     }
 
-    pub fn read(self: *I3c, address: u32, width: u3) u32 {
-        _ = width;
-        return self.readOffset(address -% flag.win_base);
+    /// A whole-word access at a window offset, which is how the tests and the
+    /// board's own wiring reach a register by name.
+    pub fn readOffset(self: *I3c, offset: u32) u32 {
+        return self.read(flag.win_base +% offset, 4);
     }
 
-    pub fn write(self: *I3c, address: u32, width: u3, value: u32) void {
-        _ = width;
-        self.writeOffset(address -% flag.win_base, value);
+    pub fn writeOffset(self: *I3c, offset: u32, value: u32) void {
+        self.write(flag.win_base +% offset, 4, value);
     }
 
     pub fn block(self: *I3c) periph.Block {
