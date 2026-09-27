@@ -145,3 +145,15 @@ pub fn masterHolds(at: u32, len: u32) bool {
     }
     return false;
 }
+
+/// The window an address sits in, or null when it sits in none. A model
+/// that walks forward from a base it was handed (a scan-out down a
+/// framebuffer, a walk along a ring) asks this instead of `masterHolds`,
+/// because it needs to know where the room runs out, not only that the
+/// first byte is in it.
+pub fn masterWindow(at: u32) ?Window {
+    for (master_ram) |window| {
+        if (at >= window.base and at < window.end) return window;
+    }
+    return null;
+}

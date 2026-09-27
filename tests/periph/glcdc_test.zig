@@ -196,9 +196,10 @@ test "every format code reports a fetch width" {
 }
 
 test "a framebuffer base is recognised in each modelled RAM window" {
-    try std.testing.expect(glcdc.addressIsRam(0x2000_0000));
     try std.testing.expect(glcdc.addressIsRam(0x2200_0000));
     try std.testing.expect(glcdc.addressIsRam(0x6800_0000));
+    try std.testing.expect(glcdc.addressIsRam(0x7800_0000));
+    try std.testing.expect(!glcdc.addressIsRam(0x2000_0000));
     try std.testing.expect(!glcdc.addressIsRam(0x1FFF_FFFF));
     try std.testing.expect(!glcdc.addressIsRam(0x6C00_0000));
 }
