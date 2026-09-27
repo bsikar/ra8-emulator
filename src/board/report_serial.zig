@@ -42,6 +42,18 @@ pub fn spi(board: *Board, out: Writer) !void {
                 if (unit.loopback()) "on" else "off",
             },
         );
+        if (unit.width != 0 and unit.width != 8) {
+            try out.print(
+                "SPI{d}: frame {d} bit(s), {s}-first\n",
+                .{ index, unit.width, if (unit.frameOf().lsb_first) "LSB" else "MSB" },
+            );
+        }
+        if (unit.unnamed != 0) {
+            try out.print(
+                "SPI{d}: {d} frame(s) with an SPCMD0.SPB encoding no header names, clocked at the 8-bit default\n",
+                .{ index, unit.unnamed },
+            );
+        }
         if (unit.refused != 0) {
             try out.print(
                 "SPI{d}: REFUSED {d} SPDR store(s) with SPE clear, the channel was never started\n",

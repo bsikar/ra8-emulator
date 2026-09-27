@@ -33,11 +33,13 @@
 //! into reg[off / 4], so a byte or halfword store to SPCR2 wipes the loopback
 //! bits above it and the tie silently comes undone.
 //!
-//! THE FRAME IS EIGHT BITS, and that is this model's own rule rather than a
-//! field it reads: no header in this tree gives SPCMD's frame-length bits.
-//! dev masks the inverting loopback path to a byte and echoes the whole word
-//! on the non-inverting one, which cannot both be right; here both paths use
-//! the same width, and a store with bits above it keeps only the frame.
+//! THE FRAME IS AS WIDE AS SPCMD0 SAYS. dev masks the inverting loopback
+//! path to a byte and echoes the whole word on the non-inverting one, which
+//! cannot both be right, and neither reads the data length. Here SPCMD0.SPB
+//! picks the width and SPCMD0.LSBF the bit order, so a 16- or 32-bit
+//! transfer moves what the driver put in SPDR rather than its low byte; see
+//! spi_frame.zig. A device on the line takes the frame a byte at a time,
+//! most significant first, which is the order a wire clocks them in.
 //!
 //! A DEVICE CAN BE ON THE LINE. A channel with no loopback and nothing
 //! attached clocks in an idle zero, as it does on dev with no card and no
@@ -46,12 +48,17 @@
 //! are checked first, which is dev's own order: an internal tie replaces the
 //! wire, so whatever is on the wire does not get the frame.
 //!
-//! NOT MODELLED, AND NOT GUESSED: SPCMD frame length and bit order, SPBR bit
-//! rate, SPSSR slave select, and the mode-fault, overrun and parity errors.
+//! NOT MODELLED, AND NOT GUESSED: SPBR and BRDV, the bit rate, which a
+//! headless run has no clock to show; SPSSR slave select; and the
+//! mode-fault, overrun and parity errors.
 //! The rest of the window is shadowed so a read-modify-write survives, and
 //! never read.
 const std = @import("std");
 const periph = @import("registry.zig");
+const frames = @import("spi_frame.zig");
+
+/// The width and bit order of a frame, read out of SPCMD0.
+pub const frame = frames;
 
 /// SPI_B geometry. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4035_C000;
@@ -84,12 +91,6 @@ pub const field = struct {
     /// SPSR.SPRF, receive buffer full.
     pub const sprf: u32 = 0x8000_0000;
 };
-
-/// The data path this model clocks. Eight bits is the width the polling
-/// driver uses and the width dev's own inverting path masks to; no header in
-/// this tree names the frame-length field, so this is the model's rule and
-/// not a register read.
-pub const frame_mask: u32 = 0xFF;
 
 /// Something on the other end of the line: one frame out, one frame back.
 /// The SD card is the first of them; a display controller is the other one
@@ -129,6 +130,11 @@ pub const Channel = struct {
     refused: u32 = 0,
     /// SPDR reads made with the holding register empty.
     starved: u32 = 0,
+    /// The width of the last frame clocked, so the report can say it.
+    width: u6 = 0,
+    /// Frames clocked with SPCMD0.SPB holding an encoding the tree does not
+    /// name, which fall back to eight bits.
+    unnamed: u32 = 0,
     /// What is on the wire, when anything is.
     device: ?Device = null,
 
@@ -144,6 +150,12 @@ pub const Channel = struct {
         return self.spcr2 & (field.splp | field.splp2) != 0;
     }
 
+    /// The frame SPCMD0 currently describes. The command registers ride in
+    /// the shadow with the rest of the window; only this reads them.
+    pub fn frameOf(self: *const Channel) frames.Frame {
+        return frames.of(self.shadow[frames.off.spcmd0 / 4]);
+    }
+
     pub fn quiet(self: *const Channel) bool {
         return self.spcr == 0 and self.spcr2 == 0 and self.frames == 0 and
             self.refused == 0 and self.starved == 0;
@@ -157,23 +169,45 @@ pub const Channel = struct {
             self.refused +%= 1;
             return;
         }
-        const word = value & frame_mask;
-        self.rx = self.receive(word);
+        const shape = self.frameOf();
+        if (!shape.named) self.unnamed +%= 1;
+        const word = value & shape.mask();
+        self.rx = self.receive(shape, word);
         self.rx_full = true;
         self.ended = true;
         self.last = word;
+        self.width = shape.bits();
         self.frames +%= 1;
     }
 
     /// What the receive shifter clocks in behind that frame. The inverting
     /// tie is checked first because SPLP and SPLP2 can both be set and only
     /// one line comes back.
-    fn receive(self: *Channel, word: u32) u32 {
-        if (self.inverting()) return ~word & frame_mask;
+    fn receive(self: *Channel, shape: frames.Frame, word: u32) u32 {
+        if (self.inverting()) return ~word & shape.mask();
         if (self.loopback()) return word;
-        if (self.device) |on_line| return on_line.exchange(@intCast(word & frame_mask));
+        if (self.device != null) return self.exchange(shape, word);
         // Nothing drives the line.
         return 0;
+    }
+
+    /// Hand the frame to whatever is on the line, a byte at a time and most
+    /// significant first, which is the order the bits leave the pin. The
+    /// frame is turned end for end on the way out when LSBF is set and
+    /// turned back on the way in, so a byte-oriented device sees what it
+    /// would see on a wire.
+    fn exchange(self: *Channel, shape: frames.Frame, word: u32) u32 {
+        const on_line = self.device orelse return 0;
+        const wire = shape.onWire(word);
+        var taken: u6 = shape.width.bytes();
+        var back: u32 = 0;
+        while (taken > 0) {
+            taken -= 1;
+            const shift: u5 = @intCast(taken * 8);
+            const out: u8 = @intCast((wire >> shift) & 0xFF);
+            back |= @as(u32, on_line.exchange(out)) << shift;
+        }
+        return shape.fromWire(back);
     }
 
     /// Take the received frame. A read of an empty holding register is a
