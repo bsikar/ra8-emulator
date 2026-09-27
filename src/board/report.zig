@@ -15,6 +15,7 @@ const audio = @import("report_audio.zig");
 const capture = @import("report_capture.zig");
 const compute = @import("report_compute.zig");
 const cores = @import("report_cores.zig");
+const dma = @import("report_dma.zig");
 const backup = @import("report_backup.zig");
 const memory = @import("report_memory.zig");
 const modules = @import("report_modules.zig");
@@ -80,6 +81,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try events(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
+    try dma.section(board, out);
     try serial.sections(board, out);
     try serial.spi(board, out);
     try serial.trace(board, out);
