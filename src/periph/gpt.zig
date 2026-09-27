@@ -64,12 +64,20 @@
 //! and falls back to zero instead of sawing, and a one-shot channel stops
 //! itself at the period instead of wrapping forever.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the buffer registers, so a duty loaded for
-//! the next cycle takes effect at once; the write-protection register; and
-//! the per-source interrupt enables in GTINTAD, so channel 0's overflow
-//! always raises and a compare match never does.
+//! THE BUFFERED COMPARE lives in src/periph/gpt_buffer.zig: GTBER (+0x40)
+//! says whether a channel reloads GTCCRA and GTCCRB from their buffer
+//! registers at the end of a cycle, so a duty the HAL parks through
+//! `ra8_gpt_duty_cycle_set` arrives on the next cycle instead of never
+//! arriving at all. This file's note used to say a buffered duty took effect
+//! at once; it did not take effect, because nothing read the buffer.
+//!
+//! NOT MODELLED, AND NOT GUESSED: the write-protection register, so GTWP
+//! neither locks nor rejects anything; and the per-source interrupt enables
+//! in GTINTAD, so channel 0's overflow always raises and a compare match
+//! never does.
 const std = @import("std");
 
+const buf = @import("gpt_buffer.zig");
 const clk = @import("gpt_clock.zig");
 const compare = @import("gpt_compare.zig");
 const md = @import("gpt_mode.zig");
@@ -84,6 +92,9 @@ pub const clock = clk;
 
 /// The counter mode, reached as `gpt.mode`.
 pub const mode = md;
+
+/// The compare buffers, reached as `gpt.buffers`.
+pub const buffers = buf;
 
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
@@ -149,6 +160,7 @@ pub const Channel = struct {
     /// Which way the count is going. Only a triangle ever sets it false.
     rising: bool = true,
     compares: compare.Pair = .{},
+    buffered: buf.Buffers = .{},
 
     pub fn running(self: Channel) bool {
         return self.cr & control.cst != 0;
@@ -190,7 +202,17 @@ pub const Channel = struct {
         }
         if (moved.halted) self.cr &= ~control.cst;
         self.st |= self.matched(kind, before, moved, period);
+        if (endedCycle(kind, moved)) self.reload();
         return moved.peaks;
+    }
+
+    /// Hand the buffered compares over, the way GTBER's single-buffer
+    /// selection says to. The chunk's own matches were judged above against
+    /// the values that were live while it ran, so a duty arriving here
+    /// governs the next cycle and not the one that just finished.
+    fn reload(self: *Channel) void {
+        if (self.buffered.take(.a)) |value| self.compares.load(.a, value);
+        if (self.buffered.take(.b)) |value| self.compares.load(.b, value);
     }
 
     /// The compare flags this chunk raised. A saw chunk is an up-count and is
@@ -207,7 +229,12 @@ pub const Channel = struct {
             const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
             return lane(self.compares.value(side), local - base);
         }
+        if (buf.which(local)) |side| {
+            const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
+            return lane(self.buffered.value(side), local - base);
+        }
         return switch (cellOf(local)) {
+            buf.off.gtber => lane(self.buffered.ber, local - buf.off.gtber),
             off.gtcnt => lane(self.cnt, local - off.gtcnt),
             off.gtpr => lane(self.period, local - off.gtpr),
             off.gtcr => lane(self.cr, local - off.gtcr),
@@ -222,7 +249,13 @@ pub const Channel = struct {
             self.compares.set(side, merge(self.compares.value(side), local - base, byte));
             return;
         }
+        if (buf.which(local)) |side| {
+            const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
+            self.buffered.set(side, merge(self.buffered.value(side), local - base, byte));
+            return;
+        }
         switch (cellOf(local)) {
+            buf.off.gtber => self.buffered.ber = merge(self.buffered.ber, local - buf.off.gtber, byte),
             off.gtcnt => self.cnt = merge(self.cnt, local - off.gtcnt, byte),
             off.gtpr => self.period = merge(self.period, local - off.gtpr, byte),
             off.gtcr => self.cr = merge(self.cr, local - off.gtcr, byte),
@@ -251,16 +284,25 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: Channel) bool {
-        return self.overflows == 0 and self.underflows == 0 and !self.running() and self.compares.quiet();
+        if (!self.compares.quiet() or !self.buffered.quiet()) return false;
+        return self.overflows == 0 and self.underflows == 0 and !self.running();
     }
 };
+
+/// Did this chunk finish a counting cycle? A saw's cycle ends where it wraps
+/// and a one-shot's at the single peak that stops it, both of which are a
+/// peak; a triangle's ends where it comes back to zero, which is a trough.
+fn endedCycle(kind: md.Mode, moved: md.Step) bool {
+    if (kind.symmetric()) return moved.troughs != 0;
+    return moved.peaks != 0;
+}
 
 /// The register a byte offset belongs to, so a narrow store lands on the
 /// right word instead of falling through to the shadow.
 fn cellOf(local: u32) u32 {
     const cells = [_]u32{
         off.gtstr, off.gtstp, off.gtclr, off.gtcr,
-        off.gtst,  off.gtcnt, off.gtpr,
+        off.gtst,  off.gtcnt, off.gtpr,  buf.off.gtber,
     };
     for (cells) |cell| {
         if (local >= cell and local < cell + 4) return cell;

@@ -12,9 +12,11 @@
 //! The six compare/capture registers sit at +0x4C through +0x60, one word
 //! each, from ra8-firmware's ra8_gpt_regs.h on zig/dev (`GTCCR[6]`, between
 //! GTCNT at +0x48 and GTPR at +0x64). That header is what the GPT file's own
-//! note said did not exist; it does, so A and B are compared here. C through
-//! F stay shadowed: they are the buffer and capture halves of the same array
-//! and mean nothing without GTBER, which this tree does not model.
+//! note said did not exist; it does, so A and B are compared here. The two
+//! buffer halves, GTCCR[2] and GTCCR[3], now feed A and B at the end of a
+//! cycle through src/periph/gpt_buffer.zig, which reads GTBER. GTCCRD and
+//! GTCCRF stay shadowed: they are capture registers and there is no capture
+//! input in this model.
 //!
 //! THE FLAG POSITIONS. dev's enumeration gives three of GTST's bits by name:
 //! TCFA bit 0, TCFPO bit 6, TCFPU bit 7. TCFB is not in it. Bit 1 is taken
@@ -95,6 +97,16 @@ pub const Pair = struct {
             .b => self.b = new_value,
         }
         self.writes +%= 1;
+    }
+
+    /// Take a value from the buffer register at the end of a cycle. The
+    /// transfer is the hardware's, not a firmware store, so it does not
+    /// count as a write: the buffer side counts its own reloads.
+    pub fn load(self: *Pair, side: Which, new_value: u32) void {
+        switch (side) {
+            .a => self.a = new_value,
+            .b => self.b = new_value,
+        }
     }
 
     /// The flags a chunk of counting from `before` up to `after` raises.
