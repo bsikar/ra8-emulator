@@ -37,6 +37,7 @@ const gptp = @import("../periph/gptp.zig");
 const icu = @import("../periph/icu.zig");
 const ipc = @import("../periph/ipc.zig");
 const lvd = @import("../periph/lvd.zig");
+const mipi_csi = @import("../periph/mipi_csi.zig");
 const mipi_phy = @import("../periph/mipi_phy.zig");
 const modem = @import("../periph/modem.zig");
 const net = @import("net.zig");
@@ -201,6 +202,7 @@ pub const Board = struct {
     /// The MIPI D-PHY under both display and camera: the LDO and PLL flags
     /// the bring-up sequence waits on before either link is worth starting.
     link: mipi_phy.MipiPhy,
+    receiver: mipi_csi.MipiCsi,
     causes: reset.Reset,
     control: scb.Scb,
     /// The Arm cache window in the PPB: the geometry the firmware reads out
@@ -262,6 +264,7 @@ pub const Board = struct {
             .watchdog = wdt.Wdt.init(),
             .heartbeat = iwdt.Iwdt.init(),
             .link = mipi_phy.MipiPhy.init(),
+            .receiver = mipi_csi.MipiCsi.init(),
             .causes = reset.Reset.init(),
             .control = scb.Scb.init(),
             .caches = cache.Cache.init(),
