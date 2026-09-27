@@ -52,6 +52,7 @@ pub const periph = struct {
     pub const drw_clut = @import("periph/drw_clut.zig");
     pub const drw_dlist = @import("periph/drw_dlist.zig");
     pub const drw_limit = @import("periph/drw_limit.zig");
+    pub const drw_regs = @import("periph/drw_regs.zig");
     pub const drw_tex = @import("periph/drw_tex.zig");
     pub const drw_texel = @import("periph/drw_texel.zig");
     pub const dtc = @import("periph/dtc.zig");

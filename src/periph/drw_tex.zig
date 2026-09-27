@@ -151,6 +151,31 @@ pub const Source = struct {
         return true;
     }
 
+    /// What the source holds for a register, so a narrow store keeps the
+    /// lanes it does not name. Null when the offset is not a texture
+    /// register; TEXCLDATA is consumed by its write and holds nothing, so it
+    /// answers zero rather than a palette entry.
+    pub fn held(self: *const Source, offset: u32) ?u32 {
+        return switch (offset) {
+            off.lustart => @bitCast(self.lustart),
+            off.luxadd => @bitCast(self.luxadd),
+            off.luyadd => @bitCast(self.luyadd),
+            off.lvstarti => @bitCast(self.lvstarti),
+            off.lvstartf => self.lvstartf,
+            off.lvxaddi => @bitCast(self.lvxaddi),
+            off.lvyaddi => @bitCast(self.lvyaddi),
+            off.lvyxaddf => self.lvyxaddf,
+            off.texpitch => self.texpitch,
+            off.texmask => self.texmask,
+            off.texorigin => self.texorigin,
+            off.texcladdr => self.palette.cursor,
+            off.texcldata => 0,
+            off.texcloffset => self.palette.offset,
+            off.colkey => self.colkey,
+            else => null,
+        };
+    }
+
     /// Why this texture configuration cannot be sampled, or null when it can.
     pub fn refusal(self: *const Source, control2_word: u32) ?Refusal {
         if (control2_word & control2.rle_enable != 0) return .rle;

@@ -167,3 +167,19 @@ test "a triangle is three intersecting edges" {
     try std.testing.expect(set.admits(ctl, 1, 3));
     try std.testing.expect(!set.admits(ctl, 3, 3));
 }
+
+test "a set answers what it holds for a register, and nothing for another's" {
+    var set = limit.Set{};
+    _ = set.latch(limit.off.start + limit.off.stride, 0xDEAD_BEEF);
+    _ = set.latch(limit.off.band1, 24);
+    try std.testing.expectEqual(@as(?u32, 0xDEAD_BEEF), set.held(limit.off.start + limit.off.stride));
+    try std.testing.expectEqual(@as(?u32, 24), set.held(limit.off.band1));
+    try std.testing.expectEqual(@as(?u32, 0), set.held(limit.off.yadd));
+    try std.testing.expectEqual(@as(?u32, null), set.held(0x078));
+}
+
+test "what a set holds is what latch put there, sign and all" {
+    var set = limit.Set{};
+    _ = set.latch(limit.off.xadd, @bitCast(@as(i32, -unit)));
+    try std.testing.expectEqual(@as(?u32, @bitCast(@as(i32, -unit))), set.held(limit.off.xadd));
+}
