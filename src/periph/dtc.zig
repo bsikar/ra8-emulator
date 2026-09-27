@@ -85,6 +85,14 @@ pub fn refusalName(reason: Refusal) []const u8 {
     };
 }
 
+/// What one copy got through. `short` means memory refused a unit partway
+/// into a block: the units before it are in the destination and stay there,
+/// because a transfer is not a transaction on silicon either.
+pub const Moved = struct {
+    units: u32,
+    short: bool,
+};
+
 /// What one activation did, so the board knows whether the CPU still sees the
 /// interrupt behind it.
 pub const Outcome = struct {
@@ -143,11 +151,12 @@ pub const Dtc = struct {
         var info = self.fetch(core, at, vector) orelse return self.refuse(.unreadable);
         if (info.unsupported()) |reason| return self.refuse(.{ .unsupported = reason });
         if (info.exhausted()) return self.refuse(.exhausted);
-        const moved = self.copy(core, info) orelse return self.refuse(.unreadable);
+        const moved = self.copy(core, info);
+        if (moved.short) return self.stopShort(core, at, &info, vector, moved.units);
         info.advance();
         writeInfo(core, at, info);
         self.cache.keep(vector, info);
-        return self.settle(events, slot, info, moved);
+        return self.settle(events, slot, info, moved.units * info.unit());
     }
 
     /// The descriptor this activation runs. With RRS set and the same vector
@@ -192,8 +201,9 @@ pub const Dtc = struct {
     }
 
     /// Move one activation's worth: a single unit in normal mode, one block in
-    /// block mode. Answers the bytes moved, or null if memory refused a unit.
-    fn copy(self: *Dtc, core: anytype, info: xfer.Info) ?u32 {
+    /// block mode. Answers what actually moved, which in block mode is not
+    /// always the whole block.
+    fn copy(self: *Dtc, core: anytype, info: xfer.Info) Moved {
         const unit = info.unit();
         const units = info.burst();
         const source_step = info.step(info.source);
@@ -204,14 +214,28 @@ pub const Dtc = struct {
         var done: u32 = 0;
         while (done < units) : (done += 1) {
             const slice = cell[0..unit];
-            core.read(source, slice) catch return null;
-            core.write(dest, slice) catch return null;
+            core.read(source, slice) catch break;
+            core.write(dest, slice) catch break;
             source = xfer.walk(source, source_step);
             dest = xfer.walk(dest, dest_step);
         }
-        self.units += units;
-        self.bytes += units * unit;
-        return units * unit;
+        self.units += done;
+        self.bytes += done * unit;
+        return .{ .units = done, .short = done < units };
+    }
+
+    /// A block that stopped partway. The units that landed are already in the
+    /// destination and already booked, so the descriptor is written back with
+    /// its addresses over them: leaving it where it started would hand the
+    /// next activation the same bytes again and deny in the counters that
+    /// these ever moved. The count is NOT spent, because the block did not
+    /// complete, and the activation is still a refusal, so DTCE stays up and
+    /// the CPU gets the interrupt the controller could not absorb.
+    fn stopShort(self: *Dtc, core: anytype, at: u32, info: *xfer.Info, vector: u8, units: u32) ?Outcome {
+        info.walkBy(units);
+        writeInfo(core, at, info.*);
+        self.cache.keep(vector, info.*);
+        return self.refuse(.unreadable);
     }
 
     fn refuse(self: *Dtc, reason: Refusal) ?Outcome {

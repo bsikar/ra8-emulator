@@ -120,3 +120,28 @@ test "an address walk wraps the way a 32-bit pointer does" {
     try std.testing.expectEqual(@as(u32, 0), xfer.walk(0xFFFF_FFFF, 1));
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFFC), xfer.walk(0, -4));
 }
+
+test "walkBy moves the addresses and pays no count" {
+    var info = xfer.Info.decode(
+        (@as(u32, 0b1001_1000) << 24) | (@as(u32, 0b0000_1000) << 16),
+        0x2000_0000,
+        0x2000_1000,
+        3,
+        0x20 << 8,
+    );
+    info.walkBy(4);
+    // Halfword units, so four of them are eight bytes on each side.
+    try std.testing.expectEqual(@as(u32, 0x2000_0008), info.sar);
+    try std.testing.expectEqual(@as(u32, 0x2000_1008), info.dar);
+    try std.testing.expectEqual(@as(u16, 3), info.crb);
+    try std.testing.expectEqual(@as(u16, 0x20 << 8), info.cra);
+}
+
+test "walking by nothing leaves the descriptor exactly as it was" {
+    const start = xfer.Info.decode(0, 0x2000_0000, 0x2000_1000, 1, 2);
+    var info = start;
+    info.walkBy(0);
+    try std.testing.expectEqual(start.sar, info.sar);
+    try std.testing.expectEqual(start.dar, info.dar);
+    try std.testing.expectEqual(start.packedCounts(), info.packedCounts());
+}
