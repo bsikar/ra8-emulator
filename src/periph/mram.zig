@@ -45,15 +45,16 @@
 //! configuration pages, which stay sparse because ra8_cgc_init programs them
 //! during clock setup with a key-strip readback this model would have to
 //! invent; the erase and blank-check commands; and every MSTATR bit besides
-//! MRDY and the two illegal-command latches. The code-MRAM page is carried
-//! from dev unchanged: MRCPS reads idle-and-ready so the DFU program path
-//! completes instead of spinning, because the mapped MRAM window already
-//! takes the stores that path makes.
+//! MRDY and the two illegal-command latches. The code-MRAM page is its own
+//! file, mram_code.zig: MRCPS still reads idle-and-ready the way dev leaves
+//! it, and a store to it is refused there for the same reason a store to
+//! MSTATR is refused here.
 const std = @import("std");
 const engine = @import("../core/engine.zig");
 const periph = @import("registry.zig");
 const maci = @import("maci.zig");
 const cells = @import("mram_otp.zig");
+const code = @import("mram_code.zig");
 
 pub const window = cells.window;
 
@@ -75,14 +76,9 @@ pub const command = struct {
     pub const span: u32 = 0x10;
 };
 
-/// The code-MRAM program-control page (the R_MRMS 0x3000 page).
-pub const code_page = struct {
-    pub const base: u32 = 0x4013_F000;
-    pub const span: u32 = 0x100;
-    pub const off_mrcps: u32 = 0x10;
-    /// ABUFEMP set, nothing busy or full, no errors.
-    pub const ready: u32 = 0x20;
-};
+/// The code-MRAM program-control page (the R_MRMS 0x3000 page), which
+/// answers for itself in mram_code.zig.
+pub const code_page = code.page;
 
 pub const field = struct {
     /// MENTRYR.MENTRY, the program/erase mode status bit.
@@ -103,13 +99,14 @@ pub const field = struct {
 };
 
 const shadow_words: usize = regs.span / 4;
-const code_words: usize = code_page.span / 4;
 
 pub const Mram = struct {
     otp: cells.Cells,
     stream: maci.Sequencer = .{},
     shadow: [shadow_words]u32 = [_]u32{0} ** shadow_words,
-    code_shadow: [code_words]u32 = [_]u32{0} ** code_words,
+    /// The code-MRAM program-control page: a different program path on the
+    /// same controller, so it shares this block and owns its own rules.
+    code: code.Page = .{},
     /// Where a program that lands is also written through, so firmware can
     /// read the option word back. A board built by a test leaves it null and
     /// the write-through is skipped; the cells still hold the program.
@@ -153,7 +150,7 @@ pub const Mram = struct {
         return self.programs == 0 and self.config_sets == 0 and self.illegal == 0 and
             self.locked_out == 0 and self.outside_mode == 0 and self.malformed == 0 and
             self.rewrites == 0 and self.keyless == 0 and self.read_only == 0 and
-            self.faulted == 0;
+            self.faulted == 0 and self.code.quiet();
     }
 
     /// MSTATR as this model computes it: ready, plus whatever the sequencer
@@ -198,18 +195,11 @@ pub const Mram = struct {
     }
 
     pub fn codeRead(self: *Mram, address: u32, width: u3) u32 {
-        const at = address -% code_page.base;
-        if (at >= code_page.span) return 0;
-        const byte = at % 4;
-        if (at & ~@as(u32, 3) == code_page.off_mrcps) return part_of(code_page.ready, byte, width);
-        return part_of(self.code_shadow[at / 4], byte, width);
+        return self.code.read(address, width);
     }
 
     pub fn codeWrite(self: *Mram, address: u32, width: u3, value: u32) void {
-        const at = address -% code_page.base;
-        if (at >= code_page.span) return;
-        const word = at / 4;
-        self.code_shadow[word] = merge(self.code_shadow[word], at % 4, width, value);
+        self.code.write(address, width, value);
     }
 
     /// MENTRYR. The key has to be there, and leaving program/erase mode is

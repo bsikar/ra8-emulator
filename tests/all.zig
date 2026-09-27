@@ -94,6 +94,7 @@ test {
     _ = @import("periph/icu_test.zig");
     _ = @import("periph/lvd_test.zig");
     _ = @import("periph/maci_test.zig");
+    _ = @import("periph/mram_code_test.zig");
     _ = @import("periph/mram_otp_test.zig");
     _ = @import("periph/mipi_csi_short_test.zig");
     _ = @import("periph/mipi_csi_test.zig");
