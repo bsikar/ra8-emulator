@@ -19,6 +19,7 @@ pub const periph = struct {
     pub const adc = @import("periph/adc.zig");
     pub const adc_scan = @import("periph/adc_scan.zig");
     pub const agt = @import("periph/agt.zig");
+    pub const agt_clock = @import("periph/agt_clock.zig");
     pub const bkup = @import("periph/bkup.zig");
     pub const bkup_ctrl = @import("periph/bkup_ctrl.zig");
     pub const cac = @import("periph/cac.zig");
