@@ -16,8 +16,9 @@
 //! and a driver that programs SIZE last has drawn nothing.
 //!
 //! Every DRW register except STATUS, HWREVISION and the performance counters
-//! is write-only on silicon (HUM Ch 62.2, R/W column "W"), so the shadow
-//! below is not a convenience, it is the only copy of what was programmed.
+//! is write-only on silicon (HUM Ch 62.2, R/W column "W"), so the shadow below
+//! is not a convenience, it is the only copy of what was programmed, and the
+//! only thing a narrow store can merge its untouched lanes into.
 const std = @import("std");
 
 const engine = @import("../core/engine.zig");
@@ -25,39 +26,19 @@ const blend = @import("drw_blend.zig");
 const cache = @import("drw_cache.zig");
 const dlist = @import("drw_dlist.zig");
 const limit = @import("drw_limit.zig");
+const regs = @import("drw_regs.zig");
 const tex = @import("drw_tex.zig");
+const lanes = @import("lanes.zig");
 const pdctr = @import("pdctr.zig");
 const periph = @import("registry.zig");
 
-pub const win_base: u32 = 0x4044_4000;
-pub const win_span: u32 = 0x104;
-
-/// Register byte offsets this model tracks (HUM Ch 62.2).
-pub const off = struct {
-    /// CONTROL on write, STATUS on read.
-    pub const control: u32 = 0x000;
-    /// CONTROL2 on write, HWREVISION on read.
-    pub const control2: u32 = 0x004;
-    pub const color1: u32 = 0x064;
-    pub const color2: u32 = 0x068;
-    pub const size: u32 = 0x078;
-    pub const pitch: u32 = 0x07C;
-    /// Writing ORIGIN anchors the box and starts the render.
-    pub const origin: u32 = 0x080;
-    pub const cachectl: u32 = 0x0C4;
-    /// Writing DLISTSTART kicks the display-list reader.
-    pub const dliststart: u32 = 0x0C8;
-};
-
-pub const field = struct {
-    pub const size_mask: u32 = 0xFFFF;
-    pub const height_shift: u5 = 16;
-};
-
-/// HWREVISION as read from an EK-RA8D2 over J-Link with the domain powered
-/// (HUM Ch 62.2.6 p 3696). Reads 0 while the domain is gated, which is the
-/// cheapest "is my engine alive" check a driver can make.
-pub const hardware_revision: u32 = 0x0FBE_0107;
+/// The map is next door in drw_regs.zig, re-exported so a caller still names
+/// an offset on the block.
+pub const win_base = regs.win_base;
+pub const win_span = regs.win_span;
+pub const off = regs.off;
+pub const field = regs.field;
+pub const hardware_revision = regs.hardware_revision;
 
 /// Why a render the firmware asked for produced no pixels. Both unmodelled
 /// cases fail SAFE: nothing is drawn, so an app relying on them goes visibly
@@ -159,24 +140,29 @@ pub const Drw = struct {
     /// STATUS reads as idle apart from CACHEDIRTY: this model rasterizes
     /// inside the ORIGIN write, so the engine is never busy by the time
     /// firmware can look, but pixels the framebuffer cache is still holding
-    /// are a thing a driver polls for before it reads the framebuffer.
-    /// Every other register is write-only and reads back zero, HWREVISION
-    /// aside.
+    /// are a thing a driver polls for. Every other register is write-only and
+    /// reads back zero, HWREVISION aside.
     pub fn read(self: *Drw, address: u32, width: u3) u32 {
-        _ = width;
         if (!self.domain.powered()) {
             self.dark_reads +%= 1;
             return 0;
         }
-        return switch (address - win_base) {
+        const offset = address - win_base;
+        return lanes.part(self.readWord(lanes.word(offset)), lanes.lane(offset), width);
+    }
+
+    /// The whole register an access lands in, before its lanes are cut.
+    fn readWord(self: *Drw, offset: u32) u32 {
+        return switch (offset) {
             off.control => if (self.pixel_cache.dirty()) cache.status.cache_dirty else 0,
             off.control2 => hardware_revision,
             else => 0,
         };
     }
 
+    /// A store reaches the lanes the width names and no others: a halfword
+    /// into the top of SIZE sets the height and leaves the width standing.
     pub fn write(self: *Drw, address: u32, width: u3, value: u32) void {
-        _ = width;
         // An unpowered block does not latch: dev snoops the value anyway, so
         // a firmware that forgot PDCTRGD draws a complete picture there and
         // nothing on the bench.
@@ -185,13 +171,40 @@ pub const Drw = struct {
             return;
         }
         self.writes +%= 1;
-        switch (address - win_base) {
+        const offset = address - win_base;
+        const word = lanes.word(offset);
+        self.writeWord(word, lanes.merge(self.held(word), lanes.lane(offset), width, value));
+    }
+
+    /// What the shadow holds, which is what a narrow store merges into: these
+    /// registers are write-only on silicon, so it is the only place the lanes
+    /// an access does not name survive. One consumed by its write rather than
+    /// kept (CACHECTL, DLISTSTART, TEXCLDATA) holds nothing and merges into 0.
+    fn held(self: *const Drw, offset: u32) u32 {
+        if (self.limits.held(offset)) |value| return value;
+        if (self.texture.held(offset)) |value| return value;
+        return switch (offset) {
+            off.control => self.control,
+            off.control2 => self.control2,
+            off.color1 => self.color1,
+            off.color2 => self.color2,
+            off.size => self.size,
+            off.pitch => self.pitch,
+            off.origin => self.origin,
+            else => 0,
+        };
+    }
+
+    /// The whole register once the lanes are merged in. An access naming any
+    /// lane of ORIGIN still triggers: the strobe is the register's.
+    fn writeWord(self: *Drw, offset: u32, value: u32) void {
+        switch (offset) {
             off.origin => {
                 self.origin = value;
                 self.render();
             },
             off.dliststart => self.runList(value),
-            else => self.latch(address - win_base, value),
+            else => self.latch(offset, value),
         }
     }
 
@@ -293,7 +306,7 @@ pub const Drw = struct {
         if (self.pixel_cache.store(self.memory, at, bytes, stored)) return;
         var cell = [_]u8{0} ** 4;
         const slot = cell[0..bytes];
-        store(slot, stored);
+        cache.pack(slot, stored);
         memory.write(at, slot) catch {
             self.faults +%= 1;
         };
@@ -304,14 +317,14 @@ pub const Drw = struct {
     /// while the cache holds a newer value is how a second primitive over
     /// the same pixel composites against the wrong colour.
     fn destination(self: *Drw, memory: engine.Engine, at: u32, bytes: u32) ?u32 {
-        if (self.pixel_cache.load(at)) |held| return held;
+        if (self.pixel_cache.load(at)) |cached| return cached;
         var cell = [_]u8{0} ** 4;
         const slot = cell[0..bytes];
         memory.read(at, slot) catch {
             self.faults +%= 1;
             return null;
         };
-        return load(slot);
+        return cache.unpack(slot);
     }
 
     /// An init ORIGIN write with nothing programmed yet is not a failed
@@ -369,17 +382,6 @@ pub const Drw = struct {
         };
     }
 };
-
-/// A framebuffer pixel is one, two or four little-endian bytes wide.
-fn load(slot: []const u8) u32 {
-    var value: u32 = 0;
-    for (slot, 0..) |byte, index| value |= @as(u32, byte) << @intCast(index * 8);
-    return value;
-}
-
-fn store(slot: []u8, value: u32) void {
-    for (slot, 0..) |*byte, index| byte.* = @truncate(value >> @intCast(index * 8));
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Drw = @ptrCast(@alignCast(context));

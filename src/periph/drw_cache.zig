@@ -142,7 +142,7 @@ pub const Framebuffer = struct {
         };
         var slot = [_]u8{0} ** 4;
         const span = slot[0..cell.bytes];
-        for (span, 0..) |*byte, index| byte.* = @truncate(cell.value >> @intCast(index * 8));
+        pack(span, cell.value);
         target.write(cell.at, span) catch {
             self.faults +%= 1;
             return;
@@ -172,3 +172,16 @@ pub const Texture = struct {
         self.enabled = word & bits.enable_tx != 0;
     }
 };
+
+/// A framebuffer cell is one, two or four little-endian bytes. Both the
+/// write-back above and the rasterizer in drw.zig move pixels through this
+/// shape, so the arithmetic is here once rather than in both.
+pub fn pack(slot: []u8, value: u32) void {
+    for (slot, 0..) |*byte, index| byte.* = @truncate(value >> @intCast(index * 8));
+}
+
+pub fn unpack(slot: []const u8) u32 {
+    var value: u32 = 0;
+    for (slot, 0..) |byte, index| value |= @as(u32, byte) << @intCast(index * 8);
+    return value;
+}

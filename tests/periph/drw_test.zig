@@ -347,3 +347,53 @@ test "a run that never touched the engine has nothing to narrate" {
     unit.write(at(drw.off.color1), 4, 1);
     try std.testing.expect(!unit.quiet());
 }
+
+test "a narrow store reaches the lanes it names and leaves the rest standing" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = drw.Drw.init(&domain);
+    // A halfword into the top of SIZE is the height, not a new box.
+    unit.write(at(drw.off.size), 4, 480 | @as(u32, 272) << drw.field.height_shift);
+    unit.write(at(drw.off.size + 2), 2, 136);
+    try std.testing.expectEqual(@as(u32, 480), unit.box().width);
+    try std.testing.expectEqual(@as(u32, 136), unit.box().height);
+    // A byte into the top of COLOR1 is the alpha, not a new colour.
+    unit.write(at(drw.off.color1), 4, 0x0012_3456);
+    unit.write(at(drw.off.color1 + 3), 1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0xFF12_3456), unit.color1);
+    // A pitch laid down in two halfword stores keeps both halves.
+    unit.write(at(drw.off.pitch), 2, 0x0480);
+    unit.write(at(drw.off.pitch + 2), 2, 0x0001);
+    try std.testing.expectEqual(@as(u32, 0x0001_0480), unit.pitch);
+}
+
+test "a narrow store into a limiter keeps the lanes it does not name" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = drw.Drw.init(&domain);
+    unit.write(at(limit.off.start), 4, 0x1234_5678);
+    unit.write(at(limit.off.start), 2, 0xABCD);
+    try std.testing.expectEqual(@as(i32, @bitCast(@as(u32, 0x1234_ABCD))), unit.limits.edges[0].start);
+}
+
+test "a halfword read of HWREVISION answers the half it asked for" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = drw.Drw.init(&domain);
+    try std.testing.expectEqual(@as(u32, 0x0107), unit.read(at(drw.off.control2), 2));
+    try std.testing.expectEqual(@as(u32, 0x0FBE), unit.read(at(drw.off.control2 + 2), 2));
+    try std.testing.expectEqual(@as(u32, 0xBE), unit.read(at(drw.off.control2 + 2), 1));
+}
+
+test "an ORIGIN half laid on top of the other triggers the box it makes" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.close();
+
+    programFill(&bench.unit, 2, 2, 8, 0xFFFF_0000);
+    bench.unit.write(at(drw.off.origin), 2, fb_base & 0xFFFF);
+    bench.unit.write(at(drw.off.origin + 2), 2, fb_base >> 16);
+    try std.testing.expectEqual(fb_base, bench.unit.origin);
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.renders);
+    try std.testing.expectEqual(@as(u64, 4), bench.unit.pixels);
+}

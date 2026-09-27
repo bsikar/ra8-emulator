@@ -128,6 +128,20 @@ pub const Set = struct {
         return true;
     }
 
+    /// What this set holds for a register, so a narrow store keeps the lanes
+    /// it does not name. Null when the offset is not one of this set's, the
+    /// same seam `latch` answers on.
+    pub fn held(self: *const Set, offset: u32) ?u32 {
+        if (index(offset, off.start)) |n| return @bitCast(self.edges[n].start);
+        if (index(offset, off.xadd)) |n| return @bitCast(self.edges[n].xadd);
+        if (index(offset, off.yadd)) |n| return @bitCast(self.edges[n].yadd);
+        return switch (offset) {
+            off.band1 => self.edges[0].band,
+            off.band2 => self.edges[1].band,
+            else => null,
+        };
+    }
+
     /// Whether the configuration limits anything at all. A render with no
     /// enable set is the plain bounding box, the case dev always handled.
     pub fn active(ctl: u32) bool {

@@ -238,3 +238,24 @@ test "a fresh source is quiet and a sampled one is not" {
     _ = source.sample(memory, readFormat(0x2), 0, 0);
     try std.testing.expect(!source.quiet());
 }
+
+test "a source answers what it holds for a register, and nothing for another's" {
+    var source = tex.Source{};
+    _ = source.latch(tex.off.texorigin, tex_base);
+    _ = source.latch(tex.off.texpitch, 8);
+    _ = source.latch(tex.off.colkey, 0x00FF_00FF);
+    try std.testing.expectEqual(@as(?u32, tex_base), source.held(tex.off.texorigin));
+    try std.testing.expectEqual(@as(?u32, 8), source.held(tex.off.texpitch));
+    try std.testing.expectEqual(@as(?u32, 0x00FF_00FF), source.held(tex.off.colkey));
+    try std.testing.expectEqual(@as(?u32, null), source.held(0x064));
+}
+
+test "the palette cursor and offset read back, and TEXCLDATA holds nothing" {
+    var source = tex.Source{};
+    _ = source.latch(tex.off.texcladdr, 0x12);
+    _ = source.latch(tex.off.texcloffset, 0x34);
+    _ = source.latch(tex.off.texcldata, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(?u32, 0x13), source.held(tex.off.texcladdr));
+    try std.testing.expectEqual(@as(?u32, 0x34), source.held(tex.off.texcloffset));
+    try std.testing.expectEqual(@as(?u32, 0), source.held(tex.off.texcldata));
+}
