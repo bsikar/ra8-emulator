@@ -230,3 +230,92 @@ test "a touched block is not quiet" {
     unit.write(elc.linkAddress(0), 2, elc.softwareEvent(3));
     try std.testing.expect(!unit.quiet());
 }
+
+test "the high byte of ELS is the high byte, not the low one" {
+    var unit = elc.Elc.init();
+    // A driver that only has the top bits to set writes the second byte:
+    // event 0x120 is 0x20 low, 0x01 high.
+    unit.write(elc.linkAddress(5), 1, 0x20);
+    unit.write(elc.linkAddress(5) + 1, 1, 0x01);
+    try std.testing.expectEqual(@as(u32, 0x120), unit.read(elc.linkAddress(5), 2));
+    try std.testing.expectEqual(@as(u32, 0x01), unit.read(elc.linkAddress(5) + 1, 1));
+    try std.testing.expectEqual(@as(?usize, 5), unit.target(0x120));
+}
+
+test "a byte store into ELSR leaves the other byte where it was" {
+    var unit = elc.Elc.init();
+    unit.write(elc.linkAddress(2), 2, 0x0123);
+    unit.write(elc.linkAddress(2), 1, 0x45);
+    try std.testing.expectEqual(@as(u32, 0x0145), unit.read(elc.linkAddress(2), 2));
+    try std.testing.expectEqual(@as(?usize, 2), unit.target(0x0145));
+}
+
+test "the reserved half above ELSR is not the slot" {
+    var unit = elc.Elc.init();
+    unit.write(elc.linkAddress(9), 2, elc.softwareEvent(0));
+    unit.write(elc.linkAddress(9) + 2, 2, 0x03FF);
+    try std.testing.expectEqual(@as(u32, elc.softwareEvent(0)), unit.read(elc.linkAddress(9), 2));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(elc.linkAddress(9) + 2, 2));
+    try std.testing.expectEqual(@as(u32, 1), unit.linkCount());
+}
+
+test "a store to the reserved bytes above a generator triggers nothing" {
+    var unit = elc.Elc.init();
+    enable(&unit);
+    unit.write(elc.generatorAddress(0), 1, step.unlock);
+    unit.write(elc.generatorAddress(0), 1, step.arm);
+    unit.write(elc.generatorAddress(0) + 2, 1, step.trigger);
+    try std.testing.expectEqual(@as(u32, 0), unit.generated);
+    try std.testing.expectEqual(@as(u32, 0), unit.unarmed);
+    try std.testing.expectEqual(@as(u32, 0), unit.inhibited);
+    // The arming step is still standing, so the real trigger still fires.
+    unit.write(elc.generatorAddress(0), 1, step.trigger);
+    try std.testing.expectEqual(@as(u32, 1), unit.generated);
+}
+
+test "a reserved byte of a generator reads zero, not the register beside it" {
+    var unit = elc.Elc.init();
+    try std.testing.expectEqual(@as(u32, elc.field.wi), unit.read(elc.generatorAddress(1), 1));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(elc.generatorAddress(1) + 1, 1));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(elc.generatorAddress(1) + 3, 1));
+}
+
+test "a word access to a generator carries the byte and drops the rest" {
+    var unit = elc.Elc.init();
+    enable(&unit);
+    // FSP writes the byte, but a word store of the same value is the same
+    // register: the three reserved bytes above it are not.
+    unit.write(elc.generatorAddress(3), 4, step.arm);
+    unit.write(elc.generatorAddress(3), 4, step.trigger);
+    try std.testing.expectEqual(@as(u32, 1), unit.generated);
+    try std.testing.expectEqual(@as(u32, elc.field.wi), unit.read(elc.generatorAddress(3), 4));
+}
+
+test "ELCR is one byte, and the bytes above it are not the block's enable" {
+    var unit = elc.Elc.init();
+    unit.write(elc.win_base + 1, 1, elc.field.elcon);
+    try std.testing.expect(!unit.enabled());
+    unit.write(elc.win_base, 1, elc.field.elcon);
+    try std.testing.expect(unit.enabled());
+    try std.testing.expectEqual(@as(u32, elc.field.elcon), unit.read(elc.win_base, 4));
+}
+
+test "a narrow access to an attribution word names its own bytes" {
+    var unit = elc.Elc.init();
+    unit.write(elc.win_base + elc.off.elcsara, 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 0xBEEF), unit.read(elc.win_base + elc.off.elcsara, 2));
+    try std.testing.expectEqual(@as(u32, 0xDEAD), unit.read(elc.win_base + elc.off.elcsara + 2, 2));
+    unit.write(elc.win_base + elc.off.elcsara + 2, 2, 0x1234);
+    try std.testing.expectEqual(
+        @as(u32, 0x1234_BEEF),
+        unit.read(elc.win_base + elc.off.elcsara, 4),
+    );
+}
+
+test "a reserved word in the window answers zero and keeps nothing" {
+    var unit = elc.Elc.init();
+    const reserved = elc.win_base + 0x014;
+    unit.write(reserved, 4, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(reserved, 4));
+    try std.testing.expect(unit.quiet());
+}
