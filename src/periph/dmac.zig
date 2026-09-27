@@ -23,7 +23,9 @@ const std = @import("std");
 
 const engine = @import("../core/engine.zig");
 const dma_bank = @import("dma_bank.zig");
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
+const regs = @import("dmac_regs.zig");
 const xfer = @import("dmac_xfer.zig");
 
 /// DMAC0 channel geometry (ra8_dmac_regs.h).
@@ -35,35 +37,11 @@ pub const win_span: u32 = channel_stride * @as(u32, channel_count);
 /// DMAC0 channel-0 transfer-end event; the eight channels run from there.
 pub const event_base: u16 = 0x0E0;
 
-/// Per-channel register offsets (the subset a driver touches).
-pub const off = struct {
-    pub const dmsar: u32 = 0x00;
-    pub const dmdar: u32 = 0x04;
-    pub const dmcra: u32 = 0x08;
-    pub const dmcrb: u32 = 0x0C;
-    pub const dmtmd: u32 = 0x10;
-    pub const dmint: u32 = 0x13;
-    pub const dmamd: u32 = 0x14;
-    pub const dmofr: u32 = 0x18;
-    pub const dmcnt: u32 = 0x1C;
-    pub const dmreq: u32 = 0x1D;
-    pub const dmsts: u32 = 0x1E;
-};
-
-pub const field = struct {
-    /// DMCNT.DTE b0: this channel is armed.
-    pub const dte: u8 = 0x01;
-    /// DMREQ.SWREQ b0: the software transfer request.
-    pub const swreq: u8 = 0x01;
-    /// DMREQ.CLRS b4: keep the request set, so one store drains the count.
-    pub const clrs: u8 = 0x10;
-    /// DMINT.DTIE b4: interrupt the CPU when the count is spent.
-    pub const dtie: u8 = 0x10;
-    /// DMSTS.DTIF b4: transfer-end status, write 0 to clear.
-    pub const dtif: u8 = 0x10;
-    /// DMSTS.ACT b7: a transfer is in progress.
-    pub const act: u8 = 0x80;
-};
+/// The register map of one channel, and the lanes each register occupies,
+/// live in src/periph/dmac_regs.zig. They are re-exported here because a
+/// channel's window is what most callers mean by "the DMAC".
+pub const off = regs.off;
+pub const field = regs.field;
 
 /// A ceiling on one continuous request, so a mis-programmed channel stops
 /// instead of walking the whole address space.
@@ -133,7 +111,7 @@ pub const Channel = struct {
 
     /// DMCNT.DTE going up loads the counts, the way silicon does: a channel
     /// whose count is spent has to be re-armed before it moves again.
-    fn arm(self: *Channel) void {
+    pub fn arm(self: *Channel) void {
         self.pending = xfer.latchedCount(self.dmcra);
         self.blocks = xfer.latchedBlocks(self.dmcrb);
     }
@@ -265,58 +243,25 @@ pub const Dmac = struct {
     }
 
     pub fn read(self: *Dmac, address: u32, width: u3) u32 {
-        _ = width;
-        const index = (address -% win_base) / channel_stride;
+        const offset = address -% win_base;
+        const index = offset / channel_stride;
         if (index >= channel_count) return 0;
-        const channel = &self.channels[index];
-        return switch ((address -% win_base) % channel_stride) {
-            off.dmsar => channel.dmsar,
-            off.dmdar => channel.dmdar,
-            off.dmcra => channel.dmcra,
-            off.dmcrb => channel.dmcrb,
-            off.dmtmd => channel.dmtmd,
-            off.dmamd => channel.dmamd,
-            off.dmofr => channel.dmofr,
-            off.dmint => channel.dmint,
-            off.dmcnt => channel.dmcnt,
-            off.dmsts => channel.dmsts,
-            else => 0,
-        };
+        const local = offset % channel_stride;
+        const value = regs.wordValue(&self.channels[index], lanes.word(local));
+        return lanes.part(value, lanes.lane(local), width);
     }
 
     pub fn write(self: *Dmac, address: u32, width: u3, value: u32) void {
-        _ = width;
-        const index = (address -% win_base) / channel_stride;
+        const offset = address -% win_base;
+        const index = offset / channel_stride;
         if (index >= channel_count) return;
-        const offset = (address -% win_base) % channel_stride;
-        if (offset == off.dmreq) {
-            if (value & field.swreq == 0) return;
-            return self.request(index, value & field.clrs != 0);
-        }
-        self.store(index, offset, value);
-    }
-
-    /// A plain register store. DMCNT.DTE going up latches the counts, and
-    /// DMSTS's status bits are write-0-to-clear.
-    fn store(self: *Dmac, index: usize, offset: u32, value: u32) void {
+        const local = offset % channel_stride;
+        const base = lanes.word(local);
+        const at = lanes.lane(local);
         const channel = &self.channels[index];
-        switch (offset) {
-            off.dmsar => channel.dmsar = value,
-            off.dmdar => channel.dmdar = value,
-            off.dmcra => channel.dmcra = value,
-            off.dmcrb => channel.dmcrb = value,
-            off.dmtmd => channel.dmtmd = @truncate(value),
-            off.dmamd => channel.dmamd = @truncate(value),
-            off.dmofr => channel.dmofr = value,
-            off.dmint => channel.dmint = @truncate(value),
-            off.dmsts => channel.dmsts &= @truncate(value),
-            off.dmcnt => {
-                const raising = value & field.dte != 0 and !channel.armed();
-                channel.dmcnt = @truncate(value);
-                if (raising) channel.arm();
-            },
-            else => {},
-        }
+        const merged = lanes.merge(regs.wordValue(channel, base), at, width, value);
+        const asked = regs.apply(channel, base, merged, lanes.named(at, width));
+        if (asked) |ask| self.request(index, ask.continuous);
     }
 
     pub fn block(self: *Dmac) periph.Block {
