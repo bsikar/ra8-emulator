@@ -59,14 +59,20 @@
 //! crossing raises GTST.TCFA or TCFB. Everything that file does not claim is
 //! still shadowed.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the count direction and buffer registers,
-//! so every channel counts up in saw mode; the write-protection register; and
+//! THE COUNTER MODE lives in src/periph/gpt_mode.zig: GTCR's MD field picks
+//! the shape a channel counts in, so a triangle channel rises to the period
+//! and falls back to zero instead of sawing, and a one-shot channel stops
+//! itself at the period instead of wrapping forever.
+//!
+//! NOT MODELLED, AND NOT GUESSED: the buffer registers, so a duty loaded for
+//! the next cycle takes effect at once; the write-protection register; and
 //! the per-source interrupt enables in GTINTAD, so channel 0's overflow
 //! always raises and a compare match never does.
 const std = @import("std");
 
 const clk = @import("gpt_clock.zig");
 const compare = @import("gpt_compare.zig");
+const md = @import("gpt_mode.zig");
 const periph = @import("registry.zig");
 
 /// The compare pair, reached as `gpt.match` the way the other split blocks in
@@ -75,6 +81,9 @@ pub const match = compare;
 
 /// The count source, reached as `gpt.clock` the same way.
 pub const clock = clk;
+
+/// The counter mode, reached as `gpt.mode`.
+pub const mode = md;
 
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
@@ -135,6 +144,10 @@ pub const Channel = struct {
     st: u32 = 0,
     shadow: [stride]u8 = @splat(0),
     overflows: u32 = 0,
+    /// Times a triangle came back to zero. Always zero outside one.
+    underflows: u32 = 0,
+    /// Which way the count is going. Only a triangle ever sets it false.
+    rising: bool = true,
     compares: compare.Pair = .{},
 
     pub fn running(self: Channel) bool {
@@ -146,30 +159,47 @@ pub const Channel = struct {
         return clk.sourceOf(self.cr);
     }
 
+    /// The shape this channel counts in, out of GTCR.MD.
+    pub fn shape(self: Channel) md.Mode {
+        return md.modeOf(self.cr);
+    }
+
     /// The period a zero GTPR stands for.
     pub fn periodOrDefault(self: Channel) u32 {
         return if (self.period == 0) default_period else self.period;
     }
 
-    /// One chunk of counting. Returns how many times the count passed the
-    /// period, which is zero for a stopped or in-range channel.
+    /// One chunk of counting, in the shape GTCR.MD selects. Returns how many
+    /// times the count reached the period, which is zero for a stopped or
+    /// in-range channel.
     pub fn tick(self: *Channel) u32 {
         if (!self.running()) return 0;
         const period = self.periodOrDefault();
-        const span = @as(u64, period) + 1;
         const before = self.cnt;
-        const next = @as(u64, self.cnt) + clk.step(step_per_tick, self.source());
-        var wraps: u32 = 0;
-        if (next <= period) {
-            self.cnt = @intCast(next);
-        } else {
-            wraps = @intCast(next / span);
-            self.cnt = @intCast(next % span);
+        const kind = self.shape();
+        const moved = md.advance(kind, self.cnt, self.rising, period, clk.step(step_per_tick, self.source()));
+        self.cnt = moved.cnt;
+        self.rising = moved.rising;
+        if (moved.peaks != 0) {
             self.st |= status.tcfpo;
-            self.overflows +%= wraps;
+            self.overflows +%= moved.peaks;
         }
-        self.st |= self.compares.step(before, self.cnt, wraps);
-        return wraps;
+        if (moved.troughs != 0) {
+            self.st |= status.tcfpu;
+            self.underflows +%= moved.troughs;
+        }
+        if (moved.halted) self.cr &= ~control.cst;
+        self.st |= self.matched(kind, before, moved, period);
+        return moved.peaks;
+    }
+
+    /// The compare flags this chunk raised. A saw chunk is an up-count and is
+    /// described by its wraps; a triangle one may have turned, so it is
+    /// described by the span of counts it covered.
+    fn matched(self: *Channel, kind: md.Mode, before: u32, moved: md.Step, period: u32) u32 {
+        if (!kind.symmetric()) return self.compares.step(before, moved.cnt, moved.peaks);
+        const span = md.visited(before, moved, period);
+        return self.compares.stepSpan(before, span.lo, span.hi);
     }
 
     fn readByte(self: *const Channel, local: u32) u8 {
@@ -221,7 +251,7 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: Channel) bool {
-        return self.overflows == 0 and !self.running() and self.compares.quiet();
+        return self.overflows == 0 and self.underflows == 0 and !self.running() and self.compares.quiet();
     }
 };
 
