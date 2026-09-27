@@ -233,3 +233,85 @@ test "powering the domain back off takes the framebuffer away again" {
     domain.write(pdctr.win_base, 1, pdctr.field.pdde);
     try std.testing.expectEqual(@as(?glcdc.Framebuffer, null), unit.framebuffer());
 }
+
+test "a halfword store keeps the lanes it does not name" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    // The whole descriptor word: stride above, reserved below.
+    unit.write(layer1 + glcdc.off.flm3, 4, 0xFFFF_1234);
+    // A driver setting the stride alone stores a halfword at the high half.
+    unit.write(layer1 + glcdc.off.flm3 + 2, 2, 960);
+    try std.testing.expectEqual(
+        @as(u32, (960 << 16) | 0x1234),
+        unit.read(layer1 + glcdc.off.flm3, 4),
+    );
+}
+
+test "a halfword read answers the half it names, not the low one" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(layer1 + glcdc.off.flm3, 4, (960 << 16) | 0x1234);
+    try std.testing.expectEqual(@as(u32, 960), unit.read(layer1 + glcdc.off.flm3 + 2, 2));
+    try std.testing.expectEqual(@as(u32, 0x1234), unit.read(layer1 + glcdc.off.flm3, 2));
+    try std.testing.expectEqual(@as(u32, 0x34), unit.read(layer1 + glcdc.off.flm3, 1));
+    try std.testing.expectEqual(@as(u32, 0x03), unit.read(layer1 + glcdc.off.flm3 + 3, 1));
+}
+
+test "a byte store into the format lane leaves the rest of FLM6 standing" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(layer1 + glcdc.off.flm6, 4, 0x0000_00AB);
+    // FORMAT sits at [30:28], so a driver setting it alone stores the top byte.
+    const format = @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 4;
+    unit.write(layer1 + glcdc.off.flm6 + 3, 1, format);
+    try std.testing.expectEqual(
+        @as(u32, (format << 24) | 0xAB),
+        unit.read(layer1 + glcdc.off.flm6, 4),
+    );
+}
+
+test "a layer programmed with narrow stores still decodes" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    // Every field written the narrow way a driver with an 8- or 16-bit
+    // register accessor would write it.
+    unit.write(layer1 + glcdc.off.flm2, 2, fb_base & 0xFFFF);
+    unit.write(layer1 + glcdc.off.flm2 + 2, 2, fb_base >> 16);
+    unit.write(layer1 + glcdc.off.flm3 + 2, 2, 960);
+    unit.write(layer1 + glcdc.off.flm5 + 2, 2, 271);
+    unit.write(layer1 + glcdc.off.flm6 + 3, 1, @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 4);
+    unit.write(layer1 + glcdc.off.flmrd, 1, 1);
+    unit.write(bg_en, 1, 1);
+    const frame = unit.framebuffer() orelse return error.NoFramebuffer;
+    try std.testing.expectEqual(fb_base, frame.base);
+    try std.testing.expectEqual(@as(u32, 480), frame.width);
+    try std.testing.expectEqual(@as(u32, 272), frame.height);
+    try std.testing.expectEqual(glcdc.Format.rgb565, frame.format);
+    try std.testing.expect(frame.enabled);
+}
+
+test "a narrow store does not start a layer twice" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(layer1 + glcdc.off.flmrd, 1, 1);
+    unit.write(layer1 + glcdc.off.flmrd + 1, 1, 0);
+    unit.write(layer1 + glcdc.off.flmrd, 1, 1);
+    try std.testing.expectEqual(@as(u32, 1), unit.starts);
+}
+
+test "a CLUT entry answers a narrow read from the lane it names" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    // GR2_CLUT0 entry 0: the third of the four 1 KiB planes the window opens with.
+    const slot = glcdc.win_base + 0x800;
+    unit.write(slot, 4, 0xAABB_CCDD);
+    try std.testing.expectEqual(@as(u32, 0xAABB_CCDD), unit.read(slot, 4));
+    try std.testing.expectEqual(@as(u32, 0xAABB), unit.read(slot + 2, 2));
+    try std.testing.expectEqual(@as(u32, 0xDD), unit.read(slot, 1));
+}

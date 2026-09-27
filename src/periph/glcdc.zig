@@ -23,6 +23,7 @@ const periph = @import("registry.zig");
 const pdctr = @import("pdctr.zig");
 const engine = @import("../core/engine.zig");
 const clut = @import("glcdc_clut.zig");
+const lanes = @import("lanes.zig");
 const pixel = @import("glcdc_pixel.zig");
 const scan = @import("glcdc_scan.zig");
 const blend = @import("glcdc_blend.zig");
@@ -180,21 +181,25 @@ pub const Glcdc = struct {
 
     /// An unpowered block does not drive the bus: reads give zero, and the
     /// read is counted so the run can say the panel was programmed dark.
+    /// Every register here is 32 bits wide, so a read is served from the
+    /// word it lands in and cut to the lanes it named.
     pub fn read(self: *Glcdc, address: u32, width: u3) u32 {
-        _ = width;
         if (!self.domain.powered()) {
             self.dark_reads +%= 1;
             return 0;
         }
         const offset = address - win_base;
-        // A CLUT entry is a register and reads back: a driver that fills a
-        // palette and checks its work has to find it there.
+        const held = self.readWord(lanes.word(offset));
+        return lanes.part(held, lanes.lane(offset), width);
+    }
+
+    /// The whole register at a word-aligned offset. A CLUT entry reads back so
+    /// a driver can check the palette it filled, and STMON is the block's own
+    /// status rather than the last word written at it, so both answer first.
+    fn readWord(self: *Glcdc, offset: u32) u32 {
         if (clut.slotOf(offset)) |slot| {
             return self.palettes[slot.layer - 1].load(slot.plane, slot.index);
         }
-        // STMON is not a shadow word: the status is the block's own, and a
-        // driver waiting a frame out reads it here rather than reading back
-        // whatever it last wrote.
         if (self.system.read(offset)) |value| return value;
         return self.word(offset);
     }
@@ -203,14 +208,20 @@ pub const Glcdc = struct {
     /// is dropped here, counted rather than absorbed. dev snoops the value
     /// into its shadow whatever the domain is doing, so a firmware that
     /// forgot PDCTRGD gets a full framebuffer descriptor there and a dark
-    /// panel on the bench.
+    /// panel on the bench. A narrow store is merged into the word it lands in,
+    /// so the lanes it does not name keep what they held.
     pub fn write(self: *Glcdc, address: u32, width: u3, value: u32) void {
-        _ = width;
         if (!self.domain.powered()) {
             self.dropped_unpowered +%= 1;
             return;
         }
         const offset = address - win_base;
+        const at = lanes.word(offset);
+        const held = self.readWord(at);
+        self.writeWord(at, lanes.merge(held, lanes.lane(offset), width, value));
+    }
+
+    fn writeWord(self: *Glcdc, offset: u32, value: u32) void {
         if (self.isStart(offset, value)) self.starts +%= 1;
         if (self.latchPalette(offset, value)) {
             self.writes +%= 1;
@@ -344,9 +355,7 @@ pub const Glcdc = struct {
         return value & field.renb != 0 and self.word(offset) & field.renb == 0;
     }
 
-    /// The window is word-addressed here: the driver programs these
-    /// registers a word at a time, and a byte write lands in the word that
-    /// holds it rather than being modelled sub-word.
+    /// The shadow behind the window, zero past the end of it.
     fn word(self: *const Glcdc, offset: u32) u32 {
         const index = offset / 4;
         if (index >= words) return 0;
