@@ -16,6 +16,7 @@ const periph = @import("registry.zig");
 const bus = @import("riic_bus.zig");
 const flag = @import("riic_flags.zig");
 const riic_target = @import("riic_target.zig");
+const access = @import("riic_access.zig");
 
 pub const win_base = flag.win_base;
 pub const win_span = flag.win_span;
@@ -292,20 +293,37 @@ pub const Riic = struct {
         return true;
     }
 
+    /// An access of any width is the bytes it names, low lane first: every
+    /// register in this window is a byte, so a halfword or word access
+    /// reaches two or four of them, not just the one it starts on.
     pub fn read(self: *Riic, address: u32, width: u3) u32 {
-        _ = width;
+        var answer: u32 = 0;
+        var index: u32 = 0;
+        while (index < access.span(width)) : (index += 1) {
+            answer = access.place(answer, self.readByte(address +% index), index);
+        }
+        return answer;
+    }
+
+    pub fn write(self: *Riic, address: u32, width: u3, value: u32) void {
+        var index: u32 = 0;
+        while (index < access.span(width)) : (index += 1) {
+            self.writeByte(address +% index, access.byteAt(value, index));
+        }
+    }
+
+    fn readByte(self: *Riic, address: u32) u8 {
         const offset = address -% flag.win_base;
         const index = offset / flag.channel_stride;
         if (index >= flag.channel_count) return 0;
         return self.channels[index].read(offset % flag.channel_stride);
     }
 
-    pub fn write(self: *Riic, address: u32, width: u3, value: u32) void {
-        _ = width;
+    fn writeByte(self: *Riic, address: u32, byte: u8) void {
         const offset = address -% flag.win_base;
         const index = offset / flag.channel_stride;
         if (index >= flag.channel_count) return;
-        self.channels[index].write(&self.devices, offset % flag.channel_stride, @truncate(value));
+        self.channels[index].write(&self.devices, offset % flag.channel_stride, byte);
     }
 
     pub fn block(self: *Riic) periph.Block {
