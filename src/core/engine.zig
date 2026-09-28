@@ -16,6 +16,7 @@ const nvic = @import("../periph/nvic.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const reboot = @import("reboot.zig");
+const stop = @import("stop.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -87,6 +88,10 @@ pub const Session = struct {
     /// engine to perform. A reset resets the core, and the core is the
     /// engine's, so the board asks and this loop does it.
     reboot: ?*reboot.Reboot = null,
+    /// A counter in RAM to watch, and the floor that ends the run once it
+    /// gets there. Null watches nothing. A pointer rather than a copy so
+    /// the caller can ask afterwards whether the stop was what ended it.
+    stop: ?*stop.Stop = null,
 };
 
 /// Something to run at the chunk boundary. A thin vtable rather than a
@@ -307,6 +312,9 @@ pub const Engine = struct {
                 continue;
             };
             if (session.interrupts) |controller| _ = controller.dispatch(self) catch return Error.RunFailed;
+            // The counter is read here, after the boundary's blocks have
+            // run, so a value a peripheral advanced this chunk is seen.
+            if (session.stop) |watch| if (watch.met(self.readWord(watch.address) catch null)) break;
             pc = try self.register(.pc);
         }
         return null;

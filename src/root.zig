@@ -13,6 +13,8 @@ pub const core = struct {
     pub const memmap = @import("core/memmap.zig");
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
+    pub const symbols = @import("core/symbols.zig");
+    pub const stop = @import("core/stop.zig");
 };
 
 pub const periph = struct {
