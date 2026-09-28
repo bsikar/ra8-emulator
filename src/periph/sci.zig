@@ -23,9 +23,20 @@
 //! instruction-stepped emulator, so a byte written to TDR is captured and gone,
 //! and TDRE/TEND read as set. The receiver is a host-fed ring per channel, so
 //! RDRF is a fact about queued bytes rather than a value a driver wrote.
+//!
+//! RDR AND TDR ARE A DATA PORT, AND THE PORT IS THE BYTE RDAT/TDAT SITS IN.
+//! An access that does not name byte 0 of the word carries no character in
+//! either direction. The store side always said so. The read side did not:
+//! it popped the receive ring for any access landing anywhere in RDR, so a
+//! driver loading one of the bytes above RDAT ate a received character, was
+//! handed zero for it, and the run counted the byte as delivered while the
+//! next read of RDAT starved. Both directions are refused and counted now,
+//! and a refused read leaves the ring holding what it had, so the driver can
+//! come back with a load that names the data.
 const std = @import("std");
 const periph = @import("registry.zig");
 const sci_status = @import("sci_status.zig");
+const lanes = @import("lanes.zig");
 
 /// SCI_B geometry. The Non-secure alias is folded onto this base by the bus
 /// before anything here sees it.
@@ -83,7 +94,6 @@ pub const data_mask: u32 = 0xFF;
 /// console text.
 pub const limits = struct {
     pub const rx_queue: usize = 512;
-    pub const line: usize = 512;
 };
 
 /// A host-to-firmware byte ring. Fixed capacity on purpose: the model has no
@@ -146,6 +156,10 @@ pub const Channel = struct {
     unheard: u32 = 0,
     /// Stores aimed at CSR, FRSR or FTSR: the controller owns those words.
     status_stores: u32 = 0,
+    /// Loads of RDR that named a byte above RDAT. They take nothing.
+    unnamed_reads: u32 = 0,
+    /// Stores to TDR that named a byte above TDAT. They send nothing.
+    unnamed_stores: u32 = 0,
     rx: Ring = .{},
     /// What is on this channel's line, if anything.
     device: ?Device = null,
@@ -156,7 +170,8 @@ pub const Channel = struct {
 
     pub fn quiet(self: *const Channel) bool {
         return self.transmitted == 0 and self.received == 0 and
-            self.unsent == 0 and self.unheard == 0 and self.status_stores == 0;
+            self.unsent == 0 and self.unheard == 0 and self.status_stores == 0 and
+            self.unnamed_reads == 0 and self.unnamed_stores == 0;
     }
 
     /// CSR as this channel answers it. What those bits mean, and why they
@@ -170,35 +185,9 @@ pub const Channel = struct {
     }
 };
 
-/// The captured console line. The last finished line is kept as a slice, not a
-/// terminated buffer: nothing here crosses a C boundary.
-pub const Line = struct {
-    last: [limits.line]u8 = undefined,
-    last_len: usize = 0,
-    pending: [limits.line]u8 = undefined,
-    pending_len: usize = 0,
-    lines: u32 = 0,
-
-    pub fn slice(self: *const Line) []const u8 {
-        return self.last[0..self.last_len];
-    }
-
-    /// Accumulate one transmitted byte. A newline latches the pending line,
-    /// carriage return is dropped, and an over-long line stops growing rather
-    /// than wrapping onto itself.
-    pub fn feed(self: *Line, byte: u8) void {
-        if (byte == '\n') {
-            @memcpy(self.last[0..self.pending_len], self.pending[0..self.pending_len]);
-            self.last_len = self.pending_len;
-            self.pending_len = 0;
-            self.lines += 1;
-            return;
-        }
-        if (byte == '\r' or self.pending_len == limits.line) return;
-        self.pending[self.pending_len] = byte;
-        self.pending_len += 1;
-    }
-};
+/// The captured console line, and what it does with one that never ends,
+/// live in src/periph/sci_line.zig.
+pub const Line = @import("sci_line.zig").Line;
 
 /// The block: ten channels and the console line capture.
 pub const Sci = struct {
@@ -257,14 +246,15 @@ pub const Sci = struct {
         const index = offset / stride;
         if (index >= channels) return 0;
         const local = offset % stride;
-        const word = self.readRegister(@intCast(index), local & ~@as(u32, 3));
-        return part(word, local % 4, width);
+        const at = lanes.lane(local);
+        const word = self.readRegister(@intCast(index), lanes.word(local), at);
+        return lanes.part(word, at, width);
     }
 
-    fn readRegister(self: *Sci, index: usize, offset: u32) u32 {
+    fn readRegister(self: *Sci, index: usize, offset: u32, at: u32) u32 {
         const channel = &self.channels[index];
         return switch (offset) {
-            off_rdr => self.readData(index),
+            off_rdr => self.readData(index, at),
             off_ccr0 => channel.control,
             off_csr => channel.status(),
             off_frsr => sci_status.receive(channel.readable()),
@@ -276,10 +266,17 @@ pub const Sci = struct {
         };
     }
 
-    /// RDR takes the oldest queued byte. A read with the receiver disabled, or
-    /// with nothing queued, reads zero and is not counted as received.
-    fn readData(self: *Sci, index: usize) u32 {
+    /// RDR takes the oldest queued byte, and only for an access that names
+    /// RDAT. A load of a byte above it leaves the ring alone: taking a
+    /// character for a read that cannot carry it loses the character. A read
+    /// with the receiver disabled, or with nothing queued, reads zero and is
+    /// not counted as received.
+    fn readData(self: *Sci, index: usize, at: u32) u32 {
         const channel = &self.channels[index];
+        if (at != 0) {
+            channel.unnamed_reads +%= 1;
+            return 0;
+        }
         if (!channel.readable()) return 0;
         const byte = channel.rx.pop() orelse return 0;
         channel.received += 1;
@@ -293,7 +290,7 @@ pub const Sci = struct {
         const index = offset / stride;
         if (index >= channels) return;
         const local = offset % stride;
-        self.writeRegister(@intCast(index), local & ~@as(u32, 3), local % 4, width, value);
+        self.writeRegister(@intCast(index), lanes.word(local), lanes.lane(local), width, value);
     }
 
     fn writeRegister(self: *Sci, index: usize, word: u32, lane: u32, width: u3, value: u32) void {
@@ -306,11 +303,15 @@ pub const Sci = struct {
             // TDAT is TDR[7:0]. A narrow store that does not name that byte
             // carries no character, and the bits above it are the parity and
             // multiprocessor fields nothing here interprets.
-            off_tdr => if (lane == 0) self.writeData(index, @truncate(value & data_mask)),
+            off_tdr => if (lane == 0)
+                self.writeData(index, @truncate(value & data_mask))
+            else {
+                channel.unnamed_stores +%= 1;
+            },
             // A narrow store leaves the bytes it does not name where they
             // were, so setting RE with a byte store to CCR0+0 keeps the
             // interrupt enables sitting in the bytes above it.
-            off_ccr0 => channel.control = merge(channel.control, lane, width, value),
+            off_ccr0 => channel.control = lanes.merge(channel.control, lane, width, value),
             // CFCLR and FFCLR are write-1-to-clear over flags this model
             // derives rather than latches: TDRE and TEND never go down, and
             // RDRF follows the queue, so clearing them changes nothing.
@@ -360,24 +361,6 @@ pub const Sci = struct {
         };
     }
 };
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, lane: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(lane * 8);
-    const shifted = value >> shift;
-    return if (width == 1) shifted & 0xFF else shifted & 0xFFFF;
-}
-
-/// Fold a narrow store into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, lane: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(lane * 8);
-    const bits: u32 = if (width == 1) 0xFF else 0xFFFF;
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Sci = @ptrCast(@alignCast(context));

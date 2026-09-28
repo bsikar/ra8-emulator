@@ -7,7 +7,8 @@ const Writer = @import("report.zig").Writer;
 /// One line per SCI channel that moved bytes, plus the last console line the
 /// firmware printed. A TDR write made with CCR0.TE clear never leaves the
 /// transmitter on silicon, so those are reported apart from the bytes that
-/// did go out.
+/// did go out, and so are the accesses that landed in RDR or TDR without
+/// naming the byte the character sits in.
 pub fn sections(board: *Board, out: Writer) !void {
     if (board.serial.quiet()) return;
     for (&board.serial.channels, 0..) |*channel, index| {
@@ -24,6 +25,18 @@ pub fn sections(board: *Board, out: Writer) !void {
             try out.print(
                 "SCI{d}: REFUSED {d} store(s) to CSR/FRSR/FTSR, the controller owns those words\n",
                 .{ index, channel.status_stores },
+            );
+        }
+        if (channel.unnamed_reads != 0) {
+            try out.print(
+                "SCI{d}: REFUSED {d} load(s) of RDR above RDAT, the byte stayed queued\n",
+                .{ index, channel.unnamed_reads },
+            );
+        }
+        if (channel.unnamed_stores != 0) {
+            try out.print(
+                "SCI{d}: REFUSED {d} store(s) to TDR above TDAT, no character was sent\n",
+                .{ index, channel.unnamed_stores },
             );
         }
     }
