@@ -54,6 +54,29 @@ pub const Clocks = struct {
     /// Periods that pended the SysTick exception (TICKINT was set).
     pends: u64 = 0,
 
+    /// How many instructions apart the armed SysTick periods are, or zero
+    /// when nothing is armed to ask for a boundary at all.
+    ///
+    /// The run loop reads this to keep a boundary from being wider than the
+    /// period it is meant to deliver. A wrap sets COUNTFLAG and pends the
+    /// exception, and both are single bits: several wraps inside one stretch
+    /// of execution collapse into one. On the part each period raises its
+    /// own, so a firmware counting them (`s_tick_ms` in ra8_time.c, which
+    /// `ra8_delay_ms` then loops on) advances once where the part advances it
+    /// many times, and every delay built on it runs long by that ratio.
+    ///
+    /// The period is reload + 1 ticks and a tick is charged per instruction,
+    /// so the two are the same number. A disabled counter or a zero reload
+    /// never wraps and asks for nothing.
+    pub fn period(self: *const Clocks, core: anytype) u32 {
+        _ = self;
+        const csr = core.readWord(memmap.syst.csr) catch return 0;
+        if (csr & csr_enable == 0) return 0;
+        const reload = (core.readWord(memmap.syst.rvr) catch return 0) & counter_mask;
+        if (reload == 0) return 0;
+        return reload + 1;
+    }
+
     /// Charge `instructions` worth of time to both bases. `core` is anything
     /// that can read and write a PPB word; the engine is one.
     pub fn advance(self: *Clocks, core: anytype, instructions: u32) !void {
