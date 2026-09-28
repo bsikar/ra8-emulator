@@ -79,7 +79,12 @@ pub const Counters = struct {
     modelled: u64 = 0,
 };
 
-pub const max_blocks = 64;
+/// How many modelled blocks the bus holds. It was 64 and exactly 64 were
+/// attached, so the next block of any kind failed attach with
+/// TooManyBlocks. A peripheral whose registers sit in two or three separate
+/// runs needs an entry per run, so the ceiling has to lead the tree rather
+/// than sit flush against it.
+pub const max_blocks = 80;
 
 /// The peripheral bus: a small registry of modelled blocks plus the sparse
 /// register file behind them.

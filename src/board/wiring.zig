@@ -106,7 +106,7 @@ fn attachProtected(self: *Board) !void {
     self.backup = bkup.Bkup.init(&self.protection);
     try self.bus.add(self.backup.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
-    try self.bus.add(self.branches.block());
+    for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
     self.graphics = pdctr.Pdctr.init(&self.protection);
     try self.bus.add(self.graphics.block());
 }
