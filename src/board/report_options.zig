@@ -46,6 +46,12 @@ pub fn sections(board: *Board, out: Writer) !void {
     if (unit.keyless != 0) {
         try out.print("Extra-MRAM: REFUSED {d} MENTRYR write(s) carrying the wrong key\n", .{unit.keyless});
     }
+    if (unit.narrow_writes != 0) {
+        try out.print(
+            "Extra-MRAM: REFUSED {d} MENTRYR write(s) narrower than the register, no key was carried\n",
+            .{unit.narrow_writes},
+        );
+    }
     if (unit.read_only != 0) {
         try out.print(
             "Extra-MRAM: REFUSED {d} store(s) to MSTATR/MASTAT, firmware cannot clear its own errors\n",

@@ -41,6 +41,22 @@
 //! keep the bytes they do not name, where dev's regs[off / 4] = value wipes
 //! them.
 //!
+//! THE KEY HAS TO BE IN THE WRITE. MENTRYR is a sixteen-bit register whose
+//! high half is the key and whose bit 7 is the mode, and the driver writes
+//! the pair in one halfword store, 0xAA80 in and 0xAA00 out. The key was
+//! judged on the word AFTER the store had been folded into the shadow, so
+//! the 0xAA of an earlier keyed write stayed there and vouched for every
+//! later access: a byte store of 0x80 at MENTRYR, which names no part of
+//! the key at all, read as 0xAA80 and entered program/erase mode. Now an
+//! access has to name the whole register, and the key is read out of the
+//! value the access itself carries, never out of what was already stored.
+//! A store that names less than the register carries no key, so it is
+//! refused and counted and the mode does not move. This is the SSIFTDR and
+//! TXD cut applied to a protection key rather than to a data port. MENTRYR
+//! is sixteen bits, so an access landing entirely in the two bytes above it
+//! names no part of the register and still merges into the shadow the way
+//! it always did.
+//!
 //! NOT MODELLED, AND NOT GUESSED: the 0x4013_C000 wait-state and ECC
 //! configuration pages, which stay sparse because ra8_cgc_init programs them
 //! during clock setup with a key-strip readback this model would have to
@@ -52,6 +68,7 @@
 const std = @import("std");
 const engine = @import("../core/engine.zig");
 const periph = @import("registry.zig");
+const lanes = @import("lanes.zig");
 const maci = @import("maci.zig");
 const cells = @import("mram_otp.zig");
 const code = @import("mram_code.zig");
@@ -68,6 +85,9 @@ pub const regs = struct {
     pub const off_msaddr: u32 = 0x30;
     pub const off_mstatr: u32 = 0x80;
     pub const off_mentryr: u32 = 0x84;
+    /// MENTRYR is sixteen bits wide, so only the low half of the word it
+    /// sits in is the register; the two bytes above it are not.
+    pub const mentryr_bytes: u32 = 2;
 };
 
 /// The MACI command-issuing area: one port, byte and halfword wide.
@@ -133,6 +153,9 @@ pub const Mram = struct {
     rewrites: u32 = 0,
     /// MENTRYR writes carrying the wrong key.
     keyless: u32 = 0,
+    /// MENTRYR writes that named less than the register, so they carried no
+    /// key of their own whatever the shadow already held.
+    narrow_writes: u32 = 0,
     /// Stores to MSTATR or MASTAT: firmware cannot clear its own errors.
     read_only: u32 = 0,
     /// Programs the guest memory behind the option window refused.
@@ -149,7 +172,8 @@ pub const Mram = struct {
     pub fn quiet(self: *const Mram) bool {
         return self.programs == 0 and self.config_sets == 0 and self.illegal == 0 and
             self.locked_out == 0 and self.outside_mode == 0 and self.malformed == 0 and
-            self.rewrites == 0 and self.keyless == 0 and self.read_only == 0 and
+            self.rewrites == 0 and self.keyless == 0 and self.narrow_writes == 0 and
+            self.read_only == 0 and
             self.faulted == 0 and self.code.quiet();
     }
 
@@ -164,10 +188,10 @@ pub const Mram = struct {
         if (offset >= regs.span) return 0;
         const byte = offset % 4;
         return switch (offset & ~@as(u32, 3)) {
-            regs.off_mentryr => part_of(if (self.in_pe_mode) field.mentry else 0, byte, width),
-            regs.off_mstatr => part_of(self.status(), byte, width),
-            regs.off_mastat => part_of(self.access, byte, width),
-            else => part_of(self.shadow[offset / 4], byte, width),
+            regs.off_mentryr => lanes.part(if (self.in_pe_mode) field.mentry else 0, byte, width),
+            regs.off_mstatr => lanes.part(self.status(), byte, width),
+            regs.off_mastat => lanes.part(self.access, byte, width),
+            else => lanes.part(self.shadow[offset / 4], byte, width),
         };
     }
 
@@ -202,17 +226,25 @@ pub const Mram = struct {
         self.code.write(address, width, value);
     }
 
-    /// MENTRYR. The key has to be there, and leaving program/erase mode is
-    /// what releases a command-locked sequencer.
+    /// MENTRYR. The key has to be carried by the access itself, and leaving
+    /// program/erase mode is what releases a command-locked sequencer.
     fn enter(self: *Mram, offset: u32, byte: u32, width: u3, value: u32) void {
-        const word = offset / 4;
-        const merged = merge(self.shadow[word], byte, width, value);
-        if (merged & field.key_mask != field.key) {
+        if (byte >= regs.mentryr_bytes) {
+            _ = self.store(offset, byte, width, value);
+            return;
+        }
+        if (!namesRegister(byte, width)) {
+            self.narrow_writes +%= 1;
+            return;
+        }
+        const carried = value & lanes.named(byte, width);
+        if (carried & field.key_mask != field.key) {
             self.keyless +%= 1;
             return;
         }
-        self.shadow[word] = merged;
-        self.in_pe_mode = merged & field.mentry != 0;
+        const word = offset / 4;
+        self.shadow[word] = lanes.merge(self.shadow[word], byte, width, value);
+        self.in_pe_mode = carried & field.mentry != 0;
         if (self.in_pe_mode) return;
         self.locked = false;
         self.errors = 0;
@@ -273,7 +305,7 @@ pub const Mram = struct {
 
     fn store(self: *Mram, offset: u32, byte: u32, width: u3, value: u32) u32 {
         const word = offset / 4;
-        self.shadow[word] = merge(self.shadow[word], byte, width, value);
+        self.shadow[word] = lanes.merge(self.shadow[word], byte, width, value);
         return self.shadow[word];
     }
 
@@ -320,29 +352,13 @@ pub const Mram = struct {
     }
 };
 
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part_of(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const slot: u32 = bits << shift;
-    return (current & ~slot) | ((value & bits) << shift);
+/// Whether an access names the whole of MENTRYR: it has to start at the
+/// register and be at least as wide as it, so that the key half is part of
+/// what the store carries. A wider access is still fine, the way a word
+/// store of a halfword register is, and an access landing entirely above
+/// the register never gets here.
+fn namesRegister(byte_offset: u32, width: u3) bool {
+    return byte_offset == 0 and width >= 2;
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
