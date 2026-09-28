@@ -112,6 +112,9 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
     try self.regions.prime(core.*);
+    // RBAR/RLAR are one word each in RAM, so without this every region a
+    // driver programs overwrites the last and the table reads back empty.
+    try core.attachRegions(&self.regions);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
