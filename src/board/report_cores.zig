@@ -39,9 +39,10 @@ fn secondCore(board: *Board, out: Writer) !void {
 }
 
 /// What the firmware programmed into the MPU, and what enforcement made of
-/// it. A store into a read-only region is refused with a MemManage, so the
-/// violations are the line that matters: a run that programmed a protected
-/// span and never tripped it is a different run from one that did.
+/// it. A store into a read-only region and a fetch out of an execute-never
+/// one are both refused with a MemManage, so the violations are the line that
+/// matters: a run that programmed a protected span and never tripped it is a
+/// different run from one that did.
 fn regions(board: *Board, out: Writer) !void {
     const unit = &board.regions;
     const latch = &board.guard.latch;
@@ -56,10 +57,22 @@ fn regions(board: *Board, out: Writer) !void {
             if (unit.privilegedDefault()) ", privileged default map on" else "",
         },
     );
+    if (latch.violations != latch.fetches) {
+        try out.print(
+            "MPU: REFUSED {d} store(s) into a read-only region\n",
+            .{latch.violations - latch.fetches},
+        );
+    }
+    if (latch.fetches != 0) {
+        try out.print(
+            "MPU: REFUSED {d} fetch(es) from an execute-never region\n",
+            .{latch.fetches},
+        );
+    }
     if (latch.violations != 0) {
         try out.print(
-            "MPU: REFUSED {d} store(s) into a read-only region, {d} took MemManage\n",
-            .{ latch.violations, latch.faults },
+            "MPU: {d} of {d} violation(s) took MemManage\n",
+            .{ latch.faults, latch.violations },
         );
     }
     if (latch.unhandled != 0) {
@@ -68,9 +81,12 @@ fn regions(board: *Board, out: Writer) !void {
             .{latch.unhandled},
         );
     }
+    if (latch.stood_down) {
+        try out.print("MPU: enforcement stood down, a refused fetch had nowhere to go\n", .{});
+    }
     if (unit.on() and latch.violations == 0) {
         try out.print(
-            "MPU: {d} read-only region(s) enforced, no store was refused\n",
+            "MPU: {d} read-only region(s) enforced, no access was refused\n",
             .{unit.readOnly()},
         );
     }

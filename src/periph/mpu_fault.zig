@@ -1,5 +1,5 @@
-//! What a store into a read-only region does to the core: the MemManage
-//! status it latches, and the violation waiting to become one.
+//! What an access the MPU refuses does to the core: the MemManage status it
+//! latches, and the violation waiting to become one.
 //!
 //! Armv8-M refuses a store into a region whose RBAR.AP says read-only, at
 //! both privilege levels, and takes a MemManage for it. Unicorn's core models
@@ -18,29 +18,42 @@
 /// MemManage, exception 4 (DDI0553 B3.6).
 pub const exception: u16 = 4;
 
-/// The MMFSR bits a data-access violation sets. IACCVIOL is named for what it
-/// means rather than because this model sets it: nothing here checks a fetch
-/// against the region's XN bit.
+/// The MMFSR bits a refused access sets: DACCVIOL with MMARVALID for a store,
+/// IACCVIOL on its own for a fetch. A refused fetch leaves MMFAR alone and
+/// MMARVALID clear, because the address that took it is the PC the frame
+/// already carries (DDI0553 D1.2.11).
 pub const mmfsr = struct {
     pub const iaccviol: u32 = 1 << 0;
     pub const daccviol: u32 = 1 << 1;
     pub const mmarvalid: u32 = 1 << 7;
 };
 
-/// One refused store: the instruction that made it, and the address it went
-/// for. The PC matters as much as the address, because entry has to stack
-/// the faulting store rather than whatever the run stopped on.
+/// Which of the two rules refused the access.
+pub const Kind = enum {
+    /// A store into a region RBAR.AP made read-only.
+    store,
+    /// A fetch from a region RBAR.XN made execute-never.
+    fetch,
+};
+
+/// One refused access: the instruction that made it, and the address it went
+/// for. The PC matters as much as the address, because entry has to stack the
+/// faulting instruction rather than whatever the run stopped on. For a fetch
+/// the two are the same address.
 pub const Violation = struct {
     pc: u32,
     address: u32,
+    kind: Kind = .store,
 };
 
 /// What enforcement has caught and what became of it.
 pub const Latch = struct {
     /// The store waiting to become an exception, taken at the next boundary.
     pending: ?Violation = null,
-    /// Stores refused by an enabled read-only region.
+    /// Accesses refused by an enabled region, of either kind.
     violations: u64 = 0,
+    /// How many of those were fetches out of an execute-never region.
+    fetches: u64 = 0,
     /// Violations that reached a MemManage handler.
     faults: u64 = 0,
     /// Violations with no handler to reach: the vector table carries none, or
@@ -53,6 +66,13 @@ pub const Latch = struct {
     coalesced: u64 = 0,
     /// Times enforcement was armed, one per CTRL store that asked for it.
     arms: u64 = 0,
+    /// Enforcement took itself off because a refused fetch had no handler to
+    /// go to. Architecturally that is a HardFault escalation and then lockup;
+    /// this model escalates neither, and leaving the trap up would re-refuse
+    /// the same fetch at every boundary for the rest of the run without the
+    /// PC ever moving. So the violation is counted once, the traps come off,
+    /// and a later store to CTRL puts them back.
+    stood_down: bool = false,
 
     /// A run whose firmware never enabled a protected region stays out of
     /// the report.
@@ -60,7 +80,7 @@ pub const Latch = struct {
         return self.arms == 0 and self.violations == 0;
     }
 
-    /// Catch one refused store. Answers whether it is the one to stop on:
+    /// Catch one refused access. Answers whether it is the one to stop on:
     /// the first is, and the rest of the same access are not.
     pub fn record(self: *Latch, hit: Violation) bool {
         if (self.pending != null) {
@@ -69,6 +89,7 @@ pub const Latch = struct {
         }
         self.pending = hit;
         self.violations +%= 1;
+        if (hit.kind == .fetch) self.fetches +%= 1;
         return true;
     }
 
