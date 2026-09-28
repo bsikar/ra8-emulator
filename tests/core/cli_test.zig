@@ -9,10 +9,10 @@ const Part = ra8.core.part.Part;
 test "the command line takes an image and an optional instruction budget" {
     const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
     try std.testing.expectEqualStrings("a.elf", defaults.path);
-    try std.testing.expectEqual(@as(usize, 2_000_000), defaults.instructions);
+    try std.testing.expectEqual(@as(?usize, null), defaults.instructions);
 
     const bounded = try parse(&[_][]const u8{ "emu", "a.elf", "--instructions", "64" });
-    try std.testing.expectEqual(@as(usize, 64), bounded.instructions);
+    try std.testing.expectEqual(@as(?usize, 64), bounded.instructions);
 
     try std.testing.expectError(error.MissingImage, parse(&[_][]const u8{"emu"}));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--instructions" }));
@@ -28,4 +28,26 @@ test "the part defaults to the RA8D2 and is named, never guessed" {
 
     try std.testing.expectError(error.UnknownPart, parse(&[_][]const u8{ "emu", "a.elf", "--part", "ra8m1" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--part" }));
+}
+
+test "an unwatched run gets the default budget" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expectEqual(mod.budget, options.budgetFor(false));
+}
+
+test "a watched run gets the larger budget, because it stops on its counter" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--stop-sym", "g_tick", "5" });
+    try std.testing.expectEqual(mod.watched_budget, options.budgetFor(true));
+    try std.testing.expect(mod.watched_budget > mod.budget);
+}
+
+test "a counter that did not resolve watches nothing, so it keeps the default" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--stop-sym", "g_absent", "5" });
+    try std.testing.expectEqual(mod.budget, options.budgetFor(false));
+}
+
+test "an asked-for budget wins over either default" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--instructions", "64", "--stop-sym", "g_tick", "5" });
+    try std.testing.expectEqual(@as(usize, 64), options.budgetFor(true));
+    try std.testing.expectEqual(@as(usize, 64), options.budgetFor(false));
 }

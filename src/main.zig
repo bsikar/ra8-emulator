@@ -73,7 +73,8 @@ pub fn main() !u8 {
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     var stop = resolveStop(image, options);
-    const fault = try core.run(entry, options.instructions, .{
+    const budget = options.budgetFor(stop != null);
+    const fault = try core.run(entry, budget, .{
         .watch = &watch,
         .timebase = &timebase,
         .interrupts = &interrupts,
@@ -88,18 +89,44 @@ pub fn main() !u8 {
     try report.loops(out, loops);
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
+    return verdict(out, core, options, fault, stop, budget);
+}
+
+/// How the run ended, in one line, and the exit status that goes with it.
+///
+/// Three outcomes, and the middle one is why this is not a single print: a
+/// watched run that reached its counter stopped early and is a pass, while a
+/// watched run that spent the whole budget never arrived at all. Under the
+/// plain "ran N instructions clean" line those two read identically, which
+/// is exactly the confusion a progress counter exists to settle.
+fn verdict(
+    out: anytype,
+    core: engine.Engine,
+    options: cli.Options,
+    fault: ?engine.Fault,
+    stop: ?stop_watch.Stop,
+    budget: usize,
+) !u8 {
     if (fault) |taken| {
         try report.fault(out, taken);
         return 1;
     }
-    if (stop) |reached_stop| if (reached_stop.reached) {
-        try out.print(
-            "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
-            .{ options.stop_symbol.?, reached_stop.reaches, try core.register(.pc) },
-        );
+    const pc = try core.register(.pc);
+    const watched = stop orelse {
+        try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ budget, pc });
         return 0;
     };
-    try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
+    if (watched.reached) {
+        try out.print(
+            "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
+            .{ options.stop_symbol.?, watched.reaches, pc },
+        );
+        return 0;
+    }
+    try out.print(
+        "ran {d} instructions, {s} never reached {d}, pc 0x{X:0>8}\n",
+        .{ budget, options.stop_symbol.?, watched.reaches, pc },
+    );
     return 0;
 }
 

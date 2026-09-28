@@ -11,7 +11,8 @@ pub const usage =
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N]
     \\
-    \\  --instructions N   stop after N instructions (default 2000000)
+    \\  --instructions N   stop after N instructions (default 2000000,
+    \\                     or 200000000 when --stop-sym is watching)
     \\  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU
     \\  --device NAME      the same thing, spelled the way the firmware's
     \\                     own emulator-in-the-loop suite spells it
@@ -33,9 +34,26 @@ pub const usage =
 /// cap is a little room above that rather than an allocation.
 pub const dump_limit: usize = 8;
 
+/// Instructions a run gets when nothing tells it when to stop. Long enough
+/// for an app to reach whatever it prints and short enough that a sweep of
+/// the whole corpus stays quick.
+pub const budget: usize = 2_000_000;
+
+/// Instructions a run gets when `--stop-sym` is watching a counter. A
+/// watched run has an end of its own and reaches it early, so the budget is
+/// only the ceiling on an app that never gets there: at the throughput this
+/// model runs at, roughly 37 million instructions a second, that ceiling is
+/// a few seconds rather than the fraction of one the default would give.
+/// The suite's own apps need tens of millions (blink_ra8p1 reaches its fifth
+/// tick at about 24 million), which the default budget ends ten times short
+/// of, reporting a clean run for an app that had barely started.
+pub const watched_budget: usize = 200_000_000;
+
 pub const Options = struct {
     path: []const u8,
-    instructions: usize = 2_000_000,
+    /// The budget `--instructions` asked for, or null to take whichever
+    /// default fits the run. Resolved by `budget`, never read raw.
+    instructions: ?usize = null,
     /// Which part the run models. The two share a register map; the RA8P1
     /// also carries the Ethos-U55, so this decides whether that window
     /// answers at all.
@@ -65,6 +83,18 @@ pub const Options = struct {
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {
         return self.dump[0..self.dump_count];
+    }
+
+    /// How many instructions this run gets. An explicit `--instructions`
+    /// always wins; otherwise a run with a counter to watch gets the
+    /// watched budget and every other run gets the default.
+    ///
+    /// `watching` is whether a counter was actually resolved, not whether
+    /// the flag was spelled: a `--stop-sym` naming a symbol the image does
+    /// not carry watches nothing, and spending the larger budget on it
+    /// would cost seconds per app to reach the same verdict.
+    pub fn budgetFor(self: *const Options, watching: bool) usize {
+        return self.instructions orelse if (watching) watched_budget else budget;
     }
 };
 
