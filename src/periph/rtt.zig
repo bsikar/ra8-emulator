@@ -12,14 +12,18 @@
 //! Ported from board_periph_rtt.c on dev, with four things that model does
 //! not do.
 //!
-//! THE RING HAS TO BE IN RAM. dev checks the descriptor's sizes and offsets
-//! and never checks where the storage pointer points, then reads through it
-//! and stores four bytes of read offset back through it. A block caught
-//! half-initialised, with a stale or garbage pointer, has the emulator reading
-//! the peripheral window and calling the result firmware output, and writing
-//! into an address the firmware never meant as a ring. Here the whole ring and
-//! the descriptor must lie inside the mapped SRAM window, and a candidate that
-//! does not is refused and counted.
+//! THE RING HAS TO BE IN RAM, AND RAM IS ALL OF IT. dev checks the
+//! descriptor's sizes and offsets and never checks where the storage pointer
+//! points, then reads through it and stores four bytes of read offset back
+//! through it. A block caught half-initialised, with a stale or garbage
+//! pointer, has the emulator reading the peripheral window and calling the
+//! result firmware output, and writing into an address the firmware never
+//! meant as a ring. Here the whole ring must lie in RAM a debug probe can
+//! reach, which is every region the loader maps as RAM, and a candidate that
+//! does not is refused and counted. That is a wider rule than `search`
+//! below, deliberately: the block is what the probe hunts for and a hunt is
+//! bounded by what it costs, while the ring is one pointer away from a block
+//! already in hand.
 //!
 //! A FORGOTTEN BLOCK RE-ARMS THE SCAN. dev forgets a clobbered block by
 //! zeroing the address and leaves the scan cadence where it was, which is
@@ -48,12 +52,19 @@ const memmap = @import("../core/memmap.zig");
 const block = @import("rtt_block.zig");
 const text = @import("rtt_line.zig");
 
-/// The window the scan covers: the SRAM this tree actually maps, not dev's
-/// hard-coded four megabytes.
-pub const ram = block.Window{
+/// The window the scan hunts a control block in: the SRAM this tree actually
+/// maps, not dev's hard-coded four megabytes. A J-Link searches the ranges it
+/// is configured with rather than the whole address space, and this is that
+/// range. The ring the block points at is not held to it: see `rtt_block`.
+pub const search = memmap.Window{
     .base = memmap.sram_base,
-    .size = memmap.sram_end - memmap.sram_base,
+    .end = memmap.sram_end,
 };
+
+/// Bytes the scan covers.
+pub fn searchSize() u32 {
+    return search.end - search.base;
+}
 
 /// Scan cadence and per-tick bounds. A run whose firmware never uses RTT pays
 /// a handful of scans, not one per chunk.
@@ -118,13 +129,14 @@ pub const Rtt = struct {
     /// it, so no candidate is examined twice.
     fn scan(self: *Rtt, memory: engine.Engine) void {
         self.scans += 1;
+        const size = searchSize();
         var offset: u32 = 0;
-        while (offset < ram.size) : (offset += cadence.step) {
+        while (offset < size) : (offset += cadence.step) {
             var want: u32 = cadence.step + block.id.len;
-            if (offset + want > ram.size) want = ram.size - offset;
+            if (offset + want > size) want = size - offset;
             if (want < block.id.len) return;
             const starts = @min(cadence.step, want - block.id.len + 1);
-            const at = ram.base + offset;
+            const at = search.base + offset;
             memory.read(at, self.stage[0..want]) catch return;
             if (self.match(memory, at, self.stage[0..want], starts)) return;
         }
@@ -138,7 +150,7 @@ pub const Rtt = struct {
             const candidate = at + @as(u32, @intCast(index));
             const up = self.readUp(memory, candidate) orelse continue;
             const count = readWord(memory, candidate + block.layout.max_up) orelse continue;
-            if (block.check(count, up, ram)) |why| {
+            if (block.check(count, up)) |why| {
                 if (why == .ring_off_ram) self.off_ram += 1;
                 continue;
             }
@@ -155,7 +167,7 @@ pub const Rtt = struct {
         if (!self.stillThere(memory, at)) return;
         const count = readWord(memory, at + block.layout.max_up) orelse return;
         const up = self.readUp(memory, at) orelse return;
-        if (block.check(count, up, ram)) |why| {
+        if (block.check(count, up)) |why| {
             switch (why) {
                 // The firmware published a block and has taken it away again.
                 .no_up_buffer, .too_many_up_buffers, .empty_ring => self.forget(),

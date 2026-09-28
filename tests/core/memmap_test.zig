@@ -77,3 +77,19 @@ test "an address in no master window sits in none" {
     try std.testing.expect(mod.masterWindow(mod.sdram_end) == null);
     try std.testing.expect(mod.masterWindow(0x4000_0000) == null);
 }
+
+test "the debug window list carries the DTCM the master list leaves out" {
+    try std.testing.expect(mod.debugHolds(mod.dtcm_base, 16));
+    try std.testing.expect(!masterHolds(mod.dtcm_base, 16));
+}
+
+test "the debug window list carries every RAM the loader maps" {
+    try std.testing.expect(mod.debugHolds(mod.sram_base, 16));
+    try std.testing.expect(mod.debugHolds(mod.sdram_base, 16));
+    try std.testing.expect(mod.debugHolds(mod.ns_sdram_base, 16));
+}
+
+test "the debug window list stops at the peripheral bus" {
+    try std.testing.expect(!mod.debugHolds(0x4000_0000, 4));
+    try std.testing.expect(!mod.debugHolds(ppb_base, 4));
+}

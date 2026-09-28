@@ -8,8 +8,10 @@
 //! spell the ID; the scanning and draining live in rtt.zig.
 //!
 //! Ported from board_periph_rtt.c on dev, with one check dev does not make:
-//! the ring has to be in RAM. See `Window`.
+//! the ring has to be in RAM. See `check`.
 const std = @import("std");
+
+const memmap = @import("../core/memmap.zig");
 
 /// The ID a block begins with. Spelled as bytes rather than a string literal
 /// for the reason the firmware writes it a byte at a time: this tool's own
@@ -38,24 +40,6 @@ pub const limits = struct {
     pub const max_up: u32 = 16;
     /// A ring bigger than this is a pointer, not a size.
     pub const ring: u32 = 1024 * 1024;
-};
-
-/// A span of guest RAM. The probe reads target RAM and nothing else, which is
-/// the check dev is missing: there a descriptor's storage pointer is followed
-/// wherever it points, and the advanced read offset is stored back through it,
-/// so a half-initialised block has the emulator reading bytes out of the
-/// peripheral window and writing four bytes at an address the firmware never
-/// meant as a ring.
-pub const Window = struct {
-    base: u32,
-    size: u32,
-
-    pub fn holds(self: Window, at: u32, len: u32) bool {
-        if (len == 0) return false;
-        if (at < self.base) return false;
-        const end = @as(u64, at) + len;
-        return end <= @as(u64, self.base) + self.size;
-    }
 };
 
 /// Up-buffer 0 as it stands this tick.
@@ -89,13 +73,20 @@ pub const Reject = enum {
 };
 
 /// The checks a probe makes before it trusts a ring, plus the RAM one.
-pub fn check(max_up_count: u32, up: Up, ram: Window) ?Reject {
+///
+/// The RAM one is `memmap.debugHolds`, every region the loader maps as RAM,
+/// and not the one window the scan happens to search. A probe follows the
+/// storage pointer out of a block it has already found, so where the ring
+/// sits is a question about what the debug port can reach, not about where
+/// it was worth looking for the block. dev makes no such check at all and
+/// follows the pointer into the peripheral window.
+pub fn check(max_up_count: u32, up: Up) ?Reject {
     if (max_up_count == 0) return .no_up_buffer;
     if (max_up_count > limits.max_up) return .too_many_up_buffers;
     if (up.buf == 0 or up.size == 0) return .empty_ring;
     if (up.size > limits.ring) return .huge_ring;
     if (up.write >= up.size or up.read >= up.size) return .offset_past_ring;
-    if (!ram.holds(up.buf, up.size)) return .ring_off_ram;
+    if (!memmap.debugHolds(up.buf, up.size)) return .ring_off_ram;
     return null;
 }
 

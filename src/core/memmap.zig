@@ -135,6 +135,29 @@ pub const master_ram = [_]Window{
     .{ .base = ns_sdram_base, .end = ns_sdram_end },
 };
 
+/// The RAM a debug probe can read and write over the debug port: every
+/// region the loader maps as RAM, the core's own DTCM included. The probe
+/// is not a bus master on the fabric, it reaches memory through the core,
+/// so the `master_ram` exclusions do not apply to it. The peripheral window
+/// is still not here: registers are not somewhere a log ring lives.
+pub const debug_ram = [_]Window{
+    .{ .base = dtcm_base, .end = dtcm_end },
+    .{ .base = sram_base, .end = sram_end },
+    .{ .base = sdram_base, .end = sdram_end },
+    .{ .base = ns_sdram_base, .end = ns_sdram_end },
+};
+
+/// Whether a span of `len` bytes at `at` is RAM a debug probe may read or
+/// write. A model that follows a pointer out of a structure the firmware
+/// published for a probe asks this rather than `masterHolds`.
+pub fn debugHolds(at: u32, len: u32) bool {
+    if (len == 0) return false;
+    for (debug_ram) |window| {
+        if (window.holds(at, len)) return true;
+    }
+    return false;
+}
+
 /// Whether a span of `len` bytes at `at` is somewhere a bus master may read
 /// or write. A model that follows a pointer the firmware gave it asks this
 /// first, because a half-built descriptor points anywhere.
