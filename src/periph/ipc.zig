@@ -36,6 +36,17 @@
 //! like one that did not. The latches are kept, and the words the FIFO could
 //! not take and the reads that found nothing are counted and reported.
 //!
+//! THE MESSAGE PORTS ARE WORD PORTS. TXD and RXD carry one 32-bit message,
+//! not a bag of independently addressable bits the way STA, ISET and CLR do,
+//! and the FIFO stage behind them moves whole. So a store narrower than a
+//! word would push a message three quarters of which the firmware never
+//! wrote, and a load narrower than a word would consume a stage and hand
+//! back one lane of it with the rest gone for good. Both are refused and
+//! counted here rather than taken: the FIFO keeps what it has, and the run
+//! says the access was the wrong width. dev takes either one, so on that
+//! tree a driver reading a message through two halfword loads drains two
+//! stages and assembles a word out of the low halves of both.
+//!
 //! NOT MODELLED, AND NOT GUESSED: any IPC interrupt besides the two receive
 //! events, and NMI delivery, which is latched and counted here but reaches
 //! no core. The event is queued for the chunk boundary rather than raised
@@ -118,11 +129,17 @@ pub const Channel = struct {
     lost: u32 = 0,
     /// Reads that found the FIFO empty: no message was there to take.
     starved: u32 = 0,
+    /// Loads of RXD narrower than a word. Refused, so the stage stays.
+    narrow_reads: u32 = 0,
+    /// Stores to TXD narrower than a word. Refused, so no part-written
+    /// message is pushed.
+    narrow_writes: u32 = 0,
 
     pub fn quiet(self: *const Channel) bool {
         return self.pending == 0 and self.count == 0 and self.sends == 0 and
             self.pushes == 0 and self.pops == 0 and self.lost == 0 and
-            self.starved == 0 and !self.rerr and !self.ferr;
+            self.starved == 0 and self.narrow_reads == 0 and
+            self.narrow_writes == 0 and !self.rerr and !self.ferr;
     }
 
     /// STA is composed, never stored: the FIFO bits follow the ring and the
@@ -240,7 +257,17 @@ pub const Ipc = struct {
             const unit = &self.channels[slot.index];
             switch (slot.reg) {
                 off_sta => return part(unit.status(), byte, width),
-                off_rxd => return part(unit.pop(), byte, width),
+                // A stage is consumed by the load, so a load that cannot
+                // carry a whole one must not make it. The refusal reads
+                // back zero, which is what a stage nobody took holds for
+                // the caller anyway.
+                off_rxd => {
+                    if (width < 4) {
+                        unit.narrow_reads +%= 1;
+                        return 0;
+                    }
+                    return unit.pop();
+                },
                 // ISET, TXD and CLR are actions; nothing sits behind them.
                 off_iset, off_txd, off_clr => return 0,
                 else => {},
@@ -258,8 +285,18 @@ pub const Ipc = struct {
         if (decode(offset)) |slot| {
             const named = merge(0, byte, width, value);
             switch (slot.reg) {
+                // ISET and CLR name lines, one bit each, so the lanes a
+                // narrow store reaches are exactly the lines it asks for.
                 off_iset => self.poke(slot.index, named),
-                off_txd => self.channels[slot.index].push(named),
+                // A message is a word, not lines: the lanes this store did
+                // not name hold nothing to push with it.
+                off_txd => {
+                    if (width < 4) {
+                        self.channels[slot.index].narrow_writes +%= 1;
+                        return;
+                    }
+                    self.channels[slot.index].push(value);
+                },
                 off_clr => self.channels[slot.index].clear(named),
                 // Status, and a status register does not take a store.
                 off_sta, off_rxd => {},
