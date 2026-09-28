@@ -191,6 +191,15 @@ pub const int1 = struct {
     pub const sign: u16 = 1 << 5;
 };
 
+/// INTSTS0's summary bits, the mask ra8_usb_dispatch reads before it looks at
+/// any per-pipe status register (ra8_usb_regs.h: k_ra8_int0_bit_brdy = 8,
+/// k_ra8_int0_bit_nrdy = 9, k_ra8_int0_bit_bemp = 10).
+pub const int0 = struct {
+    pub const brdy: u16 = 1 << 8;
+    pub const nrdy: u16 = 1 << 9;
+    pub const bemp: u16 = 1 << 10;
+};
+
 /// BRDYSTS / NRDYSTS / BEMPSTS are one bit per pipe; bit 0 is the DCP.
 pub const status = struct {
     pub const dcp: u16 = 1 << 0;

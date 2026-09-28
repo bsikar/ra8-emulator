@@ -334,3 +334,43 @@ test "a refused packet counts as a refusal the run can report" {
     try std.testing.expect(!transfer.quiet());
     try std.testing.expect(transfer.refusals() >= 1);
 }
+
+test "a control reply raises the INTSTS0 summary, not just BRDYSTS" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    try std.testing.expectEqual(@as(u16, 0), transfer.interruptStatus(&pipes));
+    getDescriptor(&transfer, 0x0100, 18);
+    // The dispatcher reads the mask and never touches BRDYSTS itself.
+    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy != 0);
+    try std.testing.expect(transfer.brdy & regs.status.dcp != 0);
+}
+
+test "a staged packet going out raises the INTSTS0 empty summary" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    transfer.port.select(regs.fifo.isel);
+    transfer.port.writeData(0xAA, 1, 64);
+    transfer.commit(&pipes);
+    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.bemp != 0);
+    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy == 0);
+}
+
+test "a new packet re-raises the summary after it was acked" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    getDescriptor(&transfer, 0x0100, 18);
+    _ = transfer.interruptStatus(&pipes);
+    transfer.clearInterrupt(~regs.int0.brdy);
+    transfer.clearReady(~regs.status.dcp);
+    getDescriptor(&transfer, 0x0100, 18);
+    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy != 0);
+}
+
+test "nothing on the bus raises no summary at all" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    transfer.usbreq = 0x0680;
+    transfer.usbleng = 18;
+    transfer.launch(false);
+    try std.testing.expectEqual(@as(u16, 0), transfer.interruptStatus(&pipes));
+}

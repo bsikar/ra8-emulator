@@ -86,6 +86,7 @@ pub const Host = struct {
             regs.reg.cfifoctr => self.xfer.port.status(),
             regs.reg.brdysts => self.xfer.readyStatus(&self.pipes),
             regs.reg.bempsts => self.xfer.bemp,
+            regs.reg.intsts0 => self.xfer.interruptStatus(&self.pipes),
             regs.reg.intsts1 => self.xfer.intsts1,
             regs.reg.dcpctr => self.xfer.dcpctr,
             regs.reg.usbreq => self.xfer.usbreq,
@@ -148,7 +149,8 @@ pub const Host = struct {
             regs.reg.pipecfg => _ = self.pipes.configure(v),
             regs.reg.pipemaxp => _ = self.pipes.setMaxPacket(v),
             // W0C: a status bit clears by writing zero to it.
-            regs.reg.intsts0, regs.reg.nrdysts => self.shadow[word(offset)] &= v,
+            regs.reg.intsts0 => self.xfer.clearInterrupt(v),
+            regs.reg.nrdysts => self.shadow[word(offset)] &= v,
             else => {
                 if (regs.isPipeCtr(offset)) {
                     _ = self.pipes.setControl(regs.pipeCtrIndex(offset), v);
