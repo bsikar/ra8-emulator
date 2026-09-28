@@ -133,6 +133,7 @@ pub const periph = struct {
     pub const npu = @import("periph/npu.zig");
     pub const npu_cmd = @import("periph/npu_cmd.zig");
     pub const nvic = @import("periph/nvic.zig");
+    pub const oscsf = @import("periph/oscsf.zig");
     pub const pdctr = @import("periph/pdctr.zig");
     pub const pdm = @import("periph/pdm.zig");
     pub const poeg = @import("periph/poeg.zig");

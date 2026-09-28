@@ -36,6 +36,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.adc.block());
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
+    try self.bus.add(self.oscillators.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
     try self.display.attach(&self.bus, &self.graphics, core.*);
