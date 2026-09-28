@@ -57,6 +57,12 @@
 //! names no part of the register and still merges into the shadow the way
 //! it always did.
 //!
+//! MSUINITR IS A KICK, AND THE SEQUENCER TAKES SUINIT BACK DOWN. It fell
+//! into the generic shadow below, so a store landed 0xAA01 in a word and a
+//! read handed it straight back: SUINIT was still standing on every poll
+//! and ra8_flash_msuinitr_kick always ran out its spin limit and returned
+//! a hardware timeout. The rule and its evidence are in mram_init.zig.
+//!
 //! NOT MODELLED, AND NOT GUESSED: the 0x4013_C000 wait-state and ECC
 //! configuration pages, which stay sparse because ra8_cgc_init programs them
 //! during clock setup with a key-strip readback this model would have to
@@ -72,51 +78,21 @@ const lanes = @import("lanes.zig");
 const maci = @import("maci.zig");
 const cells = @import("mram_otp.zig");
 const code = @import("mram_code.zig");
+const mram_regs = @import("mram_regs.zig");
 
 pub const window = cells.window;
 
-/// The MRMS program-mode sub-window (ra8_flash_regs.h). Deliberately narrow:
-/// it covers only the program-mode registers, not the configuration page
-/// below it.
-pub const regs = struct {
-    pub const base: u32 = 0x4013_E000;
-    pub const span: u32 = 0x100;
-    pub const off_mastat: u32 = 0x10;
-    pub const off_msaddr: u32 = 0x30;
-    pub const off_mstatr: u32 = 0x80;
-    pub const off_mentryr: u32 = 0x84;
-    /// MENTRYR is sixteen bits wide, so only the low half of the word it
-    /// sits in is the register; the two bytes above it are not.
-    pub const mentryr_bytes: u32 = 2;
-};
-
-/// The MACI command-issuing area: one port, byte and halfword wide.
-pub const command = struct {
-    pub const base: u32 = 0x4012_0000;
-    pub const span: u32 = 0x10;
-};
+/// Where these registers sit and what their bits mean: mram_regs.zig.
+pub const regs = mram_regs.regs;
+pub const command = mram_regs.command;
+pub const field = mram_regs.field;
 
 /// The code-MRAM program-control page (the R_MRMS 0x3000 page), which
 /// answers for itself in mram_code.zig.
 pub const code_page = code.page;
 
-pub const field = struct {
-    /// MENTRYR.MENTRY, the program/erase mode status bit.
-    pub const mentry: u32 = 0x0080;
-    /// The key byte MENTRYR takes in its high half.
-    pub const key: u32 = 0xAA00;
-    pub const key_mask: u32 = 0xFF00;
-    /// MSTATR.MRDY, command complete.
-    pub const mrdy: u32 = 0x0000_8000;
-    /// MSTATR.ILGLERR, illegal.
-    pub const ilglerr: u32 = 0x0000_4000;
-    /// MSTATR.ILGCOMERR, illegal command.
-    pub const ilgcomerr: u32 = 0x0080_0000;
-    /// MASTAT.MREAE, extra-MRAM access error.
-    pub const mreae: u32 = 0x08;
-    /// MASTAT.CMDLK, the command-locked state.
-    pub const cmdlk: u32 = 0x10;
-};
+/// MSUINITR, the set-up init kick, and its rule: mram_init.zig.
+pub const init_reg = @import("mram_init.zig");
 
 const shadow_words: usize = regs.span / 4;
 
@@ -127,6 +103,8 @@ pub const Mram = struct {
     /// The code-MRAM program-control page: a different program path on the
     /// same controller, so it shares this block and owns its own rules.
     code: code.Page = .{},
+    /// MSUINITR's set-up init state.
+    setup: init_reg.Init = .{},
     /// Where a program that lands is also written through, so firmware can
     /// read the option word back. A board built by a test leaves it null and
     /// the write-through is skipped; the cells still hold the program.
@@ -174,7 +152,7 @@ pub const Mram = struct {
             self.locked_out == 0 and self.outside_mode == 0 and self.malformed == 0 and
             self.rewrites == 0 and self.keyless == 0 and self.narrow_writes == 0 and
             self.read_only == 0 and
-            self.faulted == 0 and self.code.quiet();
+            self.faulted == 0 and self.code.quiet() and self.setup.quiet();
     }
 
     /// MSTATR as this model computes it: ready, plus whatever the sequencer
@@ -191,6 +169,7 @@ pub const Mram = struct {
             regs.off_mentryr => lanes.part(if (self.in_pe_mode) field.mentry else 0, byte, width),
             regs.off_mstatr => lanes.part(self.status(), byte, width),
             regs.off_mastat => lanes.part(self.access, byte, width),
+            init_reg.off => lanes.part(self.setup.read(), byte, width),
             else => lanes.part(self.shadow[offset / 4], byte, width),
         };
     }
@@ -203,6 +182,7 @@ pub const Mram = struct {
             regs.off_mstatr, regs.off_mastat => self.read_only +%= 1,
             regs.off_mentryr => self.enter(offset, byte, width, value),
             regs.off_msaddr => self.msaddr = self.store(offset, byte, width, value),
+            init_reg.off => self.setup.write(byte, width, value),
             else => _ = self.store(offset, byte, width, value),
         }
     }
