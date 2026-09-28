@@ -171,6 +171,15 @@ fn touchline(board: *Board, out: Writer) !void {
     if (unit.role_clash != 0) {
         try out.print(", {d} ROLE CHANGE(S) ON TOP OF A LIVE TRANSFER REFUSED", .{unit.role_clash});
     }
+    if (unit.resets != 0) {
+        try out.print(
+            ", {d} RSTCTL software reset(s) took the channel back to idle",
+            .{unit.resets},
+        );
+    }
+    if (unit.reset_busy != 0) {
+        try out.print(", {d} of them with a transaction still open", .{unit.reset_busy});
+    }
     try out.print("\n", .{});
     try responder(board, out);
 }
