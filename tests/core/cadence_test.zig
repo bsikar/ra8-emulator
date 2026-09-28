@@ -84,3 +84,30 @@ test "boundaries and chunks agree on how a budget is cut" {
     }
     try std.testing.expectEqual(pace.boundaries(1000), ticks);
 }
+
+test "a boundary narrows to a period finer than it" {
+    const pace = cadence.Cadence{ .per_boundary = 50_000 };
+    try std.testing.expectEqual(@as(u32, 8_401), pace.narrowedTo(8_401).per_boundary);
+}
+
+test "a boundary is never widened to a longer period" {
+    const pace = cadence.Cadence{ .per_boundary = 50_000 };
+    try std.testing.expectEqual(@as(u32, 50_000), pace.narrowedTo(200_000).per_boundary);
+    try std.testing.expectEqual(@as(u32, 50_000), pace.narrowedTo(50_000).per_boundary);
+}
+
+test "nothing armed leaves the boundary alone" {
+    const pace = cadence.Cadence{ .per_boundary = 50_000 };
+    try std.testing.expectEqual(@as(u32, 50_000), pace.narrowedTo(0).per_boundary);
+}
+
+test "a period under the floor narrows only to the floor" {
+    const pace = cadence.Cadence{ .per_boundary = 50_000 };
+    try std.testing.expectEqual(cadence.floor, pace.narrowedTo(1).per_boundary);
+    try std.testing.expectEqual(cadence.floor, pace.narrowedTo(cadence.floor - 1).per_boundary);
+}
+
+test "a narrowed boundary delivers one period per chunk" {
+    const pace = (cadence.Cadence{ .per_boundary = 50_000 }).narrowedTo(8_401);
+    try std.testing.expectEqual(@as(usize, 8_401), pace.chunk(100_000));
+}

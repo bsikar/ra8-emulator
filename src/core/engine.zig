@@ -279,12 +279,18 @@ pub const Engine = struct {
         if (session.timebase == null and session.interrupts == null) {
             return self.runChunk(start, instructions, session.watch);
         }
-        const pace = cadence.Cadence{
+        const configured = cadence.Cadence{
             .per_boundary = if (session.timebase) |clock| clock.per_chunk else cadence.instructions,
         };
         var remaining = instructions;
         var pc = start;
         while (remaining > 0) {
+            // Read the armed period every time round rather than once: the
+            // firmware arms SysTick well after reset, and may re-arm it.
+            const pace = if (session.timebase) |clock|
+                configured.narrowedTo(clock.period(self))
+            else
+                configured;
             const chunk = pace.chunk(remaining);
             if (try self.runChunk(pc, chunk, session.watch)) |taken| {
                 const controller = session.interrupts orelse return taken;

@@ -32,11 +32,30 @@ const std = @import("std");
 /// Instructions between two boundaries.
 pub const instructions: u32 = 50_000;
 
+/// The narrowest a boundary is allowed to get when a timed event asks for
+/// one finer than `instructions`. A reload of a handful of ticks would
+/// otherwise put a boundary every few instructions and spend the whole run
+/// in per-boundary work; below this the model stops following the period and
+/// the collapse it causes is the firmware's own to see.
+pub const floor: u32 = 2_000;
+
 /// The boundary policy of one run. A field rather than a bare constant so a
 /// test can run a short boundary, which is also what the engine reads off the
 /// time base.
 pub const Cadence = struct {
     per_boundary: u32 = instructions,
+
+    /// Narrow this boundary to `period` when a timed event repeats faster
+    /// than the boundary does, bounded by `floor`. A boundary wider than the
+    /// period it is meant to deliver collapses periods into one: the counter
+    /// they drive advances once where the part advances it many times, and a
+    /// firmware counting those periods loses the difference. Widening never
+    /// happens here, so a caller asking for a period longer than the
+    /// boundary keeps the boundary.
+    pub fn narrowedTo(self: Cadence, period: u32) Cadence {
+        if (period == 0 or period >= self.per_boundary) return self;
+        return .{ .per_boundary = @max(floor, period) };
+    }
 
     /// The next stretch to execute: a whole boundary, or whatever is left of
     /// the budget when less than one remains.

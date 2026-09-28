@@ -180,3 +180,51 @@ test "the counter lands where the architecture says after a long chunk" {
     try std.testing.expectEqual(Wrapped{ .value = 98, .periods = 1 }, wrap(10, 99, 12));
     try std.testing.expectEqual(Wrapped{ .value = 99, .periods = 2 }, wrap(10, 99, 111));
 }
+
+test "an armed SysTick asks for a boundary one period wide" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(8_399, csr_enable | csr_tickint);
+    const clocks = Clocks{};
+    try std.testing.expectEqual(@as(u32, 8_400), clocks.period(&ppb));
+}
+
+test "a disabled SysTick asks for nothing" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(8_399, 0);
+    const clocks = Clocks{};
+    try std.testing.expectEqual(@as(u32, 0), clocks.period(&ppb));
+}
+
+test "a zero reload never wraps, so it asks for nothing" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(0, csr_enable | csr_tickint);
+    const clocks = Clocks{};
+    try std.testing.expectEqual(@as(u32, 0), clocks.period(&ppb));
+}
+
+test "the period a counting SysTick asks for ignores TICKINT" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(999, csr_enable);
+    const clocks = Clocks{};
+    try std.testing.expectEqual(@as(u32, 1_000), clocks.period(&ppb));
+}
+
+test "one boundary per period pends every period rather than collapsing them" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    var collapsed = Clocks{};
+    try ppb.armSysTick(999, csr_enable | csr_tickint);
+    try collapsed.advance(&ppb, 6_000);
+    try std.testing.expectEqual(@as(u64, 6), collapsed.ticks);
+    try std.testing.expectEqual(@as(u64, 1), collapsed.pends);
+
+    var followed = Clocks{};
+    try ppb.armSysTick(999, csr_enable | csr_tickint);
+    for (0..6) |_| try followed.advance(&ppb, 1_000);
+    try std.testing.expectEqual(@as(u64, 6), followed.ticks);
+    try std.testing.expectEqual(@as(u64, 6), followed.pends);
+}
