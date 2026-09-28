@@ -25,6 +25,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.locked_out},
         );
     }
+    if (unit.paused_kicks != 0) {
+        try out.print(
+            "Extra-MRAM: REFUSED {d} command(s) with MENTRYR.PCKA holding the sequencer paused\n",
+            .{unit.paused_kicks},
+        );
+    }
     if (unit.outside_mode != 0) {
         try out.print(
             "Extra-MRAM: REFUSED {d} command(s) with program/erase mode never entered\n",
@@ -43,13 +49,13 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.rewrites},
         );
     }
-    if (unit.keyless != 0) {
-        try out.print("Extra-MRAM: REFUSED {d} MENTRYR write(s) carrying the wrong key\n", .{unit.keyless});
+    if (unit.entry.keyless != 0) {
+        try out.print("Extra-MRAM: REFUSED {d} MENTRYR write(s) carrying the wrong key\n", .{unit.entry.keyless});
     }
-    if (unit.narrow_writes != 0) {
+    if (unit.entry.narrow_writes != 0) {
         try out.print(
             "Extra-MRAM: REFUSED {d} MENTRYR write(s) narrower than the register, no key was carried\n",
-            .{unit.narrow_writes},
+            .{unit.entry.narrow_writes},
         );
     }
     if (unit.setup.kicks != 0) {

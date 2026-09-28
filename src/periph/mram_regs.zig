@@ -29,6 +29,9 @@ pub const command = struct {
 pub const field = struct {
     /// MENTRYR.MENTRY, the program/erase mode status bit.
     pub const mentry: u32 = 0x0080;
+    /// MENTRYR.PCKA, the pause gate: set by the keyed pause pattern, clear
+    /// again on the keyed resume, and readable either way.
+    pub const pcka: u32 = 0x0040;
     /// The key byte MENTRYR takes in its high half.
     pub const key: u32 = 0xAA00;
     pub const key_mask: u32 = 0xFF00;
