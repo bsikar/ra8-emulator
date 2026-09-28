@@ -24,6 +24,14 @@
 //! and TDRE/TEND read as set. The receiver is a host-fed ring per channel, so
 //! RDRF is a fact about queued bytes rather than a value a driver wrote.
 //!
+//! THE SIMPLE LIN HALF OF THE WINDOW ANSWERS TOO. XCR0/XCR1/XCR2, XSR0/XSR1
+//! and XFCLR sit in the same channel window and used to fall through the
+//! `else` arms below: every store dropped, every read zero. XCR1.TCST is a
+//! self-clearing strobe that starts a break field, so reading it back clear
+//! is exactly what ra8_sci_lin_send_break polls for, and the call returned
+//! success for a break that never happened. The rule and its evidence live
+//! in src/periph/sci_lin.zig.
+//!
 //! RDR AND TDR ARE A DATA PORT, AND THE PORT IS THE BYTE RDAT/TDAT SITS IN.
 //! An access that does not name byte 0 of the word carries no character in
 //! either direction. The store side always said so. The read side did not:
@@ -36,6 +44,7 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 const sci_status = @import("sci_status.zig");
+const sci_lin = @import("sci_lin.zig");
 const lanes = @import("lanes.zig");
 
 /// SCI_B geometry. The Non-secure alias is folded onto this base by the bus
@@ -67,6 +76,9 @@ pub const ccr0 = struct {
     pub const tie: u32 = 0x0010_0000;
     pub const teie: u32 = 0x0020_0000;
 };
+
+/// The Simple LIN registers, and what a store to one does.
+pub const lin = sci_lin;
 
 pub const csr = sci_status.csr;
 pub const fifo = sci_status.fifo;
@@ -161,6 +173,8 @@ pub const Channel = struct {
     /// Stores to TDR that named a byte above TDAT. They send nothing.
     unnamed_stores: u32 = 0,
     rx: Ring = .{},
+    /// The Simple LIN half of this channel.
+    lin: sci_lin.Lin = .{},
     /// What is on this channel's line, if anything.
     device: ?Device = null,
 
@@ -171,7 +185,7 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.transmitted == 0 and self.received == 0 and
             self.unsent == 0 and self.unheard == 0 and self.status_stores == 0 and
-            self.unnamed_reads == 0 and self.unnamed_stores == 0;
+            self.unnamed_reads == 0 and self.unnamed_stores == 0 and self.lin.quiet();
     }
 
     /// CSR as this channel answers it. What those bits mean, and why they
@@ -262,7 +276,7 @@ pub const Sci = struct {
             // The clear strobes are write-only, and nothing else in the
             // channel answers: zero beats the sparse file's alternating
             // stand-in here, because these are registers with no value.
-            else => 0,
+            else => if (sci_lin.owns(offset)) channel.lin.read(offset) else 0,
         };
     }
 
@@ -315,7 +329,7 @@ pub const Sci = struct {
             // CFCLR and FFCLR are write-1-to-clear over flags this model
             // derives rather than latches: TDRE and TEND never go down, and
             // RDRF follows the queue, so clearing them changes nothing.
-            else => {},
+            else => if (sci_lin.owns(word)) channel.lin.write(word, lane, width, value),
         }
     }
 
