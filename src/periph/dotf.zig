@@ -107,6 +107,21 @@ pub const Channel = struct {
         return self.decrypting() and region.covers(self.convareast, self.convaread, address);
     }
 
+    /// The value a register actually holds, so a narrow write folds into
+    /// the bytes it does not name. This is the stored value, not the one a
+    /// read gives back: CONVAREAD reads its reserved field back as ones, and
+    /// folding those in would let a byte write carry them into the address
+    /// field. The staging window holds nothing, so it folds into zero.
+    fn held(self: *const Channel, local: u32) u32 {
+        return switch (local) {
+            off.convareast => self.convareast,
+            off.convaread => self.convaread,
+            off.reg00 => self.reg00,
+            off.reg03 => 0,
+            else => self.shadowWord(local),
+        };
+    }
+
     fn word(self: *Channel, local: u32) u32 {
         return switch (local) {
             off.convareast => region.startReadback(self.convareast),
@@ -201,7 +216,7 @@ pub const Dotf = struct {
         const placed = if (width >= 4 and local == aligned)
             value
         else
-            merge(unit.shadowWord(aligned), local - aligned, width, value);
+            merge(unit.held(aligned), local - aligned, width, value);
         unit.writeWord(index, aligned, placed);
     }
 
