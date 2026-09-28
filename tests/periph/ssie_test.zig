@@ -231,3 +231,68 @@ test "a refused store alone is enough to report the channel" {
     try std.testing.expect(!block.channels[0].quiet());
     try std.testing.expect(!block.quiet());
 }
+
+test "SSIRST empties the transmit FIFO and takes the enables down" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssicr, 4, ssie.field.ten | 0x0000_0040);
+    block.write(ch0 + ssie.off_ssiftdr, 4, 0xAAAA_AAAA);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].transmitted);
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    // The mode bit above the enables rides through; REN and TEN do not.
+    try std.testing.expectEqual(@as(u32, 0x0000_0040), block.channels[0].ssicr);
+    try std.testing.expect(!block.channels[0].transmitting());
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].resetCount());
+}
+
+test "a reset throws away what was staged behind a transmitter that never came on" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssiftdr, 4, 0x1111_1111);
+    block.write(ch0 + ssie.off_ssiftdr, 4, 0x2222_2222);
+    try std.testing.expectEqual(@as(usize, 2), block.channels[0].staged());
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    try std.testing.expectEqual(@as(usize, 0), block.channels[0].staged());
+    try std.testing.expectEqual(@as(u32, 2), block.channels[0].discarded());
+    // Nothing left to drain, so enabling the transmitter shifts nothing out.
+    block.write(ch0 + ssie.off_ssicr, 4, ssie.field.ten);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].transmitted);
+}
+
+test "IIRQ comes back after a reset, so the driver's idle check passes" {
+    var block = unit();
+    try startTx(&block, ch0);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + ssie.off_ssisr, 4));
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    try std.testing.expectEqual(ssie.field.iirq, block.read(ch0 + ssie.off_ssisr, 4));
+}
+
+test "SSIRST reads back what firmware wrote and only resets on the rising edge" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    try std.testing.expectEqual(ssie.reset.mask.ssirst, block.read(ch0 + ssie.off_ssifcr, 4));
+    // The bit is held, so another SSIFCR field arriving on top of it is not a
+    // second reset.
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst | 0x0000_000C);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].resetCount());
+    block.write(ch0 + ssie.off_ssifcr, 4, 0);
+    block.write(ch0 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    try std.testing.expectEqual(@as(u32, 2), block.channels[0].resetCount());
+}
+
+test "a reset on one channel leaves the other running" {
+    var block = unit();
+    try startTx(&block, ch0);
+    try startTx(&block, ch1);
+    block.write(ch1 + ssie.off_ssifcr, 4, ssie.reset.mask.ssirst);
+    try std.testing.expect(block.channels[0].transmitting());
+    try std.testing.expect(!block.channels[1].transmitting());
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].resetCount());
+}
+
+test "a halfword store to the top of SSIFCR carries SSIRST" {
+    var block = unit();
+    try startTx(&block, ch0);
+    // SSIRST is bit 16, so it rides in the upper halfword at +2.
+    block.write(ch0 + ssie.off_ssifcr + 2, 2, 0x0001);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].resetCount());
+    try std.testing.expect(!block.channels[0].transmitting());
+}
