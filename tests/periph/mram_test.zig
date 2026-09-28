@@ -58,6 +58,67 @@ test "a keyless MENTRYR write is refused, where dev enters anyway" {
     try std.testing.expectEqual(@as(u32, 1), unit.keyless);
 }
 
+test "a byte store at MENTRYR carries no key, where the shadow used to vouch" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr), 4, enter_pe);
+    unit.write(address(mram.regs.off_mentryr), 4, leave_pe);
+    unit.write(address(mram.regs.off_mentryr), 1, mram.field.mentry);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(address(mram.regs.off_mentryr), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0), unit.keyless);
+}
+
+test "a byte store of the key half alone does not move the mode" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr) + 1, 1, 0xAA);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(address(mram.regs.off_mentryr), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.narrow_writes);
+}
+
+test "a halfword store names the whole of MENTRYR and is taken" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr), 2, enter_pe);
+    try std.testing.expectEqual(mram.field.mentry, unit.read(address(mram.regs.off_mentryr), 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.narrow_writes);
+    unit.write(address(mram.regs.off_mentryr), 2, leave_pe);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(address(mram.regs.off_mentryr), 4));
+}
+
+test "a refused narrow store leaves program/erase mode standing" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr), 4, enter_pe);
+    unit.write(address(mram.regs.off_mentryr), 1, 0x00);
+    try std.testing.expectEqual(mram.field.mentry, unit.read(address(mram.regs.off_mentryr), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.narrow_writes);
+}
+
+test "a wrong key in a whole-register store is still counted keyless" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr), 2, 0x5580);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(address(mram.regs.off_mentryr), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.keyless);
+    try std.testing.expectEqual(@as(u32, 0), unit.narrow_writes);
+}
+
+test "the bytes above MENTRYR still merge into the shadow" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    unit.write(address(mram.regs.off_mentryr) + 2, 2, 0x1234);
+    try std.testing.expectEqual(@as(u32, 0), unit.narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0), unit.keyless);
+}
+
 test "MSADDR keeps the bytes a narrow store does not name" {
     var unit = mram.Mram.init(std.testing.allocator);
     defer unit.deinit();
