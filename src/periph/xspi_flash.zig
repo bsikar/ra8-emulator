@@ -18,6 +18,14 @@
 //! bits, so writing 0x0F over 0x33 leaves 0x03 and never restores a one; the
 //! only way back to 0xFF is a sector erase. LevelX depends on exactly that:
 //! it marks a block used by clearing a bit in a header it wrote earlier.
+//!
+//! THE OTHER NOR SEMANTIC IS THE PAGE. A page program walks a counter that
+//! is only as wide as a page, so a program that runs past the end of its
+//! 256-byte page WRAPS TO THE START OF THAT PAGE and overwrites what it
+//! already wrote. It does not spill into the next page, and it cannot leave
+//! the page it started in. A read is the opposite and streams straight on
+//! across pages and sectors, which is why the two paths do not share this
+//! arithmetic.
 const std = @import("std");
 
 /// The part this models.
@@ -31,8 +39,31 @@ pub const part = struct {
     /// The JEDEC triplet RDID answers with: manufacturer, type, capacity.
     pub const jedec = [3]u8{ 0x9D, 0x5A, 0x1A };
 
+    /// The program unit. A page program addresses within one of these and
+    /// wraps inside it; it never crosses into the next.
+    pub const page_len: u32 = 0x100;
+
     pub fn sectorOf(address: u32) u32 {
         return address / sector_len;
+    }
+
+    /// The first address of the page an address falls in.
+    pub fn pageOf(address: u32) u32 {
+        return address & ~(page_len - 1);
+    }
+
+    /// Where the nth byte of a page program starting at `address` lands.
+    /// Past the end of the page that is the start of the same page, not the
+    /// next one.
+    pub fn programStep(address: u32, index: u32) u32 {
+        return pageOf(address) + ((address +% index) % page_len);
+    }
+
+    /// Whether a program of `len` bytes from `address` runs past the end of
+    /// its page and so wraps.
+    pub fn crossesPage(address: u32, len: u32) bool {
+        if (len == 0) return false;
+        return (address % page_len) + len > page_len;
     }
 
     pub fn holds(address: u32, len: u32) bool {

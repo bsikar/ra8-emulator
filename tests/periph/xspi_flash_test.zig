@@ -97,3 +97,26 @@ test "the sector of an address is its 4 KiB block" {
     try std.testing.expect(flash.part.holds(flash.part.size - 8, 8));
     try std.testing.expect(!flash.part.holds(flash.part.size - 7, 8));
 }
+
+test "the page of an address is its 256-byte block" {
+    try std.testing.expectEqual(@as(u32, 0x1000), flash.part.pageOf(0x1000));
+    try std.testing.expectEqual(@as(u32, 0x1000), flash.part.pageOf(0x10FF));
+    try std.testing.expectEqual(@as(u32, 0x1100), flash.part.pageOf(0x1100));
+}
+
+test "a program step wraps to the start of its own page" {
+    // Four bytes from 0x10FE: two at the top of the page, two back at 0x1000.
+    try std.testing.expectEqual(@as(u32, 0x10FE), flash.part.programStep(0x10FE, 0));
+    try std.testing.expectEqual(@as(u32, 0x10FF), flash.part.programStep(0x10FE, 1));
+    try std.testing.expectEqual(@as(u32, 0x1000), flash.part.programStep(0x10FE, 2));
+    try std.testing.expectEqual(@as(u32, 0x1001), flash.part.programStep(0x10FE, 3));
+    // One that fits walks straight up.
+    try std.testing.expectEqual(@as(u32, 0x1003), flash.part.programStep(0x1000, 3));
+}
+
+test "a program crosses its page only when it runs past the end" {
+    try std.testing.expect(!flash.part.crossesPage(0x1000, 8));
+    try std.testing.expect(!flash.part.crossesPage(0x10F8, 8));
+    try std.testing.expect(flash.part.crossesPage(0x10F9, 8));
+    try std.testing.expect(!flash.part.crossesPage(0x10FF, 0));
+}

@@ -171,12 +171,79 @@ test "a command that runs off the end of the part is refused" {
     defer unit.deinit();
 
     enable(&unit);
-    kick(&unit, cdt(0x02, 8), xspi.part.size - 4, .{ 0, 0 });
+    // A read is not paged, so it really can run off the end.
+    kick(&unit, cdt(0x03, 8), xspi.part.size - 4, .{ 0, 0 });
     try std.testing.expectEqual(@as(u32, 1), unit.out_of_part);
-    try std.testing.expectEqual(@as(u32, 0), unit.programs);
+    try std.testing.expectEqual(@as(u32, 0), unit.reads);
 
     kick(&unit, cdt(0x20, 0), xspi.part.size, .{ 0, 0 });
     try std.testing.expectEqual(@as(u32, 2), unit.out_of_part);
+
+    // So can a program, but only by starting past the end.
+    kick(&unit, cdt(0x02, 4), xspi.part.size, .{ 0, 0 });
+    try std.testing.expectEqual(@as(u32, 3), unit.out_of_part);
+    try std.testing.expectEqual(@as(u32, 0), unit.programs);
+}
+
+test "a program past the end of its page wraps to the start of that page" {
+    var unit = xspi.Xspi.init(std.testing.allocator);
+    defer unit.deinit();
+
+    // Six bytes from 0x10FC: four at the top of the page, two back at 0x1000.
+    enable(&unit);
+    kick(&unit, cdt(0x02, 6), 0x10FC, .{ 0x0403_0201, 0x0000_0605 });
+    try std.testing.expectEqual(@as(u32, 1), unit.programs);
+    try std.testing.expectEqual(@as(u32, 1), unit.wrapped);
+    try std.testing.expectEqual(@as(u8, 0x01), unit.flash.byte(0x10FC));
+    try std.testing.expectEqual(@as(u8, 0x04), unit.flash.byte(0x10FF));
+    try std.testing.expectEqual(@as(u8, 0x05), unit.flash.byte(0x1000));
+    try std.testing.expectEqual(@as(u8, 0x06), unit.flash.byte(0x1001));
+    // The next page is untouched: the tail did not spill into it.
+    try std.testing.expectEqual(@as(u8, 0xFF), unit.flash.byte(0x1100));
+    try std.testing.expectEqual(@as(u8, 0xFF), unit.flash.byte(0x1101));
+}
+
+test "a program that fits its page is not counted as wrapped" {
+    var unit = xspi.Xspi.init(std.testing.allocator);
+    defer unit.deinit();
+
+    enable(&unit);
+    kick(&unit, cdt(0x02, 8), 0x10F8, .{ 0x0403_0201, 0x0807_0605 });
+    try std.testing.expectEqual(@as(u32, 1), unit.programs);
+    try std.testing.expectEqual(@as(u32, 0), unit.wrapped);
+    try std.testing.expectEqual(@as(u8, 0x01), unit.flash.byte(0x10F8));
+    try std.testing.expectEqual(@as(u8, 0x08), unit.flash.byte(0x10FF));
+    try std.testing.expectEqual(@as(u8, 0xFF), unit.flash.byte(0x1000));
+}
+
+test "a wrapping program overwrites what the same command just wrote" {
+    var unit = xspi.Xspi.init(std.testing.allocator);
+    defer unit.deinit();
+
+    // Start at 0x1000 so the wrap lands on a byte this command already set.
+    enable(&unit);
+    kick(&unit, cdt(0x02, 4), 0x1000, .{ 0xFFFF_FFFF, 0 });
+    enable(&unit);
+    kick(&unit, cdt(0x02, 2), 0x10FF, .{ 0x0000_0F0F, 0 });
+    try std.testing.expectEqual(@as(u32, 1), unit.wrapped);
+    try std.testing.expectEqual(@as(u8, 0x0F), unit.flash.byte(0x10FF));
+    // NOR only clears, so the wrapped byte ANDs into what was at 0x1000.
+    try std.testing.expectEqual(@as(u8, 0x0F), unit.flash.byte(0x1000));
+}
+
+test "a program near the end of the part wraps inside its last page" {
+    var unit = xspi.Xspi.init(std.testing.allocator);
+    defer unit.deinit();
+
+    const last_page = xspi.part.size - xspi.part.page_len;
+    enable(&unit);
+    kick(&unit, cdt(0x02, 8), xspi.part.size - 4, .{ 0x0403_0201, 0x0807_0605 });
+    try std.testing.expectEqual(@as(u32, 1), unit.programs);
+    try std.testing.expectEqual(@as(u32, 1), unit.wrapped);
+    try std.testing.expectEqual(@as(u32, 0), unit.out_of_part);
+    try std.testing.expectEqual(@as(u8, 0x01), unit.flash.byte(xspi.part.size - 4));
+    try std.testing.expectEqual(@as(u8, 0x05), unit.flash.byte(last_page));
+    try std.testing.expectEqual(@as(u8, 0x08), unit.flash.byte(last_page + 3));
 }
 
 test "an unknown opcode completes and touches nothing" {

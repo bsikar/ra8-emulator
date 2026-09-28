@@ -38,6 +38,20 @@
 //! value into regs[off / 4], so a byte store to CDCTL0 wipes CSSEL above it
 //! and the transfer goes to the wrong chip select.
 //!
+//! A PAGE PROGRAM STAYS IN ITS PAGE. dev walks the address straight up from
+//! the one the descriptor names, so a program that starts near the end of a
+//! 256-byte page spills its tail into the NEXT page. The part does not do
+//! that: the program counter is page-wide, so the tail wraps to the start of
+//! the page it began in and overwrites what the same command just wrote. A
+//! driver that gets this wrong sees the right bytes here and the wrong ones
+//! on silicon, in the direction a model must never be wrong in. Here the
+//! program wraps, and a command that wrapped is counted so the run says so.
+//! A READ IS NOT PAGED and still streams straight on across pages and
+//! sectors, which is why only the program path carries the arithmetic.
+//! It follows that a page program cannot run off the end of the part at all:
+//! only a start address already past the end is out of the part, which is
+//! the same test the erase path uses.
+//!
 //! NOT MODELLED, AND NOT GUESSED: the memory-mapped read path (CSa space),
 //! WRAPCFG and the timing and calibration registers, the second command
 //! slot, INTE's masks, and every status bit besides CMDCMP. No header for
@@ -144,6 +158,8 @@ pub const Xspi = struct {
     oversized: u32 = 0,
     /// Commands whose address and length run off the end of the part.
     out_of_part: u32 = 0,
+    /// Programs whose tail wrapped to the start of its own page.
+    wrapped: u32 = 0,
     /// Stores to INTS: firmware cannot raise a completion itself.
     faked: u32 = 0,
     /// Programs the model could not find room to hold.
@@ -160,7 +176,7 @@ pub const Xspi = struct {
     pub fn quiet(self: *const Xspi) bool {
         return self.reads == 0 and self.programs == 0 and self.erases == 0 and
             self.unarmed == 0 and self.oversized == 0 and self.out_of_part == 0 and
-            self.faked == 0 and self.lost == 0;
+            self.wrapped == 0 and self.faked == 0 and self.lost == 0;
     }
 
     pub fn read(self: *Xspi, address: u32, width: u3) u32 {
@@ -244,15 +260,19 @@ pub const Xspi = struct {
     }
 
     /// Program the data bytes into the part. NOR only clears bits, so this
-    /// cannot put a one back where a previous program took it away.
+    /// cannot put a one back where a previous program took it away, and the
+    /// address counter is only as wide as a page, so a tail past the end of
+    /// the page lands back at the start of the same page.
     fn doProgram(self: *Xspi, address: u32, size: u32) void {
         if (!self.armed()) return;
-        if (!self.fits(address, size)) return;
+        if (!self.fitsProgram(address, size)) return;
+        if (part.crossesPage(address, size)) self.wrapped +%= 1;
         const words = [2]u32{ self.buffer(slot.data0).*, self.buffer(slot.data1).* };
         for (0..size) |index| {
             const shift: u5 = @intCast((index % 4) * 8);
             const value: u8 = @truncate(words[index / 4] >> shift);
-            self.flash.program(address + @as(u32, @intCast(index)), value) catch {
+            const at = part.programStep(address, @intCast(index));
+            self.flash.program(at, value) catch {
                 self.lost +%= 1;
                 return;
             };
@@ -280,7 +300,23 @@ pub const Xspi = struct {
         return false;
     }
 
-    /// Whether slot 0 and the part can both carry this transfer.
+    /// Whether slot 0 and the part can both carry a program. A program stays
+    /// inside the page it started in, so the only way off the part is a start
+    /// address that is already past the end of it.
+    fn fitsProgram(self: *Xspi, address: u32, size: u32) bool {
+        if (size > slot.data_bytes) {
+            self.oversized +%= 1;
+            return false;
+        }
+        if (address >= part.size) {
+            self.out_of_part +%= 1;
+            return false;
+        }
+        return true;
+    }
+
+    /// Whether slot 0 and the part can both carry a read, which is not paged
+    /// and so really can run off the end.
     fn fits(self: *Xspi, address: u32, size: u32) bool {
         if (size > slot.data_bytes) {
             self.oversized +%= 1;
