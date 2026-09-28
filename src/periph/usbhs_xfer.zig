@@ -6,6 +6,36 @@
 //! call, so the polled host ran ahead of a device that had not answered yet.
 //! Here the control transfer is a value with a state, the flags follow the
 //! device, and a step the transfer is not in is refused.
+//!
+//! A SUREQ LAUNCH LATCHES EXACTLY ONE OUTCOME, SACK OR SIGN, and that is the
+//! only thing the polled host can see. ra8_usb_host_ctrl.c's
+//! internal_host_setup_wait W0C-clears both latches, asserts SUREQ, and then
+//! spins on them: SACK returns ok, SIGN returns hw_error, and falling out of
+//! the loop returns hw_timeout. Its own comment is blunt about why it cannot
+//! watch SUREQ instead: "SUREQ self-clearing alone is NOT an ACK indication,
+//! so gate on these." The loop is bound by k_ra8_usb_ctrl_poll_limit, which
+//! is two million iterations.
+//!
+//! So a launch that latched nothing cost the driver that whole spin and then
+//! reported a timeout, which is the wrong diagnosis twice over: it names the
+//! clock rather than the bus, and it is the one outcome the HAL cannot tell
+//! apart from a wedged controller. Both legs latch now:
+//!
+//!   SIGN when there was nothing on the bus to answer. That is what SIGN
+//!   means on this part, per ra8_usb_regs.h: "SETUP transaction failed
+//!   (3x)", three transmission attempts with no handshake back.
+//!
+//!   SACK the moment the token reaches something attached, BEFORE the
+//!   request itself is judged. A SETUP token is ACKed at the token level by
+//!   anything on the bus; a device that will not honour the request says so
+//!   afterwards, in the stages that follow. So a refused request latches
+//!   SACK too, and is counted as a stall on top.
+//!
+//! NOT MODELLED, AND NOT GUESSED: how that refusal then reaches the driver.
+//! On silicon the DCP goes to PID=STALL and the host reads it back from
+//! DCPCTR; here the refusal is only a counter, so a driver that gets its
+//! SACK and moves on to the data stage waits on a BRDY that never comes.
+//! That is a bigger piece than this one and wants its own slice.
 const regs = @import("usbhs_regs.zig");
 const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
@@ -52,6 +82,7 @@ pub const Transfer = struct {
     pub fn launch(self: *Transfer, live: bool) void {
         if (!live) {
             self.no_device += 1;
+            self.intsts1 |= regs.int1.sign;
             return;
         }
         self.packet = usbhs_setup.Packet.fromRegisters(
@@ -64,14 +95,14 @@ pub const Transfer = struct {
         self.in_flight = true;
         self.setups += 1;
         self.port.in[0].clear();
+        // The SIE latches SACK when the token is ACKed, which anything on
+        // the bus does at the token level. Whether the request itself can be
+        // honoured is a later question and a later stage.
+        self.intsts1 |= regs.int1.sack;
         if (!self.device.handle(self.packet)) {
             self.stalls += 1;
             self.in_flight = false;
-            return;
         }
-        // The SIE latches SACK when the device ACKs the token; the polled
-        // host gates its next step on it.
-        self.intsts1 |= regs.int1.sack;
     }
 
     /// DCPCTR.CCPL: the host closes the transfer. dev ran this on any write
