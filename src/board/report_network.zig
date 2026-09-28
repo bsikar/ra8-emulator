@@ -282,6 +282,15 @@ fn can(board: *Board, out: Writer) !void {
                 .{ index, unit.faked },
             );
         }
+        if (unit.faults.invented != 0) {
+            try out.print(
+                "CANFD{d}: REFUSED {d} store(s) to CFDCnERFL that would have raised an error flag the controller never saw\n",
+                .{ index, unit.faults.invented },
+            );
+        }
+        if (unit.faults.flags != 0) {
+            try out.print("CANFD{d}: error flags standing: 0x{x:0>4}\n", .{ index, unit.faults.flags });
+        }
     }
     if (board.can.wakes != 0) {
         try out.print("CANFD0: {d} receive event(s) raised\n", .{board.can.wakes});

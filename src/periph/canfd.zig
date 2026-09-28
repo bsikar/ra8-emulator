@@ -40,6 +40,15 @@
 //! INTS pattern, and narrow writes keep the bytes they do not name, which
 //! dev's reg[off / 4] = value wipes.
 //!
+//! AN ERROR FLAG IS THE CONTROLLER'S TO RAISE. CFDCnERFL was not interpreted
+//! at all, so it fell into the flat shadow and read back whatever was last
+//! written at it. The flags are write-ZERO-to-clear, so a driver that acks
+//! them the way most CAN parts want, by writing ones, SET all fifteen here,
+//! and the driver's own clear writes the inverse of its mask so the rest
+//! survived their own acknowledgement. The dispatch then hands that word to
+//! the application as errors that never happened. The rule and its evidence
+//! live in src/periph/canfd_error.zig.
+//!
 //! KEPT FROM DEV DELIBERATELY: the acceptance filter and its open-when-empty
 //! rule, so an image that programs no CFDGAFL entry keeps receiving
 //! everything, and a programmed entry drops the identifier it does not match.
@@ -48,88 +57,38 @@
 //! other RX FIFOs and the receive buffers, TX queues and history, error
 //! counters and the bus-off machine, and every interrupt besides the
 //! RX-FIFO one. The rest of the window is shadowed, and never read.
-const std = @import("std");
 const periph = @import("registry.zig");
 const fifo = @import("canfd_fifo.zig");
+const registers = @import("canfd_regs.zig");
+const errors = @import("canfd_error.zig");
 
-/// CANFD geometry. The Non-secure alias is folded onto these by the bus.
-pub const unit0_base: u32 = 0x4038_0000;
-pub const unit1_base: u32 = 0x4038_2000;
-pub const win_span: u32 = 0x1920;
-pub const unit_count: usize = 2;
+/// The geometry, the offsets and the field masks, split into
+/// canfd_regs.zig and reached through the block the way the other parts of
+/// it are.
+pub const unit0_base = registers.unit0_base;
+pub const unit1_base = registers.unit1_base;
+pub const win_span = registers.win_span;
+pub const unit_count = registers.unit_count;
+pub const off_cnctr = registers.off_cnctr;
+pub const off_cnsts = registers.off_cnsts;
+pub const off_gctr = registers.off_gctr;
+pub const off_gsts = registers.off_gsts;
+pub const off_rfsts0 = registers.off_rfsts0;
+pub const off_rfpctr0 = registers.off_rfpctr0;
+pub const off_tmc0 = registers.off_tmc0;
+pub const off_tmsts0 = registers.off_tmsts0;
+pub const off_afl = registers.off_afl;
+pub const off_rf0 = registers.off_rf0;
+pub const off_tm0 = registers.off_tm0;
+pub const afl = registers.afl;
+pub const field = registers.field;
+pub const event = registers.event;
+pub const Due = registers.Due;
+pub const Mode = registers.Mode;
 
-/// The registers this model interprets. Everything else is shadow.
-pub const off_cnctr: u32 = 0x004;
-pub const off_cnsts: u32 = 0x008;
-pub const off_gctr: u32 = 0x018;
-pub const off_gsts: u32 = 0x01C;
-pub const off_rfsts0: u32 = 0x044;
-pub const off_rfpctr0: u32 = 0x04C;
-pub const off_tmc0: u32 = 0x070;
-pub const off_tmsts0: u32 = 0x074;
-pub const off_afl: u32 = 0x120;
-pub const off_rf0: u32 = 0x520;
-pub const off_tm0: u32 = 0x604;
-
-/// The acceptance-filter page this model reads: sixteen entries of
-/// {ID, mask, page 0, page 1}, as dev reads them.
-pub const afl = struct {
-    pub const stride: u32 = 0x10;
-    pub const count: usize = 16;
-};
-
-/// The status and control bits dev's own masks name.
-pub const field = struct {
-    /// CFDGSTS.GRSTSTS, global reset status.
-    pub const grststs: u32 = 1 << 0;
-    /// CFDGSTS.GHLTSTS, global halt status.
-    pub const ghltsts: u32 = 1 << 1;
-    /// CFDGSTS.GRAMINIT, message-RAM init in progress. Clear from power-up
-    /// here as on dev: there is no RAM to initialise.
-    pub const graminit: u32 = 1 << 3;
-    /// CFDC.STS.CRSTSTS, channel reset status.
-    pub const crststs: u32 = 1 << 0;
-    /// CFDC.STS.CHLTSTS, channel halt status.
-    pub const chltsts: u32 = 1 << 1;
-    /// CFDRFSTS.RFEMP, the FIFO is empty.
-    pub const rfemp: u32 = 1 << 0;
-    /// CFDRFSTS.RFIF, a frame is waiting.
-    pub const rfif: u32 = 1 << 3;
-    /// CFDTMC.TMTR, the transmit request.
-    pub const tmtr: u32 = 1 << 0;
-    /// CFDTMSTS.TMTRF = 10b, transmission complete.
-    pub const tmtrf_done: u32 = 0x04;
-    /// GMDC / CHMDC, the two-bit mode field both control registers carry.
-    pub const mode: u32 = 0x3;
-};
-
-/// The CANFD0 RX-FIFO event, carried over from dev at its own best-effort
-/// value: no FSP bsp_elc.h is installed here to check it against. Nothing in
-/// this tree routes it, so it costs a polled image nothing and gives an
-/// interrupt-driven one something to take.
-pub const event = struct {
-    pub const can0_rxf: u16 = 0x33D;
-};
-
-/// One event per boundary: the line is pending in the controller until the
-/// firmware clears it, so re-raising every stage would say nothing new.
-pub const Due = std.BoundedArray(u16, 1);
-
-/// The three states both machines walk. A reserved encoding lands on
-/// operation, which is what dev's else branch does.
-pub const Mode = enum {
-    operation,
-    reset,
-    halt,
-
-    pub fn fromBits(value: u32) Mode {
-        return switch (value & field.mode) {
-            1 => .reset,
-            2 => .halt,
-            else => .operation,
-        };
-    }
-};
+/// The error-flag rule, reached as `canfd.error_flags` the way the other
+/// split parts of this block are reached through it.
+pub const error_flags = errors;
 
 const shadow_words: usize = win_span / 4;
 const frame_span: u32 = @as(u32, fifo.frame_words) * 4;
@@ -144,6 +103,8 @@ pub const Unit = struct {
     tmc: u32 = 0,
     /// CFDTMSTS[0], set by the controller and by nothing else.
     tmsts: u32 = 0,
+    /// CFDCnERFL: the error flags, which only the controller can raise.
+    faults: errors.Errors = .{},
     queue: fifo.Fifo = .{},
     shadow: [shadow_words]u32 = .{0} ** shadow_words,
     /// Frames clocked out of the transmit buffer.
@@ -163,7 +124,8 @@ pub const Unit = struct {
 
     pub fn quiet(self: *const Unit) bool {
         return self.sent == 0 and self.refused == 0 and self.starved == 0 and
-            self.faked == 0 and self.global == .reset and self.channel == .reset;
+            self.faked == 0 and self.faults.quiet() and
+            self.global == .reset and self.channel == .reset;
     }
 
     /// Both machines have to be in operation before a frame can go.
@@ -253,6 +215,7 @@ pub const Unit = struct {
             off_rfsts0 => self.fifoStatus(),
             off_tmc0 => self.tmc,
             off_tmsts0 => self.tmsts,
+            errors.off => self.faults.read(),
             // Write-only: the pointer control has nothing behind it.
             off_rfpctr0 => 0,
             else => self.shadow[offset / 4],
@@ -278,6 +241,7 @@ pub const Unit = struct {
                 self.tmc = merge(self.tmc, byte, width, value);
                 if (self.tmc & field.tmtr != 0) return self.transmit();
             },
+            errors.off => self.faults.store(byte, width, value),
             off_rfpctr0 => self.popFrame(),
             else => {
                 const word = offset / 4;
