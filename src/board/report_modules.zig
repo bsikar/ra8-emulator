@@ -7,13 +7,35 @@
 //! purpose to prove it is dead, then clears the bit and carries on. Only the
 //! gate at the end of the run tells them apart, so that is what is asked
 //! here rather than the counters alone.
+const ckcr = @import("../periph/ckcr.zig");
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
 
 const Writer = std.fs.File.Writer;
 
+/// The peripheral clock branches a run switched, and any switch PRCR ate.
+/// A branch nobody asked for stays out of the report.
+fn branches(board: *Board, out: Writer) !void {
+    const unit = &board.branches;
+    if (unit.quiet()) return;
+    for (&unit.selects, 0..) |*one, index| {
+        if (one.requests == 0 and one.switches == 0) continue;
+        try out.print(
+            "{s}: {d} switch request(s), {d} source change(s), source {d}\n",
+            .{ ckcr.names[index], one.requests, one.switches, one.sel },
+        );
+    }
+    if (unit.dropped_locked != 0) {
+        try out.print(
+            "clock select: DROPPED {d} store(s) with PRCR.PRC0 locked\n",
+            .{unit.dropped_locked},
+        );
+    }
+}
+
 pub fn section(board: *Board, out: Writer) !void {
+    try branches(board, out);
     if (board.modules.clean()) {
         try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
         return;
