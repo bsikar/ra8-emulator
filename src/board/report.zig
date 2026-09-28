@@ -53,6 +53,12 @@ pub fn blocks(board: *Board, out: Writer) !void {
             "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
             .{ @intFromEnum(board.checksum.gps()), board.checksum.dor, board.checksum.bytes },
         );
+        if (board.checksum.cleared != 0) {
+            try out.print(
+                "CRC: {d} DORCLR pulse(s), each one putting the remainder back to zero\n",
+                .{board.checksum.cleared},
+            );
+        }
     }
     if (!board.dataops.quiet()) {
         try out.print(
