@@ -379,17 +379,6 @@ pub fn reboots(out: Writer, pending: reboot.Reboot) !void {
     );
 }
 
-/// Only when the hook was needed: a run of Armv8.0-M code says nothing here,
-/// and a run of real Cortex-M85 code says how much of it the CPU model could
-/// not reach on its own.
-pub fn loops(out: Writer, stepped: lob.Loops) !void {
-    if (stepped.quiet()) return;
-    try out.print(
-        "low-overhead loops: {d} stepped by hand, the CPU model cannot decode Armv8.1-M\n",
-        .{stepped.stepped},
-    );
-}
-
 pub fn fault(out: Writer, taken: engine.Fault) !void {
     try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
     if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});

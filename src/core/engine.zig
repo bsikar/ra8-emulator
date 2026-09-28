@@ -14,8 +14,11 @@ const disasm = @import("disasm.zig");
 const cadence = @import("cadence.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
+const bus_hook = @import("bus_hook.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
+const csel = @import("csel.zig");
+const csel_hook = @import("csel_hook.zig");
 const reboot = @import("reboot.zig");
 const stop = @import("stop.zig");
 const deadline = @import("deadline.zig");
@@ -179,37 +182,13 @@ pub const Engine = struct {
     /// access in the window reaches the bus and either a modelled block or the
     /// sparse register file answers it.
     pub fn attachPeriph(self: Engine, bus: *periph.Bus) Error!void {
-        for ([_]u32{ periph.base, periph.ns_base }) |window| {
-            if (c.uc.uc_mmio_map(
-                self.handle,
-                window,
-                periph.size,
-                onRead,
-                bus,
-                onWrite,
-                bus,
-            ) != c.uc.UC_ERR_OK) {
-                return Error.AttachFailed;
-            }
-        }
+        bus_hook.attachBus(self.handle, bus) catch return Error.AttachFailed;
     }
 
-    /// Record the invalid accesses a run takes. Without this a fault is just
-    /// an error code and a PC; with it the report can say which address the
-    /// firmware reached for and how wide the access was.
+    /// Record the invalid accesses a run takes, so a fault can say which
+    /// address the firmware reached for and how wide the access was.
     pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
-        var hook: c.uc.uc_hook = 0;
-        if (c.uc.uc_hook_add(
-            self.handle,
-            &hook,
-            c.uc.UC_HOOK_MEM_INVALID,
-            @constCast(@as(*const anyopaque, @ptrCast(&onInvalid))),
-            watch,
-            1,
-            0,
-        ) != c.uc.UC_ERR_OK) {
-            return Error.AttachFailed;
-        }
+        bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M low-overhead loops the CPU model cannot decode.
@@ -217,6 +196,14 @@ pub const Engine = struct {
     /// its C startup runs, which is before main().
     pub fn attachLoops(self: Engine, loops: *lob.Loops) Error!void {
         lob_hook.attach(self.handle, loops) catch return Error.AttachFailed;
+    }
+
+    /// Step the Armv8.1-M conditional selects the CPU model cannot decode.
+    /// Its own hook rather than a branch inside the loop one: Unicorn walks
+    /// every invalid-instruction hook until one claims the encoding, so the
+    /// two decoders stay independent of each other.
+    pub fn attachSelects(self: Engine, selects: *csel.Selects) Error!void {
+        csel_hook.attach(self.handle, selects) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
@@ -336,53 +323,6 @@ pub const Engine = struct {
         };
     }
 };
-
-/// Unicorn hands an offset inside the mapped window, so the window base is
-/// added back before the bus sees it. These two functions and src/c.zig are
-/// the only places with a C calling convention in the emulator.
-fn onRead(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, user: ?*anyopaque) callconv(.C) u64 {
-    _ = uc;
-    const bus: *periph.Bus = @ptrCast(@alignCast(user.?));
-    return bus.read(periph.base + @as(u32, @truncate(offset)), widthOf(size));
-}
-
-fn onWrite(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, value: u64, user: ?*anyopaque) callconv(.C) void {
-    _ = uc;
-    const bus: *periph.Bus = @ptrCast(@alignCast(user.?));
-    bus.write(periph.base + @as(u32, @truncate(offset)), widthOf(size), @truncate(value));
-}
-
-fn onInvalid(
-    uc: ?*c.uc.uc_engine,
-    kind: c_int,
-    address: u64,
-    size: c_int,
-    value: i64,
-    user: ?*anyopaque,
-) callconv(.C) bool {
-    _ = uc;
-    const watch: *Watch = @ptrCast(@alignCast(user.?));
-    watch.last = .{
-        .kind = switch (kind) {
-            c.uc.UC_MEM_WRITE_UNMAPPED, c.uc.UC_MEM_WRITE_PROT => .write,
-            c.uc.UC_MEM_FETCH_UNMAPPED, c.uc.UC_MEM_FETCH_PROT => .fetch,
-            else => .read,
-        },
-        .address = address,
-        .size = @intCast(size),
-        .value = @bitCast(value),
-    };
-    // false: do not pretend the access succeeded, let the run stop.
-    return false;
-}
-
-fn widthOf(size: c_uint) u3 {
-    return switch (size) {
-        1 => 1,
-        2 => 2,
-        else => 4,
-    };
-}
 
 fn coveredByBoard(base: u32, size: u32) bool {
     for (memmap.ram) |region| {
