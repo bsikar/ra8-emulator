@@ -97,3 +97,28 @@ test "SPB is read out of bits 20 down to 16 and nothing else" {
     try std.testing.expect(frame.widthOf(noise) == null);
     try std.testing.expectEqual(frame.Width.sixteen, frame.widthOf(noise | (frame.spb.sixteen << frame.field.spb_shift)).?);
 }
+
+test "carriedBy wants an access at least as wide as the frame" {
+    const eight = frame.of(frame.spb.eight << frame.field.spb_shift);
+    try std.testing.expect(eight.carriedBy(0, 1));
+    try std.testing.expect(eight.carriedBy(0, 4));
+    const sixteen = frame.of(frame.spb.sixteen << frame.field.spb_shift);
+    try std.testing.expect(!sixteen.carriedBy(0, 1));
+    try std.testing.expect(sixteen.carriedBy(0, 2));
+    const wide = frame.of(frame.spb.thirty_two << frame.field.spb_shift);
+    try std.testing.expect(!wide.carriedBy(0, 2));
+    try std.testing.expect(wide.carriedBy(0, 4));
+}
+
+test "carriedBy wants the bottom lane of the register" {
+    const eight = frame.of(frame.spb.eight << frame.field.spb_shift);
+    try std.testing.expect(!eight.carriedBy(1, 1));
+    try std.testing.expect(!eight.carriedBy(2, 2));
+    try std.testing.expect(eight.carriedBy(0, 1));
+}
+
+test "an unprogrammed SPCMD0 is carried by any width at the bottom lane" {
+    const reset = frame.of(0);
+    try std.testing.expect(reset.carriedBy(0, 1));
+    try std.testing.expect(reset.carriedBy(0, 4));
+}

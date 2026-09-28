@@ -16,6 +16,11 @@ fn startLoopback(block: *spi.Spi, base: u32) void {
     block.write(base + spi.off_spcr, 4, spi.field.spe);
 }
 
+/// Programme SPCMD0's data length the way the driver does before a transfer.
+fn setWidth(block: *spi.Spi, base: u32, encoding: u32) void {
+    block.write(base + spi.frame.off.spcmd0, 4, encoding << spi.frame.field.spb_shift);
+}
+
 /// One frame, driver order: wait for TX empty, store, wait for RX full, read.
 fn exchange(block: *spi.Spi, base: u32, word: u32) !u32 {
     try std.testing.expect(block.read(base + spi.off_spsr, 4) & spi.field.sptef != 0);
@@ -152,4 +157,66 @@ test "an address past the last channel answers with nothing" {
     block.write(spi.win_base + spi.win_span, 4, 0xFFFF_FFFF);
     try std.testing.expectEqual(@as(u32, 0), block.read(spi.win_base + spi.win_span, 4));
     try std.testing.expect(block.quiet());
+}
+
+test "a byte read of SPDR cannot carry a 16-bit frame, and the register keeps it" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    setWidth(&block, ch0, spi.frame.spb.sixteen);
+    block.write(ch0 + spi.off_spdr, 4, 0x1234);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spdr, 1));
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].narrow_reads);
+    try std.testing.expect(block.read(ch0 + spi.off_spsr, 4) & spi.field.sprf != 0);
+    try std.testing.expectEqual(@as(u32, 0x1234), block.read(ch0 + spi.off_spdr, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].starved);
+}
+
+test "two halfword reads of a 32-bit frame take nothing, one word read takes it" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    setWidth(&block, ch0, spi.frame.spb.thirty_two);
+    block.write(ch0 + spi.off_spdr, 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spdr, 2));
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spdr + 2, 2));
+    try std.testing.expectEqual(@as(u32, 2), block.channels[0].narrow_reads);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), block.read(ch0 + spi.off_spdr, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].starved);
+}
+
+test "two halfword stores of a 32-bit frame clock nothing, not two half frames" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    setWidth(&block, ch0, spi.frame.spb.thirty_two);
+    block.write(ch0 + spi.off_spdr, 2, 0xBEEF);
+    block.write(ch0 + spi.off_spdr + 2, 2, 0xDEAD);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].frames);
+    try std.testing.expectEqual(@as(u32, 2), block.channels[0].narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spsr, 4) & spi.field.sprf);
+}
+
+test "a byte access still carries the eight-bit default" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    block.write(ch0 + spi.off_spdr, 1, 0x5A);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].frames);
+    try std.testing.expectEqual(@as(u32, 0x5A), block.read(ch0 + spi.off_spdr, 1));
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].narrow_reads);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].narrow_writes);
+}
+
+test "an access above the bottom lane of SPDR names no frame" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    block.write(ch0 + spi.off_spdr + 2, 1, 0x5A);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].frames);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].narrow_writes);
+}
+
+test "a refused SPDR store is counted as narrow before it is counted as disabled" {
+    var block = unit();
+    setWidth(&block, ch0, spi.frame.spb.sixteen);
+    block.write(ch0 + spi.off_spdr, 1, 0x5A);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].refused);
+    try std.testing.expect(!block.quiet());
 }

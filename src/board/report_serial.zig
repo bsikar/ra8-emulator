@@ -72,6 +72,18 @@ pub fn spi(board: *Board, out: Writer) !void {
                 .{ index, unit.starved },
             );
         }
+        if (unit.narrow_writes != 0) {
+            try out.print(
+                "SPI{d}: REFUSED {d} SPDR store(s) too narrow for the frame, no part frame was clocked\n",
+                .{ index, unit.narrow_writes },
+            );
+        }
+        if (unit.narrow_reads != 0) {
+            try out.print(
+                "SPI{d}: REFUSED {d} SPDR read(s) too narrow for the frame, the receive register kept it\n",
+                .{ index, unit.narrow_reads },
+            );
+        }
     }
 }
 
