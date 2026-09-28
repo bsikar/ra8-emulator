@@ -68,3 +68,35 @@ test "MMFSR names a data access violation with MMFAR standing" {
 test "MemManage is exception 4" {
     try std.testing.expectEqual(@as(u16, 4), mpu_fault.exception);
 }
+
+test "a refused fetch is counted apart from a refused store" {
+    var latch = mpu_fault.Latch{};
+    try std.testing.expect(latch.record(.{ .pc = 0x2200_0100, .address = 0x2200_0100, .kind = .fetch }));
+    try std.testing.expectEqual(@as(u64, 1), latch.violations);
+    try std.testing.expectEqual(@as(u64, 1), latch.fetches);
+    _ = latch.take();
+    try std.testing.expect(latch.record(.{ .pc = 0x2200_0200, .address = 0x220A_0000 }));
+    try std.testing.expectEqual(@as(u64, 2), latch.violations);
+    try std.testing.expectEqual(@as(u64, 1), latch.fetches);
+}
+
+test "a violation is a store unless it says otherwise" {
+    var latch = mpu_fault.Latch{};
+    _ = latch.record(.{ .pc = 0x2200_0004, .address = 0x220A_0000 });
+    try std.testing.expectEqual(mpu_fault.Kind.store, latch.pending.?.kind);
+    try std.testing.expectEqual(@as(u64, 0), latch.fetches);
+}
+
+test "a refused fetch carries the same address as its PC" {
+    var latch = mpu_fault.Latch{};
+    _ = latch.record(.{ .pc = 0x220A_0000, .address = 0x220A_0000, .kind = .fetch });
+    const hit = latch.take().?;
+    try std.testing.expectEqual(hit.pc, hit.address);
+}
+
+test "enforcement has not stood down until a fetch has nowhere to go" {
+    var latch = mpu_fault.Latch{};
+    try std.testing.expect(!latch.stood_down);
+    _ = latch.record(.{ .pc = 0x220A_0000, .address = 0x220A_0000, .kind = .fetch });
+    try std.testing.expect(!latch.stood_down);
+}
