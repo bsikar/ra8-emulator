@@ -21,7 +21,7 @@ const xpsr_stack_align = mod.xpsr_stack_align;
 /// A core-shaped stand-in: PPB words in a map, registers in an array, so the
 /// controller can be tested without Unicorn underneath it.
 const FakeCore = struct {
-    const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask };
+    const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp };
 
     words: std.AutoHashMap(u32, u32),
     registers: std.EnumArray(Name, u32) = std.EnumArray(Name, u32).initFill(0),
@@ -99,7 +99,7 @@ test "returning restores the frame and lands back where the exception hit" {
     // The handler clobbers what it is allowed to clobber.
     try core.setRegister(.r2, 0);
     try core.setRegister(.pc, exc_return_thread_msp);
-    try irqs.exit(&core);
+    try irqs.exit(&core, exc_return_thread_msp);
 
     try std.testing.expectEqual(@as(u32, 0x2200_0400), try core.register(.pc));
     try std.testing.expectEqual(@as(u32, 0x1234_5678), try core.register(.r2));
@@ -122,7 +122,7 @@ test "an unaligned stack pointer is padded and the pad is given back" {
     try std.testing.expect(try core.readWord(0x2200_7FF8 - 4) & xpsr_stack_align != 0);
 
     try core.setRegister(.pc, exc_return_thread_msp);
-    try irqs.exit(&core);
+    try irqs.exit(&core, exc_return_thread_msp);
     try std.testing.expectEqual(@as(u32, 0x2200_7FFC), try core.register(.sp));
 }
 
@@ -158,7 +158,7 @@ test "an enabled line is taken, a disabled one is not" {
     try std.testing.expectEqual(@as(?u16, first_irq + 5), try irqs.dispatch(&core));
     try std.testing.expect(try core.readWord(memmap.nvic.iabr) & (1 << 5) != 0);
     try core.setRegister(.pc, exc_return_thread_msp);
-    try irqs.exit(&core);
+    try irqs.exit(&core, exc_return_thread_msp);
     try std.testing.expectEqual(@as(u32, 0), try core.readWord(memmap.nvic.iabr));
 }
 
@@ -202,12 +202,12 @@ test "the more urgent line wins, and ties go to the lower exception number" {
     var irqs = Nvic{};
     try std.testing.expectEqual(@as(?u16, first_irq + 3), try irqs.dispatch(&core));
     try core.setRegister(.pc, exc_return_thread_msp);
-    try irqs.exit(&core);
+    try irqs.exit(&core, exc_return_thread_msp);
     try std.testing.expectEqual(@as(?u16, first_irq + 2), try irqs.dispatch(&core));
 
     // Same priority now, so the lower number goes first.
     try core.setRegister(.pc, exc_return_thread_msp);
-    try irqs.exit(&core);
+    try irqs.exit(&core, exc_return_thread_msp);
     try core.writeWord(memmap.nvic.ipr, 0);
     try core.writeWord(memmap.nvic.ispr, (1 << 2) | (1 << 3));
     try std.testing.expectEqual(@as(?u16, first_irq + 2), try irqs.dispatch(&core));
@@ -248,7 +248,7 @@ test "returning with nothing active is an error, not a silent unwind" {
     var core = FakeCore.init(std.testing.allocator);
     defer core.deinit();
     var irqs = Nvic{};
-    try std.testing.expectError(Error.NotInHandler, irqs.exit(&core));
+    try std.testing.expectError(Error.NotInHandler, irqs.exit(&core, exc_return_thread_msp));
 }
 
 test "a pend with no handler in the table is held, not jumped to" {
