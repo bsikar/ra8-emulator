@@ -34,6 +34,17 @@
 //! SSIFSR's TDC count, and the SSIFCR resets that empty it. That file carries
 //! the register fields and what is deliberately left alone in them.
 //!
+//! SSIFTDR IS A DATA PORT, NOT A BAG OF ADDRESSABLE LANES. A sample is one
+//! 32-bit register write, and the stage behind it moves whole. dev, and this
+//! model until now, clocked a sample on ANY store landing anywhere in the
+//! register and built it out of the lanes that store named, so a driver
+//! pushing one sample in two halfword stores staged TWO samples, each
+//! carrying half the word with the other half zero, and a byte store to the
+//! three bytes above the register staged a sample made of a byte. Here an
+//! access narrower than the register carries no sample: it is refused and
+//! counted, and the FIFO keeps what it already had. SSICR, SSIFCR and the
+//! shadow are untouched by this: their lanes really are the bits a narrow
+//! store names, which is what step 5 of fw/real/ssie.c does to SSICR.
 //! NOT MODELLED, AND NOT GUESSED: SSIFSR's receive flags, and the write-0-to
 //! -clear the header describes for RDF and TDE. TDE is computed from what the
 //! FIFO is holding rather than latched, so a store to SSIFSR still changes
@@ -95,6 +106,8 @@ pub const Channel = struct {
     transmitted: u32 = 0,
     /// The last sample shifted out.
     last: u32 = 0,
+    /// Stores to SSIFTDR that did not name the whole register.
+    narrow_writes: u32 = 0,
 
     pub fn transmitting(self: *const Channel) bool {
         return self.ssicr & field.ten != 0;
@@ -107,7 +120,8 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: *const Channel) bool {
-        return self.ssicr == 0 and self.transmitted == 0 and self.tx.quiet();
+        return self.ssicr == 0 and self.transmitted == 0 and
+            self.narrow_writes == 0 and self.tx.quiet();
     }
 
     /// Samples still waiting behind a transmitter that never came on.
@@ -123,6 +137,25 @@ pub const Channel = struct {
     /// Samples a FIFO reset threw away before they were shifted out.
     pub fn discarded(self: *const Channel) u32 {
         return self.tx.discarded;
+    }
+
+    /// Stores to SSIFTDR too narrow to carry a sample.
+    pub fn refused(self: *const Channel) u32 {
+        return self.narrow_writes;
+    }
+
+    /// A store to SSIFTDR. Only an access that names the whole register
+    /// carries a sample: the register is 32 bits wide and the stage behind it
+    /// takes a word, so a narrower store has part of one and staging it would
+    /// put a sample on the stream that firmware never wrote. The refusal is
+    /// about the register's own width and not about SSICR.DWL, which this
+    /// model does not read: a short sample still sits in a 32-bit SSIFTDR.
+    fn store(self: *Channel, lane: u32, width: u3, value: u32) void {
+        if (lane != 0 or width < 4) {
+            self.narrow_writes +%= 1;
+            return;
+        }
+        self.push(value);
     }
 
     /// Take a sample. With the transmitter on it goes out; with it off the
@@ -211,7 +244,7 @@ pub const Ssie = struct {
                 unit.shadow[word] = merge(before, byte, width, value);
                 unit.fifoControl(before, unit.shadow[word]);
             },
-            off_ssiftdr => unit.push(value & widthMask(width)),
+            off_ssiftdr => unit.store(byte, width, value),
             // Status, and a status register does not take a store.
             off_ssisr, off_ssifsr => {},
             else => {

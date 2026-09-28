@@ -174,3 +174,60 @@ test "a channel outside the window is not decoded" {
     block.write(ssie.win_base + ssie.win_span, 4, 0xFFFF);
     try std.testing.expect(block.quiet());
 }
+
+test "a halfword store to SSIFTDR stages nothing" {
+    var block = unit();
+    try startTx(&block, ch0);
+    block.write(ch0 + ssie.off_ssiftdr, 2, 0x5678);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].transmitted);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].last);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].refused());
+}
+
+test "one sample pushed in two halfword stores becomes no samples" {
+    var block = unit();
+    try startTx(&block, ch0);
+    block.write(ch0 + ssie.off_ssiftdr, 2, 0x5678);
+    block.write(ch0 + ssie.off_ssiftdr + 2, 2, 0x1234);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].transmitted);
+    try std.testing.expectEqual(@as(u32, 2), block.channels[0].refused());
+    block.write(ch0 + ssie.off_ssiftdr, 4, 0x1234_5678);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].transmitted);
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), block.channels[0].last);
+}
+
+test "a byte store above the register carries no sample either" {
+    var block = unit();
+    try startTx(&block, ch0);
+    block.write(ch0 + ssie.off_ssiftdr + 3, 1, 0xAB);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].transmitted);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].refused());
+}
+
+test "a refused store leaves the staged FIFO exactly as it was" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssiftdr, 4, 0x0000_1111);
+    block.write(ch0 + ssie.off_ssiftdr, 1, 0x22);
+    try std.testing.expectEqual(@as(usize, 1), block.channels[0].staged());
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].refused());
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + ssie.off_ssifsr, 4) & ssie.field.tde);
+    try startTx(&block, ch0);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].transmitted);
+    try std.testing.expectEqual(@as(u32, 0x0000_1111), block.channels[0].last);
+}
+
+test "a narrow store to SSICR is still folded into the lanes it names" {
+    var block = unit();
+    block.write(ch0 + ssie.off_ssicr, 4, 0x5A5A_5A00);
+    block.write(ch0 + ssie.off_ssicr, 1, ssie.field.ten);
+    try std.testing.expectEqual(@as(u32, 0x5A5A_5A02), block.read(ch0 + ssie.off_ssicr, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].refused());
+}
+
+test "a refused store alone is enough to report the channel" {
+    var block = unit();
+    try std.testing.expect(block.channels[0].quiet());
+    block.write(ch0 + ssie.off_ssiftdr, 2, 0x99);
+    try std.testing.expect(!block.channels[0].quiet());
+    try std.testing.expect(!block.quiet());
+}
