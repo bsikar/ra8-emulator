@@ -33,6 +33,24 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, channel.unnamed_reads },
             );
         }
+        if (channel.lin.breaks != 0) {
+            try out.print(
+                "SCI{d} LIN: {d} break field(s) put on the wire, {d} timer period(s) long\n",
+                .{ index, channel.lin.breaks, channel.lin.length() },
+            );
+        }
+        if (channel.lin.unenabled != 0) {
+            try out.print(
+                "SCI{d} LIN: REFUSED {d} TCST pulse(s) with XCR0.BFE clear, no break was generated\n",
+                .{ index, channel.lin.unenabled },
+            );
+        }
+        if (channel.lin.status_stores != 0) {
+            try out.print(
+                "SCI{d} LIN: REFUSED {d} store(s) to XSR0/XSR1, the block owns those words\n",
+                .{ index, channel.lin.status_stores },
+            );
+        }
         if (channel.unnamed_stores != 0) {
             try out.print(
                 "SCI{d}: REFUSED {d} store(s) to TDR above TDAT, no character was sent\n",

@@ -149,6 +149,7 @@ pub const periph = struct {
     pub const scb = @import("periph/scb.zig");
     pub const sci = @import("periph/sci.zig");
     pub const sci_line = @import("periph/sci_line.zig");
+    pub const sci_lin = @import("periph/sci_lin.zig");
     pub const sci_status = @import("periph/sci_status.zig");
     pub const sd_card = @import("periph/sd_card.zig");
     pub const sd_crc = @import("periph/sd_crc.zig");
