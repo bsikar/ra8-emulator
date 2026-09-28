@@ -18,6 +18,7 @@
 const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
+const exc_return = @import("exc_return.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the
 /// firmware actually pends are named; everything at or above `first_irq` is
@@ -46,18 +47,19 @@ pub const xpsr_stack_align: u32 = 1 << 9;
 /// sets it, and early bring-up runs under it for long stretches.
 pub const primask_pm: u32 = 1 << 0;
 
-/// EXC_RETURN. Bits [31:8] are all ones, which is why no real code lives
-/// there and why a branch to one is unambiguous.
-pub const exc_return_base: u32 = 0xFFFF_FF00;
-pub const exc_return_thread_msp: u32 = 0xFFFF_FFF9;
-pub const exc_return_handler_msp: u32 = 0xFFFF_FFF1;
+/// EXC_RETURN and CONTROL live in exc_return.zig; these are the names the
+/// rest of the tree already reaches for.
+pub const exc_return_base: u32 = exc_return.base;
+pub const exc_return_thread_msp: u32 = exc_return.to.thread_main;
+pub const exc_return_thread_psp: u32 = exc_return.to.thread_process;
+pub const exc_return_handler_msp: u32 = exc_return.to.handler_main;
 
 /// The eight words entry stacks: r0-r3, r12, lr, the return address, xPSR.
 pub const frame_bytes: u32 = 32;
 
 /// Is this address an EXC_RETURN rather than somewhere to fetch from?
 pub fn isExceptionReturn(address: u32) bool {
-    return address >= exc_return_base;
+    return exc_return.is(address);
 }
 
 /// A pending exception and the priority it would run at. Lower is more
@@ -89,6 +91,19 @@ pub const Nvic = struct {
     /// Pends that were ready but could not be taken: masked, outranked by the
     /// running handler, or past the nesting guard.
     held: u64 = 0,
+    /// Returns that landed a thread back on the Process stack. Nonzero means
+    /// a scheduler is switching threads under this run.
+    thread_returns: u64 = 0,
+    /// Which stack Thread mode is on. CONTROL.SPSEL is the architectural home
+    /// for this and the emulator underneath does not keep a write to it, so
+    /// the bit is held here instead and moved only by an exception return,
+    /// which is the only thing that moves it in any of the images this runs.
+    /// A firmware that selects the Process stack by storing CONTROL itself is
+    /// NOT MODELLED, AND NOT GUESSED: none of the EIL images does it.
+    on_process: bool = false,
+    /// The Main stack as it was when the last return left it for a thread.
+    /// Entry from a thread on the Process stack puts the handler back on it.
+    main_sp: u32 = 0,
 
     /// Fold the write-to-clear registers, then take the most urgent pend that
     /// is allowed to preempt whatever is running. Returns the exception it
@@ -125,8 +140,16 @@ pub const Nvic = struct {
         if (self.depth == max_nesting) return Error.TooDeep;
         const handler = (try self.vectorFor(core, exc.number)) orelse return Error.NoVector;
         const xpsr = try core.register(.xpsr);
+        // Thread mode may be running on either stack, and the frame goes on
+        // the one it is using. Unicorn banks SP on CONTROL.SPSEL, so reading
+        // SP before the switch below already gives the right one.
+        const from_handler = self.depth > 0;
+        const on_process = !from_handler and self.on_process;
 
         var stacked_xpsr = xpsr & ~xpsr_stack_align;
+        // The frame goes on the stack the interrupted code was running on,
+        // which is the live SP either way: a thread on the Process stack is
+        // running with its own pointer in SP.
         var sp = try core.register(.sp);
         // The frame is eight-byte aligned; entry pads and records the pad.
         if (sp & 4 != 0) {
@@ -143,8 +166,18 @@ pub const Nvic = struct {
         try core.writeWord(sp + 24, try core.register(.pc));
         try core.writeWord(sp + 28, stacked_xpsr);
 
-        try core.setRegister(.sp, sp);
-        try core.setRegister(.lr, if (self.depth == 0) exc_return_thread_msp else exc_return_handler_msp);
+        if (on_process) {
+            // The handler runs on the Main stack, so the thread's pointer is
+            // left where a handler looks for it (PSP, which is what a
+            // scheduler reads to find the frame it has to save) and the Main
+            // stack the last return stepped off is picked back up.
+            try core.setRegister(.psp, sp);
+            try core.setRegister(.sp, self.main_sp);
+            self.on_process = false;
+        } else {
+            try core.setRegister(.sp, sp);
+        }
+        try core.setRegister(.lr, exc_return.forEntry(from_handler, on_process));
         // IPSR is the running exception: a handler that reads it gets itself.
         try core.setRegister(.xpsr, (xpsr & ~ipsr_mask) | exc.number);
         try core.setRegister(.pc, handler);
@@ -156,14 +189,27 @@ pub const Nvic = struct {
         try setActiveBit(core, exc.number, true);
     }
 
-    /// Return from the innermost handler: restore the frame the entry stacked
-    /// and resume where the exception interrupted.
-    pub fn exit(self: *Nvic, core: anytype) !void {
+    /// Return from the innermost handler: restore the frame at the stack the
+    /// EXC_RETURN names and resume where that frame says.
+    ///
+    /// `value` is the EXC_RETURN the handler branched to, which is not always
+    /// the one entry handed it. A scheduler's PendSV rebuilds a thread's
+    /// context, puts that thread's stack pointer in PSP, and returns with
+    /// 0xFFFF_FFFD to land on it; unstacking from MSP there resumes whatever
+    /// was left on the main stack instead of the thread.
+    pub fn exit(self: *Nvic, core: anytype, value: u32) !void {
         if (self.depth == 0) return Error.NotInHandler;
         const finished = self.active[self.depth - 1];
         self.depth -= 1;
 
-        var sp = try core.register(.sp);
+        // A branch to an EXC_RETURN arrives with bit 0 already stripped, so
+        // the value is matched on MODE and SPSEL and never compared whole.
+        const to_process = exc_return.usesProcessStack(value);
+        if (to_process) self.main_sp = try core.register(.sp);
+        // A scheduler repoints PSP at the thread it picked before returning,
+        // so the frame is read from PSP as it stands now, not from anything
+        // entry remembered.
+        var sp = if (to_process) try core.register(.psp) else try core.register(.sp);
         try core.setRegister(.r0, try core.readWord(sp + 0));
         try core.setRegister(.r1, try core.readWord(sp + 4));
         try core.setRegister(.r2, try core.readWord(sp + 8));
@@ -175,6 +221,11 @@ pub const Nvic = struct {
         sp += frame_bytes;
         if (stacked_xpsr & xpsr_stack_align != 0) sp += 4;
 
+        if (exc_return.toThread(value)) self.on_process = to_process;
+        if (to_process) {
+            try core.setRegister(.psp, sp);
+            self.thread_returns +%= 1;
+        }
         try core.setRegister(.sp, sp);
         try core.setRegister(.xpsr, stacked_xpsr & ~xpsr_stack_align);
         try core.setRegister(.pc, return_address & ~@as(u32, 1));

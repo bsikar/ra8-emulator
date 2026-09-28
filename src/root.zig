@@ -69,6 +69,7 @@ pub const periph = struct {
     pub const eink = @import("periph/eink.zig");
     pub const eink_busy = @import("periph/eink_busy.zig");
     pub const eink_wire = @import("periph/eink_wire.zig");
+    pub const exc_return = @import("periph/exc_return.zig");
     pub const elc = @import("periph/elc.zig");
     pub const elc_regs = @import("periph/elc_regs.zig");
     pub const elc_route = @import("periph/elc_route.zig");

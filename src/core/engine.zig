@@ -48,6 +48,10 @@ pub const Cortex = enum(c_int) {
     r12 = c.uc.UC_ARM_REG_R12,
     xpsr = c.uc.UC_ARM_REG_XPSR,
     primask = c.uc.UC_ARM_REG_PRIMASK,
+    // The Process stack pointer. A scheduler's handler reads it to find the
+    // frame it has to save and writes it to name the thread it picked, so
+    // exception entry and return both keep it current.
+    psp = c.uc.UC_ARM_REG_PSP,
 };
 
 /// What runs alongside the core for the length of a run. Everything here is
@@ -277,7 +281,7 @@ pub const Engine = struct {
             if (try self.runChunk(pc, chunk, session.watch)) |taken| {
                 const controller = session.interrupts orelse return taken;
                 if (!nvic.isExceptionReturn(taken.pc)) return taken;
-                controller.exit(self) catch return Error.RunFailed;
+                controller.exit(self, taken.pc) catch return Error.RunFailed;
                 pc = try self.register(.pc);
                 // The stretch that ended in the return cannot be measured, so
                 // it is charged one instruction: enough to keep the budget

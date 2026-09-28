@@ -80,6 +80,7 @@ test {
     _ = @import("periph/eth_peer_test.zig");
     _ = @import("periph/eth_phy_test.zig");
     _ = @import("periph/eth_queue_test.zig");
+    _ = @import("periph/exc_return_test.zig");
     _ = @import("periph/eth_test.zig");
     _ = @import("periph/glcdc_test.zig");
     _ = @import("periph/glcdc_blend_test.zig");
