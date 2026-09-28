@@ -5,8 +5,34 @@
 //! words; the rest it shadows. Two questions come up on every access and
 //! neither belongs to the counting: which word a byte offset lands in, so a
 //! byte or half-word store reaches the right register instead of falling
-//! through to the shadow, and whether this model interprets that word at
-//! all, which is the set GTWP's protection covers.
+//! through to the shadow, and whether GTWP's protection covers that word.
+//!
+//! THOSE TWO QUESTIONS USED TO HAVE ONE ANSWER. `interpreted` served as the
+//! protected set as well, on the reasoning that the registers this model
+//! reads are the ones the HAL brackets between the GTWP keys. That is true
+//! of every register but one, and the exception is the one a polling driver
+//! leans on hardest: GTST.
+//!
+//! GTST IS NOT PROTECTED. Neither tree carries HUM's table of protected
+//! registers, so the HAL's own bracketing is the evidence available, and it
+//! is unambiguous. Across ra8_gpt.c's twenty-two bracketed windows, fifteen
+//! registers are only ever written between `k_ra8_gtwp_key_unlock` and
+//! `k_ra8_gtwp_key_lock`: GTCCR, GTCNT, GTCR, GTDNSR, GTDTCR, GTDVD, GTDVU,
+//! GTICASR, GTICBSR, GTIOR, GTPBR, GTPR, GTSTP, GTSTR and GTUPSR. Exactly
+//! one register is written with no bracket anywhere in the file, at both of
+//! its two sites: GTST, in `ra8_gpt_clear_status` (line 425) and in
+//! `internal_dispatch` (line 891), the ISR path that acknowledges the flag
+//! it was entered for. A driver that has to unlock before acknowledging an
+//! interrupt would be a strange thing to ship, and this one does not.
+//!
+//! The confirmation is that the firmware runs. gpt_one_shot_demo sits in
+//! examples/ek_ra8d2/hw_validated/hil/, the tree's hardware-validated set,
+//! and its inner loop is `ra8_gpt_get_status` until GTST.TCFPO shows, then
+//! `ra8_gpt_clear_status` to drop it, with its hil.conf asserting the
+//! counter advances at least ten times and the mismatch counter stays at
+//! zero. `ra8_gpt_start_free_run` locks the channel on its way out, so every
+//! one of those clears arrives with GTWP shut. If the part refused them the
+//! flag would stand, and the app passed on the bench.
 const std = @import("std");
 
 const buf = @import("gpt_buffer.zig");
@@ -40,14 +66,22 @@ pub fn cellOf(local: u32) u32 {
     return local;
 }
 
-/// Does this model interpret the register at this offset? GTWP's protection
-/// covers exactly these, which is the set the HAL brackets between its keys.
+/// Does this model interpret the register at this offset, as opposed to
+/// only shadowing it?
 pub fn interpreted(local: u32) bool {
     if (compare.which(local) != null or buf.which(local) != null) return true;
     for (cells) |cell| {
         if (local >= cell and local < cell + 4) return true;
     }
     return false;
+}
+
+/// Does GTWP's protection cover the register at this offset? The set the
+/// HAL brackets between its keys, which is everything this model interprets
+/// except GTST, and GTWP itself is outside it either way.
+pub fn protected(local: u32) bool {
+    if (local >= off.gtst and local < off.gtst + 4) return false;
+    return interpreted(local);
 }
 
 /// One byte lane out of a word.

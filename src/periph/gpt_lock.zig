@@ -22,11 +22,20 @@
 //! optimistic direction: a driver bug that forgets to unlock ran here and
 //! failed on the bench.
 //!
-//! WHAT THE PROTECTION COVERS HERE: the registers this model interprets, the
-//! set the HAL brackets, which is the counter and period, the control and
-//! status words, the start / stop / clear requests, the compares and their
-//! buffers, and GTBER. GTWP itself is never protected, or nothing could ever
-//! unlock it.
+//! WHAT THE PROTECTION COVERS HERE lives in src/periph/gpt_window.zig as
+//! `protected`: the counter and period, the control word, the start / stop /
+//! clear requests, the compares and their buffers, and GTBER. GTWP itself is
+//! never protected, or nothing could ever unlock it.
+//!
+//! GTST IS NOT IN THAT SET, and used to be. The protected set was taken to
+//! be every register this model interprets, and GTST is the one register
+//! ra8_gpt.c writes with no bracket around it, at both of its sites:
+//! `ra8_gpt_clear_status` and the ISR path that acknowledges the flag it was
+//! entered for. Because `ra8_gpt_start_free_run` locks the channel on its
+//! way out, every acknowledgement a polling or interrupt-driven driver makes
+//! arrives with GTWP shut, and this model dropped all of them. The flag
+//! stood, so a driver waiting for its own clear to take spun on a bit it had
+//! just cleared. gpt_window.zig's header carries the full evidence.
 //!
 //! NOT MODELLED, AND NOT GUESSED: HUM's own list of protected registers.
 //! Neither tree carries the table (ra8_gpt_regs.h gives GTWP an offset and

@@ -363,7 +363,7 @@ pub const Gpt = struct {
         }
         // One store, one refusal: the protection turns the access away, not
         // each of its byte lanes.
-        if (!channel.guard.admits(local, win.interpreted(local))) return;
+        if (!channel.guard.admits(local, win.protected(local))) return;
         var index: u32 = 0;
         while (index < width and local + index < stride) : (index += 1) {
             const shift: u5 = @intCast(index * 8);
