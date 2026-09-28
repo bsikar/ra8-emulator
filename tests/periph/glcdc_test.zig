@@ -316,3 +316,72 @@ test "a CLUT entry answers a narrow read from the lane it names" {
     try std.testing.expectEqual(@as(u32, 0xAABB), unit.read(slot + 2, 2));
     try std.testing.expectEqual(@as(u32, 0xDD), unit.read(slot, 1));
 }
+
+test "BG_EN.VEN reads back clear so the driver's vblank poll finishes" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    // ra8_glcdc_bg_color_set: set VEN on top of the running output stage,
+    // then poll it back down. dev kept the bit and burned all 0x40000
+    // iterations before returning a timeout.
+    unit.write(bg_en, 4, 1);
+    unit.write(bg_en, 4, 0x101);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(bg_en, 4) & 0x100);
+    try std.testing.expectEqual(@as(u32, 1), unit.updates());
+}
+
+test "the output stage stays enabled through the store that spends the VEN" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(bg_en, 4, 0x101);
+    try std.testing.expectEqual(@as(u32, 1), unit.read(bg_en, 4));
+    try std.testing.expect(unit.outputEnabled());
+}
+
+test "each layer's VEN auto-clears too" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(glcdc.win_base + 0x1100, 4, 1);
+    unit.write(glcdc.win_base + 0x1200, 4, 1);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(glcdc.win_base + 0x1100, 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(glcdc.win_base + 0x1200, 4));
+    try std.testing.expectEqual(@as(u32, 2), unit.updates());
+}
+
+test "a narrow store that names the VEN lane spends it" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    // BG_EN.VEN is bit 8, so byte 1 is the lane that carries it.
+    unit.write(bg_en + 1, 1, 1);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(bg_en, 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.updates());
+}
+
+test "a store with no VEN asks for no update" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(bg_en, 4, 1);
+    unit.write(glcdc.win_base + 0x1100, 4, 0);
+    try std.testing.expectEqual(@as(u32, 0), unit.updates());
+}
+
+test "a layer descriptor still decodes after its VEN went by" {
+    const guard = unlockedGuard();
+    const domain = poweredDomain(&guard);
+    var unit = glcdc.Glcdc.init(&domain);
+    unit.write(layer1 + glcdc.off.flm2, 4, fb_base);
+    unit.write(layer1 + glcdc.off.flm3, 4, 960 << 16);
+    unit.write(layer1 + glcdc.off.flm5, 4, 271 << 16);
+    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 28);
+    unit.write(layer1 + glcdc.off.flmrd, 4, 1);
+    unit.write(glcdc.win_base + 0x1100, 4, 1);
+    unit.write(bg_en, 4, 0x101);
+    const frame = unit.framebuffer() orelse return error.NoFramebuffer;
+    try std.testing.expectEqual(fb_base, frame.base);
+    try std.testing.expectEqual(@as(u32, 480), frame.width);
+    try std.testing.expect(frame.enabled);
+}

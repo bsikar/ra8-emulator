@@ -78,6 +78,7 @@ pub const periph = struct {
     pub const glcdc_blend = @import("periph/glcdc_blend.zig");
     pub const glcdc_clut = @import("periph/glcdc_clut.zig");
     pub const glcdc_frame = @import("periph/glcdc_frame.zig");
+    pub const glcdc_latch = @import("periph/glcdc_latch.zig");
     pub const glcdc_gamma = @import("periph/glcdc_gamma.zig");
     pub const glcdc_mix = @import("periph/glcdc_mix.zig");
     pub const glcdc_out = @import("periph/glcdc_out.zig");

@@ -2,7 +2,9 @@
 //! the RAM it is allowed to live in.
 //!
 //! Split out of glcdc.zig, which is about the register window: this is about
-//! the thing the window describes. A descriptor whose BASE is outside every
+//! the thing the window describes, and since the decode below is the only
+//! reader of the FLM field positions, they live here beside it rather than
+//! in the window's own offset table. A descriptor whose BASE is outside every
 //! RAM window a bus master can reach is not a framebuffer however well
 //! formed the rest of it reads, and a descriptor whose last line runs past
 //! the end of the window it started in is the failure the scan refuses on.
@@ -30,6 +32,56 @@ pub const ram_windows = memmap.master_ram;
 /// Sanity cap on a decoded dimension, so a half-programmed layer does not
 /// read back as a plausible 60000-pixel-wide panel.
 pub const max_dimension: u32 = 4096;
+
+/// The FLM field positions a descriptor is decoded from (HUM Ch 63).
+pub const field = struct {
+    /// FLMRD.RENB, bit 0: this layer fetches from its framebuffer.
+    pub const renb: u32 = 0x1;
+    pub const stride_shift: u5 = 16;
+    pub const stride_mask: u32 = 0xFFFF;
+    pub const lnnum_shift: u5 = 16;
+    pub const lnnum_mask: u32 = 0x7FF;
+    pub const format_shift: u5 = 28;
+    pub const format_mask: u32 = 0x7;
+};
+
+/// The five layer registers a descriptor is built out of, already read from
+/// the window so this file needs nothing of the bus.
+pub const Registers = struct {
+    flmrd: u32,
+    flm2: u32,
+    flm3: u32,
+    flm5: u32,
+    flm6: u32,
+};
+
+/// Recover one layer's descriptor. Width comes back from the stride and the
+/// format's fetch width, height from LNNUM + 1. A layer that is not
+/// fetching, or whose base is not in RAM, or whose geometry is not sane, is
+/// not a framebuffer and is reported as none rather than as zeroes.
+pub fn decode(regs: Registers, layer: u8, enabled: bool) ?Framebuffer {
+    if (regs.flmrd & field.renb == 0) return null;
+    if (!addressIsRam(regs.flm2)) return null;
+    const stride = regs.flm3 >> field.stride_shift & field.stride_mask;
+    const lines = (regs.flm5 >> field.lnnum_shift & field.lnnum_mask) + 1;
+    const format: pixel.Format = @enumFromInt(regs.flm6 >> field.format_shift & field.format_mask);
+    if (stride == 0) return null;
+    // Bits, not bytes: a CLUT4 line of `stride` bytes carries twice as many
+    // pixels as it has bytes, and a CLUT1 line eight times as many. dev
+    // divides by a bytes-per-pixel that rounds both up to one, so every
+    // sub-byte layer it has ever reported came out too narrow.
+    const width = format.pixelsIn(stride);
+    if (width == 0 or width > max_dimension or lines > max_dimension) return null;
+    return .{
+        .base = regs.flm2,
+        .width = width,
+        .height = lines,
+        .stride = stride,
+        .format = format,
+        .layer = layer,
+        .enabled = enabled,
+    };
+}
 
 /// What the panel is being scanned from, recovered from one layer's
 /// registers.
