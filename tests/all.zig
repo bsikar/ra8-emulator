@@ -41,6 +41,7 @@ test {
     _ = @import("periph/ckcr_test.zig");
     _ = @import("periph/ckdiv_test.zig");
     _ = @import("periph/clocks_test.zig");
+    _ = @import("periph/cpu_ctrl_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/dac_test.zig");
     _ = @import("periph/dac_output_test.zig");

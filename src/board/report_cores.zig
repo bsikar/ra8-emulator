@@ -4,11 +4,43 @@ const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const ipc = @import("../periph/ipc.zig");
 const sync = @import("../periph/ipc_sync.zig");
+const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
+
+/// What CPU0 did with the second-core release handshake. ACT going up means
+/// the handshake completed, never that a second core is fetching: this model
+/// runs one core, so the line says released rather than running and the two
+/// are never allowed to blur.
+fn secondCore(board: *Board, out: Writer) !void {
+    const unit = &board.second_core;
+    if (unit.quiet()) return;
+    try out.print(
+        "CPU1: {s}, vector table 0x{X:0>8}, ACTCSR 0x{X:0>4}{s}\n",
+        .{
+            if (unit.act) "released" else "never activated",
+            unit.initvtor,
+            unit.status(),
+            if (unit.running()) "" else ", CPUWAIT held",
+        },
+    );
+    if (unit.act) {
+        try out.print(
+            "CPU1: no instruction was executed on it, this model runs one core\n",
+            .{},
+        );
+    }
+    if (unit.refused != 0) {
+        try out.print(
+            "CPU1: DROPPED {d} ACTCSR store(s) whose key byte was not 0x{X:0>2}\n",
+            .{ unit.refused, cpu_ctrl.key.value >> 8 },
+        );
+    }
+}
 
 /// One line per channel that carried anything, plus the losses. A message a
 /// full FIFO dropped and a read that found nothing are both real failures of
 /// the handshake, so they are reported apart from the traffic that worked.
 pub fn sections(board: *Board, out: Writer) !void {
+    try secondCore(board, out);
     const mailbox = &board.mailbox;
     if (mailbox.quiet()) return;
     for (&mailbox.channels, 0..) |*unit, index| {
