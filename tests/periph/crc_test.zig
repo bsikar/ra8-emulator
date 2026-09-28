@@ -129,5 +129,69 @@ test "GPS is read back out of CRCCR0, masked to its three bits" {
     var unit = Crc.init();
     unit.write(regAddress(off_cr0), 1, 0xFD); // DORCLR set, LMS set, GPS=5
     try std.testing.expectEqual(Gps.crc32c, unit.gps());
-    try std.testing.expectEqual(@as(u32, 0xFD), unit.read(regAddress(off_cr0), 1));
+    // Everything but DORCLR survives the store; DORCLR was spent on the way in.
+    try std.testing.expectEqual(@as(u32, 0x7D), unit.read(regAddress(off_cr0), 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.cleared);
+}
+
+test "DORCLR does not stay in the shadow, so a readback is the settings alone" {
+    var unit = Crc.init();
+    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    // ra8_crc_get_status reads the whole byte: 0x04 on the bench, not 0x84.
+    try std.testing.expectEqual(@as(u32, 0x04), unit.read(regAddress(off_cr0), 1));
+    try std.testing.expectEqual(Gps.crc32, unit.gps());
+}
+
+test "ra8_crc_reset's read-modify-write still clears, and keeps the polynomial" {
+    var unit = Crc.init();
+    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
+
+    const readback: u8 = @truncate(unit.read(regAddress(off_cr0), 1));
+    unit.write(regAddress(off_cr0), 1, readback | dorclr);
+
+    try std.testing.expectEqual(@as(u32, 0), unit.read(regAddress(off_dor), 4));
+    try std.testing.expectEqual(Gps.crc32, unit.gps());
+    try std.testing.expectEqual(@as(u32, 1), unit.cleared);
+}
+
+test "a read-modify-write that does not name DORCLR leaves the remainder alone" {
+    var unit = Crc.init();
+    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
+
+    // ra8_crc_set_bit_order: fold LMS in on top of whatever CRCCR0 reads.
+    const readback: u8 = @truncate(unit.read(regAddress(off_cr0), 1));
+    unit.write(regAddress(off_cr0), 1, readback | 0x40);
+
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), unit.read(regAddress(off_dor), 4));
+    try std.testing.expectEqual(@as(u32, 0x44), unit.read(regAddress(off_cr0), 1));
+    // Only the init pulse was ever asked for.
+    try std.testing.expectEqual(@as(u32, 1), unit.cleared);
+}
+
+test "a running remainder survives a bit-order store mid-calculation" {
+    var straight = Crc.init();
+    straight.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    straight.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
+    feedSlice(&straight, check);
+
+    var interrupted = Crc.init();
+    interrupted.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    interrupted.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
+    feedSlice(&interrupted, check[0..4]);
+    const readback: u8 = @truncate(interrupted.read(regAddress(off_cr0), 1));
+    interrupted.write(regAddress(off_cr0), 1, readback | 0x40);
+    feedSlice(&interrupted, check[4..]);
+
+    try std.testing.expectEqual(straight.dor, interrupted.dor);
+    try std.testing.expectEqual(@as(u32, 9), interrupted.bytes);
+}
+
+test "a unit that only ever had its remainder cleared still reports" {
+    var unit = Crc.init();
+    try std.testing.expect(unit.quiet());
+    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    try std.testing.expect(!unit.quiet());
+    try std.testing.expectEqual(@as(u32, 0), unit.bytes);
 }

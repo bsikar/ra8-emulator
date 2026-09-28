@@ -19,6 +19,18 @@
 //! CRC-32 pre-seeds CRCDOR with 0xFFFF_FFFF and inverts the readback itself;
 //! that is why CRCDOR is writable here.
 //!
+//! DORCLR IS A COMMAND, NOT A SETTING. CRCCR0 bit 7 clears CRCDOR and
+//! auto-clears itself; ra8_crc_regs.h calls it write-only and ra8_crc.c says
+//! so twice, once in its own header and once at `ra8_crc_reset`, which does
+//! `CRCCR0 = CRCCR0 | DORCLR` precisely because the read gives the bit back
+//! as zero. dev stores the whole byte, so the first `ra8_crc_init` leaves
+//! bit 7 standing in the shadow for the rest of the run: `ra8_crc_get_status`
+//! then answers 0x84 for a CRC-32 unit, and worse, every later
+//! read-modify-write of CRCCR0 carries the stale bit back in and wipes the
+//! running remainder. `ra8_crc_set_bit_order` is exactly that shape, so a
+//! bit-order change mid-calculation silently restarts the CRC here and does
+//! not on the bench. The bit is read out of the value the store carries,
+//! acted on, counted, and never kept.
 //! The width of the access is the feed width, which is the one thing a byte
 //! model has to get right: a 32-bit store to CRCDIR folds four bytes LSB-first,
 //! the order ra8_crc's word packing produces, and an 8-bit store folds one.
@@ -87,6 +99,9 @@ pub const Crc = struct {
     cr1: u8 = 0,
     dor: u32 = 0,
     bytes: u32 = 0,
+    /// DORCLR pulses: stores to CRCCR0 that asked for the remainder back at
+    /// zero. Counted because the bit leaves no trace in the shadow.
+    cleared: u32 = 0,
 
     pub fn init() Crc {
         return .{};
@@ -98,7 +113,7 @@ pub const Crc = struct {
 
     /// Untouched units stay out of the end-of-run report.
     pub fn quiet(self: *const Crc) bool {
-        return self.bytes == 0;
+        return self.bytes == 0 and self.cleared == 0;
     }
 
     /// Fold one byte with whatever polynomial CRCCR0.GPS currently selects.
@@ -114,6 +129,19 @@ pub const Crc = struct {
             else => self.dor,
         };
         self.bytes +%= 1;
+    }
+
+    /// A store to CRCCR0. DORCLR is spent here rather than kept: it clears
+    /// the remainder and is dropped from the shadow, so a readback answers
+    /// with the settings alone and a read-modify-write cannot re-pulse a bit
+    /// nobody asked for again. The settings bits land whether or not the
+    /// clear came with them, which is what makes `GPS | DORCLR` in one store
+    /// select a polynomial and zero the remainder together.
+    pub fn control(self: *Crc, value: u8) void {
+        self.cr0 = value & ~dorclr;
+        if (value & dorclr == 0) return;
+        self.dor = 0;
+        self.cleared +%= 1;
     }
 
     pub fn read(self: *Crc, address: u32, width: u3) u32 {
@@ -136,8 +164,7 @@ pub const Crc = struct {
     pub fn write(self: *Crc, address: u32, width: u3, value: u32) void {
         const offset = address -% win_base;
         if (offset == off_cr0) {
-            self.cr0 = @truncate(value);
-            if (self.cr0 & dorclr != 0) self.dor = 0;
+            self.control(@truncate(value));
             return;
         }
         if (offset == off_cr1) {
