@@ -54,16 +54,12 @@ test "a store to TYPE is turned away and the count put back" {
 }
 
 test "a region is captured out of the RBAR and RLAR pair that programs it" {
-    var ppb = FakePpb.init(std.testing.allocator);
-    defer ppb.deinit();
     var unit = mpu.Mpu.init();
-    try unit.prime(&ppb);
 
     // Region 1 covers 0x2200_0000..0x2200_1FFF, read-only and not executable.
-    try ppb.writeWord(memmap.mpu.rnr, 1);
-    try ppb.writeWord(memmap.mpu.rbar, 0x2200_0000 | mpu.field.rbar_ap_ro | mpu.field.rbar_xn);
-    try ppb.writeWord(memmap.mpu.rlar, 0x2200_1FE0 | mpu.field.rlar_enable);
-    try unit.poll(&ppb);
+    _ = unit.observe(memmap.mpu.rnr, 1);
+    _ = unit.observe(memmap.mpu.rbar, 0x2200_0000 | mpu.field.rbar_ap_ro | mpu.field.rbar_xn);
+    _ = unit.observe(memmap.mpu.rlar, 0x2200_1FE0 | mpu.field.rlar_enable);
 
     const region = unit.table[1];
     try std.testing.expect(region.enabled);
@@ -77,17 +73,13 @@ test "a region is captured out of the RBAR and RLAR pair that programs it" {
 }
 
 test "the alias pairs reach the regions that follow the selected one" {
-    var ppb = FakePpb.init(std.testing.allocator);
-    defer ppb.deinit();
     var unit = mpu.Mpu.init();
-    try unit.prime(&ppb);
 
-    try ppb.writeWord(memmap.mpu.rnr, 2);
-    try ppb.writeWord(memmap.mpu.rbar_a1, 0x0200_0000);
-    try ppb.writeWord(memmap.mpu.rlar_a1, 0x0200_0FE0 | mpu.field.rlar_enable);
-    try ppb.writeWord(memmap.mpu.rbar_a3, 0x4000_0000);
-    try ppb.writeWord(memmap.mpu.rlar_a3, 0x4000_0FE0 | mpu.field.rlar_enable);
-    try unit.poll(&ppb);
+    _ = unit.observe(memmap.mpu.rnr, 2);
+    _ = unit.observe(memmap.mpu.rbar_a1, 0x0200_0000);
+    _ = unit.observe(memmap.mpu.rlar_a1, 0x0200_0FE0 | mpu.field.rlar_enable);
+    _ = unit.observe(memmap.mpu.rbar_a3, 0x4000_0000);
+    _ = unit.observe(memmap.mpu.rlar_a3, 0x4000_0FE0 | mpu.field.rlar_enable);
 
     try std.testing.expectEqual(@as(u32, 0x0200_0000), unit.table[3].base);
     try std.testing.expect(unit.table[3].enabled);
@@ -98,15 +90,11 @@ test "the alias pairs reach the regions that follow the selected one" {
 }
 
 test "a region with EN clear covers nothing" {
-    var ppb = FakePpb.init(std.testing.allocator);
-    defer ppb.deinit();
     var unit = mpu.Mpu.init();
-    try unit.prime(&ppb);
 
-    try ppb.writeWord(memmap.mpu.rnr, 0);
-    try ppb.writeWord(memmap.mpu.rbar, 0x2200_0000);
-    try ppb.writeWord(memmap.mpu.rlar, 0x2200_1FE0);
-    try unit.poll(&ppb);
+    _ = unit.observe(memmap.mpu.rnr, 0);
+    _ = unit.observe(memmap.mpu.rbar, 0x2200_0000);
+    _ = unit.observe(memmap.mpu.rlar, 0x2200_1FE0);
 
     try std.testing.expect(!unit.table[0].enabled);
     try std.testing.expect(!unit.table[0].covers(0x2200_0010));
@@ -165,4 +153,87 @@ test "a select value beyond the implemented set wraps into it" {
     try std.testing.expectEqual(@as(u8, 7), mpu.geometry.selects(7));
     try std.testing.expectEqual(@as(u8, 0), mpu.geometry.selects(8));
     try std.testing.expectEqual(@as(u8, 1), mpu.geometry.selects(9));
+}
+
+test "each region programmed through RNR keeps its own pair" {
+    var unit = mpu.Mpu.init();
+
+    // What ra8_mpu_configure's programRegion loop does: RNR, then the pair,
+    // once per region. Over one RBAR word these all landed on each other.
+    var region: u32 = 0;
+    while (region < 4) : (region += 1) {
+        _ = unit.observe(memmap.mpu.rnr, region);
+        _ = unit.observe(memmap.mpu.rbar, 0x2200_0000 + region * 0x1000);
+        _ = unit.observe(memmap.mpu.rlar, 0x2200_0FE0 + region * 0x1000 | mpu.field.rlar_enable);
+    }
+
+    try std.testing.expectEqual(@as(u8, 4), unit.programmed());
+    try std.testing.expectEqual(@as(u32, 0x2200_0000), unit.table[0].base);
+    try std.testing.expectEqual(@as(u32, 0x2200_3000), unit.table[3].base);
+    try std.testing.expectEqual(@as(u32, 8), unit.banked);
+}
+
+test "clearing the unused tail leaves the programmed regions standing" {
+    var unit = mpu.Mpu.init();
+
+    _ = unit.observe(memmap.mpu.rnr, 0);
+    _ = unit.observe(memmap.mpu.rbar, 0x2200_0000);
+    _ = unit.observe(memmap.mpu.rlar, 0x2200_0FE0 | mpu.field.rlar_enable);
+
+    // ra8_mpu_configure then walks the rest of the implemented set clearing
+    // RLAR. Over one word this is the store that wiped the whole table.
+    var region: u32 = 1;
+    while (region < mpu.geometry.regions) : (region += 1) {
+        _ = unit.observe(memmap.mpu.rnr, region);
+        _ = unit.observe(memmap.mpu.rlar, 0);
+    }
+
+    try std.testing.expectEqual(@as(u8, 1), unit.programmed());
+    try std.testing.expect(unit.table[0].enabled);
+    try std.testing.expectEqual(@as(u32, 0x2200_0000), unit.table[0].base);
+}
+
+test "a store to RNR is the one that asks for the pairs to be put back" {
+    var unit = mpu.Mpu.init();
+
+    try std.testing.expect(unit.observe(memmap.mpu.rnr, 3));
+    try std.testing.expectEqual(@as(u8, 3), unit.selected);
+    try std.testing.expect(!unit.observe(memmap.mpu.rbar, 0x2200_0000));
+    try std.testing.expect(!unit.observe(memmap.mpu.rlar, 0x2200_0FE0));
+    // Nothing else in the window is banked, so nothing else asks.
+    try std.testing.expect(!unit.observe(memmap.mpu.ctrl, mpu.field.ctrl_enable));
+    try std.testing.expect(!unit.observe(memmap.mpu.mair0, 0x44));
+    try std.testing.expectEqual(@as(u32, 2), unit.banked);
+}
+
+test "the pair put back is the region RNR now names, whole" {
+    var unit = mpu.Mpu.init();
+
+    // Attribute and shareability bits this model does not read still have to
+    // survive a trip through the table, or a readback loses them.
+    const rbar: u32 = 0x2200_0000 | (0b01 << 3) | mpu.field.rbar_ap_ro;
+    const rlar: u32 = 0x2200_0FE0 | (0b010 << 1) | mpu.field.rlar_enable;
+    _ = unit.observe(memmap.mpu.rnr, 5);
+    _ = unit.observe(memmap.mpu.rbar, rbar);
+    _ = unit.observe(memmap.mpu.rlar, rlar);
+
+    _ = unit.observe(memmap.mpu.rnr, 0);
+    try std.testing.expectEqual([2]u32{ 0, 0 }, unit.pairFor(0));
+
+    _ = unit.observe(memmap.mpu.rnr, 5);
+    try std.testing.expectEqual([2]u32{ rbar, rlar }, unit.pairFor(0));
+    // The aliases follow it, and wrap with it.
+    try std.testing.expectEqual(@as(u8, 6), unit.banks(1));
+    try std.testing.expectEqual(@as(u8, 0), unit.banks(3));
+}
+
+test "a select beyond the implemented set banks into the wrapped region" {
+    var unit = mpu.Mpu.init();
+
+    _ = unit.observe(memmap.mpu.rnr, mpu.geometry.regions + 2);
+    _ = unit.observe(memmap.mpu.rbar, 0x0200_0000);
+    _ = unit.observe(memmap.mpu.rlar, 0x0200_0FE0 | mpu.field.rlar_enable);
+
+    try std.testing.expectEqual(@as(u8, 2), unit.selected);
+    try std.testing.expect(unit.table[2].enabled);
 }

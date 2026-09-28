@@ -27,15 +27,23 @@
 //! TWO THINGS THIS BLOCK DOES NOT DO, both measured with
 //! fw/probe/mpuregions.c rather than assumed, and both left for later slices.
 //!
-//! RBAR/RLAR ARE NOT BANKED THROUGH RNR. On silicon RNR selects which of the
-//! eight region pairs the one RBAR/RLAR address reaches, so programming region
-//! 3 and then pointing RNR back at region 0 reads region 0's base again. Here
-//! the PPB is plain RAM and RBAR is one word, so that readback gives region 3's
-//! base. The probe stops at step 5 on this and it is the next slice in this
-//! vein: it needs the window served as a bus block rather than observed over
-//! RAM, which is why it is not folded in here. It costs nothing yet because no
-//! RA8 image in the corpus reads a region back after programming it; they
-//! write the table and enable it.
+//! RBAR/RLAR ARE BANKED THROUGH RNR, and that is the second thing this block
+//! had to learn. On silicon RNR selects which of the eight region pairs the
+//! one RBAR/RLAR address reaches. The PPB is plain RAM here and RBAR is one
+//! word, so every region programmed landed on top of the last one, and the
+//! table was read back at a poll rather than as it was written. That is not a
+//! cosmetic gap: `ra8_mpu_configure` programs the table and then CLEARS THE
+//! UNUSED TAIL, one `RNR = i; RLAR = 0` per unimplemented region, so the last
+//! write any configuration leaves behind is a zeroed RLAR. Read back over RAM
+//! that says the firmware enabled nothing, and threadx_mpu_partition_demo
+//! reported "0 of 8 region(s) enabled" after programming four.
+//!
+//! So the writes are watched instead of the words: `observe` takes each store
+//! into the window and files it under the region RNR names, and a store to RNR
+//! puts that region's pair back into the RAM the firmware reads, which is what
+//! makes a readback after an RNR change give the right region. The three alias
+//! pairs reach the three regions after the selected one, which is how a driver
+//! programs four regions without touching RNR again.
 //!
 //! NOTHING HERE ENFORCES A REGION. A privileged store into a read-only region
 //! is a MemManage violation on silicon, and Unicorn's core models no MPU, so
@@ -89,6 +97,12 @@ pub const Region = struct {
     read_only: bool = false,
     executable: bool = true,
     enabled: bool = false,
+    /// The two words exactly as the firmware wrote them. Kept whole rather
+    /// than rebuilt from the fields above, so putting a region back in front
+    /// of the firmware after an RNR change returns what it programmed,
+    /// including the attribute and shareability bits this model does not read.
+    rbar: u32 = 0,
+    rlar: u32 = 0,
 
     /// Read one region out of the RBAR/RLAR pair that programs it.
     pub fn fromPair(rbar: u32, rlar: u32) Region {
@@ -98,6 +112,8 @@ pub const Region = struct {
             .read_only = rbar & field.rbar_ap_ro != 0,
             .executable = rbar & field.rbar_xn == 0,
             .enabled = rlar & field.rlar_enable != 0,
+            .rbar = rbar,
+            .rlar = rlar,
         };
     }
 
@@ -128,6 +144,9 @@ pub const Mpu = struct {
     disables: u32 = 0,
     /// Stores to TYPE turned away, the read-only rule this block enforces.
     refused: u32 = 0,
+    /// Stores into a banked RBAR or RLAR, so a run that programmed the table
+    /// is distinguishable from one that only read TYPE and gave up.
+    banked: u32 = 0,
 
     pub fn init() Mpu {
         return .{};
@@ -140,14 +159,16 @@ pub const Mpu = struct {
         try core.writeWord(memmap.mpu.type_, geometry.type_value);
     }
 
-    /// Read the window: keep TYPE read-only, then capture the table the
-    /// firmware has programmed and which way CTRL.ENABLE has moved.
+    /// Read the window: keep TYPE read-only, and see which way CTRL.ENABLE
+    /// has moved. The region table is NOT read here: it is built from the
+    /// stores themselves in `observe`, because the last store any
+    /// configuration leaves behind is a cleared RLAR for the unused tail and
+    /// a poll would only ever see that.
     pub fn poll(self: *Mpu, core: anytype) !void {
         if (try core.readWord(memmap.mpu.type_) != geometry.type_value) {
             self.refused +%= 1;
             try core.writeWord(memmap.mpu.type_, geometry.type_value);
         }
-        try self.readTable(core);
         const ctrl = try core.readWord(memmap.mpu.ctrl);
         const was_on = self.ctrl & field.ctrl_enable != 0;
         const is_on = ctrl & field.ctrl_enable != 0;
@@ -156,28 +177,56 @@ pub const Mpu = struct {
         self.ctrl = ctrl;
     }
 
-    /// RNR names one region; the three alias pairs reach the three that follow
-    /// it without another RNR write, which is how a driver programmes four
-    /// regions in one go. Each pair is read where it lands. This sees the
-    /// table as it stands AT THE POLL, not every state it passed through: a
-    /// driver that walks RNR and rewrites the one unaliased pair faster than
-    /// the poll seam leaves only its last pair visible. Enough for the report
-    /// and for what the corpus does; see the banking note in the file header.
-    fn readTable(self: *Mpu, core: anytype) !void {
-        self.selected = geometry.selects(try core.readWord(memmap.mpu.rnr));
-        const pairs = [_][2]u32{
-            .{ memmap.mpu.rbar, memmap.mpu.rlar },
-            .{ memmap.mpu.rbar_a1, memmap.mpu.rlar_a1 },
-            .{ memmap.mpu.rbar_a2, memmap.mpu.rlar_a2 },
-            .{ memmap.mpu.rbar_a3, memmap.mpu.rlar_a3 },
+    /// Which region a store at this address programs, and which half of its
+    /// pair. RNR names the first; each alias pair reaches the region after
+    /// the one before it, which is how a driver programs four in a row
+    /// without touching RNR again.
+    const Target = struct { offset: u2, limit_half: bool };
+
+    fn targetOf(address: u32) ?Target {
+        return switch (address) {
+            memmap.mpu.rbar => .{ .offset = 0, .limit_half = false },
+            memmap.mpu.rlar => .{ .offset = 0, .limit_half = true },
+            memmap.mpu.rbar_a1 => .{ .offset = 1, .limit_half = false },
+            memmap.mpu.rlar_a1 => .{ .offset = 1, .limit_half = true },
+            memmap.mpu.rbar_a2 => .{ .offset = 2, .limit_half = false },
+            memmap.mpu.rlar_a2 => .{ .offset = 2, .limit_half = true },
+            memmap.mpu.rbar_a3 => .{ .offset = 3, .limit_half = false },
+            memmap.mpu.rlar_a3 => .{ .offset = 3, .limit_half = true },
+            else => null,
         };
-        for (pairs, 0..) |pair, offset| {
-            const which = geometry.selects(self.selected + @as(u32, @intCast(offset)));
-            self.table[which] = Region.fromPair(
-                try core.readWord(pair[0]),
-                try core.readWord(pair[1]),
-            );
+    }
+
+    /// The region a pair at this offset from RNR programs.
+    pub fn banks(self: *const Mpu, offset: u2) u8 {
+        return geometry.selects(@as(u32, self.selected) + offset);
+    }
+
+    /// File one store into the window under the region RNR names. Answers
+    /// true when the selected region moved, which is the caller's cue to put
+    /// the newly selected pairs back in front of the firmware.
+    pub fn observe(self: *Mpu, address: u32, value: u32) bool {
+        if (address == memmap.mpu.rnr) {
+            self.selected = geometry.selects(value);
+            return true;
         }
+        const target = targetOf(address) orelse return false;
+        const region = &self.table[self.banks(target.offset)];
+        const pair = if (target.limit_half)
+            [2]u32{ region.rbar, value }
+        else
+            [2]u32{ value, region.rlar };
+        region.* = Region.fromPair(pair[0], pair[1]);
+        self.banked +%= 1;
+        return false;
+    }
+
+    /// The RBAR and RLAR words the firmware should see at this offset from
+    /// RNR, so a read after an RNR change gives back the region it selected
+    /// rather than whatever the last store happened to leave in the word.
+    pub fn pairFor(self: *const Mpu, offset: u2) [2]u32 {
+        const region = self.table[self.banks(offset)];
+        return .{ region.rbar, region.rlar };
     }
 
     pub fn on(self: *const Mpu) bool {

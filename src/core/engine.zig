@@ -15,6 +15,8 @@ const cadence = @import("cadence.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const bus_hook = @import("bus_hook.zig");
+const mpu = @import("../periph/mpu.zig");
+const mpu_hook = @import("mpu_hook.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
@@ -196,6 +198,13 @@ pub const Engine = struct {
     /// its C startup runs, which is before main().
     pub fn attachLoops(self: Engine, loops: *lob.Loops) Error!void {
         lob_hook.attach(self.handle, loops) catch return Error.AttachFailed;
+    }
+
+    /// Bank the MPU region table through RNR. Without this every region a
+    /// driver programs lands on top of the last one, and a configuration
+    /// that clears its unused tail reads back as an empty table.
+    pub fn attachRegions(self: Engine, unit: *mpu.Mpu) Error!void {
+        mpu_hook.attach(self.handle, unit) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M conditional selects the CPU model cannot decode.
