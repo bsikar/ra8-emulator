@@ -6,6 +6,12 @@
 //! the newly selected pairs back in front of the firmware. Keeping the two
 //! apart is what lets the banking be tested without a live engine.
 //!
+//! THE GUARD IS WHAT THE HOOK CARRIES, not the block itself: a store in this
+//! window can mean two different things to the engine. RNR moves the table
+//! the firmware reads, and CTRL arms or disarms the traps enforcement keeps
+//! over the read-only regions. Both hang off src/core/mpu_guard.zig, which
+//! holds the table pointer, so one user pointer reaches both.
+//!
 //! A WRITE HOOK RATHER THAN A BUS BLOCK, and the reason is the map. The
 //! peripheral registry answers on its own MMIO window, but the MPU registers
 //! sit inside the PPB, which is mapped as ordinary RAM, and a hole cannot be
@@ -17,6 +23,7 @@
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
 const mpu = @import("../periph/mpu.zig");
+const mpu_guard = @import("mpu_guard.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -26,14 +33,14 @@ pub const window = struct {
     pub const last: u64 = memmap.mpu.mair1 + 3;
 };
 
-pub fn attach(handle: ?*c.uc.uc_engine, unit: *mpu.Mpu) Error!void {
+pub fn attach(handle: ?*c.uc.uc_engine, guard: *mpu_guard.Guard) Error!void {
     var hook: c.uc.uc_hook = 0;
     if (c.uc.uc_hook_add(
         handle,
         &hook,
         c.uc.UC_HOOK_MEM_WRITE,
         @constCast(@as(*const anyopaque, @ptrCast(&onWrite))),
-        unit,
+        guard,
         window.first,
         window.last,
     ) != c.uc.UC_ERR_OK) {
@@ -57,11 +64,15 @@ fn onWrite(
     // as words. A narrower store is left to the RAM underneath rather than
     // filed as a whole register.
     if (size != 4) return;
-    const unit: *mpu.Mpu = @ptrCast(@alignCast(user.?));
-    const moved = unit.observe(@truncate(address), @bitCast(@as(i32, @truncate(value))));
-    if (!moved) return;
+    const guard: *mpu_guard.Guard = @ptrCast(@alignCast(user.?));
+    const unit = guard.unit orelse return;
     const handle = uc orelse return;
-    rebank(handle, unit);
+    const word: u32 = @bitCast(@as(i32, @truncate(value)));
+    switch (unit.observe(@truncate(address), word)) {
+        .none => {},
+        .rebank => rebank(handle, unit),
+        .rearm => guard.follow(handle, word & mpu.field.ctrl_enable != 0),
+    }
 }
 
 /// Put the four pairs RNR now selects back into the words the firmware

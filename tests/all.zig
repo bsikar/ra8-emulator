@@ -36,6 +36,7 @@ test {
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/cache_geometry_test.zig");
     _ = @import("periph/cache_test.zig");
+    _ = @import("periph/mpu_fault_test.zig");
     _ = @import("periph/mpu_test.zig");
     _ = @import("periph/canfd_error_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");

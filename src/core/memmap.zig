@@ -63,6 +63,9 @@ pub const scb = struct {
     pub const vtor: u32 = 0xE000_ED08;
     pub const aircr: u32 = 0xE000_ED0C;
     pub const ccr: u32 = 0xE000_ED14;
+    /// SHPR1 holds the configurable fault priorities: MemManage in its low
+    /// byte, then BusFault and UsageFault above it.
+    pub const shpr1: u32 = 0xE000_ED18;
     pub const shpr2: u32 = 0xE000_ED1C;
     pub const shpr3: u32 = 0xE000_ED20;
     pub const cfsr: u32 = 0xE000_ED28;

@@ -88,6 +88,7 @@ pub fn main() !u8 {
         .interrupts = &interrupts,
         .board = board.ticker(),
         .reboot = &reboot,
+        .protection = &board.guard,
         .stop = if (stop) |*one| one else null,
         .deadline = if (timed) |*one| one else null,
     });
