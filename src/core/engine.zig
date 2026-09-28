@@ -18,6 +18,8 @@ const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const reboot = @import("reboot.zig");
 const stop = @import("stop.zig");
+const deadline = @import("deadline.zig");
+const fault = @import("fault.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -28,32 +30,10 @@ pub const Error = error{
     RunFailed,
 };
 
-pub const Fault = struct {
-    pc: u32,
-    detail: []const u8,
-    /// The access that took the fault, when Unicorn reported one.
-    access: ?Access = null,
-    /// The instruction at the PC, when it decoded.
-    instruction: ?disasm.Text = null,
-
-    pub const Access = struct {
-        kind: enum { read, write, fetch },
-        address: u64,
-        size: u8,
-        value: u64,
-    };
-};
-
-/// Catches the invalid access behind a fault. Unicorn reports the address and
-/// width in a hook and only the error code afterwards, so the hook writes here
-/// and `run` reads it back once the run has stopped.
-pub const Watch = struct {
-    last: ?Fault.Access = null,
-
-    pub fn clear(self: *Watch) void {
-        self.last = null;
-    }
-};
+/// Why a run stopped badly, and the latch the hook records it in. Both live
+/// in fault.zig and are re-exported here so `engine.Fault` still resolves.
+pub const Fault = fault.Fault;
+pub const Watch = fault.Watch;
 
 pub const Cortex = enum(c_int) {
     pc = c.uc.UC_ARM_REG_PC,
@@ -93,6 +73,11 @@ pub const Session = struct {
     /// gets there. Null watches nothing. A pointer rather than a copy so
     /// the caller can ask afterwards whether the stop was what ended it.
     stop: ?*stop.Stop = null,
+    /// Modelled time the run is allowed, counted in the SysTick periods the
+    /// time base reports. Null is untimed. Needs `timebase` to have anything
+    /// to count, so an image with no clocks attached is never cut short by
+    /// a deadline it could not have reached.
+    deadline: ?*deadline.Deadline = null,
 };
 
 /// Something to run at the chunk boundary. A thin vtable rather than a
@@ -318,6 +303,12 @@ pub const Engine = struct {
             // The counter is read here, after the boundary's blocks have
             // run, so a value a peripheral advanced this chunk is seen.
             if (session.stop) |watch| if (watch.met(self.readWord(watch.address) catch null)) break;
+            // Modelled time is read from the same boundary, after the counter:
+            // when both land on one boundary the counter is the verdict the
+            // suite asked for and the deadline is only the window it allowed.
+            if (session.deadline) |due| if (session.timebase) |clock| {
+                if (due.met(clock.ticks)) break;
+            };
             pc = try self.register(.pc);
         }
         return null;

@@ -13,6 +13,8 @@ test {
     _ = @import("core/elf_test.zig");
     _ = @import("core/symbols_test.zig");
     _ = @import("core/stop_test.zig");
+    _ = @import("core/deadline_test.zig");
+    _ = @import("core/fault_test.zig");
     _ = @import("core/engine_test.zig");
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");

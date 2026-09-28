@@ -9,10 +9,13 @@ pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--touch X,Y]
     \\                    [--battery PCT] [--charge]
-    \\                    [--dump-sym NAME] [--stop-sym NAME N]
+    \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
+    \\  --ms N             stop after N milliseconds of modelled time,
+    \\                     counted in the SysTick periods the firmware
+    \\                     itself armed
     \\  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU
     \\  --device NAME      the same thing, spelled the way the firmware's
     \\                     own emulator-in-the-loop suite spells it
@@ -49,6 +52,21 @@ pub const budget: usize = 2_000_000;
 /// of, reporting a clean run for an app that had barely started.
 pub const watched_budget: usize = 200_000_000;
 
+/// Instructions one modelled millisecond costs at the fastest core clock
+/// this corpus reaches, which is what bounds a `--ms` run.
+///
+/// The deadline itself is counted in SysTick periods, not here: this is only
+/// the ceiling that keeps an image which never arms SysTick from running to
+/// no end at all. cpuclk0 comes up at 1 GHz, the model charges one cycle per
+/// instruction, and `ra8_time_init` arms SysTick at `cpu_hz / 1000`, so a
+/// period there is a million instructions: measured on `doc_demo`,
+/// `gpt_one_shot_demo` and `gpt_irq_demo`, all of which report exactly 50
+/// periods in a 50,000,000-instruction run. Nothing in the corpus runs a
+/// faster core, so no timed run is cut short by this; a slower one, like
+/// `blink` at about 8,400 instructions a period, reaches its deadline long
+/// before the ceiling.
+pub const instructions_per_ms: usize = 1_000_000;
+
 pub const Options = struct {
     path: []const u8,
     /// The budget `--instructions` asked for, or null to take whichever
@@ -79,6 +97,9 @@ pub const Options = struct {
     /// it. Null watches nothing and the run goes to its instruction budget.
     stop_symbol: ?[]const u8 = null,
     stop_at: u32 = 0,
+    /// Milliseconds of modelled time the run is allowed, counted in SysTick
+    /// periods. Null is untimed and the run goes to its instruction budget.
+    ms: ?u64 = null,
 
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {
@@ -93,10 +114,24 @@ pub const Options = struct {
     /// the flag was spelled: a `--stop-sym` naming a symbol the image does
     /// not carry watches nothing, and spending the larger budget on it
     /// would cost seconds per app to reach the same verdict.
+    ///
+    /// A timed run sizes its own ceiling from the deadline it was given, so
+    /// asking for more milliseconds buys more instructions to spend them in
+    /// rather than running into a number set for some other app.
     pub fn budgetFor(self: *const Options, watching: bool) usize {
-        return self.instructions orelse if (watching) watched_budget else budget;
+        if (self.instructions) |asked| return asked;
+        if (self.ms) |milliseconds| return ceilingFor(milliseconds);
+        return if (watching) watched_budget else budget;
     }
 };
+
+/// The instruction ceiling a deadline of `milliseconds` gets, saturating
+/// rather than wrapping: a deadline nothing could reach is still a run that
+/// ends, not one that overflows into a short budget.
+pub fn ceilingFor(milliseconds: u64) usize {
+    const wanted = milliseconds *| @as(u64, instructions_per_ms);
+    return std.math.cast(usize, wanted) orelse std.math.maxInt(usize);
+}
 
 pub fn parse(argv: []const []const u8) !Options {
     if (argv.len < 2) return error.MissingImage;
@@ -118,6 +153,10 @@ pub fn parse(argv: []const []const u8) !Options {
             options.stop_symbol = argv[index + 1];
             options.stop_at = try std.fmt.parseInt(u32, argv[index + 2], 10);
             index += 2;
+        } else if (std.mem.eql(u8, argv[index], "--ms")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.ms = try std.fmt.parseInt(u64, argv[index], 10);
         } else if (std.mem.eql(u8, argv[index], "--part") or
             std.mem.eql(u8, argv[index], "--device"))
         {

@@ -16,6 +16,8 @@ pub const core = struct {
     pub const reboot = @import("core/reboot.zig");
     pub const symbols = @import("core/symbols.zig");
     pub const stop = @import("core/stop.zig");
+    pub const deadline = @import("core/deadline.zig");
+    pub const fault = @import("core/fault.zig");
 };
 
 pub const periph = struct {
