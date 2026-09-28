@@ -43,6 +43,7 @@ const mipi_phy = @import("../periph/mipi_phy.zig");
 const modem = @import("../periph/modem.zig");
 const net = @import("net.zig");
 const mram = @import("../periph/mram.zig");
+const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp.zig");
 const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
@@ -110,6 +111,9 @@ pub const Board = struct {
     /// The peripheral clock source selects, built in attach() for the same
     /// reason the two below are: each needs this board's own protection.
     branches: ckcr.Ckcr,
+    /// The code-MRAM frequency latches and the prefetch buffer. Keyed
+    /// registers, so nothing lands here without the key the driver writes.
+    memory_rates: mrms.Mrms = .{},
     ratios: ckdiv.Ckdiv,
 
     /// The four clock sources and the stabilisation flags that follow their

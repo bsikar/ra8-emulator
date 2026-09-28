@@ -10,6 +10,7 @@
 const ckcr = @import("../periph/ckcr.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
+const mrms = @import("../periph/mrms.zig");
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
@@ -88,10 +89,31 @@ fn oscillators(board: *Board, out: Writer) !void {
     }
 }
 
+/// The frequencies a run told the code-MRAM controller it was running at,
+/// and any store the key byte turned away. The driver re-stores until the
+/// readback matches, so a refusal here is a store that carried the wrong
+/// key, never the retry loop doing its job.
+fn memoryRates(board: *Board, out: Writer) !void {
+    const unit = &board.memory_rates;
+    if (unit.quiet()) return;
+    try out.print(
+        "MRMS: MRICLK {d} MHz, MRPCLK {d} MHz, prefetch buffer {s}\n",
+        .{ unit.code.mhz, unit.extra.mhz, if (unit.prefetching()) "on" else "off" },
+    );
+    const refused = unit.code.refused + unit.extra.refused;
+    if (refused != 0) {
+        try out.print(
+            "MRMS: DROPPED {d} frequency store(s) whose key byte was not 0x{X:0>2} or 0x{X:0>2}\n",
+            .{ refused, mrms.key.mrcfreq >> 24, mrms.key.mrefreq >> 24 },
+        );
+    }
+}
+
 pub fn section(board: *Board, out: Writer) !void {
     try branches(board, out);
     try ratios(board, out);
     try oscillators(board, out);
+    try memoryRates(board, out);
     if (board.modules.clean()) {
         try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
         return;
