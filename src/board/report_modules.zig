@@ -8,6 +8,7 @@
 //! gate at the end of the run tells them apart, so that is what is asked
 //! here rather than the counters alone.
 const ckcr = @import("../periph/ckcr.zig");
+const oscsf = @import("../periph/oscsf.zig");
 const std = @import("std");
 
 const Board = @import("board.zig").Board;
@@ -34,8 +35,28 @@ fn branches(board: *Board, out: Writer) !void {
     }
 }
 
+/// The clock sources a run started or stopped, and any store aimed at the
+/// read-only flag register. A run that touched none of them says nothing.
+fn oscillators(board: *Board, out: Writer) !void {
+    const unit = &board.oscillators;
+    if (unit.quiet()) return;
+    if (unit.starts != 0 or unit.stops != 0) {
+        try out.print(
+            "clock sources: {d} start(s), {d} stop(s), OSCSF 0x{X:0>2}\n",
+            .{ unit.starts, unit.stops, unit.flags() },
+        );
+    }
+    if (unit.readonly_writes != 0) {
+        try out.print(
+            "clock sources: REFUSED {d} store(s) to OSCSF, which hardware owns\n",
+            .{unit.readonly_writes},
+        );
+    }
+}
+
 pub fn section(board: *Board, out: Writer) !void {
     try branches(board, out);
+    try oscillators(board, out);
     if (board.modules.clean()) {
         try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
         return;

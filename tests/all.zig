@@ -134,6 +134,7 @@ test {
     _ = @import("periph/ipc_test.zig");
     _ = @import("periph/ipc_sync_test.zig");
     _ = @import("periph/poeg_test.zig");
+    _ = @import("periph/oscsf_test.zig");
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
