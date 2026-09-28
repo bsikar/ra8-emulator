@@ -175,3 +175,58 @@ test "a narrow read of STA names the byte it asked for" {
     mailbox.write(reg(0, ipc.off_txd), 4, 0x7777);
     try std.testing.expectEqual(@as(u32, 0x01), mailbox.read(reg(0, ipc.off_sta) + 2, 1));
 }
+
+test "a halfword load of RXD is refused and the stage stays where it was" {
+    var mailbox = unit();
+    mailbox.write(reg(0, ipc.off_txd), 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.read(reg(0, ipc.off_rxd), 2));
+    try std.testing.expectEqual(@as(u32, 1), mailbox.channels[0].narrow_reads);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.channels[0].pops);
+    // The message is still there, whole, for the load that can carry it.
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), mailbox.read(reg(0, ipc.off_rxd), 4));
+    try std.testing.expectEqual(@as(u32, 1), mailbox.channels[0].pops);
+}
+
+test "a byte load of RXD neither drains a stage nor latches RERR" {
+    var mailbox = unit();
+    mailbox.write(reg(0, ipc.off_txd), 4, 0x1122_3344);
+    _ = mailbox.read(reg(0, ipc.off_rxd), 1);
+    _ = mailbox.read(reg(0, ipc.off_rxd) + 2, 1);
+    try std.testing.expectEqual(@as(u32, 2), mailbox.channels[0].narrow_reads);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.channels[0].starved);
+    try std.testing.expect(!mailbox.channels[0].rerr);
+    try std.testing.expectEqual(@as(u32, ipc.field.rdy), mailbox.read(reg(0, ipc.off_sta), 4));
+}
+
+test "a narrow store to TXD pushes nothing rather than a part-written message" {
+    var mailbox = unit();
+    mailbox.write(reg(0, ipc.off_txd), 2, 0xBEEF);
+    try std.testing.expectEqual(@as(u32, 1), mailbox.channels[0].narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.channels[0].pushes);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.read(reg(0, ipc.off_sta), 4));
+}
+
+test "a word store to TXD still carries the whole message" {
+    var mailbox = unit();
+    mailbox.write(reg(0, ipc.off_txd), 4, 0xA5A5_5A5A);
+    try std.testing.expectEqual(@as(u32, 0), mailbox.channels[0].narrow_writes);
+    try std.testing.expectEqual(@as(u32, 0xA5A5_5A5A), mailbox.read(reg(0, ipc.off_rxd), 4));
+}
+
+test "ISET and CLR still take a narrow store on the lanes it names" {
+    var mailbox = unit();
+    mailbox.write(reg(0, ipc.off_iset), 1, 0x03);
+    try std.testing.expectEqual(@as(u32, 0x03), mailbox.read(reg(0, ipc.off_sta), 4));
+    mailbox.write(reg(0, ipc.off_clr), 1, 0x01);
+    try std.testing.expectEqual(@as(u32, 0x02), mailbox.read(reg(0, ipc.off_sta), 4));
+    try std.testing.expectEqual(@as(u32, 0), mailbox.channels[0].narrow_writes);
+}
+
+test "a refused narrow access leaves the channel quiet on neither counter" {
+    var mailbox = unit();
+    _ = mailbox.read(reg(1, ipc.off_rxd), 2);
+    mailbox.write(reg(1, ipc.off_txd), 1, 0x11);
+    try std.testing.expect(!mailbox.channels[1].quiet());
+    try std.testing.expectEqual(@as(u32, 1), mailbox.channels[1].narrow_reads);
+    try std.testing.expectEqual(@as(u32, 1), mailbox.channels[1].narrow_writes);
+}

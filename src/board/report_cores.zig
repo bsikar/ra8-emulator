@@ -29,6 +29,18 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, unit.starved },
             );
         }
+        if (unit.narrow_reads != 0) {
+            try out.print(
+                "IPC ch{d}: REFUSED {d} load(s) of RXD narrower than a word, the stage was kept\n",
+                .{ index, unit.narrow_reads },
+            );
+        }
+        if (unit.narrow_writes != 0) {
+            try out.print(
+                "IPC ch{d}: REFUSED {d} store(s) to TXD narrower than a word, no part message was sent\n",
+                .{ index, unit.narrow_writes },
+            );
+        }
     }
     if (mailbox.wakes != 0) {
         try out.print("IPC: {d} receive event(s) raised on this core\n", .{mailbox.wakes});
