@@ -1,5 +1,6 @@
-//! Covers src/periph/sci.zig: the SCI_B channels, the console line capture and
-//! the transmit-enable gate.
+//! Covers src/periph/sci.zig: the SCI_B channels, the data port at RDAT/TDAT
+//! and the transmit-enable gate. The console line buffer itself is
+//! tests/periph/sci_line_test.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const sci = ra8.periph.sci;
@@ -123,13 +124,6 @@ test "a full RX ring drops the rest instead of wrapping over unread bytes" {
     ring.push(&payload);
     try std.testing.expectEqual(@as(u32, 1), ring.dropped);
     try std.testing.expectEqual(@as(u8, 'x'), ring.pop().?);
-}
-
-test "an over-long line stops growing rather than wrapping onto itself" {
-    var line = sci.Line{};
-    for (0..sci.limits.line + 8) |_| line.feed('a');
-    line.feed('\n');
-    try std.testing.expectEqual(sci.limits.line, line.slice().len);
 }
 
 test "an untouched block stays out of the report" {
@@ -300,11 +294,66 @@ test "a byte-wide polled put still sends, and the console line captures it" {
     try std.testing.expectEqualStrings("hi", unit.line.slice());
 }
 
-test "a narrow store above TDAT carries no character" {
+test "a narrow store above TDAT carries no character, and is counted" {
     var unit = sci.Sci.init();
     open(&unit, sci.console_channel);
     unit.write(sci.regAddress(sci.console_channel, sci.off_tdr) + 1, 1, 'Z');
     try std.testing.expectEqual(@as(u32, 0), unit.console().transmitted);
+    try std.testing.expectEqual(@as(u32, 1), unit.console().unnamed_stores);
+}
+
+test "a byte load above RDAT takes nothing and leaves the byte queued" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.feed(sci.console_channel, "A");
+    const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(rdr + 1, 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.console().unnamed_reads);
+    try std.testing.expectEqual(@as(u32, 0), unit.console().received);
+    try std.testing.expectEqual(@as(u32, 'A'), unit.read(rdr, 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.console().received);
+}
+
+test "a halfword load of RDR's top half takes nothing either" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.feed(sci.console_channel, "hi");
+    const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(rdr + 2, 2));
+    try std.testing.expectEqual(@as(u32, 1), unit.console().unnamed_reads);
+    try std.testing.expectEqual(@as(u32, 'h'), unit.read(rdr, 4));
+    try std.testing.expectEqual(@as(u32, 'i'), unit.read(rdr, 4));
+}
+
+test "a refused load leaves RDRF standing for the load that names RDAT" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.feed(sci.console_channel, "q");
+    const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);
+    _ = unit.read(rdr + 3, 1);
+    const status = unit.read(sci.regAddress(sci.console_channel, sci.off_csr), 4);
+    try std.testing.expect(status & sci.csr.rdrf != 0);
+    try std.testing.expectEqual(@as(u32, 'q'), unit.read(rdr, 1));
+}
+
+test "a byte or halfword load that names RDAT still carries the character" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    unit.feed(sci.console_channel, "no");
+    const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);
+    try std.testing.expectEqual(@as(u32, 'n'), unit.read(rdr, 1));
+    try std.testing.expectEqual(@as(u32, 'o'), unit.read(rdr, 2));
+    try std.testing.expectEqual(@as(u32, 2), unit.console().received);
+    try std.testing.expectEqual(@as(u32, 0), unit.console().unnamed_reads);
+}
+
+test "a refused load of an empty RDR is still counted and takes nothing" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(rdr + 1, 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.console().unnamed_reads);
+    try std.testing.expectEqual(@as(u32, 0), unit.console().received);
 }
 
 test "a store to CSR is refused and counted, and the word still derives" {

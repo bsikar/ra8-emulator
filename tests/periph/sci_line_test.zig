@@ -1,0 +1,33 @@
+//! Covers src/periph/sci_line.zig: the console line the firmware printed.
+const std = @import("std");
+const ra8 = @import("ra8");
+const text = ra8.periph.sci_line;
+
+test "a line is latched on the newline that finishes it" {
+    var line = text.Line{};
+    for ("hello, ra8d2!\r\n") |byte| line.feed(byte);
+    try std.testing.expectEqualStrings("hello, ra8d2!", line.slice());
+    try std.testing.expectEqual(@as(u32, 1), line.lines);
+}
+
+test "an unfinished line is not latched until its newline arrives" {
+    var line = text.Line{};
+    for ("first\nsecond") |byte| line.feed(byte);
+    try std.testing.expectEqualStrings("first", line.slice());
+    line.feed('\n');
+    try std.testing.expectEqualStrings("second", line.slice());
+    try std.testing.expectEqual(@as(u32, 2), line.lines);
+}
+
+test "an over-long line stops growing rather than wrapping onto itself" {
+    var line = text.Line{};
+    for (0..text.limits.line + 8) |_| line.feed('a');
+    line.feed('\n');
+    try std.testing.expectEqual(text.limits.line, line.slice().len);
+}
+
+test "a carriage return never reaches the line" {
+    var line = text.Line{};
+    for ("a\rb\n") |byte| line.feed(byte);
+    try std.testing.expectEqualStrings("ab", line.slice());
+}
