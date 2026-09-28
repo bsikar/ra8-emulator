@@ -63,6 +63,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
     try self.options.attach(&self.bus, core.*);
+    try self.bus.add(self.second_core.block());
     try self.bus.add(self.memory_rates.block());
     try self.bus.add(self.card.block());
     try self.bus.add(self.ecc.block());
