@@ -12,7 +12,15 @@ fn at(offset: u32) u32 {
 fn broughtUp() usbhs.Host {
     var host = usbhs.Host{};
     host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm);
+    bringUpPhy(&host);
     return host;
+}
+
+/// The PHY sequence ra8_usb_phy.c walks: release the analog block, release
+/// the PLL, then start the PHY clock.
+fn bringUpPhy(host: *usbhs.Host) void {
+    host.write(at(regs.reg.physet), 2, regs.physet.clksel_24);
+    host.write(at(regs.reg.lpsts), 2, regs.lpsts.suspendm);
 }
 
 test "the window is the controller's own" {
@@ -47,11 +55,20 @@ test "an odd offset is refused rather than rounded down onto a register" {
     try std.testing.expectEqual(@as(u32, 2), host.misaligned);
 }
 
-test "the PLL answers before the module does, and only once clocked" {
+test "the PLL answers with USBE still clear, which is when the driver asks" {
     var host = usbhs.Host{};
     try std.testing.expectEqual(@as(u32, 0), host.read(at(regs.reg.pllsta), 2));
-    host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke);
+    host.write(at(regs.reg.syscfg), 2, regs.syscfg.scke);
+    bringUpPhy(&host);
     try std.testing.expectEqual(@as(u32, regs.pllsta.plllock), host.read(at(regs.reg.pllsta), 2));
+    try std.testing.expectEqual(@as(u32, 0), host.off);
+    try std.testing.expect(!host.phy.powered());
+}
+
+test "PHYSET and PLLSTA are reachable with the module off" {
+    var host = usbhs.Host{};
+    host.write(at(regs.reg.physet), 2, regs.physet.clksel_24);
+    try std.testing.expectEqual(@as(u32, regs.physet.clksel_24), host.read(at(regs.reg.physet), 2));
     try std.testing.expectEqual(@as(u32, 0), host.off);
 }
 
@@ -174,6 +191,8 @@ test "the block routes through the same paths as the model" {
     var host = usbhs.Host{};
     const block = host.block();
     block.writeFn(block.context, at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke);
+    block.writeFn(block.context, at(regs.reg.physet), 2, regs.physet.clksel_24);
+    block.writeFn(block.context, at(regs.reg.lpsts), 2, regs.lpsts.suspendm);
     try std.testing.expectEqual(
         @as(u32, regs.pllsta.plllock),
         block.readFn(block.context, at(regs.reg.pllsta), 2),

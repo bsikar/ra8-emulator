@@ -7,17 +7,24 @@
 //! usbhs_phy.zig, the pipe table in usbhs_pipe.zig, and the control transfer
 //! (CFIFO staging, SETUP, the device on the far end) in usbhs_xfer.zig, with
 //! the two data ports a bulk driver actually moves payload through in
-//! usbhs_dfifo.zig.
+//! usbhs_dfifo.zig, and the embedded PHY's own PLL in usbhs_pll.zig.
+//!
+//! PLLSTA and PHYSET sit in reserved gaps of the shared device-mode struct,
+//! at 0x006 and 0x03E, and LPSTS past it at 0x102. All three are reachable
+//! with SYSCFG.USBE still clear, because the driver brings the PHY up before
+//! it sets USBE.
 const periph = @import("registry.zig");
 const regs = @import("usbhs_regs.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_phy = @import("usbhs_phy.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
+const usbhs_pll = @import("usbhs_pll.zig");
 const usbhs_xfer = @import("usbhs_xfer.zig");
 
 pub const Host = struct {
     base: u32 = regs.window.base,
     phy: usbhs_phy.Phy = .{},
+    pll: usbhs_pll.Pll = .{},
     pipes: usbhs_pipe.Table = .{},
     xfer: usbhs_xfer.Transfer = .{},
     /// The 16-bit register shadow, for everything the model does not own.
@@ -52,13 +59,14 @@ pub const Host = struct {
     /// turned on) and the PHY page, which is per-window state the device role
     /// shares.
     fn alwaysOn(offset: u32) bool {
-        return offset == regs.reg.syscfg or offset >= regs.reg.phy_page;
+        return offset == regs.reg.syscfg or offset >= regs.reg.phy_page or
+            offset == regs.reg.pllsta or offset == regs.reg.physet;
     }
 
     pub fn read(self: *Host, address: u32, width: u3) u32 {
         const offset = address -% self.base;
         if (!self.aligned(offset)) return 0;
-        if (offset == regs.reg.pllsta) return self.phy.pllLock();
+        if (offset == regs.reg.pllsta) return self.pll.status(self.phy.clocked());
         if (!alwaysOn(offset) and !self.phy.powered()) {
             self.off += 1;
             return 0;
@@ -67,6 +75,8 @@ pub const Host = struct {
         if (usbhs_dfifo.portOf(offset)) |which| return self.readDataPort(which, offset, width);
         return switch (offset) {
             regs.reg.syscfg => self.phy.syscfg,
+            regs.reg.physet => self.pll.physet,
+            regs.reg.lpsts => self.pll.lpsts,
             regs.reg.syssts0 => self.phy.lineState(),
             regs.reg.dvstctr0 => self.phy.portStatus(),
             regs.reg.pipesel => self.pipes.selected,
@@ -103,6 +113,7 @@ pub const Host = struct {
         }
         if (offset == regs.reg.syscfg) {
             self.phy.setSyscfg(v);
+            self.pll.clockChanged(self.phy.clocked());
             return;
         }
         if (!alwaysOn(offset) and !self.phy.powered()) {
@@ -120,6 +131,8 @@ pub const Host = struct {
                 self.read_only += 1;
                 self.phy.refuseStatus();
             },
+            regs.reg.physet => self.pll.setPhyset(v, self.phy.clocked()),
+            regs.reg.lpsts => self.pll.setLpsts(v, self.phy.clocked()),
             regs.reg.dvstctr0 => self.setPort(v),
             regs.reg.cfifosel => self.xfer.port.select(v),
             regs.reg.cfifoctr => self.fifoControl(v),
@@ -218,8 +231,8 @@ pub const Host = struct {
     }
 
     pub fn quiet(self: *const Host) bool {
-        return self.phy.quiet() and self.pipes.quiet() and self.xfer.quiet() and
-            self.refusals() == 0;
+        return self.phy.quiet() and self.pll.quiet() and self.pipes.quiet() and
+            self.xfer.quiet() and self.refusals() == 0;
     }
 
     pub fn block(self: *Host) periph.Block {

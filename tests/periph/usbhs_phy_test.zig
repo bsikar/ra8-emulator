@@ -11,13 +11,14 @@ fn poweredHost() usbhs_phy.Phy {
     return phy;
 }
 
-test "the PLL does not lock before the module has its clock" {
+test "the module clock is SCKE alone, not the whole power-up" {
     var phy = usbhs_phy.Phy{};
-    try std.testing.expectEqual(@as(u16, 0), phy.pllLock());
+    try std.testing.expect(!phy.clocked());
     phy.setSyscfg(regs.syscfg.usbe);
-    try std.testing.expectEqual(@as(u16, 0), phy.pllLock());
-    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke);
-    try std.testing.expectEqual(regs.pllsta.plllock, phy.pllLock());
+    try std.testing.expect(!phy.clocked());
+    phy.setSyscfg(regs.syscfg.scke);
+    try std.testing.expect(phy.clocked());
+    try std.testing.expect(!phy.powered());
 }
 
 test "the line reads idle until something is attached" {

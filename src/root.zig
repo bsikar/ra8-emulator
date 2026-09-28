@@ -182,6 +182,7 @@ pub const periph = struct {
     pub const usbhs_fifo = @import("periph/usbhs_fifo.zig");
     pub const usbhs_phy = @import("periph/usbhs_phy.zig");
     pub const usbhs_pipe = @import("periph/usbhs_pipe.zig");
+    pub const usbhs_pll = @import("periph/usbhs_pll.zig");
     pub const usbhs_regs = @import("periph/usbhs_regs.zig");
     pub const usbhs_setup = @import("periph/usbhs_setup.zig");
     pub const usbhs_xfer = @import("periph/usbhs_xfer.zig");

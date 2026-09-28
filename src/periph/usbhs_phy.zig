@@ -5,6 +5,10 @@
 //! PHY PLL locked from the first read, so an image that never turned the
 //! module or its clock on enumerated a device in the emulator and did nothing
 //! on the bench. The machine here has to be brought up the way silicon is.
+//!
+//! The PHY behind the switch is not here: PHYSET, LPSTS and the PLL lock
+//! they earn live in usbhs_pll.zig. The split is the driver's own, because
+//! the PHY comes up before SYSCFG.USBE does.
 const regs = @import("usbhs_regs.zig");
 
 /// What the port settled on after a reset, which is what DVSTCTR0.RHST
@@ -42,20 +46,20 @@ pub const Phy = struct {
     /// The module is on and clocked. Everything but SYSCFG itself is gated on
     /// this, or the firmware could never turn it on.
     pub fn powered(self: *const Phy) bool {
-        return self.syscfg & regs.syscfg.usbe != 0 and self.syscfg & regs.syscfg.scke != 0;
+        return self.syscfg & regs.syscfg.usbe != 0 and self.clocked();
+    }
+
+    /// Just the module clock. The PHY PLL runs off this alone: the driver
+    /// will not set USBE until it has seen the lock, so asking for USBE
+    /// here would be asking for something that cannot happen yet.
+    pub fn clocked(self: *const Phy) bool {
+        return self.syscfg & regs.syscfg.scke != 0;
     }
 
     /// DCFM: this controller is driving the bus, not answering on it. A host
     /// register means nothing while the part is in device role.
     pub fn host(self: *const Phy) bool {
         return self.syscfg & regs.syscfg.dcfm != 0;
-    }
-
-    /// The PLL locks once the module has its clock, and not before. dev
-    /// returned the lock flag unconditionally, so a driver that polled it
-    /// before enabling SCKE ran straight past the wait.
-    pub fn pllLock(self: *const Phy) u16 {
-        return if (self.powered()) regs.pllsta.plllock else 0;
     }
 
     /// The line state is the cable's to report, not the driver's to set.
