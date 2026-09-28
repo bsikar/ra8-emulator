@@ -55,3 +55,22 @@ test "the page count is inclusive of both ends" {
     try std.testing.expectEqual(@as(u32, 1), region.pages(0x9000_0000, 0x9000_0000));
     try std.testing.expectEqual(@as(u32, 2), region.pages(0x9000_0000, 0x9000_1000));
 }
+
+test "outsideWindow answers on the pair, not on one register" {
+    const bound = region.window(0);
+    try std.testing.expect(!region.outsideWindow(bound, 0x0000_1000, 0x0000_0000));
+    try std.testing.expect(region.outsideWindow(bound, 0x0000_1000, 0x0000_2000));
+    try std.testing.expect(!region.outsideWindow(bound, 0x9000_1000, 0x9000_2000));
+}
+
+test "outsideWindow runs the region to the top of its last page" {
+    const bound = region.window(1);
+    try std.testing.expect(!region.outsideWindow(bound, 0x7000_0000, 0x7FFF_F000));
+    try std.testing.expect(region.outsideWindow(bound, 0x7000_0000, 0x8000_0000));
+}
+
+test "a pair with a register still at reset names no region to refuse" {
+    const bound = region.window(0);
+    try std.testing.expect(!region.outsideWindow(bound, 0x0000_0000, 0x9000_1000));
+    try std.testing.expect(!region.outsideWindow(bound, 0x9000_0000, 0x0000_0000));
+}

@@ -82,3 +82,19 @@ pub fn pages(start: u32, end: u32) u32 {
     if (!programmed(start, end)) return 0;
     return ((address(end) - address(start)) / granule) + 1;
 }
+
+/// True when the pair names a region this window does not wholly hold. The
+/// end register names the last 4 KB page, so the region runs to the top of
+/// that page and both edges have to sit inside the window.
+///
+/// A pair with either register still at its reset value names no region to
+/// refuse. Both registers reset to zero, a driver programs them one at a
+/// time and sometimes end first (fw/real/dotf.c does), and zero is inside
+/// neither channel's XSPI window, so judging the pair while one half of it
+/// is still zero refuses a channel part-way through a legal sequence. The
+/// cost of that rule is a genuine region anchored at address zero, which
+/// this cannot tell apart from an unprogrammed start and so never refuses.
+pub fn outsideWindow(bound: Window, start: u32, end: u32) bool {
+    if (address(start) == 0 or !programmed(start, end)) return false;
+    return !bound.holds(address(start)) or !bound.holds(address(end) +| (granule - 1));
+}
