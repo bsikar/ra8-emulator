@@ -176,6 +176,7 @@ test {
     _ = @import("periph/usbhs_fifo_test.zig");
     _ = @import("periph/usbhs_phy_test.zig");
     _ = @import("periph/usbhs_pipe_test.zig");
+    _ = @import("periph/usbhs_pll_test.zig");
     _ = @import("periph/usbhs_setup_test.zig");
     _ = @import("periph/usbhs_test.zig");
     _ = @import("periph/usbhs_xfer_test.zig");

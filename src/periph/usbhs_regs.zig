@@ -55,9 +55,15 @@ pub const reg = struct {
     pub const pipectr: u32 = 0x070;
     /// PIPECTR is an array of nine, PIPE1 through PIPE9.
     pub const pipectr_count: u32 = 9;
-    pub const pllsta: u32 = 0x13E;
+    /// PLLSTA sits in a reserved gap of the shared device-mode struct, at
+    /// 0x006, and PHYSET in another at 0x03E. Both are named there in
+    /// ra8_usb_regs.h (HUM Ch 37), and both are where the firmware's own
+    /// bring-up reads and writes them.
+    pub const pllsta: u32 = 0x006;
+    pub const physet: u32 = 0x03E;
     /// The PHY page past the device model's span; per-window state.
     pub const phy_page: u32 = 0x100;
+    pub const lpsts: u32 = 0x102;
 };
 
 /// SYSCFG: who this controller is and whether it is on at all.
@@ -84,6 +90,20 @@ pub const port = struct {
 /// PLLSTA: the PHY PLL's lock flag, which the bring-up spins on.
 pub const pllsta = struct {
     pub const plllock: u16 = 0x0001;
+};
+
+/// PHYSET: the embedded PHY's analog power-down, its PLL reset, and which
+/// reference clock the PLL takes off the EXTAL pin.
+pub const physet = struct {
+    pub const dirpd: u16 = 1 << 0;
+    pub const pllreset: u16 = 1 << 1;
+    pub const clksel_mask: u16 = 0x0030;
+    pub const clksel_24: u16 = 0x0030;
+};
+
+/// LPSTS: SUSPENDM, which starts the PHY clock oscillating.
+pub const lpsts = struct {
+    pub const suspendm: u16 = 1 << 14;
 };
 
 /// The pipe table's shape and the fields the host programs into it.

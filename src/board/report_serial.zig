@@ -179,6 +179,12 @@ pub fn usb(board: *Board, out: Writer) !void {
             @tagName(host.phy.speed),
         },
     );
+    if (host.pll.locks != 0 or host.pll.stalled != 0) {
+        try out.print(
+            "  PHY PLL: {d} lock(s), {d} read(s) answered unlocked\n",
+            .{ host.pll.locks, host.pll.stalled },
+        );
+    }
     if (host.xfer.setups != 0) {
         try out.print(
             "  {d} SETUP(s), device {s} at address {d}, {d} stalled\n",
