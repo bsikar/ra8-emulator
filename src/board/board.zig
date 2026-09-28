@@ -10,6 +10,7 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
+const boundary = @import("boundary.zig");
 const part = @import("../core/part.zig");
 const reboot = @import("../core/reboot.zig");
 const periph = @import("../periph/registry.zig");
@@ -59,6 +60,7 @@ const rtc = @import("../periph/rtc.zig");
 const rtt = @import("../periph/rtt.zig");
 const cache = @import("../periph/cache.zig");
 const mpu = @import("../periph/mpu.zig");
+const mpu_guard = @import("../core/mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -236,6 +238,11 @@ pub const Board = struct {
     /// The MPU window, beside the cache one and primed the same way: TYPE is
     /// hardwired, so nothing would have put the region count there.
     regions: mpu.Mpu,
+    /// MPU enforcement: the traps kept over the read-only regions while
+    /// CTRL.ENABLE stands, and what they caught. Beside the table rather
+    /// than inside it, because one is what the firmware programmed and the
+    /// other is what the engine does about it.
+    guard: mpu_guard.Guard,
     /// Where a reset this board decides on is left for the engine to perform.
     /// main.zig points it at the run's own seam; a board built by a test that
     /// never reboots leaves it null and the request is only latched.
@@ -299,6 +306,7 @@ pub const Board = struct {
             .control = scb.Scb.init(),
             .caches = cache.Cache.init(),
             .regions = mpu.Mpu.init(),
+            .guard = mpu_guard.Guard.init(),
         };
     }
 
@@ -316,76 +324,23 @@ pub const Board = struct {
         return wiring.attach(self, core);
     }
 
-    /// The chunk boundary, peripheral side: the watchdog counts, a block with
-    /// an event due raises it into the event links, a reset the watchdog asked
-    /// for is recorded as the boot cause, then any line still latched
-    /// re-pends. The controller picks straight afterwards, so an interrupt
-    /// raised here is entered in the same boundary rather than a chunk later.
+    /// The chunk boundary, peripheral side. What actually happens there is
+    /// next door in boundary.zig: the order the blocks are stepped in and
+    /// where an event goes is its own subject, and this file is the list of
+    /// what the board is made of.
     pub fn tick(self: *Board, core: engine.Engine) !void {
-        self.watchdog.tick();
-        self.heartbeat.tick();
-        self.lowpower.tick();
-        self.microphone.tick();
-        self.clock.tick();
-        self.interval.tick();
-        self.pwm.tick();
-        self.ptp.tick();
-        self.trace.tick();
-        self.rswitch.tick();
-        try self.takeResetRequests(core);
-        try self.drain(core, self.serial.dueEvents());
-        try self.drain(core, self.lowpower.dueEvents());
-        try self.drain(core, self.mailbox.dueEvents());
-        try self.drain(core, self.can.dueEvents());
-        try self.drain(core, self.npu.dueEvents());
-        try self.drain(core, self.clock.dueEvents());
-        try self.drain(core, self.interval.dueEvents());
-        try self.drain(core, self.pwm.dueEvents());
-        try self.drain(core, self.adc.dueEvents());
-        try self.drain(core, self.dma.dueEvents());
-        try self.drain(core, self.links.takeEvents());
-        try self.events.repend(core);
+        return boundary.tick(self, core);
     }
 
-    /// Every event one block has due this boundary, offered one at a time.
-    fn drain(self: *Board, core: engine.Engine, events: anytype) !void {
-        for (events.constSlice()) |event| try self.raise(core, event);
-    }
-
-    /// One event, offered to all three consumers of one. The links first,
-    /// and they see EVERY event, not just the four the ELC generates: an
-    /// event fans out to the ICU and the ELC at once, and a link conducts
-    /// without consuming it. Then the transfer controller, before the core:
-    /// a DTCE slot belongs to the DTC until its descriptor runs out.
+    /// One event, offered to the links, the transfer controller and the core.
     pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
-        _ = self.links.conduct(event);
-        if (self.transfers.activate(core, &self.events, event)) |moved| {
-            if (!moved.interrupt) return;
-        }
-        try self.events.raise(core, event);
+        return boundary.raise(self, core, event);
     }
 
-    /// Whoever asked for a reset this boundary hands the request to the reset
-    /// block, which latches the cause the firmware will read on the way back
-    /// up. A software request is then performed: the run has a reboot seam and
-    /// the firmware behind AIRCR is sitting in a wait loop expecting the part
-    /// to go away. A watchdog request still only latches, because the image
-    /// that tripped it has nothing waiting on the reboot.
+    /// Whoever asked for a reset this boundary, plus the PPB windows that are
+    /// polled rather than hooked.
     pub fn takeResetRequests(self: *Board, core: anytype) !void {
-        if (self.watchdog.reset_requested) {
-            self.watchdog.reset_requested = false;
-            self.causes.request(.watchdog);
-        }
-        if (self.heartbeat.reset_requested) {
-            self.heartbeat.reset_requested = false;
-            self.causes.request(.iwdt);
-        }
-        try self.caches.poll(core);
-        try self.regions.poll(core);
-        if (!try self.control.poll(core)) return;
-        self.causes.request(.software);
-        self.events.clearLatches();
-        if (self.reboot) |pending| pending.requested = true;
+        return boundary.takeResetRequests(self, core);
     }
 
     pub fn ticker(self: *Board) engine.Tick {

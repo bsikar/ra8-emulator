@@ -196,13 +196,13 @@ test "clearing the unused tail leaves the programmed regions standing" {
 test "a store to RNR is the one that asks for the pairs to be put back" {
     var unit = mpu.Mpu.init();
 
-    try std.testing.expect(unit.observe(memmap.mpu.rnr, 3));
+    try std.testing.expectEqual(mpu.Mpu.Cue.rebank, unit.observe(memmap.mpu.rnr, 3));
     try std.testing.expectEqual(@as(u8, 3), unit.selected);
-    try std.testing.expect(!unit.observe(memmap.mpu.rbar, 0x2200_0000));
-    try std.testing.expect(!unit.observe(memmap.mpu.rlar, 0x2200_0FE0));
+    try std.testing.expectEqual(mpu.Mpu.Cue.none, unit.observe(memmap.mpu.rbar, 0x2200_0000));
+    try std.testing.expectEqual(mpu.Mpu.Cue.none, unit.observe(memmap.mpu.rlar, 0x2200_0FE0));
     // Nothing else in the window is banked, so nothing else asks.
-    try std.testing.expect(!unit.observe(memmap.mpu.ctrl, mpu.field.ctrl_enable));
-    try std.testing.expect(!unit.observe(memmap.mpu.mair0, 0x44));
+    try std.testing.expectEqual(mpu.Mpu.Cue.rearm, unit.observe(memmap.mpu.ctrl, mpu.field.ctrl_enable));
+    try std.testing.expectEqual(mpu.Mpu.Cue.none, unit.observe(memmap.mpu.mair0, 0x44));
     try std.testing.expectEqual(@as(u32, 2), unit.banked);
 }
 

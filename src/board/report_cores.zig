@@ -38,11 +38,13 @@ fn secondCore(board: *Board, out: Writer) !void {
     }
 }
 
-/// What the firmware programmed into the MPU. Enabled regions are reported,
-/// never enforced: nothing here faults a store into a read-only one, so the
-/// line says protected rather than enforced and the two are not blurred.
+/// What the firmware programmed into the MPU, and what enforcement made of
+/// it. A store into a read-only region is refused with a MemManage, so the
+/// violations are the line that matters: a run that programmed a protected
+/// span and never tripped it is a different run from one that did.
 fn regions(board: *Board, out: Writer) !void {
     const unit = &board.regions;
+    const latch = &board.guard.latch;
     if (!unit.on() and unit.programmed() == 0) return;
     try out.print(
         "MPU: {s}, {d} of {d} region(s) enabled, {d} read-only{s}\n",
@@ -54,10 +56,22 @@ fn regions(board: *Board, out: Writer) !void {
             if (unit.privilegedDefault()) ", privileged default map on" else "",
         },
     );
-    if (unit.on()) {
+    if (latch.violations != 0) {
         try out.print(
-            "MPU: no access was checked against it, this model does not fault\n",
-            .{},
+            "MPU: REFUSED {d} store(s) into a read-only region, {d} took MemManage\n",
+            .{ latch.violations, latch.faults },
+        );
+    }
+    if (latch.unhandled != 0) {
+        try out.print(
+            "MPU: {d} violation(s) with no MemManage handler to take them\n",
+            .{latch.unhandled},
+        );
+    }
+    if (unit.on() and latch.violations == 0) {
+        try out.print(
+            "MPU: {d} read-only region(s) enforced, no store was refused\n",
+            .{unit.readOnly()},
         );
     }
 }

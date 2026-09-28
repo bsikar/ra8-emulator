@@ -45,12 +45,14 @@
 //! pairs reach the three regions after the selected one, which is how a driver
 //! programs four regions without touching RNR again.
 //!
-//! NOTHING HERE ENFORCES A REGION. A privileged store into a read-only region
-//! is a MemManage violation on silicon, and Unicorn's core models no MPU, so
-//! dev synthesises the exception from a write hook over each read-only range
-//! (emu_mpu.c). The table is captured so that enforcement has something to read
-//! and so the report can say what the firmware programmed; the fault itself is
-//! not modelled and an image that relies on one still runs on.
+//! THE TABLE IS WHAT ENFORCEMENT READS. A store into a read-only region is a
+//! MemManage violation on silicon and Unicorn's core models no MPU, so the
+//! exception is synthesised from a write hook over each protected span:
+//! src/core/mpu_guard.zig keeps those traps, src/periph/mpu_fault.zig holds
+//! what they catch, and this block is the table they are built from. So a
+//! region captured wrongly here is now a fault taken wrongly rather than a
+//! line in the report, which is why `observe` says what each store meant
+//! rather than leaving the caller to work it out from the address.
 const memmap = @import("../core/memmap.zig");
 
 /// The register block's fixed shape: how many data regions this core reports,
@@ -202,15 +204,29 @@ pub const Mpu = struct {
         return geometry.selects(@as(u32, self.selected) + offset);
     }
 
-    /// File one store into the window under the region RNR names. Answers
-    /// true when the selected region moved, which is the caller's cue to put
-    /// the newly selected pairs back in front of the firmware.
-    pub fn observe(self: *Mpu, address: u32, value: u32) bool {
+    /// What a store into the window asks of the engine above this block.
+    pub const Cue = enum {
+        /// Nothing beyond what the store already did to the table.
+        none,
+        /// RNR moved: put the newly selected pairs back in front of the
+        /// firmware, so a read after the change gives the region it picked.
+        rebank,
+        /// CTRL was written: enforcement follows ENABLE, so the traps over
+        /// the read-only regions are rebuilt or taken off.
+        rearm,
+    };
+
+    /// File one store into the window under the region RNR names, and say
+    /// what else it asks for. CTRL is not folded in here: the enable and
+    /// disable edges are counted at the boundary poll, and this only cues
+    /// the engine to follow the bit the store carried.
+    pub fn observe(self: *Mpu, address: u32, value: u32) Cue {
         if (address == memmap.mpu.rnr) {
             self.selected = geometry.selects(value);
-            return true;
+            return .rebank;
         }
-        const target = targetOf(address) orelse return false;
+        if (address == memmap.mpu.ctrl) return .rearm;
+        const target = targetOf(address) orelse return .none;
         const region = &self.table[self.banks(target.offset)];
         const pair = if (target.limit_half)
             [2]u32{ region.rbar, value }
@@ -218,7 +234,7 @@ pub const Mpu = struct {
             [2]u32{ value, region.rlar };
         region.* = Region.fromPair(pair[0], pair[1]);
         self.banked +%= 1;
-        return false;
+        return .none;
     }
 
     /// The RBAR and RLAR words the firmware should see at this offset from

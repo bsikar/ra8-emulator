@@ -307,6 +307,10 @@ fn clearPending(core: anytype, number: u16) !void {
         try core.writeWord(memmap.scb.icsr, icsr & ~bit);
         return;
     }
+    // A system exception below the first IRQ has no NVIC pending bit at all:
+    // SysTick and PendSV keep theirs in ICSR (above), and the rest, MemManage
+    // among them, are pended by the fault itself and have nothing to clear.
+    if (number < first_irq) return;
     const line = number - first_irq;
     const address = memmap.nvic.ispr + 4 * (@as(u32, line) / 32);
     const mask = @as(u32, 1) << @intCast(line % 32);

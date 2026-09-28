@@ -17,6 +17,7 @@ const nvic = @import("../periph/nvic.zig");
 const bus_hook = @import("bus_hook.zig");
 const mpu = @import("../periph/mpu.zig");
 const mpu_hook = @import("mpu_hook.zig");
+const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
@@ -82,6 +83,10 @@ pub const Session = struct {
     /// gets there. Null watches nothing. A pointer rather than a copy so
     /// the caller can ask afterwards whether the stop was what ended it.
     stop: ?*stop.Stop = null,
+    /// MPU enforcement: the traps over the read-only regions, and the store
+    /// one of them caught. Null runs with the table captured but nothing
+    /// checked against it, which is every test that does not program one.
+    protection: ?*mpu_guard.Guard = null,
     /// Modelled time the run is allowed, counted in the SysTick periods the
     /// time base reports. Null is untimed. Needs `timebase` to have anything
     /// to count, so an image with no clocks attached is never cut short by
@@ -203,8 +208,9 @@ pub const Engine = struct {
     /// Bank the MPU region table through RNR. Without this every region a
     /// driver programs lands on top of the last one, and a configuration
     /// that clears its unused tail reads back as an empty table.
-    pub fn attachRegions(self: Engine, unit: *mpu.Mpu) Error!void {
-        mpu_hook.attach(self.handle, unit) catch return Error.AttachFailed;
+    pub fn attachRegions(self: Engine, unit: *mpu.Mpu, guard: *mpu_guard.Guard) Error!void {
+        guard.unit = unit;
+        mpu_hook.attach(self.handle, guard) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M conditional selects the CPU model cannot decode.
@@ -285,6 +291,17 @@ pub const Engine = struct {
                 remaining -= 1;
                 continue;
             }
+            // A store into a read-only region stopped the chunk early, so the
+            // exception is taken here, at the boundary the trap made, before
+            // the clocks are charged for a chunk that did not finish. The
+            // stretch is charged one instruction for the same reason the
+            // exception return above is: enough to keep the budget monotone.
+            if (session.protection) |guard| if (guard.latch.take()) |hit| {
+                guard.synthesise(self, session.interrupts, hit) catch return Error.RunFailed;
+                remaining -= 1;
+                pc = try self.register(.pc);
+                continue;
+            };
             remaining -= chunk;
             if (session.timebase) |clock| clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
             // The budget is spent: do not enter a handler there is no room

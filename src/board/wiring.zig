@@ -114,7 +114,9 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
     try self.regions.prime(core.*);
     // RBAR/RLAR are one word each in RAM, so without this every region a
     // driver programs overwrites the last and the table reads back empty.
-    try core.attachRegions(&self.regions);
+    // The guard goes on with it: the same hook that banks the table is the
+    // one that sees CTRL and arms the read-only traps.
+    try core.attachRegions(&self.regions, &self.guard);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
