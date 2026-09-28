@@ -182,7 +182,8 @@ pub fn usb(board: *Board, out: Writer) !void {
     );
     if (host.phy.blind != 0) {
         try out.print(
-            "  {d} line-state read(s) answered SE0 with a device attached: CNEN or VBUSEN was clear\n",
+            "  {d} line-state read(s) answered SE0 with something on the far end: " ++
+                "CNEN, or VBUSEN as a host or DPRPU as a device, was clear\n",
             .{host.phy.blind},
         );
     }

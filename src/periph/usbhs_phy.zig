@@ -33,12 +33,32 @@
 //! the same answer now, and a reset cannot settle a speed the port could
 //! not have observed either.
 //!
-//! BOTH GATES ARE HOST-ROLE ONLY, and deliberately so. VBUSEN drives the
-//! jack's switch, which a device does not own, and the driver writes both
-//! bits in the host path alone. The device side has its own preconditions
-//! on the same register (DPRPU, and whatever the part does about VBUS
-//! detection); this tree says nothing about them, so they are NOT MODELLED,
-//! AND NOT GUESSED: in device role the line reads as it did before.
+//! THE DEVICE SIDE HAS ITS OWN TWO GATES, and they are not the same pair.
+//! The previous slice left them out as NOT MODELLED because nothing found
+//! then described them; ra8_usb_device.c does, at length, so they are in:
+//!
+//!   SYSCFG.CNEN again, quoting HUM Ch 37.2.1 p 2062 directly: "In device
+//!   controller mode, set this bit to 1 when VBUS is detected because of a
+//!   VBUS interrupt, and set it to 0 when the VBUS line is removed."
+//!   Without it "the HS PHY's single-end receivers are powered down and
+//!   SYSSTS0.LNST[1:0] reads 00b (SE0) regardless of what the host's
+//!   pull-down arrangement and the device's DPRPU pull-up are doing on the
+//!   wires."
+//!
+//!   SYSCFG.DPRPU, the device's own 1.5k pull-up on D+. It is what puts the
+//!   line in J-state in the first place, and ra8_usb_device_attach writes
+//!   CNEN BEFORE it "so the receivers latch the line state the moment DPRPU
+//!   pulls D+ high" (HUM Ch 37.3.3 Figure 37.2 p 2121).
+//!
+//! So: host role needs CNEN and VBUSEN, device role needs CNEN and DPRPU,
+//! and the one bit both roles share is the receiver. VBUSEN stays out of
+//! the device path because a device does not own the jack's switch, and
+//! DPRPU stays out of the host path for the mirror reason.
+//!
+//! STILL NOT MODELLED, AND NOT GUESSED: the FS instance has no CNEN gate at
+//! all (ra8_usb_device.c, citing HUM Ch 36.2.1 p 1966), so on a part with
+//! the FS controller these gates are one bit too many. This model is the HS
+//! instance and has no FS one, so there is nothing to branch on yet.
 const regs = @import("usbhs_regs.zig");
 
 /// What the port settled on after a reset, which is what DVSTCTR0.RHST
@@ -97,9 +117,15 @@ pub const Phy = struct {
     }
 
     /// CNEN: the single-ended receiver that turns the differential pair into
-    /// something the controller can read a line state off.
+    /// something the controller can read a line state off. Both roles.
     pub fn receiving(self: *const Phy) bool {
         return self.syscfg & regs.syscfg.cnen != 0;
+    }
+
+    /// DPRPU: the device's own pull-up on D+, which is what holds the line
+    /// in J-state for the host to see. Device role only.
+    pub fn pullingUp(self: *const Phy) bool {
+        return self.syscfg & regs.syscfg.dprpu != 0;
     }
 
     /// VBUSEN: the jack's external VBUS switch. An unpowered device holds
@@ -108,12 +134,12 @@ pub const Phy = struct {
         return self.dvstctr0 & regs.port.vbusen != 0;
     }
 
-    /// Whether the controller can observe the far end at all. In device
-    /// role the two host gates do not apply and being powered is enough.
+    /// Whether the controller can observe the far end at all: the receiver
+    /// in either role, plus the jack's switch as a host or its own pull-up
+    /// as a device.
     pub fn sees(self: *const Phy) bool {
-        if (!self.powered()) return false;
-        if (!self.host()) return true;
-        return self.receiving() and self.supplying();
+        if (!self.powered() or !self.receiving()) return false;
+        return if (self.host()) self.supplying() else self.pullingUp();
     }
 
     /// The line state is the cable's to report, not the driver's to set, and
