@@ -6,6 +6,7 @@ const bus = ra8.periph.riic_bus;
 const flag = ra8.periph.i3c_flags;
 const gt911 = ra8.periph.i3c_gt911;
 const i3c = ra8.periph.i3c;
+const reset = ra8.periph.i3c_reset;
 
 /// A part that answers with a fixed reply and remembers what it was told.
 const Echo = struct {
@@ -338,4 +339,61 @@ test "a channel nothing drove is quiet" {
     try std.testing.expect(unit.quiet());
     address(&unit, 0x43, false);
     try std.testing.expect(!unit.quiet());
+}
+
+test "RSTCTL reads back clear so the driver's self-clear poll finishes" {
+    var unit = i3c.I3c{};
+    // internal_i3c_i2c_reset writes the bit, writes zero, then spins.
+    unit.writeOffset(reset.off, reset.mask.ri3crst);
+    try std.testing.expectEqual(@as(u32, 0), unit.readOffset(reset.off));
+    // A narrow store that names the lane carries the command just as well.
+    unit.write(flag.win_base + reset.off, 1, reset.mask.ri3crst);
+    try std.testing.expectEqual(@as(u32, 2), unit.resetCount());
+}
+
+test "a reset takes a channel left mid-transfer back to idle" {
+    var unit = i3c.I3c{};
+    var part = Echo{};
+    try unit.attachDevice(part.device(0x43));
+    // Bring-up resets FIRST, so configuration has to ride through a reset.
+    unit.writeOffset(0x0B4, 0xDEAD_BEEF);
+    // Leave a transaction open, the way an aborted transfer does.
+    unit.writeOffset(flag.reg.cndctl, flag.cndctl.stcnd);
+    unit.writeOffset(flag.reg.ntdtbp0, 0x43 << 1);
+    try std.testing.expectEqual(@as(u32, 0), unit.readOffset(flag.reg.bcst) & flag.bcst.bfref);
+
+    unit.writeOffset(reset.off, reset.mask.ri3crst);
+    try std.testing.expectEqual(flag.bcst.bfref, unit.readOffset(flag.reg.bcst) & flag.bcst.bfref);
+    try std.testing.expectEqual(@as(u32, 0), unit.readOffset(flag.reg.bst));
+    try std.testing.expectEqual(flag.ntst.tdbef0, unit.readOffset(flag.reg.ntst));
+    try std.testing.expectEqual(@as(u32, 1), unit.reset_busy);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), unit.readOffset(0x0B4));
+
+    // INTLRST takes it down the same way, from a fresh transaction.
+    unit.writeOffset(flag.reg.cndctl, flag.cndctl.stcnd);
+    unit.writeOffset(reset.off, reset.mask.intlrst);
+    try std.testing.expectEqual(flag.bcst.bfref, unit.readOffset(flag.reg.bcst) & flag.bcst.bfref);
+}
+
+test "a reset leaves nothing staged for the next read to serve" {
+    var unit = i3c.I3c{};
+    var part = Echo{ .reply = &[_]u8{ 0xDE, 0xAD } };
+    try unit.attachDevice(part.device(0x43));
+    unit.writeOffset(flag.reg.cndctl, flag.cndctl.stcnd);
+    unit.writeOffset(flag.reg.ntdtbp0, (0x43 << 1) | 1);
+    _ = unit.readOffset(flag.reg.ntdtbp0);
+
+    unit.writeOffset(reset.off, reset.mask.ri3crst);
+    // No transaction open, so the next buffer write has no START.
+    unit.writeOffset(flag.reg.ntdtbp0, 0x00);
+    try std.testing.expectEqual(@as(u32, 1), unit.no_start);
+}
+
+test "a per-queue reset is spent and counted but moves no transfer" {
+    var unit = i3c.I3c{};
+    unit.writeOffset(flag.reg.cndctl, flag.cndctl.stcnd);
+    unit.writeOffset(reset.off, reset.mask.tdbrst);
+    try std.testing.expectEqual(@as(u32, 0), unit.readOffset(reset.off));
+    try std.testing.expectEqual(@as(u32, 1), unit.resetCount());
+    try std.testing.expectEqual(@as(u32, 0), unit.readOffset(flag.reg.bcst) & flag.bcst.bfref);
 }
