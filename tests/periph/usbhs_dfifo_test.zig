@@ -134,9 +134,10 @@ test "a fresh pair is quiet" {
 /// a device on the bus that has been through a reset.
 fn liveHost(host: *usbhs.Host) void {
     host.attachDevice();
-    host.write(regs.window.base + regs.reg.syscfg, 2, regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm);
-    host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.usbrst);
-    host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.uact);
+    host.write(regs.window.base + regs.reg.syscfg, 2, regs.syscfg.usbe | regs.syscfg.scke |
+        regs.syscfg.dcfm | regs.syscfg.cnen);
+    host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.vbusen | regs.port.usbrst);
+    host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.vbusen | regs.port.uact);
 }
 
 /// Program PIPE1 as a bulk OUT on endpoint 2 and arm it.

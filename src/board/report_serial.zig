@@ -3,6 +3,7 @@
 //! which was at the file-length limit.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
+const Host = @import("../periph/usbhs.zig").Host;
 
 /// One line per SCI channel that moved bytes, plus the last console line the
 /// firmware printed. A TDR write made with CCR0.TE clear never leaves the
@@ -179,6 +180,12 @@ pub fn usb(board: *Board, out: Writer) !void {
             @tagName(host.phy.speed),
         },
     );
+    if (host.phy.blind != 0) {
+        try out.print(
+            "  {d} line-state read(s) answered SE0 with a device attached: CNEN or VBUSEN was clear\n",
+            .{host.phy.blind},
+        );
+    }
     if (host.pll.locks != 0 or host.pll.stalled != 0) {
         try out.print(
             "  PHY PLL: {d} lock(s), {d} read(s) answered unlocked\n",
@@ -202,6 +209,13 @@ pub fn usb(board: *Board, out: Writer) !void {
             .{ host.xfer.refused_out, host.xfer.refused_bytes },
         );
     }
+    try usbRefused(host, out);
+}
+
+/// What the controller turned away, in the order the driver would meet it:
+/// the window's own refusals, then the two data ports, then the transfers.
+/// Split out of usb() above, which was at the function-length limit.
+fn usbRefused(host: *const Host, out: Writer) !void {
     if (host.refusals() == 0) return;
     try out.print(
         "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++

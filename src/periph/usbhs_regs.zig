@@ -71,6 +71,9 @@ pub const syscfg = struct {
     pub const usbe: u16 = 1 << 0;
     pub const dprpu: u16 = 1 << 4;
     pub const dcfm: u16 = 1 << 6;
+    /// CNEN: the single-ended receiver. Without it the HS PHY cannot see the
+    /// line at all (HUM Ch 37.2.1 p 2062).
+    pub const cnen: u16 = 1 << 8;
     pub const scke: u16 = 1 << 10;
 };
 
@@ -85,6 +88,9 @@ pub const port = struct {
     pub const rhst_high: u16 = 0x0003;
     pub const usbrst: u16 = 1 << 6;
     pub const uact: u16 = 1 << 8;
+    /// VBUSEN: the external VBUS switch on the USBHS jack. Nothing on the
+    /// far end is powered until the host closes it (HUM Ch 37.2.5).
+    pub const vbusen: u16 = 1 << 9;
 };
 
 /// PLLSTA: the PHY PLL's lock flag, which the bring-up spins on.

@@ -9,10 +9,14 @@ fn at(offset: u32) u32 {
     return regs.window.base + offset;
 }
 
+/// The host bring-up internal_host_hs_bringup writes: powered, host role,
+/// and the single-ended receiver on, then the jack's VBUS switch closed.
 fn broughtUp() usbhs.Host {
     var host = usbhs.Host{};
-    host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm);
+    host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke |
+        regs.syscfg.dcfm | regs.syscfg.cnen);
     bringUpPhy(&host);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen);
     return host;
 }
 
@@ -91,12 +95,12 @@ test "a store into SYSSTS0 does not invent an attached device" {
 test "RHST reports what the reset settled on" {
     var host = broughtUp();
     host.attachDevice();
-    host.write(at(regs.reg.dvstctr0), 2, regs.port.usbrst);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen | regs.port.usbrst);
     try std.testing.expectEqual(
         @as(u32, 0),
         host.read(at(regs.reg.dvstctr0), 2) & regs.port.rhst_mask,
     );
-    host.write(at(regs.reg.dvstctr0), 2, regs.port.uact);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen | regs.port.uact);
     try std.testing.expectEqual(
         @as(u32, regs.port.rhst_high),
         host.read(at(regs.reg.dvstctr0), 2) & regs.port.rhst_mask,
@@ -196,5 +200,32 @@ test "the block routes through the same paths as the model" {
     try std.testing.expectEqual(
         @as(u32, regs.pllsta.plllock),
         block.readFn(block.context, at(regs.reg.pllsta), 2),
+    );
+}
+
+test "a host that never closed VBUSEN reads SE0 through the window" {
+    var host = usbhs.Host{};
+    host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke |
+        regs.syscfg.dcfm | regs.syscfg.cnen);
+    host.attachDevice();
+    try std.testing.expectEqual(@as(u32, 0), host.read(at(regs.reg.syssts0), 2));
+    try std.testing.expectEqual(@as(u32, 1), host.phy.blind);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen);
+    try std.testing.expectEqual(@as(u32, regs.port.lnst_j), host.read(at(regs.reg.syssts0), 2));
+    try std.testing.expectEqual(@as(u32, 1), host.phy.blind);
+}
+
+test "a host that never enabled the receiver reads SE0 through the window" {
+    var host = usbhs.Host{};
+    host.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen);
+    host.attachDevice();
+    try std.testing.expectEqual(@as(u32, 0), host.read(at(regs.reg.syssts0), 2));
+    try std.testing.expectEqual(@as(u32, 1), host.phy.blind);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen | regs.port.usbrst);
+    host.write(at(regs.reg.dvstctr0), 2, regs.port.vbusen | regs.port.uact);
+    try std.testing.expectEqual(
+        @as(u32, 0),
+        host.read(at(regs.reg.dvstctr0), 2) & regs.port.rhst_mask,
     );
 }
