@@ -62,11 +62,12 @@ test "a ring outside RAM is refused, which dev does not check" {
 }
 
 test "a ring running off the end of RAM is refused" {
-    try std.testing.expectEqual(block.Reject.ring_off_ram, block.check(1, up(0x220F_FFE0, 4096, 0, 0)).?);
+    const straddling = memmap.sram_end - 0x20;
+    try std.testing.expectEqual(block.Reject.ring_off_ram, block.check(1, up(straddling, 4096, 0, 0)).?);
 }
 
 test "RAM holds a span that ends exactly at the end of a window" {
-    try std.testing.expect(memmap.debugHolds(0x220F_FF00, 0x100));
+    try std.testing.expect(memmap.debugHolds(memmap.sram_end - 0x100, 0x100));
 }
 
 test "RAM holds nothing of zero length" {
