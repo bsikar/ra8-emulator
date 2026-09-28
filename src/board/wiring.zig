@@ -18,6 +18,7 @@ const drw = @import("../periph/drw.zig");
 const eink = @import("../periph/eink.zig");
 const modem = @import("../periph/modem.zig");
 const ckcr = @import("../periph/ckcr.zig");
+const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const pdctr = @import("../periph/pdctr.zig");
@@ -62,6 +63,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
     try self.options.attach(&self.bus, core.*);
+    try self.bus.add(self.memory_rates.block());
     try self.bus.add(self.card.block());
     try self.bus.add(self.ecc.block());
     try self.bus.add(self.audio.block());

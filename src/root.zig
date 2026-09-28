@@ -131,6 +131,7 @@ pub const periph = struct {
     pub const mram_init = @import("periph/mram_init.zig");
     pub const mram_otp = @import("periph/mram_otp.zig");
     pub const mram_regs = @import("periph/mram_regs.zig");
+    pub const mrms = @import("periph/mrms.zig");
     pub const mstp = @import("periph/mstp.zig");
     pub const mstp_drops = @import("periph/mstp_drops.zig");
     pub const npu = @import("periph/npu.zig");
