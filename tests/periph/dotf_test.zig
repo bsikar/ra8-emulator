@@ -67,9 +67,67 @@ test "switching the core on is counted once per rising edge" {
 test "a region outside the channel's own XSPI window is counted" {
     var unit = dotf.Dotf.init();
     unit.write(at(0, dotf.off.convareast), 4, 0x7000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x7000_1000);
     try std.testing.expectEqual(@as(u32, 1), unit.channels[0].out_of_window);
     unit.write(at(1, dotf.off.convareast), 4, 0x7000_0000);
+    unit.write(at(1, dotf.off.convaread), 4, 0x7000_1000);
     try std.testing.expectEqual(@as(u32, 0), unit.channels[1].out_of_window);
+}
+
+test "an address written in halves is not refused between the two writes" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 2, 0x1000);
+    unit.write(at(0, dotf.off.convareast + 2), 2, 0x9000);
+    unit.write(at(0, dotf.off.convaread), 2, 0x2000);
+    unit.write(at(0, dotf.off.convaread + 2), 2, 0x9000);
+    try std.testing.expectEqual(@as(u32, 0x9000_1000), unit.channels[0].convareast);
+    try std.testing.expectEqual(@as(u32, 0x9000_2000), unit.channels[0].convaread);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].out_of_window);
+}
+
+test "a start with no end yet names no region to refuse" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x7000_0000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].out_of_window);
+}
+
+test "an end programmed before its start names no region to refuse" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].out_of_window);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].out_of_window);
+}
+
+test "one bad region is counted once however many writes program it" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x7000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x7000_1000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x7000_2000);
+    unit.write(at(0, dotf.off.convareast), 4, 0x7000_1000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].out_of_window);
+}
+
+test "a channel moved back out of its window is counted again" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x7000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x7000_1000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].out_of_window);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].out_of_window);
+    unit.write(at(0, dotf.off.convareast), 4, 0x7000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x7000_1000);
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[0].out_of_window);
+}
+
+test "a region running off the top of the window is refused" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x9FFF_F000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9FFF_F000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].out_of_window);
+    unit.write(at(0, dotf.off.convaread), 4, 0xA000_0000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].out_of_window);
 }
 
 test "a channel covers an address only while it is decrypting" {

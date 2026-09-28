@@ -65,8 +65,12 @@ pub const Channel = struct {
     empty_reads: u32 = 0,
     /// Times the core was switched on.
     enables: u32 = 0,
-    /// Regions programmed outside the XSPI window this channel is bound to.
+    /// Regions programmed outside the XSPI window this channel is bound to,
+    /// counted once per region rather than once per write.
     out_of_window: u32 = 0,
+    /// Whether the region standing now is one of them, so a region written
+    /// in several writes is counted once and a re-write is not counted again.
+    outside: bool = false,
 
     pub fn quiet(self: *const Channel) bool {
         return self.self_tests == 0 and self.staged == 0 and self.staged_dark == 0 and
@@ -155,11 +159,15 @@ pub const Channel = struct {
         }
     }
 
+    /// A region is refused on the pair, not on the half of an address that
+    /// has just landed. Firmware programs these registers a word or a
+    /// halfword at a time, so between the two writes the channel names an
+    /// address it was never asked to decrypt over.
     fn setArea(self: *Channel, index: usize, local: u32, value: u32) void {
         if (local == off.convareast) self.convareast = value else self.convaread = value;
-        const bound = region.window(index);
-        const target = region.address(value);
-        if (target != 0 and !bound.holds(target)) self.out_of_window +%= 1;
+        const now = region.outsideWindow(region.window(index), self.convareast, self.convaread);
+        if (now and !self.outside) self.out_of_window +%= 1;
+        self.outside = now;
     }
 
     /// The self-test runs inside the write, so the bit never lands.
