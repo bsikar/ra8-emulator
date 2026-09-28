@@ -58,6 +58,7 @@ const reset = @import("../periph/reset.zig");
 const rtc = @import("../periph/rtc.zig");
 const rtt = @import("../periph/rtt.zig");
 const cache = @import("../periph/cache.zig");
+const mpu = @import("../periph/mpu.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -232,6 +233,9 @@ pub const Board = struct {
     /// it then asks for. Primed and polled like AIRCR beside it, because
     /// neither sits on the peripheral bus.
     caches: cache.Cache,
+    /// The MPU window, beside the cache one and primed the same way: TYPE is
+    /// hardwired, so nothing would have put the region count there.
+    regions: mpu.Mpu,
     /// Where a reset this board decides on is left for the engine to perform.
     /// main.zig points it at the run's own seam; a board built by a test that
     /// never reboots leaves it null and the request is only latched.
@@ -294,6 +298,7 @@ pub const Board = struct {
             .causes = reset.Reset.init(),
             .control = scb.Scb.init(),
             .caches = cache.Cache.init(),
+            .regions = mpu.Mpu.init(),
         };
     }
 
@@ -376,6 +381,7 @@ pub const Board = struct {
             self.causes.request(.iwdt);
         }
         try self.caches.poll(core);
+        try self.regions.poll(core);
         if (!try self.control.poll(core)) return;
         self.causes.request(.software);
         self.events.clearLatches();

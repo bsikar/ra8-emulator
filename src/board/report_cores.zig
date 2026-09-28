@@ -1,10 +1,12 @@
 //! The cross-core part of the end-of-run report: what went through the IPC
-//! mailbox, and what the other core was supposed to hear about.
+//! mailbox, what the other core was supposed to hear about, and what the
+//! core's own MPU was asked to protect.
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const ipc = @import("../periph/ipc.zig");
 const sync = @import("../periph/ipc_sync.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
+const mpu = @import("../periph/mpu.zig");
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
 /// the handshake completed, never that a second core is fetching: this model
@@ -36,11 +38,36 @@ fn secondCore(board: *Board, out: Writer) !void {
     }
 }
 
+/// What the firmware programmed into the MPU. Enabled regions are reported,
+/// never enforced: nothing here faults a store into a read-only one, so the
+/// line says protected rather than enforced and the two are not blurred.
+fn regions(board: *Board, out: Writer) !void {
+    const unit = &board.regions;
+    if (!unit.on() and unit.programmed() == 0) return;
+    try out.print(
+        "MPU: {s}, {d} of {d} region(s) enabled, {d} read-only{s}\n",
+        .{
+            if (unit.on()) "enabled" else "programmed but never enabled",
+            unit.programmed(),
+            mpu.geometry.regions,
+            unit.readOnly(),
+            if (unit.privilegedDefault()) ", privileged default map on" else "",
+        },
+    );
+    if (unit.on()) {
+        try out.print(
+            "MPU: no access was checked against it, this model does not fault\n",
+            .{},
+        );
+    }
+}
+
 /// One line per channel that carried anything, plus the losses. A message a
 /// full FIFO dropped and a read that found nothing are both real failures of
 /// the handshake, so they are reported apart from the traffic that worked.
 pub fn sections(board: *Board, out: Writer) !void {
     try secondCore(board, out);
+    try regions(board, out);
     const mailbox = &board.mailbox;
     if (mailbox.quiet()) return;
     for (&mailbox.channels, 0..) |*unit, index| {

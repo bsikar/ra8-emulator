@@ -96,12 +96,22 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
     try core.attachPeriph(&self.bus);
-    // AIRCR is PPB RAM, not a bus block, and RAM starts at zero: without
-    // this the first read of it is 0 rather than the key status.
+    try primeCoreWindows(self, core);
+}
+
+/// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
+/// at zero. Every one of these is a register the firmware reads before it
+/// writes anything, so a zero is not a neutral starting value: it is a wrong
+/// answer the firmware then believes. Seed each with what the core reports.
+fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
+    // AIRCR: the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);
-    // Same reason for the cache window: CTR read as zero, so the firmware
-    // computed a four-byte line and walked every range eight times over.
+    // CTR read as zero, so the firmware computed a four-byte line and
+    // walked every range eight times over.
     try self.caches.prime(core.*);
+    // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
+    // configuration for want of capacity and main never got past it.
+    try self.regions.prime(core.*);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer

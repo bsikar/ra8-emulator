@@ -67,9 +67,27 @@ pub const scb = struct {
     pub const shpr3: u32 = 0xE000_ED20;
     pub const cfsr: u32 = 0xE000_ED28;
     pub const mmfar: u32 = 0xE000_ED34;
-    pub const mpu_type: u32 = 0xE000_ED90;
-    pub const mpu_ctrl: u32 = 0xE000_ED94;
     pub const demcr: u32 = 0xE000_EDFC;
+};
+
+/// The Armv8-M Memory Protection Unit window. TYPE is read-only and reports
+/// how many data regions the core implements; RNR selects one and RBAR/RLAR
+/// program it, with three alias pairs that reach the following regions without
+/// another RNR write. Architectural, so constants like the rest of the PPB.
+pub const mpu = struct {
+    pub const type_: u32 = 0xE000_ED90;
+    pub const ctrl: u32 = 0xE000_ED94;
+    pub const rnr: u32 = 0xE000_ED98;
+    pub const rbar: u32 = 0xE000_ED9C;
+    pub const rlar: u32 = 0xE000_EDA0;
+    pub const rbar_a1: u32 = 0xE000_EDA4;
+    pub const rlar_a1: u32 = 0xE000_EDA8;
+    pub const rbar_a2: u32 = 0xE000_EDAC;
+    pub const rlar_a2: u32 = 0xE000_EDB0;
+    pub const rbar_a3: u32 = 0xE000_EDB4;
+    pub const rlar_a3: u32 = 0xE000_EDB8;
+    pub const mair0: u32 = 0xE000_EDC0;
+    pub const mair1: u32 = 0xE000_EDC4;
 };
 
 /// The Arm v8-M cache maintenance window, the other half of the SCB the

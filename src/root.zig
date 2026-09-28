@@ -33,6 +33,7 @@ pub const periph = struct {
     pub const bkup_ctrl = @import("periph/bkup_ctrl.zig");
     pub const cac = @import("periph/cac.zig");
     pub const cache = @import("periph/cache.zig");
+    pub const mpu = @import("periph/mpu.zig");
     pub const cache_geometry = @import("periph/cache_geometry.zig");
     pub const canfd = @import("periph/canfd.zig");
     pub const canfd_error = @import("periph/canfd_error.zig");
