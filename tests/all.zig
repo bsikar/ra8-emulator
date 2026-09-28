@@ -34,6 +34,7 @@ test {
     _ = @import("periph/canfd_test.zig");
     _ = @import("periph/ceu_test.zig");
     _ = @import("periph/ckcr_test.zig");
+    _ = @import("periph/ckdiv_test.zig");
     _ = @import("periph/clocks_test.zig");
     _ = @import("periph/crc_test.zig");
     _ = @import("periph/dac_test.zig");

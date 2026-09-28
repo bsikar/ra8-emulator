@@ -46,6 +46,7 @@ const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
 const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
+const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
@@ -109,6 +110,7 @@ pub const Board = struct {
     /// The peripheral clock source selects, built in attach() for the same
     /// reason the two below are: each needs this board's own protection.
     branches: ckcr.Ckcr,
+    ratios: ckdiv.Ckdiv,
 
     /// The four clock sources and the stabilisation flags that follow their
     /// stop bits. Built in attach(): every store is PRC0-gated, so it needs a
@@ -252,6 +254,7 @@ pub const Board = struct {
             // board's own protection model, not a copy of it.
             .backup = undefined,
             .oscillators = undefined,
+            .ratios = undefined,
             .branches = undefined,
             .graphics = undefined,
             .display = undefined,
