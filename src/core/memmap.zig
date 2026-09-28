@@ -24,7 +24,16 @@ pub const Region = struct {
 pub const dtcm_base: u32 = 0x2000_0000;
 pub const dtcm_end: u32 = 0x2001_0000;
 pub const sram_base: u32 = 0x2200_0000;
-pub const sram_end: u32 = 0x2210_0000;
+/// The on-chip system SRAM runs to 0x221A_0000, not to the 0x2210_0000 a
+/// 1 MB part would give: it is SRAM0's 1024 KB plus SRAM1's 640 KB, 1664 KB
+/// in one contiguous ECC-backed block, and it is the same size on both
+/// parts. The firmware states it twice, at ra8_device.h
+/// `k_ra8_mem_sram_size = 0x001A0000U` ("1664 KB system SRAM (both parts)")
+/// and in every app linker script's SRAM region. The upper 640 KB is what
+/// an RA8D2 script calls NS_SRAM at 0x2210_0000: a Non-secure alias
+/// placeholder over the same physical bytes, not a separate memory, which
+/// is why one region covers it rather than two.
+pub const sram_end: u32 = 0x221A_0000;
 pub const sdram_base: u32 = 0x6800_0000;
 pub const sdram_end: u32 = 0x6C00_0000;
 pub const ns_sdram_base: u32 = 0x7800_0000;

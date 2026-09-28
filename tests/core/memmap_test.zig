@@ -93,3 +93,15 @@ test "the debug window list stops at the peripheral bus" {
     try std.testing.expect(!mod.debugHolds(0x4000_0000, 4));
     try std.testing.expect(!mod.debugHolds(ppb_base, 4));
 }
+
+test "the system SRAM is the full 1664 KB both parts carry" {
+    try std.testing.expectEqual(@as(u32, 0x001A_0000), mod.sram_end - mod.sram_base);
+}
+
+test "a stack top at the very top of SRAM is held" {
+    try std.testing.expect(mod.masterHolds(mod.sram_end - 8, 8));
+}
+
+test "the upper 640 KB an RA8D2 script calls NS_SRAM is the same memory" {
+    try std.testing.expectEqual(mod.masterWindow(mod.sram_base).?.end, mod.masterWindow(0x2210_0000).?.end);
+}
