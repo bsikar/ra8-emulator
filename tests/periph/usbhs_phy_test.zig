@@ -168,14 +168,73 @@ test "both gates together are what the host bring-up writes" {
     try std.testing.expect(phy.sees());
 }
 
-test "the two host gates do not apply to a device-role controller" {
+test "a device role wants its own pull-up, not the jack's switch" {
+    var phy = usbhs_phy.Phy{};
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.cnen);
+    phy.attached = true;
+    try std.testing.expect(!phy.host());
+    try std.testing.expect(!phy.pullingUp());
+    try std.testing.expectEqual(@as(u16, 0), phy.lineState());
+    try std.testing.expectEqual(@as(u32, 1), phy.blind);
+
+    // VBUSEN is the host's bit and buys a device nothing.
+    _ = phy.setPort(regs.port.vbusen);
+    try std.testing.expectEqual(@as(u16, 0), phy.lineState());
+    try std.testing.expectEqual(@as(u32, 2), phy.blind);
+
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.cnen |
+        regs.syscfg.dprpu);
+    try std.testing.expectEqual(regs.port.lnst_j, phy.lineState());
+    try std.testing.expectEqual(@as(u32, 2), phy.blind);
+}
+
+test "the receiver is the one gate both roles share" {
+    var phy = usbhs_phy.Phy{};
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dprpu);
+    phy.attached = true;
+    try std.testing.expect(phy.pullingUp());
+    try std.testing.expect(!phy.receiving());
+    try std.testing.expectEqual(@as(u16, 0), phy.lineState());
+    try std.testing.expectEqual(@as(u32, 1), phy.blind);
+}
+
+test "the attach order is CNEN before DPRPU, and the line waits for both" {
     var phy = usbhs_phy.Phy{};
     phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke);
     phy.attached = true;
-    try std.testing.expect(!phy.host());
-    try std.testing.expect(!phy.receiving());
-    try std.testing.expect(!phy.supplying());
+    try std.testing.expect(!phy.sees());
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.cnen);
+    try std.testing.expect(!phy.sees());
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.cnen |
+        regs.syscfg.dprpu);
     try std.testing.expect(phy.sees());
     try std.testing.expectEqual(regs.port.lnst_j, phy.lineState());
-    try std.testing.expectEqual(@as(u32, 0), phy.blind);
+}
+
+test "a detach drops the pull-up and the line goes dark again" {
+    var phy = usbhs_phy.Phy{};
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.cnen |
+        regs.syscfg.dprpu);
+    phy.attached = true;
+    try std.testing.expectEqual(regs.port.lnst_j, phy.lineState());
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke);
+    try std.testing.expectEqual(@as(u16, 0), phy.lineState());
+    try std.testing.expectEqual(@as(u32, 1), phy.blind);
+}
+
+test "DPRPU buys a host nothing, the way VBUSEN buys a device nothing" {
+    var phy = usbhs_phy.Phy{};
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm |
+        regs.syscfg.cnen | regs.syscfg.dprpu);
+    phy.attached = true;
+    try std.testing.expect(phy.host());
+    try std.testing.expectEqual(@as(u16, 0), phy.lineState());
+    _ = phy.setPort(regs.port.vbusen);
+    try std.testing.expectEqual(regs.port.lnst_j, phy.lineState());
+}
+
+test "K-state is named with the encoding the manual gives" {
+    try std.testing.expectEqual(@as(u16, 0b01), regs.port.lnst_j);
+    try std.testing.expectEqual(@as(u16, 0b10), regs.port.lnst_k);
+    try std.testing.expectEqual(@as(u16, 0b11), regs.port.lnst_mask);
 }

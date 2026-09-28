@@ -79,8 +79,15 @@ pub const syscfg = struct {
 
 /// SYSSTS0 line state, and the DVSTCTR0 port control the host drives.
 pub const port = struct {
-    /// SYSSTS0.LNST J-state: something is attached and idle.
+    /// SYSSTS0.LNST, the two bits that say what is on the wires. The
+    /// encoding is HUM Ch 37.2.3 p 2063 and Table 37.4 p 2064, written out
+    /// in ra8_usb_device.c's own g_syssts0_after_attach comment: 00b is
+    /// SE0 (no pull-up visible), 01b is J-state, 10b is K-state (an HS
+    /// chirp, or FS K). 11b is not a line state at all.
     pub const lnst_j: u16 = 0x0001;
+    /// K-state. Nothing here drives a chirp yet, so no read answers this;
+    /// it is named so the next slice does not have to guess the encoding.
+    pub const lnst_k: u16 = 0x0002;
     pub const lnst_mask: u16 = 0x0003;
     /// DVSTCTR0.RHST, the speed the reset settled on.
     pub const rhst_mask: u16 = 0x0007;
