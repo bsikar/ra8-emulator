@@ -3,8 +3,11 @@
 //! imports this as "ra8"; so does src/main.zig.
 pub const core = struct {
     pub const c = @import("core/c.zig");
+    pub const bus_hook = @import("core/bus_hook.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("core/cli.zig");
+    pub const csel = @import("core/csel.zig");
+    pub const csel_hook = @import("core/csel_hook.zig");
     pub const disasm = @import("core/disasm.zig");
     pub const elf = @import("core/elf.zig");
     pub const engine = @import("core/engine.zig");
@@ -214,4 +217,5 @@ pub const board = struct {
     pub const usb = @import("board/usb.zig");
     pub const report = @import("board/report.zig");
     pub const report_dma = @import("board/report_dma.zig");
+    pub const report_steps = @import("board/report_steps.zig");
 };

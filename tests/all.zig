@@ -16,6 +16,8 @@ test {
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");
     _ = @import("core/engine_test.zig");
+    _ = @import("core/csel_test.zig");
+    _ = @import("core/csel_hook_test.zig");
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");

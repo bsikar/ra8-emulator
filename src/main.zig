@@ -22,6 +22,7 @@ const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
 const Board = ra8.board.Board;
 const report = ra8.board.report;
+const report_steps = ra8.board.report_steps;
 
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -56,6 +57,8 @@ pub fn main() !u8 {
     try core.attachWatch(&watch);
     var loops = lob.Loops{};
     try core.attachLoops(&loops);
+    var selects = ra8.core.csel.Selects{};
+    try core.attachSelects(&selects);
     const written = try core.loadImage(image);
 
     const vector_base = image.vectorBase() orelse {
@@ -92,7 +95,8 @@ pub fn main() !u8 {
     try report.bus(&board, out);
     try report.timing(out, timebase, interrupts);
     try report.reboots(out, reboot);
-    try report.loops(out, loops);
+    try report_steps.loops(out, loops);
+    try report_steps.selects(out, selects);
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
     return verdict(out, core, options, fault, stop, timed, budget);
