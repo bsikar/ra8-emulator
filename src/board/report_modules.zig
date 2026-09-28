@@ -8,6 +8,7 @@
 //! gate at the end of the run tells them apart, so that is what is asked
 //! here rather than the counters alone.
 const ckcr = @import("../periph/ckcr.zig");
+const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const std = @import("std");
 
@@ -30,6 +31,33 @@ fn branches(board: *Board, out: Writer) !void {
     if (unit.dropped_locked != 0) {
         try out.print(
             "clock select: DROPPED {d} store(s) with PRCR.PRC0 locked\n",
+            .{unit.dropped_locked},
+        );
+    }
+}
+
+/// The peripheral clock dividers a run programmed, and any divider store
+/// that arrived while its branch was still running and so did not take.
+fn ratios(board: *Board, out: Writer) !void {
+    const unit = &board.ratios;
+    if (unit.quiet()) return;
+    for (&unit.dividers, 0..) |*one, index| {
+        if (one.writes != 0) {
+            try out.print(
+                "{s}: divider code {d} ({d} store(s) inside the switch window)\n",
+                .{ ckdiv.slots[index].name, one.value(), one.writes },
+            );
+        }
+        if (one.ungated != 0) {
+            try out.print(
+                "{s}: {d} store(s) arrived with the branch running and did not take\n",
+                .{ ckdiv.slots[index].name, one.ungated },
+            );
+        }
+    }
+    if (unit.dropped_locked != 0) {
+        try out.print(
+            "clock divider: DROPPED {d} store(s) with PRCR.PRC0 locked\n",
             .{unit.dropped_locked},
         );
     }
@@ -62,6 +90,7 @@ fn oscillators(board: *Board, out: Writer) !void {
 
 pub fn section(board: *Board, out: Writer) !void {
     try branches(board, out);
+    try ratios(board, out);
     try oscillators(board, out);
     if (board.modules.clean()) {
         try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});

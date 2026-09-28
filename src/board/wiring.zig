@@ -18,6 +18,7 @@ const drw = @import("../periph/drw.zig");
 const eink = @import("../periph/eink.zig");
 const modem = @import("../periph/modem.zig");
 const ckcr = @import("../periph/ckcr.zig");
+const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -110,6 +111,10 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.oscillators.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
     for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
+    // The dividers ask the selects whether the branch is gated, so they go
+    // on after the selects they are paired with.
+    self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
+    for (0..ckdiv.windows.len) |which| try self.bus.add(self.ratios.block(which));
     self.graphics = pdctr.Pdctr.init(&self.protection);
     try self.bus.add(self.graphics.block());
 }
