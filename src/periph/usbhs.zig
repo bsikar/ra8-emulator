@@ -212,12 +212,17 @@ pub const Host = struct {
 
     /// DCPCTR: SUREQ sends the staged SETUP, CCPL closes the transfer. SUREQ
     /// self-clears once the token is away and is never latched.
+    ///
+    /// The host's own bits land BEFORE the transaction runs, because the
+    /// transaction reports its outcome in this same register: a refused
+    /// request parks PID at STALL, and the store that launched it carried
+    /// PID=BUF. Storing afterwards would hand the driver back its own write
+    /// and lose the answer it is about to spin on.
     fn controlPipe(self: *Host, value: u16) void {
-        if (value & regs.dcpctr.sureq != 0) self.xfer.launch(self.live());
-        if (value & regs.dcpctr.ccpl != 0 and self.xfer.dcpctr & regs.dcpctr.ccpl == 0) {
-            self.xfer.complete();
-        }
+        const ccpl_was_set = self.xfer.dcpctr & regs.dcpctr.ccpl != 0;
         self.xfer.dcpctr = value & ~regs.dcpctr.sureq;
+        if (value & regs.dcpctr.sureq != 0) self.xfer.launch(self.live());
+        if (value & regs.dcpctr.ccpl != 0 and !ccpl_was_set) self.xfer.complete();
     }
 
     /// There is something on the bus that has been through a port reset.

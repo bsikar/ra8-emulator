@@ -80,6 +80,49 @@ test "a refused request still ACKs the token it arrived on" {
     try std.testing.expect(!transfer.in_flight);
 }
 
+test "a refused request parks the DCP at PID=STALL" {
+    var transfer = xfer.Transfer{};
+    getDescriptor(&transfer, 0x0300, 4);
+    try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
+    try std.testing.expectEqual(
+        regs.dcpctr.pid_stall,
+        transfer.dcpctr & regs.dcpctr.pid_mask,
+    );
+}
+
+test "a request the device honours leaves the PID field alone" {
+    var transfer = xfer.Transfer{};
+    transfer.dcpctr = regs.dcpctr.pid_buf;
+    getDescriptor(&transfer, 0x0100, 18);
+    try std.testing.expectEqual(@as(u32, 0), transfer.stalls);
+    try std.testing.expectEqual(
+        regs.dcpctr.pid_buf,
+        transfer.dcpctr & regs.dcpctr.pid_mask,
+    );
+}
+
+test "the stall lands in the PID field and disturbs nothing else" {
+    var transfer = xfer.Transfer{};
+    transfer.dcpctr = regs.dcpctr.ccpl | regs.dcpctr.bsts;
+    getDescriptor(&transfer, 0x0300, 4);
+    try std.testing.expect(transfer.dcpctr & regs.dcpctr.ccpl != 0);
+    try std.testing.expect(transfer.dcpctr & regs.dcpctr.bsts != 0);
+    try std.testing.expectEqual(
+        regs.dcpctr.pid_stall,
+        transfer.dcpctr & regs.dcpctr.pid_mask,
+    );
+}
+
+test "a dead-bus launch stalls nothing: there was no device to refuse it" {
+    var transfer = xfer.Transfer{};
+    transfer.usbreq = 0x0680;
+    transfer.usbval = 0x0300;
+    transfer.usbleng = 4;
+    transfer.launch(false);
+    try std.testing.expectEqual(@as(u16, 0), transfer.dcpctr & regs.dcpctr.pid_mask);
+    try std.testing.expectEqual(@as(u32, 0), transfer.stalls);
+}
+
 test "an unsupported request code ACKs too" {
     var transfer = xfer.Transfer{};
     // bRequest is USBREQ's HIGH byte; 0xFF is no chapter-9 request.

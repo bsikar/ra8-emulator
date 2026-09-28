@@ -175,6 +175,11 @@ pub const dfifo = struct {
 /// host drives a control transfer with.
 pub const dcpctr = struct {
     pub const pid_mask: u16 = 0x0003;
+    /// PID[1] is set for either STALL response, which is the bit the host's
+    /// data-stage wait reads back (ra8_usb_internal.h k_ra8_usb_pid_stall_bit).
+    pub const pid_stall: u16 = 0x0002;
+    /// PID=BUF, the armed state the host re-arms the pipe with.
+    pub const pid_buf: u16 = 0x0001;
     pub const ccpl: u16 = 1 << 2;
     pub const sureq: u16 = 1 << 6;
     pub const bsts: u16 = 1 << 15;
