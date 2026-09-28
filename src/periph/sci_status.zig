@@ -22,17 +22,36 @@
 //! told nothing and the run reported nothing. It is refused and counted
 //! here, the way this tree already treats MSTATR, MRCPS, SRAMESR and INTS.
 //!
-//! CFCLR AND FFCLR STAY ACCEPTED NO-OPS, and that is not the same thing.
-//! They are write-1-to-clear strobes over flags this model derives rather
-//! than latches: TDRE and TEND never go down, and RDRF follows the receive
-//! queue, so clearing them changes nothing and refusing them would report a
-//! driver doing exactly what the hardware manual asks of it.
+//! CFCLR AND FFCLR ARE ACCEPTED, and most of what they name is a no-op.
+//! They are write-1-to-clear strobes, and TDRE, TEND and RDRF are derived
+//! here rather than latched: the first two never go down and the third
+//! follows the receive queue, so clearing them changes nothing and refusing
+//! them would report a driver doing exactly what the hardware manual asks of
+//! it. ORER IS THE ONE THAT IS A LATCH, so CFCLR.ORERC is the one bit of
+//! either strobe that does something.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the error flags. ORER, FER and PER live in
-//! CSR too, and nothing in this model can raise one: there is no baud clock
-//! to frame against and no line to see noise on. They read clear, so a
-//! driver's error path is never entered rather than entered on an invented
-//! fault.
+//! ORER HAS A SOURCE HERE, and it is the receive ring. The ring is a fixed
+//! 512 bytes with no allocator below the bus, so a host or a device that
+//! drives more than the firmware has read out loses the excess, and
+//! sci.zig's Ring has always counted it. That IS an overrun: a character
+//! arrived with the previous one still unread, which is what CSR.ORER
+//! (bit 24, HUM Ch 38.2.17 p 2225) reports and what ra8_sci_get_errors
+//! turns into k_ra8_sci_err_overrun. The bit read clear forever, so a run
+//! that dropped characters told the driver its line was clean and the
+//! error path was never entered: the firmware saw a short message rather
+//! than a reported overrun, which is the worse of the two directions for a
+//! model to be wrong in. It latches now, and only CFCLR.ORERC
+//! (bit 24, HUM Ch 38.2.24 p 2238, and inside ra8_sci.c's own
+//! k_ra8_sci_cfclr_default = 0x9D070010) puts it down.
+//!
+//! NOT MODELLED, AND NOT GUESSED: FER and PER, and the receiver halt. The
+//! other two error flags have no source here, because there is no baud clock
+//! to frame against and no line to see noise on, so they still read clear
+//! rather than being raised on an invented fault. Nor does a raised ORER
+//! stop the receiver: silicon holds the next character off until the flag is
+//! cleared, and nothing in this tree states that, so the ring keeps taking
+//! what fits and the flag stays up until the strobe clears it. Both are
+//! their own slice if an image ever needs them.
 
 /// The offsets this file owns inside a channel's 0x100 window.
 pub const off = struct {
@@ -46,9 +65,16 @@ pub const off = struct {
 /// CSR status bits (ra8_sci_csr_bit_t).
 pub const csr = struct {
     pub const rxdmon: u32 = 0x0000_8000;
+    pub const orer: u32 = 0x0100_0000;
     pub const tdre: u32 = 0x2000_0000;
     pub const tend: u32 = 0x4000_0000;
     pub const rdrf: u32 = 0x8000_0000;
+};
+
+/// CFCLR clear lines. Only the one over a flag this model latches is named:
+/// the rest clear derived bits and are accepted with nothing to do.
+pub const cfclr = struct {
+    pub const orerc: u32 = 0x0100_0000;
 };
 
 /// The bits a read of FRSR or FTSR reports.
@@ -66,6 +92,13 @@ pub const fifo = struct {
 pub fn common(readable: bool) u32 {
     const idle = csr.tdre | csr.tend | csr.rxdmon;
     return if (readable) idle | csr.rdrf else idle;
+}
+
+/// Whether a store to CFCLR asks for the overrun latch to come down. The
+/// value the ACCESS carries decides it, never the register's own shadow:
+/// CFCLR reads as zero, so there is no shadow to consult.
+pub fn clearsOverrun(value: u32) bool {
+    return value & cfclr.orerc != 0;
 }
 
 /// FRSR: the receive FIFO reports a byte waiting exactly when the queue has

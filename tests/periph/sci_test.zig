@@ -117,15 +117,6 @@ test "the control shadow reads back what the driver wrote" {
     try std.testing.expect(!unit.channels[3].enabled(sci.ccr0.tie));
 }
 
-test "a full RX ring drops the rest instead of wrapping over unread bytes" {
-    var ring = sci.Ring{};
-    var payload: [sci.limits.rx_queue]u8 = undefined;
-    @memset(&payload, 'x');
-    ring.push(&payload);
-    try std.testing.expectEqual(@as(u32, 1), ring.dropped);
-    try std.testing.expectEqual(@as(u8, 'x'), ring.pop().?);
-}
-
 test "an untouched block stays out of the report" {
     var unit = sci.Sci.init();
     try std.testing.expect(unit.quiet());
@@ -382,4 +373,28 @@ test "the clear strobes are accepted no-ops, not refusals" {
     unit.write(sci.regAddress(sci.console_channel, sci.off_ffclr), 4, 0xFFFF_FFFF);
     try std.testing.expectEqual(@as(u32, 0), unit.console().status_stores);
     try std.testing.expect(unit.read(sci.regAddress(sci.console_channel, sci.off_csr), 4) & sci.csr.tdre != 0);
+}
+
+fn flood(unit: *sci.Sci, channel: usize) void {
+    var block: [sci.limits.rx_queue + 8]u8 = undefined;
+    @memset(&block, 'q');
+    unit.feed(channel, &block);
+}
+
+// The sequence ra8_sci_get_errors / ra8_sci_clear_errors walks. ORER is bit
+// 24, so the only byte store that clears it is the one at CFCLR+3.
+test "an overrun shows up in CSR and only ORERC's lane clears it" {
+    var unit = sci.Sci.init();
+    open(&unit, sci.console_channel);
+    const csr = sci.regAddress(sci.console_channel, sci.off_csr);
+    const cfclr = sci.regAddress(sci.console_channel, sci.off_cfclr);
+    flood(&unit, sci.console_channel);
+    try std.testing.expect(unit.read(csr, 4) & sci.csr.orer != 0);
+    while (unit.read(sci.regAddress(sci.console_channel, sci.off_rdr), 4) != 0) {}
+    try std.testing.expect(unit.read(csr, 4) & sci.csr.orer != 0);
+    unit.write(cfclr, 1, 0x01);
+    try std.testing.expect(unit.read(csr, 4) & sci.csr.orer != 0);
+    unit.write(cfclr + 3, 1, 0x01);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(csr, 4) & sci.csr.orer);
+    try std.testing.expectEqual(@as(u32, 1), unit.console().errors.overruns);
 }

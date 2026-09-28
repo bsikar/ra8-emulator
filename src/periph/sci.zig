@@ -45,6 +45,8 @@ const std = @import("std");
 const periph = @import("registry.zig");
 const sci_status = @import("sci_status.zig");
 const sci_lin = @import("sci_lin.zig");
+const sci_ring = @import("sci_ring.zig");
+const sci_error = @import("sci_error.zig");
 const lanes = @import("lanes.zig");
 
 /// SCI_B geometry. The Non-secure alias is folded onto this base by the bus
@@ -81,6 +83,8 @@ pub const ccr0 = struct {
 pub const lin = sci_lin;
 
 pub const csr = sci_status.csr;
+pub const cfclr = sci_status.cfclr;
+pub const Errors = sci_error.Errors;
 pub const fifo = sci_status.fifo;
 
 /// The ELC event numbers the console channel raises (HUM Ch 19 Table 19.3,
@@ -102,44 +106,9 @@ pub const Due = std.BoundedArray(u16, 3);
 
 pub const data_mask: u32 = 0xFF;
 
-/// Model sizing. The RX ring is per channel; the line buffer only ever holds
-/// console text.
-pub const limits = struct {
-    pub const rx_queue: usize = 512;
-};
-
-/// A host-to-firmware byte ring. Fixed capacity on purpose: the model has no
-/// allocator below the bus, and a real UART drops what it cannot hold too.
-pub const Ring = struct {
-    bytes: [limits.rx_queue]u8 = undefined,
-    head: usize = 0,
-    tail: usize = 0,
-    dropped: u32 = 0,
-
-    pub fn empty(self: *const Ring) bool {
-        return self.head == self.tail;
-    }
-
-    /// Queue what fits and count what does not.
-    pub fn push(self: *Ring, data: []const u8) void {
-        for (data, 0..) |byte, i| {
-            const next = (self.tail + 1) % limits.rx_queue;
-            if (next == self.head) {
-                self.dropped += @intCast(data.len - i);
-                return;
-            }
-            self.bytes[self.tail] = byte;
-            self.tail = next;
-        }
-    }
-
-    pub fn pop(self: *Ring) ?u8 {
-        if (self.empty()) return null;
-        const byte = self.bytes[self.head];
-        self.head = (self.head + 1) % limits.rx_queue;
-        return byte;
-    }
-};
+/// Model sizing, and the receive ring itself: src/periph/sci_ring.zig.
+pub const limits = sci_ring.limits;
+pub const Ring = sci_ring.Ring;
 
 /// Something listening on a channel's line. It is handed each byte the
 /// channel actually sends and answers with the bytes it drives back, which
@@ -173,6 +142,8 @@ pub const Channel = struct {
     /// Stores to TDR that named a byte above TDAT. They send nothing.
     unnamed_stores: u32 = 0,
     rx: Ring = .{},
+    /// The CSR flags firmware has to clear: src/periph/sci_error.zig.
+    errors: sci_error.Errors = .{},
     /// The Simple LIN half of this channel.
     lin: sci_lin.Lin = .{},
     /// What is on this channel's line, if anything.
@@ -185,13 +156,20 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.transmitted == 0 and self.received == 0 and
             self.unsent == 0 and self.unheard == 0 and self.status_stores == 0 and
-            self.unnamed_reads == 0 and self.unnamed_stores == 0 and self.lin.quiet();
+            self.unnamed_reads == 0 and self.unnamed_stores == 0 and
+            self.errors.quiet() and self.lin.quiet();
     }
 
     /// CSR as this channel answers it. What those bits mean, and why they
     /// read the way they do, is src/periph/sci_status.zig's.
     pub fn status(self: *const Channel) u32 {
-        return sci_status.common(self.readable());
+        return sci_status.common(self.readable()) | self.errors.flags();
+    }
+
+    /// Take bytes off the line into the ring, raising the overrun latch when
+    /// the ring could not hold them all.
+    pub fn receive(self: *Channel, data: []const u8) void {
+        if (self.rx.push(data)) self.errors.raiseOverrun();
     }
 
     pub fn readable(self: *const Channel) bool {
@@ -226,7 +204,7 @@ pub const Sci = struct {
     /// Queue host bytes for the firmware to read out of RDR.
     pub fn feed(self: *Sci, channel: usize, data: []const u8) void {
         if (channel >= channels) return;
-        self.channels[channel].rx.push(data);
+        self.channels[channel].receive(data);
     }
 
     /// Put a device on one channel's line.
@@ -326,9 +304,13 @@ pub const Sci = struct {
             // were, so setting RE with a byte store to CCR0+0 keeps the
             // interrupt enables sitting in the bytes above it.
             off_ccr0 => channel.control = lanes.merge(channel.control, lane, width, value),
-            // CFCLR and FFCLR are write-1-to-clear over flags this model
-            // derives rather than latches: TDRE and TEND never go down, and
-            // RDRF follows the queue, so clearing them changes nothing.
+            // CFCLR is write-1-to-clear. Most of what it names this model
+            // derives rather than latches, so clearing those changes nothing;
+            // ORER is the one real latch, and the bit comes out of the value
+            // the access carries, never out of a shadow this register has not
+            // got.
+            off_cfclr => channel.errors.clear(lanes.merge(0, lane, width, value)),
+            // FFCLR clears FRSR.DR, which follows the queue here.
             else => if (sci_lin.owns(word)) channel.lin.write(word, lane, width, value),
         }
     }
@@ -361,7 +343,7 @@ pub const Sci = struct {
             channel.unheard +%= @intCast(reply.len);
             return;
         }
-        channel.rx.push(reply);
+        channel.receive(reply);
     }
 
     pub fn block(self: *Sci) periph.Block {

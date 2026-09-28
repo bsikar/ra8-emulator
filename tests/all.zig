@@ -148,6 +148,8 @@ test {
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
     _ = @import("periph/sci_line_test.zig");
+    _ = @import("periph/sci_error_test.zig");
+    _ = @import("periph/sci_ring_test.zig");
     _ = @import("periph/sci_lin_test.zig");
     _ = @import("periph/sci_status_test.zig");
     _ = @import("periph/rtt_block_test.zig");

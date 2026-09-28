@@ -28,6 +28,16 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, channel.status_stores },
             );
         }
+        if (channel.errors.overruns != 0) {
+            try out.print(
+                "SCI{d}: {d} OVERRUN(S), CSR.ORER {s}\n",
+                .{
+                    index,
+                    channel.errors.overruns,
+                    if (channel.errors.overrun) "still standing" else "cleared by the driver",
+                },
+            );
+        }
         if (channel.unnamed_reads != 0) {
             try out.print(
                 "SCI{d}: REFUSED {d} load(s) of RDR above RDAT, the byte stayed queued\n",
