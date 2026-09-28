@@ -34,6 +34,16 @@
 //! counted here; the key is the 0xAA the two writes dev's own header
 //! documents both carry.
 //!
+//! A PAUSE IS A STATE, NOT A WRITE THAT VANISHES. MENTRYR.PCKA is the gate
+//! ra8_flash_suspend and ra8_flash_resume drive: suspend stores the keyed
+//! pause pattern 0xAAC0 and polls for PCKA standing, resume stores 0xAA80
+//! and polls for it gone. Neither dev nor this model carried the bit at
+//! all, and MENTRYR reads back the mode bit alone, so every suspend spun
+//! its whole 0x10000-iteration budget and returned a hw timeout, while
+//! every resume answered instantly whether or not anything was paused.
+//! PCKA now follows the keyed write and reads back beside MENTRY, and
+//! leaving program/erase mode drops it the way it drops the lock.
+//!
 //! STATUS IS CONTROLLER-OWNED. dev stores any value written anywhere in the
 //! window into its shadow, MSTATR and MASTAT included, so firmware can clear
 //! the error bits its own illegal command raised. Refused and counted here,
@@ -94,6 +104,9 @@ pub const code_page = code.page;
 /// MSUINITR, the set-up init kick, and its rule: mram_init.zig.
 pub const init_reg = @import("mram_init.zig");
 
+/// MENTRYR, the mode gate and its key: mram_entry.zig.
+pub const entry_reg = @import("mram_entry.zig");
+
 const shadow_words: usize = regs.span / 4;
 
 pub const Mram = struct {
@@ -114,7 +127,8 @@ pub const Mram = struct {
     /// The latched MASTAT access bits.
     access: u32 = 0,
     msaddr: u32 = 0,
-    in_pe_mode: bool = false,
+    /// MENTRYR: the mode gate, its key, and the pause bit.
+    entry: entry_reg.Entry = .{},
     locked: bool = false,
 
     programs: u32 = 0,
@@ -123,17 +137,14 @@ pub const Mram = struct {
     illegal: u32 = 0,
     /// Commands that arrived while the sequencer was command-locked.
     locked_out: u32 = 0,
+    /// Commands that arrived while PCKA held the sequencer paused.
+    paused_kicks: u32 = 0,
     /// Commands that arrived without program/erase mode entered.
     outside_mode: u32 = 0,
     /// Trailers on a stream that never carried what it declared.
     malformed: u32 = 0,
     /// Programs asking a one-time-programmable cell for a bit back.
     rewrites: u32 = 0,
-    /// MENTRYR writes carrying the wrong key.
-    keyless: u32 = 0,
-    /// MENTRYR writes that named less than the register, so they carried no
-    /// key of their own whatever the shadow already held.
-    narrow_writes: u32 = 0,
     /// Stores to MSTATR or MASTAT: firmware cannot clear its own errors.
     read_only: u32 = 0,
     /// Programs the guest memory behind the option window refused.
@@ -149,9 +160,9 @@ pub const Mram = struct {
 
     pub fn quiet(self: *const Mram) bool {
         return self.programs == 0 and self.config_sets == 0 and self.illegal == 0 and
-            self.locked_out == 0 and self.outside_mode == 0 and self.malformed == 0 and
-            self.rewrites == 0 and self.keyless == 0 and self.narrow_writes == 0 and
-            self.read_only == 0 and
+            self.locked_out == 0 and self.paused_kicks == 0 and
+            self.outside_mode == 0 and self.malformed == 0 and
+            self.rewrites == 0 and self.read_only == 0 and self.entry.quiet() and
             self.faulted == 0 and self.code.quiet() and self.setup.quiet();
     }
 
@@ -166,7 +177,7 @@ pub const Mram = struct {
         if (offset >= regs.span) return 0;
         const byte = offset % 4;
         return switch (offset & ~@as(u32, 3)) {
-            regs.off_mentryr => lanes.part(if (self.in_pe_mode) field.mentry else 0, byte, width),
+            regs.off_mentryr => lanes.part(self.entry.status(), byte, width),
             regs.off_mstatr => lanes.part(self.status(), byte, width),
             regs.off_mastat => lanes.part(self.access, byte, width),
             init_reg.off => lanes.part(self.setup.read(), byte, width),
@@ -213,19 +224,11 @@ pub const Mram = struct {
             _ = self.store(offset, byte, width, value);
             return;
         }
-        if (!namesRegister(byte, width)) {
-            self.narrow_writes +%= 1;
-            return;
-        }
-        const carried = value & lanes.named(byte, width);
-        if (carried & field.key_mask != field.key) {
-            self.keyless +%= 1;
-            return;
-        }
+        const outcome = self.entry.write(byte, width, value);
+        if (outcome == .refused) return;
         const word = offset / 4;
         self.shadow[word] = lanes.merge(self.shadow[word], byte, width, value);
-        self.in_pe_mode = carried & field.mentry != 0;
-        if (self.in_pe_mode) return;
+        if (outcome == .entered) return;
         self.locked = false;
         self.errors = 0;
         self.access = 0;
@@ -237,8 +240,12 @@ pub const Mram = struct {
             self.locked_out +%= 1;
             return;
         }
-        if (!self.in_pe_mode) {
+        if (!self.entry.in_pe_mode) {
             self.outside_mode +%= 1;
+            return;
+        }
+        if (self.entry.paused) {
+            self.paused_kicks +%= 1;
             return;
         }
         if (!self.stream.complete()) {
@@ -331,15 +338,6 @@ pub const Mram = struct {
         };
     }
 };
-
-/// Whether an access names the whole of MENTRYR: it has to start at the
-/// register and be at least as wide as it, so that the key half is part of
-/// what the store carries. A wider access is still fine, the way a word
-/// store of a halfword register is, and an access landing entirely above
-/// the register never gets here.
-fn namesRegister(byte_offset: u32, width: u3) bool {
-    return byte_offset == 0 and width >= 2;
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Mram = @ptrCast(@alignCast(context));
