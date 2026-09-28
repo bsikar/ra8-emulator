@@ -138,6 +138,12 @@ fn flash(board: *Board, out: Writer) !void {
             .{unit.out_of_part},
         );
     }
+    if (unit.wrapped != 0) {
+        try out.print(
+            "XSPI flash: {d} program(s) WRAPPED to the start of their own 256-byte page\n",
+            .{unit.wrapped},
+        );
+    }
     if (unit.faked != 0) {
         try out.print(
             "XSPI flash: REFUSED {d} store(s) to INTS, firmware cannot raise a completion itself\n",
