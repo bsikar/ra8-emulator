@@ -111,7 +111,8 @@ pub const Board = struct {
     branches: ckcr.Ckcr,
 
     /// The four clock sources and the stabilisation flags that follow their
-    /// stop bits. Owns its own window, so it needs nothing from attach().
+    /// stop bits. Built in attach(): every store is PRC0-gated, so it needs a
+    /// pointer to this board's own protection model rather than a copy.
     oscillators: oscsf.Oscillators,
     /// The graphics power domain, and the one block so far that lives in it.
     /// Both are built in attach(): each needs a pointer to a model this board
@@ -247,10 +248,10 @@ pub const Board = struct {
             .adc = adc.Adc.init(),
             .shutoff = poeg.Poeg.init(),
             .protection = prcr.Prcr.init(),
-            .oscillators = oscsf.Oscillators.init(),
             // Patched in attach(): the backup file has to point at this
             // board's own protection model, not a copy of it.
             .backup = undefined,
+            .oscillators = undefined,
             .branches = undefined,
             .graphics = undefined,
             .display = undefined,

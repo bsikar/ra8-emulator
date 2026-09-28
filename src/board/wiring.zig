@@ -18,6 +18,7 @@ const drw = @import("../periph/drw.zig");
 const eink = @import("../periph/eink.zig");
 const modem = @import("../periph/modem.zig");
 const ckcr = @import("../periph/ckcr.zig");
+const oscsf = @import("../periph/oscsf.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
 
@@ -36,7 +37,6 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.adc.block());
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
-    try self.bus.add(self.oscillators.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
     try self.display.attach(&self.bus, &self.graphics, core.*);
@@ -106,6 +106,8 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
 fn attachProtected(self: *Board) !void {
     self.backup = bkup.Bkup.init(&self.protection);
     try self.bus.add(self.backup.block());
+    self.oscillators = oscsf.Oscillators.init(&self.protection);
+    try self.bus.add(self.oscillators.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
     for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
     self.graphics = pdctr.Pdctr.init(&self.protection);

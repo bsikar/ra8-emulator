@@ -48,14 +48,22 @@
 //! other three are stopped because every path that uses them starts them first
 //! and waits, and ra8_cgc_usb.c line 271 exists precisely to find PLL2 down.
 //!
-//! ALSO NOT MODELLED, AND DELIBERATELY: PRCR.PRC0 gating on these four
-//! control registers. On silicon PRC0 protects the CGC family, so a store
-//! arriving with it locked vanishes, and ckcr.zig right next door already
-//! asks board.protection before it accepts one. Doing the same here needs
-//! this block to carry a pointer to the board's own protection model, which
-//! is attach() wiring rather than a bit rule, so it is its own slice. Nothing
-//! regresses in the meantime: the catch-all these registers used to fall to
-//! gated nothing either.
+//! PRCR.PRC0 GATES EVERY STORE HERE. These four control registers are in the
+//! clock-generation family, which PRC0 protects: ra8_lpm.h lines 572-573 name
+//! the group and state that "a write issued while PRC0 is locked is discarded
+//! silently by the hardware" (HUM Ch 13.1 Table 13.1), and k_ra8_prcr_grp0_cgc
+//! is that bit. So a store arriving with PRC0 locked is dropped and counted,
+//! exactly as ckcr.zig right next door already does for the clock selects.
+//! Reads are never gated, which is prcr.zig's rule and the hardware's.
+//!
+//! That silence is the point. ra8_cgc_use_hoco clears HCSTP at ra8_cgc.c:765
+//! OUTSIDE any RA8_PROTECTED_WRITE window, wrapping only the SCKSCR store that
+//! follows it (line 773), while the MOSCCR and PLLCR stores in the bring-up
+//! path run inside ra8_cgc_init's protected core. A caller that reaches
+//! ra8_cgc_use_hoco with PRC0 shut therefore loses its HOCOCR write on silicon
+//! and keeps it in a model that gates nothing. This is the shape of the C
+//! tree's issue #131, where a whole VBATT backup file was written with PRCR
+//! locked: the bench reported failure and the emulator reported success.
 //!
 //! NOT MODELLED, AND NOT GUESSED: MOSCWTCR, PLLCCR, PLLCCR2, PLL2CCR and
 //! PLL2CCR2 all sit inside this window and are retained as written, nothing
@@ -65,6 +73,7 @@
 //! dividers into the modelled clock tree is its own slice.
 const std = @import("std");
 const periph = @import("registry.zig");
+const prcr = @import("prcr.zig");
 
 /// Window geometry: SYSC base 0x4001_E000, PLLCR (+0x02A) through PLL2CR
 /// (+0x04A) inclusive.
@@ -101,15 +110,25 @@ const sources = [_]Source{
     .{ .control = regs.pll2cr, .raises = flag.pll2sf },
 };
 
+/// The PRCR group that has to be open for a store to land: PRC0, the clock
+/// generation circuit (k_ra8_prcr_grp0_cgc).
+pub const guard: u16 = prcr.group.cgc;
+
 /// The stop bits and the counters behind the end-of-run line.
 pub const Oscillators = struct {
+    /// The board's live protection model, not a copy of it.
+    protection: *const prcr.Prcr,
     shadow: [win_span]u8,
     starts: u32 = 0,
     stops: u32 = 0,
     readonly_writes: u32 = 0,
+    dropped_locked: u32 = 0,
 
-    pub fn init() Oscillators {
-        var self = Oscillators{ .shadow = [_]u8{0} ** win_span };
+    pub fn init(protection: *const prcr.Prcr) Oscillators {
+        var self = Oscillators{
+            .protection = protection,
+            .shadow = [_]u8{0} ** win_span,
+        };
         // HOCO running, the other three stopped. See the header.
         self.shadow[regs.mosccr] = stop;
         self.shadow[regs.pllcr] = stop;
@@ -119,7 +138,8 @@ pub const Oscillators = struct {
 
     /// Untouched units stay out of the end-of-run report.
     pub fn quiet(self: *const Oscillators) bool {
-        return self.starts == 0 and self.stops == 0 and self.readonly_writes == 0;
+        return self.starts == 0 and self.stops == 0 and
+            self.readonly_writes == 0 and self.dropped_locked == 0;
     }
 
     /// OSCSF, computed from the stop bits rather than stored.
@@ -152,6 +172,12 @@ pub const Oscillators = struct {
     }
 
     pub fn write(self: *Oscillators, address: u32, width: u3, value: u32) void {
+        // PRC0 shut means the hardware discards the store without a fault and
+        // without a status bit. Counting it is the only way the run can say so.
+        if (!self.protection.unlocked(guard)) {
+            self.dropped_locked +%= 1;
+            return;
+        }
         const offset = address -% win_base;
         var lane: u32 = 0;
         while (lane < width) : (lane += 1) {
