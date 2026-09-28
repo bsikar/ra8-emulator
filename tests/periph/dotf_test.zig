@@ -111,3 +111,53 @@ test "an access past the block answers zero and changes nothing" {
     try std.testing.expectEqual(@as(u32, 0), unit.read(dotf.win_base + dotf.win_span, 4));
     try std.testing.expect(unit.quiet());
 }
+
+test "a byte write to the control word leaves the bytes it does not name" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.reg00), 4, control.value.enable);
+    // Bit 20 lives in byte 2, so a byte-wide self-test request names only it.
+    unit.write(at(0, dotf.off.reg00) + 2, 1, control.mask.self_test >> 16);
+    try std.testing.expectEqual(control.value.enable, unit.read(at(0, dotf.off.reg00), 4));
+    try std.testing.expect(unit.channels[0].enabled());
+    try std.testing.expect(unit.channels[0].decrypting());
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].self_tests);
+}
+
+test "a word staged after a narrow self-test is staged, not staged dark" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.reg00), 4, control.value.enable);
+    unit.write(at(0, dotf.off.reg00) + 2, 1, control.mask.self_test >> 16);
+    unit.write(at(0, dotf.off.reg03), 4, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].staged);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].staged_dark);
+}
+
+test "a halfword write to the area start keeps the half it does not name" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.convareast) + 2, 2, 0x9002);
+    try std.testing.expectEqual(@as(u32, 0x9002_1000), unit.read(at(0, dotf.off.convareast), 4));
+}
+
+test "a halfword write to the area end keeps the address half it does not name" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_3000);
+    unit.write(at(0, dotf.off.convaread) + 2, 2, 0x9004);
+    // The reserved field still reads back as ones, from the rule, not the fold.
+    try std.testing.expectEqual(@as(u32, 0x9004_3FFF), unit.read(at(0, dotf.off.convaread), 4));
+    try std.testing.expectEqual(@as(u32, 0x9004_3000), unit.channels[0].end());
+}
+
+test "a read-back reserved field is not folded into what is stored" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_0000);
+    unit.write(at(0, dotf.off.convaread) + 3, 1, 0x91);
+    try std.testing.expectEqual(@as(u32, 0x9100_0000), unit.channels[0].convaread);
+}
+
+test "a narrow write to the padding still folds into the shadow" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, 0x010), 4, 0x1122_3344);
+    unit.write(at(0, 0x010) + 1, 1, 0xAA);
+    try std.testing.expectEqual(@as(u32, 0x1122_AA44), unit.read(at(0, 0x010), 4));
+}
