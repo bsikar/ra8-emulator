@@ -108,6 +108,12 @@ pub fn display(board: *Board, out: Writer) !void {
     } else {
         try out.print("GLCDC: {d} write(s), no layer fetching a framebuffer\n", .{unit.writes});
     }
+    if (unit.updates() != 0) {
+        try out.print(
+            "GLCDC: {d} register update(s) latched by a VEN command (the bit is spent on the write, so the driver's vblank poll finishes)\n",
+            .{unit.updates()},
+        );
+    }
     try palettes(unit, out);
     try panelTiming(unit, out);
     try composited(unit, out);

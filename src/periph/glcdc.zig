@@ -14,6 +14,14 @@
 //!   GRn_FLM5  (+0x1118 / +0x1218) LNNUM [26:16]: lines - 1
 //!   GRn_FLM6  (+0x111C / +0x121C) FORMAT [30:28]: pixel format
 //!
+//! A VEN BIT IS A COMMAND, NOT A SETTING. BG_EN, GR1_EN and GR2_EN each
+//! carry one, the driver writes all three, and ra8_glcdc_bg_color_set polls
+//! BG_EN.VEN back down to find the vblank window. dev stores the bit and so
+//! did this model, so that poll burned its whole budget, returned a timeout,
+//! and the background colour it exists to set was never written. The bit is
+//! spent on the write here. The rule and its evidence live in
+//! src/periph/glcdc_latch.zig.
+//!
 //! The block is inside the switchable graphics power domain (HUM Ch 11.5.1
 //! Table 11.7 p 480), which is gated off at reset, so it asks pdctr.zig
 //! before answering with anything. That is the whole reason this slice is the
@@ -32,6 +40,7 @@ const output = @import("glcdc_out.zig");
 const descriptor = @import("glcdc_frame.zig");
 const tcon = @import("glcdc_tcon.zig");
 const sys = @import("glcdc_sys.zig");
+const update = @import("glcdc_latch.zig");
 
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
@@ -57,18 +66,13 @@ pub const off = struct {
     pub const bg_bgc: u32 = 0x1014;
 };
 
-/// Field masks and shifts the descriptor decode applies (HUM Ch 63).
+/// Field masks this file reads. The FLM field positions the descriptor
+/// decode applies live with the decode, in glcdc_frame.zig.
 pub const field = struct {
     /// BG_EN.EN, bit 0: the output stage is running.
     pub const bg_en: u32 = 0x1;
     /// FLMRD.RENB, bit 0: this layer fetches from its framebuffer.
-    pub const renb: u32 = 0x1;
-    pub const stride_shift: u5 = 16;
-    pub const stride_mask: u32 = 0xFFFF;
-    pub const lnnum_shift: u5 = 16;
-    pub const lnnum_mask: u32 = 0x7FF;
-    pub const format_shift: u5 = 28;
-    pub const format_mask: u32 = 0x7;
+    pub const renb: u32 = descriptor.field.renb;
 };
 
 /// FLM6.FORMAT codes, and the decode behind them. Re-exported so a caller
@@ -84,6 +88,10 @@ pub const max_dimension = descriptor.max_dimension;
 pub const shapeOf = descriptor.shapeOf;
 pub const windowEnd = descriptor.windowEnd;
 pub const addressIsRam = descriptor.addressIsRam;
+
+/// The VEN rule, reached as `glcdc.latch` the way the other split parts of
+/// this block are reached through it.
+pub const latch = update;
 
 const words = win_span / 4;
 
@@ -122,6 +130,8 @@ pub const Glcdc = struct {
     dark_reads: u32 = 0,
     /// Times a layer's FLMRD.RENB went from clear to set.
     starts: u32 = 0,
+    /// VEN register-update commands spent.
+    latches: u32 = 0,
 
     pub fn init(domain: *const pdctr.Pdctr) Glcdc {
         return .{ .domain = domain };
@@ -149,34 +159,17 @@ pub const Glcdc = struct {
         return self.decode(2);
     }
 
-    /// Recover one layer's descriptor. Width comes back from the stride and
-    /// the format's fetch width, height from LNNUM + 1. A layer that is not
-    /// fetching, or whose base is not in RAM, or whose geometry is not sane,
-    /// is not a framebuffer and is reported as none rather than as zeroes.
+    /// Recover one layer's descriptor, out of the five registers that
+    /// describe it. The decode itself is glcdc_frame.zig's.
     pub fn decode(self: *const Glcdc, layer: u8) ?Framebuffer {
-        const base_off = off.layer_base + off.layer_stride * (@as(u32, layer) - 1);
-        if (self.word(base_off + off.flmrd) & field.renb == 0) return null;
-        const base = self.word(base_off + off.flm2);
-        if (!addressIsRam(base)) return null;
-        const stride = self.word(base_off + off.flm3) >> field.stride_shift & field.stride_mask;
-        const lines = (self.word(base_off + off.flm5) >> field.lnnum_shift & field.lnnum_mask) + 1;
-        const format: Format = @enumFromInt(self.word(base_off + off.flm6) >> field.format_shift & field.format_mask);
-        if (stride == 0) return null;
-        // Bits, not bytes: a CLUT4 line of `stride` bytes carries twice as
-        // many pixels as it has bytes, and a CLUT1 line eight times as many.
-        // dev divides by a bytes-per-pixel that rounds both up to one, so
-        // every sub-byte layer it has ever reported came out too narrow.
-        const width = format.pixelsIn(stride);
-        if (width == 0 or width > max_dimension or lines > max_dimension) return null;
-        return .{
-            .base = base,
-            .width = width,
-            .height = lines,
-            .stride = stride,
-            .format = format,
-            .layer = layer,
-            .enabled = self.outputEnabled(),
-        };
+        const at = off.layer_base + off.layer_stride * (@as(u32, layer) - 1);
+        return descriptor.decode(.{
+            .flmrd = self.word(at + off.flmrd),
+            .flm2 = self.word(at + off.flm2),
+            .flm3 = self.word(at + off.flm3),
+            .flm5 = self.word(at + off.flm5),
+            .flm6 = self.word(at + off.flm6),
+        }, layer, self.outputEnabled());
     }
 
     /// An unpowered block does not drive the bus: reads give zero, and the
@@ -223,12 +216,18 @@ pub const Glcdc = struct {
 
     fn writeWord(self: *Glcdc, offset: u32, value: u32) void {
         if (self.isStart(offset, value)) self.starts +%= 1;
+        if (update.requested(offset, value)) self.latches +%= 1;
         if (self.latchPalette(offset, value)) {
             self.writes +%= 1;
             return;
         }
-        self.setWord(offset, value);
+        self.setWord(offset, update.stored(offset, value));
         self.writes +%= 1;
+    }
+
+    /// Register updates a VEN asked for.
+    pub fn updates(self: *const Glcdc) u32 {
+        return self.latches;
     }
 
     /// A write into the four CLUT planes, or into a layer's CLUTINT plane

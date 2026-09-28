@@ -77,6 +77,7 @@ test {
     _ = @import("periph/glcdc_clut_test.zig");
     _ = @import("periph/glcdc_gamma_test.zig");
     _ = @import("periph/glcdc_frame_test.zig");
+    _ = @import("periph/glcdc_latch_test.zig");
     _ = @import("periph/glcdc_mix_test.zig");
     _ = @import("periph/glcdc_out_test.zig");
     _ = @import("periph/glcdc_pixel_test.zig");
