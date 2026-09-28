@@ -23,7 +23,7 @@ fn branches(board: *Board, out: Writer) !void {
         if (one.requests == 0 and one.switches == 0) continue;
         try out.print(
             "{s}: {d} switch request(s), {d} source change(s), source {d}\n",
-            .{ ckcr.names[index], one.requests, one.switches, one.sel },
+            .{ ckcr.slots[index].name, one.requests, one.switches, one.sel },
         );
     }
     if (unit.dropped_locked != 0) {
