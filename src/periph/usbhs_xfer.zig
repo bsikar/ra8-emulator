@@ -31,11 +31,26 @@
 //!   afterwards, in the stages that follow. So a refused request latches
 //!   SACK too, and is counted as a stall on top.
 //!
-//! NOT MODELLED, AND NOT GUESSED: how that refusal then reaches the driver.
-//! On silicon the DCP goes to PID=STALL and the host reads it back from
-//! DCPCTR; here the refusal is only a counter, so a driver that gets its
-//! SACK and moves on to the data stage waits on a BRDY that never comes.
-//! That is a bigger piece than this one and wants its own slice.
+//! A REFUSED REQUEST PARKS THE DCP AT PID=STALL, which is how the refusal
+//! reaches the driver at all. ra8_usb_host_ctrl.c's internal_host_dcp_in_wait
+//! spins on BRDYSTS for the reply and checks DCPCTR against
+//! k_ra8_usb_pid_stall_bit (0x0002, "PID[1]: set for either STALL") on every
+//! turn of the loop, returning hw_error the moment it is up. Without it the
+//! SACK from the token says go on, the reply never comes, and the driver
+//! spends k_ra8_usb_ctrl_poll_limit before calling it a timeout. The bit is
+//! the difference between "this device will not do that" and "this
+//! controller is wedged", and only the first is true.
+//!
+//! The host clears it the way it clears any PID field, by storing a new PID
+//! into DCPCTR: priv_dcp_pid(reg, k_ra8_pid_buf) re-arms the pipe. So the
+//! stall survives reads and is dropped by the next write that names a
+//! different PID, and a fresh SUREQ starts from whatever the host left.
+//!
+//! NOT MODELLED, AND NOT GUESSED: the bulk pipes' own STALL. Its reader
+//! exists (internal_host_wait_pipe reads PIPECTR against the same bit) and
+//! its own comment says the C host fake cannot raise it either, so nothing
+//! in the tree says what stalls a bulk pipe here. Own slice, if an image
+//! ever needs it.
 const regs = @import("usbhs_regs.zig");
 const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
@@ -102,6 +117,9 @@ pub const Transfer = struct {
         if (!self.device.handle(self.packet)) {
             self.stalls += 1;
             self.in_flight = false;
+            // The refusal has to be readable, or the driver's data-stage
+            // wait has nothing to break out on but the clock.
+            self.dcpctr = (self.dcpctr & ~regs.dcpctr.pid_mask) | regs.dcpctr.pid_stall;
         }
     }
 
