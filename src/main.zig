@@ -13,6 +13,7 @@ const cli = ra8.core.cli;
 const elf = ra8.core.elf;
 const symbols = ra8.core.symbols;
 const stop_watch = ra8.core.stop;
+const deadline = ra8.core.deadline;
 const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
@@ -73,6 +74,10 @@ pub fn main() !u8 {
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     var stop = resolveStop(image, options);
+    var timed: ?deadline.Deadline = if (options.ms) |milliseconds|
+        .{ .periods = milliseconds }
+    else
+        null;
     const budget = options.budgetFor(stop != null);
     const fault = try core.run(entry, budget, .{
         .watch = &watch,
@@ -81,6 +86,7 @@ pub fn main() !u8 {
         .board = board.ticker(),
         .reboot = &reboot,
         .stop = if (stop) |*one| one else null,
+        .deadline = if (timed) |*one| one else null,
     });
 
     try report.bus(&board, out);
@@ -89,22 +95,26 @@ pub fn main() !u8 {
     try report.loops(out, loops);
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
-    return verdict(out, core, options, fault, stop, budget);
+    return verdict(out, core, options, fault, stop, timed, budget);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
 ///
-/// Three outcomes, and the middle one is why this is not a single print: a
-/// watched run that reached its counter stopped early and is a pass, while a
-/// watched run that spent the whole budget never arrived at all. Under the
-/// plain "ran N instructions clean" line those two read identically, which
-/// is exactly the confusion a progress counter exists to settle.
+/// Four outcomes now, and the two middle ones are why this is not a single
+/// print. A watched run that reached its counter stopped early and is a
+/// pass, while a watched run that ran out never arrived at all; under the
+/// plain "ran N instructions clean" line those read identically, which is
+/// exactly the confusion a progress counter exists to settle. And what ran
+/// out is worth naming too: a timed run that spent its whole window says so
+/// in milliseconds, because an instruction count is not what was asked for
+/// and is not what would be raised to get further.
 fn verdict(
     out: anytype,
     core: engine.Engine,
     options: cli.Options,
     fault: ?engine.Fault,
     stop: ?stop_watch.Stop,
+    timed: ?deadline.Deadline,
     budget: usize,
 ) !u8 {
     if (fault) |taken| {
@@ -112,14 +122,26 @@ fn verdict(
         return 1;
     }
     const pc = try core.register(.pc);
+    const spent = if (timed) |due| due.reached else false;
     const watched = stop orelse {
-        try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ budget, pc });
+        if (spent) {
+            try out.print("stopped clean after {d} ms, pc 0x{X:0>8}\n", .{ timed.?.periods, pc });
+        } else {
+            try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ budget, pc });
+        }
         return 0;
     };
     if (watched.reached) {
         try out.print(
             "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
             .{ options.stop_symbol.?, watched.reaches, pc },
+        );
+        return 0;
+    }
+    if (spent) {
+        try out.print(
+            "ran {d} ms, {s} never reached {d}, pc 0x{X:0>8}\n",
+            .{ timed.?.periods, options.stop_symbol.?, watched.reaches, pc },
         );
         return 0;
     }
