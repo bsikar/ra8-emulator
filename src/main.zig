@@ -11,6 +11,8 @@ const ra8 = @import("ra8");
 
 const cli = ra8.core.cli;
 const elf = ra8.core.elf;
+const symbols = ra8.core.symbols;
+const stop_watch = ra8.core.stop;
 const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
@@ -70,12 +72,14 @@ pub fn main() !u8 {
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
+    var stop = resolveStop(image, options);
     const fault = try core.run(entry, options.instructions, .{
         .watch = &watch,
         .timebase = &timebase,
         .interrupts = &interrupts,
         .board = board.ticker(),
         .reboot = &reboot,
+        .stop = if (stop) |*one| one else null,
     });
 
     try report.bus(&board, out);
@@ -83,12 +87,58 @@ pub fn main() !u8 {
     try report.reboots(out, reboot);
     try report.loops(out, loops);
     try report.blocks(&board, out);
+    try dumpSymbols(out, core, image, options);
     if (fault) |taken| {
         try report.fault(out, taken);
         return 1;
     }
+    if (stop) |reached_stop| if (reached_stop.reached) {
+        try out.print(
+            "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
+            .{ options.stop_symbol.?, reached_stop.reaches, try core.register(.pc) },
+        );
+        return 0;
+    };
     try out.print("ran {d} instructions clean, pc 0x{X:0>8}\n", .{ options.instructions, try core.register(.pc) });
     return 0;
+}
+
+/// The counter `--stop-sym` named, resolved against the image's symbol
+/// table. A name the image does not carry is reported and the run goes to
+/// its instruction budget instead: a missing symbol is the suite's own
+/// verdict to make, not a reason to refuse the run.
+fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
+    const name = options.stop_symbol orelse return null;
+    const address = symbols.addressOf(image, name) orelse {
+        std.debug.print("--stop-sym {s} not found in symbol table\n", .{name});
+        return null;
+    };
+    return .{ .address = address, .reaches = options.stop_at };
+}
+
+/// Read each `--dump-sym` global out of RAM and print it.
+///
+/// The shape of the line is load-bearing: the firmware's own
+/// emulator-in-the-loop suite parses it with a regex over
+/// "dump-sym : <name> @0x<addr> = <decimal> ", so the name, the address,
+/// the decimal value and something after it all have to be there. A symbol
+/// the image does not carry, or an address that will not read, says so
+/// plainly instead of printing a number nothing measured.
+fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
+    for (options.dumps()) |name| {
+        const address = symbols.addressOf(image, name) orelse {
+            try out.print("  dump-sym      : {s} <unresolved>\n", .{name});
+            continue;
+        };
+        const value = core.readWord(address) catch {
+            try out.print("  dump-sym      : {s} @0x{X:0>8} <unreadable>\n", .{ name, address });
+            continue;
+        };
+        try out.print(
+            "  dump-sym      : {s} @0x{X:0>8} = {d} (0x{X:0>8})\n",
+            .{ name, address, value, value },
+        );
+    }
 }
 
 /// Size and format the card on the SPI line, when the command line asked for

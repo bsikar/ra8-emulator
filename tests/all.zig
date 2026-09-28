@@ -11,6 +11,8 @@ test {
     _ = @import("core/cli_test.zig");
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");
+    _ = @import("core/symbols_test.zig");
+    _ = @import("core/stop_test.zig");
     _ = @import("core/engine_test.zig");
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");

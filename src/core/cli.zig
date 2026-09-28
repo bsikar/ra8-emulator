@@ -9,9 +9,15 @@ pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--touch X,Y]
     \\                    [--battery PCT] [--charge]
+    \\                    [--dump-sym NAME] [--stop-sym NAME N]
     \\
     \\  --instructions N   stop after N instructions (default 2000000)
     \\  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU
+    \\  --device NAME      the same thing, spelled the way the firmware's
+    \\                     own emulator-in-the-loop suite spells it
+    \\  --dump-sym NAME    read that global out of RAM after the run and
+    \\                     print it, repeatable
+    \\  --stop-sym NAME N  end the run early once that global reaches N
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
@@ -21,6 +27,11 @@ pub const usage =
     \\                     the gauge answers with is positive
     \\
 ;
+
+/// How many `--dump-sym` names one run will carry. The suite that drives
+/// this asks for at most two, a progress counter and a failure counter; the
+/// cap is a little room above that rather than an allocation.
+pub const dump_limit: usize = 8;
 
 pub const Options = struct {
     path: []const u8,
@@ -43,6 +54,18 @@ pub const Options = struct {
     /// What the fuel gauge on the I2C line says is in the battery. The
     /// percent is range-checked by the gauge itself, not here.
     battery: max17048.Battery = .{},
+    /// Globals to read out of RAM once the run is over, in the order asked.
+    dump: [dump_limit][]const u8 = .{""} ** dump_limit,
+    dump_count: usize = 0,
+    /// A global to watch, and the value that ends the run once it reaches
+    /// it. Null watches nothing and the run goes to its instruction budget.
+    stop_symbol: ?[]const u8 = null,
+    stop_at: u32 = 0,
+
+    /// The names asked for, as a slice rather than the fixed array.
+    pub fn dumps(self: *const Options) []const []const u8 {
+        return self.dump[0..self.dump_count];
+    }
 };
 
 pub fn parse(argv: []const []const u8) !Options {
@@ -54,7 +77,20 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.instructions = try std.fmt.parseInt(usize, argv[index], 10);
-        } else if (std.mem.eql(u8, argv[index], "--part")) {
+        } else if (std.mem.eql(u8, argv[index], "--dump-sym")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            if (options.dump_count >= options.dump.len) return error.TooManyDumps;
+            options.dump[options.dump_count] = argv[index];
+            options.dump_count += 1;
+        } else if (std.mem.eql(u8, argv[index], "--stop-sym")) {
+            if (index + 2 >= argv.len) return error.MissingValue;
+            options.stop_symbol = argv[index + 1];
+            options.stop_at = try std.fmt.parseInt(u32, argv[index + 2], 10);
+            index += 2;
+        } else if (std.mem.eql(u8, argv[index], "--part") or
+            std.mem.eql(u8, argv[index], "--device"))
+        {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.part = part.Part.parse(argv[index]) orelse return error.UnknownPart;
