@@ -10,9 +10,10 @@ const Board = @import("board.zig").Board;
 const ssie = @import("../periph/ssie.zig");
 const Writer = @import("report.zig").Writer;
 
-/// One line per channel the firmware touched, plus the two loud cases. A
-/// sample staged with TEN clear is one dev counts as transmitted, and a store
-/// past the last FIFO stage is one dev never notices at all.
+/// One line per channel the firmware touched, plus the loud cases. A sample
+/// staged with TEN clear is one dev counts as transmitted, a store past the
+/// last FIFO stage is one dev never notices at all, and a store too narrow to
+/// carry a sample is one dev turns into a part sample on the stream.
 pub fn sections(board: *Board, out: Writer) !void {
     for (&board.audio.channels, 0..) |*unit, index| {
         if (unit.quiet()) continue;
@@ -42,6 +43,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             try out.print(
                 "SSIE{d}: {d} sample(s) thrown away by a FIFO reset before they went out\n",
                 .{ index, unit.discarded() },
+            );
+        }
+        if (unit.refused() != 0) {
+            try out.print(
+                "SSIE{d}: REFUSED {d} store(s) to SSIFTDR narrower than the register, no part sample was staged\n",
+                .{ index, unit.refused() },
             );
         }
     }
