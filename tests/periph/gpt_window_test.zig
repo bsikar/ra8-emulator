@@ -27,6 +27,30 @@ test "the interpreted set covers the counter, the compares and the buffers" {
 
 test "GTWP is not in the interpreted set, so protection can never cover it" {
     try std.testing.expect(!window.interpreted(gpt.protection.off.gtwp));
+    try std.testing.expect(!window.protected(gpt.protection.off.gtwp));
+}
+
+test "GTST is interpreted but not protected, because the HAL never brackets it" {
+    var lane: u32 = 0;
+    while (lane < 4) : (lane += 1) {
+        try std.testing.expect(window.interpreted(gpt.off.gtst + lane));
+        try std.testing.expect(!window.protected(gpt.off.gtst + lane));
+    }
+}
+
+test "the protected set is everything else the HAL does bracket" {
+    try std.testing.expect(window.protected(gpt.off.gtcnt));
+    try std.testing.expect(window.protected(gpt.off.gtcr + 3));
+    try std.testing.expect(window.protected(gpt.off.gtpr));
+    try std.testing.expect(window.protected(gpt.off.gtstr));
+    try std.testing.expect(window.protected(gpt.off.gtstp));
+    try std.testing.expect(window.protected(gpt.match.off.gtccra));
+    try std.testing.expect(window.protected(gpt.buffers.off.gtber));
+}
+
+test "a register this model only shadows is outside both sets" {
+    try std.testing.expect(!window.interpreted(0x34));
+    try std.testing.expect(!window.protected(0x34));
 }
 
 test "a lane round trips through merge" {
