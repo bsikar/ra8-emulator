@@ -64,6 +64,9 @@ fn i2c(board: *Board, out: Writer) !void {
                     if (channel.target.mismatched) "MISMATCHED" else "matched",
                 },
             );
+            if (channel.target.nacked != 0) {
+                try out.print(", {d} read frame(s) the controller NACKed to an end", .{channel.target.nacked});
+            }
             if (channel.target.unaddressed != 0) {
                 try out.print(", {d} ARMING(S) WITH NO OWN ADDRESS REFUSED", .{channel.target.unaddressed});
             }

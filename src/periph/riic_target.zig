@@ -5,6 +5,33 @@
 //! drives the clock. Headless there is nothing else, so this model IS that
 //! controller: it writes a known payload at the firmware's own address, reads
 //! it back, and checks the firmware echoed what it was sent.
+//!
+//! A CONTROLLER ENDS A READ BY NOT ACKNOWLEDGING THE LAST BYTE IT WANTED.
+//! ra8_i2c_peripheral.c's own state diagram says so in the TX_ACTIVE box
+//! ("push ICDRT while TDRE set and no NACK, until len") and its exit arrow
+//! ("NACK (controller end) or sent == len"), and the two predicates behind
+//! that box test the bit directly:
+//!
+//!     priv_ra8_i2c_internal_peripheral_tx_continue(icsr2, sent, len)
+//!       = (icsr2 & nackf) == 0 && sent < len
+//!     priv_ra8_i2c_internal_peripheral_tx_done(icsr2)
+//!       = (icsr2 & nackf) != 0 || (icsr2 & tend) != 0
+//!
+//! This model never raised NACKF, so the controller's end of the frame was
+//! invisible: tx_continue stayed true and the send loop ran to the CALLER'S
+//! buffer length rather than stopping at the bytes the controller asked for,
+//! and internal_i2c_target_finish_tx then passed its TEND|NACKF wait only on
+//! the TEND this model leaves standing for the whole phase, which is a wait
+//! passing for the wrong reason. The run then counted every extra byte and
+//! called the echo MISMATCHED, blaming firmware for a NACK nothing sent.
+//!
+//! So the read phase now NACKs and stops once it has the bytes it wanted,
+//! and a phase ends on the fall of the flag it was waiting on rather than on
+//! any ICSR2 write at all. ICSR2 is write-0-to-clear and the driver clears
+//! several bits in one store (finish_tx clears NACKF and STOP together), so
+//! the rule is about WHICH bit fell, not that a store happened: clearing
+//! RDRF between payload bytes, or clearing the error flags mid-frame the way
+//! ra8_i2c_clear_errors does, no longer skips the script forward a phase.
 const std = @import("std");
 const flag = @import("riic_flags.zig");
 const bus = @import("riic_bus.zig");
@@ -42,6 +69,10 @@ pub const Target = struct {
     captured: [script.capture]u8 = .{0} ** script.capture,
     cycles: u32 = 0,
     mismatched: bool = false,
+    /// Read frames the controller ended by not acknowledging the last byte
+    /// it wanted. One per completed read, so it tracks `cycles` on a run
+    /// where the firmware respects the NACK.
+    nacked: u32 = 0,
     /// ICSER writes that named a slot whose own-address register was still
     /// zero. dev latched it and answered at address 0x00, which is the
     /// general call and never a target's own address, so the firmware looked
@@ -119,21 +150,34 @@ pub const Target = struct {
         return byte;
     }
 
-    /// ICDRT: capture what the firmware echoes back.
+    /// ICDRT: capture what the firmware echoes back. The controller wants
+    /// exactly `script.payload.len` bytes, so it withholds the acknowledge on
+    /// the last of them and stops. TDRE stays up because the shift register
+    /// really did empty; NACKF is what the send loop tests, and leaving TDRE
+    /// standing is what keeps the driver's next TDRE wait from spinning its
+    /// whole budget to reach a conclusion NACKF already carries.
     pub fn transmit(self: *Target, byte: u8) void {
         if (self.phase != .reading) return;
         if (self.echoed < script.capture) self.captured[self.echoed] = byte;
         self.echoed += 1;
+        if (self.echoed == script.payload.len) {
+            self.status |= flag.icsr2.nackf | flag.icsr2.stop;
+            self.nacked += 1;
+        }
     }
 
-    /// ICSR2 is write-0-to-clear, and clearing the condition flag is what
-    /// moves the script on: the receive path clears STOP, the transmit path
-    /// clears its own.
+    /// ICSR2 is write-0-to-clear, and the fall of the flag a phase was
+    /// waiting on is what moves the script on: the receive path ends when the
+    /// firmware clears the STOP the last payload byte raised, the transmit
+    /// path when it clears the NACKF the controller's refusal raised. A store
+    /// that clears neither leaves the phase where it was.
     pub fn acknowledge(self: *Target, value: u8) void {
+        const before = self.status;
         self.status &= value;
+        const fell = before & ~self.status;
         switch (self.phase) {
-            .writing => self.beginRead(),
-            .reading => self.completeRead(),
+            .writing => if (fell & flag.icsr2.stop != 0) self.beginRead(),
+            .reading => if (fell & flag.icsr2.nackf != 0) self.completeRead(),
             else => {},
         }
     }
