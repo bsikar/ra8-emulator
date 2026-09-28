@@ -48,6 +48,16 @@
 //! are checked first, which is dev's own order: an internal tie replaces the
 //! wire, so whatever is on the wire does not get the frame.
 //!
+//! SPDR MOVES A WHOLE FRAME OR NOTHING. dev clocks a frame on any store to
+//! the data port and serves the holding register on any read of it, so a
+//! driver taking a 32-bit frame in two halfword loads ate the frame on the
+//! first and starved on the second, and one pushing it back in two halfword
+//! stores clocked two frames out of the halves. Here an access that cannot
+//! carry the frame SPCMD0 selects, or that names a lane above the bottom of
+//! the register, is refused and counted: no part frame is clocked and the
+//! receive register keeps what it holds. SPCR2 and SPSRC are bags of lines
+//! and still merge; see spi_frame.zig for the rule.
+//!
 //! NOT MODELLED, AND NOT GUESSED: SPBR and BRDV, the bit rate, which a
 //! headless run has no clock to show; SPSSR slave select; and the
 //! mode-fault, overrun and parity errors.
@@ -135,6 +145,10 @@ pub const Channel = struct {
     /// Frames clocked with SPCMD0.SPB holding an encoding the tree does not
     /// name, which fall back to eight bits.
     unnamed: u32 = 0,
+    /// SPDR stores that could not carry the frame: nothing was clocked.
+    narrow_writes: u32 = 0,
+    /// SPDR reads that could not carry the frame: nothing was taken.
+    narrow_reads: u32 = 0,
     /// What is on the wire, when anything is.
     device: ?Device = null,
 
@@ -158,7 +172,30 @@ pub const Channel = struct {
 
     pub fn quiet(self: *const Channel) bool {
         return self.spcr == 0 and self.spcr2 == 0 and self.frames == 0 and
-            self.refused == 0 and self.starved == 0;
+            self.refused == 0 and self.starved == 0 and
+            self.narrow_writes == 0 and self.narrow_reads == 0;
+    }
+
+    /// A store to SPDR. The width gate comes before the enable gate: an
+    /// access that cannot carry the frame is malformed whether or not the
+    /// channel was ever started, and there is no half frame to hold.
+    fn store(self: *Channel, lane: u32, width: u3, value: u32) void {
+        if (!self.frameOf().carriedBy(lane, width)) {
+            self.narrow_writes +%= 1;
+            return;
+        }
+        self.send(value);
+    }
+
+    /// A read of SPDR. An access too narrow for the frame takes nothing:
+    /// the holding register keeps it and SPRF stays up, so the driver can
+    /// come back for it with a load that fits.
+    fn serve(self: *Channel, lane: u32, width: u3) u32 {
+        if (!self.frameOf().carriedBy(lane, width)) {
+            self.narrow_reads +%= 1;
+            return 0;
+        }
+        return self.take();
     }
 
     /// Clock one frame. Without an enabled channel there is no clock, so the
@@ -270,7 +307,7 @@ pub const Spi = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         return switch (inner & ~@as(u32, 3)) {
-            off_spdr => part(unit.take(), byte, width),
+            off_spdr => part(unit.serve(byte, width), byte, width),
             off_spcr => part(unit.spcr, byte, width),
             off_spcr2 => part(unit.spcr2, byte, width),
             off_spsr => part(unit.status(), byte, width),
@@ -288,7 +325,7 @@ pub const Spi = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_spdr => unit.send(value & widthMask(width)),
+            off_spdr => unit.store(byte, width, value & widthMask(width)),
             off_spcr => unit.spcr = merge(unit.spcr, byte, width, value),
             off_spcr2 => unit.spcr2 = merge(unit.spcr2, byte, width, value),
             // Status, and a status register does not take a store.

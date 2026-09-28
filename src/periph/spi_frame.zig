@@ -24,6 +24,13 @@
 //! width, it has selected nothing, and the default stands without a
 //! complaint on the report.
 //!
+//! A FRAME MOVES WHOLE, SO THE ACCESS HAS TO CARRY IT. SPDR is a data
+//! port, not a bag of independently addressable bits: one store clocks one
+//! frame and one read takes one. An access that cannot carry the frame SPB
+//! selects has no half-frame to move, so `carriedBy` decides, and spi.zig
+//! refuses the access rather than clocking or eating a frame on its
+//! account.
+//!
 //! LSB-FIRST IS ONLY VISIBLE ON THE WIRE. A loopback tie shifts out and
 //! back in at the same end, so the word returns unchanged whichever way it
 //! went. A device on the line clocks MSB-first, so a frame sent LSB-first
@@ -123,6 +130,17 @@ pub const Frame = struct {
     /// The other direction, for what the line drives back.
     pub fn fromWire(self: Frame, word: u32) u32 {
         return self.onWire(word);
+    }
+
+    /// Whether an access of this width, starting at this lane of SPDR,
+    /// names the whole frame. SPDR carries one frame sitting at the bottom
+    /// of the register, so an access narrower than the frame cannot carry
+    /// it and an access starting above lane zero does not name it. A wider
+    /// access is fine: the driver reads the register and the frame is in
+    /// the low bits of what it gets.
+    pub fn carriedBy(self: Frame, lane: u32, width: u3) bool {
+        if (lane != 0) return false;
+        return @as(u16, width) * 8 >= @as(u16, self.bits());
     }
 };
 
