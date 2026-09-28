@@ -52,6 +52,18 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.narrow_writes},
         );
     }
+    if (unit.setup.kicks != 0) {
+        try out.print(
+            "Extra-MRAM: {d} MSUINITR set-up init(s), the sequencer cleared SUINIT each time\n",
+            .{unit.setup.kicks},
+        );
+    }
+    if (unit.setup.keyless != 0 or unit.setup.narrow_writes != 0) {
+        try out.print(
+            "Extra-MRAM: REFUSED {d} MSUINITR write(s) with no key, {d} naming less than the register\n",
+            .{ unit.setup.keyless, unit.setup.narrow_writes },
+        );
+    }
     if (unit.read_only != 0) {
         try out.print(
             "Extra-MRAM: REFUSED {d} store(s) to MSTATR/MASTAT, firmware cannot clear its own errors\n",

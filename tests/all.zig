@@ -116,6 +116,7 @@ test {
     _ = @import("periph/mipi_phy_test.zig");
     _ = @import("periph/modem_script_test.zig");
     _ = @import("periph/modem_test.zig");
+    _ = @import("periph/mram_init_test.zig");
     _ = @import("periph/mram_test.zig");
     _ = @import("periph/mstp_drops_test.zig");
     _ = @import("periph/mstp_test.zig");
