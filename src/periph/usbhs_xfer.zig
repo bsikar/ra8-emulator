@@ -51,10 +51,18 @@
 //! its own comment says the C host fake cannot raise it either, so nothing
 //! in the tree says what stalls a bulk pipe here. Own slice, if an image
 //! ever needs it.
+//!
+//! INTSTS0 IS THE DISPATCH MASK, not a spare shadow word. This model raised
+//! BRDYSTS and BEMPSTS and left INTSTS0 reading back as a bare shadow word,
+//! which is zero, so a driver dispatching on the mask saw an idle controller
+//! on every turn no matter how many pipes had answers standing. BRDY and BEMP
+//! now latch alongside their per-pipe bit; usbhs_int.zig holds the latch and
+//! says what the rest of the register is and is not.
 const regs = @import("usbhs_regs.zig");
 const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
+const usbhs_int = @import("usbhs_int.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_setup = @import("usbhs_setup.zig");
 
@@ -76,6 +84,7 @@ pub const Transfer = struct {
 
     brdy: u16 = 0,
     bemp: u16 = 0,
+    intsts0: usbhs_int.Summary = .{},
     intsts1: u16 = 0,
     dcpctr: u16 = 0,
 
@@ -123,6 +132,33 @@ pub const Transfer = struct {
         }
     }
 
+    /// A pipe has an answer standing: raise its BRDYSTS bit and the INTSTS0
+    /// summary above it together, so a dispatcher and a poller see the same
+    /// packet.
+    fn raiseReady(self: *Transfer, bits: u16) void {
+        self.brdy |= bits;
+        self.intsts0.ready();
+    }
+
+    /// The mirror on the empty side: a staged buffer has gone out.
+    fn raiseEmpty(self: *Transfer, bits: u16) void {
+        self.bemp |= bits;
+        self.intsts0.empty();
+    }
+
+    /// INTSTS0. The reply materialises on a read of the summary exactly as it
+    /// does on a read of BRDYSTS, so a driver that only ever reads the mask
+    /// still sees the packet arrive.
+    pub fn interruptStatus(self: *Transfer, pipes: *usbhs_pipe.Table) u16 {
+        _ = self.readyStatus(pipes);
+        return self.intsts0.value();
+    }
+
+    /// W0C, the same shape as INTSTS1.
+    pub fn clearInterrupt(self: *Transfer, value: u16) void {
+        self.intsts0.ack(value);
+    }
+
     /// DCPCTR.CCPL: the host closes the transfer. dev ran this on any write
     /// with the bit set, so a driver that left CCPL standing completed the
     /// same transfer on every store.
@@ -133,12 +169,12 @@ pub const Transfer = struct {
         }
         self.in_flight = false;
         if (self.control_read) {
-            self.bemp |= regs.status.dcp;
+            self.raiseEmpty(regs.status.dcp);
             return;
         }
         self.port.in[0].clear();
         self.port.in[0].ready = true;
-        self.brdy |= regs.status.dcp;
+        self.raiseReady(regs.status.dcp);
     }
 
     /// BRDYSTS is the register the polled host spins on, so it is where the
@@ -150,7 +186,7 @@ pub const Transfer = struct {
             self.port.in[0].len = len;
             self.port.in[0].cursor = 0;
             self.port.in[0].ready = true;
-            self.brdy |= regs.status.dcp;
+            self.raiseReady(regs.status.dcp);
         }
         var index: u32 = 1;
         while (index < regs.pipe.count) : (index += 1) {
@@ -160,7 +196,7 @@ pub const Transfer = struct {
             self.port.in[index].len = len;
             self.port.in[index].cursor = 0;
             self.port.in[index].ready = true;
-            self.brdy |= @as(u16, 1) << @intCast(index);
+            self.raiseReady(@as(u16, 1) << @intCast(index));
         }
         return self.brdy;
     }
@@ -201,7 +237,7 @@ pub const Transfer = struct {
         if (staging.len == 0) return;
         if (index == 0) {
             staging.clear();
-            self.bemp |= regs.status.dcp;
+            self.raiseEmpty(regs.status.dcp);
             return;
         }
         if (!self.device.bulkOut(staging.staged())) {
@@ -210,7 +246,7 @@ pub const Transfer = struct {
             return;
         }
         staging.clear();
-        self.bemp |= @as(u16, 1) << @intCast(index);
+        self.raiseEmpty(@as(u16, 1) << @intCast(index));
     }
 
     pub fn clearEmpty(self: *Transfer, value: u16) void {
@@ -291,6 +327,7 @@ pub const Transfer = struct {
         self.in_flight = false;
         self.brdy = 0;
         self.bemp = 0;
+        self.intsts0.busReset();
         for (&self.port.in) |*staging| staging.clear();
         for (&self.port.out) |*staging| staging.clear();
         self.data.release();
