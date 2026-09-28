@@ -165,6 +165,7 @@ pub const periph = struct {
     pub const sram_lock = @import("periph/sram_lock.zig");
     pub const ssie = @import("periph/ssie.zig");
     pub const ssie_fifo = @import("periph/ssie_fifo.zig");
+    pub const ssie_reset = @import("periph/ssie_reset.zig");
     pub const ulpt = @import("periph/ulpt.zig");
     pub const ulpt_compare = @import("periph/ulpt_compare.zig");
     pub const ulpt_regs = @import("periph/ulpt_regs.zig");

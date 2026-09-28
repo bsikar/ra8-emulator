@@ -162,6 +162,7 @@ test {
     _ = @import("periph/sram_test.zig");
     _ = @import("periph/ssie_test.zig");
     _ = @import("periph/ssie_fifo_test.zig");
+    _ = @import("periph/ssie_reset_test.zig");
     _ = @import("periph/ulpt_compare_test.zig");
     _ = @import("periph/ulpt_test.zig");
     _ = @import("periph/ulpt_regs_test.zig");

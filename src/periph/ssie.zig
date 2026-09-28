@@ -45,6 +45,22 @@
 //! counted, and the FIFO keeps what it already had. SSICR, SSIFCR and the
 //! shadow are untouched by this: their lanes really are the bits a narrow
 //! store names, which is what step 5 of fw/real/ssie.c does to SSICR.
+//!
+//! SSIFCR.SSIRST IS A COMMAND, NOT A STORED BIT. Bit 16 of SSIFCR is the
+//! module's own software reset, the one HUM Table 46.9 is named after, and
+//! both dev and this model until now merged it into the shadow and did
+//! nothing else with it. The driver leans on it twice: at bring-up, and on
+//! every error recovery, where ra8_ssie_start_recovery pulses it and then
+//! does nothing but clear the SSISR error flags by hand. So a channel that
+//! underran kept its transmitter on and kept the samples staged behind it,
+//! and the run shifted out a stream the part would have thrown away. Worse,
+//! SSICR.TEN stayed set, so SSISR.IIRQ read low forever and ra8_ssie_start
+//! answered k_ra8_err_busy at the idle check on every later attempt to
+//! restart the channel. Here the rising edge empties the transmit FIFO and
+//! takes REN and TEN down, leaving the mode bits above them alone, which is
+//! what ra8_ssie.h states as the post-condition of that call. The rule and
+//! its evidence live in src/periph/ssie_reset.zig.
+//!
 //! NOT MODELLED, AND NOT GUESSED: SSIFSR's receive flags, and the write-0-to
 //! -clear the header describes for RDF and TDE. TDE is computed from what the
 //! FIFO is holding rather than latched, so a store to SSIFSR still changes
@@ -55,11 +71,16 @@
 const std = @import("std");
 
 const fifo = @import("ssie_fifo.zig");
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
+const soft_reset = @import("ssie_reset.zig");
 
 /// The staging FIFO, reached as `ssie.stage` the way the other split blocks
 /// in this tree re-export their halves.
 pub const stage = fifo;
+
+/// The SSIRST rule, reached as `ssie.reset` the same way.
+pub const reset = soft_reset;
 
 /// SSIE geometry. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4025_D000;
@@ -108,6 +129,8 @@ pub const Channel = struct {
     last: u32 = 0,
     /// Stores to SSIFTDR that did not name the whole register.
     narrow_writes: u32 = 0,
+    /// SSIRST pulses the channel took.
+    resets: u32 = 0,
 
     pub fn transmitting(self: *const Channel) bool {
         return self.ssicr & field.ten != 0;
@@ -121,7 +144,7 @@ pub const Channel = struct {
 
     pub fn quiet(self: *const Channel) bool {
         return self.ssicr == 0 and self.transmitted == 0 and
-            self.narrow_writes == 0 and self.tx.quiet();
+            self.narrow_writes == 0 and self.resets == 0 and self.tx.quiet();
     }
 
     /// Samples still waiting behind a transmitter that never came on.
@@ -142,6 +165,11 @@ pub const Channel = struct {
     /// Stores to SSIFTDR too narrow to carry a sample.
     pub fn refused(self: *const Channel) u32 {
         return self.narrow_writes;
+    }
+
+    /// Software resets the channel was put through.
+    pub fn resetCount(self: *const Channel) u32 {
+        return self.resets;
     }
 
     /// A store to SSIFTDR. Only an access that names the whole register
@@ -190,11 +218,23 @@ pub const Channel = struct {
         return empty | fifo.transmitCount(self.tx.held);
     }
 
-    /// A write to SSIFCR. A reset bit going up empties the FIFO it names;
-    /// the word itself stays in the shadow, so the driver's readback and its
-    /// poll for the bit to clear both see what it wrote.
+    /// A write to SSIFCR. A FIFO reset bit going up empties the FIFO it
+    /// names, and SSIRST going up resets the channel; the word itself stays
+    /// in the shadow either way, because the driver writes these bits back
+    /// to zero itself and reads SSIFCR back in between.
     fn fifoControl(self: *Channel, before: u32, after: u32) void {
         if (fifo.asserted(before, after) & fifo.reset.transmit != 0) self.tx.flush();
+        if (soft_reset.asserted(before, after)) self.softReset();
+    }
+
+    /// SSIRST. The channel comes back idle with nothing staged: the transmit
+    /// FIFO is emptied, and REN and TEN go down while the mode bits above
+    /// them ride through, which is what ra8_ssie.h states as the
+    /// post-condition of the recovery call that does nothing else.
+    fn softReset(self: *Channel) void {
+        self.resets +%= 1;
+        self.tx.flush();
+        self.ssicr = soft_reset.control(self.ssicr);
     }
 };
 
@@ -220,12 +260,12 @@ pub const Ssie = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         return switch (inner & ~@as(u32, 3)) {
-            off_ssicr => part(unit.ssicr, byte, width),
-            off_ssisr => part(unit.status(), byte, width),
-            off_ssifsr => part(unit.fifoStatus(), byte, width),
+            off_ssicr => lanes.part(unit.ssicr, byte, width),
+            off_ssisr => lanes.part(unit.status(), byte, width),
+            off_ssifsr => lanes.part(unit.fifoStatus(), byte, width),
             // Write-only port, and no receive source behind the other one.
             off_ssiftdr, off_ssifrdr => 0,
-            else => part(unit.shadow[inner / 4], byte, width),
+            else => lanes.part(unit.shadow[inner / 4], byte, width),
         };
     }
 
@@ -237,11 +277,11 @@ pub const Ssie = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_ssicr => control(unit, merge(unit.ssicr, byte, width, value)),
+            off_ssicr => control(unit, lanes.merge(unit.ssicr, byte, width, value)),
             off_ssifcr => {
                 const word = inner / 4;
                 const before = unit.shadow[word];
-                unit.shadow[word] = merge(before, byte, width, value);
+                unit.shadow[word] = lanes.merge(before, byte, width, value);
                 unit.fifoControl(before, unit.shadow[word]);
             },
             off_ssiftdr => unit.store(byte, width, value),
@@ -249,7 +289,7 @@ pub const Ssie = struct {
             off_ssisr, off_ssifsr => {},
             else => {
                 const word = inner / 4;
-                unit.shadow[word] = merge(unit.shadow[word], byte, width, value);
+                unit.shadow[word] = lanes.merge(unit.shadow[word], byte, width, value);
             },
         }
     }
@@ -272,32 +312,6 @@ fn control(unit: *Channel, value: u32) void {
     const was = unit.transmitting();
     unit.ssicr = value;
     if (!was and unit.transmitting()) unit.drain();
-}
-
-/// The bits an access of this width names.
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {

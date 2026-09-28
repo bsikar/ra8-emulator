@@ -45,6 +45,12 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, unit.discarded() },
             );
         }
+        if (unit.resetCount() != 0) {
+            try out.print(
+                "SSIE{d}: {d} software reset(s) via SSIFCR.SSIRST took the channel back to idle\n",
+                .{ index, unit.resetCount() },
+            );
+        }
         if (unit.refused() != 0) {
             try out.print(
                 "SSIE{d}: REFUSED {d} store(s) to SSIFTDR narrower than the register, no part sample was staged\n",
