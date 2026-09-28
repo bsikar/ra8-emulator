@@ -26,6 +26,41 @@ test "a SETUP needs something on the bus that has been reset" {
     try std.testing.expect(!transfer.in_flight);
 }
 
+test "a SETUP nothing answered latches SIGN, not silence" {
+    var transfer = xfer.Transfer{};
+    transfer.usbreq = 0x0680;
+    transfer.usbleng = 18;
+    transfer.launch(false);
+    try std.testing.expect(transfer.intsts1 & regs.int1.sign != 0);
+    try std.testing.expect(transfer.intsts1 & regs.int1.sack == 0);
+}
+
+test "the driver W0C-clears the latch and the next launch sets it again" {
+    var transfer = xfer.Transfer{};
+    transfer.usbreq = 0x0680;
+    transfer.usbleng = 18;
+    transfer.launch(false);
+    try std.testing.expect(transfer.intsts1 & regs.int1.sign != 0);
+    transfer.intsts1 &= ~regs.int1.sign;
+    try std.testing.expectEqual(@as(u16, 0), transfer.intsts1);
+    transfer.launch(false);
+    try std.testing.expect(transfer.intsts1 & regs.int1.sign != 0);
+    try std.testing.expectEqual(@as(u32, 2), transfer.no_device);
+}
+
+test "exactly one of SACK and SIGN comes back from a launch" {
+    var dead = xfer.Transfer{};
+    dead.usbreq = 0x0680;
+    dead.usbval = 0x0100;
+    dead.usbleng = 18;
+    dead.launch(false);
+    try std.testing.expectEqual(regs.int1.sign, dead.intsts1);
+
+    var live = xfer.Transfer{};
+    getDescriptor(&live, 0x0100, 18);
+    try std.testing.expectEqual(regs.int1.sack, live.intsts1);
+}
+
 test "an acked SETUP latches SACK" {
     var transfer = xfer.Transfer{};
     getDescriptor(&transfer, 0x0100, 18);
@@ -34,12 +69,35 @@ test "an acked SETUP latches SACK" {
     try std.testing.expect(transfer.control_read);
 }
 
-test "a stalled SETUP leaves no transfer in flight and no SACK" {
+test "a refused request still ACKs the token it arrived on" {
     var transfer = xfer.Transfer{};
     getDescriptor(&transfer, 0x0300, 4);
     try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
-    try std.testing.expectEqual(@as(u16, 0), transfer.intsts1);
+    // The token reached a device, so SACK. What the device would not do
+    // with the request is a later stage's business, not the token's.
+    try std.testing.expect(transfer.intsts1 & regs.int1.sack != 0);
+    try std.testing.expect(transfer.intsts1 & regs.int1.sign == 0);
     try std.testing.expect(!transfer.in_flight);
+}
+
+test "an unsupported request code ACKs too" {
+    var transfer = xfer.Transfer{};
+    // bRequest is USBREQ's HIGH byte; 0xFF is no chapter-9 request.
+    transfer.usbreq = 0xFF00;
+    transfer.usbleng = 0;
+    transfer.launch(true);
+    try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
+    try std.testing.expectEqual(regs.int1.sack, transfer.intsts1);
+}
+
+test "a SET_CONFIGURATION out of order ACKs and stalls" {
+    var transfer = xfer.Transfer{};
+    transfer.usbreq = 0x0900;
+    transfer.usbval = 1;
+    transfer.usbleng = 0;
+    transfer.launch(true);
+    try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
+    try std.testing.expectEqual(regs.int1.sack, transfer.intsts1);
 }
 
 test "the device's answer shows up on the ready register the host polls" {
