@@ -17,6 +17,7 @@ const dmac = @import("../periph/dmac.zig");
 const drw = @import("../periph/drw.zig");
 const eink = @import("../periph/eink.zig");
 const modem = @import("../periph/modem.zig");
+const ckcr = @import("../periph/ckcr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
 
@@ -35,10 +36,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.adc.block());
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
-    self.backup = bkup.Bkup.init(&self.protection);
-    try self.bus.add(self.backup.block());
-    self.graphics = pdctr.Pdctr.init(&self.protection);
-    try self.bus.add(self.graphics.block());
+    try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
     try self.display.attach(&self.bus, &self.graphics, core.*);
     self.raster = drw.Drw.init(&self.graphics);
@@ -99,4 +97,16 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     // Same reason for the cache window: CTR read as zero, so the firmware
     // computed a four-byte line and walked every range eight times over.
     try self.caches.prime(core.*);
+}
+
+/// The blocks that ask PRCR before they accept a store. Each needs a pointer
+/// to the protection model this board owns, not a copy of one, so none of
+/// them can be built in the struct literal.
+fn attachProtected(self: *Board) !void {
+    self.backup = bkup.Bkup.init(&self.protection);
+    try self.bus.add(self.backup.block());
+    self.branches = ckcr.Ckcr.init(&self.protection);
+    try self.bus.add(self.branches.block());
+    self.graphics = pdctr.Pdctr.init(&self.protection);
+    try self.bus.add(self.graphics.block());
 }

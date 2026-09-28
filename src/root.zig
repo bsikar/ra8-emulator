@@ -135,6 +135,7 @@ pub const periph = struct {
     pub const pdctr = @import("periph/pdctr.zig");
     pub const pdm = @import("periph/pdm.zig");
     pub const poeg = @import("periph/poeg.zig");
+    pub const ckcr = @import("periph/ckcr.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const registry = @import("periph/registry.zig");
     pub const reset = @import("periph/reset.zig");

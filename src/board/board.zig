@@ -45,6 +45,7 @@ const net = @import("net.zig");
 const mram = @import("../periph/mram.zig");
 const mstp = @import("../periph/mstp.zig");
 const npu = @import("../periph/npu.zig");
+const ckcr = @import("../periph/ckcr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -104,6 +105,9 @@ pub const Board = struct {
     shutoff: poeg.Poeg,
     protection: prcr.Prcr,
     backup: bkup.Bkup,
+    /// The peripheral clock source selects, built in attach() for the same
+    /// reason the two below are: each needs this board's own protection.
+    branches: ckcr.Ckcr,
     /// The graphics power domain, and the one block so far that lives in it.
     /// Both are built in attach(): each needs a pointer to a model this board
     /// owns, not a copy of one.
@@ -241,6 +245,7 @@ pub const Board = struct {
             // Patched in attach(): the backup file has to point at this
             // board's own protection model, not a copy of it.
             .backup = undefined,
+            .branches = undefined,
             .graphics = undefined,
             .display = undefined,
             .raster = undefined,
