@@ -7,6 +7,7 @@
 const std = @import("std");
 const c = @import("c.zig");
 const elf = @import("elf.zig");
+const pages = @import("pages.zig");
 const memmap = @import("memmap.zig");
 const periph = @import("../periph/registry.zig");
 const disasm = @import("disasm.zig");
@@ -231,23 +232,19 @@ pub const Engine = struct {
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
     /// pages the image asks for that the board map does not already cover.
+    ///
+    /// The pages are merged before any of them is mapped: segments of one
+    /// image share pages, and the CPU model refuses a page it already holds.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
-        var mapped_low: u64 = 0;
-        var mapped_high: u64 = 0;
+        const needed = pages.forImage(image) catch return Error.MapFailed;
+        for (needed.items()) |range| {
+            if (coveredByBoard(range.base, range.size())) continue;
+            try self.map(range.base, range.size());
+        }
         var written: u32 = 0;
         var index: u16 = 0;
         while (index < image.segmentCount()) : (index += 1) {
             const segment = image.loadSegment(index) orelse continue;
-            const page_base = segment.paddr & ~@as(u32, 0xFFF);
-            const span = (@as(u64, segment.paddr) + @max(segment.memsz, @as(u32, @intCast(segment.bytes.len)))) - page_base;
-            const page_size: u32 = @intCast((span + 0xFFF) & ~@as(u64, 0xFFF));
-            if (!coveredByBoard(page_base, page_size) and
-                !(page_base >= mapped_low and @as(u64, page_base) + page_size <= mapped_high))
-            {
-                try self.map(page_base, page_size);
-                mapped_low = page_base;
-                mapped_high = @as(u64, page_base) + page_size;
-            }
             try self.write(segment.paddr, segment.bytes);
             written += @intCast(segment.bytes.len);
         }
