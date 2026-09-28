@@ -9,6 +9,36 @@
 //! The PHY behind the switch is not here: PHYSET, LPSTS and the PLL lock
 //! they earn live in usbhs_pll.zig. The split is the driver's own, because
 //! the PHY comes up before SYSCFG.USBE does.
+//!
+//! A LINE STATE IS EARNED, NOT ASSUMED. Being powered and having something
+//! plugged in is not enough for the host to SEE it, and the driver's own
+//! bring-up says so twice, in the two comments that name the two bits:
+//!
+//!   SYSCFG.CNEN, the single-ended receiver (ra8_usb_irq.c, internal_host_
+//!   hs_bringup): "CNEN (single-ended receiver enable) is required for the
+//!   HS PHY to report line state / attach at all -- without it LNST reads
+//!   SE0 forever and no ATTCH ever latches (HUM Ch 37.2.1 p 2062)."
+//!
+//!   DVSTCTR0.VBUSEN, the jack's external VBUS switch (same file, the HS
+//!   branch of the host init): "the USBHS jack's external VBUS switch is
+//!   driven by this bit (FSP hw_usb_hmodule_init); without it an attached
+//!   device never powers and LNST stays SE0."
+//!
+//! Neither bit was named anywhere in this tree, so LNST answered J-state
+//! from the moment the module was on with something attached. That is the
+//! wrong direction to be wrong in: ra8_usb_hmsc_enum's attach hunt breaks
+//! out of its 50-million-iteration spin the instant line_state is non-zero,
+//! so a host image that forgot either bit enumerated a device here and sat
+//! through the whole spin and its timeout on the bench. Both are gates on
+//! the same answer now, and a reset cannot settle a speed the port could
+//! not have observed either.
+//!
+//! BOTH GATES ARE HOST-ROLE ONLY, and deliberately so. VBUSEN drives the
+//! jack's switch, which a device does not own, and the driver writes both
+//! bits in the host path alone. The device side has its own preconditions
+//! on the same register (DPRPU, and whatever the part does about VBUS
+//! detection); this tree says nothing about them, so they are NOT MODELLED,
+//! AND NOT GUESSED: in device role the line reads as it did before.
 const regs = @import("usbhs_regs.zig");
 
 /// What the port settled on after a reset, which is what DVSTCTR0.RHST
@@ -42,6 +72,10 @@ pub const Phy = struct {
     off: u32 = 0,
     not_host: u32 = 0,
     read_only: u32 = 0,
+    /// Line-state reads answered SE0 with a device on the far end, because
+    /// the receiver was off or the port was unpowered. Not a refusal: the
+    /// read is honest, the firmware simply cannot see what is there.
+    blind: u32 = 0,
 
     /// The module is on and clocked. Everything but SYSCFG itself is gated on
     /// this, or the firmware could never turn it on.
@@ -62,9 +96,34 @@ pub const Phy = struct {
         return self.syscfg & regs.syscfg.dcfm != 0;
     }
 
-    /// The line state is the cable's to report, not the driver's to set.
-    pub fn lineState(self: *const Phy) u16 {
-        if (!self.powered() or !self.attached) return 0;
+    /// CNEN: the single-ended receiver that turns the differential pair into
+    /// something the controller can read a line state off.
+    pub fn receiving(self: *const Phy) bool {
+        return self.syscfg & regs.syscfg.cnen != 0;
+    }
+
+    /// VBUSEN: the jack's external VBUS switch. An unpowered device holds
+    /// neither line up, so the pair reads SE0 whatever is plugged in.
+    pub fn supplying(self: *const Phy) bool {
+        return self.dvstctr0 & regs.port.vbusen != 0;
+    }
+
+    /// Whether the controller can observe the far end at all. In device
+    /// role the two host gates do not apply and being powered is enough.
+    pub fn sees(self: *const Phy) bool {
+        if (!self.powered()) return false;
+        if (!self.host()) return true;
+        return self.receiving() and self.supplying();
+    }
+
+    /// The line state is the cable's to report, not the driver's to set, and
+    /// only a port that is powered and listening reports one.
+    pub fn lineState(self: *Phy) u16 {
+        if (!self.sees()) {
+            if (self.attached and self.powered()) self.blind += 1;
+            return 0;
+        }
+        if (!self.attached) return 0;
         return regs.port.lnst_j;
     }
 
@@ -98,9 +157,11 @@ pub const Phy = struct {
         return true;
     }
 
+    /// A reset settles on a speed only for a device the port could actually
+    /// observe through it; chirping is line state like any other.
     fn finishReset(self: *Phy) void {
         self.resets += 1;
-        self.speed = if (self.attached) .high else .none;
+        self.speed = if (self.attached and self.sees()) .high else .none;
     }
 
     /// A status register a store cannot reach. SYSSTS0 is the line, RHST is
@@ -110,7 +171,7 @@ pub const Phy = struct {
     }
 
     pub fn quiet(self: *const Phy) bool {
-        return self.resets == 0 and self.refusals() == 0;
+        return self.resets == 0 and self.refusals() == 0 and self.blind == 0;
     }
 
     pub fn refusals(self: *const Phy) u32 {
