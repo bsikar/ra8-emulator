@@ -52,6 +52,12 @@ fn oscillators(board: *Board, out: Writer) !void {
             .{unit.readonly_writes},
         );
     }
+    if (unit.dropped_locked != 0) {
+        try out.print(
+            "clock sources: DROPPED {d} store(s) with PRCR.PRC0 locked\n",
+            .{unit.dropped_locked},
+        );
+    }
 }
 
 pub fn section(board: *Board, out: Writer) !void {
