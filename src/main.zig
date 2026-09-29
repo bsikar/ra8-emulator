@@ -18,6 +18,7 @@ const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
+const sd_dump = ra8.periph.sd_dump;
 const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
 const Board = ra8.board.Board;
@@ -100,7 +101,37 @@ pub fn main() !u8 {
     try report_steps.selects(out, selects);
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
+    try dumpBlock(out, &board, options);
     return verdict(out, core, options, fault, stop, timed, budget);
+}
+
+/// One card block back as hex, when `--dump-sd` asked for it.
+///
+/// Rows of nothing but zeros are dropped: a block of a freshly formatted
+/// volume is mostly zeros, and the few rows carrying a directory entry or a
+/// boot field are the whole reason to look. The count of dropped rows is
+/// printed so a reader can tell an elided block from a short one.
+fn dumpBlock(out: anytype, board: anytype, options: cli.Options) !void {
+    const index = options.dump_sd orelse return;
+    var block: sd_image.Block = undefined;
+    if (!board.sd.img.read(index, &block)) {
+        try out.print("  dump-sd       : block {d} is not on this card\n", .{index});
+        return;
+    }
+    try out.print("  dump-sd       : block {d} (0x{X})\n", .{ index, index });
+    var offset: usize = 0;
+    var dropped: usize = 0;
+    while (offset < block.len) : (offset += sd_dump.row_bytes) {
+        const end = @min(offset + sd_dump.row_bytes, block.len);
+        const bytes = block[offset..end];
+        if (sd_dump.blank(bytes)) {
+            dropped += 1;
+            continue;
+        }
+        var buf: sd_dump.Buffer = undefined;
+        try out.print("{s}\n", .{sd_dump.row(&buf, offset, bytes)});
+    }
+    if (dropped > 0) try out.print("  dump-sd       : {d} zero row(s) not shown\n", .{dropped});
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.

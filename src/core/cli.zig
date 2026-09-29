@@ -8,6 +8,7 @@ const sd_format = @import("../periph/sd_format.zig");
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
+    \\                    [--dump-sd BLOCK]
     \\                    [--touch X,Y]
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
@@ -25,6 +26,7 @@ pub const usage =
     \\  --stop-sym NAME N  end the run early once that global reaches N
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
+    \\  --dump-sd BLOCK    print that card block as hex after the run
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
@@ -87,6 +89,8 @@ pub const Options = struct {
     sd_size_mb: ?u32 = null,
     /// Write one line per SD command to stderr.
     trace_sd: bool = false,
+    /// Print this card block back as hex once the run is over.
+    dump_sd: ?u32 = null,
     /// Contacts to queue on the touch panel, one drained per frame the
     /// firmware reads.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
@@ -171,6 +175,10 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.sd_size_mb = try std.fmt.parseInt(u32, argv[index], 10);
+        } else if (std.mem.eql(u8, argv[index], "--dump-sd")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.dump_sd = try std.fmt.parseInt(u32, argv[index], 0);
         } else if (std.mem.eql(u8, argv[index], "--trace-sd")) {
             options.trace_sd = true;
         } else if (std.mem.eql(u8, argv[index], "--sd-new")) {

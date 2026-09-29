@@ -174,6 +174,7 @@ test {
     _ = @import("periph/sd_card_test.zig");
     _ = @import("periph/sd_card_line_test.zig");
     _ = @import("periph/sd_crc_test.zig");
+    _ = @import("periph/sd_dump_test.zig");
     _ = @import("periph/sd_fat_test.zig");
     _ = @import("periph/sd_format_test.zig");
     _ = @import("periph/sd_image_test.zig");
