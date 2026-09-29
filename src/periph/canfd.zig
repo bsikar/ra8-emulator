@@ -60,6 +60,7 @@
 const periph = @import("registry.zig");
 const fifo = @import("canfd_fifo.zig");
 const rx_config = @import("canfd_rx_config.zig");
+const tx_status = @import("canfd_tx_status.zig");
 const registers = @import("canfd_regs.zig");
 const errors = @import("canfd_error.zig");
 
@@ -102,8 +103,10 @@ pub const Unit = struct {
     channel: Mode = .reset,
     /// CFDTMC[0], with TMTR cleared once the frame has gone.
     tmc: u32 = 0,
-    /// CFDTMSTS[0], set by the controller and by nothing else.
-    tmsts: u32 = 0,
+    /// CFDTMSTS[0], the transmit result. Set by the controller, cleared by
+    /// software, and the gate on every later request. See
+    /// src/periph/canfd_tx_status.zig.
+    tx: tx_status.Status = .{},
     /// CFDCnERFL: the error flags, which only the controller can raise.
     faults: errors.Errors = .{},
     queue: fifo.Fifo = .{},
@@ -131,7 +134,8 @@ pub const Unit = struct {
     pub fn quiet(self: *const Unit) bool {
         return self.sent == 0 and self.refused == 0 and self.starved == 0 and
             self.faked == 0 and self.unarmed == 0 and self.faults.quiet() and
-            self.rx.quiet() and self.global == .reset and self.channel == .reset;
+            self.rx.quiet() and self.tx.quiet() and
+            self.global == .reset and self.channel == .reset;
     }
 
     /// Both machines have to be in operation before a frame can go.
@@ -184,6 +188,9 @@ pub const Unit = struct {
             self.refused +%= 1;
             return false;
         }
+        // TMTR is only honoured while TMTRF reads 00b. A result the
+        // firmware never cleared turns every later request away.
+        if (!self.tx.accepts()) return false;
         var frame = fifo.Frame{};
         for (&frame.words, 0..) |*word, index| {
             word.* = self.shadow[off_tm0 / 4 + index];
@@ -192,7 +199,7 @@ pub const Unit = struct {
         // completes and TMTR drops, as it does when the arbitration is won.
         self.sent +%= 1;
         self.tmc &= ~field.tmtr;
-        self.tmsts = field.tmtrf_done;
+        self.tx.complete();
         if (!self.accepts(frame.id())) {
             self.filtered +%= 1;
             return false;
@@ -227,7 +234,7 @@ pub const Unit = struct {
             off_rfsts0 => self.fifoStatus(),
             rx_config.off_rfcc0 => self.rx.word,
             off_tmc0 => self.tmc,
-            off_tmsts0 => self.tmsts,
+            off_tmsts0 => self.tx.word,
             errors.off => self.faults.read(),
             // Write-only: the pointer control has nothing behind it.
             off_rfpctr0 => 0,
@@ -249,7 +256,16 @@ pub const Unit = struct {
                 self.shadow[offset / 4] = held;
                 self.channel = Mode.fromBits(held);
             },
-            off_gsts, off_cnsts, off_rfsts0, off_tmsts0 => self.faked +%= 1,
+            off_gsts, off_cnsts, off_rfsts0 => self.faked +%= 1,
+            off_tmsts0 => {
+                // Only mailbox 0 is modelled; a store that names none of
+                // its byte is a store into a register nothing here owns.
+                if (byte == 0) {
+                    self.tx.store(merge(self.tx.word, byte, width, value));
+                } else {
+                    self.faked +%= 1;
+                }
+            },
             off_tmc0 => {
                 self.tmc = merge(self.tmc, byte, width, value);
                 if (self.tmc & field.tmtr != 0) return self.transmit();
