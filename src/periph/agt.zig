@@ -54,6 +54,17 @@
 //! source counts proportionally slower, and AGT1 set to cascade steps on
 //! AGT0's underflow instead of on a clock of its own.
 //!
+//! THE CASCADE'S START ORDER IS VISIBLE. ra8_agt_start_cascade's contract
+//! cites the part: "AGT1's TSTART must be set before AGT0's so AGT1 is ready
+//! to sample the AGT0 underflow on the very first cycle" (ra8_agt.h, HUM
+//! Ch 24.2.4 "AGTCR" p 1167, the count starts in sync with its source).
+//! Started the other way round, every AGT0 underflow landing before AGT1's
+//! TSTART is gone and the 32-bit value the pair stands for is short by that
+//! many for the rest of the run. The arithmetic was already right, since a
+//! stopped channel does not advance, and that is the problem: the loss was
+//! silent, so a backwards start order read a plausible 32-bit count that was
+//! wrong. Counted now, and neither refused nor flagged, as on silicon.
+//!
 //! NOT MODELLED, AND NOT GUESSED: AGTMR2's own CKS divider, which has an
 //! offset in the header and no field table; AGTCMSR's output-enable and
 //! polarity bits, which select and invert a pin a headless run has nothing
@@ -135,6 +146,10 @@ pub const Channel = struct {
     refused_running: u32 = 0,
     /// Boundaries this channel was stepped by the channel it cascades from.
     cascaded_steps: u32 = 0,
+    /// Underflows handed to this channel while its own count was stopped.
+    /// On the cascade pair that is the start-order bug: AGT0 running before
+    /// AGT1 was armed, so the high half never saw those wraps.
+    dropped_cascade: u32 = 0,
 
     pub fn running(self: Channel) bool {
         return self.cr & control.tstart != 0;
@@ -154,9 +169,15 @@ pub const Channel = struct {
     }
 
     /// A cascaded channel counts the underflows handed to it, not a clock.
+    /// Handed one while stopped, it loses it: the source wrapped and there
+    /// was nothing counting, which is what the start-order rule is about.
     pub fn tickCascade(self: *Channel, underflows: u16) bool {
         if (underflows == 0) return false;
-        if (self.running()) self.cascaded_steps +%= 1;
+        if (!self.running()) {
+            self.dropped_cascade +%= underflows;
+            return false;
+        }
+        self.cascaded_steps +%= 1;
         return self.advance(underflows);
     }
 
@@ -268,7 +289,7 @@ pub const Channel = struct {
     pub fn quiet(self: Channel) bool {
         return self.underflows == 0 and self.matches_a == 0 and self.matches_b == 0 and
             self.masked == 0 and self.forced_stops == 0 and self.refused_running == 0 and
-            self.cascaded_steps == 0 and !self.running();
+            self.cascaded_steps == 0 and self.dropped_cascade == 0 and !self.running();
     }
 };
 
