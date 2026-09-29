@@ -165,12 +165,14 @@ test {
     _ = @import("periph/sci_error_test.zig");
     _ = @import("periph/sci_ring_test.zig");
     _ = @import("periph/sci_lin_test.zig");
+    _ = @import("periph/sci_device_test.zig");
     _ = @import("periph/sci_spi_test.zig");
     _ = @import("periph/sci_status_test.zig");
     _ = @import("periph/rtt_block_test.zig");
     _ = @import("periph/rtt_line_test.zig");
     _ = @import("periph/rtt_test.zig");
     _ = @import("periph/sd_card_test.zig");
+    _ = @import("periph/sd_card_line_test.zig");
     _ = @import("periph/sd_crc_test.zig");
     _ = @import("periph/sd_fat_test.zig");
     _ = @import("periph/sd_format_test.zig");

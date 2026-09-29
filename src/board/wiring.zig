@@ -23,6 +23,7 @@ const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
+const sd_card_line = @import("../periph/sd_card_line.zig");
 
 /// Put every block on the bus, in the order that works.
 pub fn attach(self: *Board, core: *engine.Engine) !void {
@@ -52,7 +53,10 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.host.block());
     try self.bus.add(self.serial.block());
     try self.bus.add(self.spi.block());
-    self.spi.attachDevice(sd_card.line_channel, self.sd.device());
+    // The card is on Pmod2, which is SCI0 in Simple-SPI mode, not on a
+    // SPI_B channel (src/periph/sd_card_line.zig).
+    self.sd_line = sd_card_line.Line.init(&self.sd);
+    self.serial.attachDevice(sd_card_line.line_channel, self.sd_line.device());
     self.spi.attachDevice(eink.line_channel, self.panel.device());
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());

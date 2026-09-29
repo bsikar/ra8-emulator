@@ -46,6 +46,7 @@ const periph = @import("registry.zig");
 const sci_status = @import("sci_status.zig");
 const sci_lin = @import("sci_lin.zig");
 const sci_spi = @import("sci_spi.zig");
+const sci_device = @import("sci_device.zig");
 const sci_ring = @import("sci_ring.zig");
 const sci_error = @import("sci_error.zig");
 const lanes = @import("lanes.zig");
@@ -113,19 +114,8 @@ pub const data_mask: u32 = 0xFF;
 pub const limits = sci_ring.limits;
 pub const Ring = sci_ring.Ring;
 
-/// Something listening on a channel's line. It is handed each byte the
-/// channel actually sends and answers with the bytes it drives back, which
-/// the channel queues for the firmware to read out of RDR. Only one device
-/// per channel: the AT modem sits on SCI7 this way (src/periph/modem.zig),
-/// the same shape the SPI channels use for the card and the panel.
-pub const Device = struct {
-    context: *anyopaque,
-    feedFn: *const fn (*anyopaque, u8) []const u8,
-
-    pub fn feed(self: Device, byte: u8) []const u8 {
-        return self.feedFn(self.context, byte);
-    }
-};
+/// Something on a channel's line, and when it is on it.
+pub const Device = sci_device.Device;
 
 /// One channel: the control shadow, the byte counters and the RX ring.
 pub const Channel = struct {
@@ -347,6 +337,9 @@ pub const Sci = struct {
     fn deliver(self: *Sci, index: usize, byte: u8) void {
         const channel = &self.channels[index];
         const on_line = channel.device orelse return self.clockIdle(index);
+        // A device wired to the channel's SPI pins is not on the line while
+        // the channel is running as a UART (src/periph/sci_device.zig).
+        if (on_line.spi_only and !sci_spi.simpleSpi(channel.ccr3)) return self.clockIdle(index);
         const reply = on_line.feed(byte);
         if (reply.len == 0) return self.clockIdle(index);
         if (!channel.enabled(ccr0.re)) {
