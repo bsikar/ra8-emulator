@@ -12,6 +12,11 @@
 //!   0x4001_EA58 +0x2C PVDmCMPCR and PVDmCR0 for all four channels
 //!   0x4001_EB20 +0x18 PVDmFCR for all four, then PVDLR
 //!
+//! THE RESET BAND AND ITS NEGATION INTERLOCK. RHSEL = 1 needs PVDmCR0.RI
+//! already set, and RN = 1 is prohibited while RHSEL = 1 (HUM Ch 8.2.8
+//! p 308, Ch 8.2.4 p 305). Both rules, why only m channels are gated and
+//! why a standing bit is left alone, live in src/periph/lvd_interlock.zig.
+//!
 //! THE FILTER DIVIDER IS LOCKED WHILE THE FILTER RUNS. FSAMP only takes a
 //! store while that channel's DFDIS is set (HUM Ch 8.2.4 p 305, Ch 8.2.5
 //! p 306). The rule, its citation, why a read-modify-write that carries the
@@ -57,8 +62,9 @@ pub const level_min = regs.level_min;
 pub const level_max = regs.level_max;
 pub const detect_millivolts = regs.detect_millivolts;
 pub const detectVoltage = regs.detectVoltage;
+const interlock = @import("lvd_interlock.zig");
 
-pub const Series = enum { monitor, reset_only };
+pub const Series = regs.Series;
 
 /// One voltage monitor: its four register shadows and the comparator state
 /// they add up to. An n-series channel has no CR1 and no SR, so `det` and
@@ -168,6 +174,8 @@ pub const Lvd = struct {
     dropped: u32 = 0,
     /// FSAMP stores refused for the filter state they were made in.
     fields: field_lock.Locked = .{},
+    /// RHSEL/RN stores refused for the combination they would have made.
+    bands: interlock.Locked = .{},
 
     pub fn init() Lvd {
         var unit = Lvd{ .channels = undefined };
@@ -179,7 +187,7 @@ pub const Lvd = struct {
         for (&self.channels) |*channel| {
             if (!channel.quiet()) return false;
         }
-        return self.dropped == 0 and self.fields.quiet();
+        return self.dropped == 0 and self.fields.quiet() and self.bands.quiet();
     }
 
     pub fn read(self: *Lvd, address: u32, width: u3) u32 {
@@ -233,10 +241,11 @@ pub const Lvd = struct {
                 channel.evaluate();
             },
             .cr0 => {
-                channel.cr0 = self.fields.filter(channel.cr0, value);
+                const kept = self.fields.filter(channel.cr0, value);
+                channel.cr0 = self.bands.negate(channel.series, channel.fcr, channel.cr0, kept);
                 channel.evaluate();
             },
-            .fcr => channel.fcr = value & hysteresis.rhsel,
+            .fcr => channel.fcr = self.bands.band(channel.series, channel.cr0, value),
             .pvdlr => unreachable,
         }
     }

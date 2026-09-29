@@ -35,6 +35,18 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{board.monitors.fields.filters},
         );
     }
+    if (board.monitors.bands.bands != 0) {
+        try out.print(
+            "SYSC-PVD: REFUSED {d} RHSEL=1 store(s) made with PVDmCR0.RI clear, arm the reset path before selecting the rise-detect band\n",
+            .{board.monitors.bands.bands},
+        );
+    }
+    if (board.monitors.bands.negations != 0) {
+        try out.print(
+            "SYSC-PVD: REFUSED {d} RN=1 store(s) made with PVDmFCR.RHSEL set, that combination is prohibited\n",
+            .{board.monitors.bands.negations},
+        );
+    }
     if (board.monitors.dropped != 0) {
         try out.print(
             "SYSC-PVDLR: DROPPED {d} write(s) to PVD4/PVD5 with LOCK set (write 0 to PVDLR once to release it)\n",

@@ -114,10 +114,46 @@ test "PVDmCR1 keeps only IDTSEL and IRQSEL" {
 
 test "PVDmFCR keeps only RHSEL" {
     var unit = lvd.Lvd.init();
+    // RI first: the rise-detect band is prohibited until the reset path is
+    // armed, so this test arms it to get at the mask underneath.
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.ri);
     unit.write(lvd.at(pvd1, .fcr), 1, 0xFE);
     try std.testing.expectEqual(@as(u32, 0), unit.read(lvd.at(pvd1, .fcr), 1));
     unit.write(lvd.at(pvd1, .fcr), 1, 0xFF);
     try std.testing.expectEqual(@as(u32, lvd.hysteresis.rhsel), unit.read(lvd.at(pvd1, .fcr), 1));
+    try std.testing.expect(unit.bands.quiet());
+}
+
+test "the rise-detect band is refused until RI arms the reset path" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.at(pvd1, .fcr), 1, lvd.hysteresis.rhsel);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(lvd.at(pvd1, .fcr), 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.bands.bands);
+    try std.testing.expect(!unit.quiet());
+    // Arm it and the same store lands.
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.ri);
+    unit.write(lvd.at(pvd1, .fcr), 1, lvd.hysteresis.rhsel);
+    try std.testing.expectEqual(@as(u32, lvd.hysteresis.rhsel), unit.read(lvd.at(pvd1, .fcr), 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.bands.bands);
+}
+
+test "RN is refused while the rise-detect band stands, and the rest of the store lands" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.ri);
+    unit.write(lvd.at(pvd1, .fcr), 1, lvd.hysteresis.rhsel);
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.ri | lvd.control.rn | lvd.control.rie);
+    const cr0 = unit.read(lvd.at(pvd1, .cr0), 1);
+    try std.testing.expectEqual(@as(u32, 0), cr0 & lvd.control.rn);
+    try std.testing.expectEqual(@as(u32, lvd.control.rie), cr0 & lvd.control.rie);
+    try std.testing.expectEqual(@as(u32, 1), unit.bands.negations);
+}
+
+test "an n-series channel is gated by neither rule" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.pvdlr_at, 1, 0);
+    unit.write(lvd.at(pvd4, .fcr), 1, lvd.hysteresis.rhsel);
+    try std.testing.expectEqual(@as(u32, lvd.hysteresis.rhsel), unit.read(lvd.at(pvd4, .fcr), 1));
+    try std.testing.expect(unit.bands.quiet());
 }
 
 test "PVDLR locks the reset-only channels out of reset" {
