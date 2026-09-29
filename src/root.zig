@@ -175,6 +175,7 @@ pub const periph = struct {
     pub const pdm = @import("periph/pdm.zig");
     pub const poeg = @import("periph/poeg.zig");
     pub const ckcr = @import("periph/ckcr.zig");
+    pub const octaclk = @import("periph/octaclk.zig");
     pub const ckdiv = @import("periph/ckdiv.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const sysclk = @import("periph/sysclk.zig");

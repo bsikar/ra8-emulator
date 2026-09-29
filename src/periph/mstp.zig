@@ -27,6 +27,7 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 const drops = @import("mstp_drops.zig");
+const octaclk = @import("octaclk.zig");
 const pscu = @import("pscu.zig");
 
 /// R_MSTP geometry (HUM Ch 11.2.6..11.2.10). The Non-secure alias at
@@ -151,6 +152,10 @@ pub const Mstp = struct {
     attribution: ?*const pscu.Unit = null,
     /// Secure stores whose bits the attribution mask refused to move.
     masked_writes: u32 = 0,
+    /// The OCTACLK watch, or null on a board that has none. MSTPB16/B17 are
+    /// the only bits in this window whose release has a precondition
+    /// somewhere else (HUM Ch 11.2.7 Note 3).
+    octa: ?*octaclk.Octa = null,
     regs: [reg_count]u32 = .{ reset_a, reset_rest, reset_rest, reset_rest, reset_rest },
     gated_reads: u32 = 0,
     gated_writes: u32 = 0,
@@ -240,7 +245,20 @@ pub const Mstp = struct {
             const before = register.*;
             register.* = (before & ~writable) | ((incoming << shift) & writable);
             if ((@as(u32, 0xFF) << shift) != writable) self.masked_writes +%= 1;
+            self.noteOspi(byte / 4, before, register.*);
         }
+    }
+
+    /// MSTPB16 and MSTPB17 uncover the OSPI, and HUM Ch 11.2.7 Note 3 says
+    /// they must be written after OCTACLK is stable. Only the stopped ->
+    /// running edge is the release; re-gating and a store that changes
+    /// nothing are not.
+    fn noteOspi(self: *Mstp, register: usize, before: u32, after: u32) void {
+        if (register != octaclk.ospi_register) return;
+        const unit = self.octa orelse return;
+        const freed = before & ~after & octaclk.ospi_bits;
+        if (freed == 0) return;
+        unit.release();
     }
 
     /// The bits of one MSTPCR register that a Secure store cannot move.

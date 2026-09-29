@@ -60,8 +60,10 @@
 //! reads clear because a command completes inside the store that kicked it:
 //! there is no time in this model for the part to still be busy.
 const std = @import("std");
+const octaclk = @import("octaclk.zig");
 const periph = @import("registry.zig");
 const flash = @import("xspi_flash.zig");
+const lanes = @import("lanes.zig");
 
 pub const part = flash.part;
 
@@ -144,6 +146,9 @@ const shadow_words: usize = win_span / 4;
 
 pub const Xspi = struct {
     flash: flash.Flash,
+    /// The OCTACLK watch, or null on a board without one, in which case the
+    /// engine works the way it always did here.
+    octa: ?*const octaclk.Octa = null,
     shadow: [shadow_words]u32 = .{0} ** shadow_words,
     /// INTS.CMDCMP, held rather than shadowed.
     complete: bool = false,
@@ -164,6 +169,9 @@ pub const Xspi = struct {
     faked: u32 = 0,
     /// Programs the model could not find room to hold.
     lost: u32 = 0,
+    /// Kicks that went nowhere because the OSPI came out of module stop
+    /// before OCTACLK was declared stable.
+    stalled: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Xspi {
         return .{ .flash = flash.Flash.init(allocator) };
@@ -176,7 +184,8 @@ pub const Xspi = struct {
     pub fn quiet(self: *const Xspi) bool {
         return self.reads == 0 and self.programs == 0 and self.erases == 0 and
             self.unarmed == 0 and self.oversized == 0 and self.out_of_part == 0 and
-            self.wrapped == 0 and self.faked == 0 and self.lost == 0;
+            self.wrapped == 0 and self.faked == 0 and self.lost == 0 and
+            self.stalled == 0;
     }
 
     pub fn read(self: *Xspi, address: u32, width: u3) u32 {
@@ -184,10 +193,10 @@ pub const Xspi = struct {
         if (offset >= win_span) return 0;
         const byte = offset % 4;
         return switch (offset & ~@as(u32, 3)) {
-            off_ints => part_of(self.interrupts(), byte, width),
+            off_ints => lanes.part(self.interrupts(), byte, width),
             // Write-one-to-clear, with nothing behind it to read.
             off_intc => 0,
-            else => part_of(self.shadow[offset / 4], byte, width),
+            else => lanes.part(self.shadow[offset / 4], byte, width),
         };
     }
 
@@ -198,16 +207,30 @@ pub const Xspi = struct {
         switch (offset & ~@as(u32, 3)) {
             off_ints => self.faked +%= 1,
             off_intc => {
-                if (merge(0, byte, width, value) & field.cmdcmp != 0) self.complete = false;
+                if (lanes.merge(0, byte, width, value) & field.cmdcmp != 0) self.complete = false;
             },
             off_cdctl0 => {
                 const word = self.store(offset, byte, width, value);
                 if (word & field.trreq == 0) return;
+                if (self.stalledByClock()) return;
                 self.execute();
                 self.shadow[offset / 4] &= ~field.trreq;
             },
             else => _ = self.store(offset, byte, width, value),
         }
+    }
+
+    /// HUM Ch 11.2.7 MSTPCRB Note 3: the OSPI module-stop bits must be
+    /// written after OCTACLK is stable. Released early, the manual-command
+    /// engine cannot retire CDCTL0.TRREQ after the first CDT write, so the
+    /// kick lands, TRREQ stays up, CMDCMP never comes, and the driver's
+    /// bounded poll gives up with a hardware timeout. That is the bench
+    /// symptom ra8_xspi.c records, and it is what this returns true for.
+    fn stalledByClock(self: *Xspi) bool {
+        const unit = self.octa orelse return false;
+        if (!unit.wedged) return false;
+        self.stalled +%= 1;
+        return true;
     }
 
     /// INTS as this model computes it.
@@ -217,7 +240,7 @@ pub const Xspi = struct {
 
     fn store(self: *Xspi, offset: u32, byte: u32, width: u3, value: u32) u32 {
         const word = offset / 4;
-        self.shadow[word] = merge(self.shadow[word], byte, width, value);
+        self.shadow[word] = lanes.merge(self.shadow[word], byte, width, value);
         return self.shadow[word];
     }
 
@@ -340,32 +363,6 @@ pub const Xspi = struct {
         };
     }
 };
-
-/// The bits an access of this width names.
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part_of(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Xspi = @ptrCast(@alignCast(context));

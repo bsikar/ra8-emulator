@@ -18,6 +18,7 @@ const drw = @import("../periph/drw.zig");
 const eink = @import("../periph/eink.zig");
 const modem = @import("../periph/modem.zig");
 const ckcr = @import("../periph/ckcr.zig");
+const octaclk = @import("../periph/octaclk.zig");
 const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
@@ -163,6 +164,12 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.tree.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
     for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
+    // MSTPB16/B17 may only be released once OCTACKCR has handshaken (HUM
+    // Ch 11.2.7 Note 3), so the watch reads the selects live and both the
+    // module-stop window and the command engine it uncovers consult it.
+    self.octa = octaclk.Octa.init(&self.branches);
+    self.modules.octa = &self.octa;
+    self.flash.octa = &self.octa;
     // The dividers ask the selects whether the branch is gated, so they go
     // on after the selects they are paired with.
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);

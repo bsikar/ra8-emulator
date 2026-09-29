@@ -169,6 +169,15 @@ pub const Ckcr = struct {
         return true;
     }
 
+    /// How many completed handshakes one select has behind it: SREQ up,
+    /// SRDY read back, SREQ down. Callers that need to know whether a
+    /// branch's clock was ever declared stable ask this rather than reading
+    /// SEL, which says what was picked and not whether it settled.
+    pub fn completed(self: *const Ckcr, address: u32) u32 {
+        const index = indexOf(address) orelse return 0;
+        return self.selects[index].switches;
+    }
+
     pub fn read(self: *Ckcr, address: u32, width: u3) u32 {
         _ = width;
         const index = indexOf(address) orelse return 0;
