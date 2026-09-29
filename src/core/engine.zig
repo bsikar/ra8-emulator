@@ -22,6 +22,7 @@ const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
 const csel_hook = @import("csel_hook.zig");
+const break_hook = @import("break_hook.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("breakpoint.zig");
 const stop = @import("stop.zig");
@@ -227,6 +228,12 @@ pub const Engine = struct {
         csel_hook.attach(self.handle, selects) catch return Error.AttachFailed;
     }
 
+    /// Arm the break: one instruction is hooked, and reaching it the
+    /// asked-for number of times stops the run where it stands.
+    pub fn attachBreak(self: Engine, point: *breakpoint.Break) Error!void {
+        break_hook.attach(self.handle, point) catch return Error.AttachFailed;
+    }
+
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
     /// pages the image asks for that the board map does not already cover.
     ///
@@ -270,9 +277,8 @@ pub const Engine = struct {
     /// Unicorn cannot fetch from 0xFFFFFFxx and does not have to.
     pub fn run(self: Engine, start: u32, instructions: usize, session: Session) Error!?Fault {
         if (session.watch) |w| w.clear();
-        const until = if (session.brk) |point| point.until() else breakpoint.limits.unreachable_address;
         if (session.timebase == null and session.interrupts == null) {
-            return self.runChunk(start, instructions, session.watch, until);
+            return self.runChunk(start, instructions, session.watch);
         }
         const configured = cadence.Cadence{
             .per_boundary = if (session.timebase) |clock| clock.per_chunk else cadence.instructions,
@@ -287,7 +293,7 @@ pub const Engine = struct {
             else
                 configured;
             const chunk = pace.chunk(remaining);
-            if (try self.runChunk(pc, chunk, session.watch, until)) |taken| {
+            if (try self.runChunk(pc, chunk, session.watch)) |taken| {
                 const controller = session.interrupts orelse return taken;
                 if (!nvic.isExceptionReturn(taken.pc)) return taken;
                 controller.exit(self, taken.pc) catch return Error.RunFailed;
@@ -309,11 +315,11 @@ pub const Engine = struct {
                 pc = try self.register(.pc);
                 continue;
             };
-            // Arriving at the break ends the run here rather than at the
-            // next boundary: the emulator stopped the chunk on the break's
-            // own first instruction, so this is where the program counter
-            // still points at it.
-            if (session.brk) |point| if (point.met(try self.register(.pc))) break;
+            // The break's hook stopped the chunk on the break's own
+            // instruction, so the run ends here rather than at the next
+            // boundary: this is where the program counter still points at
+            // it, and where the register file is the function's caller's.
+            if (session.brk) |point| if (point.reached) break;
             remaining -= chunk;
             if (session.timebase) |clock| clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
             // The budget is spent: do not enter a handler there is no room
@@ -345,8 +351,14 @@ pub const Engine = struct {
 
     /// One uninterrupted stretch of execution. The clocks stand still inside
     /// it: a chunk is the unit of modelled time.
-    fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch, until: u64) Error!?Fault {
-        const err = c.uc.uc_emu_start(self.handle, start | 1, until, 0, instructions);
+    fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
+        const err = c.uc.uc_emu_start(
+            self.handle,
+            start | 1,
+            breakpoint.limits.unreachable_address,
+            0,
+            instructions,
+        );
         if (err == c.uc.UC_ERR_OK) return null;
         const pc = self.register(.pc) catch 0;
         var bytes: [4]u8 = undefined;
