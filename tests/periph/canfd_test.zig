@@ -45,8 +45,16 @@ fn filter(model: *canfd.Canfd, base: u32, slot: u32, id: u32, mask: u32) void {
 
 test "both machines power up in reset, and the FIFO powers up empty" {
     var model = canfd.Canfd.init();
-    try std.testing.expectEqual(canfd.field.grststs, model.read(unit0 + canfd.off_gsts, 4));
-    try std.testing.expectEqual(canfd.field.crststs, model.read(unit0 + canfd.off_cnsts, 4));
+    // Unit 0 was never started, so it is still asleep beside its reset status.
+    try std.testing.expectEqual(
+        canfd.field.grststs | ra8.periph.canfd_sleep.status,
+        model.read(unit0 + canfd.off_gsts, 4),
+    );
+    // Power-up: in reset and asleep, the pair the JTAG dump showed.
+    try std.testing.expectEqual(
+        canfd.field.crststs | ra8.periph.canfd_sleep.status,
+        model.read(unit0 + canfd.off_cnsts, 4),
+    );
     try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
     // GRAMINIT is clear from power-up: there is no message RAM to initialise.
     const gsts = model.read(unit0 + canfd.off_gsts, 4);
@@ -63,6 +71,7 @@ test "the mode machines report what was asked of them" {
     model.write(unit0 + canfd.off_cnctr, 4, 2);
     try std.testing.expectEqual(canfd.field.chltsts, model.read(unit0 + canfd.off_cnsts, 4));
     model.write(unit0 + canfd.off_cnctr, 4, 1);
+    // Awake from the halt write above, so the sleep status is down.
     try std.testing.expectEqual(canfd.field.crststs, model.read(unit0 + canfd.off_cnsts, 4));
 }
 
@@ -235,7 +244,11 @@ test "the two controllers keep their own state" {
     try std.testing.expectEqual(@as(u32, 0), model.units[0].received);
     try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
     try std.testing.expectEqual(@as(u32, 0x0AA), model.read(unit1 + canfd.off_rf0, 4));
-    try std.testing.expectEqual(canfd.field.grststs, model.read(unit0 + canfd.off_gsts, 4));
+    // Unit 0 was never started, so it is still asleep beside its reset status.
+    try std.testing.expectEqual(
+        canfd.field.grststs | ra8.periph.canfd_sleep.status,
+        model.read(unit0 + canfd.off_gsts, 4),
+    );
 }
 
 test "only a delivered frame on CANFD0 earns the receive event" {

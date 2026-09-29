@@ -297,6 +297,12 @@ fn can(board: *Board, out: Writer) !void {
         if (unit.starved != 0) {
             try out.print("CANFD{d}: {d} pop(s) of an empty receive FIFO\n", .{ index, unit.starved });
         }
+        if (!unit.dozing.quiet()) {
+            try out.print(
+                "CANFD{d}: IGNORED {d} mode write(s), the sleep request was still standing\n",
+                .{ index, unit.dozing.ignored() },
+            );
+        }
         if (unit.faked != 0) {
             try out.print(
                 "CANFD{d}: REFUSED {d} store(s) into a status register the controller owns\n",
