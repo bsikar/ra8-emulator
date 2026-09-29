@@ -21,6 +21,7 @@ const ckcr = @import("../periph/ckcr.zig");
 const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
+const subclock = @import("../periph/subclock.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const voltage_hazard = @import("../periph/voltage_hazard.zig");
 const lpm = @import("../periph/lpm.zig");
@@ -148,6 +149,8 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.backup.block());
     self.oscillators = oscsf.Oscillators.init(&self.protection);
     try self.bus.add(self.oscillators.block());
+    self.subclk = subclock.Unit.init(&self.protection);
+    try self.bus.add(self.subclk.block());
     // The tree asks the oscillators whether the source it was told to select
     // had stabilised, so it goes on after them.
     // The core voltage range is step 2 of the same protected bring-up, and it

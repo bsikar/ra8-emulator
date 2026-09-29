@@ -89,6 +89,29 @@ fn oscillators(board: *Board, out: Writer) !void {
     }
 }
 
+/// The 32.768 kHz sub-clock crystal: whether a run started it, the drive it
+/// picked, and any drive change the part would have ignored.
+fn subClock(board: *Board, out: Writer) !void {
+    const unit = &board.subclk;
+    if (unit.quiet()) return;
+    try out.print(
+        "sub-clock: {s}, drive {s}, {d} start(s)\n",
+        .{ if (unit.running()) "running" else "stopped", unit.drive().name(), unit.starts },
+    );
+    if (unit.refused_running != 0) {
+        try out.print(
+            "sub-clock: REFUSED {d} SOMCR store(s), the crystal was already running\n",
+            .{unit.refused_running},
+        );
+    }
+    if (unit.dropped_locked != 0) {
+        try out.print(
+            "sub-clock: DROPPED {d} store(s) with PRCR.PRC0 locked\n",
+            .{unit.dropped_locked},
+        );
+    }
+}
+
 /// The frequencies a run told the code-MRAM controller it was running at,
 /// and any store the key byte turned away. The driver re-stores until the
 /// readback matches, so a refusal here is a store that carried the wrong
@@ -113,6 +136,7 @@ pub fn section(board: *Board, out: Writer) !void {
     try branches(board, out);
     try ratios(board, out);
     try oscillators(board, out);
+    try subClock(board, out);
     try memoryRates(board, out);
     if (board.modules.clean()) {
         try out.print("module stop: every peripheral the firmware touched was clocked\n", .{});
