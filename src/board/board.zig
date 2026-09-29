@@ -64,6 +64,7 @@ const mpu_guard = @import("../core/mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
 const sd_card = @import("../periph/sd_card.zig");
+const sd_card_line = @import("../periph/sd_card_line.zig");
 const sd_format = @import("../periph/sd_format.zig");
 const sdhi = @import("../periph/sdhi.zig");
 const spi = @import("../periph/spi.zig");
@@ -157,10 +158,15 @@ pub const Board = struct {
     /// It owns no register window at all, so it is not on the bus: attach()
     /// only hands it the machine whose memory it reads.
     trace: rtt.Rtt = .{},
-    /// The SD card on the SPI line, the other way an image reaches storage.
-    /// Built in attach(): it holds only the blocks something wrote, so it
-    /// needs the board's allocator, and attach() is where it goes on a line.
+    /// The SD card on the Pmod2 line, the other way an image reaches
+    /// storage. Built in attach(): it holds only the blocks something wrote,
+    /// so it needs the board's allocator, and attach() is where it goes on a
+    /// line.
     sd: sd_card.Card,
+    /// The card as something on SCI0's line. Built in attach(), which is
+    /// also where it is handed the card it speaks for: it holds a pointer,
+    /// so it cannot be built before the board it points into.
+    sd_line: sd_card_line.Line = undefined,
     /// The volume a `--sd-new` format put on that card, for the report. Null
     /// when the card came up blank, which is every run that did not ask.
     sd_volume: ?sd_format.Volume = null,
