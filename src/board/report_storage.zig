@@ -13,6 +13,19 @@ pub fn sections(board: *Board, out: Writer) !void {
     try spiCard(board, out);
 }
 
+/// The order the OSPI came out of module stop in. Silent on a run that
+/// either left MSTPB16/B17 alone or handshook OCTACKCR first, which is what
+/// every well-behaved driver does, so the line only ever marks the bug.
+fn clock(board: *Board, out: Writer) !void {
+    const unit = &board.octa;
+    if (unit.quiet()) return;
+    try out.print(
+        "OCTACLK: {d} OSPI module-stop release(s) BEFORE the clock was stable, " ++
+            "MSTPB16/B17 need the OCTACKCR handshake first\n",
+        .{unit.early_releases},
+    );
+}
+
 /// One line per DOTF channel the firmware touched. Nothing is decrypted
 /// here, so what is worth saying is what the driver asked the block for: the
 /// conversion area it programmed, the cipher it selected, the self-tests it
@@ -127,6 +140,7 @@ fn spiCard(board: *Board, out: Writer) !void {
 /// have run anyway, so both are reported apart from the work that landed.
 fn flash(board: *Board, out: Writer) !void {
     const unit = &board.flash;
+    try clock(board, out);
     if (unit.quiet()) return;
     try out.print(
         "XSPI flash: {d} read(s), {d} program(s), {d} erase(s), {d} sector(s) holding data\n",
@@ -164,6 +178,12 @@ fn flash(board: *Board, out: Writer) !void {
     }
     if (unit.lost != 0) {
         try out.print("XSPI flash: {d} program(s) LOST, no room to hold the sector\n", .{unit.lost});
+    }
+    if (unit.stalled != 0) {
+        try out.print(
+            "XSPI flash: {d} command(s) STALLED, TRREQ cannot retire on an OSPI uncovered early\n",
+            .{unit.stalled},
+        );
     }
 }
 

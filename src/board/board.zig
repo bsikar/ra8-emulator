@@ -48,6 +48,7 @@ const mram = @import("../periph/mram.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp.zig");
+const octaclk = @import("../periph/octaclk.zig");
 const pscu = @import("../periph/pscu.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const npu = @import("../periph/npu.zig");
@@ -206,6 +207,9 @@ pub const Board = struct {
     /// front of it. Built in attach(): the part is sparse and needs the
     /// board's allocator to hold the sectors something actually wrote to.
     flash: xspi.Xspi,
+    /// Whether the OSPI was uncovered on a stable OCTACLK. Built in attach():
+    /// it reads the clock-select model live, so it cannot exist before it.
+    octa: octaclk.Octa,
     /// The decryption-on-the-fly stage in front of each xSPI controller.
     /// No AES core here, so what it answers for is the control word the
     /// driver polls and the conversion area it programmes.
@@ -323,6 +327,7 @@ pub const Board = struct {
             .spi = spi.Spi.init(),
             .sd = sd_card.Card.init(allocator),
             .flash = xspi.Xspi.init(allocator),
+            .octa = undefined,
             .cipher = dotf.Dotf.init(),
             .card = sdhi.Sdhi.init(allocator),
             .options = mram.Mram.init(allocator),
