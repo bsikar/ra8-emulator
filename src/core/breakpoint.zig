@@ -23,7 +23,16 @@
 //! having arrived fewer times than asked reports how many it did see,
 //! which is evidence a command trace cannot give: a function that issues
 //! no bus access leaves no trace either way.
+//!
+//! Where to stop is named the same way `--dump-mem` names where to read,
+//! so a break is not limited to a function's own first instruction. That
+//! matters for a value a function RETURNS: the only place a return value
+//! is still in r0 is the instruction after the call, which has no symbol
+//! of its own and is reached as `caller+offset`.
 const std = @import("std");
+const elf = @import("elf.zig");
+const place = @import("place.zig");
+const symbols = @import("symbols.zig");
 
 /// How the address is compared, and what an unset count means.
 pub const limits = struct {
@@ -72,4 +81,17 @@ pub const Break = struct {
 /// An address with the interworking bit cleared.
 fn entry(address: u32) u32 {
     return address & ~limits.thumb_bit;
+}
+
+/// Where a break named on the command line actually is.
+///
+/// A place may name a symbol, a literal address, or either with an offset
+/// applied. It may not dereference: a break is resolved before the run
+/// starts, when there is no memory to read a pointer out of.
+pub fn resolve(image: elf.Image, spec: []const u8, arrival: u32) !Break {
+    const want = try place.parse(spec);
+    if (want.deref) return error.NoDerefInBreak;
+    var base = want.address;
+    if (want.name) |name| base = symbols.addressOf(image, name) orelse return error.Unresolved;
+    return .{ .address = want.apply(base), .arrival = arrival };
 }

@@ -13,7 +13,7 @@ pub const usage =
     \\                    [--touch X,Y]
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
-    \\                    [--break-sym NAME [N]] [--dump-mem PLACE [N]]
+    \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -26,11 +26,15 @@ pub const usage =
     \\  --dump-sym NAME    read that global out of RAM after the run and
     \\                     print it, repeatable
     \\  --stop-sym NAME N  end the run early once that global reaches N
-    \\  --break-sym NAME [N]
-    \\                     end the run when execution reaches that
-    \\                     function, on the Nth arrival (default the
-    \\                     first); the report says how many arrivals a
-    \\                     run that fell short did see
+    \\  --break-sym PLACE [N]
+    \\                     end the run when execution reaches PLACE, on
+    \\                     the Nth arrival (default the first); the report
+    \\                     says how many arrivals a run that fell short
+    \\                     did see. PLACE is a function, an address, or
+    \\                     either with a +/- offset, which is how to stop
+    \\                     just after a call and read what it returned.
+    \\                     --break-at is the same flag, spelled for an
+    \\                     address rather than a name
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
@@ -121,10 +125,11 @@ pub const Options = struct {
     /// it. Null watches nothing and the run goes to its instruction budget.
     stop_symbol: ?[]const u8 = null,
     stop_at: u32 = 0,
-    /// A function to stop at the first time execution reaches it. Null
-    /// stops at nothing and the run goes to its instruction budget.
-    break_symbol: ?[]const u8 = null,
-    /// Which arrival at `break_symbol` ends the run. One is the first.
+    /// Where to stop, spelled the way `place.parse` reads it: a function,
+    /// an address, or either with an offset. Null stops at nothing and the
+    /// run goes to its instruction budget.
+    break_place: ?[]const u8 = null,
+    /// Which arrival at `break_place` ends the run. One is the first.
     break_arrival: u32 = 1,
     /// Print the core registers after the run.
     dump_regs: bool = false,
@@ -190,13 +195,17 @@ pub fn parse(argv: []const []const u8) !Options {
             options.stop_symbol = argv[index + 1];
             options.stop_at = try std.fmt.parseInt(u32, argv[index + 2], 10);
             index += 2;
-        } else if (std.mem.eql(u8, argv[index], "--break-sym")) {
+        } else if (std.mem.eql(u8, argv[index], "--break-sym") or
+            std.mem.eql(u8, argv[index], "--break-at"))
+        {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
-            options.break_symbol = argv[index];
+            options.break_place = argv[index];
             // The count is optional, so it is taken only when the next
-            // argument is one. A symbol name is never a number, and the
-            // flag that may follow instead always starts with a dash.
+            // argument is one. A place that is itself a number is written
+            // 0x-prefixed or not, and either way it has already been
+            // taken by the line above; the flag that may follow instead
+            // always starts with a dash.
             if (index + 1 < argv.len) {
                 if (std.fmt.parseInt(u32, argv[index + 1], 0) catch null) |nth| {
                     if (nth == 0) return error.BadValue;
