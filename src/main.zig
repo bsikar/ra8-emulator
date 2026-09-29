@@ -86,6 +86,7 @@ pub fn main() !u8 {
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try core.attachWatchpoint(one);
     var undefined_found = undefined_ops.sweep(image);
+    if (options.stop_on_undefined) undefined_found.stopOnRun();
     try core.attachUndefined(&undefined_found);
     var timed = resolveDeadline(options);
     const budget = options.budgetFor(stop != null);
@@ -98,6 +99,7 @@ pub fn main() !u8 {
         .protection = &board.guard,
         .stop = if (stop) |*one| one else null,
         .brk = if (point) |*one| one else null,
+        .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
     });
 

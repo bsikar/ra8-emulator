@@ -14,7 +14,7 @@ pub const usage =
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
-    \\                    [--watch PLACE]
+    \\                    [--watch PLACE] [--stop-on-undefined]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -49,6 +49,11 @@ pub const usage =
     \\                     Takes the same place spelling as --dump-mem, minus
     \\                     the dereference: the address has to be known
     \\                     before the run starts
+    \\  --stop-on-undefined
+    \\                     end the run the first time it reaches an
+    \\                     instruction the architecture leaves undefined,
+    \\                     before that instruction executes, so a dump
+    \\                     beside it reads the state on the way in
     \\  --dump-regs        print the argument registers and the words at
     \\                     the stack pointer after the run; at a break
     \\                     they are still the arguments of the function
@@ -139,6 +144,10 @@ pub const Options = struct {
     break_arrival: u32 = 1,
     /// Print the core registers after the run.
     dump_regs: bool = false,
+    /// End the run at the first undefined instruction it reaches, before
+    /// that instruction executes. Off by default: the sweep reports, it
+    /// does not decide.
+    stop_on_undefined: bool = false,
     /// A place in memory to read once the run is over, spelled the way
     /// `place.parse` reads it. Null reads nothing.
     dump_mem: ?[]const u8 = null,
@@ -251,6 +260,8 @@ pub fn parse(argv: []const []const u8) !Options {
             options.watch_place = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--dump-regs")) {
             options.dump_regs = true;
+        } else if (std.mem.eql(u8, argv[index], "--stop-on-undefined")) {
+            options.stop_on_undefined = true;
         } else return error.UnknownFlag;
     }
     return options;
