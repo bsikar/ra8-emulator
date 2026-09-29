@@ -101,7 +101,7 @@ pub fn main() !u8 {
     try report_steps.loops(out, loops);
     try report_steps.selects(out, selects);
     try report.blocks(&board, out);
-    try undefined_ops.print(out, undefined_ops.sweep(image));
+    try undefined_ops.print(out, image, undefined_ops.sweep(image));
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, &board, options);
     try dumpRegisters(out, core, options);
