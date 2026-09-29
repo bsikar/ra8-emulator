@@ -237,13 +237,13 @@ fn arrivals(
     if (point.reached) {
         try out.print(
             "reached {s} arrival {d}, pc 0x{X:0>8}\n",
-            .{ options.break_symbol.?, point.seen, pc },
+            .{ options.break_place.?, point.seen, pc },
         );
         return 0;
     }
     try out.print(
         "ran {d} instructions, reached {s} {d} time(s) of {d}, pc 0x{X:0>8}\n",
-        .{ budget, options.break_symbol.?, point.seen, point.arrival, pc },
+        .{ budget, options.break_place.?, point.seen, point.arrival, pc },
     );
     return 0;
 }
@@ -258,12 +258,11 @@ fn resolveDeadline(options: cli.Options) ?deadline.Deadline {
 }
 
 fn resolveBreak(image: elf.Image, options: cli.Options) ?breakpoint.Break {
-    const name = options.break_symbol orelse return null;
-    const address = symbols.addressOf(image, name) orelse {
-        std.debug.print("--break-sym {s} not found in symbol table\n", .{name});
+    const spec = options.break_place orelse return null;
+    return breakpoint.resolve(image, spec, options.break_arrival) catch |err| {
+        std.debug.print("--break-sym {s}: {s}\n", .{ spec, @errorName(err) });
         return null;
     };
-    return .{ .address = address, .arrival = options.break_arrival };
 }
 
 /// The counter `--stop-sym` named, resolved against the image's symbol
