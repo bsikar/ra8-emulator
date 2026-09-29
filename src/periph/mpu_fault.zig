@@ -38,6 +38,9 @@ pub const Reason = enum {
     /// The region allows no unprivileged access at all, and the access was
     /// unprivileged.
     privilege,
+    /// No region covered the address at all, and CTRL.PRIVDEFENA did not hand
+    /// this access the default map. See src/periph/mpu_background.zig.
+    background,
 };
 
 /// Which direction the refused access went. The table in src/periph/mpu.zig
@@ -84,6 +87,9 @@ pub const Latch = struct {
     /// How many were refused because the access was unprivileged and the
     /// region allows no unprivileged access, rather than on its permissions.
     privilege: u64 = 0,
+    /// Of those, the ones that landed outside every enabled region rather
+    /// than inside one that refused them.
+    background: u64 = 0,
     /// Violations that reached a MemManage handler.
     faults: u64 = 0,
     /// Violations with no handler to reach: the vector table carries none, or
@@ -122,6 +128,7 @@ pub const Latch = struct {
         if (hit.kind == .fetch) self.fetches +%= 1;
         if (hit.kind == .load) self.loads +%= 1;
         if (hit.reason == .privilege) self.privilege +%= 1;
+        if (hit.reason == .background) self.background +%= 1;
         return true;
     }
 
