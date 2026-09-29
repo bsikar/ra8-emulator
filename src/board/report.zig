@@ -22,6 +22,7 @@ const modules = @import("report_modules.zig");
 const mipi = @import("report_mipi.zig");
 const network = @import("report_network.zig");
 const options = @import("report_options.zig");
+const icu = @import("report_icu.zig");
 const pinfunc = @import("report_pinfunc.zig");
 const sysclock = @import("report_sysclk.zig");
 const lowpower = @import("report_lowpower.zig");
@@ -90,7 +91,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try masks(board, out);
     try control(board, out);
     try monitors.sections(board, out);
-    try events(board, out);
+    try icu.sections(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
     try dma.section(board, out);
@@ -246,21 +247,6 @@ fn control(board: *Board, out: Writer) !void {
         "AIRCR: {d} write(s) DROPPED for a missing or wrong VECTKEY (0x{X:0>4} required)\n",
         .{ unit.rejected, scb.key.write },
     );
-}
-
-/// The event links, but only once something raised an event. A re-pend is
-/// reported loudly: it means a handler returned with IELSR.IR still set,
-/// which on silicon re-enters that handler forever.
-fn events(board: *Board, out: Writer) !void {
-    if (board.events.quiet()) return;
-    try out.print(
-        "ICU: {d} event(s) raised, {d} line(s) pended, {d} unrouted",
-        .{ board.events.raised, board.events.pends, board.events.unlinked },
-    );
-    if (board.events.repends != 0) {
-        try out.print(", {d} RE-PENDED with IELSR.IR still latched", .{board.events.repends});
-    }
-    try out.print("\n", .{});
 }
 
 /// The event link controller, and the loud cases behind it: dev models no ELC

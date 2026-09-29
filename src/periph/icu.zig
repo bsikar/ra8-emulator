@@ -28,6 +28,7 @@
 const memmap = @import("../core/memmap.zig");
 const periph = @import("registry.zig");
 const lanes = @import("lanes.zig");
+const irqcr = @import("icu_irqcr.zig");
 
 /// R_ICU geometry (ra8_icu_regs.h): the block is at 0x4000_6000 and the
 /// event-link table sits 0x6300 into it.
@@ -62,6 +63,11 @@ pub const Icu = struct {
     pends: u64 = 0,
     /// NVIC lines pended again because IR was still latched at a boundary.
     repends: u64 = 0,
+    /// IRQCRa/IRQCRb, the external-IRQ pins' own control bytes. They live
+    /// here rather than on the board because the rule the manual puts on
+    /// them is a question about this table: a pin may only be rewritten
+    /// while nothing routes its event.
+    pins: irqcr.Irqcr = .{},
 
     pub fn init() Icu {
         return .{};
@@ -181,6 +187,25 @@ pub const Icu = struct {
             .writeFn = writeThunk,
         };
     }
+
+    /// Whether some line is listening for this IRQ channel's event right
+    /// now. The pin file cannot answer this; only the table can.
+    pub fn pinRouted(self: *const Icu, channel: usize) bool {
+        return self.slotFor(irqcr.eventFor(channel)) != null;
+    }
+
+    /// The IRQCRa/IRQCRb window. A store is handed the live routed answer,
+    /// so unrouting the event before reconfiguring the pin is quiet.
+    pub fn pinsBlock(self: *Icu) periph.Block {
+        return .{
+            .name = "ICU IRQ pins",
+            .base = icu_base,
+            .size = irqcr.win_span,
+            .context = self,
+            .readFn = pinsReadThunk,
+            .writeFn = pinsWriteThunk,
+        };
+    }
 };
 
 /// The address of one IELSR slot, so a test or a later slice does not have to
@@ -235,4 +260,24 @@ fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Icu = @ptrCast(@alignCast(context));
     self.write(address, width, value);
+}
+
+fn pinsReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    _ = width;
+    const self: *Icu = @ptrCast(@alignCast(context));
+    return self.pins.read(address -% icu_base);
+}
+
+/// A wide store at the top of the window reaches several pins, and each of
+/// them gets its own routed answer, because the rule is per channel.
+fn pinsWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *Icu = @ptrCast(@alignCast(context));
+    const first = address -% icu_base;
+    var step: u32 = 0;
+    while (step < width) : (step += 1) {
+        const offset = first + step;
+        const channel = irqcr.channelAt(offset) orelse continue;
+        const byte: u8 = @truncate(value >> @intCast(step * 8));
+        self.pins.store(offset, byte, self.pinRouted(channel));
+    }
 }

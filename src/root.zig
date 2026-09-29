@@ -133,6 +133,7 @@ pub const periph = struct {
     pub const i3c_max17048 = @import("periph/i3c_max17048.zig");
     pub const i3c_target = @import("periph/i3c_target.zig");
     pub const icu = @import("periph/icu.zig");
+    pub const icu_irqcr = @import("periph/icu_irqcr.zig");
     pub const ipc = @import("periph/ipc.zig");
     pub const iwdt = @import("periph/iwdt.zig");
     pub const iwdt_refresh = @import("periph/iwdt_refresh.zig");

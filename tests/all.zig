@@ -129,6 +129,7 @@ test {
     _ = @import("periph/i3c_reset_test.zig");
     _ = @import("periph/i3c_test.zig");
     _ = @import("periph/icu_test.zig");
+    _ = @import("periph/icu_irqcr_test.zig");
     _ = @import("periph/lanes_test.zig");
     _ = @import("periph/lvd_field_lock_test.zig");
     _ = @import("periph/lvd_interlock_test.zig");
