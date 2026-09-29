@@ -74,3 +74,19 @@ test "a pair with a register still at reset names no region to refuse" {
     try std.testing.expect(!region.outsideWindow(bound, 0x0000_0000, 0x9000_1000));
     try std.testing.expect(!region.outsideWindow(bound, 0x9000_0000, 0x0000_0000));
 }
+
+test "a reversed pair is the prohibited one" {
+    try std.testing.expect(region.reversed(0x9000_2000, 0x9000_1000));
+    try std.testing.expect(!region.reversed(0x9000_1000, 0x9000_2000));
+    try std.testing.expect(!region.reversed(0x9000_1000, 0x9000_1000));
+}
+
+test "a pair whose end is still at reset is not reversed" {
+    try std.testing.expect(!region.reversed(0x9000_1000, 0x0000_0000));
+    try std.testing.expect(!region.reversed(0x0000_0000, 0x0000_0000));
+}
+
+test "reversed judges the address field, not the reserved bits" {
+    try std.testing.expect(!region.reversed(0x9000_1FFF, 0x9000_1000));
+    try std.testing.expect(region.reversed(0x9000_2000, 0x9000_1FFF));
+}

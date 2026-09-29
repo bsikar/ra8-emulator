@@ -13,6 +13,29 @@
 //! outside it: DOTF0 over XSPI0 at 0x8000_0000..0x9FFF_FFFF, DOTF1 over
 //! XSPI1 at 0x7000_0000..0x7FFF_FFFF (ra8_dotf_regs.h
 //! ra8_dotf_xspi_window_t, HUM Ch 45.3 p 3049).
+//!
+//! TWO THINGS THE PAIR CAN BE ASKED FOR THAT SILICON DOES NOT ALLOW, and
+//! both were silent here. The HUM records each as a requirement on the
+//! driver without saying what the hardware does when it is broken, so
+//! neither is refused: the store lands and the run says so, the same cut
+//! src/periph/pfs_route.zig makes for a prohibited pin handover.
+//!
+//! A REVERSED PAIR. "Setting CONVAREAST[31:12] > CONVAREAED[31:12] is
+//! prohibited" (HUM Ch 45.3.1 p 3049, quoted in ra8_dotf.c
+//! internal_validate_region, which returns invalid-arg for it). It is why
+//! FSP writes the two registers END FIRST: r_ospi_b.c says "Set the end and
+//! start area for DOTF conversion in that order to ensure that end address
+//! is always higher than start address", and ra8_dotf_select_region follows
+//! it. Programming start first and end second passes through start > end = 0
+//! on the way, which is the ordinary sequence and not the prohibited state,
+//! so a pair whose END is still at its reset value names nothing to count.
+//!
+//! A LIVE AREA CHANGE. ra8_dotf_select_region carries the precondition
+//! "Channel is currently disabled (HUM 45.3.1 p 3049)" and expects the
+//! caller to have run ra8_dotf_disable first. Moving the conversion area
+//! underneath a running AES core hands the decrypting path a region the
+//! firmware has half-replaced, and an image that does it reads plaintext
+//! for one region and ciphertext for the other with nothing to say which.
 
 /// The 4 KB granule the address registers are scaled in.
 pub const granule: u32 = 0x0000_1000;
@@ -97,4 +120,15 @@ pub fn pages(start: u32, end: u32) u32 {
 pub fn outsideWindow(bound: Window, start: u32, end: u32) bool {
     if (address(start) == 0 or !programmed(start, end)) return false;
     return !bound.holds(address(start)) or !bound.holds(address(end) +| (granule - 1));
+}
+
+/// True when the pair is the prohibited one: a start above its end
+/// (HUM Ch 45.3.1 p 3049). A pair whose end is still at its reset value is
+/// a driver part-way through programming start-then-end, not a reversed
+/// region, so it is not counted; the cost is a genuine region ending at
+/// address zero, which cannot be told apart from an unprogrammed end and
+/// which no XSPI window holds anyway.
+pub fn reversed(start: u32, end: u32) bool {
+    if (address(end) == 0) return false;
+    return address(start) > address(end);
 }

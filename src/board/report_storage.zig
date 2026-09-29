@@ -48,6 +48,18 @@ fn cipher(board: *Board, out: Writer) !void {
                 .{ index, unit.out_of_window },
             );
         }
+        if (unit.reversed_areas != 0) {
+            try out.print(
+                "DOTF{d}: {d} conversion area(s) with the start above the end, which is prohibited\n",
+                .{ index, unit.reversed_areas },
+            );
+        }
+        if (unit.live_area_writes != 0) {
+            try out.print(
+                "DOTF{d}: {d} conversion area store(s) made while the core was decrypting\n",
+                .{ index, unit.live_area_writes },
+            );
+        }
     }
 }
 
