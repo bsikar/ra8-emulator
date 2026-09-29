@@ -93,6 +93,12 @@ fn regions(board: *Board, out: Writer) !void {
             .{ latch.faults, latch.violations },
         );
     }
+    if (latch.escalated != 0) {
+        try out.print(
+            "MPU: {d} of those escalated to HardFault, MemManage was never enabled\n",
+            .{latch.escalated},
+        );
+    }
     if (latch.unhandled != 0) {
         try out.print(
             "MPU: {d} violation(s) with no MemManage handler to take them\n",

@@ -34,6 +34,7 @@ const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
 const mpu = @import("../periph/mpu.zig");
 const mpu_fault = @import("../periph/mpu_fault.zig");
+const escalate = @import("../periph/mpu_escalate.zig");
 const background = @import("../periph/mpu_background.zig");
 
 /// uc_ctl packs the direction into the control word's top two bits, and the
@@ -178,11 +179,16 @@ pub const Guard = struct {
     /// latch the architectural status, put PC back on the instruction so
     /// entry stacks it, and vector into the handler.
     ///
-    /// With no handler to reach, the violation is counted and the run
-    /// carries on from where the store left it: no escalation to HardFault
-    /// is modelled. PC is rewound only once the entry has happened, because
-    /// a rewind with nothing to vector into would re-run the store straight
-    /// back into the trap that stopped it.
+    /// WHICH handler is SHCSR's to say, not the vector table's. MemManage is
+    /// a configurable fault and runs only while SHCSR.MEMFAULTENA stands;
+    /// with it clear the fault is disabled and escalates to HardFault with
+    /// HFSR.FORCED set, whatever the table holds at the MemManage slot. See
+    /// src/periph/mpu_escalate.zig.
+    ///
+    /// With neither handler to reach, the violation is counted and the run
+    /// carries on from where the store left it. PC is rewound only once the
+    /// entry has happened, because a rewind with nothing to vector into
+    /// would re-run the store straight back into the trap that stopped it.
     pub fn synthesise(
         self: *Guard,
         core: anytype,
@@ -203,17 +209,30 @@ pub const Guard = struct {
             self.standDown(core, hit);
             return;
         };
+        const target = escalate.targetFor(core.readWord(memmap.scb.shcsr) catch 0);
+        const taken: nvic.Candidate = switch (target) {
+            .mem_manage => .{
+                .number = mpu_fault.exception,
+                .priority = @truncate(core.readWord(memmap.scb.shpr1) catch 0),
+            },
+            .hard_fault => .{
+                .number = escalate.hard_fault,
+                .priority = escalate.hard_fault_priority,
+            },
+        };
+        if (escalate.marks(target)) {
+            const hfsr = core.readWord(memmap.scb.hfsr) catch 0;
+            try core.writeWord(memmap.scb.hfsr, hfsr | escalate.hfsr.forced);
+        }
         const stopped_at = try core.register(.pc);
         try core.setRegister(.pc, hit.pc);
-        unit.enter(core, .{
-            .number = mpu_fault.exception,
-            .priority = @truncate(core.readWord(memmap.scb.shpr1) catch 0),
-        }) catch {
+        unit.enter(core, taken) catch {
             try core.setRegister(.pc, stopped_at);
             self.standDown(core, hit);
             return;
         };
         self.latch.faults +%= 1;
+        if (target == .hard_fault) self.latch.escalated +%= 1;
     }
 
     /// A violation with no handler to reach. A STORE carries on from where it
