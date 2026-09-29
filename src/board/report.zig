@@ -168,8 +168,11 @@ fn watchdog(board: *Board, out: Writer) !void {
     } else {
         try out.print("WDT0: refreshes={d}, counter {d}/{d}, underflows={d}\n", .{ unit.refreshes, unit.counter, unit.reload(), unit.underflows });
     }
-    if (unit.bad_acks == 0) return;
-    try out.print("WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
+    if (unit.bad_acks != 0) {
+        try out.print("WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
+    }
+    if (unit.locked_writes == 0) return;
+    try out.print("WDT0: DROPPED {d} control store(s), WDTCR/WDTRCR/WDTCSTPR take one write each after reset\n", .{unit.locked_writes});
 }
 
 /// Why the part booted, and whether anything asked it to boot again. A
