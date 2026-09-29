@@ -18,8 +18,8 @@
 /// MemManage, exception 4 (DDI0553 B3.6).
 pub const exception: u16 = 4;
 
-/// The MMFSR bits a refused access sets: DACCVIOL with MMARVALID for a store,
-/// IACCVIOL on its own for a fetch. A refused fetch leaves MMFAR alone and
+/// The MMFSR bits a refused access sets: DACCVIOL with MMARVALID for a store
+/// or a load, both being data accesses, and IACCVIOL on its own for a fetch. A refused fetch leaves MMFAR alone and
 /// MMARVALID clear, because the address that took it is the PC the frame
 /// already carries (DDI0553 D1.2.11).
 pub const mmfsr = struct {
@@ -40,12 +40,21 @@ pub const Reason = enum {
     privilege,
 };
 
-/// Which of the two rules refused the access.
+/// Which direction the refused access went. The table in src/periph/mpu.zig
+/// answers with this too, because what a region allows is decided per
+/// direction: read-only refuses a store and serves a load, execute-never
+/// refuses a fetch and serves both, and privileged-only refuses all three.
 pub const Kind = enum {
-    /// A store into a region RBAR.AP made read-only.
+    /// A store into a region RBAR.AP made read-only, or one it keeps to
+    /// privileged code.
     store,
-    /// A fetch from a region RBAR.XN made execute-never.
+    /// A fetch from a region RBAR.XN made execute-never, or one it keeps to
+    /// privileged code.
     fetch,
+    /// A load out of a region that allows no unprivileged access. No
+    /// permission bit refuses a privileged load, so this is a privilege
+    /// refusal every time.
+    load,
 };
 
 /// One refused access: the instruction that made it, and the address it went
@@ -65,8 +74,13 @@ pub const Latch = struct {
     pending: ?Violation = null,
     /// Accesses refused by an enabled region, of either kind.
     violations: u64 = 0,
-    /// How many of those were fetches rather than stores.
+    /// How many of those were fetches rather than data accesses.
     fetches: u64 = 0,
+    /// How many were loads. Kept apart from stores because a load the model
+    /// refuses has already been served by the engine, the same way a store
+    /// has already landed: the count is what the report can still be honest
+    /// about.
+    loads: u64 = 0,
     /// How many were refused because the access was unprivileged and the
     /// region allows no unprivileged access, rather than on its permissions.
     privilege: u64 = 0,
@@ -106,6 +120,7 @@ pub const Latch = struct {
         self.pending = hit;
         self.violations +%= 1;
         if (hit.kind == .fetch) self.fetches +%= 1;
+        if (hit.kind == .load) self.loads +%= 1;
         if (hit.reason == .privilege) self.privilege +%= 1;
         return true;
     }

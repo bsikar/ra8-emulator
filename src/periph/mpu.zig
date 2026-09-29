@@ -54,6 +54,7 @@
 //! line in the report, which is why `observe` says what each store meant
 //! rather than leaving the caller to work it out from the address.
 const memmap = @import("../core/memmap.zig");
+const mpu_fault = @import("mpu_fault.zig");
 
 /// The register block's fixed shape: how many data regions this core reports,
 /// and where DREGION sits in TYPE.
@@ -138,16 +139,21 @@ pub const Region = struct {
     }
 
     /// Whether this region refuses one access, and on which of the two
-    /// grounds. Privilege is checked first because it refuses a read as well,
+    /// grounds. Privilege is checked first because it refuses a load as well,
     /// and because a privileged-only region says nothing about what
     /// privileged code may do there.
     pub const Refusal = enum { allowed, permission, privilege };
 
-    pub fn refuses(self: Region, fetch: bool, privileged: bool) Refusal {
+    pub fn refuses(self: Region, kind: mpu_fault.Kind, privileged: bool) Refusal {
         if (!privileged and !self.unprivileged) return .privilege;
-        if (fetch and !self.executable) return .permission;
-        if (!fetch and self.read_only) return .permission;
-        return .allowed;
+        return switch (kind) {
+            // No permission bit refuses a load: read-only is about stores and
+            // execute-never is about fetches, so a privileged load is served
+            // by every region this model knows how to program.
+            .load => .allowed,
+            .store => if (self.read_only) .permission else .allowed,
+            .fetch => if (self.executable) .allowed else .permission,
+        };
     }
 
     /// Whether any access into this region could be refused, which is what
