@@ -23,6 +23,7 @@ const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const subclock = @import("../periph/subclock.zig");
+const reset = @import("../periph/reset.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const voltage_hazard = @import("../periph/voltage_hazard.zig");
 const lpm = @import("../periph/lpm.zig");
@@ -186,4 +187,13 @@ fn attachProtected(self: *Board) !void {
     for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
     self.graphics = pdctr.Pdctr.init(&self.protection);
     try self.bus.add(self.graphics.block());
+    // SYRSTMSK0/1/2 is PRC5-protected, and its two watchdog mask bits freeze
+    // while their watchdog runs (HUM Ch 6.2.6 p 263), so it reads both
+    // watchdogs' armed flags live rather than a copy.
+    self.causes.watchWatchdogs(
+        &self.protection,
+        &self.watchdog.armed,
+        &self.heartbeat.armed,
+    );
+    try self.bus.add(self.causes.maskBlock());
 }

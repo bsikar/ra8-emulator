@@ -19,6 +19,8 @@
 //! the cause gets either "no flags at all" or "every cause at once", and both
 //! readings are wrong.
 const periph = @import("registry.zig");
+const prcr = @import("prcr.zig");
+const syrstmsk = @import("syrstmsk.zig");
 
 /// RSTSR1 geometry: one 32-bit register.
 pub const rstsr1 = struct {
@@ -69,9 +71,31 @@ pub const Reset = struct {
     requests: u32 = 0,
     /// Acks that cleared nothing because they wrote a one at a set flag.
     bad_acks: u32 = 0,
+    /// SYRSTMSK0/1/2: which of these causes the part is still allowed to act
+    /// on. Same reset controller, its own file. Left undefined until the
+    /// board calls watchWatchdogs(), because the mask cannot be built without
+    /// this board's own protection model and its two watchdogs.
+    masks: syrstmsk.Mask = undefined,
 
     pub fn init() Reset {
         return .{};
+    }
+
+    /// Wire up SYRSTMSK. The two watchdog mask bits freeze while their
+    /// watchdog is running, so the mask reads the live armed flags rather
+    /// than a copy taken at boot.
+    pub fn watchWatchdogs(
+        self: *Reset,
+        protection: *const prcr.Prcr,
+        watchdog_armed: *const bool,
+        heartbeat_armed: *const bool,
+    ) void {
+        self.masks = syrstmsk.Mask.init(protection, watchdog_armed, heartbeat_armed);
+    }
+
+    /// The SYRSTMSK0/1/2 window. Only valid after watchWatchdogs().
+    pub fn maskBlock(self: *Reset) periph.Block {
+        return self.masks.block();
     }
 
     /// A run that never touched the block and never had a cause latched past
