@@ -17,6 +17,13 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.guard.refused},
         );
     }
+    if (unit.ordering.glitched != 0) {
+        try out.print(
+            "PFS: {d} pin(s) handed straight from one peripheral function to another, " ++
+                "clear PMR before programming a new PSEL\n",
+            .{unit.ordering.glitched},
+        );
+    }
     if (unit.guard.ignored_keys != 0) {
         try out.print(
             "PFS: IGNORED {d} store(s) asking for PFSWE while B0WI still stood\n",

@@ -19,6 +19,13 @@
 //! stores whatever it is handed and reads it back, so every pin write landed
 //! whether or not the firmware had unlocked.
 //!
+//! THE ONE ORDERING RULE PmnPFS HAS lives in `pfs_route.zig`: a pin is meant
+//! to be returned to GPIO mode before a new peripheral function is programmed
+//! onto it, and a store that moves a routed pin straight to a different
+//! function leaves the pad driving the old one while the new select decodes.
+//! That store is taken here exactly as the part takes it, and counted, because
+//! the glitch is invisible from the firmware side.
+//!
 //! THE REST OF PMISC IS A SHADOW and deliberately so. PFENET and PMSAR are in
 //! the same window, nothing in the corpus touches either, and PMSAR in
 //! particular would change which of the two write-protect paths owns a port.
@@ -27,6 +34,7 @@
 const periph = @import("registry.zig");
 const lanes = @import("lanes.zig");
 const protect = @import("pfs_protect.zig");
+const route = @import("pfs_route.zig");
 
 pub const win_base: u32 = 0x4040_0800;
 pub const win_span: u32 = 0x580;
@@ -50,6 +58,7 @@ pub const Pfs = struct {
     entries: [limits.entry_count]u32 = [_]u32{0} ** limits.entry_count,
     misc: [region.pmisc_words]u32 = [_]u32{0} ** region.pmisc_words,
     guard: protect.Protect = .{},
+    ordering: route.Route = .{},
     /// Pin writes that landed, so a refusal count has something to sit beside.
     programmed: u32 = 0,
 
@@ -58,7 +67,7 @@ pub const Pfs = struct {
     }
 
     pub fn quiet(self: *const Pfs) bool {
-        return self.programmed == 0 and self.guard.quiet();
+        return self.programmed == 0 and self.guard.quiet() and self.ordering.quiet();
     }
 
     /// The flat index a pin sits at, the firmware's own (port * 16) + pin.
@@ -102,7 +111,10 @@ pub const Pfs = struct {
                 return;
             }
             const index = offset / 4;
-            self.entries[index] = lanes.merge(self.entries[index], lanes.lane(offset), width, value);
+            const standing = self.entries[index];
+            const merged = lanes.merge(standing, lanes.lane(offset), width, value);
+            self.ordering.observe(standing, merged);
+            self.entries[index] = merged;
             self.programmed +%= 1;
             return;
         }
