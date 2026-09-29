@@ -81,6 +81,17 @@ pub const rule = struct {
     pub const fat32_preferred_clusters: u32 = 512 * 1024;
 };
 
+/// The window the remedy search walks when a format is refused.
+pub const search = struct {
+    /// Card sizes arrive from the command line in whole megabytes, and a
+    /// megabyte is a whole number of the 512 KiB units a CSD counts in, so
+    /// every size named here is one the card can actually be resized to.
+    pub const sectors_per_mib: u32 = 1024 * 1024 / 512;
+    /// As far up as the search looks. Two terabytes is past anything this
+    /// model will be handed and keeps the walk finite.
+    pub const max_mib: u32 = 2 * 1024 * 1024;
+};
+
 pub const Error = error{
     CardTooSmall,
     TooFewClusters,
@@ -212,4 +223,60 @@ fn solveFat32(total_sectors: u32) Error!fat.Layout {
         }
         spc *= 2;
     }
+}
+
+/// Whether a card of `mib` whole megabytes solves for `kind` at all.
+fn works(kind: Kind, mib: u32) bool {
+    if (solve(kind, mib *| search.sectors_per_mib)) |_| return true else |_| return false;
+}
+
+/// The smallest card, in whole megabytes, this model will format `kind` on.
+///
+/// Worth computing rather than stating: the floor is not a round number and
+/// it moves with the reserved region, the FAT copies and the cluster count
+/// the specification fixes. A FAT32 volume needs 65525 clusters before it
+/// is allowed to call itself one, and at 512 bytes a cluster that is more
+/// than the 32 MB card this model comes up with, which is exactly the
+/// refusal a reader meets first.
+///
+/// Double until a size works, then halve in on the boundary. The search
+/// leans on the two widths being solvable over one unbroken run of sizes,
+/// which is what the solvers do: below the run the cluster count is short,
+/// above it the table has outgrown its width. Null means nothing in the
+/// window works, which is reported rather than guessed at.
+pub fn smallestCardMib(kind: Kind) ?u32 {
+    var hi: u32 = 1;
+    while (!works(kind, hi)) {
+        if (hi > search.max_mib) return null;
+        hi *= 2;
+    }
+    var lo: u32 = hi / 2;
+    while (hi - lo > 1) {
+        const mid = lo + (hi - lo) / 2;
+        if (works(kind, mid)) hi = mid else lo = mid;
+    }
+    return hi;
+}
+
+/// The largest card, in whole megabytes, this model will format `kind` on,
+/// which is the answer to a FAT16 volume refused for having outgrown a
+/// 16-bit table. Null means the search window never ran out, which is the
+/// honest answer for FAT32: its ceiling is past anything worth naming.
+///
+/// Starts from the floor rather than from one megabyte, because the small
+/// end of the range does not solve either and a walk upward from there
+/// stops before it has begun.
+pub fn largestCardMib(kind: Kind) ?u32 {
+    var lo = smallestCardMib(kind) orelse return null;
+    var hi = lo;
+    while (works(kind, hi)) {
+        if (hi > search.max_mib) return null;
+        lo = hi;
+        hi *= 2;
+    }
+    while (hi - lo > 1) {
+        const mid = lo + (hi - lo) / 2;
+        if (works(kind, mid)) lo = mid else hi = mid;
+    }
+    return lo;
 }

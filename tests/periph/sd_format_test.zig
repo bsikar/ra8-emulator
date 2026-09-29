@@ -145,3 +145,43 @@ test "a refused width writes nothing at all" {
     try std.testing.expectError(error.TooFewClusters, format.apply(&img, .fat32, "ra8"));
     try std.testing.expectEqual(@as(usize, 0), img.held());
 }
+
+test "the smallest FAT32 card is bigger than the card this model comes up with" {
+    const mib = format.smallestCardMib(.fat32) orelse return error.TestExpectedSize;
+    const default_mib = image.geometry.default_capacity_blocks / megabyte_blocks;
+    try std.testing.expect(mib > default_mib);
+}
+
+test "the smallest card the search names really does format" {
+    inline for (.{ format.Kind.fat16, format.Kind.fat32 }) |kind| {
+        const mib = format.smallestCardMib(kind) orelse return error.TestExpectedSize;
+        _ = try format.solve(kind, mib * megabyte_blocks);
+    }
+}
+
+test "one megabyte below the floor is refused" {
+    inline for (.{ format.Kind.fat16, format.Kind.fat32 }) |kind| {
+        const mib = format.smallestCardMib(kind) orelse return error.TestExpectedSize;
+        if (mib > 1) {
+            try std.testing.expectError(
+                error.TooFewClusters,
+                format.solve(kind, (mib - 1) * megabyte_blocks),
+            );
+        }
+    }
+}
+
+test "a FAT16 card has a ceiling and the card above it is refused" {
+    const mib = format.largestCardMib(.fat16) orelse return error.TestExpectedSize;
+    _ = try format.solve(.fat16, mib * megabyte_blocks);
+    try std.testing.expectError(
+        error.TooManyClusters,
+        format.solve(.fat16, (mib + 1) * megabyte_blocks),
+    );
+}
+
+test "the default card is too small for FAT32 and fine for FAT16" {
+    const blocks = image.geometry.default_capacity_blocks;
+    try std.testing.expectError(error.TooFewClusters, format.solve(.fat32, blocks));
+    _ = try format.solve(.fat16, blocks);
+}

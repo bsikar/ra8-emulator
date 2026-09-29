@@ -193,6 +193,7 @@ pub const periph = struct {
     pub const sd_dump = @import("periph/sd_dump.zig");
     pub const sd_fat = @import("periph/sd_fat.zig");
     pub const sd_format = @import("periph/sd_format.zig");
+    pub const sd_format_advice = @import("periph/sd_format_advice.zig");
     pub const sd_image = @import("periph/sd_image.zig");
     pub const sd_reply = @import("periph/sd_reply.zig");
     pub const sd_trace = @import("periph/sd_trace.zig");

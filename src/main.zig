@@ -19,6 +19,7 @@ const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
+const sd_advice = ra8.periph.sd_format_advice;
 const breakpoint = ra8.core.breakpoint;
 const watchpoint = ra8.core.watchpoint;
 const mem_dump = ra8.core.mem_dump;
@@ -352,6 +353,7 @@ fn prepareCard(board: *Board, options: cli.Options) !void {
     const kind = options.sd_new orelse return;
     board.sd_volume = sd_format.apply(&board.sd.img, kind, options.sd_label) catch |err| {
         std.debug.print("--sd-new {s}: {s}\n", .{ kind.text(), @errorName(err) });
+        sd_advice.printRemedy(kind, err);
         return err;
     };
 }
