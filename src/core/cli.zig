@@ -1,6 +1,7 @@
 //! The command line: the flags the emulator takes and nothing else.
 const std = @import("std");
 const part = @import("part.zig");
+const place = @import("place.zig");
 const gt911 = @import("../periph/i3c_gt911.zig");
 const max17048 = @import("../periph/i3c_max17048.zig");
 const sd_format = @import("../periph/sd_format.zig");
@@ -12,7 +13,7 @@ pub const usage =
     \\                    [--touch X,Y]
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
-    \\                    [--break-sym NAME [N]]
+    \\                    [--break-sym NAME [N]] [--dump-mem PLACE [N]]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -33,6 +34,11 @@ pub const usage =
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
+    \\  --dump-mem PLACE [N]
+    \\                     print N words (default 4) out of memory at
+    \\                     PLACE, which is an address, a symbol, or
+    \\                     @symbol to follow the pointer it holds, any of
+    \\                     them with a +/- offset applied afterwards
     \\  --dump-regs        print the argument registers and the words at
     \\                     the stack pointer after the run; at a break
     \\                     they are still the arguments of the function
@@ -122,6 +128,11 @@ pub const Options = struct {
     break_arrival: u32 = 1,
     /// Print the core registers after the run.
     dump_regs: bool = false,
+    /// A place in memory to read once the run is over, spelled the way
+    /// `place.parse` reads it. Null reads nothing.
+    dump_mem: ?[]const u8 = null,
+    /// How many words that read prints. Null takes the default.
+    dump_mem_words: ?u32 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -163,6 +174,7 @@ pub fn parse(argv: []const []const u8) !Options {
     var options = Options{ .path = argv[1] };
     var index: usize = 2;
     while (index < argv.len) : (index += 1) {
+        if (try parseWorld(&options, argv, &index)) continue;
         if (std.mem.eql(u8, argv[index], "--instructions")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
@@ -202,40 +214,63 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.part = part.Part.parse(argv[index]) orelse return error.UnknownPart;
-        } else if (std.mem.eql(u8, argv[index], "--sd-size")) {
+        } else if (std.mem.eql(u8, argv[index], "--dump-mem")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
-            options.sd_size_mb = try std.fmt.parseInt(u32, argv[index], 10);
-        } else if (std.mem.eql(u8, argv[index], "--dump-sd")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            options.dump_sd = try std.fmt.parseInt(u32, argv[index], 0);
+            options.dump_mem = argv[index];
+            // The count is optional, taken the same way `--break-sym`
+            // takes its arrival: only when the next argument is a number.
+            if (index + 1 < argv.len) {
+                if (std.fmt.parseInt(u32, argv[index + 1], 0) catch null) |count| {
+                    if (count == 0) return error.BadValue;
+                    options.dump_mem_words = count;
+                    index += 1;
+                }
+            }
         } else if (std.mem.eql(u8, argv[index], "--dump-regs")) {
             options.dump_regs = true;
-        } else if (std.mem.eql(u8, argv[index], "--trace-sd")) {
-            options.trace_sd = true;
-        } else if (std.mem.eql(u8, argv[index], "--sd-new")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            const spec = argv[index];
-            const split = std.mem.indexOfScalar(u8, spec, ':') orelse spec.len;
-            options.sd_new = sd_format.Kind.parse(spec[0..split]) orelse return error.UnknownFormat;
-            if (split < spec.len) options.sd_label = spec[split + 1 ..];
-        } else if (std.mem.eql(u8, argv[index], "--touch")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            if (options.touch_count >= options.touches.len) return error.TooManyTouches;
-            options.touches[options.touch_count] = try parseTouch(argv[index]);
-            options.touch_count += 1;
-        } else if (std.mem.eql(u8, argv[index], "--battery")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            options.battery.soc_pct = try std.fmt.parseInt(u8, argv[index], 10);
-        } else if (std.mem.eql(u8, argv[index], "--charge")) {
-            options.battery.charging = true;
         } else return error.UnknownFlag;
     }
     return options;
+}
+
+/// The flags that describe the world the board comes up in: the card on the
+/// SPI line, the panel, the gauge. They read the same way the rest do and
+/// are only kept apart so neither reader sprawls.
+///
+/// Returns whether the argument was one of them. False leaves the index
+/// where it found it, so the caller can carry on looking.
+fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    const flag = argv[index.*];
+    if (std.mem.eql(u8, flag, "--trace-sd")) {
+        options.trace_sd = true;
+    } else if (std.mem.eql(u8, flag, "--charge")) {
+        options.battery.charging = true;
+    } else if (std.mem.eql(u8, flag, "--sd-size")) {
+        options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
+    } else if (std.mem.eql(u8, flag, "--dump-sd")) {
+        options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
+    } else if (std.mem.eql(u8, flag, "--battery")) {
+        options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
+    } else if (std.mem.eql(u8, flag, "--sd-new")) {
+        const spec = try next(argv, index);
+        const split = std.mem.indexOfScalar(u8, spec, ':') orelse spec.len;
+        options.sd_new = sd_format.Kind.parse(spec[0..split]) orelse return error.UnknownFormat;
+        if (split < spec.len) options.sd_label = spec[split + 1 ..];
+    } else if (std.mem.eql(u8, flag, "--touch")) {
+        const spec = try next(argv, index);
+        if (options.touch_count >= options.touches.len) return error.TooManyTouches;
+        options.touches[options.touch_count] = try parseTouch(spec);
+        options.touch_count += 1;
+    } else return false;
+    return true;
+}
+
+/// The argument after the flag, or a refusal when the flag was last.
+fn next(argv: []const []const u8, index: *usize) ![]const u8 {
+    index.* += 1;
+    if (index.* >= argv.len) return error.MissingValue;
+    return argv[index.*];
 }
 
 /// "X,Y" as a contact on the panel, in the panel's own coordinates.

@@ -19,6 +19,7 @@ const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
 const breakpoint = ra8.core.breakpoint;
+const mem_dump = ra8.core.mem_dump;
 const registers = ra8.core.registers;
 const sd_dump = ra8.periph.sd_dump;
 const sd_image = ra8.periph.sd_image;
@@ -102,6 +103,7 @@ pub fn main() !u8 {
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, &board, options);
     try dumpRegisters(out, core, options);
+    try mem_dump.print(out, core, image, options.dump_mem, options.dump_mem_words);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 
