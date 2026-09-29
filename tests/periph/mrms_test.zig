@@ -102,3 +102,62 @@ test "the window covers the three registers the driver names" {
     try std.testing.expectEqual(@as(u32, 0x4013_C000), mrms.win_base);
     try std.testing.expectEqual(@as(u32, 0x0C), mrms.win_span);
 }
+
+test "a frequency store with the buffer still up is counted, not turned away" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    m.write(mrms.win_base + mrms.regs.mrcfreq, 4, mrms.key.mrcfreq | 250);
+    try std.testing.expectEqual(@as(u32, 250), m.code.mhz);
+    try std.testing.expectEqual(@as(u32, 1), m.code.latched);
+    try std.testing.expectEqual(@as(u32, 1), m.hot_changes);
+}
+
+test "the other latch answers to the same rule" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    m.write(mrms.win_base + mrms.regs.mrefreq, 4, mrms.key.mrefreq | 200);
+    try std.testing.expectEqual(@as(u32, 200), m.extra.mhz);
+    try std.testing.expectEqual(@as(u32, 1), m.hot_changes);
+}
+
+test "the driver's own order counts nothing" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, 0);
+    m.write(mrms.win_base + mrms.regs.mrcfreq, 4, mrms.key.mrcfreq | 250);
+    m.write(mrms.win_base + mrms.regs.mrefreq, 4, mrms.key.mrefreq | 250);
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    try std.testing.expectEqual(@as(u32, 0), m.hot_changes);
+    try std.testing.expectEqual(@as(u32, 0), m.early_enables);
+    try std.testing.expect(m.prefetching());
+}
+
+test "enabling the buffer under the floor is counted" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcfreq, 4, mrms.key.mrcfreq | (mrms.threshold_mhz - 1));
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    try std.testing.expectEqual(@as(u32, 1), m.early_enables);
+    try std.testing.expect(m.prefetching());
+}
+
+test "the floor itself is high enough" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcfreq, 4, mrms.key.mrcfreq | mrms.threshold_mhz);
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    try std.testing.expectEqual(@as(u32, 0), m.early_enables);
+}
+
+test "a store that puts the buffer down counts nothing either way" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, 0);
+    try std.testing.expectEqual(@as(u32, 0), m.early_enables);
+    try std.testing.expect(!m.prefetching());
+    try std.testing.expect(m.quiet());
+}
+
+test "either count alone is enough to be worth reporting" {
+    var m = unit();
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, mrms.prefetch_on);
+    m.write(mrms.win_base + mrms.regs.mrcpfb, 4, 0);
+    try std.testing.expectEqual(@as(u32, 1), m.early_enables);
+    try std.testing.expect(!m.quiet());
+}

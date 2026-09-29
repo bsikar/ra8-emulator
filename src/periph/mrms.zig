@@ -40,6 +40,26 @@
 //! three dummy reads the driver does after clearing it are reads like any
 //! other.
 //!
+//! THE TWO ORDERING RULES AROUND THE PREFETCH BUFFER, and they are rules
+//! about WHEN, not about what a register holds. HUM Ch 59.4.3 "Frequency
+//! Change Procedure" (p 3548) and FSP bsp_clocks.c both want the buffer
+//! DOWN before any frequency change, and ra8_cgc.c's step 1 does exactly
+//! that: internal_clear_pfb writes MRCPFB = 0 and then three dummy reads to
+//! drain the pipeline, before a single divider or source moves. Step 10,
+//! internal_set_pfb, brings it back up only above a floor: it reads MRCFREQ
+//! back and writes MRCPFB = 1 only when that readback is at least 100 MHz
+//! (k_ra8_mrcpfb_threshold_mhz, FSP's BSP_PRV_MRCPFB_LIMIT).
+//!
+//! NEITHER RULE IS REFUSED HERE, and the reason is the manual: it says what
+//! the driver must do and does not say what the part does to a driver that
+//! does not. A buffer left up across a frequency change is holding code
+//! fetched at the old wait states, and a buffer enabled under 100 MHz is
+//! running ahead of what the MRAM can serve; both are real faults on
+//! silicon and neither has a defined register-level answer to model. So the
+//! store lands, and the run counts it and says so, the same cut the DOTF
+//! reversed pair, the OCTACLK early release, the AGT cascade start order,
+//! SYRSTMSK and the ICU pin rewrite all take.
+//!
 //! NOT MODELLED, AND NOT GUESSED: nothing downstream reads these. No wait
 //! state is inserted, no MRAM access is slowed, and the prefetch buffer
 //! buffers nothing, because this model has no memory timing for any of that
@@ -71,6 +91,10 @@ pub const key = struct {
 /// MRCPFB bit 0, the prefetch buffer enable (ra8_mrms_pfb_t).
 pub const prefetch_on: u32 = 0x01;
 
+/// The MRICLK floor the prefetch buffer may only be enabled above
+/// (k_ra8_mrcpfb_threshold_mhz, FSP BSP_PRV_MRCPFB_LIMIT).
+pub const threshold_mhz: u32 = 100;
+
 /// One keyed frequency latch: what it holds and what it turned away.
 pub const Latch = struct {
     /// The key a store has to carry for this latch to accept it.
@@ -101,11 +125,16 @@ pub const Mrms = struct {
     extra: Latch = .{ .wants = key.mrefreq },
     /// MRCPFB, retained as written.
     pfb: u32 = 0,
+    /// Frequency stores taken with the prefetch buffer still up.
+    hot_changes: u32 = 0,
+    /// Stores that left the buffer up while MRCFREQ is under the floor.
+    early_enables: u32 = 0,
 
     /// An image that never brought the clocks up has nothing to narrate.
     pub fn quiet(self: *const Mrms) bool {
         return self.code.latched == 0 and self.code.refused == 0 and
-            self.extra.latched == 0 and self.extra.refused == 0 and self.pfb == 0;
+            self.extra.latched == 0 and self.extra.refused == 0 and self.pfb == 0 and
+            self.hot_changes == 0 and self.early_enables == 0;
     }
 
     /// Whether the prefetch buffer is switched on right now.
@@ -123,12 +152,29 @@ pub const Mrms = struct {
         };
     }
 
+    /// A frequency store the procedure wanted done with the buffer down.
+    /// The store still lands; what the buffer then holds is code fetched at
+    /// the old wait states, which is not a register state to model, so the
+    /// run counts the store rather than turning it away.
+    fn latch(self: *Mrms, which: *Latch, value: u32) void {
+        if (self.prefetching()) self.hot_changes +%= 1;
+        which.store(value);
+    }
+
+    /// MRCPFB is retained as written either way; a store that leaves the
+    /// buffer up while MRCFREQ is under the floor is counted, because the
+    /// driver reads MRCFREQ back for exactly this test and then declines.
+    fn setPrefetch(self: *Mrms, value: u32) void {
+        self.pfb = value;
+        if (self.prefetching() and self.code.mhz < threshold_mhz) self.early_enables +%= 1;
+    }
+
     pub fn write(self: *Mrms, address: u32, width: u3, value: u32) void {
         _ = width;
         switch (address -% win_base) {
-            regs.mrcpfb => self.pfb = value,
-            regs.mrcfreq => self.code.store(value),
-            regs.mrefreq => self.extra.store(value),
+            regs.mrcpfb => self.setPrefetch(value),
+            regs.mrcfreq => self.latch(&self.code, value),
+            regs.mrefreq => self.latch(&self.extra, value),
             else => {},
         }
     }

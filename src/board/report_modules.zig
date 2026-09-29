@@ -130,6 +130,18 @@ fn memoryRates(board: *Board, out: Writer) !void {
             .{ refused, mrms.key.mrcfreq >> 24, mrms.key.mrefreq >> 24 },
         );
     }
+    if (unit.hot_changes != 0) {
+        try out.print(
+            "MRMS: {d} frequency store(s) taken with the prefetch buffer still on, clear MRCPFB first\n",
+            .{unit.hot_changes},
+        );
+    }
+    if (unit.early_enables != 0) {
+        try out.print(
+            "MRMS: {d} store(s) left the prefetch buffer on below the {d} MHz floor\n",
+            .{ unit.early_enables, mrms.threshold_mhz },
+        );
+    }
 }
 
 pub fn section(board: *Board, out: Writer) !void {
