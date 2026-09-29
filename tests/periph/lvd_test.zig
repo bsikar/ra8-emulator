@@ -195,3 +195,62 @@ test "armed says whether a latch would reach the CPU" {
     // An n channel has no interrupt path whatever RE says.
     try std.testing.expect(!unit.channels[pvd4].armed());
 }
+
+test "the divider lands while DFDIS is set, which is the driver's own order" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis);
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis | 0x20);
+    const value = unit.read(lvd.at(pvd1, .cr0), 1) & lvd.control.fsamp;
+    try std.testing.expectEqual(@as(u32, 0x20), value);
+    try std.testing.expectEqual(@as(u32, 0), unit.fields.filters);
+}
+
+test "the divider is refused while the filter runs, and the run says so" {
+    var unit = lvd.Lvd.init();
+    // The driver's order: DFDIS first on its own, then the divider.
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis);
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis | 0x10);
+    // Drop DFDIS: the filter is now running with divider 0x10.
+    unit.write(lvd.at(pvd1, .cr0), 1, 0x10);
+    unit.write(lvd.at(pvd1, .cr0), 1, 0x20 | lvd.control.rie);
+    const value = unit.read(lvd.at(pvd1, .cr0), 1);
+    try std.testing.expectEqual(@as(u32, 0x10), value & lvd.control.fsamp);
+    try std.testing.expectEqual(@as(u32, lvd.control.rie), value & lvd.control.rie);
+    try std.testing.expectEqual(@as(u32, 1), unit.fields.filters);
+    try std.testing.expect(!unit.quiet());
+}
+
+test "a CR0 read-modify-write that keeps the divider is not a refusal" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis);
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis | 0x30);
+    unit.write(lvd.at(pvd1, .cr0), 1, 0x30);
+    unit.write(lvd.at(pvd1, .cr0), 1, 0x30 | lvd.control.rie);
+    try std.testing.expectEqual(@as(u32, 0), unit.fields.filters);
+}
+
+test "setting DFDIS and moving FSAMP in one store is still a refusal" {
+    var unit = lvd.Lvd.init();
+    // The gate reads the DFDIS standing before the store, which is why the
+    // driver reaches CR0 three times instead of once.
+    unit.write(lvd.at(pvd1, .cr0), 1, lvd.control.dfdis | 0x20);
+    try std.testing.expectEqual(
+        @as(u32, 0),
+        unit.read(lvd.at(pvd1, .cr0), 1) & lvd.control.fsamp,
+    );
+    try std.testing.expectEqual(@as(u32, 1), unit.fields.filters);
+}
+
+test "an n-series channel is gated the same way once PVDLR is released" {
+    var unit = lvd.Lvd.init();
+    unit.write(lvd.pvdlr_at, 1, 0);
+    unit.write(lvd.at(pvd4, .cr0), 1, lvd.control.dfdis);
+    unit.write(lvd.at(pvd4, .cr0), 1, lvd.control.dfdis | 0x10);
+    unit.write(lvd.at(pvd4, .cr0), 1, 0x10);
+    unit.write(lvd.at(pvd4, .cr0), 1, 0x30);
+    try std.testing.expectEqual(
+        @as(u32, 0x10),
+        unit.read(lvd.at(pvd4, .cr0), 1) & lvd.control.fsamp,
+    );
+    try std.testing.expectEqual(@as(u32, 1), unit.fields.filters);
+}

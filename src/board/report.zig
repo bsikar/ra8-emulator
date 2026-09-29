@@ -27,12 +27,12 @@ const sysclock = @import("report_sysclk.zig");
 const lowpower = @import("report_lowpower.zig");
 const pll1 = @import("report_pll.zig");
 const voltage = @import("report_voltage.zig");
+const monitors = @import("report_monitors.zig");
 const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
 const timers = @import("report_timers.zig");
 const gpio = @import("../periph/gpio.zig");
-const lvd = @import("../periph/lvd.zig");
 const poeg = @import("../periph/poeg.zig");
 const reset = @import("../periph/reset.zig");
 const reboot = @import("../core/reboot.zig");
@@ -88,7 +88,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try watchdog(board, out);
     try causes(board, out);
     try control(board, out);
-    try monitors(board, out);
+    try monitors.sections(board, out);
     try events(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
@@ -212,39 +212,6 @@ fn control(board: *Board, out: Writer) !void {
         "AIRCR: {d} write(s) DROPPED for a missing or wrong VECTKEY (0x{X:0>4} required)\n",
         .{ unit.rejected, scb.key.write },
     );
-}
-
-/// One line per voltage monitor the firmware programmed. A monitor whose
-/// threshold sits over the rail is reported as below, which is the reading
-/// the C tree cannot give: there every PVDmSR read says the rail is fine.
-fn monitors(board: *Board, out: Writer) !void {
-    if (board.monitors.quiet()) return;
-    for (&board.monitors.channels, lvd.names) |*channel, label| {
-        if (channel.quiet()) continue;
-        try out.print("{s}: {s}", .{ label, monitorState(channel) });
-        if (channel.crossings != 0) {
-            try out.print(", {d} crossing(s), DET={d}", .{ channel.crossings, @intFromBool(channel.det) });
-        }
-        if (channel.refused_clears != 0) {
-            try out.print(", {d} DET CLEAR(S) WRITTEN AS A 1 AND REFUSED", .{channel.refused_clears});
-        }
-        if (channel.reserved_level != 0) {
-            try out.print(", {d} RESERVED PVDLVL ENCODING(S)", .{channel.reserved_level});
-        }
-        try out.print("\n", .{});
-    }
-    if (board.monitors.dropped != 0) {
-        try out.print(
-            "SYSC-PVDLR: DROPPED {d} write(s) to PVD4/PVD5 with LOCK set (write 0 to PVDLR once to release it)\n",
-            .{board.monitors.dropped},
-        );
-    }
-}
-
-/// What the comparator is saying right now, in the words the report uses.
-fn monitorState(channel: *const lvd.Channel) []const u8 {
-    if (!channel.live) return "monitor off";
-    return if (channel.above) "VCC above Vdet" else "VCC BELOW Vdet";
 }
 
 /// The event links, but only once something raised an event. A re-pend is
