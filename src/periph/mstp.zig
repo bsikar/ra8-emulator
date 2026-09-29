@@ -13,11 +13,21 @@
 //! file ends, and it is also what makes the mandated read-back after an
 //! ungate settle: MSTPCRx is real state here, not a sparse cell that toggles.
 //!
+//! A module-stop bit follows its peripheral's security attribution. Once the
+//! Secure side delegates a peripheral to the Non-secure world (R_PSCU, the
+//! PSARB..PSARE words next door at 0x4020_4000), that MSTPCRx bit is owned by
+//! the Non-secure alias and a Secure write to it is MASKED: the bit does not
+//! change. `attribution` is that block, read live on every store rather than
+//! copied, so a delegation made mid-run takes effect on the next write. A
+//! board built without one delegates nothing and every bit stays writable,
+//! which is also what the part does out of reset.
+//!
 //! The shadow and the address -> bit table are plain data and arithmetic, so
 //! everything below is tested directly rather than only through a full run.
 const std = @import("std");
 const periph = @import("registry.zig");
 const drops = @import("mstp_drops.zig");
+const pscu = @import("pscu.zig");
 
 /// R_MSTP geometry (HUM Ch 11.2.6..11.2.10). The Non-secure alias at
 /// 0x5020_3000 is folded onto this base by the bus before it ever gets here.
@@ -136,6 +146,11 @@ fn ownerOf(address: u32) ?Owner {
 
 /// The MSTPCRA..E shadow, the gate it implies, and what the gate dropped.
 pub const Mstp = struct {
+    /// The security attribution words next door, or null on a board that
+    /// has none, in which case nothing is delegated.
+    attribution: ?*const pscu.Unit = null,
+    /// Secure stores whose bits the attribution mask refused to move.
+    masked_writes: u32 = 0,
     regs: [reg_count]u32 = .{ reset_a, reset_rest, reset_rest, reset_rest, reset_rest },
     gated_reads: u32 = 0,
     gated_writes: u32 = 0,
@@ -215,8 +230,23 @@ pub const Mstp = struct {
             const shift: u5 = @intCast((byte % 4) * 8);
             const incoming = (value >> @as(u5, @intCast(i * 8))) & 0xFF;
             const register = &self.regs[byte / 4];
-            register.* = (register.* & ~(@as(u32, 0xFF) << shift)) | (incoming << shift);
+            // A delegated bit is owned by the Non-secure alias: the store
+            // names it, and it does not move.
+            const writable = ~self.delegated(byte / 4) & (@as(u32, 0xFF) << shift);
+            if (writable == 0) {
+                self.masked_writes +%= 1;
+                continue;
+            }
+            const before = register.*;
+            register.* = (before & ~writable) | ((incoming << shift) & writable);
+            if ((@as(u32, 0xFF) << shift) != writable) self.masked_writes +%= 1;
         }
+    }
+
+    /// The bits of one MSTPCR register that a Secure store cannot move.
+    fn delegated(self: *const Mstp, register: usize) u32 {
+        const words = self.attribution orelse return 0;
+        return words.nonsecureMask(register);
     }
 
     fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {

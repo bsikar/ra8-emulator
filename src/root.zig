@@ -165,6 +165,7 @@ pub const periph = struct {
     pub const pdctr = @import("periph/pdctr.zig");
     pub const pfs = @import("periph/pfs.zig");
     pub const pfs_protect = @import("periph/pfs_protect.zig");
+    pub const pscu = @import("periph/pscu.zig");
     pub const pdm = @import("periph/pdm.zig");
     pub const poeg = @import("periph/poeg.zig");
     pub const ckcr = @import("periph/ckcr.zig");
