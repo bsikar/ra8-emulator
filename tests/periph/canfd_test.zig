@@ -27,6 +27,9 @@ fn start(model: *canfd.Canfd, base: u32) void {
 /// Load TX message buffer 0 with an identifier, a length code and one data
 /// word, then assert the transmit request.
 fn send(model: *canfd.Canfd, base: u32, id: u32, dlc: u32, payload: u32) void {
+    // ra8_canfd_transmit clears the previous result first: TMTR is only
+    // honoured while TMTRF reads 00b. See src/periph/canfd_tx_status.zig.
+    model.write(base + canfd.off_tmsts0, 1, 0);
     model.write(base + canfd.off_tm0, 4, id);
     model.write(base + canfd.off_tm0 + 4, 4, dlc << fifo.ptr.dlc_shift);
     model.write(base + canfd.off_tm0 + 12, 4, payload);
@@ -167,11 +170,42 @@ test "a store into a status register is refused" {
     model.write(unit0 + canfd.off_rfsts0, 4, canfd.field.rfif);
     model.write(unit0 + canfd.off_gsts, 4, canfd.field.ghltsts);
     model.write(unit0 + canfd.off_cnsts, 4, canfd.field.chltsts);
-    model.write(unit0 + canfd.off_tmsts0, 4, canfd.field.tmtrf_done);
+    // CFDTMSTS[1..3] are mailboxes this model does not carry.
+    model.write(unit0 + canfd.off_tmsts0 + 1, 1, canfd.field.tmtrf_done);
     try std.testing.expectEqual(@as(u32, 4), model.units[0].faked);
     try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
     try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_gsts, 4));
     try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_tmsts0, 4));
+}
+
+test "a transmit request is dropped while the previous result stands" {
+    var model = canfd.Canfd.init();
+    start(&model, unit0);
+    // The first frame goes and leaves TMTRF = 10b behind it.
+    model.write(unit0 + canfd.off_tm0, 4, 0x123);
+    model.write(unit0 + canfd.off_tmc0, 4, canfd.field.tmtr);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].sent);
+    try std.testing.expectEqual(canfd.field.tmtrf_done, model.read(unit0 + canfd.off_tmsts0, 4));
+    // A driver that forgets the clear gets nothing out of the next request,
+    // which is what ra8_canfd_transmit's own comment describes.
+    model.write(unit0 + canfd.off_tmc0, 4, canfd.field.tmtr);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].sent);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].tx.stalled);
+    // Clearing the byte frees the mailbox again.
+    model.write(unit0 + canfd.off_tmsts0, 1, 0);
+    model.write(unit0 + canfd.off_tmc0, 4, canfd.field.tmtr);
+    try std.testing.expectEqual(@as(u32, 2), model.units[0].sent);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].tx.stalled);
+}
+
+test "software cannot set TMTRF, only clear it" {
+    var model = canfd.Canfd.init();
+    start(&model, unit0);
+    model.write(unit0 + canfd.off_tmsts0, 1, canfd.field.tmtrf_done);
+    try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_tmsts0, 4));
+    // And a frame really does still go: the mailbox is idle.
+    send(&model, unit0, 0x123, 8, 0xABCD_1234);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].sent);
 }
 
 test "a narrow write keeps the bytes it does not name" {

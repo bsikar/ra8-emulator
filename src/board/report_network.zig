@@ -288,6 +288,12 @@ fn can(board: *Board, out: Writer) !void {
                 .{ index, unit.rx.refused },
             );
         }
+        if (unit.tx.stalled != 0) {
+            try out.print(
+                "CANFD{d}: DROPPED {d} transmit request(s), CFDTMSTS.TMTRF was never cleared\n",
+                .{ index, unit.tx.stalled },
+            );
+        }
         if (unit.starved != 0) {
             try out.print("CANFD{d}: {d} pop(s) of an empty receive FIFO\n", .{ index, unit.starved });
         }
