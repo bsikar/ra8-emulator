@@ -89,6 +89,11 @@ Unicorn itself tops out at Cortex-M33 (Armv8-M), yet the M85 firmware executes
 on it, because the boot path emits no v8.1-M-only opcode. An
 invalid-instruction trap reports any that ever appears.
 
+One instruction that appears is not the chip's fault and not Unicorn's: Arm GNU
+Toolchain 13.3.Rel1 emits `pc` as a shifted operand for a 64-bit constant
+multiply on Cortex-M85 at `-O0`, which is UNPREDICTABLE and is what stops both
+SD images. Two lines of C reproduce it; see `docs/gcc-miscompile.md`.
+
 ## Which part it emulates
 
 The RA8P1 shares the RA8D2's entire register map and memory map -- the
