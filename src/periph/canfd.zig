@@ -59,6 +59,7 @@
 //! RX-FIFO one. The rest of the window is shadowed, and never read.
 const periph = @import("registry.zig");
 const fifo = @import("canfd_fifo.zig");
+const rx_config = @import("canfd_rx_config.zig");
 const registers = @import("canfd_regs.zig");
 const errors = @import("canfd_error.zig");
 
@@ -117,6 +118,11 @@ pub const Unit = struct {
     refused: u32 = 0,
     /// Accepted frames with no stage free.
     lost: u32 = 0,
+    /// Accepted frames dropped because CFDRFCC.RFE was never set, so there
+    /// was no FIFO to queue them in. See src/periph/canfd_rx_config.zig.
+    unarmed: u32 = 0,
+    /// CFDRFCC[0], the RX FIFO's own configuration.
+    rx: rx_config.Config = .{},
     /// Pops of an empty FIFO.
     starved: u32 = 0,
     /// Stores into a status register the controller owns.
@@ -124,8 +130,8 @@ pub const Unit = struct {
 
     pub fn quiet(self: *const Unit) bool {
         return self.sent == 0 and self.refused == 0 and self.starved == 0 and
-            self.faked == 0 and self.faults.quiet() and
-            self.global == .reset and self.channel == .reset;
+            self.faked == 0 and self.unarmed == 0 and self.faults.quiet() and
+            self.rx.quiet() and self.global == .reset and self.channel == .reset;
     }
 
     /// Both machines have to be in operation before a frame can go.
@@ -191,6 +197,12 @@ pub const Unit = struct {
             self.filtered +%= 1;
             return false;
         }
+        // A FIFO the firmware never enabled is not a full FIFO: the frame
+        // has nowhere to go at all, so it is dropped rather than lost.
+        if (!self.rx.enabled()) {
+            self.unarmed +%= 1;
+            return false;
+        }
         if (!self.queue.push(frame)) {
             self.lost +%= 1;
             return false;
@@ -213,6 +225,7 @@ pub const Unit = struct {
             off_gsts => self.globalStatus(),
             off_cnsts => self.channelStatus(),
             off_rfsts0 => self.fifoStatus(),
+            rx_config.off_rfcc0 => self.rx.word,
             off_tmc0 => self.tmc,
             off_tmsts0 => self.tmsts,
             errors.off => self.faults.read(),
@@ -243,6 +256,10 @@ pub const Unit = struct {
             },
             errors.off => self.faults.store(byte, width, value),
             off_rfpctr0 => self.popFrame(),
+            rx_config.off_rfcc0 => self.rx.store(
+                merge(self.rx.word, byte, width, value),
+                self.global == .reset,
+            ),
             else => {
                 const word = offset / 4;
                 self.shadow[word] = merge(self.shadow[word], byte, width, value);

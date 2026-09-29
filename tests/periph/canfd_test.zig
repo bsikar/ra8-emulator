@@ -4,6 +4,10 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const canfd = ra8.periph.canfd;
 const fifo = ra8.periph.canfd_fifo;
+const rx_config = ra8.periph.canfd_rx_config;
+
+/// CFDRFCC.RFDC = 001b, the four-message depth ra8_canfd.c programs.
+const depth_4: u32 = 1 << 8;
 
 const unit0 = canfd.unit0_base;
 const unit1 = canfd.unit1_base;
@@ -11,8 +15,13 @@ const unit1 = canfd.unit1_base;
 /// Bring both mode machines of one unit into operation, the way the driver
 /// does: global first, then the channel.
 fn start(model: *canfd.Canfd, base: u32) void {
+    // ra8_canfd.c programs the FIFO depth while the global machine is still
+    // in reset, brings both machines up, and only then sets RFE, which does
+    // not take in GL_RESET. See src/periph/canfd_rx_config.zig.
+    model.write(base + rx_config.off_rfcc0, 4, depth_4);
     model.write(base + canfd.off_gctr, 4, 0);
     model.write(base + canfd.off_cnctr, 4, 0);
+    model.write(base + rx_config.off_rfcc0, 4, depth_4 | rx_config.field.rfe);
 }
 
 /// Load TX message buffer 0 with an identifier, a length code and one data
@@ -230,4 +239,45 @@ test "an address outside both windows reads zero and writes nothing" {
     model.write(unit0 + canfd.win_span, 4, 0xFFFF_FFFF);
     try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.win_span, 4));
     try std.testing.expect(model.quiet());
+}
+
+test "a frame the filter took is dropped when the FIFO was never enabled" {
+    var model = canfd.Canfd.init();
+    // Both machines run, but nothing ever wrote CFDRFCC: the driver skipped
+    // internal_enable_rx_fifo0.
+    model.write(unit0 + canfd.off_gctr, 4, 0);
+    model.write(unit0 + canfd.off_cnctr, 4, 0);
+    send(&model, unit0, 0x123, 8, 0xDEAD_BEEF);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].sent);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].unarmed);
+    try std.testing.expectEqual(@as(u32, 0), model.units[0].lost);
+    try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
+}
+
+test "the enable write in GL_RESET is refused and the frame still drops" {
+    var model = canfd.Canfd.init();
+    // The order ra8_canfd.c warns against: RFE asked for before the global
+    // machine leaves reset.
+    model.write(unit0 + rx_config.off_rfcc0, 4, depth_4 | rx_config.field.rfe);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].rx.refused);
+    model.write(unit0 + canfd.off_gctr, 4, 0);
+    model.write(unit0 + canfd.off_cnctr, 4, 0);
+    send(&model, unit0, 0x123, 8, 0xC0FF_EE00);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].unarmed);
+    // The depth survived the refusal, so the retry the driver makes works.
+    model.write(unit0 + rx_config.off_rfcc0, 4, depth_4 | rx_config.field.rfe);
+    send(&model, unit0, 0x123, 8, 0xC0FF_EE00);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].unarmed);
+    try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_rfsts0, 4) & canfd.field.rfemp);
+}
+
+test "CFDRFCC reads back what the firmware left in it" {
+    var model = canfd.Canfd.init();
+    start(&model, unit0);
+    try std.testing.expectEqual(
+        depth_4 | rx_config.field.rfe,
+        model.read(unit0 + rx_config.off_rfcc0, 4),
+    );
+    // And the second unit is untouched by the first.
+    try std.testing.expectEqual(@as(u32, 0), model.read(unit1 + rx_config.off_rfcc0, 4));
 }

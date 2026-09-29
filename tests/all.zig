@@ -47,6 +47,7 @@ test {
     _ = @import("periph/mpu_test.zig");
     _ = @import("periph/canfd_error_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");
+    _ = @import("periph/canfd_rx_config_test.zig");
     _ = @import("periph/canfd_test.zig");
     _ = @import("periph/ceu_test.zig");
     _ = @import("periph/ckcr_test.zig");

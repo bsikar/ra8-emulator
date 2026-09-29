@@ -276,6 +276,18 @@ fn can(board: *Board, out: Writer) !void {
         if (unit.lost != 0) {
             try out.print("CANFD{d}: {d} frame(s) LOST, no receive stage free\n", .{ index, unit.lost });
         }
+        if (unit.unarmed != 0) {
+            try out.print(
+                "CANFD{d}: {d} frame(s) DROPPED, the receive FIFO was never enabled\n",
+                .{ index, unit.unarmed },
+            );
+        }
+        if (unit.rx.refused != 0) {
+            try out.print(
+                "CANFD{d}: REFUSED {d} store(s) asking for CFDRFCC.RFE, out of reset or with no depth\n",
+                .{ index, unit.rx.refused },
+            );
+        }
         if (unit.starved != 0) {
             try out.print("CANFD{d}: {d} pop(s) of an empty receive FIFO\n", .{ index, unit.starved });
         }
