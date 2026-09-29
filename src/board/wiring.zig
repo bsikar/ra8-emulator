@@ -21,6 +21,7 @@ const ckcr = @import("../periph/ckcr.zig");
 const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
+const sysclk = @import("../periph/sysclk.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
 const sd_card_line = @import("../periph/sd_card_line.zig");
@@ -132,6 +133,10 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.backup.block());
     self.oscillators = oscsf.Oscillators.init(&self.protection);
     try self.bus.add(self.oscillators.block());
+    // The tree asks the oscillators whether the source it was told to select
+    // had stabilised, so it goes on after them.
+    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators);
+    try self.bus.add(self.tree.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
     for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
     // The dividers ask the selects whether the branch is gated, so they go
