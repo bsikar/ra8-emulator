@@ -87,6 +87,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try graphics.sections(board, out);
     try watchdog(board, out);
     try causes(board, out);
+    try masks(board, out);
     try control(board, out);
     try monitors.sections(board, out);
     try events(board, out);
@@ -193,10 +194,40 @@ fn causes(board: *Board, out: Writer) !void {
             .{unit.requests},
         );
     }
-    if (unit.bad_acks == 0) return;
+    if (unit.bad_acks != 0) {
+        try out.print(
+            "RESET: {d} ack(s) wrote a one at a cause flag and cleared nothing (RSTSRn is write-zero-to-clear)\n",
+            .{unit.bad_acks},
+        );
+    }
+}
+
+/// SYRSTMSK0/1/2: the resets this run switched off, and the mask stores the
+/// part would not have taken. A firmware that thinks it masked a watchdog
+/// reset and did not is one that reboots where it expected to carry on.
+fn masks(board: *Board, out: Writer) !void {
+    const unit = &board.causes.masks;
+    if (unit.quiet()) return;
     try out.print(
-        "RESET: {d} ack(s) wrote a one at a cause flag and cleared nothing (RSTSRn is write-zero-to-clear)\n",
-        .{unit.bad_acks},
+        "SYRSTMSK: 0x{X:0>2} 0x{X:0>2} 0x{X:0>2} (a one masks that reset)\n",
+        .{ unit.m0, unit.m1, unit.m2 },
+    );
+    if (unit.dropped_locked != 0) {
+        try out.print(
+            "SYRSTMSK: DROPPED {d} store(s) with PRCR.PRC5 shut\n",
+            .{unit.dropped_locked},
+        );
+    }
+    if (unit.ignored_iwdt != 0) {
+        try out.print(
+            "SYRSTMSK: IGNORED {d} store(s) at IWDTMASK while the IWDT was running, the bit freezes until it stops\n",
+            .{unit.ignored_iwdt},
+        );
+    }
+    if (unit.ignored_wdt0 == 0) return;
+    try out.print(
+        "SYRSTMSK: IGNORED {d} store(s) at WDT0MASK while the WDT was running, the bit freezes until it stops\n",
+        .{unit.ignored_wdt0},
     );
 }
 
