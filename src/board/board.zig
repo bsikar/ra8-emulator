@@ -55,6 +55,7 @@ const oscsf = @import("../periph/oscsf.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
+const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -143,6 +144,8 @@ pub const Board = struct {
     low_power: lpm.Unit,
     /// PLLCCR / PLLCCR2 / MOSCWTCR, behind PRCR.PRC0.
     pll1: pll.Unit,
+    /// VSCR, the core voltage range, behind PRCR.PRC0.
+    voltage: vscr.Unit,
     /// The graphics power domain, and the one block so far that lives in it.
     /// Both are built in attach(): each needs a pointer to a model this board
     /// owns, not a copy of one.
@@ -298,6 +301,7 @@ pub const Board = struct {
             .tree = undefined,
             .low_power = undefined,
             .pll1 = undefined,
+            .voltage = undefined,
             .ratios = undefined,
             .branches = undefined,
             .graphics = undefined,

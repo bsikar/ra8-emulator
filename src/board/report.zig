@@ -26,6 +26,7 @@ const pinfunc = @import("report_pinfunc.zig");
 const sysclock = @import("report_sysclk.zig");
 const lowpower = @import("report_lowpower.zig");
 const pll1 = @import("report_pll.zig");
+const voltage = @import("report_voltage.zig");
 const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
@@ -110,6 +111,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try sysclock.sections(board, out);
     try lowpower.sections(board, out);
     try pll1.sections(board, out);
+    try voltage.sections(board, out);
     try network.sections(board, out);
     try cores.sections(board, out);
     try compute.sections(board, out);
