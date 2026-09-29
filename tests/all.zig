@@ -161,6 +161,7 @@ test {
     _ = @import("periph/lpm_test.zig");
     _ = @import("periph/pll_test.zig");
     _ = @import("periph/vscr_test.zig");
+    _ = @import("periph/voltage_hazard_test.zig");
     _ = @import("periph/pll_div_test.zig");
     _ = @import("periph/lpm_mode_test.zig");
     _ = @import("periph/sysclk_div_test.zig");

@@ -4,18 +4,24 @@ const sysclk = ra8.periph.sysclk;
 const sysclk_div = ra8.periph.sysclk_div;
 const prcr = ra8.periph.prcr;
 const oscsf = ra8.periph.oscsf;
+const vscr = ra8.periph.vscr;
+const hazard = ra8.periph.voltage_hazard;
 
 /// A tree with its own protection and oscillators, the way the board builds
 /// one. Both have to outlive the tree, so the fixture owns all three.
 const Fixture = struct {
     protection: prcr.Prcr,
     oscillators: oscsf.Oscillators,
+    voltage: vscr.Unit,
+    brownout: hazard.Watch,
     tree: sysclk.Tree,
 
     fn init(self: *Fixture) void {
         self.protection = prcr.Prcr.init();
         self.oscillators = oscsf.Oscillators.init(&self.protection);
-        self.tree = sysclk.Tree.init(&self.protection, &self.oscillators);
+        self.voltage = vscr.Unit.init(&self.protection);
+        self.brownout = hazard.Watch.init(&self.voltage);
+        self.tree = sysclk.Tree.init(&self.protection, &self.oscillators, &self.brownout);
     }
 
     /// Open PRC0, the way RA8_PROTECTED_WRITE(k_ra8_prcr_unlock_cgc) does.

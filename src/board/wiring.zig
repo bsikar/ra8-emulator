@@ -22,6 +22,7 @@ const mrms = @import("../periph/mrms.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const sysclk = @import("../periph/sysclk.zig");
+const voltage_hazard = @import("../periph/voltage_hazard.zig");
 const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
@@ -139,7 +140,13 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.oscillators.block());
     // The tree asks the oscillators whether the source it was told to select
     // had stabilised, so it goes on after them.
-    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators);
+    // The core voltage range is step 2 of the same protected bring-up, and it
+    // has to exist before the tree: the tree tells the brown-out watch about
+    // every clock select, and the watch reads this range live.
+    self.voltage = vscr.Unit.init(&self.protection);
+    try self.bus.add(self.voltage.block());
+    self.brownout = voltage_hazard.Watch.init(&self.voltage);
+    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators, &self.brownout);
     try self.bus.add(self.tree.block());
     self.branches = ckcr.Ckcr.init(&self.protection);
     for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
@@ -147,9 +154,6 @@ fn attachProtected(self: *Board) !void {
     // on after the selects they are paired with.
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
     for (0..ckdiv.windows.len) |which| try self.bus.add(self.ratios.block(which));
-    // The core voltage range is step 2 of the same protected bring-up.
-    self.voltage = vscr.Unit.init(&self.protection);
-    try self.bus.add(self.voltage.block());
     // PLL1's configuration asks PRCR before a store, as the clock tree does.
     self.pll1 = pll.Unit.init(&self.protection, &self.oscillators);
     // GTCLKCR is the GPT bank's clock domain, and only the module-stop
