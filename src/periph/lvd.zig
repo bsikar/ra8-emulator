@@ -12,6 +12,12 @@
 //!   0x4001_EA58 +0x2C PVDmCMPCR and PVDmCR0 for all four channels
 //!   0x4001_EB20 +0x18 PVDmFCR for all four, then PVDLR
 //!
+//! THE FILTER DIVIDER IS LOCKED WHILE THE FILTER RUNS. FSAMP only takes a
+//! store while that channel's DFDIS is set (HUM Ch 8.2.4 p 305, Ch 8.2.5
+//! p 306). The rule, its citation, why a read-modify-write that carries the
+//! divider along unchanged is not a violation, and why the matching PVDLVL
+//! rule is not modelled yet, all live in src/periph/lvd_field_lock.zig.
+//!
 //! Ported from board_periph_lvd.c on dev, which models the four status bytes
 //! and nothing else: it answers every PVDmSR read with MON = above and DET = 0
 //! whatever the firmware programmed, and absorbs every status write. So on dev
@@ -36,65 +42,21 @@ pub const filter_span: u32 = 0x18;
 /// emulator, so this is the one number the whole block is measured against.
 pub const rail_millivolts: u16 = 3300;
 
-/// PVDmCMPCR (HUM Ch 8.2.2 p 303): PVDLVL[4:0] plus the PVDE enable.
-pub const compare = struct {
-    pub const level: u8 = 0x1F;
-    pub const enable: u8 = 0x80;
-};
+/// The register fields and the Vdet table, in src/periph/lvd_regs.zig.
+const regs = @import("lvd_regs.zig");
+const field_lock = @import("lvd_field_lock.zig");
 
-/// PVDmCR0 (HUM Ch 8.2.4 p 305) and PVDnCR0 (Ch 8.2.5 p 306). Bit 3 on an m
-/// channel and bit 6 on an n channel are the reserved read-as-1 markers.
-pub const control = struct {
-    pub const rie: u8 = 0x01;
-    pub const dfdis: u8 = 0x02;
-    pub const cmpe: u8 = 0x04;
-    pub const m_marker: u8 = 0x08;
-    pub const fsamp: u8 = 0x30;
-    pub const ri: u8 = 0x40;
-    pub const n_marker: u8 = 0x40;
-    pub const rn: u8 = 0x80;
-};
-
-/// PVDmCR1 (HUM Ch 8.2.6 p 307): the edge selector and the NMI/IRQ choice.
-pub const irq = struct {
-    pub const idtsel: u8 = 0x03;
-    pub const irqsel: u8 = 0x04;
-    pub const writable: u8 = idtsel | irqsel;
-};
-
-/// PVDmSR (HUM Ch 8.2.7 p 307). DET is write-0-to-clear, MON is read-only.
-pub const status = struct {
-    pub const det: u8 = 0x01;
-    pub const mon: u8 = 0x02;
-};
-
-/// PVDmFCR (HUM Ch 8.2.8 p 308): RHSEL is the only writable bit.
-pub const hysteresis = struct {
-    pub const rhsel: u8 = 0x01;
-};
-
-/// PVDLR (HUM Ch 8.2.10 p 309): LOCK resets to 1 and gates the n channels.
-pub const lock = struct {
-    pub const bit: u8 = 0x01;
-};
-
-/// PVDmCR1.IDTSEL: which crossing latches DET. 11b is prohibited.
-pub const Edge = enum(u2) { rise = 0, fall = 1, both = 2, prohibited = 3 };
-
-/// The PVDLVL encodings HUM Ch 8.2.2 Table 8.2 p 303 allows, and the nominal
-/// Vdet each one selects. Anything outside 0x03..0x0F is reserved.
-pub const level_min: u8 = 0x03;
-pub const level_max: u8 = 0x0F;
-pub const detect_millivolts = [_]u16{
-    3860, 3140, 3100, 3080, 2850, 2830, 2800, 2620, 2330, 1900, 1860, 1740, 1710,
-};
-
-/// The threshold a PVDLVL encoding selects, or null when it is reserved.
-pub fn detectVoltage(bits: u8) ?u16 {
-    const level = bits & compare.level;
-    if (level < level_min or level > level_max) return null;
-    return detect_millivolts[level - level_min];
-}
+pub const compare = regs.compare;
+pub const control = regs.control;
+pub const irq = regs.irq;
+pub const status = regs.status;
+pub const hysteresis = regs.hysteresis;
+pub const lock = regs.lock;
+pub const Edge = regs.Edge;
+pub const level_min = regs.level_min;
+pub const level_max = regs.level_max;
+pub const detect_millivolts = regs.detect_millivolts;
+pub const detectVoltage = regs.detectVoltage;
 
 pub const Series = enum { monitor, reset_only };
 
@@ -204,6 +166,8 @@ pub const Lvd = struct {
     locked: bool = true,
     unlock_spent: bool = false,
     dropped: u32 = 0,
+    /// FSAMP stores refused for the filter state they were made in.
+    fields: field_lock.Locked = .{},
 
     pub fn init() Lvd {
         var unit = Lvd{ .channels = undefined };
@@ -215,7 +179,7 @@ pub const Lvd = struct {
         for (&self.channels) |*channel| {
             if (!channel.quiet()) return false;
         }
-        return self.dropped == 0;
+        return self.dropped == 0 and self.fields.quiet();
     }
 
     pub fn read(self: *Lvd, address: u32, width: u3) u32 {
@@ -269,7 +233,7 @@ pub const Lvd = struct {
                 channel.evaluate();
             },
             .cr0 => {
-                channel.cr0 = value;
+                channel.cr0 = self.fields.filter(channel.cr0, value);
                 channel.evaluate();
             },
             .fcr => channel.fcr = value & hysteresis.rhsel,
