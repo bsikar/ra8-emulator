@@ -149,7 +149,7 @@ pub const Board = struct {
     /// SBYCR / DPSBYCR / LPSCR, behind PRCR.PRC1.
     low_power: lpm.Unit,
     /// PLLCCR / PLLCCR2 / MOSCWTCR, behind PRCR.PRC0.
-    pll1: pll.Unit,
+    plls: pll.Unit,
     /// VSCR, the core voltage range, behind PRCR.PRC0.
     voltage: vscr.Unit,
     brownout: voltage_hazard.Watch,
@@ -307,7 +307,7 @@ pub const Board = struct {
             .oscillators = undefined,
             .tree = undefined,
             .low_power = undefined,
-            .pll1 = undefined,
+            .plls = undefined,
             .gpt_clock = undefined,
             .voltage = undefined,
             .brownout = undefined,
