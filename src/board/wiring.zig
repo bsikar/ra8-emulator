@@ -150,7 +150,7 @@ fn attachProtected(self: *Board) !void {
     self.voltage = vscr.Unit.init(&self.protection);
     try self.bus.add(self.voltage.block());
     // PLL1's configuration asks PRCR before a store, as the clock tree does.
-    self.pll1 = pll.Unit.init(&self.protection);
+    self.pll1 = pll.Unit.init(&self.protection, &self.oscillators);
     for (0..pll.slots.len) |which| try self.bus.add(self.pll1.block(which));
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
