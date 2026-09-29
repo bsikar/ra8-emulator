@@ -142,6 +142,7 @@ pub const periph = struct {
     pub const lvd = @import("periph/lvd.zig");
     pub const lvd_regs = @import("periph/lvd_regs.zig");
     pub const lvd_field_lock = @import("periph/lvd_field_lock.zig");
+    pub const lvd_interlock = @import("periph/lvd_interlock.zig");
     pub const maci = @import("periph/maci.zig");
     pub const mipi_csi = @import("periph/mipi_csi.zig");
     pub const mipi_csi_short = @import("periph/mipi_csi_short.zig");

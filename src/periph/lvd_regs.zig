@@ -5,6 +5,12 @@
 //! canfd_regs.zig sits under canfd.zig. lvd.zig re-exports every name here,
 //! so callers still reach them through the block.
 
+/// Which of the two PVD flavours a channel is. An m channel has a status
+/// register, an interrupt path, and the RI/RN reset bits; an n channel is
+/// reset-only and has none of them, which is what makes several of the
+/// interlocks below m-only.
+pub const Series = enum { monitor, reset_only };
+
 /// PVDmCMPCR (HUM Ch 8.2.2 p 303): PVDLVL[4:0] plus the PVDE enable.
 pub const compare = struct {
     pub const level: u8 = 0x1F;
