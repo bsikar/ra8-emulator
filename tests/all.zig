@@ -158,6 +158,8 @@ test {
     _ = @import("periph/pfs_test.zig");
     _ = @import("periph/sysclk_test.zig");
     _ = @import("periph/lpm_test.zig");
+    _ = @import("periph/pll_test.zig");
+    _ = @import("periph/pll_div_test.zig");
     _ = @import("periph/lpm_mode_test.zig");
     _ = @import("periph/sysclk_div_test.zig");
     _ = @import("periph/pfs_protect_test.zig");

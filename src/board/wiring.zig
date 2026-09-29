@@ -23,6 +23,7 @@ const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const lpm = @import("../periph/lpm.zig");
+const pll = @import("../periph/pll.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
 const sd_card_line = @import("../periph/sd_card_line.zig");
@@ -144,6 +145,9 @@ fn attachProtected(self: *Board) !void {
     // on after the selects they are paired with.
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
     for (0..ckdiv.windows.len) |which| try self.bus.add(self.ratios.block(which));
+    // PLL1's configuration asks PRCR before a store, as the clock tree does.
+    self.pll1 = pll.Unit.init(&self.protection);
+    for (0..pll.slots.len) |which| try self.bus.add(self.pll1.block(which));
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
     for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
