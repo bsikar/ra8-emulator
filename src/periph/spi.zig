@@ -58,6 +58,19 @@
 //! receive register keeps what it holds. SPCR2 and SPSRC are bags of lines
 //! and still merge; see spi_frame.zig for the rule.
 //!
+//! SPCR2 IS LOCKED WHILE THE CHANNEL RUNS. Both drivers in the firmware
+//! tree say the hardware only honors a store to SPCR2 while SPCR.SPE is
+//! clear, in the same words and against the same page, and both reach it
+//! from a path whose precondition is that SPCR reads zero. dev takes the
+//! store whatever SPE says, so a driver that asks for the internal tie
+//! after starting the channel gets one here and bare pins on the bench.
+//! Here such a store lands on nothing and is counted; see
+//! spi_enable_lock.zig. SPCMD0 is deliberately NOT locked with it: the same
+//! tree calls SPCMD0 SPE-restricted once, in a prose aside, but
+//! internal_apply_bit_width rewrites SPCMD0.SPB on every transfer with SPE
+//! standing and the frame widths the corpus moves depend on that taking
+//! effect, so the aside is not evidence enough to refuse it.
+//!
 //! NOT MODELLED, AND NOT GUESSED: SPBR and BRDV, the bit rate, which a
 //! headless run has no clock to show; SPSSR slave select; and the
 //! mode-fault, overrun and parity errors.
@@ -66,6 +79,12 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 const frames = @import("spi_frame.zig");
+const lanes = @import("lanes.zig");
+const lock = @import("spi_enable_lock.zig");
+
+/// The byte-lane arithmetic every register window here shares.
+const part = lanes.part;
+const merge = lanes.merge;
 
 /// The width and bit order of a frame, read out of SPCMD0.
 pub const frame = frames;
@@ -149,6 +168,8 @@ pub const Channel = struct {
     narrow_writes: u32 = 0,
     /// SPDR reads that could not carry the frame: nothing was taken.
     narrow_reads: u32 = 0,
+    /// SPCR2 stores made while SPE was set: the register did not move.
+    locked: lock.Locked = .{},
     /// What is on the wire, when anything is.
     device: ?Device = null,
 
@@ -173,7 +194,8 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.spcr == 0 and self.spcr2 == 0 and self.frames == 0 and
             self.refused == 0 and self.starved == 0 and
-            self.narrow_writes == 0 and self.narrow_reads == 0;
+            self.narrow_writes == 0 and self.narrow_reads == 0 and
+            self.locked.quiet();
     }
 
     /// A store to SPDR. The width gate comes before the enable gate: an
@@ -325,9 +347,13 @@ pub const Spi = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_spdr => unit.store(byte, width, value & widthMask(width)),
+            off_spdr => unit.store(byte, width, value & lanes.named(0, width)),
             off_spcr => unit.spcr = merge(unit.spcr, byte, width, value),
-            off_spcr2 => unit.spcr2 = merge(unit.spcr2, byte, width, value),
+            off_spcr2 => {
+                if (unit.locked.takes(unit.enabled())) {
+                    unit.spcr2 = merge(unit.spcr2, byte, width, value);
+                }
+            },
             // Status, and a status register does not take a store.
             off_spsr => {},
             off_spsrc => unit.clear(merge(0, byte, width, value)),
@@ -349,32 +375,6 @@ pub const Spi = struct {
         };
     }
 };
-
-/// The bits an access of this width names.
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
-}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Spi = @ptrCast(@alignCast(context));
