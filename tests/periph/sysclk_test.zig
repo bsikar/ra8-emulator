@@ -1,0 +1,164 @@
+const std = @import("std");
+const ra8 = @import("ra8");
+const sysclk = ra8.periph.sysclk;
+const sysclk_div = ra8.periph.sysclk_div;
+const prcr = ra8.periph.prcr;
+const oscsf = ra8.periph.oscsf;
+
+/// A tree with its own protection and oscillators, the way the board builds
+/// one. Both have to outlive the tree, so the fixture owns all three.
+const Fixture = struct {
+    protection: prcr.Prcr,
+    oscillators: oscsf.Oscillators,
+    tree: sysclk.Tree,
+
+    fn init(self: *Fixture) void {
+        self.protection = prcr.Prcr.init();
+        self.oscillators = oscsf.Oscillators.init(&self.protection);
+        self.tree = sysclk.Tree.init(&self.protection, &self.oscillators);
+    }
+
+    /// Open PRC0, the way RA8_PROTECTED_WRITE(k_ra8_prcr_unlock_cgc) does.
+    fn unlock(self: *Fixture) void {
+        self.protection.write(prcr.win_base, 2, prcr.unlockWord(prcr.group.cgc));
+    }
+
+    fn lock(self: *Fixture) void {
+        self.protection.write(prcr.win_base, 2, prcr.unlockWord(0));
+    }
+
+    /// Start a source by clearing its stop bit, PRC0 open.
+    fn start(self: *Fixture, control: u32) void {
+        self.unlock();
+        self.oscillators.write(oscsf.win_base + control, 1, 0);
+    }
+
+    fn at(offset: u32) u32 {
+        return sysclk.win_base + offset;
+    }
+};
+
+test "the tree starts on HOCO, which is the reset value SCKSCR reads" {
+    var fix: Fixture = undefined;
+    fix.init();
+    try std.testing.expectEqual(sysclk.Source.hoco, fix.tree.source());
+    try std.testing.expect(fix.tree.quiet());
+}
+
+test "a divider word written with PRC0 open lands and reads back" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x3223_3432);
+    try std.testing.expectEqual(@as(u32, 0x3223_3432), fix.tree.read(Fixture.at(sysclk.regs.sckdivcr), 4));
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr2), 2, 0x2020);
+    try std.testing.expectEqual(@as(u32, 0x2020), fix.tree.read(Fixture.at(sysclk.regs.sckdivcr2), 2));
+}
+
+test "a divider word written with PRC0 shut goes nowhere and is counted" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x3223_3432);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.read(Fixture.at(sysclk.regs.sckdivcr), 4));
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.dropped_locked);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.programmed);
+}
+
+test "a source select with PRC0 shut leaves the tree where it was" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    try std.testing.expectEqual(sysclk.Source.hoco, fix.tree.source());
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.dropped_locked);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.selects);
+}
+
+test "unlocking then locking again shuts the gate behind it" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x1111_1111);
+    fix.lock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x2222_2222);
+    try std.testing.expectEqual(@as(u32, 0x1111_1111), fix.tree.read(Fixture.at(sysclk.regs.sckdivcr), 4));
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.dropped_locked);
+}
+
+test "selecting a stabilised source is not remarked on" {
+    var fix: Fixture = undefined;
+    fix.init();
+    // PLL1 comes up stopped; start it and let OSCSF raise PLL1SF.
+    fix.start(oscsf.regs.pllcr);
+    try std.testing.expect(fix.oscillators.running(oscsf.flag.pll1sf));
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    try std.testing.expectEqual(sysclk.Source.pll1, fix.tree.source());
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.selects);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.unstable_selects);
+}
+
+test "selecting a source that never stabilised lands, and is counted" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    // PLL1 is still stopped, so PLL1SF is down and the driver skipped its wait.
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    try std.testing.expectEqual(sysclk.Source.pll1, fix.tree.source());
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.unstable_selects);
+}
+
+test "a source with no OSCSF flag is selected without comment" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.moco));
+    try std.testing.expectEqual(sysclk.Source.moco, fix.tree.source());
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.unstable_selects);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.reserved_selects);
+}
+
+test "CKSEL 7 is not a source ra8_cksel_t defines" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, 7);
+    try std.testing.expectEqual(sysclk.Source.reserved, fix.tree.source());
+    try std.testing.expectEqual(@as(u32, 1), fix.tree.reserved_selects);
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.unstable_selects);
+}
+
+test "the bits above CKSEL are reserved and read zero" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, 0xF5);
+    try std.testing.expectEqual(@as(u32, 5), fix.tree.read(Fixture.at(sysclk.regs.sckscr), 1));
+    try std.testing.expectEqual(sysclk.Source.pll1, fix.tree.source());
+}
+
+test "a byte store merges into the divider word it names" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x0000_0000);
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr) + 3, 1, 0x32);
+    try std.testing.expectEqual(@as(u32, 0x3200_0000), fix.tree.read(Fixture.at(sysclk.regs.sckdivcr), 4));
+}
+
+test "the decoded tree is the one the bring-up driver programmed" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr), 4, 0x3223_3432);
+    fix.tree.write(Fixture.at(sysclk.regs.sckdivcr2), 2, 0x2020);
+    try std.testing.expectEqual(@as(?u32, 4), fix.tree.ratioOf(sysclk_div.domains[1]));
+    try std.testing.expectEqual(@as(?u32, 1), fix.tree.ratioOf2(sysclk_div.domains2[0]));
+}
+
+test "the window answers only its own three registers" {
+    var fix: Fixture = undefined;
+    fix.init();
+    try std.testing.expectEqual(@as(u32, 0x7), sysclk.win_span);
+    try std.testing.expectEqual(@as(u32, 0x4001_E020), sysclk.win_base);
+    // The byte above SCKSCR is outside the window and answers zero.
+    try std.testing.expectEqual(@as(u32, 0), fix.tree.read(Fixture.at(sysclk.win_span), 1));
+}
