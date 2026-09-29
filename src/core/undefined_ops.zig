@@ -23,6 +23,7 @@
 //! proof that anything executes it. Nothing here changes what runs.
 const std = @import("std");
 const elf = @import("elf.zig");
+const symbols = @import("symbols.zig");
 
 pub const limits = struct {
     /// How many sites the report names before it stops listing them. The
@@ -109,14 +110,23 @@ fn sweepSegment(segment: elf.Segment, found: *Found) void {
 }
 
 /// Say what the sweep found, or nothing at all when it found nothing.
-pub fn print(out: anytype, found: Found) !void {
+///
+/// Each site carries the function it sits in, because an address alone
+/// sends the reader to objdump to learn the one thing they will ask first.
+/// An image with no symbol table, or an address no sized function symbol
+/// covers, prints the address by itself rather than a guess.
+pub fn print(out: anytype, image: elf.Image, found: Found) !void {
     if (found.count == 0) return;
     try out.print(
         "  undefined     : {d} site(s) name pc as a shifted operand, UNPREDICTABLE\n",
         .{found.count},
     );
     for (found.listed()) |site| {
-        try out.print("                  0x{X:0>8} {X:0>8}\n", .{ site.address, site.encoding });
+        try out.print("                  0x{X:0>8} {X:0>8}", .{ site.address, site.encoding });
+        if (symbols.inside(image, site.address)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print("\n", .{});
     }
     if (found.count > limits.listed) {
         try out.print("                  and {d} more\n", .{found.count - limits.listed});

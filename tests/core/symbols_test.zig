@@ -151,3 +151,90 @@ test "a global the linker placed at zero is found there, not reported missing" {
     const image = try elf.Image.init(bytes);
     try std.testing.expectEqual(@as(?u32, 0), symbols.addressOf(image, "g_zero"));
 }
+
+/// Mark a symbol the builder wrote as a sized function, the way a linked
+/// image carries one: STT_FUNC in the low nibble of st_info, and the Thumb
+/// interworking bit set in st_value.
+fn markFunction(buffer: []u8, index: usize, size: u32) void {
+    const at = Builder.sym_off + @sizeOf(symbols.Symbol) * index;
+    const entry: *align(1) symbols.Symbol =
+        std.mem.bytesAsValue(symbols.Symbol, buffer[at..][0..@sizeOf(symbols.Symbol)]);
+    entry.st_info = symbols.symbol_type.func;
+    entry.st_size = size;
+    entry.st_value |= 1;
+}
+
+test "an address inside a function is named, with its offset" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(
+        &buffer,
+        &.{ "priv_fat_get", "internal_fat_entry_byte_offset" },
+        &.{ 0x0200_74AA, 0x0200_743C },
+    );
+    markFunction(&buffer, 0, 0x100);
+    markFunction(&buffer, 1, 0x6E);
+    const image = try elf.Image.init(bytes);
+    const at = symbols.inside(image, 0x0200_7498) orelse return error.NotFound;
+    try std.testing.expectEqualStrings("internal_fat_entry_byte_offset", at.name);
+    try std.testing.expectEqual(@as(u32, 0x5C), at.offset);
+}
+
+test "the first byte of a function is offset zero" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(&buffer, &.{"priv_bps"}, &.{0x0200_72AC});
+    markFunction(&buffer, 0, 0x20);
+    const image = try elf.Image.init(bytes);
+    const at = symbols.inside(image, 0x0200_72AC) orelse return error.NotFound;
+    try std.testing.expectEqual(@as(u32, 0), at.offset);
+}
+
+test "the byte past the end of a function is not inside it" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(&buffer, &.{"priv_bps"}, &.{0x0200_72AC});
+    markFunction(&buffer, 0, 0x20);
+    const image = try elf.Image.init(bytes);
+    try std.testing.expect(symbols.inside(image, 0x0200_72CC) == null);
+}
+
+test "a data symbol covering the address is not a function" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(&buffer, &.{"s_mounts"}, &.{0x2204_8BD0});
+    // Left as the builder wrote it: st_info zero, so STT_NOTYPE.
+    const image = try elf.Image.init(bytes);
+    try std.testing.expect(symbols.inside(image, 0x2204_8BD4) == null);
+}
+
+test "a zero sized function says where it starts and nothing more" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(&buffer, &.{"priv_bps"}, &.{0x0200_72AC});
+    markFunction(&buffer, 0, 0);
+    const image = try elf.Image.init(bytes);
+    try std.testing.expect(symbols.inside(image, 0x0200_72AC) == null);
+}
+
+test "the innermost of two covering functions wins" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(
+        &buffer,
+        &.{ "outer", "inner" },
+        &.{ 0x0200_7000, 0x0200_7400 },
+    );
+    markFunction(&buffer, 0, 0x1000);
+    markFunction(&buffer, 1, 0x80);
+    const image = try elf.Image.init(bytes);
+    const at = symbols.inside(image, 0x0200_7410) orelse return error.NotFound;
+    try std.testing.expectEqualStrings("inner", at.name);
+    try std.testing.expectEqual(@as(u32, 0x10), at.offset);
+}
+
+test "an image with no symbol table names nothing" {
+    var buffer: [@sizeOf(elf.Header)]u8 = undefined;
+    @memset(&buffer, 0);
+    const head: *align(1) elf.Header = std.mem.bytesAsValue(elf.Header, &buffer);
+    head.magic = .{ 0x7F, 'E', 'L', 'F' };
+    head.class = 1;
+    head.data = 1;
+    head.e_machine = elf.em_arm;
+    const image = try elf.Image.init(&buffer);
+    try std.testing.expect(symbols.inside(image, 0x0200_7498) == null);
+}

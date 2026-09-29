@@ -102,9 +102,11 @@ test "a non executable segment is not swept" {
 }
 
 test "nothing found prints nothing" {
+    var buffer: [256]u8 = undefined;
+    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), .{});
+    try undefined_ops.print(out.writer(), image, .{});
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
@@ -112,9 +114,23 @@ test "a site prints its address and its encoding" {
     var found = undefined_ops.Found{};
     found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F };
     found.count = 1;
+    var buffer: [256]u8 = undefined;
+    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), found);
+    try undefined_ops.print(out.writer(), image, found);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "1 site(s)") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "0x02007498 EA52038F") != null);
+}
+
+test "an image with no symbol table prints the address alone" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x02007002, .encoding = 0xEA52038F };
+    found.count = 1;
+    var buffer: [256]u8 = undefined;
+    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try undefined_ops.print(out.writer(), image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "+0x") == null);
 }

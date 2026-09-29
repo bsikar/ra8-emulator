@@ -28,6 +28,12 @@ pub const section_type = struct {
     pub const symtab: u32 = 2;
 };
 
+/// Symbol types, of which only the function matters here.
+pub const symbol_type = struct {
+    /// STT_FUNC, the low nibble of st_info on a function symbol.
+    pub const func: u8 = 2;
+};
+
 /// One ELF32 section header, read straight off the file.
 pub const SectionHeader = extern struct {
     sh_name: u32,
@@ -128,4 +134,42 @@ pub fn addressOf(image: elf.Image, wanted: []const u8) ?u32 {
 pub fn count(image: elf.Image) usize {
     const found = tables(image) orelse return 0;
     return found.symbols.len / found.entry_size;
+}
+
+/// A function symbol and how far into it an address sits.
+pub const Inside = struct {
+    name: []const u8,
+    offset: u32,
+};
+
+/// The function an address falls inside, or null when no function symbol
+/// covers it.
+///
+/// A Thumb function's st_value carries the interworking bit, so the byte
+/// address of its first instruction is st_value with bit 0 cleared; an
+/// address is compared against that, never against the raw value. Only
+/// sized function symbols are considered: a zero-sized symbol says where
+/// something starts and nothing about where it ends, and guessing an extent
+/// from the next symbol along would put a wrong name on a real address.
+///
+/// The greatest covering base wins, so a symbol nested inside another is
+/// reported rather than its container.
+pub fn inside(image: elf.Image, address: u32) ?Inside {
+    const found = tables(image) orelse return null;
+    var best: ?Inside = null;
+    var best_base: u32 = 0;
+    var offset: usize = 0;
+    while (offset + @sizeOf(Symbol) <= found.symbols.len) : (offset += found.entry_size) {
+        const entry: *align(1) const Symbol =
+            std.mem.bytesAsValue(Symbol, found.symbols[offset..][0..@sizeOf(Symbol)]);
+        if (entry.st_info & 0xF != symbol_type.func) continue;
+        if (entry.st_size == 0) continue;
+        const base = entry.st_value & ~@as(u32, 1);
+        if (address < base or address >= base +% entry.st_size) continue;
+        if (best != null and base <= best_base) continue;
+        const name = nameAt(found.strings, entry.st_name) orelse continue;
+        best = .{ .name = name, .offset = address - base };
+        best_base = base;
+    }
+    return best;
 }
