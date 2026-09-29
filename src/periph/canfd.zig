@@ -49,6 +49,11 @@
 //! the application as errors that never happened. The rule and its evidence
 //! live in src/periph/canfd_error.zig.
 //!
+//! A MODE WRITE LANDS ON NOTHING WHILE THE MACHINE IS ASLEEP. Neither model
+//! knew the sleep request beside the mode field, so a driver that leaves it
+//! set reached operation mode here and hangs on silicon. The rule and its
+//! evidence live in src/periph/canfd_sleep.zig.
+//!
 //! KEPT FROM DEV DELIBERATELY: the acceptance filter and its open-when-empty
 //! rule, so an image that programs no CFDGAFL entry keeps receiving
 //! everything, and a programmed entry drops the identifier it does not match.
@@ -58,7 +63,9 @@
 //! counters and the bus-off machine, and every interrupt besides the
 //! RX-FIFO one. The rest of the window is shadowed, and never read.
 const periph = @import("registry.zig");
+const lanes = @import("lanes.zig");
 const fifo = @import("canfd_fifo.zig");
+const sleep = @import("canfd_sleep.zig");
 const rx_config = @import("canfd_rx_config.zig");
 const tx_status = @import("canfd_tx_status.zig");
 const registers = @import("canfd_regs.zig");
@@ -92,6 +99,9 @@ pub const Mode = registers.Mode;
 /// split parts of this block are reached through it.
 pub const error_flags = errors;
 
+const part = lanes.part;
+const merge = lanes.merge;
+
 const shadow_words: usize = win_span / 4;
 const frame_span: u32 = @as(u32, fifo.frame_words) * 4;
 
@@ -101,6 +111,8 @@ pub const Unit = struct {
     /// The state machines, both in reset from power-up as on silicon.
     global: Mode = .reset,
     channel: Mode = .reset,
+    /// Both sleep requests, set from power-up. See canfd_sleep.zig.
+    dozing: sleep.Pair = .{},
     /// CFDTMC[0], with TMTR cleared once the frame has gone.
     tmc: u32 = 0,
     /// CFDTMSTS[0], the transmit result. Set by the controller, cleared by
@@ -134,7 +146,7 @@ pub const Unit = struct {
     pub fn quiet(self: *const Unit) bool {
         return self.sent == 0 and self.refused == 0 and self.starved == 0 and
             self.faked == 0 and self.unarmed == 0 and self.faults.quiet() and
-            self.rx.quiet() and self.tx.quiet() and
+            self.rx.quiet() and self.tx.quiet() and self.dozing.quiet() and
             self.global == .reset and self.channel == .reset;
     }
 
@@ -229,8 +241,8 @@ pub const Unit = struct {
             return self.queue.word((offset - off_rf0) / 4);
         }
         return switch (offset) {
-            off_gsts => self.globalStatus(),
-            off_cnsts => self.channelStatus(),
+            off_gsts => self.globalStatus() | self.dozing.global.statusBit(),
+            off_cnsts => self.channelStatus() | self.dozing.channel.statusBit(),
             off_rfsts0 => self.fifoStatus(),
             rx_config.off_rfcc0 => self.rx.word,
             off_tmc0 => self.tmc,
@@ -249,12 +261,12 @@ pub const Unit = struct {
             off_gctr => {
                 const held = merge(self.shadow[offset / 4], byte, width, value);
                 self.shadow[offset / 4] = held;
-                self.global = Mode.fromBits(held);
+                if (self.dozing.global.store(held)) self.global = Mode.fromBits(held);
             },
             off_cnctr => {
                 const held = merge(self.shadow[offset / 4], byte, width, value);
                 self.shadow[offset / 4] = held;
-                self.channel = Mode.fromBits(held);
+                if (self.dozing.channel.store(held)) self.channel = Mode.fromBits(held);
             },
             off_gsts, off_cnsts, off_rfsts0 => self.faked +%= 1,
             off_tmsts0 => {
@@ -358,32 +370,6 @@ fn unitIndex(address: u32) ?usize {
         if (address >= start and address - start < win_span) return index;
     }
     return null;
-}
-
-/// The bits an access of this width names.
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
