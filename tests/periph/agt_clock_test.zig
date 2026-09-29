@@ -114,14 +114,18 @@ test "a cascaded AGT1 counts one for each AGT0 underflow" {
     try std.testing.expectEqual(@as(u32, 1), unit.channels[1].cascaded_steps);
 }
 
-test "a stopped cascade channel takes no underflow" {
+test "a stopped cascade channel takes no underflow, and says so" {
     var unit = agt.Agt.init();
     arm(&unit, ch0, 0x00, 0);
     unit.write(ch1 + agt.off.mr1, 1, 0x50);
     unit.write(ch1 + agt.off.cnt, 2, 4);
     unit.tick();
     try std.testing.expectEqual(@as(u16, 4), unit.channels[1].counter);
-    try std.testing.expect(unit.channels[1].quiet());
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[1].cascaded_steps);
+    // The count does not move, but the underflow it missed is not silent:
+    // the pair was started backwards and the 32-bit value is short by one.
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[1].dropped_cascade);
+    try std.testing.expect(!unit.channels[1].quiet());
 }
 
 test "cascading is what the channel reports as its source" {

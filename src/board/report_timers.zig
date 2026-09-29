@@ -131,6 +131,13 @@ fn interval(board: *Board, out: Writer) !void {
                 .{ index, channel.refused_running },
             );
         }
+        if (channel.dropped_cascade != 0) {
+            try out.print(
+                "AGT{d}: LOST {d} cascade underflow(s) while stopped, " ++
+                    "AGT1's TSTART has to be set before AGT0's\n",
+                .{ index, channel.dropped_cascade },
+            );
+        }
     }
 }
 

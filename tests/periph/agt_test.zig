@@ -165,3 +165,68 @@ test "a block answers on its own window and nowhere else" {
     try std.testing.expect(block.covers(agt.win_base + agt.win_span - 1));
     try std.testing.expect(!block.covers(agt.win_base + agt.win_span));
 }
+
+/// AGT1's TCK = 101b, the cascade encoding, written with the count stopped.
+fn cascadeHigh(unit: *agt.Agt) void {
+    unit.write(ch1 + agt.off.mr1, 1, @intFromEnum(agt.source.Source.agt0_underflow));
+}
+
+test "the cascade pair started in the documented order loses nothing" {
+    var unit = agt.Agt.init();
+    cascadeHigh(&unit);
+    // AGT1 first, then AGT0, the order ra8_agt_start_cascade uses.
+    unit.write(ch1 + agt.off.cnt, 2, 0x0010);
+    unit.write(ch1 + agt.off.cr, 1, agt.control.tstart);
+    armed(&unit, ch0, 0x0010);
+    var i: usize = 0;
+    while (i < 8) : (i += 1) unit.tick();
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[1].dropped_cascade);
+    try std.testing.expect(unit.channels[1].cascaded_steps != 0);
+}
+
+test "an underflow handed to a stopped high half is lost and counted" {
+    var unit = agt.Agt.init();
+    cascadeHigh(&unit);
+    // AGT0 only: the backwards start order ra8_agt.h warns about.
+    armed(&unit, ch0, 0x0010);
+    var i: usize = 0;
+    while (i < 8) : (i += 1) unit.tick();
+    try std.testing.expect(unit.channels[0].underflows != 0);
+    try std.testing.expectEqual(unit.channels[0].underflows, unit.channels[1].dropped_cascade);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[1].cascaded_steps);
+    try std.testing.expectEqual(@as(u32, 0x0000), unit.channels[1].counter);
+}
+
+test "the loss stops the moment the high half is started" {
+    var unit = agt.Agt.init();
+    cascadeHigh(&unit);
+    armed(&unit, ch0, 0x0010);
+    unit.tick();
+    const lost = unit.channels[1].dropped_cascade;
+    try std.testing.expect(lost != 0);
+    unit.write(ch1 + agt.off.cnt, 2, 0x0010);
+    unit.write(ch1 + agt.off.cr, 1, agt.control.tstart);
+    var i: usize = 0;
+    while (i < 4) : (i += 1) unit.tick();
+    // Nothing further is lost, and what was lost is not taken back.
+    try std.testing.expectEqual(lost, unit.channels[1].dropped_cascade);
+    try std.testing.expect(unit.channels[1].cascaded_steps != 0);
+}
+
+test "a stopped cascade channel with no source underflow loses nothing" {
+    var unit = agt.Agt.init();
+    cascadeHigh(&unit);
+    var i: usize = 0;
+    while (i < 8) : (i += 1) unit.tick();
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[1].dropped_cascade);
+    try std.testing.expect(unit.quiet());
+}
+
+test "a lost cascade underflow breaks the channel's silence" {
+    var unit = agt.Agt.init();
+    cascadeHigh(&unit);
+    armed(&unit, ch0, 0x0010);
+    var i: usize = 0;
+    while (i < 8) : (i += 1) unit.tick();
+    try std.testing.expect(!unit.channels[1].quiet());
+}
