@@ -26,15 +26,25 @@ const voltage_hazard = @import("../periph/voltage_hazard.zig");
 const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
+const pscu = @import("../periph/pscu.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
 const sd_card_line = @import("../periph/sd_card_line.zig");
 
+/// The module-stop shadow, the attribution words that decide which of its
+/// bits a Secure store may move, and the gate the rest of the bus hangs off.
+/// These three go on together because none of them is any use alone.
+fn attachGate(self: *Board) !void {
+    try self.bus.add(self.modules.block());
+    self.modules.attribution = &self.attribution;
+    try self.bus.add(self.attribution.block());
+    self.bus.gate = self.modules.gate();
+}
+
 /// Put every block on the bus, in the order that works.
 pub fn attach(self: *Board, core: *engine.Engine) !void {
-    try self.bus.add(self.modules.block());
-    self.bus.gate = self.modules.gate();
+    try attachGate(self);
     try self.bus.add(self.pins.block());
     try self.bus.add(self.pinfunc.block());
     try self.bus.add(self.checksum.block());

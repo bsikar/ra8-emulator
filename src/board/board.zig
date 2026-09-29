@@ -48,6 +48,7 @@ const mram = @import("../periph/mram.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp.zig");
+const pscu = @import("../periph/pscu.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
@@ -86,6 +87,7 @@ const xspi = @import("../periph/xspi.zig");
 pub const Board = struct {
     bus: periph.Bus,
     modules: mstp.Mstp = .{},
+    attribution: pscu.Unit = .{},
     /// GTCLKCR, the GPT bank's clock domain, writable only while stopped.
     gpt_clock: gtclkcr.Unit,
     events: icu.Icu,
