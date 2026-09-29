@@ -174,6 +174,7 @@ pub const periph = struct {
     pub const lpm = @import("periph/lpm.zig");
     pub const pll = @import("periph/pll.zig");
     pub const vscr = @import("periph/vscr.zig");
+    pub const voltage_hazard = @import("periph/voltage_hazard.zig");
     pub const pll_div = @import("periph/pll_div.zig");
     pub const lpm_mode = @import("periph/lpm_mode.zig");
     pub const sysclk_div = @import("periph/sysclk_div.zig");

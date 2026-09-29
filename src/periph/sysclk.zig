@@ -56,6 +56,7 @@ const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
 const oscsf = @import("oscsf.zig");
 const div = @import("sysclk_div.zig");
+const hazard = @import("voltage_hazard.zig");
 
 /// Window geometry: SCKDIVCR (+0x020) through SCKSCR (+0x026) inclusive.
 pub const win_base: u32 = 0x4001_E020;
@@ -105,6 +106,17 @@ pub const Source = enum(u3) {
             .moco, .loco, .subck, .reserved => null,
         };
     }
+
+    /// Whether running the tree on this source lifts CPUCLK0 far enough for
+    /// the core voltage range to matter. ra8_cgc.c's step 2 exists for the
+    /// PLL bring-up and for nothing else, so only a PLL answers true; see
+    /// voltage_hazard.zig.
+    pub fn liftsCore(self: Source) bool {
+        return switch (self) {
+            .pll1, .pll2 => true,
+            .hoco, .moco, .loco, .main, .subck, .reserved => false,
+        };
+    }
 };
 
 /// CKSEL[2:0]; the bits above it are reserved and read zero.
@@ -121,6 +133,9 @@ pub const Tree = struct {
     /// The board's live oscillators, so a select can be checked against the
     /// stabilisation flags the driver is supposed to have waited on.
     oscillators: *const oscsf.Oscillators,
+    /// The brown-out watch, told about every select that lifts the core. Not
+    /// a copy: it reads the voltage range live.
+    brownout: *hazard.Watch,
     divcr: u32 = 0,
     divcr2: u16 = 0,
     /// CKSEL. Resets to HOCO; see the header.
@@ -136,8 +151,16 @@ pub const Tree = struct {
     /// Selects of CKSEL = 7, which ra8_cksel_t does not define.
     reserved_selects: u32 = 0,
 
-    pub fn init(protection: *const prcr.Prcr, oscillators: *const oscsf.Oscillators) Tree {
-        return .{ .protection = protection, .oscillators = oscillators };
+    pub fn init(
+        protection: *const prcr.Prcr,
+        oscillators: *const oscsf.Oscillators,
+        brownout: *hazard.Watch,
+    ) Tree {
+        return .{
+            .protection = protection,
+            .oscillators = oscillators,
+            .brownout = brownout,
+        };
     }
 
     /// Untouched units stay out of the end-of-run report.
@@ -220,6 +243,9 @@ pub const Tree = struct {
         self.cksel = byte & cksel_mask;
         self.selects +%= 1;
         const picked = self.source();
+        // Step 2's hazard, watched not enforced: the select lands whatever the
+        // core voltage range is, and voltage_hazard.zig says why.
+        self.brownout.selecting(picked.liftsCore());
         if (picked == .reserved) {
             self.reserved_selects +%= 1;
             return;
