@@ -33,6 +33,9 @@ pub fn sections(board: *const Board, out: anytype) !void {
     if (unit.dropped_locked != 0) {
         try out.print("PLL1: DROPPED {d} store(s), PRCR.PRC0 was locked\n", .{unit.dropped_locked});
     }
+    if (unit.dropped_running != 0) {
+        try out.print("PLL1: DROPPED {d} configuration store(s), PLL1 was still running\n", .{unit.dropped_running});
+    }
     if (unit.prohibited_divider != 0) {
         try out.print("PLL1: REJECTED {d} PLLCCR2 store(s) carrying a prohibited divider code\n", .{unit.prohibited_divider});
     }

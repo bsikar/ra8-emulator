@@ -40,16 +40,37 @@
 //! bytes it leaves alone keep what they had. The PLLCCR2 rejection is judged
 //! on the MERGED word, because that is the value the register would take.
 //!
+//! AND THE STOP BARRIER, which this file previously wrote off as a driver
+//! contract and which the tree says outright is the hardware's. ra8_cgc.c's
+//! own file header, step 3: "Stop PLL1 (PLLCR = 1), then poll OSCSF.PLLSF = 0.
+//! Without this barrier, PLLCCR / PLLCCR2 writes are silently dropped and read
+//! back as zero." That is not a precondition the driver keeps out of tidiness,
+//! it is what silicon does, and internal_cgc_init_protected orders
+//! internal_stop_pll1 before internal_program_and_start_pll1 for exactly that
+//! reason. A model that stored the configuration while PLL1 was still running
+//! would let firmware skip step 3 and still come up at the rate it asked for,
+//! and the run would report a clock tree that only exists in the emulator: the
+//! bench would keep the old multiplier, or zero. So a PLLCCR or PLLCCR2 store
+//! arriving while OSCSF.PLL1SF is set is dropped and counted, and a later read
+//! gives back what was there before, which before any successful store is
+//! zero, the way the driver's note says.
+//!
+//! MOSCWTCR IS OUTSIDE THE BARRIER and deliberately so: it is the main
+//! oscillator's wait count, written in step 1 by internal_start_main_osc,
+//! before PLL1 is stopped at all, and nothing in the tree ties it to PLL1's
+//! run state.
+//!
 //! DELIBERATELY NOT MODELLED. The reset values: nothing in the tree records
 //! them, so the registers start at zero here and the report only speaks once
 //! firmware has written. No frequency is derived: the multiplier and the four
 //! ratios are reported as written, because turning them into megahertz would
-//! need the XTAL rate, which this emulator does not model. And nothing here
-//! requires PLL1 to be stopped first; ra8_cgc.c stops it beforehand and says
-//! so in its own preconditions, but that is a driver contract, and no
-//! document in this tree says the hardware enforces it.
+//! need the XTAL rate, which this emulator does not model. Nor does anything
+//! here check the core voltage range VSCR selected: step 2 is a brown-out
+//! hazard rather than a rule the clock registers enforce, so it belongs to
+//! whatever models the consequence, not to this file.
 const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
+const oscsf = @import("oscsf.zig");
 const div = @import("pll_div.zig");
 const lanes = @import("lanes.zig");
 
@@ -88,6 +109,9 @@ pub fn indexOf(address: u32) ?usize {
 /// The retained words, plus what the run did to them.
 pub const Unit = struct {
     protection: *const prcr.Prcr,
+    /// The board's live oscillators, so PLL1's run state is read rather than
+    /// tracked twice. Not a copy: the stop bit moves under this pointer.
+    oscillators: *const oscsf.Oscillators,
     pllccr: u32 = 0,
     pllccr2: u16 = 0,
     moscwtcr: u8 = 0,
@@ -95,15 +119,23 @@ pub const Unit = struct {
     stores: u32 = 0,
     /// Stores dropped because PRCR.PRC0 was locked.
     dropped_locked: u32 = 0,
+    /// Configuration stores dropped because PLL1 was still running.
+    dropped_running: u32 = 0,
     /// PLLCCR2 stores rejected whole for carrying a prohibited divider code.
     prohibited_divider: u32 = 0,
 
-    pub fn init(protection: *const prcr.Prcr) Unit {
-        return .{ .protection = protection };
+    pub fn init(protection: *const prcr.Prcr, oscillators: *const oscsf.Oscillators) Unit {
+        return .{ .protection = protection, .oscillators = oscillators };
     }
 
     pub fn quiet(self: *const Unit) bool {
-        return self.stores == 0 and self.dropped_locked == 0 and self.prohibited_divider == 0;
+        return self.stores == 0 and self.dropped_locked == 0 and
+            self.dropped_running == 0 and self.prohibited_divider == 0;
+    }
+
+    /// Whether PLL1 is turning right now, which is what shuts the barrier.
+    fn running(self: *const Unit) bool {
+        return self.oscillators.running(oscsf.flag.pll1sf);
     }
 
     /// Whether firmware has configured PLL1 at all, which is what decides
@@ -152,6 +184,12 @@ pub const Unit = struct {
         // Protection first: a store nobody unlocked never reaches the word.
         if (!self.protection.unlocked(guard)) {
             self.dropped_locked +%= 1;
+            return;
+        }
+        // Step 3's barrier: the configuration pair takes nothing while PLL1
+        // turns. MOSCWTCR is not part of that pair; see the header.
+        if (which != index.moscwtcr and self.running()) {
+            self.dropped_running +%= 1;
             return;
         }
         const at = address - slots[which].address;

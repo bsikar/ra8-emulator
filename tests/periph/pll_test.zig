@@ -3,14 +3,27 @@ const ra8 = @import("ra8");
 const pll = ra8.periph.pll;
 const pll_div = ra8.periph.pll_div;
 const prcr = ra8.periph.prcr;
+const oscsf = ra8.periph.oscsf;
 
 const Fixture = struct {
     protection: prcr.Prcr,
+    oscillators: oscsf.Oscillators,
     unit: pll.Unit,
 
     fn init(self: *Fixture) void {
         self.protection = prcr.Prcr.init();
-        self.unit = pll.Unit.init(&self.protection);
+        self.oscillators = oscsf.Oscillators.init(&self.protection);
+        self.unit = pll.Unit.init(&self.protection, &self.oscillators);
+    }
+
+    /// PLL1 comes up stopped, so the barrier is open until something starts
+    /// it. These two are what internal_stop_pll1 and step 5 write.
+    fn startPll1(self: *Fixture) void {
+        self.oscillators.write(oscsf.win_base + oscsf.regs.pllcr, 1, 0);
+    }
+
+    fn stopPll1(self: *Fixture) void {
+        self.oscillators.write(oscsf.win_base + oscsf.regs.pllcr, 1, oscsf.stop);
     }
 
     fn unlock(self: *Fixture) void {
@@ -172,4 +185,93 @@ test "one bus window per register, at the documented widths" {
         try std.testing.expectEqual(pll.slots[which].address, one.base);
         try std.testing.expectEqual(widths[which], one.size);
     }
+}
+
+test "PLL1 comes up stopped, so the configuration pair lands" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    try std.testing.expect(!fix.oscillators.running(oscsf.flag.pll1sf));
+    fix.programQuickstart();
+    try std.testing.expectEqual(@as(u32, 0xFA02), fix.unit.pllccr);
+    try std.testing.expectEqual(@as(u16, 0x451), fix.unit.pllccr2);
+    try std.testing.expectEqual(@as(u32, 0), fix.unit.dropped_running);
+}
+
+test "a PLLCCR store while PLL1 runs is dropped and counted" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.pllccr].address, 4, 0xFA02);
+    try std.testing.expectEqual(@as(u32, 0), fix.unit.pllccr);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_running);
+    try std.testing.expectEqual(@as(u32, 0), fix.unit.stores);
+}
+
+test "a PLLCCR2 store while PLL1 runs is dropped too" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.pllccr2].address, 2, 0x451);
+    try std.testing.expectEqual(@as(u16, 0), fix.unit.pllccr2);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_running);
+}
+
+test "a dropped configuration store reads back as it was" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.programQuickstart();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.pllccr].address, 4, 0x1234);
+    try std.testing.expectEqual(
+        @as(u32, 0xFA02),
+        fix.unit.read(pll.slots[pll.index.pllccr].address, 4),
+    );
+}
+
+test "MOSCWTCR is outside the barrier and lands while PLL1 runs" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.moscwtcr].address, 1, 9);
+    try std.testing.expectEqual(@as(u8, 9), fix.unit.moscwtcr);
+    try std.testing.expectEqual(@as(u32, 0), fix.unit.dropped_running);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.stores);
+}
+
+test "stopping PLL1 again reopens the barrier" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.pllccr].address, 4, 0xFA02);
+    fix.stopPll1();
+    fix.programQuickstart();
+    try std.testing.expectEqual(@as(u32, 0xFA02), fix.unit.pllccr);
+    try std.testing.expectEqual(@as(u16, 0x451), fix.unit.pllccr2);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_running);
+}
+
+test "PRC0 is judged before the barrier" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.relock();
+    fix.unit.write(pll.slots[pll.index.pllccr].address, 4, 0xFA02);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_locked);
+    try std.testing.expectEqual(@as(u32, 0), fix.unit.dropped_running);
+}
+
+test "the barrier alone breaks quiet" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.startPll1();
+    fix.unit.write(pll.slots[pll.index.pllccr].address, 4, 0xFA02);
+    try std.testing.expect(!fix.unit.quiet());
 }
