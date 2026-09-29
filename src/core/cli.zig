@@ -33,6 +33,10 @@ pub const usage =
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
+    \\  --dump-regs        print the argument registers and the words at
+    \\                     the stack pointer after the run; at a break
+    \\                     they are still the arguments of the function
+    \\                     stopped on
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
@@ -116,6 +120,8 @@ pub const Options = struct {
     break_symbol: ?[]const u8 = null,
     /// Which arrival at `break_symbol` ends the run. One is the first.
     break_arrival: u32 = 1,
+    /// Print the core registers after the run.
+    dump_regs: bool = false,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -204,6 +210,8 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.dump_sd = try std.fmt.parseInt(u32, argv[index], 0);
+        } else if (std.mem.eql(u8, argv[index], "--dump-regs")) {
+            options.dump_regs = true;
         } else if (std.mem.eql(u8, argv[index], "--trace-sd")) {
             options.trace_sd = true;
         } else if (std.mem.eql(u8, argv[index], "--sd-new")) {

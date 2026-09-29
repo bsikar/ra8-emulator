@@ -19,6 +19,7 @@ const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
 const breakpoint = ra8.core.breakpoint;
+const registers = ra8.core.registers;
 const sd_dump = ra8.periph.sd_dump;
 const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
@@ -100,7 +101,37 @@ pub fn main() !u8 {
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, &board, options);
+    try dumpRegisters(out, core, options);
     return verdict(out, core, options, fault, stop, point, timed, budget);
+}
+
+/// The core registers as the run left them, when `--dump-regs` asked.
+///
+/// At a break this is the function's own call boundary, so r0-r3 and the
+/// words at the stack pointer are still its arguments. A register the
+/// core refuses to hand back is printed as unreadable rather than as a
+/// zero that would read like a real value.
+fn dumpRegisters(out: anytype, core: engine.Engine, options: cli.Options) !void {
+    if (!options.dump_regs) return;
+    try out.print("  dump-regs     :", .{});
+    for (registers.dumped, 0..) |named, index| {
+        if (core.register(named.which)) |value| {
+            try out.print(" {s} 0x{X:0>8}", .{ named.name, value });
+        } else |_| {
+            try out.print(" {s} <unreadable>", .{named.name});
+        }
+        if (registers.endsLine(index)) try out.print("\n                 ", .{});
+    }
+    const sp = core.register(.sp) catch return out.print("sp unreadable\n", .{});
+    for (0..registers.limits.stack_words) |index| {
+        const at = registers.stackWord(sp, index);
+        if (core.readWord(at)) |value| {
+            try out.print(" [sp+{d}] 0x{X:0>8}", .{ index * 4, value });
+        } else |_| {
+            try out.print(" [sp+{d}] <unreadable>", .{index * 4});
+        }
+    }
+    try out.print("\n", .{});
 }
 
 /// One card block back as hex, when `--dump-sd` asked for it.
