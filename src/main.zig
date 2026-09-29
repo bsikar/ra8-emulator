@@ -199,6 +199,7 @@ fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli
 /// it. A card that cannot carry the volume it was asked for is refused here
 /// rather than stamped with a BPB that contradicts it.
 fn prepareCard(board: *Board, options: cli.Options) !void {
+    board.sd.trace = options.trace_sd;
     if (options.sd_size_mb) |megabytes| {
         const blocks = megabytes *| (1024 * 1024 / sd_image.geometry.block_bytes);
         if (!board.sd.img.resize(blocks)) {
