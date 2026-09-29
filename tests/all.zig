@@ -14,6 +14,7 @@ test {
     _ = @import("core/symbols_test.zig");
     _ = @import("core/undefined_ops_test.zig");
     _ = @import("core/breakpoint_test.zig");
+    _ = @import("core/watchpoint_test.zig");
     _ = @import("core/place_test.zig");
     _ = @import("core/registers_test.zig");
     _ = @import("core/stop_test.zig");
