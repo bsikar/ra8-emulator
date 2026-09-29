@@ -33,6 +33,7 @@ const eink = @import("../periph/eink.zig");
 const elc = @import("../periph/elc.zig");
 const glcdc = @import("../periph/glcdc.zig");
 const gpio = @import("../periph/gpio.zig");
+const pfs = @import("../periph/pfs.zig");
 const gpt = @import("../periph/gpt.zig");
 const gptp = @import("../periph/gptp.zig");
 const icu = @import("../periph/icu.zig");
@@ -93,6 +94,8 @@ pub const Board = struct {
     dma: dmac.Dmac,
     dma_module: dma_bank.Bank = .{},
     pins: gpio.Gpio,
+    /// The pin function array and the write protect in front of it.
+    pinfunc: pfs.Pfs,
     checksum: crc.Crc,
     dataops: doc.Doc,
     accuracy: cac.Cac,
@@ -266,6 +269,7 @@ pub const Board = struct {
             .transfers = dtc.Dtc.init(),
             .dma = undefined,
             .pins = gpio.Gpio.init(),
+            .pinfunc = pfs.Pfs.init(),
             .checksum = crc.Crc.init(),
             .dataops = doc.Doc.init(),
             .accuracy = cac.Cac.init(),

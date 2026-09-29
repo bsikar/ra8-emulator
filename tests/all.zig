@@ -155,6 +155,8 @@ test {
     _ = @import("periph/iwdt_status_test.zig");
     _ = @import("periph/ipc_test.zig");
     _ = @import("periph/ipc_sync_test.zig");
+    _ = @import("periph/pfs_test.zig");
+    _ = @import("periph/pfs_protect_test.zig");
     _ = @import("periph/poeg_test.zig");
     _ = @import("periph/oscsf_test.zig");
     _ = @import("periph/prcr_test.zig");
