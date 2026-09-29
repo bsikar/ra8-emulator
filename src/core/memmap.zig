@@ -68,7 +68,13 @@ pub const scb = struct {
     pub const shpr1: u32 = 0xE000_ED18;
     pub const shpr2: u32 = 0xE000_ED1C;
     pub const shpr3: u32 = 0xE000_ED20;
+    /// SHCSR: SHCSR.MEMFAULTENA [16] is what enables MemManage at all. With
+    /// it clear the fault is disabled and escalates to HardFault instead.
+    pub const shcsr: u32 = 0xE000_ED24;
     pub const cfsr: u32 = 0xE000_ED28;
+    /// HFSR: HFSR.FORCED [30] says the HardFault is an escalated one rather
+    /// than a fault of its own.
+    pub const hfsr: u32 = 0xE000_ED2C;
     pub const mmfar: u32 = 0xE000_ED34;
     pub const demcr: u32 = 0xE000_EDFC;
 };

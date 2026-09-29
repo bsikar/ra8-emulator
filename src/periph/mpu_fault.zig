@@ -92,6 +92,10 @@ pub const Latch = struct {
     background: u64 = 0,
     /// Violations that reached a MemManage handler.
     faults: u64 = 0,
+    /// Of those, the ones taken as a HardFault because SHCSR.MEMFAULTENA was
+    /// clear and MemManage was therefore disabled. See
+    /// src/periph/mpu_escalate.zig.
+    escalated: u64 = 0,
     /// Violations with no handler to reach: the vector table carries none, or
     /// the controller would not take it. No escalation to HardFault is
     /// modelled, so the run carries on from where the store left it.
