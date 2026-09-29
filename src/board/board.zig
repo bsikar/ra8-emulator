@@ -48,6 +48,7 @@ const mram = @import("../periph/mram.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp.zig");
+const gtclkcr = @import("../periph/gtclkcr.zig");
 const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
@@ -84,6 +85,8 @@ const xspi = @import("../periph/xspi.zig");
 pub const Board = struct {
     bus: periph.Bus,
     modules: mstp.Mstp = .{},
+    /// GTCLKCR, the GPT bank's clock domain, writable only while stopped.
+    gpt_clock: gtclkcr.Unit,
     events: icu.Icu,
     /// The event link controller: the other half of the event path, where a
     /// source event drives a peripheral rather than an NVIC line, and the
@@ -301,6 +304,7 @@ pub const Board = struct {
             .tree = undefined,
             .low_power = undefined,
             .pll1 = undefined,
+            .gpt_clock = undefined,
             .voltage = undefined,
             .ratios = undefined,
             .branches = undefined,

@@ -84,7 +84,7 @@ pub const Counters = struct {
 /// TooManyBlocks. A peripheral whose registers sit in two or three separate
 /// runs needs an entry per run, so the ceiling has to lead the tree rather
 /// than sit flush against it.
-pub const max_blocks = 80;
+pub const max_blocks = 96;
 
 /// The peripheral bus: a small registry of modelled blocks plus the sparse
 /// register file behind them.

@@ -24,6 +24,7 @@ const oscsf = @import("../periph/oscsf.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
+const gtclkcr = @import("../periph/gtclkcr.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -151,6 +152,10 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.voltage.block());
     // PLL1's configuration asks PRCR before a store, as the clock tree does.
     self.pll1 = pll.Unit.init(&self.protection, &self.oscillators);
+    // GTCLKCR is the GPT bank's clock domain, and only the module-stop
+    // model can say whether the window to change it is still open.
+    self.gpt_clock = gtclkcr.Unit.init(&self.modules);
+    try self.bus.add(self.gpt_clock.block());
     for (0..pll.slots.len) |which| try self.bus.add(self.pll1.block(which));
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
