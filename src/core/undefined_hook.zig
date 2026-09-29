@@ -35,14 +35,24 @@ pub fn attach(handle: ?*c.uc.uc_engine, found: *undefined_ops.Found) Error!void 
     }
 }
 
-/// Called before the instruction at the site runs. Nothing is stopped: the
-/// run is allowed to go on doing whatever this core does with an undefined
-/// encoding, because the report's job is to say the run cannot be trusted,
-/// not to decide that for the reader.
+/// Called before the instruction at the site runs.
+///
+/// By default nothing is stopped: the run is allowed to go on doing
+/// whatever this core does with an undefined encoding, because the
+/// report's job is to say the run cannot be trusted, not to decide that
+/// for the reader.
+///
+/// A site carrying `stop` ends the run here instead, which is what
+/// `--stop-on-undefined` asks for. The hook fires BEFORE the instruction
+/// executes, so the stop leaves the machine as it stood on the way in and
+/// a register or memory dump beside it reads the state that produced the
+/// undefined encoding rather than the state after it. The arrival is
+/// counted either way, before the stop, so the report never shows a run
+/// that stopped at a site with no arrivals at it.
 fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
-    _ = uc;
     _ = address;
     _ = size;
     const site: *undefined_ops.Site = @ptrCast(@alignCast(user orelse return));
     site.runs +|= 1;
+    if (site.stop) _ = c.uc.uc_emu_stop(uc);
 }

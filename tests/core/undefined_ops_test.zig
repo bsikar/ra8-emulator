@@ -190,3 +190,87 @@ test "a swept but unexecuted site reports none executed" {
     try std.testing.expect(std.mem.indexOf(u8, out.items, "none executed") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "EXECUTED") == null);
 }
+
+test "a kept site does not stop the run by default" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.count = 1;
+    try std.testing.expect(!found.sites[0].stop);
+    found.sites[0].runs = 1;
+    try std.testing.expect(found.stoppedAt() == null);
+}
+
+test "stopOnRun arms every kept site" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA52_03CF };
+    found.count = 2;
+    found.stopOnRun();
+    for (found.kept()) |site| try std.testing.expect(site.stop);
+}
+
+test "an armed site that never ran stopped nothing" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.count = 1;
+    found.stopOnRun();
+    try std.testing.expect(found.stoppedAt() == null);
+}
+
+test "the first armed site that ran is the one that stopped the run" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA52_03CF };
+    found.count = 2;
+    found.stopOnRun();
+    found.sites[1].runs = 1;
+    const at = found.stoppedAt() orelse return error.TestExpectedSite;
+    try std.testing.expectEqual(@as(u32, 0x0200_0200), at.address);
+}
+
+test "a site past the watch limit can neither be armed nor stop anything" {
+    var found = undefined_ops.Found{};
+    for (0..undefined_ops.limits.watched) |index| {
+        found.sites[index] = .{
+            .address = @intCast(0x0200_0000 + index * 4),
+            .encoding = 0xEA52_038F,
+        };
+    }
+    found.count = undefined_ops.limits.watched + 3;
+    found.stopOnRun();
+    try std.testing.expectEqual(undefined_ops.limits.watched, found.kept().len);
+    try std.testing.expect(found.stoppedAt() == null);
+}
+
+test "the report names the site the run stopped on" {
+    var buffer: [4096]u8 = undefined;
+    var image_bytes: [512]u8 = undefined;
+    const image = imageWith(&image_bytes, &[_]u8{ 0x52, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
+
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA52_038F };
+    found.count = 1;
+    found.stopOnRun();
+    found.sites[0].runs = 1;
+
+    var stream = std.io.fixedBufferStream(&buffer);
+    try undefined_ops.print(stream.writer(), image, found);
+    const out = stream.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, out, "run stopped at 0x02000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "before it executed") != null);
+}
+
+test "a run that was not stopped says nothing about stopping" {
+    var buffer: [4096]u8 = undefined;
+    var image_bytes: [512]u8 = undefined;
+    const image = imageWith(&image_bytes, &[_]u8{ 0x52, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
+
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA52_038F };
+    found.count = 1;
+    found.sites[0].runs = 1;
+
+    var stream = std.io.fixedBufferStream(&buffer);
+    try undefined_ops.print(stream.writer(), image, found);
+    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "run stopped at") == null);
+}

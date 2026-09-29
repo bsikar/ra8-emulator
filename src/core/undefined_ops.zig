@@ -59,6 +59,11 @@ pub const Site = struct {
     /// How many times the run reached this site. Zero means the sweep
     /// found the bytes and nothing executed them.
     runs: u32 = 0,
+    /// Whether reaching this site should end the run. Off by default: the
+    /// report's job is to say the run cannot be trusted, not to decide
+    /// that for the reader. Turned on for every kept site by
+    /// `Found.stopOnRun`, which is what `--stop-on-undefined` asks for.
+    stop: bool = false,
 };
 
 /// What a sweep of one image found.
@@ -98,6 +103,30 @@ pub const Found = struct {
             total += site.runs;
         }
         return total;
+    }
+
+    /// Ask the run to end the first time it reaches any kept site.
+    ///
+    /// Only the kept sites can do this, because only they are watched. A
+    /// site past the watch limit goes on being uncounted and cannot stop
+    /// anything, which the report already says rather than implying a
+    /// silent zero.
+    pub fn stopOnRun(self: *Found) void {
+        for (self.kept()) |*site| site.stop = true;
+    }
+
+    /// The site that ended the run, if one did.
+    ///
+    /// A run can reach several sites before the stop takes effect, since a
+    /// core finishes the translated block it is in, so this names the
+    /// first kept site that both asked to stop and was reached. Null means
+    /// nothing stopped the run, whether because the flag was off or
+    /// because no site was ever executed.
+    pub fn stoppedAt(self: *const Found) ?Site {
+        for (self.sites[0..@min(self.count, limits.watched)]) |site| {
+            if (site.stop and site.runs > 0) return site;
+        }
+        return null;
     }
 };
 
@@ -176,6 +205,24 @@ pub fn print(out: anytype, image: elf.Image, found: Found) !void {
         try executedPastTheList(out, image, found);
     }
     try ran(out, found);
+    try stoppedThere(out, image, found);
+}
+
+/// Name the site the run stopped on, when one did.
+///
+/// This matters more than it looks: with `--stop-on-undefined` the run
+/// ends BEFORE the undefined instruction executes, so every register and
+/// every word of memory a dump prints afterwards is the machine as it
+/// stood on the way in. Without this line a short run reads like a crash
+/// or a budget that ran out, and the dumps beside it read like the state
+/// after the damage rather than before it.
+fn stoppedThere(out: anytype, image: elf.Image, found: Found) !void {
+    const site = found.stoppedAt() orelse return;
+    try out.print("                  run stopped at 0x{X:0>8}", .{site.address});
+    if (symbols.inside(image, site.address)) |at| {
+        try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+    }
+    try out.print(", before it executed\n", .{});
 }
 
 /// Name any site that ran but sat past the end of the list.

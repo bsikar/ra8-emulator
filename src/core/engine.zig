@@ -30,6 +30,7 @@ const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("breakpoint.zig");
 const stop = @import("stop.zig");
+const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 
@@ -103,19 +104,14 @@ pub const Session = struct {
     /// to count, so an image with no clocks attached is never cut short by
     /// a deadline it could not have reached.
     deadline: ?*deadline.Deadline = null,
+    /// The swept undefined sites, when reaching one should end the run.
+    /// Null runs past them and only counts, which is the default: the
+    /// sweep reports, it does not decide.
+    undefined_sites: ?*undefined_ops.Found = null,
 };
 
-/// Something to run at the chunk boundary. A thin vtable rather than a
-/// concrete type, for the same reason the peripheral bus takes one: the
-/// engine has no business knowing what a board is made of.
-pub const Tick = struct {
-    context: *anyopaque,
-    tickFn: *const fn (context: *anyopaque, core: Engine) anyerror!void,
-
-    pub fn run(self: Tick, core: Engine) !void {
-        return self.tickFn(self.context, core);
-    }
-};
+/// The board's chunk-boundary hook, re-exported so `engine.Tick` resolves.
+pub const Tick = @import("tick.zig").Tick;
 
 pub const Engine = struct {
     handle: ?*c.uc.uc_engine,
@@ -338,6 +334,10 @@ pub const Engine = struct {
             // boundary: this is where the program counter still points at
             // it, and where the register file is the function's caller's.
             if (session.brk) |point| if (point.reached) break;
+            // The undefined hook stopped the chunk the same way, one
+            // instruction before the encoding runs, and for the same
+            // reason: here the program counter still points at it.
+            if (session.undefined_sites) |f| if (f.stoppedAt() != null) break;
             remaining -= chunk;
             if (session.timebase) |clock| clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
             // The budget is spent: do not enter a handler there is no room
