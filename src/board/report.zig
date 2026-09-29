@@ -24,6 +24,7 @@ const network = @import("report_network.zig");
 const options = @import("report_options.zig");
 const pinfunc = @import("report_pinfunc.zig");
 const sysclock = @import("report_sysclk.zig");
+const lowpower = @import("report_lowpower.zig");
 const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
@@ -106,6 +107,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     try options.sections(board, out);
     try pinfunc.sections(board, out);
     try sysclock.sections(board, out);
+    try lowpower.sections(board, out);
     try network.sections(board, out);
     try cores.sections(board, out);
     try compute.sections(board, out);

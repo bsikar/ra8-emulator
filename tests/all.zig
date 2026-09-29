@@ -157,6 +157,8 @@ test {
     _ = @import("periph/ipc_sync_test.zig");
     _ = @import("periph/pfs_test.zig");
     _ = @import("periph/sysclk_test.zig");
+    _ = @import("periph/lpm_test.zig");
+    _ = @import("periph/lpm_mode_test.zig");
     _ = @import("periph/sysclk_div_test.zig");
     _ = @import("periph/pfs_protect_test.zig");
     _ = @import("periph/poeg_test.zig");
