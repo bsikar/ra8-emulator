@@ -3,6 +3,7 @@
 //! here: the low-power timer that counts through standby, the interval
 //! timers, and the PWM timers.
 const gpt = @import("../periph/gpt.zig");
+const gtclkcr = @import("../periph/gtclkcr.zig");
 const iwdt = @import("../periph/iwdt.zig");
 
 const Board = @import("board.zig").Board;
@@ -13,8 +14,25 @@ const Writer = @import("report.zig").Writer;
 pub fn sections(board: *Board, out: Writer) !void {
     try lowpower(board, out);
     try interval(board, out);
+    try bankClock(board, out);
     try pwm(board, out);
     try independent(board, out);
+}
+
+/// GTCLKCR, the GPT bank's clock domain. It is written once, before the
+/// first channel is released, so an image that never used a timer is silent.
+fn bankClock(board: *Board, out: Writer) !void {
+    const unit = &board.gpt_clock;
+    if (unit.quiet()) return;
+    if (unit.programmed()) {
+        try out.print("GPT bank: GTCLK tied to PCLKA before the module-stop release\n", .{});
+    }
+    if (unit.prohibited_running != 0) {
+        try out.print(
+            "GPT bank: PROHIBITED {d} GTCLKCR store(s), the block was already released\n",
+            .{unit.prohibited_running},
+        );
+    }
 }
 
 /// The independent watchdog. An image that never touched it says nothing.
