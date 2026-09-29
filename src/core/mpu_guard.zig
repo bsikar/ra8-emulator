@@ -1,7 +1,7 @@
 //! MPU enforcement: refuse an access a region does not allow, and take the
 //! MemManage the core would have taken. Three rules are enforced: a store into
 //! a read-only region, a fetch out of an execute-never one, and any access at
-//! all from unprivileged code into a region that allows none.
+//! all from unprivileged code into a region that allows none, loads included.
 //!
 //! src/periph/mpu.zig captures what the firmware programmed and
 //! src/periph/mpu_fault.zig holds what enforcement caught. This file is the
@@ -47,10 +47,11 @@ pub const Guard = struct {
     /// attached enforces nothing rather than guessing at a table.
     unit: ?*mpu.Mpu = null,
     latch: mpu_fault.Latch = .{},
-    /// Room for both traps of every region, so the set can be rebuilt without
-    /// disturbing anything else the engine has hooked. A region can be both
-    /// read-only and execute-never and then carries one of each.
-    hooks: [2 * mpu.geometry.regions]c.uc.uc_hook = [_]c.uc.uc_hook{0} ** (2 * mpu.geometry.regions),
+    /// Room for all three traps of every region, so the set can be rebuilt
+    /// without disturbing anything else the engine has hooked. A
+    /// privileged-only region carries one of each; a read-only one that
+    /// unprivileged code may read carries only the store trap.
+    hooks: [3 * mpu.geometry.regions]c.uc.uc_hook = [_]c.uc.uc_hook{0} ** (3 * mpu.geometry.regions),
     live: usize = 0,
 
     pub fn init() Guard {
@@ -77,6 +78,9 @@ pub const Guard = struct {
             // permissions would have allowed the access.
             if (region.read_only or !region.unprivileged) self.trap(handle, region, .store);
             if (!region.executable or !region.unprivileged) self.trap(handle, region, .fetch);
+            // A load is refused on privilege alone, so an open region and a
+            // read-only one both go untrapped on this side.
+            if (!region.unprivileged) self.trap(handle, region, .load);
         }
         flush(handle);
         self.latch.arms +%= 1;
@@ -103,10 +107,12 @@ pub const Guard = struct {
         const event: c_int = switch (kind) {
             .store => c.uc.UC_HOOK_MEM_WRITE,
             .fetch => c.uc.UC_HOOK_CODE,
+            .load => c.uc.UC_HOOK_MEM_READ,
         };
         const callback: *const anyopaque = switch (kind) {
             .store => @ptrCast(&onWrite),
             .fetch => @ptrCast(&onFetch),
+            .load => @ptrCast(&onRead),
         };
         if (c.uc.uc_hook_add(
             handle,
@@ -124,10 +130,15 @@ pub const Guard = struct {
     /// it allows it. A trap covers a whole region, so a span guarded for one
     /// rule sees accesses the other rules are fine with: a privileged-only
     /// region traps every store, and a privileged one is allowed through here.
-    fn verdict(self: *Guard, handle: ?*c.uc.uc_engine, at: u32, fetch: bool) ?mpu_fault.Reason {
+    fn verdict(
+        self: *Guard,
+        handle: ?*c.uc.uc_engine,
+        at: u32,
+        kind: mpu_fault.Kind,
+    ) ?mpu_fault.Reason {
         const unit = self.unit orelse return null;
         const region = unit.regionFor(at) orelse return null;
-        return switch (region.refuses(fetch, privileged(handle))) {
+        return switch (region.refuses(kind, privileged(handle))) {
             .allowed => null,
             .permission => .permission,
             .privilege => .privilege,
@@ -141,9 +152,9 @@ pub const Guard = struct {
         self.live = 0;
     }
 
-    /// Turn a trapped store into the exception the core would have taken:
-    /// latch the architectural status, put PC back on the store so entry
-    /// stacks it, and vector into the handler.
+    /// Turn a trapped access into the exception the core would have taken:
+    /// latch the architectural status, put PC back on the instruction so
+    /// entry stacks it, and vector into the handler.
     ///
     /// With no handler to reach, the violation is counted and the run
     /// carries on from where the store left it: no escalation to HardFault
@@ -157,13 +168,15 @@ pub const Guard = struct {
         hit: mpu_fault.Violation,
     ) !void {
         const reason: u32 = switch (hit.kind) {
-            .store => mpu_fault.mmfsr.daccviol | mpu_fault.mmfsr.mmarvalid,
+            // A load and a store are both data accesses, so both latch
+            // DACCVIOL and hand MMFAR the address they went for.
+            .store, .load => mpu_fault.mmfsr.daccviol | mpu_fault.mmfsr.mmarvalid,
             .fetch => mpu_fault.mmfsr.iaccviol,
         };
         try core.writeWord(memmap.scb.cfsr, (core.readWord(memmap.scb.cfsr) catch 0) | reason);
-        // MMFAR belongs to the store case alone: a refused fetch leaves
-        // MMARVALID clear, so whatever MMFAR held stays where it was.
-        if (hit.kind == .store) try core.writeWord(memmap.scb.mmfar, hit.address);
+        // MMFAR belongs to the data cases: a refused fetch leaves MMARVALID
+        // clear, so whatever MMFAR held stays where it was.
+        if (hit.kind != .fetch) try core.writeWord(memmap.scb.mmfar, hit.address);
         const unit = controller orelse {
             self.standDown(core, hit);
             return;
@@ -181,8 +194,8 @@ pub const Guard = struct {
         self.latch.faults +%= 1;
     }
 
-    /// A violation with no handler to reach. The store case simply carries on
-    /// from where the store left it, the way it always has. The fetch case
+    /// A violation with no handler to reach. A data access simply carries on
+    /// from where it left the run, the way a store always has. The fetch case
     /// cannot: the PC is still on the refused instruction, so the traps come
     /// off to let the run make progress instead of refusing it forever.
     fn standDown(self: *Guard, core: anytype, hit: mpu_fault.Violation) void {
@@ -212,10 +225,35 @@ fn onWrite(
     const handle = uc orelse return;
     const guard: *Guard = @ptrCast(@alignCast(user.?));
     const at: u32 = @truncate(address);
-    const why = guard.verdict(handle, at, false) orelse return;
+    const why = guard.verdict(handle, at, .store) orelse return;
     var pc: u32 = 0;
     _ = c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_PC, &pc);
     if (!guard.latch.record(.{ .pc = pc, .address = at, .reason = why })) return;
+    _ = c.uc.uc_emu_stop(handle);
+}
+
+/// A load out of a span kept to privileged code. Unicorn has already served
+/// the value by the time the hook runs, the same way a store has already
+/// landed, so the refusal is the exception rather than a withheld value: the
+/// run stops, the handler runs, and the return re-runs the load.
+fn onRead(
+    uc: ?*c.uc.uc_engine,
+    kind: c_int,
+    address: u64,
+    size: c_int,
+    value: i64,
+    user: ?*anyopaque,
+) callconv(.C) void {
+    _ = kind;
+    _ = size;
+    _ = value;
+    const handle = uc orelse return;
+    const guard: *Guard = @ptrCast(@alignCast(user.?));
+    const at: u32 = @truncate(address);
+    const why = guard.verdict(handle, at, .load) orelse return;
+    var pc: u32 = 0;
+    _ = c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_PC, &pc);
+    if (!guard.latch.record(.{ .pc = pc, .address = at, .kind = .load, .reason = why })) return;
     _ = c.uc.uc_emu_stop(handle);
 }
 
@@ -233,7 +271,7 @@ fn onFetch(
     const handle = uc orelse return;
     const guard: *Guard = @ptrCast(@alignCast(user.?));
     const at: u32 = @truncate(address);
-    const why = guard.verdict(handle, at, true) orelse return;
+    const why = guard.verdict(handle, at, .fetch) orelse return;
     if (!guard.latch.record(.{ .pc = at, .address = at, .kind = .fetch, .reason = why })) return;
     _ = c.uc.uc_emu_stop(handle);
 }

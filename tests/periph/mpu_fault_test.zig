@@ -116,3 +116,14 @@ test "a violation is a permission one unless it says otherwise" {
     _ = latch.record(.{ .pc = 0x2200_0004, .address = 0x220A_0000 });
     try std.testing.expectEqual(mpu_fault.Reason.permission, latch.pending.?.reason);
 }
+
+test "a refused load is counted apart from a refused store" {
+    var latch = mpu_fault.Latch{};
+    _ = latch.record(.{ .pc = 4, .address = 0x220B_2000, .kind = .load, .reason = .privilege });
+    _ = latch.take();
+    _ = latch.record(.{ .pc = 8, .address = 0x220B_2000, .reason = .privilege });
+    try std.testing.expectEqual(@as(u64, 1), latch.loads);
+    try std.testing.expectEqual(@as(u64, 0), latch.fetches);
+    try std.testing.expectEqual(@as(u64, 2), latch.violations);
+    try std.testing.expectEqual(@as(u64, 2), latch.privilege);
+}

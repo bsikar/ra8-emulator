@@ -57,10 +57,16 @@ fn regions(board: *Board, out: Writer) !void {
             if (unit.privilegedDefault()) ", privileged default map on" else "",
         },
     );
-    if (latch.violations != latch.fetches) {
+    if (latch.violations != latch.fetches + latch.loads) {
         try out.print(
             "MPU: REFUSED {d} store(s) the region did not allow\n",
-            .{latch.violations - latch.fetches},
+            .{latch.violations - latch.fetches - latch.loads},
+        );
+    }
+    if (latch.loads != 0) {
+        try out.print(
+            "MPU: REFUSED {d} load(s) the region did not allow\n",
+            .{latch.loads},
         );
     }
     if (latch.fetches != 0) {
