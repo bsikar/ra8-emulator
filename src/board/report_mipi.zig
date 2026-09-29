@@ -39,6 +39,12 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{ phy.early_enables, phy.enables },
         );
     }
+    if (phy.pll.ignored != 0) {
+        try out.print(
+            "MIPI-PHY: IGNORED {d} DPHYPLFCR/DPHYESCCR store(s) made with the PLL running, the coefficients only latch while PLLSTP is set\n",
+            .{phy.pll.ignored},
+        );
+    }
     if (phy.refused != 0) {
         try out.print(
             "MIPI-PHY: REFUSED {d} store(s) to DPHYSFR, firmware cannot raise its own stability flags\n",

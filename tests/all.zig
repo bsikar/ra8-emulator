@@ -138,6 +138,7 @@ test {
     _ = @import("periph/mipi_csi_test.zig");
     _ = @import("periph/mipi_dsi_link_test.zig");
     _ = @import("periph/mipi_dsi_test.zig");
+    _ = @import("periph/mipi_phy_pll_lock_test.zig");
     _ = @import("periph/mipi_phy_status_test.zig");
     _ = @import("periph/mipi_phy_test.zig");
     _ = @import("periph/modem_script_test.zig");

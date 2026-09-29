@@ -28,6 +28,15 @@
 //! What it reads comes from src/periph/mipi_phy_status.zig, which carries the
 //! rule and states what it does not model.
 //!
+//! THE PLL COMES OUT OF RESET STOPPED, AND ITS COEFFICIENTS ARE LOCKED WHILE
+//! IT RUNS. DPHYPLOCR.PLLSTP reads 1 after reset (HUM Ch 64.2.3 p 3824,
+//! quoted in ra8_mipi_phy_regs.h), and DPHYPLFCR and DPHYESCCR only take a
+//! store while it does. Both halves live in src/periph/mipi_phy_pll_lock.zig
+//! with the citations; the consequence here is that the lock flag comes up on
+//! the DPHYPLOCR write that ENDS the host sequence, which is the write the
+//! driver then spins on DPHYSFR for, and not on the DPHYPLFCR write three
+//! steps earlier.
+//!
 //! NOT MODELLED, AND NOT GUESSED: the lanes themselves. Timing, escape clock
 //! divider and reference frequency are stored, read back and never
 //! interpreted, because nothing in this tree carries a lane-level model for
@@ -36,6 +45,7 @@
 //! number for the PHY is in either tree, so nothing is raised here.
 const periph = @import("registry.zig");
 const status = @import("mipi_phy_status.zig");
+const pll_lock = @import("mipi_phy_pll_lock.zig");
 
 /// D-PHY geometry. The bus folds the Non-secure alias onto this base.
 pub const win_base: u32 = 0x4034_6C00;
@@ -62,7 +72,8 @@ pub const off = struct {
 pub const MipiPhy = struct {
     refcr: u32 = 0,
     plfcr: u32 = 0,
-    plocr: u32 = 0,
+    /// Reset value: the PLL is stopped until firmware releases it.
+    plocr: u32 = pll_lock.plocr_reset,
     esccr: u32 = 0,
     pwrcr: u32 = 0,
     ocr: u32 = 0,
@@ -83,6 +94,8 @@ pub const MipiPhy = struct {
     locks: u32 = 0,
     /// Times DPHYOCR.DPHYEN went from clear to set.
     enables: u32 = 0,
+    /// Stores to DPHYPLFCR or DPHYESCCR dropped because the PLL was running.
+    pll: pll_lock.Locked = .{},
     /// Enables taken with DPHYSFR not ready: lanes started before the PHY
     /// said it was stable, which on a bench is a link that comes up
     /// intermittently rather than not at all.
@@ -94,7 +107,7 @@ pub const MipiPhy = struct {
 
     pub fn quiet(self: *const MipiPhy) bool {
         return self.polls == 0 and self.dark_polls == 0 and self.refused == 0 and
-            self.powerups == 0 and self.enables == 0;
+            self.powerups == 0 and self.enables == 0 and self.pll.quiet();
     }
 
     pub fn mode(self: *const MipiPhy) status.Mode {
@@ -148,10 +161,10 @@ pub const MipiPhy = struct {
     }
 
     /// Every control write goes through here, so the PLL lock is counted on
-    /// the edge wherever it happens. The driver's own order makes that worth
-    /// saying: PLLSTP is already clear out of reset, so on the host path the
-    /// flag comes up on the DPHYPLFCR write, not on the DPHYPLOCR one the
-    /// sequence ends with.
+    /// the edge wherever it happens. On the host path that edge is the
+    /// DPHYPLOCR write the sequence ends with: PLLSTP reads 1 out of reset,
+    /// so the coefficients written three steps earlier cannot latch a lock on
+    /// their own.
     fn writeWord(self: *MipiPhy, local: u32, value: u32) void {
         const was_locked = self.sfr() & status.flag.pllsf != 0;
         self.applyWord(local, value);
@@ -161,9 +174,13 @@ pub const MipiPhy = struct {
     fn applyWord(self: *MipiPhy, local: u32, value: u32) void {
         switch (local) {
             off.refcr => self.refcr = value,
-            off.plfcr => self.plfcr = value,
+            off.plfcr => if (self.pll.takes(self.plocr)) {
+                self.plfcr = value;
+            },
             off.plocr => self.plocr = value,
-            off.esccr => self.esccr = value,
+            off.esccr => if (self.pll.takes(self.plocr)) {
+                self.esccr = value;
+            },
             off.pwrcr => self.setPower(value),
             // Read-only: the PHY owns this one.
             off.sfr => self.refused +%= 1,

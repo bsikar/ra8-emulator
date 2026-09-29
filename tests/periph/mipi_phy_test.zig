@@ -154,7 +154,73 @@ test "enabling the lanes before the flags are up is counted apart" {
     phy.write(at(mipi_phy.off.ocr), 4, 0);
     powerUp(&phy);
     phy.write(at(mipi_phy.off.plfcr), 4, 0x0002_1000);
+    // ra8_mipi_phy_init releases the PLL and waits on PLLSF before step 11
+    // enables the lanes. Without that release the PLL is still stopped, so
+    // this enable would be early too.
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
     phy.write(at(mipi_phy.off.ocr), 4, status.operation.dphyen);
     try std.testing.expectEqual(@as(u32, 2), phy.enables);
     try std.testing.expectEqual(@as(u32, 1), phy.early_enables);
+}
+
+test "DPHYPLOCR reads the PLL stopped out of reset" {
+    var phy = mipi_phy.MipiPhy.init();
+    try std.testing.expectEqual(
+        status.pll_control.pllstp,
+        phy.read(at(mipi_phy.off.plocr), 4),
+    );
+    try std.testing.expect(!status.running(phy.read(at(mipi_phy.off.plocr), 4)));
+}
+
+test "the lock flag comes up on the write that releases the PLL, not on the coefficients" {
+    var phy = mipi_phy.MipiPhy.init();
+    powerUp(&phy);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0002_1000);
+    try std.testing.expectEqual(status.flag.pwrsf, phy.read(at(mipi_phy.off.sfr), 4));
+    try std.testing.expectEqual(@as(u32, 0), phy.locks);
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    try std.testing.expectEqual(status.flag.ready, phy.read(at(mipi_phy.off.sfr), 4));
+    try std.testing.expectEqual(@as(u32, 1), phy.locks);
+}
+
+test "DPHYPLFCR is ignored while the PLL is running" {
+    var phy = mipi_phy.MipiPhy.init();
+    powerUp(&phy);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0002_1000);
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0003_2000);
+    try std.testing.expectEqual(@as(u32, 0x0002_1000), phy.read(at(mipi_phy.off.plfcr), 4));
+    try std.testing.expectEqual(@as(u32, 1), phy.pll.ignored);
+}
+
+test "DPHYESCCR is ignored while the PLL is running" {
+    var phy = mipi_phy.MipiPhy.init();
+    powerUp(&phy);
+    phy.write(at(mipi_phy.off.esccr), 4, 0x0000_0004);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0002_1000);
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    phy.write(at(mipi_phy.off.esccr), 4, 0x0000_0010);
+    try std.testing.expectEqual(@as(u32, 0x0000_0004), phy.read(at(mipi_phy.off.esccr), 4));
+    try std.testing.expectEqual(@as(u32, 1), phy.pll.ignored);
+}
+
+test "the driver's set_lane_speed order lands, because it stops the PLL first" {
+    var phy = mipi_phy.MipiPhy.init();
+    powerUp(&phy);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0002_1000);
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    phy.write(at(mipi_phy.off.plocr), 4, status.pll_control.pllstp);
+    phy.write(at(mipi_phy.off.plfcr), 4, 0x0003_2000);
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    try std.testing.expectEqual(@as(u32, 0x0003_2000), phy.read(at(mipi_phy.off.plfcr), 4));
+    try std.testing.expectEqual(@as(u32, 0), phy.pll.ignored);
+    try std.testing.expectEqual(@as(u32, 2), phy.locks);
+}
+
+test "a refused coefficient store makes the run loud" {
+    var phy = mipi_phy.MipiPhy.init();
+    phy.write(at(mipi_phy.off.plocr), 4, 0);
+    phy.write(at(mipi_phy.off.esccr), 4, 0x0000_0010);
+    try std.testing.expect(!phy.quiet());
+    try std.testing.expectEqual(@as(u32, 1), phy.pll.ignored);
 }

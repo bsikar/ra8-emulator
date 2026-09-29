@@ -147,6 +147,7 @@ pub const periph = struct {
     pub const mipi_dsi_link = @import("periph/mipi_dsi_link.zig");
     pub const mipi_phy = @import("periph/mipi_phy.zig");
     pub const mipi_phy_status = @import("periph/mipi_phy_status.zig");
+    pub const mipi_phy_pll_lock = @import("periph/mipi_phy_pll_lock.zig");
     pub const modem = @import("periph/modem.zig");
     pub const modem_script = @import("periph/modem_script.zig");
     pub const mram = @import("periph/mram.zig");
