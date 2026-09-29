@@ -45,6 +45,7 @@ const std = @import("std");
 const periph = @import("registry.zig");
 const sci_status = @import("sci_status.zig");
 const sci_lin = @import("sci_lin.zig");
+const sci_spi = @import("sci_spi.zig");
 const sci_ring = @import("sci_ring.zig");
 const sci_error = @import("sci_error.zig");
 const lanes = @import("lanes.zig");
@@ -62,6 +63,8 @@ pub const console_channel: usize = 8;
 pub const off_rdr: u32 = 0x00;
 pub const off_tdr: u32 = 0x04;
 pub const off_ccr0: u32 = 0x08;
+/// CCR3's mode field, and what a Simple-SPI frame clocks back: sci_spi.zig.
+pub const off_ccr3: u32 = sci_spi.off_ccr3;
 /// The status words and the clear strobes live in src/periph/sci_status.zig,
 /// which owns what they answer and what a store to one does.
 pub const off_csr: u32 = sci_status.off.csr;
@@ -144,6 +147,10 @@ pub const Channel = struct {
     rx: Ring = .{},
     /// The CSR flags firmware has to clear: src/periph/sci_error.zig.
     errors: sci_error.Errors = .{},
+    /// CCR3, kept whole so the mode field can be read out of it.
+    ccr3: u32 = 0,
+    /// Simple-SPI frames nothing answered, clocked in off an idle line.
+    idle_frames: u32 = 0,
     /// The Simple LIN half of this channel.
     lin: sci_lin.Lin = .{},
     /// What is on this channel's line, if anything.
@@ -157,6 +164,7 @@ pub const Channel = struct {
         return self.transmitted == 0 and self.received == 0 and
             self.unsent == 0 and self.unheard == 0 and self.status_stores == 0 and
             self.unnamed_reads == 0 and self.unnamed_stores == 0 and
+            self.idle_frames == 0 and
             self.errors.quiet() and self.lin.quiet();
     }
 
@@ -248,6 +256,7 @@ pub const Sci = struct {
         return switch (offset) {
             off_rdr => self.readData(index, at),
             off_ccr0 => channel.control,
+            off_ccr3 => channel.ccr3,
             off_csr => channel.status(),
             off_frsr => sci_status.receive(channel.readable()),
             off_ftsr => sci_status.transmit,
@@ -304,6 +313,7 @@ pub const Sci = struct {
             // were, so setting RE with a byte store to CCR0+0 keeps the
             // interrupt enables sitting in the bytes above it.
             off_ccr0 => channel.control = lanes.merge(channel.control, lane, width, value),
+            off_ccr3 => channel.ccr3 = lanes.merge(channel.ccr3, lane, width, value),
             // CFCLR is write-1-to-clear. Most of what it names this model
             // derives rather than latches, so clearing those changes nothing;
             // ORER is the one real latch, and the bit comes out of the value
@@ -336,14 +346,28 @@ pub const Sci = struct {
     /// pass a run it would fail on the bench.
     fn deliver(self: *Sci, index: usize, byte: u8) void {
         const channel = &self.channels[index];
-        const on_line = channel.device orelse return;
+        const on_line = channel.device orelse return self.clockIdle(index);
         const reply = on_line.feed(byte);
-        if (reply.len == 0) return;
+        if (reply.len == 0) return self.clockIdle(index);
         if (!channel.enabled(ccr0.re)) {
             channel.unheard +%= @intCast(reply.len);
             return;
         }
         channel.receive(reply);
+    }
+
+    /// A Simple-SPI frame nothing answered still clocked one in: the channel
+    /// drives the clock, so the receiver shifts the level the line sat at,
+    /// and an unconnected MISO sits high. Asynchronous channels are untouched.
+    fn clockIdle(self: *Sci, index: usize) void {
+        const channel = &self.channels[index];
+        if (!sci_spi.simpleSpi(channel.ccr3)) return;
+        channel.idle_frames +%= 1;
+        if (!channel.enabled(ccr0.re)) {
+            channel.unheard +%= 1;
+            return;
+        }
+        channel.receive(&[_]u8{sci_spi.idle_byte});
     }
 
     pub fn block(self: *Sci) periph.Block {
