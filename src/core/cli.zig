@@ -12,6 +12,7 @@ pub const usage =
     \\                    [--touch X,Y]
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
+    \\                    [--break-sym NAME [N]]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -24,8 +25,11 @@ pub const usage =
     \\  --dump-sym NAME    read that global out of RAM after the run and
     \\                     print it, repeatable
     \\  --stop-sym NAME N  end the run early once that global reaches N
-    \\  --break-sym NAME   end the run the first time execution reaches
-    \\                     that function
+    \\  --break-sym NAME [N]
+    \\                     end the run when execution reaches that
+    \\                     function, on the Nth arrival (default the
+    \\                     first); the report says how many arrivals a
+    \\                     run that fell short did see
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
@@ -110,6 +114,8 @@ pub const Options = struct {
     /// A function to stop at the first time execution reaches it. Null
     /// stops at nothing and the run goes to its instruction budget.
     break_symbol: ?[]const u8 = null,
+    /// Which arrival at `break_symbol` ends the run. One is the first.
+    break_arrival: u32 = 1,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -170,6 +176,16 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.break_symbol = argv[index];
+            // The count is optional, so it is taken only when the next
+            // argument is one. A symbol name is never a number, and the
+            // flag that may follow instead always starts with a dash.
+            if (index + 1 < argv.len) {
+                if (std.fmt.parseInt(u32, argv[index + 1], 0) catch null) |nth| {
+                    if (nth == 0) return error.BadValue;
+                    options.break_arrival = nth;
+                    index += 1;
+                }
+            }
         } else if (std.mem.eql(u8, argv[index], "--ms")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;

@@ -1,4 +1,4 @@
-//! The instruction address a run stops at.
+//! The instruction address a run stops at, and which arrival to stop on.
 //!
 //! `--stop-sym` watches a counter in RAM, which answers "did the firmware
 //! get as far as counting N of something". It cannot answer the question a
@@ -6,23 +6,33 @@
 //! all. Reading the C to decide that is guesswork, and on the SD provision
 //! wall it has now been wrong twice.
 //!
-//! So this is the other half: an address execution stops at the first time
-//! it arrives. The engine hands it to the emulator as the point to run
-//! until, so the stop costs nothing per instruction and lands on the first
-//! instruction of the function rather than at the chunk boundary after it.
+//! So this is the other half: an address execution stops at. The first
+//! arrival is rarely the interesting one. A block read that fails does so
+//! after a mount's worth of reads have already succeeded, so the question
+//! is not "was the reader entered" but "what was different about the tenth
+//! time", and only a count can ask that.
 //!
-//! The interesting verdict is the negative one. A run that ends without
-//! arriving proves the firmware never called that function, which is the
-//! evidence a command trace cannot give: a function that issues no bus
-//! access leaves no trace either way.
+//! The counting is done by src/core/break_hook.zig, which is called on the
+//! break's own instruction and nowhere else. An earlier cut handed the
+//! address to the emulator as the point to run until, which stops on the
+//! first arrival and cannot be resumed past: restarting a run AT the
+//! address it is told to stop before either spins or steps over the very
+//! instruction being counted.
+//!
+//! The interesting verdict is still the negative one. A run that ends
+//! having arrived fewer times than asked reports how many it did see,
+//! which is evidence a command trace cannot give: a function that issues
+//! no bus access leaves no trace either way.
 const std = @import("std");
 
-/// How the address is compared, and what an unset break runs until.
+/// How the address is compared, and what an unset count means.
 pub const limits = struct {
     /// The Thumb interworking bit. A symbol may carry it and a program
     /// counter may carry it; neither says anything about which address
     /// was meant, so it is cleared on both sides of the comparison.
     pub const thumb_bit: u32 = 1;
+    /// Which arrival a break with no count given stops on.
+    pub const first_arrival: u32 = 1;
     /// What a run with no break asks to run until: an address no image
     /// reaches, so the emulator stops on the instruction count alone.
     pub const unreachable_address: u64 = 0xFFFF_FFFF;
@@ -32,24 +42,30 @@ pub const Break = struct {
     /// Where to stop, resolved from the image's symbol table before the
     /// run starts.
     address: u32,
-    /// Set when execution arrived. This is what tells the report the run
-    /// ended at the break rather than spending its budget.
+    /// Which arrival ends the run. One is the first.
+    arrival: u32 = limits.first_arrival,
+    /// How many times execution has reached the address so far. Kept past
+    /// the stop so a run that never got there can say how close it came.
+    seen: u32 = 0,
+    /// Set when the wanted arrival happened. This is what tells the report
+    /// the run ended at the break rather than spending its budget.
     reached: bool = false,
 
-    /// The address to run until, as the emulator wants it.
-    pub fn until(self: Break) u64 {
-        return @as(u64, entry(self.address));
+    /// Count one arrival, and say whether this is the one that ends the run.
+    ///
+    /// Called from the hook on the break's own instruction. Stopping is a
+    /// one-way latch: arrivals past the wanted one keep counting, but they
+    /// cannot un-reach a break that was already met.
+    pub fn count(self: *Break) bool {
+        self.seen += 1;
+        if (self.seen < self.arrival) return false;
+        self.reached = true;
+        return self.seen == self.arrival;
     }
 
-    /// Did execution arrive at the break?
-    ///
-    /// Called at a chunk boundary with the program counter as it stands.
-    /// Arriving is a one-way latch: a later boundary somewhere else does
-    /// not un-reach a break that was already met.
-    pub fn met(self: *Break, pc: u32) bool {
-        if (entry(pc) != entry(self.address)) return false;
-        self.reached = true;
-        return true;
+    /// The address the hook watches, as the emulator numbers instructions.
+    pub fn watchedAddress(self: Break) u64 {
+        return @as(u64, entry(self.address));
     }
 };
 

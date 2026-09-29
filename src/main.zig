@@ -77,10 +77,8 @@ pub fn main() !u8 {
     board.reboot = &reboot;
     var stop = resolveStop(image, options);
     var point = resolveBreak(image, options);
-    var timed: ?deadline.Deadline = if (options.ms) |milliseconds|
-        .{ .periods = milliseconds }
-    else
-        null;
+    if (point) |*one| try core.attachBreak(one);
+    var timed = resolveDeadline(options);
     const budget = options.budgetFor(stop != null);
     const fault = try core.run(entry, budget, .{
         .watch = &watch,
@@ -204,12 +202,15 @@ fn arrivals(
     budget: usize,
 ) !u8 {
     if (point.reached) {
-        try out.print("reached {s}, pc 0x{X:0>8}\n", .{ options.break_symbol.?, pc });
+        try out.print(
+            "reached {s} arrival {d}, pc 0x{X:0>8}\n",
+            .{ options.break_symbol.?, point.seen, pc },
+        );
         return 0;
     }
     try out.print(
-        "ran {d} instructions, never reached {s}, pc 0x{X:0>8}\n",
-        .{ budget, options.break_symbol.?, pc },
+        "ran {d} instructions, reached {s} {d} time(s) of {d}, pc 0x{X:0>8}\n",
+        .{ budget, options.break_symbol.?, point.seen, point.arrival, pc },
     );
     return 0;
 }
@@ -217,13 +218,19 @@ fn arrivals(
 /// The function `--break-sym` named, resolved against the image's symbol
 /// table. A name the image does not carry is reported and the run goes to
 /// its instruction budget, the same way a missing `--stop-sym` does.
+/// The modelled-time window a run is allowed, or none.
+fn resolveDeadline(options: cli.Options) ?deadline.Deadline {
+    const milliseconds = options.ms orelse return null;
+    return .{ .periods = milliseconds };
+}
+
 fn resolveBreak(image: elf.Image, options: cli.Options) ?breakpoint.Break {
     const name = options.break_symbol orelse return null;
     const address = symbols.addressOf(image, name) orelse {
         std.debug.print("--break-sym {s} not found in symbol table\n", .{name});
         return null;
     };
-    return .{ .address = address };
+    return .{ .address = address, .arrival = options.break_arrival };
 }
 
 /// The counter `--stop-sym` named, resolved against the image's symbol
