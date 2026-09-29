@@ -53,6 +53,7 @@ const ckcr = @import("../periph/ckcr.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const sysclk = @import("../periph/sysclk.zig");
+const lpm = @import("../periph/lpm.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const pdm = @import("../periph/pdm.zig");
 const poeg = @import("../periph/poeg.zig");
@@ -137,6 +138,8 @@ pub const Board = struct {
     /// checked against the stabilisation flags, so it needs pointers to this
     /// board's own protection and oscillators rather than copies.
     tree: sysclk.Tree,
+    /// SBYCR / DPSBYCR / LPSCR, behind PRCR.PRC1.
+    low_power: lpm.Unit,
     /// The graphics power domain, and the one block so far that lives in it.
     /// Both are built in attach(): each needs a pointer to a model this board
     /// owns, not a copy of one.
@@ -290,6 +293,7 @@ pub const Board = struct {
             .backup = undefined,
             .oscillators = undefined,
             .tree = undefined,
+            .low_power = undefined,
             .ratios = undefined,
             .branches = undefined,
             .graphics = undefined,
