@@ -20,6 +20,7 @@ pub const core = struct {
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
     pub const symbols = @import("core/symbols.zig");
+    pub const undefined_ops = @import("core/undefined_ops.zig");
     pub const breakpoint = @import("core/breakpoint.zig");
     pub const mem_dump = @import("core/mem_dump.zig");
     pub const place = @import("core/place.zig");
