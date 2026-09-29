@@ -162,6 +162,7 @@ test {
     _ = @import("periph/ipc_sync_test.zig");
     _ = @import("periph/pfs_test.zig");
     _ = @import("periph/sysclk_test.zig");
+    _ = @import("periph/subclock_test.zig");
     _ = @import("periph/lpm_test.zig");
     _ = @import("periph/pll_test.zig");
     _ = @import("periph/vscr_test.zig");

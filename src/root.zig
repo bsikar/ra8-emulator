@@ -178,6 +178,7 @@ pub const periph = struct {
     pub const ckdiv = @import("periph/ckdiv.zig");
     pub const prcr = @import("periph/prcr.zig");
     pub const sysclk = @import("periph/sysclk.zig");
+    pub const subclock = @import("periph/subclock.zig");
     pub const lpm = @import("periph/lpm.zig");
     pub const pll = @import("periph/pll.zig");
     pub const vscr = @import("periph/vscr.zig");

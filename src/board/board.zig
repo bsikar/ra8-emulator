@@ -54,6 +54,7 @@ const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
 const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
+const subclock = @import("../periph/subclock.zig");
 const sysclk = @import("../periph/sysclk.zig");
 const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
@@ -141,6 +142,7 @@ pub const Board = struct {
     /// stop bits. Built in attach(): every store is PRC0-gated, so it needs a
     /// pointer to this board's own protection model rather than a copy.
     oscillators: oscsf.Oscillators,
+    subclk: subclock.Unit,
     /// The system clock tree: the source CKSEL picks and the dividers under
     /// it. Built in attach(): every store is PRC0-gated and a select is
     /// checked against the stabilisation flags, so it needs pointers to this
@@ -305,6 +307,7 @@ pub const Board = struct {
             // board's own protection model, not a copy of it.
             .backup = undefined,
             .oscillators = undefined,
+            .subclk = undefined,
             .tree = undefined,
             .low_power = undefined,
             .plls = undefined,
