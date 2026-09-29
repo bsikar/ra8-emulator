@@ -54,6 +54,7 @@ pub const periph = struct {
     pub const canfd = @import("periph/canfd.zig");
     pub const canfd_error = @import("periph/canfd_error.zig");
     pub const canfd_fifo = @import("periph/canfd_fifo.zig");
+    pub const canfd_rx_config = @import("periph/canfd_rx_config.zig");
     pub const canfd_regs = @import("periph/canfd_regs.zig");
     pub const ceu = @import("periph/ceu.zig");
     pub const clocks = @import("periph/clocks.zig");
