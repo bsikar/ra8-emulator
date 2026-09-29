@@ -177,6 +177,7 @@ test {
     _ = @import("periph/sd_fat_test.zig");
     _ = @import("periph/sd_format_test.zig");
     _ = @import("periph/sd_image_test.zig");
+    _ = @import("periph/sd_trace_test.zig");
     _ = @import("periph/sd_write_test.zig");
     _ = @import("periph/sdhi_card_test.zig");
     _ = @import("periph/sdhi_fifo_test.zig");

@@ -7,7 +7,8 @@ const sd_format = @import("../periph/sd_format.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
-    \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--touch X,Y]
+    \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
+    \\                    [--touch X,Y]
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\
@@ -23,6 +24,7 @@ pub const usage =
     \\                     print it, repeatable
     \\  --stop-sym NAME N  end the run early once that global reaches N
     \\  --sd-size MB       size the card on the SPI line (default 32)
+    \\  --trace-sd         write one line per SD command to stderr
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
@@ -83,6 +85,8 @@ pub const Options = struct {
     sd_label: []const u8 = "RA8",
     /// The card's size in MiB. Null keeps the image's own default.
     sd_size_mb: ?u32 = null,
+    /// Write one line per SD command to stderr.
+    trace_sd: bool = false,
     /// Contacts to queue on the touch panel, one drained per frame the
     /// firmware reads.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
@@ -167,6 +171,8 @@ pub fn parse(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.sd_size_mb = try std.fmt.parseInt(u32, argv[index], 10);
+        } else if (std.mem.eql(u8, argv[index], "--trace-sd")) {
+            options.trace_sd = true;
         } else if (std.mem.eql(u8, argv[index], "--sd-new")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;

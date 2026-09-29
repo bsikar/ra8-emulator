@@ -66,6 +66,8 @@ const std = @import("std");
 const image = @import("sd_image.zig");
 const sd_reply = @import("sd_reply.zig");
 const sd_write = @import("sd_write.zig");
+const sd_trace = @import("sd_trace.zig");
+const sd_command = @import("sd_command.zig");
 const spi = @import("spi.zig");
 
 /// Which SPI_B channel the card is wired to. The model's own rule; see the
@@ -84,30 +86,9 @@ pub const frame = struct {
 
 /// The wire bytes and the staged reply both live next door, so a caller
 /// reaches them through one name rather than two.
+pub const Command = sd_command.Command;
 pub const token = sd_reply.token;
 pub const r1 = sd_reply.r1;
-
-/// The commands answered here. Non-exhaustive: anything else gets the plain
-/// R1 a real card gives a command it does not implement in this mode.
-pub const Command = enum(u8) {
-    go_idle = 0,
-    send_if_cond = 8,
-    send_csd = 9,
-    stop = 12,
-    set_blocklen = 16,
-    read_single = 17,
-    read_multi = 18,
-    write_single = 24,
-    write_multi = 25,
-    erase_start = 32,
-    erase_end = 33,
-    erase = 38,
-    app_op_cond = 41,
-    app_cmd = 55,
-    read_ocr = 58,
-    crc_on_off = 59,
-    _,
-};
 
 /// The CSD v2.0 register, as far as the capacity field this model fills.
 const csd = struct {
@@ -159,6 +140,8 @@ pub const Card = struct {
     crc_unchecked: u32 = 0,
     /// CMD38 with no range latched.
     erase_seq: u32 = 0,
+    /// Write one line per command to stderr. Off unless --trace-sd asked.
+    trace: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) Card {
         return .{ .img = image.Image.init(allocator) };
@@ -214,6 +197,10 @@ pub const Card = struct {
         self.app_cmd = false;
         self.commands +%= 1;
         const command: Command = @enumFromInt(index);
+        if (self.trace) {
+            var buf: sd_trace.Buffer = undefined;
+            std.debug.print("{s}\n", .{sd_trace.line(&buf, index, arg, was_app)});
+        }
         if (command == .app_op_cond and was_app) {
             self.ready = true;
             self.reply.one(r1.ready);
