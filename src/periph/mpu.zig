@@ -79,8 +79,10 @@ pub const field = struct {
     pub const ctrl_enable: u32 = 1 << 0;
     pub const ctrl_hfnmiena: u32 = 1 << 1;
     pub const ctrl_privdefena: u32 = 1 << 2;
-    /// RBAR[0] XN, [2:1] AP. AP[2] set is read-only at both privilege levels.
+    /// RBAR[0] XN, [2:1] AP. AP[1] (bit 1) allows unprivileged access at all;
+    /// AP[2] (bit 2) makes the region read-only at both privilege levels.
     pub const rbar_xn: u32 = 1 << 0;
+    pub const rbar_ap_unprivileged: u32 = 1 << 1;
     pub const rbar_ap_ro: u32 = 1 << 2;
     /// RLAR[0] EN, the region-enable bit.
     pub const rlar_enable: u32 = 1 << 0;
@@ -92,12 +94,16 @@ pub const field = struct {
 };
 
 /// One data region as the firmware left it: the inclusive span it covers, and
-/// the two bits that decide whether a store into it is allowed.
+/// the three bits that decide which accesses into it are allowed.
 pub const Region = struct {
     base: u32 = 0,
     limit: u32 = 0,
     read_only: bool = false,
     executable: bool = true,
+    /// RBAR.AP[1]: whether unprivileged code may touch the region at all. A
+    /// region without it is privileged-only, and an unprivileged access to it
+    /// is refused whichever direction it goes.
+    unprivileged: bool = false,
     enabled: bool = false,
     /// The two words exactly as the firmware wrote them. Kept whole rather
     /// than rebuilt from the fields above, so putting a region back in front
@@ -113,6 +119,7 @@ pub const Region = struct {
             .limit = (rlar & field.address) | field.limit_low,
             .read_only = rbar & field.rbar_ap_ro != 0,
             .executable = rbar & field.rbar_xn == 0,
+            .unprivileged = rbar & field.rbar_ap_unprivileged != 0,
             .enabled = rlar & field.rlar_enable != 0,
             .rbar = rbar,
             .rlar = rlar,
@@ -128,6 +135,25 @@ pub const Region = struct {
     pub fn bytes(self: Region) u32 {
         if (!self.enabled or self.limit < self.base) return 0;
         return self.limit - self.base + 1;
+    }
+
+    /// Whether this region refuses one access, and on which of the two
+    /// grounds. Privilege is checked first because it refuses a read as well,
+    /// and because a privileged-only region says nothing about what
+    /// privileged code may do there.
+    pub const Refusal = enum { allowed, permission, privilege };
+
+    pub fn refuses(self: Region, fetch: bool, privileged: bool) Refusal {
+        if (!privileged and !self.unprivileged) return .privilege;
+        if (fetch and !self.executable) return .permission;
+        if (!fetch and self.read_only) return .permission;
+        return .allowed;
+    }
+
+    /// Whether any access into this region could be refused, which is what
+    /// decides if enforcement needs a trap over its span at all.
+    pub fn guarded(self: Region) bool {
+        return self.read_only or !self.executable or !self.unprivileged;
     }
 };
 

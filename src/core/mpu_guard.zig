@@ -1,5 +1,7 @@
-//! MPU enforcement: refuse a store into a read-only region and a fetch out of
-//! an execute-never one, and take the MemManage the core would have taken.
+//! MPU enforcement: refuse an access a region does not allow, and take the
+//! MemManage the core would have taken. Three rules are enforced: a store into
+//! a read-only region, a fetch out of an execute-never one, and any access at
+//! all from unprivileged code into a region that allows none.
 //!
 //! src/periph/mpu.zig captures what the firmware programmed and
 //! src/periph/mpu_fault.zig holds what enforcement caught. This file is the
@@ -69,9 +71,12 @@ pub const Guard = struct {
         const unit = self.unit orelse return;
         self.latch.stood_down = false;
         for (unit.table) |region| {
-            if (region.bytes() == 0) continue;
-            if (region.read_only) self.trap(handle, region, .store);
-            if (!region.executable) self.trap(handle, region, .fetch);
+            if (region.bytes() == 0 or !region.guarded()) continue;
+            // Privilege refuses a store and a fetch alike, so a
+            // privileged-only region needs both traps even when its own
+            // permissions would have allowed the access.
+            if (region.read_only or !region.unprivileged) self.trap(handle, region, .store);
+            if (!region.executable or !region.unprivileged) self.trap(handle, region, .fetch);
         }
         flush(handle);
         self.latch.arms +%= 1;
@@ -108,11 +113,25 @@ pub const Guard = struct {
             &self.hooks[self.live],
             event,
             @constCast(callback),
-            &self.latch,
+            self,
             region.base,
             region.limit,
         ) != c.uc.UC_ERR_OK) return;
         self.live += 1;
+    }
+
+    /// Why the region covering this address refuses the access, or null when
+    /// it allows it. A trap covers a whole region, so a span guarded for one
+    /// rule sees accesses the other rules are fine with: a privileged-only
+    /// region traps every store, and a privileged one is allowed through here.
+    fn verdict(self: *Guard, handle: ?*c.uc.uc_engine, at: u32, fetch: bool) ?mpu_fault.Reason {
+        const unit = self.unit orelse return null;
+        const region = unit.regionFor(at) orelse return null;
+        return switch (region.refuses(fetch, privileged(handle))) {
+            .allowed => null,
+            .permission => .permission,
+            .privilege => .privilege,
+        };
     }
 
     /// Take every trap off, which is what a cleared CTRL.ENABLE means: the
@@ -175,9 +194,10 @@ pub const Guard = struct {
     }
 };
 
-/// A store into a protected span. Unicorn cannot be told to decline it, so
-/// the run is stopped instead and the PC of the store kept: the loop takes
-/// the exception at the boundary this makes.
+/// A store into a guarded span. Unicorn cannot be told to decline it, so the
+/// run is stopped instead and the PC of the store kept: the loop takes the
+/// exception at the boundary this makes. A trap is over the whole region, so
+/// the rule that refuses this particular access is worked out here.
 fn onWrite(
     uc: ?*c.uc.uc_engine,
     kind: c_int,
@@ -190,10 +210,12 @@ fn onWrite(
     _ = size;
     _ = value;
     const handle = uc orelse return;
-    const latch: *mpu_fault.Latch = @ptrCast(@alignCast(user.?));
+    const guard: *Guard = @ptrCast(@alignCast(user.?));
+    const at: u32 = @truncate(address);
+    const why = guard.verdict(handle, at, false) orelse return;
     var pc: u32 = 0;
     _ = c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_PC, &pc);
-    if (!latch.record(.{ .pc = pc, .address = @truncate(address) })) return;
+    if (!guard.latch.record(.{ .pc = pc, .address = at, .reason = why })) return;
     _ = c.uc.uc_emu_stop(handle);
 }
 
@@ -209,8 +231,25 @@ fn onFetch(
 ) callconv(.C) void {
     _ = size;
     const handle = uc orelse return;
-    const latch: *mpu_fault.Latch = @ptrCast(@alignCast(user.?));
+    const guard: *Guard = @ptrCast(@alignCast(user.?));
     const at: u32 = @truncate(address);
-    if (!latch.record(.{ .pc = at, .address = at, .kind = .fetch })) return;
+    const why = guard.verdict(handle, at, true) orelse return;
+    if (!guard.latch.record(.{ .pc = at, .address = at, .kind = .fetch, .reason = why })) return;
     _ = c.uc.uc_emu_stop(handle);
 }
+
+/// Whether the core is privileged right now. Handler mode always is, whatever
+/// CONTROL says; thread mode is privileged only while CONTROL.nPRIV is clear
+/// (DDI0553 B3.5). Unicorn is asked rather than the model, because this is the
+/// core's own state and nothing on the peripheral bus mirrors it.
+fn privileged(handle: ?*c.uc.uc_engine) bool {
+    var ipsr: u32 = 0;
+    _ = c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_IPSR, &ipsr);
+    if (ipsr != 0) return true;
+    var control: u32 = 0;
+    _ = c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_CONTROL, &control);
+    return control & control_npriv == 0;
+}
+
+/// CONTROL[0] nPRIV: set means thread mode runs unprivileged.
+const control_npriv: u32 = 1 << 0;

@@ -100,3 +100,19 @@ test "enforcement has not stood down until a fetch has nowhere to go" {
     _ = latch.record(.{ .pc = 0x220A_0000, .address = 0x220A_0000, .kind = .fetch });
     try std.testing.expect(!latch.stood_down);
 }
+
+test "a privilege refusal is counted apart from a permission one" {
+    var latch = mpu_fault.Latch{};
+    _ = latch.record(.{ .pc = 0x2200_0004, .address = 0x220A_0000, .reason = .privilege });
+    try std.testing.expectEqual(@as(u64, 1), latch.privilege);
+    _ = latch.take();
+    _ = latch.record(.{ .pc = 0x2200_0008, .address = 0x220A_0000 });
+    try std.testing.expectEqual(@as(u64, 2), latch.violations);
+    try std.testing.expectEqual(@as(u64, 1), latch.privilege);
+}
+
+test "a violation is a permission one unless it says otherwise" {
+    var latch = mpu_fault.Latch{};
+    _ = latch.record(.{ .pc = 0x2200_0004, .address = 0x220A_0000 });
+    try std.testing.expectEqual(mpu_fault.Reason.permission, latch.pending.?.reason);
+}
