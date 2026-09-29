@@ -126,6 +126,12 @@ pub fn spi(board: *Board, out: Writer) !void {
                 .{ index, unit.narrow_writes },
             );
         }
+        if (unit.locked.ignored != 0) {
+            try out.print(
+                "SPI{d}: IGNORED {d} SPCR2 store(s) made with SPE set, the channel was already running\n",
+                .{ index, unit.locked.ignored },
+            );
+        }
         if (unit.narrow_reads != 0) {
             try out.print(
                 "SPI{d}: REFUSED {d} SPDR read(s) too narrow for the frame, the receive register kept it\n",

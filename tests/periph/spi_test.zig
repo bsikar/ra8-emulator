@@ -220,3 +220,58 @@ test "a refused SPDR store is counted as narrow before it is counted as disabled
     try std.testing.expectEqual(@as(u32, 0), block.channels[0].refused);
     try std.testing.expect(!block.quiet());
 }
+
+test "SPCR2 takes the tie while the channel is stopped" {
+    var block = unit();
+    block.write(ch0 + spi.off_spcr2, 4, spi.field.splp2);
+    try std.testing.expectEqual(@as(u32, spi.field.splp2), block.read(ch0 + spi.off_spcr2, 4));
+    try std.testing.expect(block.channels[0].loopback());
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].locked.ignored);
+}
+
+test "SPCR2 does not move once SPE is set" {
+    var block = unit();
+    block.write(ch0 + spi.off_spcr, 4, spi.field.spe);
+    block.write(ch0 + spi.off_spcr2, 4, spi.field.splp2);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spcr2, 4));
+    try std.testing.expect(!block.channels[0].loopback());
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].locked.ignored);
+}
+
+test "a tie armed before the enable survives the enable" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    try std.testing.expectEqual(@as(u32, spi.field.splp2), block.read(ch0 + spi.off_spcr2, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].locked.ignored);
+    try std.testing.expectEqual(@as(u32, 0x5A), try exchange(&block, ch0, 0x5A));
+}
+
+test "a teardown that clears SPCR2 before SPE leaves the tie standing" {
+    var block = unit();
+    startLoopback(&block, ch0);
+    block.write(ch0 + spi.off_spcr2, 4, 0);
+    try std.testing.expectEqual(@as(u32, spi.field.splp2), block.read(ch0 + spi.off_spcr2, 4));
+    block.write(ch0 + spi.off_spcr, 4, 0);
+    block.write(ch0 + spi.off_spcr2, 4, 0);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + spi.off_spcr2, 4));
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].locked.ignored);
+}
+
+test "a narrow SPCR2 store is refused by the lock too" {
+    var block = unit();
+    block.write(ch0 + spi.off_spcr2, 4, spi.field.splp2);
+    block.write(ch0 + spi.off_spcr, 4, spi.field.spe);
+    block.write(ch0 + spi.off_spcr2 + 2, 2, 0);
+    try std.testing.expectEqual(@as(u32, spi.field.splp2), block.read(ch0 + spi.off_spcr2, 4));
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].locked.ignored);
+}
+
+test "the lock is per channel" {
+    var block = unit();
+    block.write(ch0 + spi.off_spcr, 4, spi.field.spe);
+    block.write(ch0 + spi.off_spcr2, 4, spi.field.splp2);
+    block.write(ch1 + spi.off_spcr2, 4, spi.field.splp2);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].locked.ignored);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[1].locked.ignored);
+    try std.testing.expectEqual(@as(u32, spi.field.splp2), block.read(ch1 + spi.off_spcr2, 4));
+}
