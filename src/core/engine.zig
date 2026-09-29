@@ -25,6 +25,8 @@ const csel_hook = @import("csel_hook.zig");
 const break_hook = @import("break_hook.zig");
 const watchpoint = @import("watchpoint.zig");
 const watch_hook = @import("watch_hook.zig");
+const undefined_hook = @import("undefined_hook.zig");
+const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("breakpoint.zig");
 const stop = @import("stop.zig");
@@ -241,6 +243,13 @@ pub const Engine = struct {
     /// written more than once tells its whole story in one run.
     pub fn attachWatchpoint(self: Engine, watched: *watchpoint.Watched) Error!void {
         watch_hook.attach(self.handle, watched) catch return Error.AttachFailed;
+    }
+
+    /// Count every arrival at an undefined site the sweep found, so the
+    /// report can separate an encoding that merely sits in the image from
+    /// one the firmware runs.
+    pub fn attachUndefined(self: Engine, found: *undefined_ops_mod.Found) Error!void {
+        undefined_hook.attach(self.handle, found) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like

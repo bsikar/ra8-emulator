@@ -21,6 +21,15 @@
 //! parked between functions, and a mis-stepped halfword can look like any
 //! encoding at all. A site named here is a place to point objdump, not a
 //! proof that anything executes it. Nothing here changes what runs.
+//!
+//! WHICH IS WHY EACH SITE COUNTS ITS OWN ARRIVALS. The sweep alone cannot
+//! separate an undefined encoding that sits in a literal pool from one the
+//! firmware really runs, and the difference is the whole question: an image
+//! can carry ten of these and execute none. So every swept site is watched
+//! for the length of the run and reports how many times it was reached. A
+//! site with no arrivals is data or a path not taken; a site with arrivals
+//! is a run whose results downstream of it mean nothing, and the report no
+//! longer calls such a run clean without qualification.
 const std = @import("std");
 const elf = @import("elf.zig");
 const symbols = @import("symbols.zig");
@@ -29,6 +38,13 @@ pub const limits = struct {
     /// How many sites the report names before it stops listing them. The
     /// count is always exact; the list is for pointing objdump somewhere.
     pub const listed: usize = 6;
+
+    /// How many sites are kept, and therefore watched for arrivals. Higher
+    /// than `listed` on purpose: the list is what a reader wants to see,
+    /// while every site kept here gets a hook and can prove whether it
+    /// runs. Beyond this the count stays exact and the tail goes unwatched,
+    /// which the report says rather than implying a silent zero.
+    pub const watched: usize = 32;
 
     /// The low halfword of the first 32-bit Thumb encoding. Below this a
     /// halfword is a 16-bit instruction all by itself.
@@ -40,22 +56,48 @@ pub const limits = struct {
 pub const Site = struct {
     address: u32,
     encoding: u32,
+    /// How many times the run reached this site. Zero means the sweep
+    /// found the bytes and nothing executed them.
+    runs: u32 = 0,
 };
 
 /// What a sweep of one image found.
 pub const Found = struct {
     count: usize = 0,
-    sites: [limits.listed]Site = undefined,
+    sites: [limits.watched]Site = undefined,
 
     fn add(self: *Found, site: Site) void {
-        if (self.count < limits.listed) self.sites[self.count] = site;
+        if (self.count < limits.watched) self.sites[self.count] = site;
         self.count += 1;
     }
 
-    /// The sites actually kept, which is every one of them until the list
-    /// fills. `count` stays exact either way.
+    /// Every site kept, which is what gets watched for arrivals.
+    pub fn kept(self: *Found) []Site {
+        return self.sites[0..@min(self.count, limits.watched)];
+    }
+
+    /// The sites actually listed in the report, which is every one of them
+    /// until the list fills. `count` stays exact either way.
     pub fn listed(self: *const Found) []const Site {
         return self.sites[0..@min(self.count, limits.listed)];
+    }
+
+    /// How many of the kept sites the run actually reached.
+    pub fn sitesRun(self: *const Found) usize {
+        var total: usize = 0;
+        for (self.sites[0..@min(self.count, limits.watched)]) |site| {
+            if (site.runs > 0) total += 1;
+        }
+        return total;
+    }
+
+    /// Every arrival at every kept site, added up.
+    pub fn arrivals(self: *const Found) u64 {
+        var total: u64 = 0;
+        for (self.sites[0..@min(self.count, limits.watched)]) |site| {
+            total += site.runs;
+        }
+        return total;
     }
 };
 
@@ -126,9 +168,56 @@ pub fn print(out: anytype, image: elf.Image, found: Found) !void {
         if (symbols.inside(image, site.address)) |at| {
             try out.print(" {s}+0x{X}", .{ at.name, at.offset });
         }
+        if (site.runs > 0) try out.print(" EXECUTED {d}x", .{site.runs});
         try out.print("\n", .{});
     }
     if (found.count > limits.listed) {
         try out.print("                  and {d} more\n", .{found.count - limits.listed});
+        try executedPastTheList(out, image, found);
+    }
+    try ran(out, found);
+}
+
+/// Name any site that ran but sat past the end of the list.
+///
+/// Without this the report can say one site executed while marking none of
+/// the six it listed, which sends the reader looking for a contradiction
+/// that is really just a list cap. A site that ran is the one a reader
+/// actually wants, so it is named wherever it sits.
+fn executedPastTheList(out: anytype, image: elf.Image, found: Found) !void {
+    var index: usize = limits.listed;
+    while (index < @min(found.count, limits.watched)) : (index += 1) {
+        const site = found.sites[index];
+        if (site.runs == 0) continue;
+        try out.print("                  0x{X:0>8} {X:0>8}", .{ site.address, site.encoding });
+        if (symbols.inside(image, site.address)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print(" EXECUTED {d}x\n", .{site.runs});
+    }
+}
+
+/// What the run did with what the sweep found.
+///
+/// The negative is worth printing too: an image carrying these encodings
+/// that never reaches one is an image whose results are its own, and
+/// saying so is what stops the sweep reading as an accusation. A run that
+/// did reach one is named loudly, because every sector number, length and
+/// offset computed after it is arithmetic on a program counter.
+fn ran(out: anytype, found: Found) !void {
+    const sites = found.sitesRun();
+    if (sites == 0) {
+        try out.print("                  none executed, results downstream are the image's own\n", .{});
+        return;
+    }
+    try out.print(
+        "                  {d} of them EXECUTED, {d} arrival(s): results downstream are not trustworthy\n",
+        .{ sites, found.arrivals() },
+    );
+    if (found.count > limits.watched) {
+        try out.print(
+            "                  {d} site(s) past the watch limit went uncounted\n",
+            .{found.count - limits.watched},
+        );
     }
 }
