@@ -18,6 +18,7 @@ const engine = ra8.core.engine;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
+const breakpoint = ra8.core.breakpoint;
 const sd_dump = ra8.periph.sd_dump;
 const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
@@ -48,10 +49,7 @@ pub fn main() !u8 {
 
     var board = Board.init(allocator);
     defer board.deinit();
-    board.part = options.part;
-    prepareCard(&board, options) catch return 2;
-    queueTouches(&board, options);
-    setBattery(&board, options) catch return 2;
+    fitBoard(&board, options) catch return 2;
     try board.attach(&core);
 
     var watch = engine.Watch{};
@@ -78,6 +76,7 @@ pub fn main() !u8 {
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     var stop = resolveStop(image, options);
+    var point = resolveBreak(image, options);
     var timed: ?deadline.Deadline = if (options.ms) |milliseconds|
         .{ .periods = milliseconds }
     else
@@ -91,6 +90,7 @@ pub fn main() !u8 {
         .reboot = &reboot,
         .protection = &board.guard,
         .stop = if (stop) |*one| one else null,
+        .brk = if (point) |*one| one else null,
         .deadline = if (timed) |*one| one else null,
     });
 
@@ -102,7 +102,7 @@ pub fn main() !u8 {
     try report.blocks(&board, out);
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, &board, options);
-    return verdict(out, core, options, fault, stop, timed, budget);
+    return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 
 /// One card block back as hex, when `--dump-sd` asked for it.
@@ -150,6 +150,7 @@ fn verdict(
     options: cli.Options,
     fault: ?engine.Fault,
     stop: ?stop_watch.Stop,
+    point: ?breakpoint.Break,
     timed: ?deadline.Deadline,
     budget: usize,
 ) !u8 {
@@ -158,6 +159,7 @@ fn verdict(
         return 1;
     }
     const pc = try core.register(.pc);
+    if (point) |arrived| return arrivals(out, options, arrived, pc, budget);
     const spent = if (timed) |due| due.reached else false;
     const watched = stop orelse {
         if (spent) {
@@ -186,6 +188,42 @@ fn verdict(
         .{ budget, options.stop_symbol.?, watched.reaches, pc },
     );
     return 0;
+}
+
+/// Whether the run arrived at the address `--break-sym` named.
+///
+/// The negative is the useful half and is said plainly: a run that spent
+/// its budget without arriving proves the firmware never called that
+/// function. That is evidence a command trace cannot give, because a
+/// function that touches no peripheral leaves no trace either way.
+fn arrivals(
+    out: anytype,
+    options: cli.Options,
+    point: breakpoint.Break,
+    pc: u32,
+    budget: usize,
+) !u8 {
+    if (point.reached) {
+        try out.print("reached {s}, pc 0x{X:0>8}\n", .{ options.break_symbol.?, pc });
+        return 0;
+    }
+    try out.print(
+        "ran {d} instructions, never reached {s}, pc 0x{X:0>8}\n",
+        .{ budget, options.break_symbol.?, pc },
+    );
+    return 0;
+}
+
+/// The function `--break-sym` named, resolved against the image's symbol
+/// table. A name the image does not carry is reported and the run goes to
+/// its instruction budget, the same way a missing `--stop-sym` does.
+fn resolveBreak(image: elf.Image, options: cli.Options) ?breakpoint.Break {
+    const name = options.break_symbol orelse return null;
+    const address = symbols.addressOf(image, name) orelse {
+        std.debug.print("--break-sym {s} not found in symbol table\n", .{name});
+        return null;
+    };
+    return .{ .address = address };
 }
 
 /// The counter `--stop-sym` named, resolved against the image's symbol
@@ -224,6 +262,17 @@ fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli
             .{ name, address, value, value },
         );
     }
+}
+
+/// Put the world the command line described onto the board: the part it is,
+/// the card in its slot, the contacts queued on its panel and the charge in
+/// its cell. Each piece refuses on its own terms and says so; this only puts
+/// them in order.
+fn fitBoard(board: *Board, options: cli.Options) !void {
+    board.part = options.part;
+    try prepareCard(board, options);
+    queueTouches(board, options);
+    try setBattery(board, options);
 }
 
 /// Size and format the card on the SPI line, when the command line asked for

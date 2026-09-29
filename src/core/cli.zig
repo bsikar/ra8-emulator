@@ -24,6 +24,8 @@ pub const usage =
     \\  --dump-sym NAME    read that global out of RAM after the run and
     \\                     print it, repeatable
     \\  --stop-sym NAME N  end the run early once that global reaches N
+    \\  --break-sym NAME   end the run the first time execution reaches
+    \\                     that function
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
@@ -105,6 +107,9 @@ pub const Options = struct {
     /// it. Null watches nothing and the run goes to its instruction budget.
     stop_symbol: ?[]const u8 = null,
     stop_at: u32 = 0,
+    /// A function to stop at the first time execution reaches it. Null
+    /// stops at nothing and the run goes to its instruction budget.
+    break_symbol: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -161,6 +166,10 @@ pub fn parse(argv: []const []const u8) !Options {
             options.stop_symbol = argv[index + 1];
             options.stop_at = try std.fmt.parseInt(u32, argv[index + 2], 10);
             index += 2;
+        } else if (std.mem.eql(u8, argv[index], "--break-sym")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.break_symbol = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--ms")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
