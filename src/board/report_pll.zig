@@ -1,6 +1,8 @@
-//! The end-of-run lines for PLL1's configuration registers.
+//! The end-of-run lines for the PLL configuration registers, one PLL at a
+//! time, plus MOSCWTCR and the stores the PRCR gate turned away.
 const std = @import("std");
 const Board = @import("board.zig").Board;
+const Config = @import("../periph/pll_config.zig").Config;
 
 fn ratio(value: ?u8, out: anytype) !void {
     if (value) |one| {
@@ -10,16 +12,16 @@ fn ratio(value: ?u8, out: anytype) !void {
     }
 }
 
-pub fn sections(board: *const Board, out: anytype) !void {
-    const unit = &board.pll1;
-    if (unit.quiet()) return;
-
-    if (unit.configured()) {
-        const mul = unit.multiplier();
-        try out.print("PLL1: {s} in ", .{unit.source().name()});
-        try ratio(unit.inputRatio(), out);
+/// One PLL's own lines. Silent when firmware never touched it, so a board
+/// that only brings up PLL1 says nothing about PLL2.
+fn onePll(label: []const u8, one: Config, out: anytype) !void {
+    if (one.quiet()) return;
+    if (one.configured()) {
+        const mul = one.multiplier();
+        try out.print("{s}: {s} in ", .{ label, one.source().name() });
+        try ratio(one.inputRatio(), out);
         try out.print(", x{d}.{d:0>2}, P", .{ mul.whole(), mul.hundredths() });
-        const outputs = unit.outputRatios();
+        const outputs = one.outputRatios();
         try ratio(outputs[0], out);
         try out.print(" Q", .{});
         try ratio(outputs[1], out);
@@ -27,16 +29,30 @@ pub fn sections(board: *const Board, out: anytype) !void {
         try ratio(outputs[2], out);
         try out.print("\n", .{});
     }
+    if (one.dropped_running != 0) {
+        try out.print(
+            "{s}: DROPPED {d} configuration store(s), {s} was still running\n",
+            .{ label, one.dropped_running, label },
+        );
+    }
+    if (one.prohibited_divider != 0) {
+        try out.print(
+            "{s}: REJECTED {d} CCR2 store(s) carrying a prohibited divider code\n",
+            .{ label, one.prohibited_divider },
+        );
+    }
+}
+
+pub fn sections(board: *const Board, out: anytype) !void {
+    const unit = &board.plls;
+    if (unit.quiet()) return;
+
+    try onePll("PLL1", unit.pll1, out);
+    try onePll("PLL2", unit.pll2, out);
     if (unit.moscwtcr != 0) {
         try out.print("PLL1: main oscillator wait code {d}\n", .{unit.moscwtcr});
     }
     if (unit.dropped_locked != 0) {
-        try out.print("PLL1: DROPPED {d} store(s), PRCR.PRC0 was locked\n", .{unit.dropped_locked});
-    }
-    if (unit.dropped_running != 0) {
-        try out.print("PLL1: DROPPED {d} configuration store(s), PLL1 was still running\n", .{unit.dropped_running});
-    }
-    if (unit.prohibited_divider != 0) {
-        try out.print("PLL1: REJECTED {d} PLLCCR2 store(s) carrying a prohibited divider code\n", .{unit.prohibited_divider});
+        try out.print("PLL: DROPPED {d} store(s), PRCR.PRC0 was locked\n", .{unit.dropped_locked});
     }
 }

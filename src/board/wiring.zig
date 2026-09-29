@@ -165,12 +165,12 @@ fn attachProtected(self: *Board) !void {
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
     for (0..ckdiv.windows.len) |which| try self.bus.add(self.ratios.block(which));
     // PLL1's configuration asks PRCR before a store, as the clock tree does.
-    self.pll1 = pll.Unit.init(&self.protection, &self.oscillators);
+    self.plls = pll.Unit.init(&self.protection, &self.oscillators);
     // GTCLKCR is the GPT bank's clock domain, and only the module-stop
     // model can say whether the window to change it is still open.
     self.gpt_clock = gtclkcr.Unit.init(&self.modules);
     try self.bus.add(self.gpt_clock.block());
-    for (0..pll.slots.len) |which| try self.bus.add(self.pll1.block(which));
+    for (0..pll.slots.len) |which| try self.bus.add(self.plls.block(which));
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
     for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
