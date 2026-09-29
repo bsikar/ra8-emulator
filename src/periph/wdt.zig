@@ -34,8 +34,24 @@
 //! and absolute time is not modelled, but TOPS and CKS are at least ordered
 //! here: the reload is the configured cycle count scaled down to ticks, so a
 //! longer configured timeout takes proportionally longer to trip.
+//!
+//! Four: the three control registers take one write each after reset and are
+//! deaf afterwards (HUM Ch 27.3.2, and see src/periph/wdt_write_once.zig).
+//! dev took every write, so a firmware reconfiguring its watchdog mid-run got
+//! the new settings here and keeps the old ones on the bench. WDTCSTPR is the
+//! register that makes it bite: ra8_wdt_init programmes it, and then
+//! ra8_wdt_deinit, ra8_wdt_enter_stop and ra8_wdt_exit_stop each write it
+//! again expecting the Sleep-stop posture to follow them. On silicon none of
+//! those three land. The register did not exist in this model at all before,
+//! so it reads its programmed value now rather than zero.
+//!
+//! Deliberately untouched: WDTRCR keeps returning every bit it was given even
+//! though only RSTIRQS is implemented, and the odd byte above each 8-bit
+//! control register still reaches it the way it always has here. Both are the
+//! narrow-access vein, not this rule.
 const cadence = @import("../core/cadence.zig");
 const periph = @import("registry.zig");
+const write_once = @import("wdt_write_once.zig");
 
 /// WDT0 geometry (ra8_wdt_regs.h, r_wdt_regs_t; HUM Ch 27.2 p 1070).
 pub const win_base: u32 = 0x4020_2600;
@@ -46,6 +62,7 @@ pub const off = struct {
     pub const wdtcr: u32 = 0x02;
     pub const wdtsr: u32 = 0x04;
     pub const wdtrcr: u32 = 0x06;
+    pub const wdtcstpr: u32 = 0x08;
 };
 
 /// The refresh register takes a two-byte sequence, not a value.
@@ -76,6 +93,12 @@ pub const status = struct {
 /// WDTRCR (HUM Ch 27.2.4 p 1077): what an underflow or refresh error does.
 pub const reset_control = struct {
     pub const rstirqs: u8 = 0x80;
+};
+
+/// WDTCSTPR (HUM Ch 27.2.5 p 1262): SLCSTP is the only bit there is, and it
+/// halts the counter while the CPU is asleep.
+pub const count_stop = struct {
+    pub const slcstp: u8 = 0x80;
 };
 
 /// TOPS[1:0]: the counter's full reload, in watchdog cycles.
@@ -114,6 +137,9 @@ pub const max_ticks: u32 = status.cntval;
 pub const Wdt = struct {
     wdtcr: u16 = 0,
     wdtrcr: u8 = 0,
+    wdtcstpr: u8 = 0,
+    /// Which control registers have spent their one post-reset write.
+    once: write_once.Once = .{},
     last_rr: u8 = 0xFF,
     armed: bool = false,
     counter: u32 = 0,
@@ -130,6 +156,9 @@ pub const Wdt = struct {
     reset_requested: bool = false,
     /// Acks that cleared nothing because they wrote a one at a flag.
     bad_acks: u32 = 0,
+    /// Control-register stores that landed nowhere because that register had
+    /// already had its one write.
+    locked_writes: u32 = 0,
 
     pub fn init() Wdt {
         return .{};
@@ -137,7 +166,7 @@ pub const Wdt = struct {
 
     pub fn quiet(self: *const Wdt) bool {
         return !self.armed and self.refreshes == 0 and self.flags == 0 and
-            self.early == 0 and self.bad_acks == 0;
+            self.early == 0 and self.bad_acks == 0 and self.locked_writes == 0;
     }
 
     /// The full reload for the programmed TOPS and CKS, in ticks.
@@ -200,12 +229,24 @@ pub const Wdt = struct {
         self.flags = ones;
     }
 
+    /// Ask one of the three locked control registers for its one post-reset
+    /// write. True means the store lands nowhere: HUM Ch 27.3.2 gives each of
+    /// them a single write and nothing reopens them short of a reset. The
+    /// width does not matter, so a driver that programmes WDTCR as two byte
+    /// stores spends the register's one write on the first of them.
+    fn locked(self: *Wdt, which: write_once.Register) bool {
+        if (self.once.claim(which)) return false;
+        self.locked_writes +%= 1;
+        return true;
+    }
+
     pub fn read(self: *Wdt, address: u32, width: u3) u32 {
         const offset = address -% win_base;
         const word: u16 = switch (offset & ~@as(u32, 1)) {
             off.wdtcr => self.wdtcr,
             off.wdtsr => @as(u16, @intCast(self.counter & status.cntval)) | self.flags,
             off.wdtrcr => self.wdtrcr,
+            off.wdtcstpr => self.wdtcstpr,
             // WDTRR reads 0 outside a refresh sequence (HUM Ch 27.2.1).
             else => 0,
         };
@@ -218,9 +259,16 @@ pub const Wdt = struct {
         const offset = address -% win_base;
         switch (offset & ~@as(u32, 1)) {
             off.wdtrr => self.refreshWrite(@truncate(value)),
-            off.wdtcr => self.wdtcr = self.merge(self.wdtcr, offset, width, value),
+            off.wdtcr => if (!self.locked(.control)) {
+                self.wdtcr = self.merge(self.wdtcr, offset, width, value);
+            },
             off.wdtsr => self.ackWrite(self.merge(self.flags | @as(u16, @intCast(self.counter & status.cntval)), offset, width, value)),
-            off.wdtrcr => self.wdtrcr = @truncate(self.merge(self.wdtrcr, offset, width, value)),
+            off.wdtrcr => if (!self.locked(.reset_control)) {
+                self.wdtrcr = @truncate(self.merge(self.wdtrcr, offset, width, value));
+            },
+            off.wdtcstpr => if (!self.locked(.count_stop)) {
+                self.wdtcstpr = @truncate(self.merge(self.wdtcstpr, offset, width, value) & @as(u16, count_stop.slcstp));
+            },
             else => {},
         }
     }

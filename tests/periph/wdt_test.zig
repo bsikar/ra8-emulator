@@ -200,3 +200,75 @@ test "the Non-secure alias reaches the same watchdog" {
     bus.write(periph.ns_offset + wdt.win_base + wdt.off.wdtrr, 1, wdt.refresh.second);
     try std.testing.expectEqual(@as(u32, 1), unit.refreshes);
 }
+
+test "WDTCSTPR reads zero out of reset and keeps the one value it is given" {
+    var unit = wdt.Wdt.init();
+    try std.testing.expectEqual(@as(u32, 0), unit.read(wdt.win_base + wdt.off.wdtcstpr, 1));
+    unit.write(wdt.win_base + wdt.off.wdtcstpr, 1, wdt.count_stop.slcstp);
+    try std.testing.expectEqual(@as(u32, wdt.count_stop.slcstp), unit.read(wdt.win_base + wdt.off.wdtcstpr, 1));
+    // ra8_wdt_exit_stop writes 0 here expecting the counter to run in Sleep
+    // again. HUM Ch 27.3.2 says the register has already had its one write.
+    unit.write(wdt.win_base + wdt.off.wdtcstpr, 1, 0);
+    try std.testing.expectEqual(@as(u32, wdt.count_stop.slcstp), unit.read(wdt.win_base + wdt.off.wdtcstpr, 1));
+    try std.testing.expectEqual(@as(u32, 1), unit.locked_writes);
+}
+
+test "WDTCSTPR keeps only SLCSTP, the one bit the register implements" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcstpr, 1, 0x7F);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(wdt.win_base + wdt.off.wdtcstpr, 1));
+}
+
+test "a second WDTCR store lands nowhere and the first settings stand" {
+    var unit = openWindow();
+    const first = unit.read(wdt.win_base + wdt.off.wdtcr, 2);
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(3, 8, 0, 0));
+    try std.testing.expectEqual(first, unit.read(wdt.win_base + wdt.off.wdtcr, 2));
+    try std.testing.expectEqual(@as(u32, 1), unit.locked_writes);
+}
+
+test "a second WDTRCR store cannot move the part off reset-on-underflow" {
+    var unit = openWindow();
+    unit.write(wdt.win_base + wdt.off.wdtrcr, 1, wdt.reset_control.rstirqs);
+    unit.write(wdt.win_base + wdt.off.wdtrcr, 1, 0);
+    try std.testing.expectEqual(@as(u32, wdt.reset_control.rstirqs), unit.read(wdt.win_base + wdt.off.wdtrcr, 1));
+    // The underflow still asks for a reset, because RSTIRQS never came off.
+    refresh(&unit);
+    for (0..unit.reload() + 2) |_| unit.tick();
+    try std.testing.expect(unit.reset_requested);
+}
+
+test "the three control registers are latched one by one, not together" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(1, 0, 3, 3));
+    unit.write(wdt.win_base + wdt.off.wdtrcr, 1, wdt.reset_control.rstirqs);
+    unit.write(wdt.win_base + wdt.off.wdtcstpr, 1, wdt.count_stop.slcstp);
+    try std.testing.expectEqual(@as(u32, 0), unit.locked_writes);
+    try std.testing.expectEqual(@as(u32, wdt.reset_control.rstirqs), unit.read(wdt.win_base + wdt.off.wdtrcr, 1));
+    try std.testing.expectEqual(@as(u32, wdt.count_stop.slcstp), unit.read(wdt.win_base + wdt.off.wdtcstpr, 1));
+}
+
+test "a byte store spends WDTCR's one write, so the other half never lands" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 1, 0x03);
+    unit.write(wdt.win_base + wdt.off.wdtcr + 1, 1, 0x30);
+    try std.testing.expectEqual(@as(u32, 0x0003), unit.read(wdt.win_base + wdt.off.wdtcr, 2));
+    try std.testing.expectEqual(@as(u32, 1), unit.locked_writes);
+}
+
+test "the refresh register is not one of the three and takes every sequence" {
+    var unit = openWindow();
+    refresh(&unit);
+    for (0..unit.reload()) |_| unit.tick();
+    refresh(&unit);
+    try std.testing.expectEqual(@as(u32, 2), unit.refreshes);
+    try std.testing.expectEqual(@as(u32, 0), unit.locked_writes);
+}
+
+test "a dropped control store alone is enough to put WDT0 in the report" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtrcr, 1, wdt.reset_control.rstirqs);
+    try std.testing.expect(unit.quiet());
+    unit.write(wdt.win_base + wdt.off.wdtrcr, 1, 0);
+    try std.testing.expect(!unit.quiet());
+}

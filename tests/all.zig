@@ -233,6 +233,7 @@ test {
     _ = @import("periph/usbhs_test.zig");
     _ = @import("periph/usbhs_xfer_test.zig");
     _ = @import("periph/wdt_test.zig");
+    _ = @import("periph/wdt_write_once_test.zig");
     _ = @import("periph/xspi_flash_test.zig");
     _ = @import("periph/xspi_test.zig");
     _ = @import("tools/gate_test.zig");
