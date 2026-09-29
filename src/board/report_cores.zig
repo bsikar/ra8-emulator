@@ -75,6 +75,12 @@ fn regions(board: *Board, out: Writer) !void {
             .{latch.fetches},
         );
     }
+    if (latch.background != 0) {
+        try out.print(
+            "MPU: {d} of those landed outside every region, with no default map\n",
+            .{latch.background},
+        );
+    }
     if (latch.privilege != 0) {
         try out.print(
             "MPU: {d} of those were unprivileged, into a privileged-only region\n",

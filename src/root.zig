@@ -47,6 +47,7 @@ pub const periph = struct {
     pub const cac = @import("periph/cac.zig");
     pub const cache = @import("periph/cache.zig");
     pub const mpu = @import("periph/mpu.zig");
+    pub const mpu_background = @import("periph/mpu_background.zig");
     pub const mpu_fault = @import("periph/mpu_fault.zig");
     pub const cache_geometry = @import("periph/cache_geometry.zig");
     pub const canfd = @import("periph/canfd.zig");

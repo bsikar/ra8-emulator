@@ -194,7 +194,9 @@ pub const Mpu = struct {
     }
 
     /// Read the window: keep TYPE read-only, and see which way CTRL.ENABLE
-    /// has moved. The region table is NOT read here: it is built from the
+    /// has moved. A word store to CTRL has already been taken in `observe`,
+    /// so the edge it counts here is the one that never reached it: a narrow
+    /// store, which the window hook leaves to the RAM underneath. The region table is NOT read here: it is built from the
     /// stores themselves in `observe`, because the last store any
     /// configuration leaves behind is a cleared RLAR for the unused tail and
     /// a poll would only ever see that.
@@ -257,7 +259,19 @@ pub const Mpu = struct {
             self.selected = geometry.selects(value);
             return .rebank;
         }
-        if (address == memmap.mpu.ctrl) return .rearm;
+        if (address == memmap.mpu.ctrl) {
+            // The store IS the new CTRL. Leaving the word for the next poll
+            // to pick out of the PPB left every live rule reading a stale
+            // one: enforcement asking whether the MPU is on, and the
+            // background asking about PRIVDEFENA, both run at access time,
+            // long before the next poll comes round.
+            const was_on = self.ctrl & field.ctrl_enable != 0;
+            const is_on = value & field.ctrl_enable != 0;
+            if (is_on and !was_on) self.enables +%= 1;
+            if (was_on and !is_on) self.disables +%= 1;
+            self.ctrl = value;
+            return .rearm;
+        }
         const target = targetOf(address) orelse return .none;
         const region = &self.table[self.banks(target.offset)];
         const pair = if (target.limit_half)

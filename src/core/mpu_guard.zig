@@ -34,6 +34,7 @@ const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
 const mpu = @import("../periph/mpu.zig");
 const mpu_fault = @import("../periph/mpu_fault.zig");
+const background = @import("../periph/mpu_background.zig");
 
 /// uc_ctl packs the direction into the control word's top two bits, and the
 /// header only offers it as a macro (UC_CTL_WRITE), which does not survive
@@ -51,7 +52,8 @@ pub const Guard = struct {
     /// without disturbing anything else the engine has hooked. A
     /// privileged-only region carries one of each; a read-only one that
     /// unprivileged code may read carries only the store trap.
-    hooks: [3 * mpu.geometry.regions]c.uc.uc_hook = [_]c.uc.uc_hook{0} ** (3 * mpu.geometry.regions),
+    hooks: [3 * (mpu.geometry.regions + background.limits.spans)]c.uc.uc_hook =
+        [_]c.uc.uc_hook{0} ** (3 * (mpu.geometry.regions + background.limits.spans)),
     live: usize = 0,
 
     pub fn init() Guard {
@@ -76,11 +78,23 @@ pub const Guard = struct {
             // Privilege refuses a store and a fetch alike, so a
             // privileged-only region needs both traps even when its own
             // permissions would have allowed the access.
-            if (region.read_only or !region.unprivileged) self.trap(handle, region, .store);
-            if (!region.executable or !region.unprivileged) self.trap(handle, region, .fetch);
+            if (region.read_only or !region.unprivileged) self.trap(handle, spanOf(region), .store);
+            if (!region.executable or !region.unprivileged) self.trap(handle, spanOf(region), .fetch);
             // A load is refused on privilege alone, so an open region and a
             // read-only one both go untrapped on this side.
-            if (!region.unprivileged) self.trap(handle, region, .load);
+            if (!region.unprivileged) self.trap(handle, spanOf(region), .load);
+        }
+        // Everything the table does not cover is the background, and an
+        // enabled MPU refuses that too unless CTRL.PRIVDEFENA hands the
+        // default map to privileged code. Which of the two it is cannot be
+        // known at arm time, because it turns on the privilege of the access
+        // rather than on anything programmed, so the gaps are trapped either
+        // way and verdict() decides when one is reached.
+        var spans: [background.limits.spans]background.Span = undefined;
+        for (background.gaps(unit, &spans)) |span| {
+            self.trap(handle, span, .store);
+            self.trap(handle, span, .fetch);
+            self.trap(handle, span, .load);
         }
         flush(handle);
         self.latch.arms +%= 1;
@@ -99,10 +113,15 @@ pub const Guard = struct {
         _ = c.uc.uc_ctl(handle, control);
     }
 
-    /// Put one trap over one region's span. A hook Unicorn will not take
+    /// The span a region occupies, which is what enforcement traps.
+    fn spanOf(region: mpu.Region) background.Span {
+        return .{ .base = region.base, .limit = region.limit };
+    }
+
+    /// Put one trap over one span. A hook Unicorn will not take
     /// leaves that span unenforced rather than failing the whole arm: the
     /// report counts what was refused, never what was watched.
-    fn trap(self: *Guard, handle: ?*c.uc.uc_engine, region: mpu.Region, kind: mpu_fault.Kind) void {
+    fn trap(self: *Guard, handle: ?*c.uc.uc_engine, span: background.Span, kind: mpu_fault.Kind) void {
         if (self.live == self.hooks.len) return;
         const event: c_int = switch (kind) {
             .store => c.uc.UC_HOOK_MEM_WRITE,
@@ -120,8 +139,8 @@ pub const Guard = struct {
             event,
             @constCast(callback),
             self,
-            region.base,
-            region.limit,
+            span.base,
+            span.limit,
         ) != c.uc.UC_ERR_OK) return;
         self.live += 1;
     }
@@ -137,8 +156,11 @@ pub const Guard = struct {
         kind: mpu_fault.Kind,
     ) ?mpu_fault.Reason {
         const unit = self.unit orelse return null;
-        const region = unit.regionFor(at) orelse return null;
-        return switch (region.refuses(kind, privileged(handle))) {
+        const allowed = privileged(handle);
+        const region = unit.regionFor(at) orelse {
+            return if (background.refuses(unit, allowed)) .background else null;
+        };
+        return switch (region.refuses(kind, allowed)) {
             .allowed => null,
             .permission => .permission,
             .privilege => .privilege,
@@ -194,13 +216,18 @@ pub const Guard = struct {
         self.latch.faults +%= 1;
     }
 
-    /// A violation with no handler to reach. A data access simply carries on
-    /// from where it left the run, the way a store always has. The fetch case
-    /// cannot: the PC is still on the refused instruction, so the traps come
-    /// off to let the run make progress instead of refusing it forever.
+    /// A violation with no handler to reach. A STORE carries on from where it
+    /// left the run: it has already landed, and the PC is past it.
+    ///
+    /// A fetch and a load both cannot. The PC is still on the refused
+    /// instruction, so resuming re-runs it, it is refused again, and the run
+    /// spends its whole budget on the same access: 2,949,999 refused loads
+    /// out of a 3,000,000-instruction run in fw/probe/mpuregions.elf, which
+    /// is what uncovered this. For those two the traps come off so the run
+    /// can make progress instead of refusing it forever.
     fn standDown(self: *Guard, core: anytype, hit: mpu_fault.Violation) void {
         self.latch.unhandled +%= 1;
-        if (hit.kind != .fetch) return;
+        if (hit.kind == .store) return;
         self.disarm(core.handle);
         flush(core.handle);
         self.latch.stood_down = true;
