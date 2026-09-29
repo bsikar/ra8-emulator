@@ -30,6 +30,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.modules.block());
     self.bus.gate = self.modules.gate();
     try self.bus.add(self.pins.block());
+    try self.bus.add(self.pinfunc.block());
     try self.bus.add(self.checksum.block());
     try self.bus.add(self.dataops.block());
     try self.bus.add(self.accuracy.block());
