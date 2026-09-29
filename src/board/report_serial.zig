@@ -68,6 +68,12 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, channel.unnamed_stores },
             );
         }
+        if (channel.idle_frames != 0) {
+            try out.print(
+                "SCI{d}: {d} Simple-SPI frame(s) clocked in off an idle line, 0xFF each\n",
+                .{ index, channel.idle_frames },
+            );
+        }
     }
     if (board.serial.line.lines != 0) {
         try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
