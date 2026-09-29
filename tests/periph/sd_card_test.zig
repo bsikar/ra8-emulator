@@ -144,15 +144,70 @@ test "a block written by CMD24 reads back through CMD17" {
     try std.testing.expectEqualSlices(u8, &filled, &payload);
 }
 
-test "a write payload whose checksum is wrong is refused, which dev accepts" {
+test "a write payload whose checksum is wrong is refused once CMD59 turns checking on" {
     var card = unit();
     defer card.deinit();
     try bringUp(&card);
+    try std.testing.expectEqual(sd_card.r1.ready, command(&card, 59, 1));
+    try std.testing.expect(card.crc_checks);
     _ = command(&card, 24, 4);
     try std.testing.expectEqual(sd_card.token.crc_error, sendBlock(&card, 0x11, 0));
     try std.testing.expectEqual(@as(u32, 1), card.crc_rejects);
     try std.testing.expectEqual(@as(u32, 0), card.writes);
     try std.testing.expectEqual(@as(usize, 0), card.img.held());
+}
+
+test "a card in SPI mode comes up with CRC checking off" {
+    var card = unit();
+    defer card.deinit();
+    try bringUp(&card);
+    try std.testing.expect(!card.crc_checks);
+}
+
+test "a wrong checksum is taken while checking is off, the way ra8_sdmmc_spi writes" {
+    var card = unit();
+    defer card.deinit();
+    try bringUp(&card);
+    _ = command(&card, 24, 4);
+    // ra8_sdmmc_spi clocks two idle bytes where the checksum goes.
+    try std.testing.expectEqual(sd_card.token.accepted, sendBlock(&card, 0x11, 0xFFFF));
+    try std.testing.expectEqual(@as(u32, 1), card.writes);
+    try std.testing.expectEqual(@as(u32, 1), card.crc_unchecked);
+    try std.testing.expectEqual(@as(u32, 0), card.crc_rejects);
+    try std.testing.expectEqual(@as(usize, 1), card.img.held());
+}
+
+test "a right checksum is not counted as unchecked" {
+    var card = unit();
+    defer card.deinit();
+    try bringUp(&card);
+    _ = command(&card, 24, 4);
+    const filled: [block_bytes]u8 = .{0x11} ** block_bytes;
+    try std.testing.expectEqual(sd_card.token.accepted, sendBlock(&card, 0x11, sd_crc.crc16(&filled)));
+    try std.testing.expectEqual(@as(u32, 1), card.writes);
+    try std.testing.expectEqual(@as(u32, 0), card.crc_unchecked);
+}
+
+test "CMD59 with bit zero clear switches checking back off" {
+    var card = unit();
+    defer card.deinit();
+    try bringUp(&card);
+    _ = command(&card, 59, 1);
+    try std.testing.expect(card.crc_checks);
+    try std.testing.expectEqual(sd_card.r1.ready, command(&card, 59, 0));
+    try std.testing.expect(!card.crc_checks);
+    _ = command(&card, 24, 4);
+    try std.testing.expectEqual(sd_card.token.accepted, sendBlock(&card, 0x11, 0xFFFF));
+}
+
+test "a block taken with an unchecked checksum is not a quiet card" {
+    var card = unit();
+    defer card.deinit();
+    try bringUp(&card);
+    _ = command(&card, 24, 4);
+    _ = sendBlock(&card, 0x11, 0xFFFF);
+    try std.testing.expect(!card.quiet());
+    try std.testing.expectEqual(@as(u32, 1), card.crc_unchecked);
 }
 
 test "a block past the end of the card is a read error, not zeros" {

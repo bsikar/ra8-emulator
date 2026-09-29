@@ -23,11 +23,27 @@
 //! read is answered with the parameter-error R1 and the read data-error
 //! token, the write is refused, and both are counted.
 //!
-//! THE BLOCK CRC IS CHECKED. dev swallows the two CRC bytes behind a write
-//! payload without looking at them and always answers "accepted", so a
-//! corrupted block lands in the image and the driver is told it is safe.
-//! Here the checksum is verified and a mismatch is answered with the
-//! CRC-error data response, with nothing written.
+//! THE BLOCK CRC IS CHECKED ONLY ONCE THE HOST ASKS FOR IT. A card in SPI
+//! mode comes up with CRC checking OFF and CMD59 is what turns it on, so the
+//! two bytes behind a write payload are not a checksum until the host has
+//! said they are. dev swallows them without looking and always answers
+//! "accepted", which is right by accident and wrong on purpose: a host that
+//! did send CMD59 is then told a corrupt block is safe. Checking them
+//! unconditionally is the other error, and the one this model made: a host
+//! that never sent CMD59 and parks a placeholder in those two bytes, which
+//! the spec lets it do, had every block refused. Here CMD59 latches the
+//! flag, a mismatch is refused with the CRC-error data response only while
+//! the flag is set, and a block taken with an unchecked checksum is counted
+//! so the report says the model let one through.
+//!
+//! THIS MOVES NO IMAGE IN THE TREE TODAY, and the commit says so. The one
+//! driver here, `ra8_sdmmc_spi`, never sends CMD59 but does compute a real
+//! CRC16 over the payload before it clocks the two bytes out
+//! (ra8_sdmmc_spi_io.c around the write block), so the old unconditional
+//! check happened to agree with it every time. The two idle bytes in that
+//! file are the READ path, where the driver clocks 0xFF twice to take the
+//! card's own CRC16 and verify it; that direction is untouched, and the card
+//! still always sends a real checksum.
 //!
 //! AN ERASE NEEDS A RANGE. CMD32 and CMD33 latch the bounds and CMD38
 //! performs it; dev's bounds power up at zero and its `end >= start` test
@@ -89,6 +105,7 @@ pub const Command = enum(u8) {
     app_op_cond = 41,
     app_cmd = 55,
     read_ocr = 58,
+    crc_on_off = 59,
     _,
 };
 
@@ -114,6 +131,8 @@ pub const Card = struct {
     app_cmd: bool = false,
     /// ACMD41 has completed: the card is out of idle.
     ready: bool = false,
+    /// CMD59: a card in SPI mode starts with data-block CRC checking off.
+    crc_checks: bool = false,
     /// The reply the host is part way through clocking out.
     reply: sd_reply.Reply = .{},
     /// An open CMD18 stream, and the block it hands over next.
@@ -136,6 +155,8 @@ pub const Card = struct {
     past_end: u32 = 0,
     /// Write payloads whose checksum did not match.
     crc_rejects: u32 = 0,
+    /// Blocks taken whose checksum did not match, with checking switched off.
+    crc_unchecked: u32 = 0,
     /// CMD38 with no range latched.
     erase_seq: u32 = 0,
 
@@ -148,7 +169,8 @@ pub const Card = struct {
     }
 
     pub fn quiet(self: *const Card) bool {
-        return self.commands == 0 and self.reads == 0 and self.writes == 0;
+        return self.commands == 0 and self.reads == 0 and self.writes == 0 and
+            self.crc_unchecked == 0;
     }
 
     /// One byte out, one byte back: the whole of the card's side of the wire.
@@ -197,12 +219,12 @@ pub const Card = struct {
             self.reply.one(r1.ready);
             return;
         }
-        if (self.dispatchIdent(command, status)) return;
+        if (self.dispatchIdent(command, arg, status)) return;
         self.dispatchData(command, arg, status);
     }
 
     /// Bring-up and configuration: the commands that say who the card is.
-    fn dispatchIdent(self: *Card, command: Command, status: u8) bool {
+    fn dispatchIdent(self: *Card, command: Command, arg: u32, status: u8) bool {
         switch (command) {
             .go_idle => self.reply.one(r1.idle),
             // R7: R1 then the voltage range and the 0xAA check pattern back.
@@ -215,6 +237,12 @@ pub const Card = struct {
             // card and the 3.3V window.
             .read_ocr => self.reply.tail(status, .{ 0xC0, 0x00, 0x80, 0 }),
             .set_blocklen => self.reply.one(r1.ready),
+            // CMD59: bit 0 of the argument switches data-block CRC
+            // checking on. Nothing else in the argument is defined.
+            .crc_on_off => {
+                self.crc_checks = (arg & 1) != 0;
+                self.reply.one(r1.ready);
+            },
             else => return false,
         }
         return true;
@@ -309,9 +337,12 @@ pub const Card = struct {
 
     fn commit(self: *Card, done: sd_write.Commit) void {
         if (!done.crc_ok) {
-            self.crc_rejects +%= 1;
-            self.reply.dataResponse(token.crc_error);
-            return;
+            if (self.crc_checks) {
+                self.crc_rejects +%= 1;
+                self.reply.dataResponse(token.crc_error);
+                return;
+            }
+            self.crc_unchecked +%= 1;
         }
         if (!self.img.write(done.block, &self.write.buf)) {
             self.past_end +%= 1;
