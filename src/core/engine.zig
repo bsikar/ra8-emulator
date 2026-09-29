@@ -23,6 +23,8 @@ const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
 const csel_hook = @import("csel_hook.zig");
 const break_hook = @import("break_hook.zig");
+const watchpoint = @import("watchpoint.zig");
+const watch_hook = @import("watch_hook.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("breakpoint.zig");
 const stop = @import("stop.zig");
@@ -232,6 +234,13 @@ pub const Engine = struct {
     /// asked-for number of times stops the run where it stands.
     pub fn attachBreak(self: Engine, point: *breakpoint.Break) Error!void {
         break_hook.attach(self.handle, point) catch return Error.AttachFailed;
+    }
+
+    /// Watch one word: every store that lands in it is recorded with the
+    /// program counter that made it. The run is not stopped, so a value
+    /// written more than once tells its whole story in one run.
+    pub fn attachWatchpoint(self: Engine, watched: *watchpoint.Watched) Error!void {
+        watch_hook.attach(self.handle, watched) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like

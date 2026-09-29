@@ -22,6 +22,7 @@ pub const core = struct {
     pub const symbols = @import("core/symbols.zig");
     pub const undefined_ops = @import("core/undefined_ops.zig");
     pub const breakpoint = @import("core/breakpoint.zig");
+    pub const watchpoint = @import("core/watchpoint.zig");
     pub const mem_dump = @import("core/mem_dump.zig");
     pub const place = @import("core/place.zig");
     pub const registers = @import("core/registers.zig");

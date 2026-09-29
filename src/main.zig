@@ -20,6 +20,7 @@ const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
 const breakpoint = ra8.core.breakpoint;
+const watchpoint = ra8.core.watchpoint;
 const mem_dump = ra8.core.mem_dump;
 const registers = ra8.core.registers;
 const sd_dump = ra8.periph.sd_dump;
@@ -81,6 +82,8 @@ pub fn main() !u8 {
     var stop = resolveStop(image, options);
     var point = resolveBreak(image, options);
     if (point) |*one| try core.attachBreak(one);
+    var watched = watchpoint.resolve(image, options.watch_place);
+    if (watched) |*one| try core.attachWatchpoint(one);
     var timed = resolveDeadline(options);
     const budget = options.budgetFor(stop != null);
     const fault = try core.run(entry, budget, .{
@@ -102,11 +105,29 @@ pub fn main() !u8 {
     try report_steps.selects(out, selects);
     try report.blocks(&board, out);
     try undefined_ops.print(out, image, undefined_ops.sweep(image));
+    try dumps(out, core, image, options, &board, watched);
+    return verdict(out, core, options, fault, stop, point, timed, budget);
+}
+
+/// Everything a flag asked to be printed once the run is over.
+///
+/// These are the reader's own questions rather than the board's account of
+/// itself, so they come after the block reports and stay together: a run
+/// with no flags prints none of them and this is one call that does
+/// nothing.
+fn dumps(
+    out: anytype,
+    core: engine.Engine,
+    image: elf.Image,
+    options: cli.Options,
+    board: *Board,
+    watched: ?watchpoint.Watched,
+) !void {
     try dumpSymbols(out, core, image, options);
-    try dumpBlock(out, &board, options);
+    try dumpBlock(out, board, options);
     try dumpRegisters(out, core, options);
     try mem_dump.print(out, core, image, options.dump_mem, options.dump_mem_words);
-    return verdict(out, core, options, fault, stop, point, timed, budget);
+    try watchpoint.print(out, image, options.watch_place, watched);
 }
 
 /// The core registers as the run left them, when `--dump-regs` asked.

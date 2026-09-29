@@ -14,6 +14,7 @@ pub const usage =
     \\                    [--battery PCT] [--charge]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
+    \\                    [--watch PLACE]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -43,6 +44,11 @@ pub const usage =
     \\                     PLACE, which is an address, a symbol, or
     \\                     @symbol to follow the pointer it holds, any of
     \\                     them with a +/- offset applied afterwards
+    \\  --watch PLACE      record every store that lands in that word, with
+    \\                     the pc that made it and the function it sits in.
+    \\                     Takes the same place spelling as --dump-mem, minus
+    \\                     the dereference: the address has to be known
+    \\                     before the run starts
     \\  --dump-regs        print the argument registers and the words at
     \\                     the stack pointer after the run; at a break
     \\                     they are still the arguments of the function
@@ -138,6 +144,9 @@ pub const Options = struct {
     dump_mem: ?[]const u8 = null,
     /// How many words that read prints. Null takes the default.
     dump_mem_words: ?u32 = null,
+    /// A place whose stores to record, as the command line spelled it.
+    /// Null watches nothing and costs the run nothing.
+    watch_place: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -236,6 +245,10 @@ pub fn parse(argv: []const []const u8) !Options {
                     index += 1;
                 }
             }
+        } else if (std.mem.eql(u8, argv[index], "--watch")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.watch_place = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--dump-regs")) {
             options.dump_regs = true;
         } else return error.UnknownFlag;
