@@ -59,14 +59,20 @@ fn regions(board: *Board, out: Writer) !void {
     );
     if (latch.violations != latch.fetches) {
         try out.print(
-            "MPU: REFUSED {d} store(s) into a read-only region\n",
+            "MPU: REFUSED {d} store(s) the region did not allow\n",
             .{latch.violations - latch.fetches},
         );
     }
     if (latch.fetches != 0) {
         try out.print(
-            "MPU: REFUSED {d} fetch(es) from an execute-never region\n",
+            "MPU: REFUSED {d} fetch(es) the region did not allow\n",
             .{latch.fetches},
+        );
+    }
+    if (latch.privilege != 0) {
+        try out.print(
+            "MPU: {d} of those were unprivileged, into a privileged-only region\n",
+            .{latch.privilege},
         );
     }
     if (latch.violations != 0) {

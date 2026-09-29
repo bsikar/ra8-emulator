@@ -28,6 +28,18 @@ pub const mmfsr = struct {
     pub const mmarvalid: u32 = 1 << 7;
 };
 
+/// Why the region refused it. Both raise the same MemManage; they are kept
+/// apart because a report that says only "refused" leaves the reader guessing
+/// whether the firmware got the permissions wrong or the privilege wrong.
+pub const Reason = enum {
+    /// The region's own permissions: read-only against a store, execute-never
+    /// against a fetch.
+    permission,
+    /// The region allows no unprivileged access at all, and the access was
+    /// unprivileged.
+    privilege,
+};
+
 /// Which of the two rules refused the access.
 pub const Kind = enum {
     /// A store into a region RBAR.AP made read-only.
@@ -44,6 +56,7 @@ pub const Violation = struct {
     pc: u32,
     address: u32,
     kind: Kind = .store,
+    reason: Reason = .permission,
 };
 
 /// What enforcement has caught and what became of it.
@@ -52,8 +65,11 @@ pub const Latch = struct {
     pending: ?Violation = null,
     /// Accesses refused by an enabled region, of either kind.
     violations: u64 = 0,
-    /// How many of those were fetches out of an execute-never region.
+    /// How many of those were fetches rather than stores.
     fetches: u64 = 0,
+    /// How many were refused because the access was unprivileged and the
+    /// region allows no unprivileged access, rather than on its permissions.
+    privilege: u64 = 0,
     /// Violations that reached a MemManage handler.
     faults: u64 = 0,
     /// Violations with no handler to reach: the vector table carries none, or
@@ -90,6 +106,7 @@ pub const Latch = struct {
         self.pending = hit;
         self.violations +%= 1;
         if (hit.kind == .fetch) self.fetches +%= 1;
+        if (hit.reason == .privilege) self.privilege +%= 1;
         return true;
     }
 

@@ -237,3 +237,49 @@ test "a select beyond the implemented set banks into the wrapped region" {
     try std.testing.expectEqual(@as(u8, 2), unit.selected);
     try std.testing.expect(unit.table[2].enabled);
 }
+
+test "RBAR.AP[1] is what lets unprivileged code touch a region" {
+    const open = mpu.Region.fromPair(
+        0x2200_0000 | mpu.field.rbar_ap_unprivileged,
+        0x2200_0FE0 | mpu.field.rlar_enable,
+    );
+    try std.testing.expect(open.unprivileged);
+    const closed = mpu.Region.fromPair(0x2200_0000, 0x2200_0FE0 | mpu.field.rlar_enable);
+    try std.testing.expect(!closed.unprivileged);
+}
+
+test "a privileged-only region refuses an unprivileged access either way" {
+    const region = mpu.Region.fromPair(0x2200_0000, 0x2200_0FE0 | mpu.field.rlar_enable);
+    try std.testing.expectEqual(mpu.Region.Refusal.privilege, region.refuses(false, false));
+    try std.testing.expectEqual(mpu.Region.Refusal.privilege, region.refuses(true, false));
+    try std.testing.expectEqual(mpu.Region.Refusal.allowed, region.refuses(false, true));
+}
+
+test "privilege is checked before the region's own permissions" {
+    const region = mpu.Region.fromPair(
+        0x2200_0000 | mpu.field.rbar_ap_ro,
+        0x2200_0FE0 | mpu.field.rlar_enable,
+    );
+    try std.testing.expectEqual(mpu.Region.Refusal.privilege, region.refuses(false, false));
+    try std.testing.expectEqual(mpu.Region.Refusal.permission, region.refuses(false, true));
+}
+
+test "an open read-write region refuses nothing and needs no trap" {
+    const region = mpu.Region.fromPair(
+        0x2200_0000 | mpu.field.rbar_ap_unprivileged,
+        0x2200_0FE0 | mpu.field.rlar_enable,
+    );
+    try std.testing.expectEqual(mpu.Region.Refusal.allowed, region.refuses(false, false));
+    try std.testing.expectEqual(mpu.Region.Refusal.allowed, region.refuses(true, false));
+    try std.testing.expect(!region.guarded());
+}
+
+test "any one of the three rules is enough to need a trap" {
+    const enable = mpu.field.rlar_enable;
+    const ro = mpu.Region.fromPair(mpu.field.rbar_ap_ro | mpu.field.rbar_ap_unprivileged, 0xFE0 | enable);
+    const xn = mpu.Region.fromPair(mpu.field.rbar_xn | mpu.field.rbar_ap_unprivileged, 0xFE0 | enable);
+    const priv = mpu.Region.fromPair(0, 0xFE0 | enable);
+    try std.testing.expect(ro.guarded());
+    try std.testing.expect(xn.guarded());
+    try std.testing.expect(priv.guarded());
+}
