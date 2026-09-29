@@ -12,6 +12,7 @@ const ra8 = @import("ra8");
 const cli = ra8.core.cli;
 const elf = ra8.core.elf;
 const symbols = ra8.core.symbols;
+const undefined_ops = ra8.core.undefined_ops;
 const stop_watch = ra8.core.stop;
 const deadline = ra8.core.deadline;
 const engine = ra8.core.engine;
@@ -100,6 +101,7 @@ pub fn main() !u8 {
     try report_steps.loops(out, loops);
     try report_steps.selects(out, selects);
     try report.blocks(&board, out);
+    try undefined_ops.print(out, undefined_ops.sweep(image));
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, &board, options);
     try dumpRegisters(out, core, options);
