@@ -21,6 +21,7 @@ pub const core = struct {
     pub const reboot = @import("core/reboot.zig");
     pub const symbols = @import("core/symbols.zig");
     pub const undefined_ops = @import("core/undefined_ops.zig");
+    pub const undefined_hook = @import("core/undefined_hook.zig");
     pub const breakpoint = @import("core/breakpoint.zig");
     pub const watchpoint = @import("core/watchpoint.zig");
     pub const mem_dump = @import("core/mem_dump.zig");
@@ -234,4 +235,5 @@ pub const board = struct {
     pub const report = @import("board/report.zig");
     pub const report_dma = @import("board/report_dma.zig");
     pub const report_steps = @import("board/report_steps.zig");
+    pub const report_run = @import("board/report_run.zig");
 };

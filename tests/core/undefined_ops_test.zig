@@ -134,3 +134,59 @@ test "an image with no symbol table prints the address alone" {
     try undefined_ops.print(out.writer(), image, found);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "+0x") == null);
 }
+
+test "a site starts with no arrivals" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA52038F };
+    found.count = 1;
+    try std.testing.expectEqual(@as(usize, 0), found.sitesRun());
+    try std.testing.expectEqual(@as(u64, 0), found.arrivals());
+}
+
+test "an arrival is counted against its own site" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA52038F };
+    found.sites[1] = .{ .address = 0x0200_8984, .encoding = 0xEA52038F };
+    found.count = 2;
+    found.kept()[1].runs += 3;
+    try std.testing.expectEqual(@as(usize, 1), found.sitesRun());
+    try std.testing.expectEqual(@as(u64, 3), found.arrivals());
+    try std.testing.expectEqual(@as(u32, 0), found.kept()[0].runs);
+}
+
+test "kept holds every site the report does not list" {
+    var found = undefined_ops.Found{};
+    var index: usize = 0;
+    while (index < 10) : (index += 1) {
+        found.sites[index] = .{ .address = @intCast(0x0200_0000 + index * 4), .encoding = 0xEA52038F };
+    }
+    found.count = 10;
+    try std.testing.expectEqual(@as(usize, 10), found.kept().len);
+    try std.testing.expectEqual(@as(usize, undefined_ops.limits.listed), found.listed().len);
+}
+
+test "an executed site is marked and counted in the summary" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F, .runs = 2 };
+    found.count = 1;
+    var buffer: [256]u8 = undefined;
+    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try undefined_ops.print(out.writer(), image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "EXECUTED 2x") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "1 of them EXECUTED, 2 arrival(s)") != null);
+}
+
+test "a swept but unexecuted site reports none executed" {
+    var found = undefined_ops.Found{};
+    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F };
+    found.count = 1;
+    var buffer: [256]u8 = undefined;
+    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try undefined_ops.print(out.writer(), image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "none executed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "EXECUTED") == null);
+}

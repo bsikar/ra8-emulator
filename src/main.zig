@@ -29,6 +29,7 @@ const nvic = ra8.periph.nvic;
 const Board = ra8.board.Board;
 const report = ra8.board.report;
 const report_steps = ra8.board.report_steps;
+const report_run = ra8.board.report_run;
 
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -84,6 +85,8 @@ pub fn main() !u8 {
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try core.attachWatchpoint(one);
+    var undefined_found = undefined_ops.sweep(image);
+    try core.attachUndefined(&undefined_found);
     var timed = resolveDeadline(options);
     const budget = options.budgetFor(stop != null);
     const fault = try core.run(entry, budget, .{
@@ -98,13 +101,8 @@ pub fn main() !u8 {
         .deadline = if (timed) |*one| one else null,
     });
 
-    try report.bus(&board, out);
-    try report.timing(out, timebase, interrupts);
-    try report.reboots(out, reboot);
-    try report_steps.loops(out, loops);
-    try report_steps.selects(out, selects);
-    try report.blocks(&board, out);
-    try undefined_ops.print(out, image, undefined_ops.sweep(image));
+    const tally = report_run.Tally{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .undefined_found = undefined_found };
+    try report_run.all(out, &board, image, tally);
     try dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
