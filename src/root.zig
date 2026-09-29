@@ -182,6 +182,7 @@ pub const periph = struct {
     pub const sd_card_line = @import("periph/sd_card_line.zig");
     pub const sd_command = @import("periph/sd_command.zig");
     pub const sd_crc = @import("periph/sd_crc.zig");
+    pub const sd_dump = @import("periph/sd_dump.zig");
     pub const sd_fat = @import("periph/sd_fat.zig");
     pub const sd_format = @import("periph/sd_format.zig");
     pub const sd_image = @import("periph/sd_image.zig");
