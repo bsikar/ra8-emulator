@@ -12,6 +12,7 @@ test {
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");
     _ = @import("core/symbols_test.zig");
+    _ = @import("core/breakpoint_test.zig");
     _ = @import("core/stop_test.zig");
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");
