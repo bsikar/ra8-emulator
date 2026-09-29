@@ -17,8 +17,13 @@
 //!   REG00      (+0x080, 32b) AES enable, key size, mode, self-test
 //!   REG03      (+0x08C, 32b) key and IV staging window, write-only
 //!
-//! The address rule is in src/periph/dotf_region.zig and the REG00 rule in
+//! The address rules are in src/periph/dotf_region.zig and the REG00 rule in
 //! src/periph/dotf_control.zig, each of which states what it does not model.
+//! Two conversion-area configurations silicon does not allow are counted
+//! rather than refused, because the HUM records each as a requirement on the
+//! driver without saying what the hardware does when it is broken: a
+//! reversed pair (start above end) and an area moved while the AES core is
+//! decrypting. dotf_region.zig carries both citations.
 //!
 //! REG03 IS A STAGING WINDOW, NOT A REGISTER. The driver pushes four words
 //! of IV, or four to eight words of wrapped key, big-endian, one after the
@@ -71,11 +76,19 @@ pub const Channel = struct {
     /// Whether the region standing now is one of them, so a region written
     /// in several writes is counted once and a re-write is not counted again.
     outside: bool = false,
+    /// Reversed pairs programmed, a start above its end, counted once per
+    /// region the same way out_of_window is.
+    reversed_areas: u32 = 0,
+    /// Whether the pair standing now is reversed.
+    backwards: bool = false,
+    /// Conversion-area stores made while the core was decrypting.
+    live_area_writes: u32 = 0,
 
     pub fn quiet(self: *const Channel) bool {
         return self.self_tests == 0 and self.staged == 0 and self.staged_dark == 0 and
             self.empty_reads == 0 and self.enables == 0 and self.reg00 == 0 and
-            self.convareast == 0 and self.convaread == 0;
+            self.convareast == 0 and self.convaread == 0 and
+            self.reversed_areas == 0 and self.live_area_writes == 0;
     }
 
     pub fn enabled(self: *const Channel) bool {
@@ -164,10 +177,17 @@ pub const Channel = struct {
     /// halfword at a time, so between the two writes the channel names an
     /// address it was never asked to decrypt over.
     fn setArea(self: *Channel, index: usize, local: u32, value: u32) void {
+        // The precondition is on the state standing BEFORE the store, so a
+        // store that itself switches the core off is judged against the core
+        // that was running when it was made.
+        if (self.decrypting()) self.live_area_writes +%= 1;
         if (local == off.convareast) self.convareast = value else self.convaread = value;
         const now = region.outsideWindow(region.window(index), self.convareast, self.convaread);
         if (now and !self.outside) self.out_of_window +%= 1;
         self.outside = now;
+        const backwards = region.reversed(self.convareast, self.convaread);
+        if (backwards and !self.backwards) self.reversed_areas +%= 1;
+        self.backwards = backwards;
     }
 
     /// The self-test runs inside the write, so the bit never lands.

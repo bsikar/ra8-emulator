@@ -219,3 +219,69 @@ test "a narrow write to the padding still folds into the shadow" {
     unit.write(at(0, 0x010) + 1, 1, 0xAA);
     try std.testing.expectEqual(@as(u32, 0x1122_AA44), unit.read(at(0, 0x010), 4));
 }
+
+test "a reversed pair is counted once, not once per store" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_3000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].reversed_areas);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_4000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].reversed_areas);
+}
+
+test "programming start then end is not counted as reversed" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_3000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].reversed_areas);
+    try std.testing.expect(!unit.channels[0].backwards);
+}
+
+test "putting a reversed pair back in order arms the count again" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_3000);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].reversed_areas);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_5000);
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[0].reversed_areas);
+}
+
+test "a reversed pair decrypts nothing and breaks quiet" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(1, dotf.off.convaread), 4, 0x7000_1000);
+    unit.write(at(1, dotf.off.convareast), 4, 0x7000_3000);
+    unit.write(at(1, dotf.off.reg00), 4, control.value.enable);
+    try std.testing.expect(!unit.channels[1].covers(0x7000_2000));
+    try std.testing.expect(!unit.channels[1].quiet());
+}
+
+test "an area store while the core decrypts is counted" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.reg00), 4, control.value.enable);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].live_area_writes);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_2000);
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[0].live_area_writes);
+    // The store still lands: the rule is counted, not refused.
+    try std.testing.expectEqual(@as(u32, 0x9000_2000), unit.channels[0].end());
+}
+
+test "an area store after the core is switched off is not counted" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.reg00), 4, control.value.enable);
+    unit.write(at(0, dotf.off.reg00), 4, 0);
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[0].live_area_writes);
+}
+
+test "each half of a halfword-programmed live area store is counted" {
+    var unit = dotf.Dotf.init();
+    unit.write(at(0, dotf.off.convareast), 4, 0x9000_0000);
+    unit.write(at(0, dotf.off.convaread), 4, 0x9000_1000);
+    unit.write(at(0, dotf.off.reg00), 4, control.value.enable);
+    unit.write(at(0, dotf.off.convaread), 2, 0x2000);
+    unit.write(at(0, dotf.off.convaread) + 2, 2, 0x9000);
+    try std.testing.expectEqual(@as(u32, 2), unit.channels[0].live_area_writes);
+}
