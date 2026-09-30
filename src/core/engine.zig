@@ -68,48 +68,8 @@ pub const Cortex = enum(c_int) {
     psp = c.uc.UC_ARM_REG_PSP,
 };
 
-/// What runs alongside the core for the length of a run. Everything here is
-/// optional and off by default: a bare `.{}` is one uninterrupted stretch of
-/// execution with no modelled time and no exceptions, which is what the
-/// loader and the smaller tests want.
-pub const Session = struct {
-    /// Records the invalid access behind a fault.
-    watch: ?*Watch = null,
-    /// Charged one chunk of time per chunk of execution.
-    timebase: ?*clocks.Clocks = null,
-    /// Consulted at each chunk boundary for an exception to take.
-    interrupts: ?*nvic.Nvic = null,
-    /// Run at each chunk boundary, before the controller picks: the
-    /// peripheral side of a tick, where a block that has something to raise
-    /// raises it. The board hands one in; the engine only calls it.
-    board: ?Tick = null,
-    /// Where a reset request the board took at the boundary is left for the
-    /// engine to perform. A reset resets the core, and the core is the
-    /// engine's, so the board asks and this loop does it.
-    reboot: ?*reboot.Reboot = null,
-    /// A counter in RAM to watch, and the floor that ends the run once it
-    /// gets there. Null watches nothing. A pointer rather than a copy so
-    /// the caller can ask afterwards whether the stop was what ended it.
-    stop: ?*stop.Stop = null,
-    /// An instruction address to stop at the first time execution reaches
-    /// it. Null runs to the budget. Handed to the emulator as the point to
-    /// run until, so it costs nothing per instruction; a pointer rather
-    /// than a copy so the caller can ask afterwards whether it arrived.
-    brk: ?*breakpoint.Break = null,
-    /// MPU enforcement: the traps over the read-only regions, and the store
-    /// one of them caught. Null runs with the table captured but nothing
-    /// checked against it, which is every test that does not program one.
-    protection: ?*mpu_guard.Guard = null,
-    /// Modelled time the run is allowed, counted in the SysTick periods the
-    /// time base reports. Null is untimed. Needs `timebase` to have anything
-    /// to count, so an image with no clocks attached is never cut short by
-    /// a deadline it could not have reached.
-    deadline: ?*deadline.Deadline = null,
-    /// The swept undefined sites, when reaching one should end the run.
-    /// Null runs past them and only counts, which is the default: the
-    /// sweep reports, it does not decide.
-    undefined_sites: ?*undefined_ops.Found = null,
-};
+/// What a run is allowed to do, re-exported so `engine.Session` resolves.
+pub const Session = @import("session.zig").Session;
 
 /// The board's chunk-boundary hook, re-exported so `engine.Tick` resolves.
 pub const Tick = @import("tick.zig").Tick;
@@ -193,6 +153,20 @@ pub const Engine = struct {
     /// of a region are the same bytes; src/core/board_ram.zig has the why.
     pub fn mapBoardRam(self: *Engine) Error!void {
         board_ram.mapBoard(self.handle, &self.ram) catch return Error.MapFailed;
+    }
+
+    /// Put this engine in front of the board RAM `owner` already allocated,
+    /// which is how a second core joins a board rather than getting one of
+    /// its own. Both engines then read and write the same bytes, so a store
+    /// CPU1 makes in shared SRAM is there for CPU0 with nothing in between.
+    ///
+    /// The pages stay the owner's: this engine allocates none and frees
+    /// none, so it must be closed before the owner is. Mapping a core onto
+    /// an owner that has not mapped yet is a programming error rather than
+    /// a silent empty board, and fails.
+    pub fn shareBoardRamWith(self: *Engine, owner: *Engine) Error!void {
+        if (!owner.ram.mapped()) return Error.MapFailed;
+        board_ram.mapBoard(self.handle, &owner.ram) catch return Error.MapFailed;
     }
 
     /// Put the peripheral bus behind the peripheral window and its Non-secure

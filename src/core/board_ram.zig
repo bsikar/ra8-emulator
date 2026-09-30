@@ -24,6 +24,16 @@
 //! was. The allocations belong to the engine that asked for them and are
 //! released when it closes.
 //!
+//! ONE STORE CAN BACK MORE THAN ONE CORE, and that is the second reason
+//! this file exists. The RA8D2 is a two-core part: CPU0 and CPU1 run their
+//! own images against ONE board, and shared SRAM is shared because it is the
+//! same silicon, not because two models are kept in step. A store that
+//! already holds pages hands those same pages to the next engine mapped
+//! against it, so a second core sees CPU0's stores the instant they land and
+//! the model has no cross-core bookkeeping to get wrong. The pages belong to
+//! the engine that allocated them, so a borrower must not outlive its owner;
+//! `Engine.shareBoardRamWith` names that direction at the call site.
+//!
 //! THE PAGES ARE ZEROED HERE, and that is not belt and braces. A region the
 //! CPU model allocates for itself comes up zeroed, which is the reset state
 //! every image and every test has always seen; a region handed over by
@@ -90,6 +100,15 @@ pub const Store = struct {
         }
     }
 
+    /// Whether this store has been put in front of an engine yet, which is
+    /// what makes it something a second core can be mapped onto.
+    pub fn mapped(self: *const Store) bool {
+        for (&self.backing) |held| {
+            if (held != null) return true;
+        }
+        return false;
+    }
+
     /// The pages behind the Secure side of a pair, or null when that region
     /// is not one half of an alias.
     fn pagesFor(self: *const Store, base: u32) ?[]u8 {
@@ -128,8 +147,14 @@ pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store) Error!void {
     for (memmap.ram) |region| {
         const prot = protOf(region.perms);
         if (secureIndex(region.base)) |index| {
-            const bytes = try allocate(region.size);
-            store.backing[index] = bytes;
+            // Already allocated means a second core is being put in front of
+            // the board this store already backs: it gets those very pages,
+            // which is the whole point of the store outliving one engine.
+            const bytes = store.backing[index] orelse blk: {
+                const fresh = try allocate(region.size);
+                store.backing[index] = fresh;
+                break :blk fresh;
+            };
             try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
             continue;
         }

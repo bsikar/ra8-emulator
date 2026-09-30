@@ -108,3 +108,67 @@ test "permission bits follow the region" {
     try std.testing.expect(all != no_exec);
     try std.testing.expect(all > no_exec);
 }
+
+test "a second core mapped onto the first sees what the first wrote" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var cpu1 = try Engine.open();
+    defer cpu1.close();
+    try cpu1.shareBoardRamWith(&cpu0);
+
+    try cpu0.writeWord(memmap.sram_base + 0x100, 0xC0DE_DEAD);
+    try std.testing.expectEqual(@as(u32, 0xC0DE_DEAD), try cpu1.readWord(memmap.sram_base + 0x100));
+}
+
+test "the cpu1 marker handshake crosses both the alias and the core" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var cpu1 = try Engine.open();
+    defer cpu1.close();
+    try cpu1.shareBoardRamWith(&cpu0);
+
+    // What cpu1_main.c actually does: CPU1 is a permanent-NS controller and
+    // writes its boot markers through the Non-secure view, while CPU0 reads
+    // the same bytes through the standard one.
+    const marker = 0x0010_0200;
+    try cpu1.writeWord(memmap.ns_sram_base + marker, 0xB055_A55A);
+    try std.testing.expectEqual(@as(u32, 0xB055_A55A), try cpu0.readWord(memmap.sram_base + marker));
+}
+
+test "the sharing runs both directions across cores" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var cpu1 = try Engine.open();
+    defer cpu1.close();
+    try cpu1.shareBoardRamWith(&cpu0);
+
+    try cpu0.writeWord(memmap.sdram_base + 0x40, 0x1111_1111);
+    try std.testing.expectEqual(@as(u32, 0x1111_1111), try cpu1.readWord(memmap.ns_sdram_base + 0x40));
+    try cpu1.writeWord(memmap.ns_sdram_base + 0x44, 0x3333_3333);
+    try std.testing.expectEqual(@as(u32, 0x3333_3333), try cpu0.readWord(memmap.sdram_base + 0x44));
+}
+
+test "a borrower allocates nothing of its own" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var cpu1 = try Engine.open();
+    defer cpu1.close();
+    try cpu1.shareBoardRamWith(&cpu0);
+    for (cpu1.ram.backing) |held| {
+        try std.testing.expect(held == null);
+    }
+    try std.testing.expect(cpu0.ram.mapped());
+    try std.testing.expect(!cpu1.ram.mapped());
+}
+
+test "a core cannot be mapped onto a board nobody has mapped yet" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    var cpu1 = try Engine.open();
+    defer cpu1.close();
+    try std.testing.expectError(error.MapFailed, cpu1.shareBoardRamWith(&cpu0));
+}
