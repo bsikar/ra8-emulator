@@ -144,6 +144,18 @@ pub const scb = struct {
 /// how many data regions the core implements; RNR selects one and RBAR/RLAR
 /// program it, with three alias pairs that reach the following regions without
 /// another RNR write. Architectural, so constants like the rest of the PPB.
+/// The Armv8-M Security Attribution Unit window, the third PPB block this
+/// model answers for after the MPU and the cache maintenance one. TYPE is
+/// hardwired and reports how many regions the core implements; RNR picks
+/// which one RBAR/RLAR reach. Architectural addresses, so constants.
+pub const sau = struct {
+    pub const ctrl: u32 = 0xE000_EDD0;
+    pub const type_: u32 = 0xE000_EDD4;
+    pub const rnr: u32 = 0xE000_EDD8;
+    pub const rbar: u32 = 0xE000_EDDC;
+    pub const rlar: u32 = 0xE000_EDE0;
+};
+
 pub const mpu = struct {
     pub const type_: u32 = 0xE000_ED90;
     pub const ctrl: u32 = 0xE000_ED94;

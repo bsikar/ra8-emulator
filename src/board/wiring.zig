@@ -162,6 +162,14 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
     // The guard goes on with it: the same hook that banks the table is the
     // one that sees CTRL and arms the read-only traps.
     try core.attachRegions(&self.regions, &self.guard);
+    // SAU_TYPE read as zero, so the secure boot's capability check failed
+    // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
+    // error, parking the run in the Secure fallback main() forever.
+    try self.partitions.prime(core.*);
+    // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
+    // the five regions the boot map programs need the same hook to keep
+    // from collapsing onto one entry.
+    try core.attachPartitions(&self.partitions);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer

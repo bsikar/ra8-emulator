@@ -70,6 +70,7 @@ const rtc = @import("../periph/rtc.zig");
 const rtt = @import("../periph/rtt.zig");
 const cache = @import("../periph/cache.zig");
 const mpu = @import("../periph/mpu.zig");
+const sau = @import("../periph/sau.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
 const sci = @import("../periph/sci.zig");
@@ -269,24 +270,22 @@ pub const Board = struct {
     control: scb.Scb,
     /// The Arm cache window in the PPB: the geometry the firmware reads out
     /// of CTR before every by-address maintenance call, and the maintenance
-    /// it then asks for. Primed and polled like AIRCR beside it, because
-    /// neither sits on the peripheral bus.
+    /// it then asks for. Primed and polled like AIRCR beside it.
     caches: cache.Cache,
     /// The MPU window, beside the cache one and primed the same way: TYPE is
     /// hardwired, so nothing would have put the region count there.
     regions: mpu.Mpu,
     /// MPU enforcement: the traps kept over the read-only regions while
-    /// CTRL.ENABLE stands, and what they caught. Beside the table rather
-    /// than inside it, because one is what the firmware programmed and the
-    /// other is what the engine does about it.
+    /// CTRL.ENABLE stands, and what they caught. Beside the table because
+    /// one is what the firmware programmed, the other what the engine does.
     guard: mpu_guard.Guard,
+    /// The SAU window, third PPB block: TYPE is hardwired like the MPU's.
+    partitions: sau.Sau,
     /// Where a reset this board decides on is left for the engine to perform.
-    /// main.zig points it at the run's own seam; a board built by a test that
-    /// never reboots leaves it null and the request is only latched.
+    /// main.zig points it at the run's seam; a test's board leaves it null.
     reboot: ?*reboot.Reboot = null,
     /// Which part this board is. main.zig sets it from the command line
-    /// before attach(); a board built by a test is an RA8D2 unless it says
-    /// otherwise.
+    /// before attach(); a test's board is an RA8D2 unless it says otherwise.
     part: part.Part = .ra8d2,
 
     pub fn init(allocator: std.mem.Allocator) Board {
@@ -353,6 +352,7 @@ pub const Board = struct {
             .caches = cache.Cache.init(),
             .regions = mpu.Mpu.init(),
             .guard = mpu_guard.Guard.init(),
+            .partitions = sau.Sau.init(),
         };
     }
 

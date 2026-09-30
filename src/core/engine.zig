@@ -18,6 +18,8 @@ const nvic = @import("../periph/nvic.zig");
 const bus_hook = @import("bus_hook.zig");
 const mpu = @import("../periph/mpu.zig");
 const mpu_hook = @import("mpu_hook.zig");
+const sau = @import("../periph/sau.zig");
+const sau_hook = @import("sau_hook.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
@@ -197,6 +199,13 @@ pub const Engine = struct {
     pub fn attachRegions(self: Engine, unit: *mpu.Mpu, guard: *mpu_guard.Guard) Error!void {
         guard.unit = unit;
         mpu_hook.attach(self.handle, guard) catch return Error.AttachFailed;
+    }
+
+    /// Bank the SAU's RBAR/RLAR through RNR. No guard beside it, unlike the
+    /// MPU: this model keeps the map the firmware programmed but does not
+    /// enforce attribution by it, so there is nothing to arm.
+    pub fn attachPartitions(self: Engine, unit: *sau.Sau) Error!void {
+        sau_hook.attach(self.handle, unit) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M conditional selects the CPU model cannot decode.

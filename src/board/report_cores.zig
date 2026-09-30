@@ -7,6 +7,7 @@ const ipc = @import("../periph/ipc.zig");
 const sync = @import("../periph/ipc_sync.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mpu = @import("../periph/mpu.zig");
+const sau = @import("../periph/sau.zig");
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
 /// the handshake completed, never by itself that a second core is fetching:
@@ -121,9 +122,37 @@ fn regions(board: *Board, out: Writer) !void {
 /// One line per channel that carried anything, plus the losses. A message a
 /// full FIFO dropped and a read that found nothing are both real failures of
 /// the handshake, so they are reported apart from the traffic that worked.
+/// What the firmware asked the SAU for. Worth its own line rather than
+/// folding into the MPU's: the MPU says who may touch a span, the SAU says
+/// which world the span belongs to, and a run that programmed one and not
+/// the other is a run whose secure boot got part way. The line reports the
+/// map and says plainly that this model keeps it without enforcing it, so
+/// nobody reads the absence of a violation count as a clean bill of health.
+fn partitions(board: *Board, out: Writer) !void {
+    const unit = &board.partitions;
+    if (unit.quiet()) return;
+    try out.print(
+        "SAU: {s}, {d} of {d} region(s) enabled, {d} Non-Secure Callable{s}\n",
+        .{
+            if (unit.on()) "enabled" else "programmed but never enabled",
+            unit.programmed(),
+            sau.geometry.regions,
+            unit.callable(),
+            if (unit.outsideIsNonSecure()) ", outside every region is Non-Secure" else "",
+        },
+    );
+    if (unit.refused != 0) {
+        try out.print(
+            "SAU: REFUSED {d} store(s) to the hardwired TYPE\n",
+            .{unit.refused},
+        );
+    }
+}
+
 pub fn sections(board: *Board, out: Writer) !void {
     try secondCore(board, out);
     try regions(board, out);
+    try partitions(board, out);
     const mailbox = &board.mailbox;
     if (mailbox.quiet()) return;
     for (&mailbox.channels, 0..) |*unit, index| {
