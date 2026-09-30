@@ -25,6 +25,9 @@
 //! the interesting part is the relation between them, which belongs to neither.
 const clocks = @import("../../periph/clocks.zig");
 const nvic = @import("../../periph/nvic.zig");
+const tally_mod = @import("../../debug/tally.zig");
+const elf = @import("../../core/elf.zig");
+const symbols = @import("../../debug/symbols.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 
@@ -79,6 +82,39 @@ pub fn timing(
         try out.print(
             "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
             .{ release.lifted, release.stepped, release.stuck, release.faulted },
+        );
+    }
+}
+
+/// Where the machine was when each exception was taken.
+///
+/// A count of entries says the vectors fired; it cannot say whether one of
+/// them cut a sequence that had to run whole. Naming the interrupted
+/// function is what makes that answerable: an exception taken inside
+/// `_tx_thread_sleep` or `_tx_thread_system_suspend` lands between the
+/// increment of `_tx_thread_preempt_disable` and its matching decrement,
+/// and a thread stopped in there holds the scheduler shut.
+pub fn takenFrom(out: anytype, image: elf.Image, counted: tally_mod.Tally) !void {
+    if (counted.quiet()) return;
+    var room: [tally_mod.limits.kept]tally_mod.Site = undefined;
+    const ranked = counted.ranked(&room);
+    var listed: usize = 0;
+    for (ranked) |site| {
+        if (listed >= tally_mod.limits.listed) break;
+        listed += 1;
+        try out.print(
+            "interrupts: {d} entry(ies) of exception {d} from pc 0x{X:0>8}",
+            .{ site.writes, site.value, site.pc },
+        );
+        if (symbols.inside(image, site.pc)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print("\n", .{});
+    }
+    if (counted.displaced > 0) {
+        try out.print(
+            "interrupts: and {d} entry(ies) from places that did not stay in the tally\n",
+            .{counted.displaced},
         );
     }
 }

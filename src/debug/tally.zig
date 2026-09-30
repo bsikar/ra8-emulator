@@ -1,25 +1,30 @@
-//! Who wrote a watched place, counted rather than listed.
+//! A bounded tally of (key, value) pairs, most frequent first.
 //!
-//! A watch keeps the first few stores and the last few, and between them
-//! it counts and drops. That is the right shape for a place written a
-//! handful of times, and the wrong one for a place written hundreds of
-//! times by a dozen sites: the question there is not "what happened at
-//! the two ends" but "which sites write this, and how often each".
+//! Counting beats listing whenever a thing happens hundreds of times from
+//! a handful of places. A list of the first few and the last few says what
+//! a run opened and closed with; a tally says how the occurrences divide
+//! up, and a division is what pairs one site against another.
 //!
 //! Measured on `threadx_blink`, where `_tx_thread_preempt_disable` takes
 //! 920 stores. The answer that located the freeze was a tally:
 //! `_tx_thread_sleep+0xAE` writes 1 four hundred and fifty two times and
 //! `_tx_thread_system_suspend+0x54` writes 0 four hundred and fifty one
 //! times, so exactly one sleep never got its matching decrement. Neither
-//! end of the list could show that, and getting it twice meant editing
-//! the list length by hand and rebuilding. This is that tally, standing.
+//! end of the list could show that.
 //!
-//! Keyed on the PAIR (pc, value), not on the pc alone, because a site
-//! that writes two different values is the interesting kind: on the same
-//! run `_tx_thread_timeout+0x2C` writes 2 twice and 1 once, and folding
-//! those together loses the shape of the end state.
+//! Keyed on the PAIR, not on the key alone, because a site that produces
+//! two different values is the interesting kind: on the same run
+//! `_tx_thread_timeout+0x2C` writes 2 twice and 1 once, and folding those
+//! together loses the shape of the end state.
 //!
-//! Its own file rather than a field on the watch, for the reason
+//! Two callers, and the second is why this is not named after the first.
+//! src/debug/watchpoint.zig tallies (program counter, value written) to
+//! say who wrote a watched place. src/core/run_loop.zig tallies
+//! (interrupted program counter, exception number) to say where the
+//! machine was when an exception was taken, which is the only way to ask
+//! whether a context switch lands inside a window that must not be cut.
+//!
+//! Its own file rather than a field on either caller, for the reason
 //! src/debug/hotspots.zig is its own file: the policy, what is kept and
 //! what happens when the table fills, is the whole of the thing.
 
@@ -33,14 +38,17 @@ pub const limits = struct {
     pub const listed: usize = 8;
 };
 
-/// One writing site and how often it wrote that value.
+/// One (key, value) pair and how often it occurred.
 pub const Site = struct {
+    /// What produced it: a program counter, in both callers so far.
     pc: u32,
+    /// What it produced: a stored value, or an exception number.
     value: u32,
+    /// How many times this exact pair occurred.
     writes: u64,
 };
 
-/// The writing sites of one watched place.
+/// The pairs counted so far.
 pub const Tally = struct {
     sites: [limits.kept]Site = [_]Site{.{ .pc = 0, .value = 0, .writes = 0 }} ** limits.kept,
     used: usize = 0,
@@ -65,7 +73,7 @@ pub const Tally = struct {
         self.sites[self.weakest()] = .{ .pc = pc, .value = value, .writes = 1 };
     }
 
-    /// The slot holding the fewest writes, which a new pair takes.
+    /// The slot holding the fewest occurrences, which a new pair takes.
     fn weakest(self: *const Tally) usize {
         var at: usize = 0;
         for (self.sites[0..self.used], 0..) |site, index| {

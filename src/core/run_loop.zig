@@ -149,7 +149,13 @@ fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault
 /// found them. src/core/idle.zig carries why that matters.
 fn service(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
     const lifted = try liftMask(core, controller, session, remaining);
+    // Read before dispatching: once the vector is entered the program
+    // counter is the handler's, and the question is what it interrupted.
+    const interrupted = if (session.taken_from == null) 0 else try core.register(.pc);
     const entered = try controller.dispatch(core);
+    if (entered) |number| {
+        if (session.taken_from) |counted| counted.record(interrupted, number);
+    }
     if (entered != null) if (session.idle) |seam| seam.stir();
     return lifted;
 }

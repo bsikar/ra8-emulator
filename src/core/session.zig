@@ -24,6 +24,7 @@ const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const hotspots = @import("../debug/hotspots.zig");
+const tally = @import("../debug/tally.zig");
 const functions = @import("../debug/functions.zig");
 
 /// Records the invalid access behind a fault.
@@ -84,6 +85,19 @@ pub const Session = struct {
     /// Where the run went, by function. Coarser than `pcs` and the one
     /// that survives a run touching thousands of addresses.
     fns: ?*functions.Table = null,
+
+    /// Where the machine was when an exception was taken, tallied as the
+    /// pair (interrupted program counter, exception number).
+    ///
+    /// A count of entries says how busy the vectors are; it cannot say
+    /// whether a switch cut a sequence that had to run whole. ThreadX puts
+    /// a window like that in every sleep: `_tx_thread_sleep` increments
+    /// `_tx_thread_preempt_disable`, restores PRIMASK, and only then calls
+    /// `_tx_thread_system_suspend`, which decrements it again. A thread
+    /// stopped in there holds the flag up, and the timer handler refuses
+    /// to issue a PendSV while it is up. This is how to ask how often an
+    /// exception lands between the two.
+    taken_from: ?*tally.Tally = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.
