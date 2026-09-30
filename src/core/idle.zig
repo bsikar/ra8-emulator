@@ -178,6 +178,31 @@ pub const Seam = struct {
         return .{ .ran = ran };
     }
 
+    /// Forget a proof an outside event has just invalidated.
+    ///
+    /// `resting` compares registers, and that is the whole proof only while
+    /// nothing outside the loop writes the memory the loop READS. An
+    /// exception handler breaks both halves of that at once: it can store
+    /// the very word the spin is waiting on, and it returns leaving the
+    /// spin's registers exactly as it found them, so the snapshot still
+    /// matches a state that has stopped being idle. The header above says
+    /// the proof holds until something outside intervenes; this is how the
+    /// seam is told that it did.
+    ///
+    /// Measured on `threadx_blink`, where `__tx_ts_wait` waits on
+    /// `_tx_thread_execute_ptr` and a handler is the only thing that ever
+    /// sets it: without this the seam went on skipping the loop after the
+    /// word went non-zero, and the image never ran a thread again.
+    ///
+    /// NOT COVERED, deliberately: a peripheral that writes RAM on its own,
+    /// a DMA transfer landing in a buffer a spin polls, is the same shape
+    /// and is not stirred here. The boundary's peripheral blocks run every
+    /// time round, so treating them as intervention would retire the seam
+    /// altogether, and no image in this corpus waits on one.
+    pub fn stir(self: *Seam) void {
+        self.known = null;
+    }
+
     /// Charge a stretch nobody has to execute.
     pub fn skip(self: *Seam, instructions: usize) void {
         if (instructions == 0) return;
