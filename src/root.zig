@@ -98,6 +98,7 @@ pub const periph = struct {
     pub const eth_desc = @import("periph/eth_desc.zig");
     pub const eth_dma = @import("periph/eth_dma.zig");
     pub const eth_gateway = @import("periph/eth_gateway.zig");
+    pub const eth_mac = @import("periph/eth_mac.zig");
     pub const eth_mode = @import("periph/eth_mode.zig");
     pub const eth_peer = @import("periph/eth_peer.zig");
     pub const eth_phy = @import("periph/eth_phy.zig");

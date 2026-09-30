@@ -9,6 +9,7 @@
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const eth_phy = @import("../periph/eth_phy.zig");
+const eth_mac = @import("../periph/eth_mac.zig");
 const net = @import("net.zig");
 
 pub fn sections(board: *Board, out: Writer) !void {
@@ -22,6 +23,7 @@ pub fn sections(board: *Board, out: Writer) !void {
         );
         try refusedSteps(&port.mode, out);
         try out.print("\n", .{});
+        try macAddress(index, &port.mac, out);
         try mdio(index, &port.phy, out);
     }
     try gateway(cluster, out);
@@ -76,6 +78,23 @@ fn refusedSteps(machine: anytype, out: Writer) !void {
         ", {d} MODE STEP(S) REFUSED (last asked for {s})",
         .{ machine.refused, @tagName(machine.last_refused.?) },
     );
+}
+
+/// The perfect-match address the port ended up carrying. A store made while
+/// the port was not in CONFIG never reached the register on silicon, so the
+/// count is the one that says why a wire-side ARP would go unanswered.
+fn macAddress(index: usize, part: *const eth_mac.Address, out: Writer) !void {
+    if (part.quiet()) return;
+    const octets = part.octets();
+    try out.print(
+        "RMAC{d} address: {x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}, {d} store(s)",
+        .{ index, octets[0], octets[1], octets[2], octets[3], octets[4], octets[5], part.stores },
+    );
+    if (part.ignored != 0) try out.print(
+        ", {d} ADDRESS STORE(S) OFF A PORT NOT IN CONFIG REFUSED",
+        .{part.ignored},
+    );
+    try out.print("\n", .{});
 }
 
 fn mdio(index: usize, part: *const eth_phy.Phy, out: Writer) !void {

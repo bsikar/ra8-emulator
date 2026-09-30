@@ -28,6 +28,7 @@ pub const Rswitch = struct {
         for (&self.ports) |*port| {
             try bus.add(port.ethaBlock());
             try bus.add(port.rmacBlock());
+            try bus.add(port.macBlock());
         }
         try bus.add(self.gateway.modeBlock());
         try bus.add(self.gateway.arirmBlock());

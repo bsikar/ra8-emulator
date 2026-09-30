@@ -16,6 +16,11 @@ const periph = @import("registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
 const eth_phy = @import("eth_phy.zig");
+const eth_mac = @import("eth_mac.zig");
+
+/// The perfect-match address, reached as `eth.mac_address` by a caller that
+/// already has the port.
+pub const mac_address = eth_mac;
 
 pub const Port = struct {
     /// Where this port's two agents answer. A board fact, so it is set when
@@ -26,6 +31,8 @@ pub const Port = struct {
     phy: eth_phy.Phy = eth_phy.Phy.init(),
     /// The last management frame, as MPSM reads back.
     mpsm: u32 = 0,
+    /// MRMAC0/MRMAC1, which only take a store while this port is in CONFIG.
+    mac: eth_mac.Address = .{},
 
     pub fn init(etha_base: u32, rmac_base: u32) Port {
         return .{ .etha_base = etha_base, .rmac_base = rmac_base };
@@ -76,8 +83,19 @@ pub const Port = struct {
         self.mpsm = self.phy.transact(asked);
     }
 
+    /// MRMAC0/MRMAC1. The port's own mode decides whether the store lands,
+    /// which is why the pair is answered here rather than by a block of its
+    /// own holding no mode.
+    pub fn macRead(self: *Port, at: u32, width: u3) u32 {
+        return self.mac.read(at -% self.rmac_base, width);
+    }
+
+    pub fn macWrite(self: *Port, at: u32, width: u3, value: u32) void {
+        self.mac.write(self.mode.mode, at -% self.rmac_base, width, value);
+    }
+
     pub fn quiet(self: *const Port) bool {
-        return self.mode.quiet() and self.phy.quiet();
+        return self.mode.quiet() and self.phy.quiet() and self.mac.quiet();
     }
 
     pub fn ethaBlock(self: *Port) periph.Block {
@@ -88,6 +106,17 @@ pub const Port = struct {
             .context = self,
             .readFn = ethaReadThunk,
             .writeFn = ethaWriteThunk,
+        };
+    }
+
+    pub fn macBlock(self: *Port) periph.Block {
+        return .{
+            .name = "RMAC-MAC",
+            .base = self.rmac_base + eth_mac.off.mrmac0,
+            .size = eth_mac.off.span,
+            .context = self,
+            .readFn = macReadThunk,
+            .writeFn = macWriteThunk,
         };
     }
 
@@ -121,4 +150,14 @@ fn rmacReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
 fn rmacWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Port = @ptrCast(@alignCast(context));
     self.rmacWrite(address, width, value);
+}
+
+fn macReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    const self: *Port = @ptrCast(@alignCast(context));
+    return self.macRead(address, width);
+}
+
+fn macWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *Port = @ptrCast(@alignCast(context));
+    self.macWrite(address, width, value);
 }
