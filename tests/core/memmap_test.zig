@@ -105,3 +105,36 @@ test "a stack top at the very top of SRAM is held" {
 test "the upper 640 KB an RA8D2 script calls NS_SRAM is the same memory" {
     try std.testing.expectEqual(mod.masterWindow(mod.sram_base).?.end, mod.masterWindow(0x2210_0000).?.end);
 }
+
+test "the Non-secure alias sits one IDAU bit above its Secure region" {
+    try std.testing.expectEqual(@as(u32, 0x1000_0000), mod.ns_offset);
+    try std.testing.expectEqual(@as(u32, 0x3200_0000), mod.ns_sram_base);
+    try std.testing.expectEqual(@as(u32, 0x7800_0000), mod.ns_sdram_base);
+    // An alias covers exactly the bytes it is an alias of.
+    try std.testing.expectEqual(mod.sram_end - mod.sram_base, mod.ns_sram_end - mod.ns_sram_base);
+    try std.testing.expectEqual(mod.sdram_end - mod.sdram_base, mod.ns_sdram_end - mod.ns_sdram_base);
+}
+
+test "the marker CPU1 writes through the alias lands in a mapped region" {
+    // cpu1_pingpong_ipc's first probe word, written at the top of the CPU1
+    // reset handler before the SAU is programmed. An unmapped store here
+    // ended the run four instructions into the image.
+    const marker: u32 = 0x3210_0200;
+    var mapped = false;
+    for (ram) |region| {
+        if (marker >= region.base and marker + 4 <= region.end()) mapped = true;
+    }
+    try std.testing.expect(mapped);
+    // The same image also marks the Secure view, so both have to answer.
+    try std.testing.expect(masterHolds(marker, 4));
+    try std.testing.expect(masterHolds(0x2219_0200, 4));
+}
+
+test "a debug probe and a bus master both reach the Non-secure SRAM view" {
+    try std.testing.expect(masterHolds(mod.ns_sram_base, 4));
+    try std.testing.expect(masterHolds(mod.ns_sram_end - 4, 4));
+    try std.testing.expect(mod.debugHolds(mod.ns_sram_base, 4));
+    try std.testing.expect(mod.debugHolds(mod.ns_sram_end - 4, 4));
+    // One past the alias is nobody's.
+    try std.testing.expect(!masterHolds(mod.ns_sram_end, 4));
+}

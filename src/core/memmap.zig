@@ -2,6 +2,44 @@
 //!
 //! The regions are silicon facts, so they are
 //! constants here, not options.
+//!
+//! THE NON-SECURE ALIAS IS PART OF THE MAP, not a detail of TrustZone. The
+//! IDAU on this part splits the space by address bit 28: the Secure view of a
+//! region and the Non-secure view of the same bytes sit 0x1000_0000 apart, so
+//! a permanent-Non-secure master reaches SRAM at 0x3200_0000 rather than at
+//! 0x2200_0000. The firmware states that bit three times over. The peripheral
+//! window's pair is already named in src/periph/registry.zig
+//! (`ns_offset`, 0x4000_0000 and 0x5000_0000), and `cpu1_pingpong_ipc`'s own
+//! CPU1 image names both of the other two: `k_cpu1_sau_periph_ns_base`
+//! 0x5000_0000, and an SAU Non-secure SRAM window it then writes through at
+//! 0x3210_0200.
+//!
+//! SDRAM's alias was mapped here from the start and SRAM's was not, which is
+//! the gap this note exists to record. CPU1 in `cpu1_pingpong_ipc` is a
+//! permanent-Non-secure controller, so every marker it writes goes through
+//! the alias, and its first one (`k_cpu1_probe_reset_addr`, 0x3210_0200,
+//! written at the top of the reset handler) landed nowhere: the run ended on
+//! an unmapped store four instructions into the image, before the SAU was
+//! programmed and before anything of the ping-pong ran. Both aliases are now
+//! derived from one named offset rather than one of them being a literal and
+//! the other missing.
+//!
+//! WHAT THIS DOES NOT DO, AND IT IS THE FIRMWARE'S OWN WORDS THAT SAY SO.
+//! cpu1_main.c calls the two views "the same backing store", and here they
+//! are two: a store through 0x3210_0200 is not visible at 0x2210_0200. Every
+//! access in the corpus is self-consistent, because an image reads a marker
+//! back through the view it wrote it through, and the one cross-view reader
+//! is a bench J-Link rather than anything that runs here. Making them one
+//! store means mapping the Secure region from host memory and mapping the
+//! alias onto the same pointer, which needs a seam in src/core/engine.zig
+//! that this slice deliberately does not open: that file sits at the gate
+//! ceiling. Until then the alias is a separate region, stated rather than
+//! implied.
+//!
+//! DTCM's alias is deliberately not mapped. The rule would place it at
+//! 0x3000_0000, but the core's tightly coupled memory is reached over the
+//! CPU's private port and nothing in the tree or the corpus asks for it
+//! there, so mapping it would be following the arithmetic past the evidence.
 const std = @import("std");
 
 pub const Region = struct {
@@ -36,7 +74,19 @@ pub const sram_base: u32 = 0x2200_0000;
 pub const sram_end: u32 = 0x221A_0000;
 pub const sdram_base: u32 = 0x6800_0000;
 pub const sdram_end: u32 = 0x6C00_0000;
-pub const ns_sdram_base: u32 = 0x7800_0000;
+
+/// How far above a Secure region its Non-secure alias sits: IDAU address
+/// bit 28. src/periph/registry.zig carries the same offset for the
+/// peripheral window, where it folds the alias onto the Secure address so
+/// one model answers both; a memory region cannot be folded that way, so
+/// each alias is its own region here.
+pub const ns_offset: u32 = 0x1000_0000;
+
+/// The Non-secure view of the system SRAM, which is where a
+/// permanent-Non-secure master writes.
+pub const ns_sram_base: u32 = sram_base + ns_offset;
+pub const ns_sram_end: u32 = ns_sram_base + (sram_end - sram_base);
+pub const ns_sdram_base: u32 = sdram_base + ns_offset;
 pub const ns_sdram_end: u32 = ns_sdram_base + (sdram_end - sdram_base);
 
 /// The Cortex-M Private Peripheral Bus: SCB, NVIC, SysTick, MPU, SAU and the
@@ -51,6 +101,7 @@ pub const ppb_size: u32 = 0x0010_0000;
 pub const ram = [_]Region{
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
     .{ .name = "SRAM", .base = sram_base, .size = sram_end - sram_base, .perms = .{} },
+    .{ .name = "NS SRAM", .base = ns_sram_base, .size = ns_sram_end - ns_sram_base, .perms = .{} },
     .{ .name = "SDRAM", .base = sdram_base, .size = sdram_end - sdram_base, .perms = .{} },
     .{ .name = "NS SDRAM", .base = ns_sdram_base, .size = ns_sdram_end - ns_sdram_base, .perms = .{} },
     .{ .name = "PPB", .base = ppb_base, .size = ppb_size, .perms = .{ .exec = false } },
@@ -156,7 +207,7 @@ pub const Window = struct {
 };
 
 /// The RAM a bus master other than the CPU can reach: the on-chip SRAM and
-/// the external SDRAM, through both its Secure and its Non-secure alias.
+/// the external SDRAM, each through both its Secure and its Non-secure view.
 ///
 /// DTCM is deliberately not here. It is the core's own tightly coupled
 /// memory, reached over the CPU's private port rather than over the fabric
@@ -167,6 +218,7 @@ pub const Window = struct {
 /// written into.
 pub const master_ram = [_]Window{
     .{ .base = sram_base, .end = sram_end },
+    .{ .base = ns_sram_base, .end = ns_sram_end },
     .{ .base = sdram_base, .end = sdram_end },
     .{ .base = ns_sdram_base, .end = ns_sdram_end },
 };
@@ -179,6 +231,7 @@ pub const master_ram = [_]Window{
 pub const debug_ram = [_]Window{
     .{ .base = dtcm_base, .end = dtcm_end },
     .{ .base = sram_base, .end = sram_end },
+    .{ .base = ns_sram_base, .end = ns_sram_end },
     .{ .base = sdram_base, .end = sdram_end },
     .{ .base = ns_sdram_base, .end = ns_sdram_end },
 };
