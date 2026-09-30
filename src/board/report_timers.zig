@@ -15,6 +15,7 @@ pub fn sections(board: *Board, out: Writer) !void {
     try lowpower(board, out);
     try interval(board, out);
     try bankClock(board, out);
+    try bankSync(board, out);
     try pwm(board, out);
     try independent(board, out);
 }
@@ -31,6 +32,24 @@ fn bankClock(board: *Board, out: Writer) !void {
         try out.print(
             "GPT bank: PROHIBITED {d} GTCLKCR store(s), the block was already released\n",
             .{unit.prohibited_running},
+        );
+    }
+}
+
+/// GTSTR, GTSTP and GTCLR name channels by bit, so the line worth reading is
+/// a store that named several at once: that is a synchronised start, and it
+/// is the only way the three-phase driver gets its phases onto one edge.
+fn bankSync(board: *Board, out: Writer) !void {
+    const state = &board.pwm.sync;
+    if (state.quiet()) return;
+    try out.print(
+        "GPT bank: {d} channel start/stop/clear bit(s) acted on, {d} store(s) named several at once\n",
+        .{ state.acted, state.together },
+    );
+    if (state.absent != 0) {
+        try out.print(
+            "GPT bank: {d} bit(s) named a channel this part does not carry\n",
+            .{state.absent},
         );
     }
 }

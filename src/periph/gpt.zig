@@ -89,6 +89,7 @@ const lk = @import("gpt_lock.zig");
 const win = @import("gpt_window.zig");
 const md = @import("gpt_mode.zig");
 const prd = @import("gpt_period.zig");
+const sync = @import("gpt_sync.zig");
 const periph = @import("registry.zig");
 
 /// The compare pair, reached as `gpt.match` the way the other split blocks in
@@ -284,24 +285,10 @@ pub const Channel = struct {
             // GTST is cleared by writing the word back with the target bits
             // zero, so a store can only take bits away.
             off.gtst => self.st &= win.merge(self.st, local - off.gtst, byte),
-            off.gtstr => self.request(local == off.gtstr, byte, .start),
-            off.gtstp => self.request(local == off.gtstp, byte, .stop),
-            off.gtclr => self.request(local == off.gtclr, byte, .clear),
+            // GTSTR, GTSTP and GTCLR name channels by bit, so the bank takes
+            // them whole before an access is broken into lanes.
+            off.gtstr, off.gtstp, off.gtclr => {},
             else => self.shadow[local] = byte,
-        }
-    }
-
-    const Request = enum { start, stop, clear };
-
-    /// The three action registers act on bit 0 of their low byte; a store to
-    /// any other lane of them changes nothing, which is what the hardware
-    /// does with the channel-select bits this model has no channels for.
-    fn request(self: *Channel, low_lane: bool, byte: u8, what: Request) void {
-        if (!low_lane or byte & 1 == 0) return;
-        switch (what) {
-            .start => self.cr |= control.cst,
-            .stop => self.cr &= ~control.cst,
-            .clear => self.cnt = 0,
         }
     }
 
@@ -315,6 +302,8 @@ pub const Gpt = struct {
     channels: [channels]Channel = @splat(.{}),
     /// Whether channel 0 wrapped this boundary.
     pending: bool = false,
+    /// What the bank's three action registers did. See gpt_sync.zig.
+    sync: sync.Sync = .{},
 
     pub fn init() Gpt {
         return .{};
@@ -335,6 +324,7 @@ pub const Gpt = struct {
     }
 
     pub fn quiet(self: *const Gpt) bool {
+        if (!self.sync.quiet()) return false;
         for (self.channels) |channel| {
             if (!channel.quiet()) return false;
         }
@@ -369,6 +359,13 @@ pub const Gpt = struct {
         // One store, one refusal: the protection turns the access away, not
         // each of its byte lanes.
         if (!channel.guard.admits(local, win.protected(local))) return;
+        // The bits are channel-indexed, so the access acts on the channels it
+        // names rather than on the window it came through.
+        if (sync.which(local)) |action| {
+            const bits = sync.carried(local - sync.base(action), width, value);
+            sync.dispatch(&self.sync, action, bits, &self.channels);
+            return;
+        }
         var index: u32 = 0;
         while (index < width and local + index < stride) : (index += 1) {
             const shift: u5 = @intCast(index * 8);
