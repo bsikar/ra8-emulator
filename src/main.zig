@@ -2,10 +2,9 @@
 //!
 //! This file is wiring and nothing else: read an ELF, build the board, reset
 //! out of the vector table, run a bounded number of instructions, and say
-//! what happened. The machine lives in src/core, every block that answers on
-//! the peripheral bus lives in src/periph, the board that holds them and the
-//! words about them live in src/board, and all of it is reached through the
-//! "ra8" module.
+//! what happened. The machine lives in src/core, the blocks that answer on
+//! the peripheral bus in src/periph, the board holding them and the words
+//! about them in src/board, all reached through the "ra8" module.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -71,6 +70,8 @@ pub fn main() !u8 {
     var selects = ra8.core.csel.Selects{};
     try core.attachSelects(&selects);
     const written = try core.loadImage(image);
+    var worlds = ra8.core.tz.Worlds{};
+    try core.attachWorlds(image, &worlds);
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
@@ -78,10 +79,9 @@ pub fn main() !u8 {
     };
     try core.resetFromVectorTable(vector_base);
 
-    const stack_pointer = try core.register(.sp);
     const entry = try core.register(.pc);
     var out = std.io.getStdOut().writer();
-    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, stack_pointer, entry });
+    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
 
     var timebase = clocks.Clocks{};
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
@@ -115,7 +115,7 @@ pub fn main() !u8 {
         .deadline = if (timed) |*one| one else null,
     }, if (second) |*one| one else null);
 
-    const tally = report_run.Tally{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .undefined_found = undefined_found };
+    const tally = report_run.Tally{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .worlds = worlds, .undefined_found = undefined_found };
     try report_run.all(out, &board, image, tally);
     try second_core.report(out, if (second) |*one| one else null);
     try dumps(out, core, image, options, &board, watched);
@@ -284,15 +284,14 @@ fn arrivals(
     return 0;
 }
 
-/// The function `--break-sym` named, resolved against the image's symbol
-/// table. A name the image does not carry is reported and the run goes to
-/// its instruction budget, the same way a missing `--stop-sym` does.
 /// The modelled-time window a run is allowed, or none.
 fn resolveDeadline(options: cli.Options) ?deadline.Deadline {
     const milliseconds = options.ms orelse return null;
     return .{ .periods = milliseconds };
 }
 
+/// The function `--break-sym` named, resolved against the image's symbol
+/// table. A missing name goes to the instruction budget, as `--stop-sym` does.
 fn resolveBreak(image: elf.Image, options: cli.Options) ?breakpoint.Break {
     const spec = options.break_place orelse return null;
     return breakpoint.resolve(image, spec, options.break_arrival) catch |err| {

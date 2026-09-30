@@ -21,6 +21,7 @@ const nvic = @import("../periph/nvic.zig");
 const reboot = @import("../core/reboot.zig");
 const lob = @import("../core/lob.zig");
 const csel = @import("../core/csel.zig");
+const tz = @import("../core/tz.zig");
 const elf = @import("../core/elf.zig");
 const undefined_ops = @import("../core/undefined_ops.zig");
 
@@ -31,6 +32,7 @@ pub const Tally = struct {
     reboot: reboot.Reboot,
     loops: lob.Loops,
     selects: csel.Selects,
+    worlds: tz.Worlds,
     undefined_found: undefined_ops.Found,
 };
 
@@ -43,6 +45,7 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);
+    try report_steps.worlds(out, of.worlds);
     try report.blocks(board, out);
     try undefined_ops.print(out, image, of.undefined_found);
 }
