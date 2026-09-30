@@ -39,6 +39,7 @@ pub const core = struct {
     pub const place = @import("debug/place.zig");
     pub const registers = @import("debug/registers.zig");
     pub const hotspots = @import("debug/hotspots.zig");
+    pub const functions = @import("debug/functions.zig");
     pub const stop = @import("core/stop.zig");
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");

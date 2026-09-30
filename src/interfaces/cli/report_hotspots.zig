@@ -15,6 +15,7 @@
 //! addresses for any one of them to reach the floor, so it prints nothing
 //! and the reader learns that by the absence.
 const hotspots = @import("../../debug/hotspots.zig");
+const functions = @import("../../debug/functions.zig");
 const symbols = @import("../../debug/symbols.zig");
 const elf = @import("../../core/elf.zig");
 const Writer = @import("report.zig").Writer;
@@ -47,6 +48,38 @@ pub fn spent(out: Writer, image: elf.Image, table: hotspots.Table) !void {
         try out.print(
             "where: {d} other address(es) did not stay in the table; the run was not only here\n",
             .{table.displaced},
+        );
+    }
+}
+
+/// Print the functions the run kept coming back to, most sampled first.
+///
+/// Printed after `spent` and in the same shape, because it answers the
+/// same question one step coarser: `spent` says which instruction a spin
+/// sits on, this says which function burned the run. On anything that is
+/// doing work the pc table churns and this one does not.
+pub fn spentIn(out: Writer, image: elf.Image, table: functions.Table) !void {
+    if (table.sites.quiet()) return;
+    var into: [hotspots.limits.kept]hotspots.Site = undefined;
+    const ranked = table.sites.ranked(&into);
+
+    var listed: usize = 0;
+    for (ranked) |site| {
+        if (listed >= hotspots.limits.listed) break;
+        const share = table.sites.shareOf(site);
+        if (share < hotspots.limits.floor_percent) break;
+        listed += 1;
+        try out.print("where: {d}% of {d} boundary sample(s) in ", .{ share, table.sites.total });
+        if (symbols.inside(image, site.address)) |found| {
+            try out.print("{s}\n", .{found.name});
+        } else {
+            try out.print("unnamed code at 0x{X:0>8}\n", .{site.address});
+        }
+    }
+    if (table.sites.displaced > 0) {
+        try out.print(
+            "where: {d} other function(s) did not stay in the table\n",
+            .{table.sites.displaced},
         );
     }
 }
