@@ -220,3 +220,33 @@ test "a place written in a loop reports its last store, not just its first" {
     try std.testing.expect(std.mem.indexOf(u8, out.items, "more, ending with") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "0x00000383") != null);
 }
+
+test "a store stamps the modelled period it landed in" {
+    var clock: u64 = 417;
+    var watched = watchpoint.Watched{ .address = 0x2200_09A8, .now = &clock };
+    watched.record(0x0200_1234, 0x0200_1235, 0x2200_09A8, 4, 1);
+    clock = 912;
+    watched.record(0x0200_1234, 0x0200_1235, 0x2200_09A8, 4, 2);
+    const opened = watched.opening();
+    try std.testing.expectEqual(@as(u64, 417), opened[0].when);
+    try std.testing.expectEqual(@as(u64, 912), opened[1].when);
+}
+
+test "without a timebase every stamp stays zero" {
+    var watched = watchpoint.Watched{ .address = 0x2200_09A8 };
+    watched.record(0x0200_1234, 0x0200_1235, 0x2200_09A8, 4, 1);
+    try std.testing.expectEqual(@as(u64, 0), watched.opening()[0].when);
+}
+
+test "the stamp rides the ring, so the closing stores carry their own" {
+    var clock: u64 = 0;
+    var watched = watchpoint.Watched{ .address = 0x2200_09A8, .now = &clock };
+    for (0..12) |step| {
+        clock = @as(u64, step) * 100;
+        watched.record(0x0200_1234, 0x0200_1235, 0x2200_09A8, 4, @intCast(step));
+    }
+    var room: [watchpoint.limits.tail]watchpoint.Store = undefined;
+    const closing = watched.closing(&room);
+    try std.testing.expectEqual(@as(u64, 800), closing[0].when);
+    try std.testing.expectEqual(@as(u64, 1100), closing[closing.len - 1].when);
+}

@@ -53,6 +53,12 @@ pub const Store = struct {
     width: u8 = 0,
     /// Which byte of the watched word it started at.
     offset: u8 = 0,
+    /// Modelled time as the store landed, in SysTick periods. A store list
+    /// says who wrote and what; on a place a scheduler drives, the question
+    /// under that is how far apart the writes are, and the pc cannot answer
+    /// it. Zero for a run with no timebase wired, which is every unit test
+    /// and every image that never arms SysTick.
+    when: u64 = 0,
 };
 
 /// The place, and what has been written to it so far.
@@ -72,6 +78,11 @@ pub const Watched = struct {
     /// stores from a dozen sites. src/debug/tally.zig carries why
     /// the two ends of the list are not enough there.
     tally: tally_mod.Tally = .{},
+    /// The period counter each store is stamped from, borrowed from the
+    /// clocks rather than copied, so the stamp is read as the store lands
+    /// instead of at the end of the run. Null leaves every stamp zero,
+    /// which is every unit test and every image that never arms SysTick.
+    now: ?*const u64 = null,
 
     /// Record a store. Everything between the two ends is counted and
     /// dropped, so the memory a watch costs is fixed.
@@ -82,6 +93,7 @@ pub const Watched = struct {
             .value = value,
             .width = width,
             .offset = @truncate(address -% self.address),
+            .when = if (self.now) |clock| clock.* else 0,
         };
         self.tally.record(pc, value);
         if (self.seen < limits.head) self.first[self.seen] = one;
@@ -202,8 +214,8 @@ fn tallied(out: anytype, image: elf.Image, counted: tally_mod.Tally) !void {
 /// One store, named.
 fn line(out: anytype, image: elf.Image, store: Store) !void {
     try out.print(
-        "                  +{d} {d}-byte 0x{X:0>8} from pc 0x{X:0>8}",
-        .{ store.offset, store.width, store.value, store.pc },
+        "                  +{d} {d}-byte 0x{X:0>8} at tick {d} from pc 0x{X:0>8}",
+        .{ store.offset, store.width, store.value, store.when, store.pc },
     );
     if (symbols.inside(image, store.pc)) |at| {
         try out.print(" {s}+0x{X}", .{ at.name, at.offset });
