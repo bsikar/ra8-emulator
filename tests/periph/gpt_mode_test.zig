@@ -122,7 +122,7 @@ test "a visited span widens to the end a turn reached" {
 
 test "a channel in triangle mode falls back to zero and raises the underflow" {
     var channel = gpt.Channel{};
-    channel.period = gpt.step_per_tick;
+    channel.period.set(.live, gpt.step_per_tick);
     channel.cr = control(4);
     channel.rising = true;
 
@@ -139,7 +139,7 @@ test "a channel in triangle mode falls back to zero and raises the underflow" {
 
 test "a channel in one-shot mode stops itself at the period" {
     var channel = gpt.Channel{};
-    channel.period = 16;
+    channel.period.set(.live, 16);
     channel.cr = control(1);
 
     _ = channel.tick();
@@ -153,7 +153,7 @@ test "a channel in one-shot mode stops itself at the period" {
 
 test "a saw channel is unchanged by the mode field being read" {
     var channel = gpt.Channel{};
-    channel.period = 0x0000_2000;
+    channel.period.set(.live, 0x0000_2000);
     channel.cr = gpt.control.cst;
 
     const wraps = channel.tick();
@@ -165,7 +165,7 @@ test "a saw channel is unchanged by the mode field being read" {
 
 test "a triangle passing a compare on the way down still matches" {
     var channel = gpt.Channel{};
-    channel.period = gpt.step_per_tick;
+    channel.period.set(.live, gpt.step_per_tick);
     channel.cr = control(4);
     channel.compares.set(.a, gpt.step_per_tick / 2);
 

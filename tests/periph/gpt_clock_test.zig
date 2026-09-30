@@ -95,8 +95,8 @@ test "a slowed channel counts behind an undivided one" {
     var slow = gpt.Channel{};
     fast.cr = control(0);
     slow.cr = control(4);
-    fast.period = 0xFFFF_FFFF;
-    slow.period = 0xFFFF_FFFF;
+    fast.period.set(.live, 0xFFFF_FFFF);
+    slow.period.set(.live, 0xFFFF_FFFF);
     _ = fast.tick();
     _ = slow.tick();
     try testing.expect(slow.cnt < fast.cnt);
@@ -108,8 +108,8 @@ test "a slowed channel overflows later than an undivided one" {
     var slow = gpt.Channel{};
     fast.cr = control(0);
     slow.cr = control(3);
-    fast.period = 0x0001_0000;
-    slow.period = 0x0001_0000;
+    fast.period.set(.live, 0x0001_0000);
+    slow.period.set(.live, 0x0001_0000);
     var index: usize = 0;
     while (index < 8) : (index += 1) {
         _ = fast.tick();
@@ -121,7 +121,7 @@ test "a slowed channel overflows later than an undivided one" {
 test "a stopped channel counts at no source at all" {
     var channel = gpt.Channel{};
     channel.cr = 0;
-    channel.period = 0xFFFF;
+    channel.period.set(.live, 0xFFFF);
     try testing.expectEqual(@as(u32, 0), channel.tick());
     try testing.expectEqual(@as(u32, 0), channel.cnt);
 }
@@ -131,8 +131,8 @@ test "an unnamed encoding counts at the undivided rate" {
     var unnamed = gpt.Channel{};
     named.cr = control(0);
     unnamed.cr = control(12);
-    named.period = 0xFFFF_FFFF;
-    unnamed.period = 0xFFFF_FFFF;
+    named.period.set(.live, 0xFFFF_FFFF);
+    unnamed.period.set(.live, 0xFFFF_FFFF);
     _ = named.tick();
     _ = unnamed.tick();
     try testing.expectEqual(named.cnt, unnamed.cnt);

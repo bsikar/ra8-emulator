@@ -48,13 +48,15 @@ pub const off = struct {
     pub const gtst: u32 = 0x3C;
     pub const gtcnt: u32 = 0x48;
     pub const gtpr: u32 = 0x64;
+    pub const gtpbr: u32 = 0x68;
 };
 
 /// The words this model interprets, as opposed to the rest of the window it
 /// only shadows.
 const cells = [_]u32{
-    off.gtstr, off.gtstp, off.gtclr, off.gtcr,
-    off.gtst,  off.gtcnt, off.gtpr,  buf.off.gtber,
+    off.gtstr,     off.gtstp, off.gtclr, off.gtcr,
+    off.gtst,      off.gtcnt, off.gtpr,  off.gtpbr,
+    buf.off.gtber,
 };
 
 /// The register a byte offset belongs to, so a narrow store lands on the

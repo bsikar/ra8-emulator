@@ -33,12 +33,18 @@
 //! reloads at the trough here and nothing pretends to know what the crest
 //! variants do differently.
 //!
+//! THE PERIOD IS NOT HERE. GTPBR (+0x68) and the live GTPR are a pair of
+//! their own and live in src/periph/gpt_period.zig, which hands the parked
+//! period over at the same cycle end this file hands the compares over. That
+//! transfer is unconditional, because the HAL documents the reload with no
+//! enable and no bit position for GTBER's period field exists in either
+//! tree; the reasoning is in that file's header.
+//!
 //! NOT MODELLED, AND NOT GUESSED: double buffering, which is the upper bit of
 //! each GTBER pair, so a pair selecting it gets the single-buffer transfer
-//! rather than an invented two-deep queue; GTBER's period and dead-time
-//! buffer fields, along with GTPBR (+0x68) and GTPDBR (+0x6C), so a buffered
-//! PERIOD still does not arrive; and the buffer-transfer skipping in GTITC,
-//! which nothing in either tree programs.
+//! rather than an invented two-deep queue; GTBER's dead-time buffer field and
+//! GTPDBR (+0x6C), the period double buffer; and the buffer-transfer skipping
+//! in GTITC, which nothing in either tree programs.
 const std = @import("std");
 
 const compare = @import("gpt_compare.zig");

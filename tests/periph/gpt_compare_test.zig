@@ -9,7 +9,7 @@ const gpt = ra8.periph.gpt;
 /// A channel started with a period, so a test only has to say what to compare.
 fn running(period: u32) gpt.Channel {
     var channel = gpt.Channel{};
-    channel.period = period;
+    channel.period.set(.live, period);
     channel.cr = gpt.control.cst;
     return channel;
 }
@@ -131,7 +131,7 @@ test "a compare is still reached on the chunk the counter wraps in" {
 
 test "a stopped channel compares nothing" {
     var channel = gpt.Channel{};
-    channel.period = 0xFFFF;
+    channel.period.set(.live, 0xFFFF);
     channel.compares.set(.a, 0x10);
     try std.testing.expectEqual(@as(u32, 0), channel.tick());
     try std.testing.expect(channel.st & gpt.status.tcfa == 0);
@@ -139,7 +139,7 @@ test "a stopped channel compares nothing" {
 
 test "GTST clears a compare flag by writing the word back with the bit zero" {
     var unit = gpt.Gpt.init();
-    unit.channels[0].period = 0xFFFF;
+    unit.channels[0].period.set(.live, 0xFFFF);
     unit.channels[0].cr = gpt.control.cst;
     unit.channels[0].compares.set(.a, 0x10);
     unit.tick();

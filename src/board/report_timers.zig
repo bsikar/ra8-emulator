@@ -150,6 +150,7 @@ fn pwm(board: *Board, out: Writer) !void {
         );
         try pwmSource(index, channel.source(), out);
         try pwmCompares(index, &channel.compares, out);
+        try pwmPeriod(index, &channel.period, out);
         try pwmProtection(index, &channel.guard, out);
     }
 }
@@ -172,6 +173,24 @@ fn pwmCompares(index: usize, pair: *const gpt.match.Pair, out: Writer) !void {
         "GPT{d}: compare A 0x{X:0>8} matched {d} time(s), B 0x{X:0>8} matched {d} time(s)\n",
         .{ index, pair.value(.a), pair.matches(.a), pair.value(.b), pair.matches(.b) },
     );
+}
+
+/// GTPBR, the period parked to become the live one at the next cycle end.
+/// Only a channel that parked one says anything, and the line worth reading is
+/// a runtime period change: parking the buffer is the only way the HAL moves
+/// the period of a channel that is already counting.
+fn pwmPeriod(index: usize, parked: *const gpt.periods.Period, out: Writer) !void {
+    if (!parked.parked) return;
+    try out.print(
+        "GPT{d}: GTPBR 0x{X:0>8}, {d} buffer load(s), {d} moved the period\n",
+        .{ index, parked.buffer, parked.loads, parked.changes },
+    );
+    if (parked.loads == 0) {
+        try out.print(
+            "GPT{d}: the parked period never arrived, no counting cycle ended\n",
+            .{index},
+        );
+    }
 }
 
 /// GTWP, but only when the protection actually cost a store. A shut channel
