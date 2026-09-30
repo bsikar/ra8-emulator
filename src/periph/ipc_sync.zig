@@ -27,6 +27,24 @@
 //! read down here and drops every write, so a driver spinning on
 //! ra8_ipc_sem_take_timeout gets 0 forever and always wins.
 //!
+//! A READ THAT CANNOT CARRY LOCK CANNOT TAKE IT. LOCK is bit 0, so it lives
+//! in the lowest byte of the word and an access that does not name that byte
+//! carries none of it. The take used to fire on any read landing anywhere in
+//! a semaphore's word, and the caller above then cut the answer down to the
+//! lanes the access named, which above bit 0 is nothing. So a byte read at
+//! IPCSEM0+1 took a lock that was free and answered 0, and 0 is precisely
+//! what ra8_ipc_sem_try_take reads as "we just acquired": the probe took the
+//! lock and the next honest claimant was told it had won a lock somebody
+//! else was holding. TWO WINNERS, which is the exact failure this file's
+//! read side effect exists to make visible rather than to manufacture. Now
+//! an access that names no part of LOCK takes nothing, is counted, and reads
+//! back zero, leaving the lock where it stood.
+//!
+//! THE WRITE SIDE ALREADY HAD THIS RIGHT, the same way sci.zig's TDR did
+//! before its read side was fixed: release() tests `value & sem.lock`, so a
+//! byte store of 1 at IPCSEM0+1 arrives merged as 0x0100 and releases
+//! nothing. Only the read direction was missing the rule.
+//!
 //! NOT MODELLED, AND NOT GUESSED: IPCSAR / IPCPAR, the security and
 //! privilege attribution for these registers, which live in CPSCU at
 //! 0x4000_8610 and not in this window. An NMI a core raises at itself is
@@ -73,10 +91,13 @@ pub const Semaphore = struct {
     releases: u32 = 0,
     /// Writes of a one at a lock nobody held.
     stray_releases: u32 = 0,
+    /// Reads that named no part of LOCK, so they took nothing.
+    unnamed_reads: u32 = 0,
 
     pub fn quiet(self: *const Semaphore) bool {
         return !self.locked and self.takes == 0 and self.contentions == 0 and
-            self.releases == 0 and self.stray_releases == 0;
+            self.releases == 0 and self.stray_releases == 0 and
+            self.unnamed_reads == 0;
     }
 
     /// The read: hand back the value as it stood, then set LOCK regardless.
@@ -196,12 +217,22 @@ pub const Sync = struct {
 
     /// The read side. Returns null for an offset this file does not own, so
     /// the caller falls through to its shadow.
-    pub fn read(self: *Sync, offset: u32) ?u32 {
+    ///
+    /// `named` is the bits of the word the access actually reaches, which
+    /// decides whether a semaphore read is a take at all: LOCK is bit 0 and
+    /// an access that does not name it cannot carry it either way.
+    pub fn read(self: *Sync, offset: u32, named: u32) ?u32 {
         const target = decode(offset) orelse return null;
         return switch (target) {
-            .semaphore => |index| switch (self.semaphores[index].take()) {
-                .won => 0,
-                .contended => sem.lock,
+            .semaphore => |index| blk: {
+                if (named & sem.lock == 0) {
+                    self.semaphores[index].unnamed_reads +%= 1;
+                    break :blk 0;
+                }
+                break :blk switch (self.semaphores[index].take()) {
+                    .won => 0,
+                    .contended => sem.lock,
+                };
             },
             .nmi_status => |unit| self.doorbells[unit].status(),
             // SET and CLR are actions; a read of one finds nothing behind it.
