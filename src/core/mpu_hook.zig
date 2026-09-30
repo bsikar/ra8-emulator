@@ -22,7 +22,7 @@
 //! free; only the banked pairs are put back.
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
-const mpu = @import("../periph/mpu.zig");
+const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 
 pub const Error = error{AttachFailed};

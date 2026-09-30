@@ -5,15 +5,15 @@
 //!
 //! The controller knows about transfers, not about parts. Which parts a board
 //! populates is a board fact, so it lives here rather than in riic.zig.
-const bus = @import("../periph/riic_bus.zig");
-const gt911 = @import("../periph/i3c_gt911.zig");
-const i3c = @import("../periph/i3c.zig");
-const lsm6dso = @import("../periph/i3c_lsm6dso.zig");
-const max17048 = @import("../periph/i3c_max17048.zig");
-const ov5640 = @import("../periph/riic_ov5640.zig");
+const bus = @import("../periph/riic/riic_bus.zig");
+const gt911 = @import("../periph/i3c/i3c_gt911.zig");
+const i3c = @import("../periph/i3c/i3c.zig");
+const lsm6dso = @import("../periph/i3c/i3c_lsm6dso.zig");
+const max17048 = @import("../periph/i3c/i3c_max17048.zig");
+const ov5640 = @import("../periph/riic/riic_ov5640.zig");
 const periph = @import("../periph/registry.zig");
-const pi4ioe = @import("../periph/riic_pi4ioe.zig");
-const riic = @import("../periph/riic.zig");
+const pi4ioe = @import("../periph/riic/riic_pi4ioe.zig");
+const riic = @import("../periph/riic/riic.zig");
 
 pub const Wire = struct {
     controller: riic.Riic = riic.Riic.init(),

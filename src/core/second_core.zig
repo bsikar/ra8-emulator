@@ -55,7 +55,7 @@ const sau = @import("../periph/sau.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
-const report_cores = @import("../board/report_cores.zig");
+const report_cores = @import("../interfaces/cli/report_cores.zig");
 const Engine = engine.Engine;
 
 pub const limits = struct {

@@ -32,10 +32,10 @@
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
-const mpu = @import("../periph/mpu.zig");
-const mpu_fault = @import("../periph/mpu_fault.zig");
-const escalate = @import("../periph/mpu_escalate.zig");
-const background = @import("../periph/mpu_background.zig");
+const mpu = @import("../periph/mpu/mpu.zig");
+const mpu_fault = @import("../periph/mpu/mpu_fault.zig");
+const escalate = @import("../periph/mpu/mpu_escalate.zig");
+const background = @import("../periph/mpu/mpu_background.zig");
 
 /// uc_ctl packs the direction into the control word's top two bits, and the
 /// header only offers it as a macro (UC_CTL_WRITE), which does not survive

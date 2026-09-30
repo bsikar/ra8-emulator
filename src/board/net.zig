@@ -4,12 +4,12 @@
 //! Which ports exist and where their PHYs answer is a board fact, so the
 //! wiring lives here rather than in the port model.
 const engine = @import("../core/engine.zig");
-const eth = @import("../periph/eth.zig");
-const eth_queue = @import("../periph/eth_queue.zig");
-const gateway = @import("../periph/eth_gateway.zig");
+const eth = @import("../periph/eth/eth.zig");
+const eth_queue = @import("../periph/eth/eth_queue.zig");
+const gateway = @import("../periph/eth/eth_gateway.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const periph = @import("../periph/registry.zig");
-const regs = @import("../periph/eth_regs.zig");
+const regs = @import("../periph/eth/eth_regs.zig");
 
 pub const Rswitch = struct {
     ports: [regs.cluster.port_count]eth.Port = .{

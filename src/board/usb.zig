@@ -5,7 +5,7 @@
 //! other: this controller is the host half of that loop. Whether a device is
 //! on the other end is a board fact, so it is set here.
 const periph = @import("../periph/registry.zig");
-const usbhs = @import("../periph/usbhs.zig");
+const usbhs = @import("../periph/usbhs/usbhs.zig");
 
 pub const Usb = struct {
     host: usbhs.Host = .{},
