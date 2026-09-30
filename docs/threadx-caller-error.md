@@ -157,3 +157,67 @@ The boot burst (guard 84, a thread body running with a null `current_ptr`) may
 be the same fault one step earlier, since a null `current_ptr` is what the wait
 loop writes when `execute_ptr` reads 0. Do not assume one fix covers both until
 that is shown.
+
+## The unpaired increment, located by tally
+
+Measured on `threadx_blink` at 2000 ms, watching
+`_tx_thread_preempt_disable`. The word takes 920 stores. Tallied by the
+pair (pc, value) rather than read off the two ends of the list:
+
+    452 store(s) of 0x00000001 from _tx_thread_sleep+0xAE
+    451 store(s) of 0x00000000 from _tx_thread_system_suspend+0x54
+      4 store(s) of 0x00000001 from _tx_thread_system_resume+0x3A
+      2 store(s) of 0x00000002 from _txe_thread_create+0x42
+      2 store(s) of 0x00000001 from _txe_thread_create+0xF0
+      2 store(s) of 0x00000002 from _tx_thread_create+0x130
+      2 store(s) of 0x00000002 from _tx_thread_timeout+0x2C
+      1 store(s) of 0x00000000 from Reset_Handler+0x6E
+
+Exactly one sleep incremented the flag and its suspend never wrote the
+decrement back. That is the whole of the floor of 1, and it is one store
+missing out of 920, which is why no length of list found it.
+
+Two things this rules out, both of which had looked plausible.
+
+Boot is clean. `_tx_initialize_kernel_enter+0x26` sets the flag to 1
+once, and a store of 0 from pc 0x02000206 (the port's
+`_tx_thread_schedule`, which carries no sized symbol, the same as
+`__tx_ts_wait`) clears it before the threads run. The assembly means to
+do exactly that: `tx_thread_schedule.S:86` builds the address and the
+next instruction stores zero, commented "Clear the preempt-disable flag
+to enable rescheduling after initialization". So the flag really is 0
+when thread A takes its first sleep, and 452 sleeps got through.
+
+The wait loop is not stuck. At the end of the same run
+`_tx_thread_execute_ptr` and `_tx_thread_current_ptr` both read
+0x220008F8, thread B. `__tx_ts_wait` loaded the execute pointer and
+stored it into the current pointer, which is its whole job, so it left.
+The 47% of boundary samples at 0x0200029C is where boundaries land, not
+a machine parked there. The earlier note pointing at that loop is
+superseded by this measurement.
+
+What is left is a deadlock with a named mechanism. Thread A is stranded
+inside `_tx_thread_system_suspend`, past the increment in
+`_tx_thread_sleep` and short of the decrement at suspend+0x54. Nothing
+can resume A without a context switch, and `tx_timer_interrupt.S:222`
+reads the flag and skips issuing PendSV whenever it is non-zero:
+
+    BL      _tx_thread_time_slice
+    LDR     r0, =_tx_thread_preempt_disable
+    LDR     r1, [r0]
+    CBNZ    r1, __tx_timer_skip_time_slice
+
+So the one stranded suspend holds the flag at 1, the flag stops every
+later PendSV, and the run keeps thread B spinning on a sleep that
+`tx_thread_sleep.c:133` refuses because the flag is non-zero. Both
+observed effects follow from one missing store.
+
+The open question is narrow now: what took control away from thread A
+between `_tx_thread_sleep+0xAE` and `_tx_thread_system_suspend+0x54`,
+and why it never came back. That window is interruptible by design
+(sleep restores PRIMASK at 0x020022AE before calling suspend at
+0x020022B6), so an exception there is ordinary and hardware finishes the
+call afterwards. This model takes exceptions only at chunk boundaries,
+so the next measurement to make is whether a boundary switch lands in
+that window more readily than hardware would, and whether the frame it
+stacks for A is one A can ever return on.
