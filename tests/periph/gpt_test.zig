@@ -10,7 +10,10 @@ const ch1 = gpt.win_base + gpt.stride;
 
 fn started(unit: *gpt.Gpt, base: u32, period: u32) void {
     unit.write(base + gpt.off.gtpr, 4, period);
-    unit.write(base + gpt.off.gtstr, 4, 1);
+    // CSTRTn is channel-indexed, so starting this channel means naming its
+    // own bit, whichever window the store goes through.
+    const index = (base - gpt.win_base) / gpt.stride;
+    unit.write(base + gpt.off.gtstr, 4, @as(u32, 1) << @intCast(index));
 }
 
 test "a reset channel is stopped, empty and silent" {
@@ -137,10 +140,33 @@ test "a halfword store lands on its own half of the period" {
     try std.testing.expectEqual(@as(u32, 0xABCD_5678), unit.read(ch0 + gpt.off.gtpr, 4));
 }
 
-test "a start request in the wrong lane of GTSTR changes nothing" {
+test "a byte store one in from GTSTR names the upper channels" {
     var unit = gpt.Gpt.init();
     unit.write(ch0 + gpt.off.gtstr + 1, 1, 0xFF);
+    // Lane 1 carries bits 8..15, so channel 0 is untouched and 8..13 start.
     try std.testing.expect(!unit.channels[0].running());
+    try std.testing.expect(unit.channels[8].running());
+    try std.testing.expect(unit.channels[13].running());
+    try std.testing.expectEqual(@as(u32, 6), unit.sync.acted);
+    // Bits 14 and 15 name channels this bank does not carry.
+    try std.testing.expectEqual(@as(u32, 2), unit.sync.absent);
+}
+
+test "one store starts three channels on the same edge" {
+    var unit = gpt.Gpt.init();
+    // What ra8_gpt_three_phase_open does: one masked GTSTR store through the
+    // U channel's window for U, V and W.
+    unit.write(ch0 + gpt.off.gtstr, 4, 0b111);
+    try std.testing.expect(unit.channels[0].running());
+    try std.testing.expect(unit.channels[1].running());
+    try std.testing.expect(unit.channels[2].running());
+    try std.testing.expectEqual(@as(u32, 1), unit.sync.together);
+    // And the close path stops the same three with one GTSTP store.
+    unit.write(ch0 + gpt.off.gtstp, 4, 0b111);
+    try std.testing.expect(!unit.channels[0].running());
+    try std.testing.expect(!unit.channels[1].running());
+    try std.testing.expect(!unit.channels[2].running());
+    try std.testing.expectEqual(@as(u32, 2), unit.sync.together);
 }
 
 test "a block answers on its own window and nowhere else" {
