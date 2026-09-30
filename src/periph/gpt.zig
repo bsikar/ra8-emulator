@@ -88,6 +88,7 @@ const compare = @import("gpt_compare.zig");
 const lk = @import("gpt_lock.zig");
 const win = @import("gpt_window.zig");
 const md = @import("gpt_mode.zig");
+const prd = @import("gpt_period.zig");
 const periph = @import("registry.zig");
 
 /// The compare pair, reached as `gpt.match` the way the other split blocks in
@@ -119,6 +120,9 @@ pub const win_span: u32 = stride * @as(u32, channels);
 /// from the window so callers reach it as `gpt.off` the way they always did.
 pub const off = win.off;
 
+/// GTPR and its buffer GTPBR live in src/periph/gpt_period.zig.
+pub const periods = prd;
+
 /// GTCR: the count-start bit. The rest of the register's fields live in
 /// gpt_clock.zig, which reads the prescaler out of it.
 pub const control = struct {
@@ -147,8 +151,9 @@ pub const event = struct {
 /// wedged.
 pub const step_per_tick: u32 = 0x0000_4001;
 
-/// GTPR = 0 counts to the 16-bit wrap, as dev does.
-pub const default_period: u32 = 0xFFFF;
+/// GTPR = 0 counts to the 16-bit wrap, as dev does. The rule lives with the
+/// register in gpt_period.zig.
+pub const default_period: u32 = prd.default;
 
 /// At most one event per boundary, from channel 0.
 pub const Due = std.BoundedArray(u16, 1);
@@ -157,7 +162,7 @@ pub const Due = std.BoundedArray(u16, 1);
 /// shadow for every register this model does not interpret.
 pub const Channel = struct {
     cnt: u32 = 0,
-    period: u32 = 0,
+    period: prd.Period = .{},
     cr: u32 = 0,
     st: u32 = 0,
     shadow: [stride]u8 = @splat(0),
@@ -186,7 +191,7 @@ pub const Channel = struct {
 
     /// The period a zero GTPR stands for.
     pub fn periodOrDefault(self: Channel) u32 {
-        return if (self.period == 0) default_period else self.period;
+        return self.period.span();
     }
 
     /// One chunk of counting, in the shape GTCR.MD selects. Returns how many
@@ -210,7 +215,7 @@ pub const Channel = struct {
         }
         if (moved.halted) self.cr &= ~control.cst;
         self.st |= self.matched(kind, before, moved, period);
-        if (endedCycle(kind, moved)) self.reload();
+        if (md.endedCycle(kind, moved)) self.reload();
         return moved.peaks;
     }
 
@@ -221,6 +226,7 @@ pub const Channel = struct {
     fn reload(self: *Channel) void {
         if (self.buffered.take(.a)) |value| self.compares.load(.a, value);
         if (self.buffered.take(.b)) |value| self.compares.load(.b, value);
+        self.period.reload();
     }
 
     /// The compare flags this chunk raised. A saw chunk is an up-count and is
@@ -242,10 +248,13 @@ pub const Channel = struct {
             const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
             return win.lane(self.buffered.value(side), local - base);
         }
+        if (prd.which(local)) |part| {
+            const base = if (part == .live) prd.off.gtpr else prd.off.gtpbr;
+            return win.lane(self.period.value(part), local - base);
+        }
         return switch (win.cellOf(local)) {
             buf.off.gtber => win.lane(self.buffered.ber, local - buf.off.gtber),
             off.gtcnt => win.lane(self.cnt, local - off.gtcnt),
-            off.gtpr => win.lane(self.period, local - off.gtpr),
             off.gtcr => win.lane(self.cr, local - off.gtcr),
             off.gtst => win.lane(self.st, local - off.gtst),
             else => self.shadow[local],
@@ -263,10 +272,14 @@ pub const Channel = struct {
             self.buffered.set(side, win.merge(self.buffered.value(side), local - base, byte));
             return;
         }
+        if (prd.which(local)) |part| {
+            const base = if (part == .live) prd.off.gtpr else prd.off.gtpbr;
+            self.period.set(part, win.merge(self.period.value(part), local - base, byte));
+            return;
+        }
         switch (win.cellOf(local)) {
             buf.off.gtber => self.buffered.ber = win.merge(self.buffered.ber, local - buf.off.gtber, byte),
             off.gtcnt => self.cnt = win.merge(self.cnt, local - off.gtcnt, byte),
-            off.gtpr => self.period = win.merge(self.period, local - off.gtpr, byte),
             off.gtcr => self.cr = win.merge(self.cr, local - off.gtcr, byte),
             // GTST is cleared by writing the word back with the target bits
             // zero, so a store can only take bits away.
@@ -297,14 +310,6 @@ pub const Channel = struct {
         return self.overflows == 0 and self.underflows == 0 and !self.running();
     }
 };
-
-/// Did this chunk finish a counting cycle? A saw's cycle ends where it wraps
-/// and a one-shot's at the single peak that stops it, both of which are a
-/// peak; a triangle's ends where it comes back to zero, which is a trough.
-fn endedCycle(kind: md.Mode, moved: md.Step) bool {
-    if (kind.symmetric()) return moved.troughs != 0;
-    return moved.peaks != 0;
-}
 
 pub const Gpt = struct {
     channels: [channels]Channel = @splat(.{}),

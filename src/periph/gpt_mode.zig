@@ -153,3 +153,13 @@ pub fn visited(before: u32, step: Step, period: u32) Span {
         .hi = if (step.peaks != 0) period else @max(before, step.cnt),
     };
 }
+
+/// Did this chunk finish a counting cycle? A saw's cycle ends where it wraps
+/// and a one-shot's at the single peak that stops it, both of which are a
+/// peak; a triangle's ends where it comes back to zero, which is a trough.
+/// The end of a cycle is when a channel takes up its buffered compares and
+/// its buffered period.
+pub fn endedCycle(kind: Mode, moved: Step) bool {
+    if (kind.symmetric()) return moved.troughs != 0;
+    return moved.peaks != 0;
+}
