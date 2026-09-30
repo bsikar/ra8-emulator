@@ -54,6 +54,27 @@
 //! the whole corpus because every single-channel start in the set is on
 //! channel 0. A model that acted on the window would go on hiding it.
 //!
+//! THE SHAPE OF THAT BUG IS WORTH COUNTING, because it is invisible in the
+//! report otherwise. A store made with per-window intent always names its
+//! own channel; a store made with bank-wide intent through channel 0's
+//! window names channel 0 among the rest. So a store that names some
+//! channel but NOT the window it came through is neither: it is a per-window
+//! write whose author thought the register was per-window. `ra8_gpt_deinit`
+//! is exactly that (ra8_gpt.c lines 373..376):
+//!
+//!     reg->GTWP  = k_ra8_gtwp_key_unlock;
+//!     reg->GTSTP = k_ra8_gpt_gtstp_stop;      /* 0x1 == CSTOP0 */
+//!     reg->GTCR  = 0U;
+//!
+//! where `reg` is channel N's window. The bare 0x1 stops channel 0, not
+//! channel N; channel N is stopped anyway by the `GTCR = 0` on the next
+//! line, so the only lasting effect is that tearing down any channel
+//! silently stops channel 0 too. `stray` counts those, and the report says
+//! so, which turns a silent firmware bug into a printed line. It stays a
+//! count and not a refusal: the store really does act on the channels it
+//! names, and the model's job here is to say what happened, not to correct
+//! the firmware's arithmetic.
+//!
 //! NOT MODELLED, AND NOT GUESSED: what these registers read back. On the
 //! part they answer with the counting state of each channel; nothing in the
 //! HAL ever reads one, and this tree carries no page for the read value, so
@@ -102,16 +123,26 @@ pub const Sync = struct {
     together: u32 = 0,
     /// Bits naming a channel this bank does not carry.
     absent: u32 = 0,
+    /// Accesses that named a channel but not the window they came through,
+    /// the per-window-intent bug described in the header.
+    stray: u32 = 0,
 
     pub fn quiet(self: *const Sync) bool {
-        return self.acted == 0 and self.together == 0 and self.absent == 0;
+        return self.acted == 0 and self.together == 0 and
+            self.absent == 0 and self.stray == 0;
     }
 };
 
 /// Take one access and act on every channel it names. `channels` is the
 /// bank's own array. What a bit does lives here rather than on the channel,
 /// so the whole CSTRTn rule reads in one place.
-pub fn dispatch(state: *Sync, action: Action, bits: u32, channels: anytype) void {
+pub fn dispatch(
+    state: *Sync,
+    action: Action,
+    bits: u32,
+    window: usize,
+    channels: anytype,
+) void {
     var named: u32 = 0;
     for (channels, 0..) |*channel, index| {
         if (bits & (@as(u32, 1) << @intCast(index)) == 0) continue;
@@ -126,4 +157,6 @@ pub fn dispatch(state: *Sync, action: Action, bits: u32, channels: anytype) void
     if (named > 1) state.together +%= 1;
     const present: u32 = (@as(u32, 1) << @intCast(channels.len)) - 1;
     state.absent +%= @popCount(bits & ~present);
+    const own: u32 = @as(u32, 1) << @intCast(window);
+    if (bits != 0 and bits & own == 0) state.stray +%= 1;
 }

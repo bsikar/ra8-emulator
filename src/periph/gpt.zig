@@ -363,7 +363,7 @@ pub const Gpt = struct {
         // names rather than on the window it came through.
         if (sync.which(local)) |action| {
             const bits = sync.carried(local - sync.base(action), width, value);
-            sync.dispatch(&self.sync, action, bits, &self.channels);
+            sync.dispatch(&self.sync, action, bits, offset / stride, &self.channels);
             return;
         }
         var index: u32 = 0;
