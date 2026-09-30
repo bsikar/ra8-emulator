@@ -54,6 +54,7 @@ const std = @import("std");
 const periph = @import("registry.zig");
 const clock = @import("rtc_clock.zig");
 const reset = @import("rtc_reset.zig");
+const frequency = @import("rtc_frequency.zig");
 
 /// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -86,6 +87,9 @@ pub const off = struct {
 
 /// The RCR2 rule: which bits mean what, and the reset that auto-clears.
 pub const software_reset = reset;
+
+/// The RFRH/RFRL pair and the two ordering rules that govern it.
+pub const freq = frequency;
 
 /// RCR1 interrupt enables and the RCR2 run bit.
 pub const control = struct {
@@ -139,6 +143,8 @@ pub const Rtc = struct {
     refused_read_only: u32 = 0,
     /// Software resets RCR2.RESET asked for and this model performed.
     resets: u32 = 0,
+    /// The frequency registers and what the run made of their two rules.
+    divisor: frequency.Frequency = .{},
     due_alarm: bool = false,
     due_periodic: bool = false,
 
@@ -151,7 +157,7 @@ pub const Rtc = struct {
     pub fn quiet(self: *const Rtc) bool {
         return self.seconds == 0 and self.matches == 0 and self.periodics == 0 and
             self.refused_running == 0 and self.refused_read_only == 0 and
-            self.resets == 0;
+            self.resets == 0 and self.divisor.quiet();
     }
 
     pub fn running(self: *const Rtc) bool {
@@ -229,6 +235,11 @@ pub const Rtc = struct {
             if (reset.requested(byte)) self.softwareReset();
             return false;
         }
+        if (frequency.names(offset)) {
+            self.divisor.note(offset, self.running());
+            self.reg[offset] = byte;
+            return false;
+        }
         if (!isCalendar(offset)) {
             self.reg[offset] = byte;
             return false;
@@ -249,6 +260,7 @@ pub const Rtc = struct {
         self.resets +%= 1;
         self.r64 = 0;
         self.reg[off.r64cnt] = 0;
+        self.divisor.clear();
     }
 
     /// Publish the binary time into the BCD counters firmware reads.

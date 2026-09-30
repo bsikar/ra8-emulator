@@ -199,6 +199,7 @@ pub const periph = struct {
     pub const riic_target = @import("periph/riic_target.zig");
     pub const rtc = @import("periph/rtc.zig");
     pub const rtc_clock = @import("periph/rtc_clock.zig");
+    pub const rtc_frequency = @import("periph/rtc_frequency.zig");
     pub const rtc_reset = @import("periph/rtc_reset.zig");
     pub const rtt = @import("periph/rtt.zig");
     pub const rtt_block = @import("periph/rtt_block.zig");

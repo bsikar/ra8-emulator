@@ -42,4 +42,16 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.refused_read_only},
         );
     }
+    if (unit.divisor.hot_stores != 0) {
+        try out.print(
+            "RTC: {d} frequency register store(s) taken with the prescaler running\n",
+            .{unit.divisor.hot_stores},
+        );
+    }
+    if (unit.divisor.out_of_order != 0) {
+        try out.print(
+            "RTC: {d} RFRL store(s) with RFRH untouched since reset\n",
+            .{unit.divisor.out_of_order},
+        );
+    }
 }
