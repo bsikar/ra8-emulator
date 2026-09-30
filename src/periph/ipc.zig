@@ -62,7 +62,9 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 const lanes = @import("lanes.zig");
+const prcr = @import("prcr.zig");
 const sync = @import("ipc_sync.zig");
+const attr = @import("ipc_attr.zig");
 
 /// IPC geometry (ra8_ipc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -215,6 +217,7 @@ pub const Channel = struct {
 /// The semaphore and NMI half of the block, re-exported so a caller
 /// reaches it the way it reaches the channels.
 pub const synchro = sync;
+pub const attribution = attr;
 
 /// Where an offset in the window lands.
 const Slot = struct { index: usize, reg: u32 };
@@ -233,13 +236,31 @@ pub const Ipc = struct {
     wakes: u32 = 0,
     /// ISET stores on a channel whose receiving core this build does not run.
     undelivered: u32 = 0,
+    /// IPCSAR / IPCPAR, which say whether a channel was given to the
+    /// Non-Secure world. They live in CPSCU rather than this window, so
+    /// they are a block of their own; they are held here because they
+    /// attribute these channels and nothing else.
+    attrib: attr.Attribution = .{},
 
     pub fn init() Ipc {
         return .{};
     }
 
+    /// Hand the attribution pair the protection model, without which it
+    /// cannot tell whether PRC4 was open and so accepts nothing.
+    pub fn protect(self: *Ipc, protection: *const prcr.Prcr) void {
+        self.attrib = attr.Attribution.init(protection);
+    }
+
+    /// The CPSCU window that attributes these channels, offered separately
+    /// because it is nowhere near this block's base.
+    pub fn attributionBlock(self: *Ipc) periph.Block {
+        return self.attrib.block();
+    }
+
     pub fn quiet(self: *const Ipc) bool {
         if (self.wakes != 0 or self.undelivered != 0) return false;
+        if (!self.attrib.quiet()) return false;
         if (!self.locks.quiet()) return false;
         for (&self.channels) |*unit| {
             if (!unit.quiet()) return false;

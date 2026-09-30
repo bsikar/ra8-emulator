@@ -247,4 +247,8 @@ fn attachProtected(self: *Board) !void {
         &self.heartbeat.armed,
     );
     try self.bus.add(self.causes.maskBlock());
+    // IPCSAR / IPCPAR are PRC4-gated and sit in CPSCU, nowhere near the
+    // mailbox window, so the mailbox offers them as a block of their own.
+    self.mailbox.protect(&self.protection);
+    try self.bus.add(self.mailbox.attributionBlock());
 }
