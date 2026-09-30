@@ -26,6 +26,7 @@
 const clocks = @import("../../periph/clocks.zig");
 const nvic = @import("../../periph/nvic.zig");
 const tally_mod = @import("../../debug/tally.zig");
+const taken_in_mod = @import("../../debug/taken_in.zig");
 const elf = @import("../../core/elf.zig");
 const symbols = @import("../../debug/symbols.zig");
 const idle = @import("../../core/idle.zig");
@@ -116,5 +117,34 @@ pub fn takenFrom(out: anytype, image: elf.Image, counted: tally_mod.Tally) !void
             "interrupts: and {d} entry(ies) from places that did not stay in the tally\n",
             .{counted.displaced},
         );
+    }
+}
+
+/// Every exception taken inside the function `--taken-in` named.
+///
+/// Printed whole, oldest first, with nothing dropped in the middle: this
+/// exists for the entry that happens once in a run, which is the one a
+/// tally cannot hold. A window that caught nothing says so, because "no
+/// exception was taken in there" is an answer and usually the surprising
+/// one.
+pub fn takenIn(out: anytype, image: elf.Image, spec: ?[]const u8, window: ?taken_in_mod.Window) !void {
+    const asked = spec orelse return;
+    const one = window orelse return;
+    try out.print(
+        "taken-in: {s} @0x{X:0>8}+0x{X}, {d} exception(s) taken inside\n",
+        .{ asked, one.base, one.size, one.seen },
+    );
+    for (one.kept()) |entry| {
+        try out.print(
+            "                  #{d} exception {d} at pc 0x{X:0>8}",
+            .{ entry.at, entry.number, entry.pc },
+        );
+        if (symbols.inside(image, entry.pc)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print("\n", .{});
+    }
+    if (one.missed() > 0) {
+        try out.print("                  and {d} more not kept\n", .{one.missed()});
     }
 }

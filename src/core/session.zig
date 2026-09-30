@@ -25,6 +25,7 @@ const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const tally = @import("../debug/tally.zig");
+const taken_in = @import("../debug/taken_in.zig");
 const functions = @import("../debug/functions.zig");
 
 /// Records the invalid access behind a fault.
@@ -98,6 +99,11 @@ pub const Session = struct {
     /// to issue a PendSV while it is up. This is how to ask how often an
     /// exception lands between the two.
     taken_from: ?*tally.Tally = null,
+
+    /// Every exception taken inside one named function, kept whole. The
+    /// tally above displaces its rarest row, which is exactly the entry a
+    /// once-per-run fault is. src/debug/taken_in.zig carries the rest.
+    taken_in: ?*taken_in.Window = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.

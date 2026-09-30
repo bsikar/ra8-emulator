@@ -24,6 +24,7 @@ test {
     _ = @import("debug/breakpoint_test.zig");
     _ = @import("debug/watchpoint_test.zig");
     _ = @import("debug/tally_test.zig");
+    _ = @import("debug/taken_in_test.zig");
     _ = @import("debug/place_test.zig");
     _ = @import("debug/registers_test.zig");
     _ = @import("debug/hotspots_test.zig");

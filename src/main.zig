@@ -22,6 +22,7 @@ const sd_format = ra8.periph.sd_format;
 const sd_advice = ra8.periph.sd_format_advice;
 const breakpoint = ra8.core.breakpoint;
 const watchpoint = ra8.core.watchpoint;
+const taken_in = ra8.core.taken_in;
 const mem_dump = ra8.core.mem_dump;
 const registers = ra8.core.registers;
 const sd_dump = ra8.periph.sd_dump;
@@ -122,6 +123,7 @@ pub fn main() !u8 {
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try core.attachWatchpoint(one);
+    var window = taken_in.resolve(image, options.taken_in_place);
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();
     try core.attachUndefined(&undefined_found);
@@ -150,15 +152,38 @@ pub fn main() !u8 {
         .pcs = &parts.pcs,
         .fns = &parts.fns.?,
         .taken_from = &parts.taken,
+        .taken_in = if (window) |*one| one else null,
     }, second);
 
-    try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
+    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
+    return verdict(out, core, options, fault, stop, point, timed, budget);
+}
+
+/// Everything a finished run prints, in the order it prints it.
+///
+/// Lifted out of `main` so the run's setup and the run's report are two
+/// functions rather than one over the length gate. The order is the
+/// contract: the board's own report first, then where the run spent
+/// itself, then the second core, then whatever was dumped by request.
+fn reportAll(
+    out: anytype,
+    core: engine.Engine,
+    board: *Board,
+    image: elf.Image,
+    options: cli.Options,
+    run: report_run.Tally,
+    parts: Parts,
+    second: ?*second_core.Second,
+    watched: ?watchpoint.Watched,
+    window: ?taken_in.Window,
+) !void {
+    try report_run.all(out, board, image, run);
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
     try report_timing.takenFrom(out, image, parts.taken);
+    try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);
-    try report_dumps.dumps(out, core, image, options, &board, watched);
-    return verdict(out, core, options, fault, stop, point, timed, budget);
+    try report_dumps.dumps(out, core, image, options, board, watched);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
