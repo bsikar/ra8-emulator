@@ -177,3 +177,58 @@ test "a triangle passing a compare on the way down still matches" {
     try testing.expectEqual(@as(u32, 2), channel.compares.matches(.a));
     try testing.expect(channel.st & gpt.status.tcfa != 0);
 }
+
+test "a channel whose MD never moved has nothing to log" {
+    var log = md.Log{};
+    // Byte stores that leave MD where it was: CST going up and down.
+    _ = log.note(control(0), control(0));
+    _ = log.note(control(0), 0);
+    try testing.expect(log.quiet());
+    try testing.expectEqual(@as(u32, 0), log.changes);
+    try testing.expect(!log.overwritten(.saw_pwm));
+}
+
+test "the first shape MD moves to is the one the channel asked for" {
+    var log = md.Log{};
+    _ = log.note(control(0), control(1));
+    try testing.expect(!log.quiet());
+    try testing.expectEqual(md.Mode.saw_one_shot, log.first.?);
+    try testing.expectEqual(@as(u32, 1), log.changes);
+    try testing.expect(!log.overwritten(.saw_one_shot));
+}
+
+test "a later store moving MD back is an overwrite, and the first shape stands" {
+    var log = md.Log{};
+    // ra8_gpt_init selects the one-shot, ra8_gpt_start_free_run writes
+    // GTCR = 0x00000001, which is CST with MD zero.
+    _ = log.note(control(0), control(1));
+    _ = log.note(control(1), control(0));
+    try testing.expectEqual(md.Mode.saw_one_shot, log.first.?);
+    try testing.expectEqual(@as(u32, 2), log.changes);
+    try testing.expect(log.overwritten(.saw_pwm));
+}
+
+test "a store that does not move MD is not a change" {
+    var log = md.Log{};
+    _ = log.note(control(0), control(4));
+    const before = log.changes;
+    // Three of the four byte stores of a word write leave MD alone.
+    _ = log.note(control(4), control(4));
+    _ = log.note(control(4), md.field.md & control(4));
+    try testing.expectEqual(before, log.changes);
+    try testing.expectEqual(md.Mode.triangle_pwm, log.first.?);
+}
+
+test "note hands the caller back the word it was given" {
+    var log = md.Log{};
+    try testing.expectEqual(control(1), log.note(control(0), control(1)));
+    try testing.expectEqual(@as(u32, 0), log.note(control(1), 0));
+}
+
+test "a channel left in the shape it first asked for is not overwritten" {
+    var log = md.Log{};
+    _ = log.note(control(0), control(6));
+    _ = log.note(control(6), control(6) & ~gpt.control.cst);
+    try testing.expectEqual(@as(u32, 1), log.changes);
+    try testing.expect(!log.overwritten(.triangle_pwm3));
+}

@@ -170,14 +170,28 @@ fn pwm(board: *Board, out: Writer) !void {
     for (&board.pwm.channels, 0..) |*channel, index| {
         if (channel.quiet()) continue;
         try out.print(
-            "GPT{d}: GTCNT 0x{X:0>8} of 0x{X:0>8}, {d} overflow(s), running={s}\n",
-            .{ index, channel.cnt, channel.periodOrDefault(), channel.overflows, yesno(channel.running()) },
+            "GPT{d}: GTCNT 0x{X:0>8} of 0x{X:0>8}, counting as {s}, {d} overflow(s), running={s}\n",
+            .{ index, channel.cnt, channel.periodOrDefault(), channel.shape().name(), channel.overflows, yesno(channel.running()) },
         );
+        try pwmShape(index, channel.shapes, channel.shape(), out);
         try pwmSource(index, channel.source(), out);
         try pwmCompares(index, &channel.compares, out);
         try pwmPeriod(index, &channel.period, out);
         try pwmProtection(index, &channel.guard, out);
     }
+}
+
+/// The shape a channel asked for against the one it ended up counting in.
+/// MD shares GTCR with CST, so a driver that starts a channel by writing the
+/// whole control word also rewrites the shape; this is the line that says the
+/// channel is not counting the way its own init configured it.
+fn pwmShape(index: usize, log: gpt.mode.Log, now: gpt.mode.Mode, out: Writer) !void {
+    if (!log.overwritten(now)) return;
+    const first = log.first orelse return;
+    try out.print(
+        "GPT{d}: MD FIRST SELECTED {s}, NOW {s} AFTER {d} CHANGE(S)\n",
+        .{ index, first.name(), now.name(), log.changes },
+    );
 }
 
 /// The clock GTCR.TPCS picked for this channel. An undivided channel says
