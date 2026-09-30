@@ -14,6 +14,9 @@
 //!
 //! The restart window, where an address written too early is dropped, is its
 //! own rule in riic_restart.zig.
+//!
+//! ICMR3's ACKBT write protection, the one bit in the file that needs its
+//! enable in force first, is its own rule in riic_ack.zig.
 const std = @import("std");
 const periph = @import("registry.zig");
 const bus = @import("riic_bus.zig");
@@ -21,6 +24,7 @@ const flag = @import("riic_flags.zig");
 const riic_target = @import("riic_target.zig");
 const access = @import("bytelanes.zig");
 const riic_restart = @import("riic_restart.zig");
+const riic_ack = @import("riic_ack.zig");
 
 pub const win_base = flag.win_base;
 pub const win_span = flag.win_span;
@@ -53,6 +57,8 @@ pub const Channel = struct {
     primed: bool = false,
     /// The restart window: RS standing, and the stores it swallowed.
     restart: riic_restart.Restart = .{},
+    /// ACKBT's write protection, and the stores it held off.
+    ack: riic_ack.Ack = .{},
 
     /// The responder half, live once ICSER arms an own address.
     target: riic_target.Target = .{},
@@ -84,7 +90,8 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.transfers == 0 and self.nacks == 0 and self.uninit == 0 and
             self.st_busy == 0 and self.rs_idle == 0 and self.no_start == 0 and
-            self.overread == 0 and self.restart.quiet() and self.target.quiet();
+            self.overread == 0 and self.restart.quiet() and self.ack.quiet() and
+            self.target.quiet();
     }
 
     /// ICE set and IICRST clear: the block is out of reset and clocked.
@@ -256,6 +263,10 @@ pub const Channel = struct {
         }
         if (!self.enabled()) {
             self.uninit += 1;
+            return;
+        }
+        if (offset == flag.reg.icmr3) {
+            self.shadow[offset] = self.ack.apply(self.shadow[offset], value);
             return;
         }
         self.shadow[offset] = value;

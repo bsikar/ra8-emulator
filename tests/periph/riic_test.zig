@@ -252,8 +252,19 @@ test "an unmodelled register reflects what was written to it" {
     var unit = riic.Riic.init();
     var expander = pi4ioe.Expander{};
     try armed(&unit, &expander);
-    unit.write(at(flag.reg.icmr3), 1, 0x3C);
-    try std.testing.expectEqual(@as(u32, 0x3C), unit.read(at(flag.reg.icmr3), 1));
+    unit.write(at(flag.reg.icmr3 + 1), 1, 0x3C);
+    try std.testing.expectEqual(@as(u32, 0x3C), unit.read(at(flag.reg.icmr3 + 1), 1));
+}
+
+test "the unprotected ICMR3 bits reflect what was written to them" {
+    var unit = riic.Riic.init();
+    var expander = pi4ioe.Expander{};
+    try armed(&unit, &expander);
+    unit.write(at(flag.reg.icmr3), 1, flag.icmr3.wait | flag.icmr3.rdrfs);
+    try std.testing.expectEqual(
+        @as(u32, flag.icmr3.wait | flag.icmr3.rdrfs),
+        unit.read(at(flag.reg.icmr3), 1),
+    );
 }
 
 test "an offset past the modelled register file answers zero" {

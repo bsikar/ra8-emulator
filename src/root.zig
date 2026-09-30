@@ -192,6 +192,7 @@ pub const periph = struct {
     pub const registry = @import("periph/registry.zig");
     pub const reset = @import("periph/reset.zig");
     pub const riic = @import("periph/riic.zig");
+    pub const riic_ack = @import("periph/riic_ack.zig");
     pub const riic_bus = @import("periph/riic_bus.zig");
     pub const riic_flags = @import("periph/riic_flags.zig");
     pub const riic_ov5640 = @import("periph/riic_ov5640.zig");
