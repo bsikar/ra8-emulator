@@ -82,6 +82,12 @@ pub fn blocks(board: *Board, out: Writer) !void {
                 },
             );
         }
+        if (board.dataops.refused() != 0) {
+            try out.print(
+                "DOC: {d} DODIR STORE(S) TOO NARROW TO CARRY AN OPERAND\n",
+                .{board.dataops.refused()},
+            );
+        }
     }
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try mipi.sections(board, out);
