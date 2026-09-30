@@ -155,7 +155,7 @@ test "reading past what the device staged is refused, not served as data" {
     // The sensor had one byte to say. dev kept RDRF up and served zeros.
     try std.testing.expectEqual(@as(u32, 0), unit.read(at(flag.reg.icdrr), 1) & flag.icsr2.rdrf);
     const channel = &unit.channels[flag.line_channel];
-    try std.testing.expectEqual(@as(u32, 1), channel.overread);
+    try std.testing.expectEqual(@as(u32, 1), channel.rx.overread);
     try std.testing.expectEqual(@as(u32, 0), unit.read(at(flag.reg.icsr2), 1) & flag.icsr2.rdrf);
 }
 

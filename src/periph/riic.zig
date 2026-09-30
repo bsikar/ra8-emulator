@@ -24,6 +24,8 @@ const flag = @import("riic_flags.zig");
 const riic_target = @import("riic_target.zig");
 const access = @import("bytelanes.zig");
 const riic_restart = @import("riic_restart.zig");
+const riic_stop = @import("riic_stop.zig");
+const riic_rx = @import("riic_rx.zig");
 const riic_ack = @import("riic_ack.zig");
 
 pub const win_base = flag.win_base;
@@ -32,10 +34,6 @@ pub const channel_stride = flag.channel_stride;
 pub const channel_count = flag.channel_count;
 pub const line_channel = flag.line_channel;
 pub const reg = flag.reg;
-
-/// Bytes a device may stage for one read. dev's own bound, and more than any
-/// modelled part has to say.
-pub const stage_bytes: usize = 64;
 
 /// One RIIC channel: the register shadow, the transfer in flight, and what
 /// the run should be told about the traffic it was given.
@@ -48,15 +46,11 @@ pub const Channel = struct {
     acked: bool = false,
     reading: bool = false,
     target_7b: u7 = 0,
-    /// What the addressed device staged for this read.
-    staged: [stage_bytes]u8 = .{0} ** stage_bytes,
-    staged_len: usize = 0,
-    served: usize = 0,
-    /// The controller-receive flow does one dummy ICDRR read to start the
-    /// clock before the first real byte (HUM Ch 39.3.4).
-    primed: bool = false,
+    /// The receive path: what the device staged and how much of it is out.
+    rx: riic_rx.Rx = .{},
     /// The restart window: RS standing, and the stores it swallowed.
     restart: riic_restart.Restart = .{},
+    stop: riic_stop.Stop = .{},
     /// ACKBT's write protection, and the stores it held off.
     ack: riic_ack.Ack = .{},
 
@@ -90,7 +84,7 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.transfers == 0 and self.nacks == 0 and self.uninit == 0 and
             self.st_busy == 0 and self.rs_idle == 0 and self.no_start == 0 and
-            self.overread == 0 and self.restart.quiet() and self.ack.quiet() and
+            self.rx.quiet() and self.restart.quiet() and self.ack.quiet() and self.stop.quiet() and
             self.target.quiet();
     }
 
@@ -105,12 +99,22 @@ pub const Channel = struct {
         self.addressed = false;
         self.acked = false;
         self.reading = false;
-        self.staged_len = 0;
-        self.served = 0;
-        self.primed = false;
+        self.rx.open();
         // The transmit buffer is empty so the driver can put the address
         // byte in it, and the previous phase's flags are not this one's.
         self.status = flag.icsr2.tdre;
+    }
+
+    /// A requested STOP waits while the frame still has a byte to hand over
+    /// or ICMR3.WAIT is still holding the clock.
+    fn stopHeld(self: *const Channel) bool {
+        return self.rx.holding() or
+            self.shadow[flag.reg.icmr3] & flag.icmr3.wait != 0;
+    }
+
+    /// Fire a requested STOP once nothing is holding it any more.
+    fn releaseStop(self: *Channel, registry: *bus.Registry) void {
+        if (self.stop.release(self.stopHeld())) self.closeTransfer(registry);
     }
 
     fn closeTransfer(self: *Channel, registry: *bus.Registry) void {
@@ -118,6 +122,7 @@ pub const Channel = struct {
             if (registry.find(self.target_7b)) |device| device.stop();
             self.transfers += 1;
         }
+        self.stop.clear();
         self.busy = false;
         self.addressed = false;
         self.status = flag.icsr2.stop;
@@ -138,10 +143,8 @@ pub const Channel = struct {
         self.acked = true;
         self.status |= flag.icsr2.tend | flag.icsr2.tdre;
         if (!self.reading) return;
-        self.staged_len = device.read(self.staged[0..]);
-        self.served = 0;
-        self.primed = false;
-        if (self.staged_len != 0) self.status |= flag.icsr2.rdrf;
+        self.rx.stage(device.read(self.rx.staged[0..]));
+        if (self.rx.holding()) self.status |= flag.icsr2.rdrf;
     }
 
     fn writeData(self: *Channel, registry: *bus.Registry, byte: u8) void {
@@ -164,24 +167,8 @@ pub const Channel = struct {
     }
 
     fn readData(self: *Channel) u8 {
-        if (!self.primed) {
-            self.primed = true;
-            return 0;
-        }
-        if (self.served >= self.staged_len) {
-            // Nothing left on the line. RDRF goes away with the data.
-            self.overread += 1;
-            self.status &= ~flag.icsr2.rdrf;
-            return 0;
-        }
-        const byte = self.staged[self.served];
-        self.served += 1;
+        const byte = self.rx.take(&self.status) orelse return 0;
         self.received += 1;
-        if (self.served < self.staged_len) {
-            self.status |= flag.icsr2.rdrf;
-        } else {
-            self.status &= ~flag.icsr2.rdrf;
-        }
         return byte;
     }
 
@@ -205,7 +192,9 @@ pub const Channel = struct {
                 kept &= ~flag.iccr2.rs;
             }
         } else if (value & flag.iccr2.sp != 0) {
-            if (self.busy) self.closeTransfer(registry);
+            if (self.busy and !self.stop.request(self.stopHeld())) {
+                self.closeTransfer(registry);
+            }
             kept &= ~flag.iccr2.sp;
         }
         self.shadow[flag.reg.iccr2] = kept;
@@ -219,7 +208,7 @@ pub const Channel = struct {
         };
     }
 
-    pub fn read(self: *Channel, offset: u32) u8 {
+    pub fn read(self: *Channel, registry: *bus.Registry, offset: u32) u8 {
         if (offset >= flag.reg.count) return 0;
         if (offset == flag.reg.iccr1) return self.shadow[offset];
         if (!self.enabled()) {
@@ -229,7 +218,13 @@ pub const Channel = struct {
         if (self.target.armed) return self.targetRead(offset);
         return switch (offset) {
             flag.reg.icsr2 => self.status,
-            flag.reg.icdrr => self.readData(),
+            flag.reg.icdrr => blk: {
+                const byte = self.readData();
+                // The last byte of the frame is what a requested STOP was
+                // waiting for, unless WAIT is still holding the clock.
+                self.releaseStop(registry);
+                break :blk byte;
+            },
             flag.reg.iccr2 => blk: {
                 const base = self.shadow[offset] & ~flag.iccr2.bbsy;
                 const answer = if (self.busy) base | flag.iccr2.bbsy else base;
@@ -267,6 +262,7 @@ pub const Channel = struct {
         }
         if (offset == flag.reg.icmr3) {
             self.shadow[offset] = self.ack.apply(self.shadow[offset], value);
+            self.releaseStop(registry);
             return;
         }
         self.shadow[offset] = value;
@@ -296,13 +292,12 @@ pub const Channel = struct {
     /// it was in the middle of. The counters are the run's record and stay.
     fn reset(self: *Channel) void {
         self.restart.clear();
+        self.stop.clear();
         self.busy = false;
         self.addressed = false;
         self.acked = false;
         self.status = 0;
-        self.staged_len = 0;
-        self.served = 0;
-        self.primed = false;
+        self.rx.open();
         self.target = .{};
     }
 };
@@ -352,7 +347,7 @@ pub const Riic = struct {
         const offset = address -% flag.win_base;
         const index = offset / flag.channel_stride;
         if (index >= flag.channel_count) return 0;
-        return self.channels[index].read(offset % flag.channel_stride);
+        return self.channels[index].read(&self.devices, offset % flag.channel_stride);
     }
 
     fn writeByte(self: *Riic, address: u32, byte: u8) void {

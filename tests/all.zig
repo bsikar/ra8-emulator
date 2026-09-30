@@ -186,6 +186,8 @@ test {
     _ = @import("periph/riic_ov5640_test.zig");
     _ = @import("periph/riic_pi4ioe_test.zig");
     _ = @import("periph/riic_restart_test.zig");
+    _ = @import("periph/riic_rx_test.zig");
+    _ = @import("periph/riic_stop_test.zig");
     _ = @import("periph/riic_target_test.zig");
     _ = @import("periph/riic_test.zig");
     _ = @import("periph/rtc_clock_test.zig");
