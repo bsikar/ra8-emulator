@@ -147,3 +147,64 @@ test "the unit answers on the bus, in both windows" {
     try std.testing.expectEqual(@as(u32, 0x2024), bus.read(regAddress(off_dodsr0), 4));
     try std.testing.expectEqual(@as(usize, 0), bus.unmodelledAddresses());
 }
+
+test "a byte store at DODIR is not an operand, it is a refusal" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, docr_add_32);
+    unit.write(regAddress(off_dodsr0), 4, 0x1000);
+    unit.write(regAddress(off_dodir), 1, 0x24);
+    // Nothing ran: the accumulator is untouched and the store is counted.
+    try std.testing.expectEqual(@as(u32, 0x1000), unit.read(regAddress(off_dodsr0), 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.ops);
+    try std.testing.expectEqual(@as(u32, 1), unit.refused());
+}
+
+test "a halfword store above lane 0 is counted instead of vanishing" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, docr_add_32);
+    unit.write(regAddress(off_dodsr0), 4, 0x1000);
+    unit.write(regAddress(off_dodir) + 2, 2, 0xBEEF);
+    try std.testing.expectEqual(@as(u32, 0x1000), unit.read(regAddress(off_dodsr0), 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.ops);
+    try std.testing.expectEqual(@as(u32, 1), unit.refused());
+}
+
+test "a 32-bit operand put in as two halfwords runs nothing at all" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, docr_add_32);
+    unit.write(regAddress(off_dodsr0), 4, 0);
+    unit.write(regAddress(off_dodir), 2, 0xDEAD);
+    unit.write(regAddress(off_dodir) + 2, 2, 0xBEEF);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(regAddress(off_dodsr0), 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.ops);
+    try std.testing.expectEqual(@as(u32, 2), unit.refused());
+}
+
+test "a halfword store still carries the 16-bit operand ra8_doc.c writes" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, @intFromEnum(Mode.add)); // DOBW clear
+    unit.write(regAddress(off_dodsr0), 4, 0x0100);
+    unit.write(regAddress(off_dodir), 2, 0x0024);
+    try std.testing.expectEqual(@as(u32, 0x0124), unit.read(regAddress(off_dodsr0), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.ops);
+    try std.testing.expectEqual(@as(u32, 0), unit.refused());
+}
+
+test "a refused store keeps a unit out of quiet, so the run reports it" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, docr_add_32);
+    try std.testing.expect(unit.quiet());
+    unit.write(regAddress(off_dodir) + 1, 1, 0x24);
+    try std.testing.expect(!unit.quiet());
+    try std.testing.expectEqual(@as(u32, 1), unit.refused());
+}
+
+test "a word store carries either width, which is the deinit zeroing" {
+    var unit = Doc.init();
+    unit.write(regAddress(off_docr), 1, docr_add_32);
+    unit.write(regAddress(off_dodsr0), 4, 7);
+    unit.write(regAddress(off_dodir), 4, 0);
+    try std.testing.expectEqual(@as(u32, 7), unit.read(regAddress(off_dodsr0), 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.ops);
+    try std.testing.expectEqual(@as(u32, 0), unit.refused());
+}

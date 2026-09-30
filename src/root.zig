@@ -70,6 +70,7 @@ pub const periph = struct {
     pub const dmac_xfer = @import("periph/dmac_xfer.zig");
     pub const doc = @import("periph/doc.zig");
     pub const doc_compare = @import("periph/doc_compare.zig");
+    pub const doc_operand = @import("periph/doc_operand.zig");
     pub const dotf = @import("periph/dotf.zig");
     pub const dotf_control = @import("periph/dotf_control.zig");
     pub const dotf_region = @import("periph/dotf_region.zig");
