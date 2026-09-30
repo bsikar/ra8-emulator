@@ -70,6 +70,16 @@ const Parts = struct {
     timebase: clocks.Clocks = .{},
 };
 
+/// Hand the watched place the run's own period counter, then hook it.
+///
+/// The stamp has to be wired before the first store lands, and the clock it
+/// reads is the one the run advances, so the two are set together here
+/// rather than left to the caller to remember.
+fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !void {
+    one.now = clock;
+    try core.attachWatchpoint(one);
+}
+
 fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts) !u32 {
     try core.attachWatch(&parts.watch);
     try core.attachLoops(&parts.loops);
@@ -122,7 +132,7 @@ pub fn main() !u8 {
     var point = resolveBreak(image, options);
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
-    if (watched) |*one| try core.attachWatchpoint(one);
+    if (watched) |*one| try armWatch(core, one, &parts.timebase.ticks);
     var window = taken_in.resolve(image, options.taken_in_place);
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();

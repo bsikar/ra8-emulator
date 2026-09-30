@@ -365,3 +365,41 @@ thousand is unsafe and 2000 merely happens to dodge it. Six widths is not
 a sweep, the strand is a coincidence of one edge and one four-instruction
 window, and a different image would put that window somewhere else.
 `cadence.instructions` is deliberately left alone this pass.
+
+## The sleeps do not run short, they collapse
+
+The previous slice made the run boundary settable and showed the tick is
+about six times fast at every width. That framing was wrong in a way worth
+recording: it assumed each `tx_thread_sleep(500)` was expiring early by a
+constant factor. It is not.
+
+Stamping each watched store with the modelled period (`--watch` now prints
+`at tick N`) says what actually happens. Over `--ms 4000 --chunk 2000`,
+`g_threadx_blink_tick` takes 49 stores: the zero at tick 0 from
+`Reset_Handler`, then 48 increments from `internal_thread_a_entry+0x16`.
+The first three land at **tick 1**. The last four land at **tick 3501**.
+
+So thread A is not waking every 83 ticks. It waits, then runs several
+iterations inside a single tick, each one through the full toggle and
+increment, with `tx_thread_sleep(500)` returning without any modelled time
+passing at all. The bursts are what inflates the count to 48 against the
+eight the HIL contract expects; the ticks themselves are right, and
+`_tx_timer_system_clock` reaching 3998 over 4000 periods already said so.
+
+That also explains the six increments before the first period completes,
+seen earlier with `--stop-sym`: at 44896 cycles, before SysTick has wrapped
+once, `g_threadx_blink_tick` is already 6. A sleep that returns instantly
+needs no tick to have happened.
+
+What this narrows the search to: not the tick rate, not the timer wheel
+(`_tx_timer_current_ptr` takes 412 stores over 400 periods, one per tick as
+it should), but the path that takes thread A out of its suspend. Something
+resumes the sleeping thread without the timer having expired it. The
+unpaired `_tx_thread_preempt_disable` increment from `_tx_thread_sleep`
+recorded earlier in this document sits on that same path and is the first
+thing to test against it.
+
+What this does not settle: whether the spurious resume comes from the
+model delivering an exception the hardware would not, or from the suspend
+returning early on its own. The stamp makes either visible; neither has
+been shown yet.
