@@ -18,13 +18,17 @@ pub const line_channel: usize = 1;
 pub const reg = struct {
     pub const iccr1: u32 = 0x00;
     pub const iccr2: u32 = 0x01;
+    pub const icmr1: u32 = 0x02;
     pub const icmr3: u32 = 0x04;
+    pub const icfer: u32 = 0x05;
     pub const icser: u32 = 0x06;
     pub const icsr1: u32 = 0x08;
     pub const icsr2: u32 = 0x09;
     pub const sarl0: u32 = 0x0A;
     pub const sarl1: u32 = 0x0C;
     pub const sarl2: u32 = 0x0E;
+    pub const icbrl: u32 = 0x10;
+    pub const icbrh: u32 = 0x11;
     pub const icdrt: u32 = 0x12;
     pub const icdrr: u32 = 0x13;
     /// Bytes of a channel window this model shadows.

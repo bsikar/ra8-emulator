@@ -63,12 +63,15 @@ test "ICCR1 answers while the interface is disabled, so it can be enabled" {
     try std.testing.expectEqual(@as(u32, 0), unit.channels[flag.line_channel].uninit);
 }
 
-test "an interface held in IICRST is not enabled" {
+test "an interface held in IICRST does not move the bus, and says so" {
     var unit = riic.Riic.init();
     unit.write(at(flag.reg.iccr1), 1, flag.iccr1.ice | flag.iccr1.iicrst);
     start(&unit);
     try std.testing.expect(!unit.channels[flag.line_channel].busy);
-    try std.testing.expectEqual(@as(u32, 1), unit.channels[flag.line_channel].uninit);
+    // Powered but held: the refusal is IICRST, not a missing ICE, so it is
+    // counted apart from the never-enabled case.
+    try std.testing.expectEqual(@as(u32, 1), unit.channels[flag.line_channel].held);
+    try std.testing.expectEqual(@as(u32, 0), unit.channels[flag.line_channel].uninit);
 }
 
 test "a write transaction reaches the device and ends at STOP" {

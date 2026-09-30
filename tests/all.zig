@@ -187,6 +187,7 @@ test {
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
     _ = @import("periph/riic_ack_test.zig");
+    _ = @import("periph/riic_reset_test.zig");
     _ = @import("periph/riic_bus_test.zig");
     _ = @import("periph/riic_ov5640_test.zig");
     _ = @import("periph/riic_pi4ioe_test.zig");
