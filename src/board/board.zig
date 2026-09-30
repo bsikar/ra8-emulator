@@ -156,10 +156,10 @@ pub const Board = struct {
     /// VSCR, the core voltage range, behind PRCR.PRC0.
     voltage: vscr.Unit,
     brownout: voltage_hazard.Watch,
-    /// The graphics power domain, and the one block so far that lives in it.
-    /// Both are built in attach(): each needs a pointer to a model this board
-    /// owns, not a copy of one.
-    graphics: pdctr.Pdctr,
+    /// The switchable power domains, both gated off at reset: the graphics one
+    /// the display blocks live in, and the ESWM one the Ethernet cluster does.
+    /// Built in attach(), which is where the PRCR they ask already exists.
+    domains: pdctr.Domains,
     display: glcdc.Glcdc,
     /// The 2D drawing engine, in the same domain and drawing into the same
     /// framebuffer the display controller scans out.
@@ -320,7 +320,7 @@ pub const Board = struct {
             .brownout = undefined,
             .ratios = undefined,
             .branches = undefined,
-            .graphics = undefined,
+            .domains = undefined,
             .display = undefined,
             .raster = undefined,
             .serial = sci.Sci.init(),

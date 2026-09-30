@@ -10,9 +10,12 @@ const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const eth_phy = @import("../periph/eth_phy.zig");
 const eth_mac = @import("../periph/eth_mac.zig");
+const eth = @import("../periph/eth.zig");
 const net = @import("net.zig");
+const pdctr = @import("../periph/pdctr.zig");
 
 pub fn sections(board: *Board, out: Writer) !void {
+    try domain(board, out);
     const cluster = &board.rswitch;
     if (cluster.quiet()) return;
     for (&cluster.ports, 0..) |*port, index| {
@@ -23,6 +26,7 @@ pub fn sections(board: *Board, out: Writer) !void {
         );
         try refusedSteps(&port.mode, out);
         try out.print("\n", .{});
+        try unpowered(index, port, out);
         try macAddress(index, &port.mac, out);
         try mdio(index, &port.phy, out);
     }
@@ -131,4 +135,32 @@ fn gateway(cluster: *const net.Rswitch, out: Writer) !void {
     );
     try refusedSteps(&agent.mode, out);
     try out.print("\n", .{});
+}
+
+/// PDCTRESWM, the Ethernet switch power domain. Gated at reset, so a driver
+/// that never clears PDDE reads every per-port window back as zero and sees
+/// its own stores vanish with no fault raised anywhere.
+fn domain(board: *Board, out: Writer) !void {
+    const unit = &board.domains.eswm;
+    if (unit.quiet()) return;
+    try out.print(
+        "PWR-ESWM: domain {s}, {d} power-on(s), {d} power-off(s)\n",
+        .{ if (unit.powered()) "powered" else "GATED", unit.power_ons, unit.power_offs },
+    );
+    if (unit.dropped_locked == 0) return;
+    try out.print(
+        "PWR-ESWM: DROPPED {d} write(s) with PRCR.PRC1 locked (unlock with 0xA502)\n",
+        .{unit.dropped_locked},
+    );
+}
+
+/// What the gate swallowed on one port. Separate from the mode line because
+/// the mode line reports what the port reached, and this reports the accesses
+/// that never reached it at all.
+fn unpowered(index: usize, port: *const eth.Port, out: Writer) !void {
+    if (port.dropped_unpowered == 0 and port.dark_reads == 0) return;
+    try out.print(
+        "ETHA{d}: DROPPED {d} write(s) and read {d} window(s) back as zero, ESWM domain gated off (clear PDCTRESWM.PDDE first)\n",
+        .{ index, port.dropped_unpowered, port.dark_reads },
+    );
 }

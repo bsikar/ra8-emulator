@@ -7,10 +7,29 @@ const periph = ra8.periph.registry;
 const regs = ra8.periph.eth_regs;
 const eth = ra8.periph.eth;
 const eth_phy = ra8.periph.eth_phy;
+const eth_mac = ra8.periph.eth_mac;
+const eth_mode = ra8.periph.eth_mode;
 const net = ra8.board.net;
+const pdctr = ra8.periph.pdctr;
+const prcr = ra8.periph.prcr;
 
 fn portZero() eth.Port {
     return eth.Port.init(regs.cluster.etha0, regs.cluster.rmac0);
+}
+
+/// PRC1 unlocked, which is what a driver does before it touches PDCTRESWM.
+fn unlockedGuard() prcr.Prcr {
+    var guard = prcr.Prcr.init();
+    guard.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
+    return guard;
+}
+
+/// The ESWM domain already powered on, so a test about the windows is not a
+/// test about the gate.
+fn poweredEswm(guard: *const prcr.Prcr) pdctr.Pdctr {
+    var domain = pdctr.Pdctr.init(guard, .eswm);
+    domain.write(pdctr.Domain.eswm.base(), 1, 0);
+    return domain;
 }
 
 fn mdio(index: u32, op: regs.Op, data: u16) u32 {
@@ -114,7 +133,9 @@ test "the cluster answers on the bus at every window it claims" {
     var cluster = net.Rswitch{};
     var core = try engine.Engine.open();
     defer core.close();
-    try cluster.attach(&bus, core);
+    const guard = unlockedGuard();
+    var domain = poweredEswm(&guard);
+    try cluster.attach(&bus, core, &domain);
     bus.write(regs.cluster.etha0 + regs.etha.eamc, 4, 1);
     try std.testing.expectEqual(@as(u32, 1), bus.read(regs.cluster.etha0 + regs.etha.eams, 4));
     bus.write(regs.cluster.gwca0 + regs.gwca.gwmc, 4, 1);
@@ -127,7 +148,9 @@ test "the cluster's config registers still read back off the bus" {
     var cluster = net.Rswitch{};
     var core = try engine.Engine.open();
     defer core.close();
-    try cluster.attach(&bus, core);
+    const guard = unlockedGuard();
+    var domain = poweredEswm(&guard);
+    try cluster.attach(&bus, core, &domain);
     // An ETHA queue register nothing models: the bus remembers it, which is
     // all the C tree's flat shadow did for this address.
     bus.write(regs.cluster.etha0 + 0x0018, 4, 0xABCD);
@@ -137,4 +160,84 @@ test "the cluster's config registers still read back off the bus" {
 test "a cluster nothing touched is quiet" {
     const cluster = net.Rswitch{};
     try std.testing.expect(cluster.quiet());
+}
+
+test "a gated ESWM domain reads every port window back as zero" {
+    const guard = prcr.Prcr.init();
+    const domain = pdctr.Pdctr.init(&guard, .eswm);
+    var port = portZero();
+    port.domain = &domain;
+    // Walking the mode machine up is exactly what a driver does first, and
+    // none of it lands: EAMS answers DISABLE forever rather than CONFIG.
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, 2);
+    try std.testing.expectEqual(@as(u32, 0), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    try std.testing.expectEqual(@as(u32, 1), port.dropped_unpowered);
+    try std.testing.expectEqual(@as(u32, 1), port.dark_reads);
+}
+
+test "a gated domain drops an MDIO frame instead of clocking it" {
+    const guard = prcr.Prcr.init();
+    const domain = pdctr.Pdctr.init(&guard, .eswm);
+    var port = portZero();
+    port.domain = &domain;
+    port.rmacWrite(regs.cluster.rmac0 + regs.rmac.mpsm, 4, mdio(1, .read, 0));
+    try std.testing.expectEqual(@as(u32, 0), port.rmacRead(regs.cluster.rmac0 + regs.rmac.mpsm, 4));
+    try std.testing.expect(port.phy.quiet());
+    try std.testing.expectEqual(@as(u32, 1), port.dropped_unpowered);
+}
+
+test "a gated domain refuses the MAC address pair and reads it back as zero" {
+    const guard = prcr.Prcr.init();
+    const domain = pdctr.Pdctr.init(&guard, .eswm);
+    var port = portZero();
+    port.domain = &domain;
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, 2);
+    port.macWrite(regs.cluster.rmac0 + eth_mac.off.mrmac0, 4, 0x0211_2233);
+    try std.testing.expectEqual(@as(u32, 0), port.macRead(regs.cluster.rmac0 + eth_mac.off.mrmac0, 4));
+    try std.testing.expect(port.mac.quiet());
+}
+
+test "powering the domain on lets the same port answer again" {
+    const guard = unlockedGuard();
+    var domain = poweredEswm(&guard);
+    var port = portZero();
+    port.domain = &domain;
+    // The mode machine still wants its rungs walked: the gate is the only
+    // thing this test lifted.
+    for ([_]u32{ 1, 2 }) |code| port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, code);
+    try std.testing.expectEqual(@as(u32, 2), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    try std.testing.expectEqual(@as(u32, 0), port.dropped_unpowered);
+    try std.testing.expectEqual(@as(u32, 0), port.dark_reads);
+}
+
+test "gating the domain again after bring-up takes the windows back down" {
+    const guard = unlockedGuard();
+    var domain = poweredEswm(&guard);
+    var port = portZero();
+    port.domain = &domain;
+    for ([_]u32{ 1, 2 }) |code| port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, code);
+    try std.testing.expectEqual(@as(u32, 2), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    domain.write(pdctr.Domain.eswm.base(), 1, pdctr.field.pdde);
+    // The mode the machine reached is still held; the window just stopped
+    // answering, which is the half a driver polling EAMS actually sees.
+    try std.testing.expectEqual(@as(u32, 0), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    try std.testing.expectEqual(eth_mode.Mode.config, port.mode.mode);
+}
+
+test "a port with no domain attached is ungated" {
+    var port = portZero();
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, 1);
+    try std.testing.expectEqual(@as(u32, 1), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    try std.testing.expectEqual(@as(u32, 0), port.dropped_unpowered);
+    try std.testing.expectEqual(@as(u32, 0), port.dark_reads);
+}
+
+test "a dropped store leaves the port loud even though nothing else moved" {
+    const guard = prcr.Prcr.init();
+    const domain = pdctr.Pdctr.init(&guard, .eswm);
+    var port = portZero();
+    port.domain = &domain;
+    try std.testing.expect(port.quiet());
+    port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, 2);
+    try std.testing.expect(!port.quiet());
 }

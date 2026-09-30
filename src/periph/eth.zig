@@ -10,6 +10,22 @@
 //! `lanes.zig` rule: a read is served from the word the address lands in and
 //! then cut, and a store is merged into that word so the lanes it does not
 //! name keep what they had.
+//!
+//! BOTH WINDOWS ARE DARK UNTIL THE ESWM POWER DOMAIN IS ON. The R-Switch sits
+//! in its own switchable domain, gated off at reset behind PDCTRESWM, so this
+//! port asks src/periph/pdctr.zig before it answers anything. ra8_cgc_eswclk.c
+//! states the hardware behaviour outright: "every per-port RMAC / ETHA
+//! register read returns 0 and writes are silently dropped until
+//! PDCTRESWM.PDDE = 0", marked as observed on EK-RA8D2 hardware. Without the
+//! question a firmware that never powered the domain drives a whole port here,
+//! walks its mode machine up to OPERATION and reads its own MAC address back,
+//! and does none of it on the bench. The read answering zero is the half that
+//! bites hardest: the mode machine reads DISABLE forever, so a driver polling
+//! for CONFIG spins rather than failing.
+//!
+//! A port with no domain attached is ungated, which is what a test about the
+//! mode machine or the MDIO bus wants; src/board/net.zig wires the real one in
+//! when it puts the cluster on the bus.
 const std = @import("std");
 const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
@@ -17,6 +33,7 @@ const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
 const eth_phy = @import("eth_phy.zig");
 const eth_mac = @import("eth_mac.zig");
+const pdctr = @import("pdctr.zig");
 
 /// The perfect-match address, reached as `eth.mac_address` by a caller that
 /// already has the port.
@@ -33,13 +50,34 @@ pub const Port = struct {
     mpsm: u32 = 0,
     /// MRMAC0/MRMAC1, which only take a store while this port is in CONFIG.
     mac: eth_mac.Address = .{},
+    /// The ESWM power domain, or null for a port nothing gated.
+    domain: ?*const pdctr.Pdctr = null,
+    /// Stores dropped, and reads served as zero, with the domain gated off.
+    dropped_unpowered: u32 = 0,
+    dark_reads: u32 = 0,
 
     pub fn init(etha_base: u32, rmac_base: u32) Port {
         return .{ .etha_base = etha_base, .rmac_base = rmac_base };
     }
 
+    /// Whether this port's windows answer at all. A port with no domain model
+    /// attached is ungated: the gate is a board fact, and a unit test that is
+    /// not about it should not have to build one.
+    fn powered(self: *const Port) bool {
+        const domain = self.domain orelse return true;
+        return domain.powered();
+    }
+
+    /// A read reaching a dark window: zero, and counted. Separated from the
+    /// store side because the two failures look nothing alike to a driver.
+    fn dark(self: *Port) u32 {
+        self.dark_reads +%= 1;
+        return 0;
+    }
+
     /// EAMC reads back the command; EAMS reports where the machine is.
     pub fn ethaRead(self: *Port, address: u32, width: u3) u32 {
+        if (!self.powered()) return self.dark();
         const offset = address -% self.etha_base;
         const whole: u32 = switch (lanes.word(offset)) {
             regs.etha.eamc, regs.etha.eams => self.mode.status(),
@@ -49,6 +87,10 @@ pub const Port = struct {
     }
 
     pub fn ethaWrite(self: *Port, address: u32, width: u3, value: u32) void {
+        if (!self.powered()) {
+            self.dropped_unpowered +%= 1;
+            return;
+        }
         const offset = address -% self.etha_base;
         // EAMS is the machine's own to report. A store there moves nothing.
         if (lanes.word(offset) != regs.etha.eamc) return;
@@ -61,6 +103,7 @@ pub const Port = struct {
     }
 
     pub fn rmacRead(self: *Port, address: u32, width: u3) u32 {
+        if (!self.powered()) return self.dark();
         const offset = address -% self.rmac_base;
         if (lanes.word(offset) != regs.rmac.mpsm) return 0;
         return lanes.part(self.mpsm, lanes.lane(offset), width);
@@ -72,6 +115,10 @@ pub const Port = struct {
     /// those two stores stop mattering, and PSME in the merged word is what
     /// decides whether anything goes out on the wire.
     pub fn rmacWrite(self: *Port, address: u32, width: u3, value: u32) void {
+        if (!self.powered()) {
+            self.dropped_unpowered +%= 1;
+            return;
+        }
         const offset = address -% self.rmac_base;
         if (lanes.word(offset) != regs.rmac.mpsm) return;
         const asked = lanes.merge(self.mpsm, lanes.lane(offset), width, value);
@@ -87,15 +134,21 @@ pub const Port = struct {
     /// which is why the pair is answered here rather than by a block of its
     /// own holding no mode.
     pub fn macRead(self: *Port, at: u32, width: u3) u32 {
+        if (!self.powered()) return self.dark();
         return self.mac.read(at -% self.rmac_base, width);
     }
 
     pub fn macWrite(self: *Port, at: u32, width: u3, value: u32) void {
+        if (!self.powered()) {
+            self.dropped_unpowered +%= 1;
+            return;
+        }
         self.mac.write(self.mode.mode, at -% self.rmac_base, width, value);
     }
 
     pub fn quiet(self: *const Port) bool {
-        return self.mode.quiet() and self.phy.quiet() and self.mac.quiet();
+        return self.mode.quiet() and self.phy.quiet() and self.mac.quiet() and
+            self.dropped_unpowered == 0 and self.dark_reads == 0;
     }
 
     pub fn ethaBlock(self: *Port) periph.Block {

@@ -62,8 +62,8 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.protection.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
-    try self.display.attach(&self.bus, &self.graphics, core.*);
-    self.raster = drw.Drw.init(&self.graphics);
+    try self.display.attach(&self.bus, &self.domains.graphics, core.*);
+    self.raster = drw.Drw.init(&self.domains.graphics);
     // The engine rasterizes into RAM, so it needs the machine that owns
     // it. A board built by a test without one declines the render.
     self.raster.memory = core.*;
@@ -81,7 +81,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());
     try self.wire.attach(&self.bus);
-    try self.rswitch.attach(&self.bus, core.*);
+    try self.rswitch.attach(&self.bus, core.*, &self.domains.eswm);
     try self.usb.attach(&self.bus);
     self.trace.memory = core.*;
     try self.bus.add(self.flash.block());
@@ -186,8 +186,9 @@ fn attachProtected(self: *Board) !void {
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
     for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
-    self.graphics = pdctr.Pdctr.init(&self.protection);
-    try self.bus.add(self.graphics.block());
+    self.domains = pdctr.Domains.init(&self.protection);
+    try self.bus.add(self.domains.graphics.block());
+    try self.bus.add(self.domains.eswm.block());
     // SYRSTMSK0/1/2 is PRC5-protected, and its two watchdog mask bits freeze
     // while their watchdog runs (HUM Ch 6.2.6 p 263), so it reads both
     // watchdogs' armed flags live rather than a copy.
