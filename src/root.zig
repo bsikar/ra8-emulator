@@ -196,6 +196,7 @@ pub const periph = struct {
     pub const riic_flags = @import("periph/riic_flags.zig");
     pub const riic_ov5640 = @import("periph/riic_ov5640.zig");
     pub const riic_pi4ioe = @import("periph/riic_pi4ioe.zig");
+    pub const riic_restart = @import("periph/riic_restart.zig");
     pub const riic_target = @import("periph/riic_target.zig");
     pub const rtc = @import("periph/rtc.zig");
     pub const rtc_clock = @import("periph/rtc_clock.zig");
