@@ -81,6 +81,10 @@ pub const CpuCtrl = struct {
     actreq: bool = false,
     /// ACTCSR.ACT, raised by an accepted request and sticky thereafter.
     act: bool = false,
+    /// Whether an engine was actually put in front of the board for CPU1,
+    /// which is a different fact from ACT: the release is a register
+    /// handshake, this is a second core fetching instructions.
+    mapped: bool = false,
     /// Stores that carried the key and landed.
     accepted: u32 = 0,
     /// Stores dropped because the key byte was not 0xA5.

@@ -9,9 +9,11 @@ const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mpu = @import("../periph/mpu.zig");
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
-/// the handshake completed, never that a second core is fetching: this model
-/// runs one core, so the line says released rather than running and the two
-/// are never allowed to blur.
+/// the handshake completed, never by itself that a second core is fetching:
+/// the release and the execution are two separate things and the lines are
+/// never allowed to blur. Whether anything actually ran on CPU1 is the
+/// second core's own line, printed by `src/core/second_core.zig`, because
+/// only the run knows whether an image was mapped onto it.
 fn secondCore(board: *Board, out: Writer) !void {
     const unit = &board.second_core;
     if (unit.quiet()) return;
@@ -24,9 +26,9 @@ fn secondCore(board: *Board, out: Writer) !void {
             if (unit.running()) "" else ", CPUWAIT held",
         },
     );
-    if (unit.act) {
+    if (unit.act and !unit.mapped) {
         try out.print(
-            "CPU1: no instruction was executed on it, this model runs one core\n",
+            "CPU1: released but no image was mapped onto it, so nothing ran there\n",
             .{},
         );
     }

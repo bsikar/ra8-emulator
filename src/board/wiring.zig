@@ -128,6 +128,26 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
 /// at zero. Every one of these is a register the firmware reads before it
 /// writes anything, so a zero is not a neutral starting value: it is a wrong
 /// answer the firmware then believes. Seed each with what the core reports.
+/// Put a SECOND core in front of the board the first already owns.
+///
+/// Only the per-core wiring is repeated. The blocks themselves are
+/// registered once, on the one bus the board owns, and both cores dispatch
+/// into that same registry: that is what makes IPCSEM and the IPC channels
+/// ONE block both cores reach rather than two models kept in step, which is
+/// the whole point of the pingpong apps. Adding them a second time is what
+/// `registry.Error.OverlappingBlock` is there to catch.
+///
+/// The blocks that hold a core of their own (the rasterizer, the capture
+/// unit, the DMA engines, the NPU) keep CPU0's. They read and write memory
+/// on behalf of whoever programmed them, and in this model CPU0 is the core
+/// that owns the clocks and the interrupt controller; handing them CPU1
+/// instead would move the asymmetry, not remove it.
+pub fn attachSecond(self: *Board, core: *engine.Engine) !void {
+    try core.attachPeriph(&self.bus);
+    try primeCoreWindows(self, core);
+    self.second_core.mapped = true;
+}
+
 fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
     // AIRCR: the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);

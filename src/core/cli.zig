@@ -15,6 +15,7 @@ pub const usage =
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
+    \\                    [--cpu1 IMAGE.elf]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -36,6 +37,10 @@ pub const usage =
     \\                     just after a call and read what it returned.
     \\                     --break-at is the same flag, spelled for an
     \\                     address rather than a name
+    \\  --cpu1 IMAGE.elf   start the second core on that image, against the
+    \\                     same board: shared RAM, shared peripherals. The
+    \\                     two cores take turns a chunk at a time. CPU0
+    \\                     keeps the clocks and the interrupt controller.
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
@@ -156,6 +161,8 @@ pub const Options = struct {
     /// A place whose stores to record, as the command line spelled it.
     /// Null watches nothing and costs the run nothing.
     watch_place: ?[]const u8 = null,
+    /// The second core's image, when the run is a two-core one.
+    cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -254,6 +261,10 @@ pub fn parse(argv: []const []const u8) !Options {
                     index += 1;
                 }
             }
+        } else if (std.mem.eql(u8, argv[index], "--cpu1")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.cpu1_path = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--watch")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;

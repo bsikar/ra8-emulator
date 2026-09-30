@@ -16,6 +16,7 @@ const undefined_ops = ra8.core.undefined_ops;
 const stop_watch = ra8.core.stop;
 const deadline = ra8.core.deadline;
 const engine = ra8.core.engine;
+const second_core = ra8.core.second_core;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
@@ -32,6 +33,15 @@ const report = ra8.board.report;
 const report_steps = ra8.board.report_steps;
 const report_run = ra8.board.report_run;
 
+/// Read the image off disk and parse it, saying which of the two failed.
+fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
+    const bytes = try readImage(allocator, path);
+    return elf.Image.init(bytes) catch |err| {
+        std.debug.print("{s} is not a loadable image: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+}
+
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -43,11 +53,7 @@ pub fn main() !u8 {
         return 2;
     };
 
-    const bytes = readImage(allocator, options.path) catch return 1;
-    const image = elf.Image.init(bytes) catch |err| {
-        std.debug.print("{s} is not a loadable image: {s}\n", .{ options.path, @errorName(err) });
-        return 1;
-    };
+    const image = openImage(allocator, options.path) catch return 1;
 
     var core = try engine.Engine.open();
     defer core.close();
@@ -91,7 +97,12 @@ pub fn main() !u8 {
     try core.attachUndefined(&undefined_found);
     var timed = resolveDeadline(options);
     const budget = options.budgetFor(stop != null);
-    const fault = try core.run(entry, budget, .{
+    var second = second_core.start(allocator, &core, &board, options.cpu1_path) catch |err| {
+        std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ options.cpu1_path orelse "?", @errorName(err) });
+        return 1;
+    };
+    defer if (second) |*one| one.close();
+    const fault = try second_core.interleave(core, entry, budget, .{
         .watch = &watch,
         .timebase = &timebase,
         .interrupts = &interrupts,
@@ -102,10 +113,11 @@ pub fn main() !u8 {
         .brk = if (point) |*one| one else null,
         .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
-    });
+    }, if (second) |*one| one else null);
 
     const tally = report_run.Tally{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .undefined_found = undefined_found };
     try report_run.all(out, &board, image, tally);
+    try second_core.report(out, if (second) |*one| one else null);
     try dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
@@ -377,6 +389,7 @@ fn setBattery(board: *Board, options: cli.Options) !void {
 
 /// The file behind `path`, or a printed complaint and the error that caused
 /// it. The bytes outlive the file and are owned by the caller's arena.
+/// CPU1 on CPU0's board: shared RAM through `start`, shared peripheral bus through the board's own attach.
 fn readImage(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ path, @errorName(err) });
