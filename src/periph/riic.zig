@@ -11,12 +11,16 @@
 //! ICE gates the transfer path here, and the rest of the refusals are the
 //! same shape: a condition the bus cannot be in is refused and counted rather
 //! than quietly made to work.
+//!
+//! The restart window, where an address written too early is dropped, is its
+//! own rule in riic_restart.zig.
 const std = @import("std");
 const periph = @import("registry.zig");
 const bus = @import("riic_bus.zig");
 const flag = @import("riic_flags.zig");
 const riic_target = @import("riic_target.zig");
 const access = @import("bytelanes.zig");
+const riic_restart = @import("riic_restart.zig");
 
 pub const win_base = flag.win_base;
 pub const win_span = flag.win_span;
@@ -47,6 +51,8 @@ pub const Channel = struct {
     /// The controller-receive flow does one dummy ICDRR read to start the
     /// clock before the first real byte (HUM Ch 39.3.4).
     primed: bool = false,
+    /// The restart window: RS standing, and the stores it swallowed.
+    restart: riic_restart.Restart = .{},
 
     /// The responder half, live once ICSER arms an own address.
     target: riic_target.Target = .{},
@@ -78,7 +84,7 @@ pub const Channel = struct {
     pub fn quiet(self: *const Channel) bool {
         return self.transfers == 0 and self.nacks == 0 and self.uninit == 0 and
             self.st_busy == 0 and self.rs_idle == 0 and self.no_start == 0 and
-            self.overread == 0 and self.target.quiet();
+            self.overread == 0 and self.restart.quiet() and self.target.quiet();
     }
 
     /// ICE set and IICRST clear: the block is out of reset and clocked.
@@ -136,6 +142,10 @@ pub const Channel = struct {
             self.no_start += 1;
             return;
         }
+        if (self.restart.blocks()) {
+            self.restart.note();
+            return;
+        }
         if (!self.addressed) {
             self.addressPhase(registry, byte);
             return;
@@ -172,13 +182,21 @@ pub const Channel = struct {
     /// and a repeated START needs a busy one; the request bits auto-clear
     /// once the condition is issued, which is what the driver spins on.
     fn control(self: *Channel, registry: *bus.Registry, value: u8) void {
+        // Any later touch of ICCR2 means the condition has long since been
+        // issued, so the window closes here as well as on the readback.
+        _ = self.restart.observe();
         var kept = value;
         if (value & flag.iccr2.st != 0) {
             if (self.busy) self.st_busy += 1 else self.openTransfer();
             kept &= ~flag.iccr2.st;
         } else if (value & flag.iccr2.rs != 0) {
-            if (self.busy) self.openTransfer() else self.rs_idle += 1;
-            kept &= ~flag.iccr2.rs;
+            if (self.busy) {
+                self.openTransfer();
+                self.restart.request();
+            } else {
+                self.rs_idle += 1;
+                kept &= ~flag.iccr2.rs;
+            }
         } else if (value & flag.iccr2.sp != 0) {
             if (self.busy) self.closeTransfer(registry);
             kept &= ~flag.iccr2.sp;
@@ -207,7 +225,13 @@ pub const Channel = struct {
             flag.reg.icdrr => self.readData(),
             flag.reg.iccr2 => blk: {
                 const base = self.shadow[offset] & ~flag.iccr2.bbsy;
-                break :blk if (self.busy) base | flag.iccr2.bbsy else base;
+                const answer = if (self.busy) base | flag.iccr2.bbsy else base;
+                // This is the look the driver spins on.
+                if (self.restart.observe()) {
+                    self.shadow[flag.reg.iccr2] =
+                        riic_restart.Restart.without(self.shadow[flag.reg.iccr2]);
+                }
+                break :blk answer;
             },
             else => self.shadow[offset],
         };
@@ -260,6 +284,7 @@ pub const Channel = struct {
     /// An interface taken out of ICE, or held in IICRST, loses the transfer
     /// it was in the middle of. The counters are the run's record and stay.
     fn reset(self: *Channel) void {
+        self.restart.clear();
         self.busy = false;
         self.addressed = false;
         self.acked = false;

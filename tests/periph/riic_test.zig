@@ -191,9 +191,12 @@ test "a repeated START on a busy bus turns the transfer around" {
     address(&unit, pi4ioe.address, false);
     unit.write(at(flag.reg.icdrt), 1, pi4ioe.file.device_id);
     unit.write(at(flag.reg.iccr2), 1, flag.iccr2.rs);
+    // The driver waits for RS to read back clear before the address.
+    _ = unit.read(at(flag.reg.iccr2), 1);
     address(&unit, pi4ioe.address, true);
     const channel = &unit.channels[flag.line_channel];
     try std.testing.expectEqual(@as(u32, 0), channel.rs_idle);
+    try std.testing.expectEqual(@as(u32, 0), channel.restart.dropped);
     try std.testing.expect(channel.reading);
 }
 

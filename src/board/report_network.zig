@@ -26,9 +26,10 @@ pub fn sections(board: *Board, out: Writer) !void {
 
 /// One line per RIIC channel that saw traffic, then a line for each part on
 /// the bus. A transfer clocked with the interface still disabled, a START on
-/// a bus that was already busy, a byte written with no transaction open and a
-/// read past what the device had to say are all things dev answered anyway,
-/// so each is reported apart from the transfers that completed.
+/// a bus that was already busy, a byte written with no transaction open, a
+/// byte written before the restart condition had been issued and a read past
+/// what the device had to say are all things dev answered anyway, so each is
+/// reported apart from the transfers that completed.
 fn i2c(board: *Board, out: Writer) !void {
     const unit = &board.wire.controller;
     if (board.wire.quiet()) return;
@@ -46,6 +47,12 @@ fn i2c(board: *Board, out: Writer) !void {
         }
         if (channel.rs_idle != 0) {
             try out.print(", {d} REPEATED START(S) WITH NOTHING TO REPEAT", .{channel.rs_idle});
+        }
+        if (channel.restart.dropped != 0) {
+            try out.print(
+                ", {d} WRITE(S) DROPPED WITH THE RESTART STILL IN FLIGHT",
+                .{channel.restart.dropped},
+            );
         }
         if (channel.no_start != 0) {
             try out.print(", {d} DATA WRITE(S) WITH NO TRANSACTION OPEN", .{channel.no_start});
