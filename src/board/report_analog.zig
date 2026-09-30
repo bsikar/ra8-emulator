@@ -39,6 +39,12 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ index, unit.blocked },
             );
         }
+        if (unit.above_data != 0) {
+            try out.print(
+                "DAC_B{d}: {d} store(s) landed in the reserved halfword above DADR, no code taken\n",
+                .{ index, unit.above_data },
+            );
+        }
         if (unit.placement() != .right) {
             try out.print(
                 "DAC_B{d}: DADR read {s}, per DACR1.DPSEL\n",
