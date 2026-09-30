@@ -92,6 +92,7 @@ test {
     _ = @import("periph/eth_desc_test.zig");
     _ = @import("periph/eth_dma_test.zig");
     _ = @import("periph/eth_gateway_test.zig");
+    _ = @import("periph/eth_mac_test.zig");
     _ = @import("periph/eth_mode_test.zig");
     _ = @import("periph/eth_peer_test.zig");
     _ = @import("periph/eth_phy_test.zig");
