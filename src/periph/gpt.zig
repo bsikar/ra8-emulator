@@ -175,6 +175,9 @@ pub const Channel = struct {
     compares: compare.Pair = .{},
     buffered: buf.Buffers = .{},
     guard: lk.Lock = .{},
+    /// Which shapes GTCR.MD has selected, so a mode a later store
+    /// took away is visible instead of silent.
+    shapes: md.Log = .{},
 
     pub fn running(self: Channel) bool {
         return self.cr & control.cst != 0;
@@ -281,7 +284,7 @@ pub const Channel = struct {
         switch (win.cellOf(local)) {
             buf.off.gtber => self.buffered.ber = win.merge(self.buffered.ber, local - buf.off.gtber, byte),
             off.gtcnt => self.cnt = win.merge(self.cnt, local - off.gtcnt, byte),
-            off.gtcr => self.cr = win.merge(self.cr, local - off.gtcr, byte),
+            off.gtcr => self.cr = self.shapes.note(self.cr, win.merge(self.cr, local - off.gtcr, byte)),
             // GTST is cleared by writing the word back with the target bits
             // zero, so a store can only take bits away.
             off.gtst => self.st &= win.merge(self.st, local - off.gtst, byte),
@@ -294,6 +297,7 @@ pub const Channel = struct {
 
     pub fn quiet(self: Channel) bool {
         if (!self.compares.quiet() or !self.buffered.quiet() or !self.guard.quiet()) return false;
+        if (!self.shapes.quiet()) return false;
         return self.overflows == 0 and self.underflows == 0 and !self.running();
     }
 };

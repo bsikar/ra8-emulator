@@ -32,6 +32,18 @@
 //! the stop sees it. That is the model's reading of "one-shot": the part also
 //! holds the output at its final level, and there is no output here.
 //!
+//! A MODE SELECTED IS NOT A MODE COUNTED IN. MD is stored in GTCR beside
+//! CST, so a driver that writes the whole control word to start a channel
+//! also rewrites the shape, and nothing said so. `ra8_gpt_start_free_run`
+//! does exactly that: it writes `GTCR = 0x00000001`, which is CST with MD
+//! zero, so a channel `ra8_gpt_init` had configured as a one-shot counts as
+//! saw PWM from the first start onward and never stops at its period. The
+//! one-shot demo reaches this: it arms MD = 1, then starts, and the run
+//! reported an ordinary free-running saw with nothing to say the shape it
+//! asked for had been taken away. `Log` below remembers the first shape MD
+//! was ever moved to and how many times it moved, so the report can name
+//! both the shape a channel asked for and the one it actually counted in.
+//!
 //! NOT MODELLED, AND NOT GUESSED: what separates the three triangle
 //! encodings. ra8_gpt.h names 4, 5 and 6 as "symmetric", "PWM 1" and "PWM 2",
 //! and neither tree says how their duty loading differs; they count the same
@@ -85,6 +97,38 @@ pub const Mode = enum(u32) {
 pub fn modeOf(cr: u32) Mode {
     return @enumFromInt((cr & field.md) >> field.shift);
 }
+
+/// What GTCR.MD has been set to over a channel's life. GTCR is written a
+/// byte at a time, and MD sits in byte 2, so only a store that actually
+/// moves the field counts: the other three bytes of a word store leave it
+/// where it was and are not a mode change.
+pub const Log = struct {
+    /// The first shape MD was ever moved to, or null if it never moved.
+    first: ?Mode = null,
+    /// Stores that moved MD to a different encoding.
+    changes: u32 = 0,
+
+    /// Take a GTCR store. `after` is the word the access leaves behind and
+    /// is returned unchanged, so a caller can write `cr = log.note(cr, x)`.
+    pub fn note(self: *Log, before: u32, after: u32) u32 {
+        const now = modeOf(after);
+        if (now == modeOf(before)) return after;
+        if (self.first == null) self.first = now;
+        self.changes += 1;
+        return after;
+    }
+
+    /// Did a later store move the channel off the shape it first asked for?
+    pub fn overwritten(self: Log, now: Mode) bool {
+        const first = self.first orelse return false;
+        return first != now;
+    }
+
+    /// A channel whose MD never moved has nothing to report.
+    pub fn quiet(self: Log) bool {
+        return self.first == null;
+    }
+};
 
 /// Where one chunk of counting left a channel.
 pub const Step = struct {
