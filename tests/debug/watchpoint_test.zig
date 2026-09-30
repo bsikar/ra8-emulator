@@ -1,5 +1,5 @@
-//! The watched place: what a store records, what the list keeps, and the
-//! spellings that watch nothing at all.
+//! The watched place: what a store records, which stores both ends keep,
+//! and the spellings that watch nothing at all.
 const std = @import("std");
 const ra8 = @import("ra8");
 const watchpoint = ra8.core.watchpoint;
@@ -8,7 +8,7 @@ test "a store records its pc, its value and its width" {
     var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
     watched.record(0x0200_FEDC, 0x0200_1235, 0x2204_00A0, 1, 5);
     try std.testing.expectEqual(@as(usize, 1), watched.seen);
-    const store = watched.listed()[0];
+    const store = watched.opening()[0];
     try std.testing.expectEqual(@as(u32, 0x0200_FEDC), store.pc);
     try std.testing.expectEqual(@as(u32, 5), store.value);
     try std.testing.expectEqual(@as(u8, 1), store.width);
@@ -19,35 +19,76 @@ test "a store records its pc, its value and its width" {
 test "a store inside the word records which byte it started at" {
     var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
     watched.record(0x0200_FEDC, 0x0200_1235, 0x2204_00A2, 2, 0xBEEF);
-    try std.testing.expectEqual(@as(u8, 2), watched.listed()[0].offset);
+    try std.testing.expectEqual(@as(u8, 2), watched.opening()[0].offset);
 }
 
 test "stores come back oldest first" {
     var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
     watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, 1);
     watched.record(0x0200_2000, 0x0200_1235, 0x2204_00A0, 4, 2);
-    const kept = watched.listed();
+    const kept = watched.opening();
     try std.testing.expectEqual(@as(u32, 1), kept[0].value);
     try std.testing.expectEqual(@as(u32, 2), kept[1].value);
 }
 
-test "a value written past the list is counted and dropped" {
+test "a value written in a loop keeps both ends and counts the middle" {
     var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
-    const written = watchpoint.limits.listed + 5;
+    const written = watchpoint.limits.head + watchpoint.limits.tail + 5;
     for (0..written) |index| {
         watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, @intCast(index));
     }
     try std.testing.expectEqual(written, watched.seen);
-    try std.testing.expectEqual(watchpoint.limits.listed, watched.listed().len);
-    // The list keeps the first stores, which are the ones that say how the
-    // value got where it is.
-    try std.testing.expectEqual(@as(u32, 0), watched.listed()[0].value);
+    try std.testing.expectEqual(watchpoint.limits.head, watched.opening().len);
+    // The opening says how the value got where it is.
+    try std.testing.expectEqual(@as(u32, 0), watched.opening()[0].value);
+    // The close is what a latch actually shows, so the last store written
+    // has to survive however long the loop ran.
+    var room: [watchpoint.limits.tail]watchpoint.Store = undefined;
+    const last = watched.closing(&room);
+    try std.testing.expectEqual(watchpoint.limits.tail, last.len);
+    try std.testing.expectEqual(@as(u32, written - 1), last[last.len - 1].value);
+    try std.testing.expectEqual(@as(usize, 5), watched.dropped());
+}
+
+test "the closing stores come back oldest first" {
+    var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
+    for (0..40) |index| {
+        watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, @intCast(index));
+    }
+    var room: [watchpoint.limits.tail]watchpoint.Store = undefined;
+    const last = watched.closing(&room);
+    for (last, 0..) |store, index| {
+        try std.testing.expectEqual(@as(u32, @intCast(40 - last.len + index)), store.value);
+    }
+}
+
+test "a short run drops nothing and repeats nothing" {
+    var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
+    const written = watchpoint.limits.head + 2;
+    for (0..written) |index| {
+        watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, @intCast(index));
+    }
+    var room: [watchpoint.limits.tail]watchpoint.Store = undefined;
+    const last = watched.closing(&room);
+    try std.testing.expectEqual(@as(usize, 0), watched.dropped());
+    try std.testing.expectEqual(@as(usize, 2), last.len);
+    // The first store the close carries is the one straight after the
+    // opening, so the two ends meet without overlapping.
+    try std.testing.expectEqual(@as(u32, watchpoint.limits.head), last[0].value);
+}
+
+test "a run shorter than the opening closes on nothing" {
+    var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
+    watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, 7);
+    var room: [watchpoint.limits.tail]watchpoint.Store = undefined;
+    try std.testing.expectEqual(@as(usize, 0), watched.closing(&room).len);
+    try std.testing.expectEqual(@as(usize, 0), watched.dropped());
 }
 
 test "a place nothing wrote to keeps an empty list" {
     const watched = watchpoint.Watched{ .address = 0x2204_00A0 };
     try std.testing.expectEqual(@as(usize, 0), watched.seen);
-    try std.testing.expectEqual(@as(usize, 0), watched.listed().len);
+    try std.testing.expectEqual(@as(usize, 0), watched.opening().len);
 }
 
 test "the window is a word wide" {
@@ -154,4 +195,28 @@ test "no watch prints nothing at all" {
     defer out.deinit();
     try watchpoint.print(out.writer(), image, null, null);
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "a place written in a loop reports its last store, not just its first" {
+    var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
+    @memset(&buffer, 0);
+    const head: *align(1) ra8.core.elf.Header =
+        std.mem.bytesAsValue(ra8.core.elf.Header, &buffer);
+    head.magic = .{ 0x7F, 'E', 'L', 'F' };
+    head.class = 1;
+    head.data = 1;
+    head.e_machine = ra8.core.elf.em_arm;
+    const image = try ra8.core.elf.Image.init(&buffer);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
+    for (0..900) |index| {
+        watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, @intCast(index));
+    }
+    try watchpoint.print(out.writer(), image, "g_latched", watched);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "900 store(s)") != null);
+    // The first store, the gap, and the last store all have to be there.
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x00000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "more, ending with") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x00000383") != null);
 }
