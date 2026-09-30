@@ -107,6 +107,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         // Sampled last, so the address recorded is the one the next
         // stretch starts at rather than whatever a handler left behind.
         if (session.pcs) |table| table.sample(pc);
+        if (session.fns) |table| table.sample(pc);
     }
     return null;
 }

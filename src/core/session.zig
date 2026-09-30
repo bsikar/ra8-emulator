@@ -24,6 +24,7 @@ const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const hotspots = @import("../debug/hotspots.zig");
+const functions = @import("../debug/functions.zig");
 
 /// Records the invalid access behind a fault.
 pub const Watch = fault.Watch;
@@ -80,6 +81,9 @@ pub const Session = struct {
     /// is not about the sampler wants. src/debug/hotspots.zig says what one
     /// sample per boundary can and cannot answer.
     pcs: ?*hotspots.Table = null,
+    /// Where the run went, by function. Coarser than `pcs` and the one
+    /// that survives a run touching thousands of addresses.
+    fns: ?*functions.Table = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.

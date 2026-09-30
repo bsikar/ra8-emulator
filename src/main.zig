@@ -63,6 +63,7 @@ const Parts = struct {
     idle: ra8.core.idle.Seam = .{},
     release: ra8.core.unmask.Release = .{},
     pcs: ra8.core.hotspots.Table = .{},
+    fns: ?ra8.core.functions.Table = null,
     timebase: clocks.Clocks = .{},
 };
 
@@ -130,6 +131,7 @@ pub fn main() !u8 {
     };
     defer if (second) |one| one.close();
     const budget = options.budgetFor(stop != null);
+    parts.fns = .{ .image = image };
     const fault = try second_core.interleave(core, entry, budget, .{
         .watch = &parts.watch,
         .timebase = &parts.timebase,
@@ -144,10 +146,12 @@ pub fn main() !u8 {
         .idle = &parts.idle,
         .unmask = &parts.release,
         .pcs = &parts.pcs,
+        .fns = &parts.fns.?,
     }, second);
 
     try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
     try report_hotspots.spent(out, image, parts.pcs);
+    try report_hotspots.spentIn(out, image, parts.fns.?);
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
