@@ -23,6 +23,7 @@ test {
     _ = @import("core/undefined_ops_test.zig");
     _ = @import("debug/breakpoint_test.zig");
     _ = @import("debug/watchpoint_test.zig");
+    _ = @import("debug/spacing_test.zig");
     _ = @import("debug/tally_test.zig");
     _ = @import("debug/taken_in_test.zig");
     _ = @import("debug/place_test.zig");

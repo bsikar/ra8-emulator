@@ -403,3 +403,39 @@ What this does not settle: whether the spurious resume comes from the
 model delivering an exception the hardware would not, or from the suspend
 returning early on its own. The stamp makes either visible; neither has
 been shown yet.
+
+## Eight wakes, six iterations each
+
+The store stamps said the ends of the run were bunched and said nothing
+about the middle, because the watch list keeps four stores at each end
+and drops the rest. Counting the gaps instead of listing the stores
+settles the shape. Over 4000 ms at a 2000-instruction boundary,
+`g_threadx_blink_tick` takes 49 stores and they fall into **9 groups**:
+the reset store on its own, then eight groups of six, with **40 stores
+landing in the same period as the store before them**. The gaps run from
+1 to 500 periods and average 437, which is `(1 + 7 * 500) / 8` exactly.
+
+So the wakes are at periods 1, 501, 1001 and so on to 3501: eight of
+them, 500 periods apart, which is `k_blink_a_ticks` to the period. The
+sleep length is right and the number of wakes is right. What is wrong is
+that **each wake runs the loop body six times**, and only the sixth call
+to `tx_thread_sleep` actually suspends. LED2 at 24 toggles against LED1
+at 48 is the same 6 on a 1000-period sleep, so this is not a property of
+one thread's period.
+
+That rules out the two readings this document has been alternating
+between. The timer is not fast: a fast timer would move the gaps, and
+the gaps are 500. The sleeps do not expire early: an early expiry would
+spread the stores out, and they land in one period. Five of every six
+`tx_thread_sleep(500)` calls **return without suspending at all**, in no
+modelled time, and the sixth suspends for the full 500.
+
+`_tx_thread_system_state` is not the cause. Watched over the same run it
+takes four stores, all before the scheduler starts, ending at zero at
+period 1 and never moving again, so `TX_CALLER_ERROR` out of the
+system-state check in `_tx_thread_sleep` cannot be what returns early.
+The remaining candidates are the `_tx_thread_current_ptr` arm of that
+same check and an early return out of `_tx_thread_system_suspend`, which
+is also where the unpaired `_tx_thread_preempt_disable` increment lives.
+Six is a number worth holding on to: whatever returns early does so five
+times and then stops.
