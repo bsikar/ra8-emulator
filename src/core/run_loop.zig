@@ -92,8 +92,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             continue;
         };
         if (session.interrupts) |controller| {
-            remaining -= liftMask(core, controller, session, remaining) catch return error.RunFailed;
-            _ = controller.dispatch(core) catch return error.RunFailed;
+            remaining -= service(core, controller, session, remaining) catch return error.RunFailed;
         }
         // The counter is read here, after the boundary's blocks have
         // run, so a value a peripheral advanced this chunk is seen.
@@ -138,6 +137,20 @@ fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault
     }
     if (looked.ran >= chunk) return null;
     return core.runChunk(try core.register(.pc), chunk - looked.ran, session.watch);
+}
+
+/// Take what the boundary owes: a pend that has been waiting out a mask,
+/// then the exception itself. Reports the instructions the lift charged.
+///
+/// The seam is stirred whenever a handler is actually entered, because a
+/// handler is the one thing that can write the word an idle spin is
+/// waiting on and then return leaving that spin's registers exactly as it
+/// found them. src/core/idle.zig carries why that matters.
+fn service(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
+    const lifted = try liftMask(core, controller, session, remaining);
+    const entered = try controller.dispatch(core);
+    if (entered != null) if (session.idle) |seam| seam.stir();
+    return lifted;
 }
 
 /// Let a pend that is ready but masked wait out the mask, and report the

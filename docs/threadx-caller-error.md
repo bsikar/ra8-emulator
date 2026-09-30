@@ -109,6 +109,39 @@ word that has already been written.
   B is not special. The earlier reading, that B stops blocking after its first
   expiry and starves A, is wrong.
 
+### The idle seam, measured this time rather than reasoned about
+
+`__tx_ts_wait` is a spin, the idle seam skips spins, and the seam's own
+proof is a register comparison, so the seam looked like the obvious way the
+model could go blind to a word an interrupt had just written. It is not
+what is happening here.
+
+The seam holds a proved-idle state in `known` and `resting` re-checks it
+with registers alone, which is genuinely too weak: a handler can store the
+word a spin waits on and then return leaving that spin's registers exactly
+as it found them. That hole is now closed (`Seam.stir`, called from
+`run_loop.service` whenever a handler is actually entered), and closing it
+changed nothing:
+
+- all 36 corpus images produce byte-identical reports before and after,
+- `threadx_blink` still reports the same tick, 301, at 1 s, 2 s and 4 s.
+
+The reason is that the hole is nearly unreachable in practice. A handler
+does not run between two instructions of the spin; it runs across chunk
+boundaries, so at the next boundary the program counter is usually inside
+the handler rather than at the head of the loop, `resting` fails on its
+own, and the seam re-probes anyway. The counters say so directly: over a
+1200 ms run the seam records 1000 closures across 18995 boundaries, so it
+is already re-proving the loop roughly once per interrupt rather than
+riding one stale proof.
+
+So the skipping is honest. When the seam skips `__tx_ts_wait` the loop
+really would not have exited, and the instructions are still charged to the
+clocks, so the interrupt still arrives at the modelled time it should. The
+freeze is not the model failing to notice a store; it is thread B spinning
+because its sleep was refused, which is what the rest of this document is
+about.
+
 ## What to read first
 
 Whether the idle seam is what keeps the wait loop from seeing the store. The

@@ -132,3 +132,45 @@ test "a peripheral register is not ordinary memory either" {
     try std.testing.expect(!idle.plainMemory(0x4000_0000, 4));
     try std.testing.expect(!idle.plainMemory(0x1_0000_0000, 4));
 }
+
+test "a proved seam rests where it stands" {
+    var seam = idle.Seam{};
+    var core = Fake{ .script = &.{ 10, 20, 30 }, .seam = &seam };
+    try std.testing.expect((try seam.look(&core, 0, idle.limits.probe)).closed);
+    // Back at the head of the loop, so the cheap path answers without
+    // stepping anything.
+    try std.testing.expect(try seam.resting(&core));
+    try std.testing.expectEqual(@as(usize, 3), core.steps);
+}
+
+test "a stirred seam will not rest on a proof an interrupt invalidated" {
+    var seam = idle.Seam{};
+    var core = Fake{ .script = &.{ 10, 20, 30 }, .seam = &seam };
+    try std.testing.expect((try seam.look(&core, 0, idle.limits.probe)).closed);
+    try std.testing.expect(try seam.resting(&core));
+    // A handler ran. The registers it left behind are identical, which is
+    // exactly why the seam cannot be allowed to trust them: the word the
+    // loop waits on lives in memory the snapshot never saw.
+    seam.stir();
+    try std.testing.expect(!(try seam.resting(&core)));
+}
+
+test "stirring a seam that proved nothing is harmless" {
+    var seam = idle.Seam{};
+    var core = Fake{ .script = &.{ 10, 20, 30 }, .seam = &seam };
+    seam.stir();
+    try std.testing.expect(!(try seam.resting(&core)));
+    // And the seam still works afterwards.
+    try std.testing.expect((try seam.look(&core, 0, idle.limits.probe)).closed);
+}
+
+test "a stir does not discard what the seam has already saved" {
+    var seam = idle.Seam{};
+    var core = Fake{ .script = &.{ 10, 20, 30 }, .seam = &seam };
+    try std.testing.expect((try seam.look(&core, 0, idle.limits.probe)).closed);
+    seam.skip(500);
+    seam.stir();
+    try std.testing.expectEqual(@as(u64, 1), seam.closures);
+    try std.testing.expectEqual(@as(u64, 1), seam.boundaries);
+    try std.testing.expectEqual(@as(u64, 500), seam.skipped);
+}
