@@ -48,6 +48,17 @@ pub const iccr2 = struct {
     pub const bbsy: u8 = 0x80;
 };
 
+/// ICMR3: the bus mode bits, of which only ACKBT is write-protected
+/// (HUM Ch 39.2.5, p 2376).
+pub const icmr3 = struct {
+    pub const ackbr: u8 = 0x04;
+    pub const ackbt: u8 = 0x08;
+    pub const ackwp: u8 = 0x10;
+    pub const rdrfs: u8 = 0x20;
+    pub const wait: u8 = 0x40;
+    pub const smbs: u8 = 0x80;
+};
+
 /// ICSR2: the status flags the polling driver waits on (HUM Ch 39.2.9).
 pub const icsr2 = struct {
     pub const tmof: u8 = 0x01;
