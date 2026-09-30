@@ -24,6 +24,22 @@
 //! the driver's own comparison against CAULVR/CALLVR is what gets exercised.
 //! The one case that is not in band is a window programmed upside down, and
 //! that is reported the way silicon reports it, with FERRF.
+//!
+//! THE MEASUREMENT MUST BE STOPPED BEFORE ITS SETTINGS ARE PROGRAMMED. The
+//! driver's own bring-up opens with `reg->CACR0 = 0U` and then waits for the
+//! bit to read back clear, and says why: "HUM Ch 10.2.1 CACR0 p 421 -- CFME
+//! must be cleared before CACR1/CACR2/limits are programmed (FSP r_cac.c
+//! r_cac_hw_configure() does the same, then waits on CACR0 readback)"
+//! (ra8_cac.c lines 106-109). Nothing here checked it: CACR1, CACR2, CAULVR
+//! and CALLVR took a store at any moment, so a run could not tell a correct
+//! bring-up from one that moved the reference clock or the window out from
+//! under a measurement already enabled. A hot store is COUNTED AND STILL
+//! LANDS rather than refused. The page names the precondition and does not
+//! say what the part does to a driver that ignores it, and this model has no
+//! real clock to count, so claiming a spoiled measurement would be a guess
+//! where a count is a fact. CACR0 and CAICR are deliberately outside the
+//! rule: CACR0 is how the measurement is stopped in the first place, and the
+//! flag-clear strobes are what the driver uses to tidy up around one.
 const std = @import("std");
 const periph = @import("registry.zig");
 
@@ -74,6 +90,8 @@ pub const Cac = struct {
     callvr: u16 = 0,
     cacntbr: u16 = 0,
     measurements: u32 = 0,
+    /// Stores into CACR1, CACR2, CAULVR or CALLVR taken with CFME set.
+    hot_config: u32 = 0,
 
     pub fn init() Cac {
         return .{};
@@ -81,7 +99,12 @@ pub const Cac = struct {
 
     /// Untouched units stay out of the end-of-run report.
     pub fn quiet(self: *const Cac) bool {
-        return self.measurements == 0;
+        return self.measurements == 0 and self.hot_config == 0;
+    }
+
+    /// Whether a measurement is enabled right now.
+    pub fn measuring(self: *const Cac) bool {
+        return self.cacr0 & cfme != 0;
     }
 
     pub fn flagSet(self: *const Cac, mask: u8) bool {
@@ -141,6 +164,7 @@ pub const Cac = struct {
     pub fn write(self: *Cac, address: u32, width: u3, value: u32) void {
         const offset = address -% win_base;
         const byte: u8 = @truncate(value);
+        if (configures(offset) and self.measuring()) self.hot_config +%= 1;
         switch (offset) {
             off_cacr0 => self.writeCacr0(byte),
             off_cacr1 => self.cacr1 = byte,
@@ -192,6 +216,14 @@ pub const Cac = struct {
         };
     }
 };
+
+/// The registers the driver programs with the measurement stopped: the two
+/// clock selects and the two window limits. CACR0 is how it stops, CAICR is
+/// how it tidies the flags, and CASTR and CACNTBR are not firmware's to write.
+fn configures(offset: u32) bool {
+    if (offset == off_cacr1 or offset == off_cacr2) return true;
+    return offset >= off_caulvr and offset < off_callvr + 2;
+}
 
 /// The part of a 16-bit register a narrow access names.
 fn part(value: u16, byte_offset: u32, width: u3) u32 {
