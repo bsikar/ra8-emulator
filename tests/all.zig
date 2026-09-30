@@ -25,6 +25,7 @@ test {
     _ = @import("debug/watchpoint_test.zig");
     _ = @import("debug/place_test.zig");
     _ = @import("debug/registers_test.zig");
+    _ = @import("debug/hotspots_test.zig");
     _ = @import("core/stop_test.zig");
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");

@@ -23,6 +23,7 @@ const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
+const hotspots = @import("../debug/hotspots.zig");
 
 /// Records the invalid access behind a fault.
 pub const Watch = fault.Watch;
@@ -74,6 +75,11 @@ pub const Session = struct {
     /// is what every test that is not about delivery timing wants.
     /// src/core/unmask.zig says what it costs and what bounds it.
     unmask: ?*unmask.Release = null,
+    /// Where the run spent itself: the program counter sampled once per
+    /// chunk boundary. Null samples nothing, which is what every test that
+    /// is not about the sampler wants. src/debug/hotspots.zig says what one
+    /// sample per boundary can and cannot answer.
+    pcs: ?*hotspots.Table = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.

@@ -18,6 +18,7 @@ const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
+const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
 /// Run a bounded number of instructions. A fault is a result, not a
@@ -104,6 +105,9 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             if (due.met(clock.ticks)) break;
         };
         pc = try core.register(.pc);
+        // Sampled last, so the address recorded is the one the next
+        // stretch starts at rather than whatever a handler left behind.
+        if (session.pcs) |table| table.sample(pc);
     }
     return null;
 }
