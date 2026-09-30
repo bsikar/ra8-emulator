@@ -5,6 +5,7 @@ const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const ipc = @import("../periph/ipc.zig");
 const sync = @import("../periph/ipc_sync.zig");
+const ipc_attr = @import("../periph/ipc_attr.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mpu = @import("../periph/mpu.zig");
 const sau = @import("../periph/sau.zig");
@@ -157,10 +158,30 @@ pub fn partitionsOf(out: Writer, label: []const u8, unit: *const sau.Sau) !void 
     }
 }
 
+/// Which IPC channels the Secure boot handed to the Non-Secure world, and
+/// whether the words it wrote actually landed. A store made with PRC4 shut
+/// is discarded by silicon, so it is reported as refused rather than folded
+/// into the count: a firmware that forgot the unlock gave nothing away.
+fn attribution(board: *Board, out: Writer) !void {
+    const unit = &board.mailbox.attrib;
+    if (unit.quiet()) return;
+    try out.print(
+        "IPC attribution: IPCSAR 0x{X:0>8}, IPCPAR 0x{X:0>8}, {d} of {d} channel(s) Non-Secure\n",
+        .{ unit.sar, unit.par, unit.givenAway(), ipc_attr.field.channels },
+    );
+    if (unit.locked_writes != 0) {
+        try out.print(
+            "IPC attribution: REFUSED {d} store(s) with PRCR_S.PRC4 shut, the words never landed\n",
+            .{unit.locked_writes},
+        );
+    }
+}
+
 pub fn sections(board: *Board, out: Writer) !void {
     try secondCore(board, out);
     try regions(board, out);
     try partitions(board, out);
+    try attribution(board, out);
     const mailbox = &board.mailbox;
     if (mailbox.quiet()) return;
     for (&mailbox.channels, 0..) |*unit, index| {

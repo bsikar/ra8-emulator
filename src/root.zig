@@ -151,6 +151,7 @@ pub const periph = struct {
     pub const iwdt_refresh = @import("periph/iwdt_refresh.zig");
     pub const iwdt_status = @import("periph/iwdt_status.zig");
     pub const ipc_sync = @import("periph/ipc_sync.zig");
+    pub const ipc_attr = @import("periph/ipc_attr.zig");
     pub const lanes = @import("periph/lanes.zig");
     pub const lvd = @import("periph/lvd.zig");
     pub const lvd_regs = @import("periph/lvd_regs.zig");

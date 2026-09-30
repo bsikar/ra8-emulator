@@ -172,6 +172,7 @@ test {
     _ = @import("periph/iwdt_status_test.zig");
     _ = @import("periph/ipc_test.zig");
     _ = @import("periph/ipc_sync_test.zig");
+    _ = @import("periph/ipc_attr_test.zig");
     _ = @import("periph/pfs_test.zig");
     _ = @import("periph/syrstmsk_test.zig");
     _ = @import("periph/sysclk_test.zig");
