@@ -35,7 +35,7 @@ pub const core = struct {
     pub const tick = @import("core/tick.zig");
     pub const breakpoint = @import("debug/breakpoint.zig");
     pub const watchpoint = @import("debug/watchpoint.zig");
-    pub const watch_sites = @import("debug/watch_sites.zig");
+    pub const tally = @import("debug/tally.zig");
     pub const mem_dump = @import("debug/mem_dump.zig");
     pub const place = @import("debug/place.zig");
     pub const registers = @import("debug/registers.zig");
@@ -299,4 +299,5 @@ pub const board = struct {
     pub const report_run = @import("interfaces/cli/report_run.zig");
     pub const report_dumps = @import("interfaces/cli/report_dumps.zig");
     pub const report_hotspots = @import("interfaces/cli/report_hotspots.zig");
+    pub const report_timing = @import("interfaces/cli/report_timing.zig");
 };

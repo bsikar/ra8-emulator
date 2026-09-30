@@ -14,7 +14,7 @@ const std = @import("std");
 const elf = @import("../core/elf.zig");
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
-const watch_sites = @import("watch_sites.zig");
+const tally_mod = @import("tally.zig");
 
 pub const limits = struct {
     /// Stores kept from the start of the run. The opening of a sequence is
@@ -69,9 +69,9 @@ pub const Watched = struct {
     /// not grow with the run however long it writes.
     last: [limits.tail]Store = undefined,
     /// Who wrote here and how often, for the places that take hundreds of
-    /// stores from a dozen sites. src/debug/watch_sites.zig carries why
+    /// stores from a dozen sites. src/debug/tally.zig carries why
     /// the two ends of the list are not enough there.
-    tally: watch_sites.Tally = .{},
+    tally: tally_mod.Tally = .{},
 
     /// Record a store. Everything between the two ends is counted and
     /// dropped, so the memory a watch costs is fixed.
@@ -174,13 +174,13 @@ pub fn print(out: anytype, image: elf.Image, spec: ?[]const u8, watched: ?Watche
 /// the run opened and closed with, the tally says how the writes divide
 /// up, and on a busy kernel word the second is what pairs an increment
 /// against its decrement.
-fn tallied(out: anytype, image: elf.Image, tally: watch_sites.Tally) !void {
-    if (tally.quiet()) return;
-    var room: [watch_sites.limits.kept]watch_sites.Site = undefined;
-    const ranked = tally.ranked(&room);
+fn tallied(out: anytype, image: elf.Image, counted: tally_mod.Tally) !void {
+    if (counted.quiet()) return;
+    var room: [tally_mod.limits.kept]tally_mod.Site = undefined;
+    const ranked = counted.ranked(&room);
     var listed: usize = 0;
     for (ranked) |site| {
-        if (listed >= watch_sites.limits.listed) break;
+        if (listed >= tally_mod.limits.listed) break;
         listed += 1;
         try out.print(
             "                  {d} store(s) of 0x{X:0>8} from pc 0x{X:0>8}",
@@ -191,10 +191,10 @@ fn tallied(out: anytype, image: elf.Image, tally: watch_sites.Tally) !void {
         }
         try out.print("\n", .{});
     }
-    if (tally.displaced > 0) {
+    if (counted.displaced > 0) {
         try out.print(
             "                  and {d} write(s) from sites that did not stay in the tally\n",
-            .{tally.displaced},
+            .{counted.displaced},
         );
     }
 }

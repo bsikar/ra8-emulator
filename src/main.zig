@@ -33,6 +33,7 @@ const report_steps = ra8.board.report_steps;
 const report_run = ra8.board.report_run;
 const report_dumps = ra8.board.report_dumps;
 const report_hotspots = ra8.board.report_hotspots;
+const report_timing = ra8.board.report_timing;
 
 /// Read the image off disk and parse it, saying which of the two failed.
 fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
@@ -64,6 +65,7 @@ const Parts = struct {
     release: ra8.core.unmask.Release = .{},
     pcs: ra8.core.hotspots.Table = .{},
     fns: ?ra8.core.functions.Table = null,
+    taken: ra8.core.tally.Tally = .{},
     timebase: clocks.Clocks = .{},
 };
 
@@ -147,11 +149,13 @@ pub fn main() !u8 {
         .unmask = &parts.release,
         .pcs = &parts.pcs,
         .fns = &parts.fns.?,
+        .taken_from = &parts.taken,
     }, second);
 
     try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
+    try report_timing.takenFrom(out, image, parts.taken);
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
