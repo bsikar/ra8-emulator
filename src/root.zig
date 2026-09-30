@@ -4,6 +4,7 @@
 pub const core = struct {
     pub const c = @import("core/c.zig");
     pub const board_ram = @import("core/board_ram.zig");
+    pub const session = @import("core/session.zig");
     pub const bus_hook = @import("core/bus_hook.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("core/cli.zig");
