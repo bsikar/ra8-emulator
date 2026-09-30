@@ -291,3 +291,77 @@ the entry is the FIRST exception in the function across the whole run:
 a systematically wrong boundary would be expected to strand more than one
 sleep out of 452. A single strand looks like a rare coincidence of chunk
 edge and window, not a standing rule.
+
+## Reading 2 confirmed: the boundary width decides it
+
+The section above left two readings open and said to test the chunk-edge
+one first. `--chunk <n>` makes the boundary width settable, so the same
+run can be asked the same question at several widths. It is decisive.
+
+Where the single PendSV inside the sleep path lands, over 2000 ms:
+
+| chunk  | exceptions in `_tx_thread_sleep` | the PendSV lands at |
+| ------ | -------------------------------- | ------------------- |
+| 2000   | 0   | `_tx_thread_system_suspend+0xEE` |
+| 5000   | 2   | `_tx_thread_system_suspend+0xEE` |
+| 12500  | 0   | `_tx_thread_system_suspend+0x1B6` |
+| 33333  | 1   | `_tx_thread_system_suspend+0xEE` |
+| 50000  | 112 | **`_tx_thread_sleep+0xBA`** |
+| 75000  | 1   | `_tx_thread_system_suspend+0xEE` |
+| 100000 | 0   | `_tx_thread_system_suspend+0xEE` |
+
+At every width except the default the PendSV lands *inside*
+`_tx_thread_system_suspend`, where ThreadX expects to be switched and
+where the flag has already been taken down. Only at 50000 does it land on
+the `nop` at `_tx_thread_sleep+0xBA`, in the four-instruction window
+between the increment and the call. The 112 is the post-strand spin; at
+the other widths the function is barely interrupted at all.
+
+So the emulator is not pending PendSV against the flag. Reading 1 is
+dead. The boundary is handing a legitimately-pending exception to the
+core at an instruction where real silicon, running that window without a
+chunk edge in it, would have reached the call first.
+
+### The spin is bigger than the strand
+
+Asking the same runs what the LEDs did over 4000 ms turns out to matter
+more than the strand did:
+
+| chunk  | LED1 (thread A) | LED2 (thread B) |
+| ------ | --------------- | --------------- |
+| 2000   | 48        | 24         |
+| 12500  | 300       | 380        |
+| 33333  | 401       | **12042263** |
+| 50000  | 301       | **18066461** |
+| 75000  | **2919586** | 909      |
+| 100000 | 1203      | **12042804** |
+
+At four of the six widths one thread runs away by four orders of
+magnitude while the other keeps a plausible count, which is the refused
+sleep spinning: the same shape the hotspot table found from the other
+side. Whichever thread gets stranded is the one that runs away, and at
+75000 it is thread A rather than thread B.
+
+Only chunk 2000 produces the ratio the app is actually written for.
+`k_blink_a_ticks` is 500 and `k_blink_b_ticks` is 1000, so thread A
+should toggle exactly twice as often as thread B, and 48:24 is that
+ratio. No other width holds it.
+
+### What is still wrong at chunk 2000
+
+The ratio is right and the magnitude is not. At 1000 Hz over 4000 ms the
+app should toggle LED1 about 8 times and LED2 about 4; it toggles 48 and
+24, so modelled time is running about six times fast. That is a separate
+defect from the strand and it is not fixed by the boundary width. It is
+the next thing to chase, and it should be chased before any decision
+about changing `cadence.instructions`, because a default picked to make
+the strand go away while the tick rate is six times off would be picked
+against the wrong evidence.
+
+### What this does not settle
+
+Whether 50000 is a bad default, or whether every width above a few
+thousand is unsafe and 2000 merely happens to dodge it. Six widths is not
+a sweep, the strand is a coincidence of one edge and one four-instruction
+window, and a different image would put that window somewhere else.
+`cadence.instructions` is deliberately left alone this pass.

@@ -153,6 +153,7 @@ pub fn main() !u8 {
         .fns = &parts.fns.?,
         .taken_from = &parts.taken,
         .taken_in = if (window) |*one| one else null,
+        .per_boundary = options.chunk_instructions,
     }, second);
 
     try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);

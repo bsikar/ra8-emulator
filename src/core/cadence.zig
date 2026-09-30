@@ -39,6 +39,23 @@ pub const instructions: u32 = 50_000;
 /// the collapse it causes is the firmware's own to see.
 pub const floor: u32 = 2_000;
 
+/// The boundary a run starts from.
+///
+/// Three sources, in order. An explicit width (`--chunk`) wins, because the
+/// only reason to ask for one is to find out whether a result depends on
+/// where the boundaries fall, and a time base quietly overriding it would
+/// defeat exactly that. Otherwise the time base's own width, which is what
+/// a clocked run has always used. Otherwise the default above.
+///
+/// A width of zero is refused rather than honoured: a boundary every no
+/// instructions is not a finer model, it is a loop that never advances.
+pub fn configuredFrom(asked: ?u32, clock: ?u32) Cadence {
+    if (asked) |width| {
+        if (width > 0) return .{ .per_boundary = width };
+    }
+    return .{ .per_boundary = clock orelse instructions };
+}
+
 /// The boundary policy of one run. A field rather than a bare constant so a
 /// test can run a short boundary, which is also what the engine reads off the
 /// time base.
