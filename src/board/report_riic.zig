@@ -23,6 +23,9 @@ pub fn channels(board: *Board, out: Writer) !void {
         if (channel.uninit != 0) {
             try out.print(", {d} ACCESS(ES) WITH THE INTERFACE DISABLED", .{channel.uninit});
         }
+        if (channel.held != 0) {
+            try out.print(", {d} BUS ACCESS(ES) WHILE HELD IN RESET", .{channel.held});
+        }
         if (channel.st_busy != 0) {
             try out.print(", {d} START(S) ON A BUSY BUS REFUSED", .{channel.st_busy});
         }

@@ -5,12 +5,9 @@
 //! payload either way, then STOP. What answers on the line comes from the
 //! device registry in riic_bus.zig, so this file is only about transfers.
 //!
-//! The thing dev never checked is the interface itself. Every register here
-//! answered whatever ICCR1 said, so an image that never enabled the block ran
-//! a whole transaction in the emulator and did nothing at all on the bench.
-//! ICE gates the transfer path here, and the rest of the refusals are the
-//! same shape: a condition the bus cannot be in is refused and counted rather
-//! than quietly made to work.
+//! The thing dev never checked is the interface itself, so a block nobody
+//! enabled ran a whole transaction here and nothing at all on the bench.
+//! Which accesses ICE and IICRST allow is its own rule in riic_reset.zig.
 //!
 //! The restart window, where an address written too early is dropped, is its
 //! own rule in riic_restart.zig.
@@ -27,6 +24,7 @@ const riic_restart = @import("riic_restart.zig");
 const riic_stop = @import("riic_stop.zig");
 const riic_rx = @import("riic_rx.zig");
 const riic_ack = @import("riic_ack.zig");
+const riic_reset = @import("riic_reset.zig");
 
 pub const win_base = flag.win_base;
 pub const win_span = flag.win_span;
@@ -65,9 +63,12 @@ pub const Channel = struct {
     /// Address bytes nothing on the bus answered. A scan is made of these, so
     /// they are traffic, not a fault.
     nacks: u32 = 0,
-    /// Accesses made with the interface disabled or held in reset. dev
-    /// answered them all.
+    /// Accesses made with ICE clear, so the register file was not powered.
+    /// dev answered them all.
     uninit: u32 = 0,
+    /// Bus-moving accesses made while IICRST held the machine in reset.
+    /// Configuration stored in that window is not a fault and is not counted.
+    held: u32 = 0,
     /// START requested while a transaction was already open. dev tore the
     /// open one down and started again, losing a transfer silently.
     st_busy: u32 = 0,
@@ -83,6 +84,7 @@ pub const Channel = struct {
 
     pub fn quiet(self: *const Channel) bool {
         return self.transfers == 0 and self.nacks == 0 and self.uninit == 0 and
+            self.held == 0 and
             self.st_busy == 0 and self.rs_idle == 0 and self.no_start == 0 and
             self.rx.quiet() and self.restart.quiet() and self.ack.quiet() and self.stop.quiet() and
             self.target.quiet();
@@ -90,8 +92,7 @@ pub const Channel = struct {
 
     /// ICE set and IICRST clear: the block is out of reset and clocked.
     pub fn enabled(self: *const Channel) bool {
-        const setup = self.shadow[flag.reg.iccr1];
-        return setup & flag.iccr1.ice != 0 and setup & flag.iccr1.iicrst == 0;
+        return riic_reset.running(self.shadow[flag.reg.iccr1]);
     }
 
     fn openTransfer(self: *Channel) void {
@@ -211,9 +212,16 @@ pub const Channel = struct {
     pub fn read(self: *Channel, registry: *bus.Registry, offset: u32) u8 {
         if (offset >= flag.reg.count) return 0;
         if (offset == flag.reg.iccr1) return self.shadow[offset];
-        if (!self.enabled()) {
-            self.uninit += 1;
-            return 0;
+        switch (riic_reset.verdict(self.shadow[flag.reg.iccr1], offset)) {
+            .answer => {},
+            .unpowered => {
+                self.uninit += 1;
+                return 0;
+            },
+            .held => {
+                self.held += 1;
+                return 0;
+            },
         }
         if (self.target.armed) return self.targetRead(offset);
         return switch (offset) {
@@ -256,9 +264,16 @@ pub const Channel = struct {
             if (!self.enabled()) self.reset();
             return;
         }
-        if (!self.enabled()) {
-            self.uninit += 1;
-            return;
+        switch (riic_reset.verdict(self.shadow[flag.reg.iccr1], offset)) {
+            .answer => {},
+            .unpowered => {
+                self.uninit += 1;
+                return;
+            },
+            .held => {
+                self.held += 1;
+                return;
+            },
         }
         if (offset == flag.reg.icmr3) {
             self.shadow[offset] = self.ack.apply(self.shadow[offset], value);
