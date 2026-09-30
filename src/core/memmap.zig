@@ -24,17 +24,12 @@
 //! derived from one named offset rather than one of them being a literal and
 //! the other missing.
 //!
-//! WHAT THIS DOES NOT DO, AND IT IS THE FIRMWARE'S OWN WORDS THAT SAY SO.
-//! cpu1_main.c calls the two views "the same backing store", and here they
-//! are two: a store through 0x3210_0200 is not visible at 0x2210_0200. Every
-//! access in the corpus is self-consistent, because an image reads a marker
-//! back through the view it wrote it through, and the one cross-view reader
-//! is a bench J-Link rather than anything that runs here. Making them one
-//! store means mapping the Secure region from host memory and mapping the
-//! alias onto the same pointer, which needs a seam in src/core/engine.zig
-//! that this slice deliberately does not open: that file sits at the gate
-//! ceiling. Until then the alias is a separate region, stated rather than
-//! implied.
+//! AN ALIAS IS THE SAME BYTES, and `alias_of` below is what says so. When the
+//! alias was first mapped it was a region of its own with its own backing
+//! store, so a marker written through 0x3210_0200 was not there at
+//! 0x2210_0200 and cpu1_main.c's own description of the two views as "the
+//! same backing store" was false here. src/core/board_ram.zig now puts both
+//! views of a region over one host allocation, so the alias aliases.
 //!
 //! DTCM's alias is deliberately not mapped. The rule would place it at
 //! 0x3000_0000, but the core's tightly coupled memory is reached over the
@@ -88,6 +83,21 @@ pub const ns_sram_base: u32 = sram_base + ns_offset;
 pub const ns_sram_end: u32 = ns_sram_base + (sram_end - sram_base);
 pub const ns_sdram_base: u32 = sdram_base + ns_offset;
 pub const ns_sdram_end: u32 = ns_sdram_base + (sdram_end - sdram_base);
+
+/// A Non-secure view and the Secure region whose bytes it is. Both entries
+/// of a pair appear in `ram` as regions in their own right, because the CPU
+/// model maps guest addresses and there are two of them; this table is what
+/// says the two share one backing store, and src/core/board_ram.zig is what
+/// honours it.
+pub const View = struct {
+    view: u32,
+    of: u32,
+};
+
+pub const alias_of = [_]View{
+    .{ .view = ns_sram_base, .of = sram_base },
+    .{ .view = ns_sdram_base, .of = sdram_base },
+};
 
 /// The Cortex-M Private Peripheral Bus: SCB, NVIC, SysTick, MPU, SAU and the
 /// debug block. The C emulator maps this as plain RAM rather than callback
