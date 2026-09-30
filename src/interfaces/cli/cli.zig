@@ -161,6 +161,9 @@ pub const Options = struct {
     /// A place whose stores to record, as the command line spelled it.
     /// Null watches nothing and costs the run nothing.
     watch_place: ?[]const u8 = null,
+    /// `--taken-in`: a function to catch every exception taken inside.
+    /// src/debug/taken_in.zig says why a tally cannot answer that.
+    taken_in_place: ?[]const u8 = null,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -205,6 +208,7 @@ pub fn parse(argv: []const []const u8) !Options {
     var index: usize = 2;
     while (index < argv.len) : (index += 1) {
         if (try parseWorld(&options, argv, &index)) continue;
+        if (try parseDebug(&options, argv, &index)) continue;
         if (std.mem.eql(u8, argv[index], "--instructions")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
@@ -261,18 +265,6 @@ pub fn parse(argv: []const []const u8) !Options {
                     index += 1;
                 }
             }
-        } else if (std.mem.eql(u8, argv[index], "--cpu1")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            options.cpu1_path = argv[index];
-        } else if (std.mem.eql(u8, argv[index], "--watch")) {
-            index += 1;
-            if (index >= argv.len) return error.MissingValue;
-            options.watch_place = argv[index];
-        } else if (std.mem.eql(u8, argv[index], "--dump-regs")) {
-            options.dump_regs = true;
-        } else if (std.mem.eql(u8, argv[index], "--stop-on-undefined")) {
-            options.stop_on_undefined = true;
         } else return error.UnknownFlag;
     }
     return options;
@@ -284,6 +276,36 @@ pub fn parse(argv: []const []const u8) !Options {
 ///
 /// Returns whether the argument was one of them. False leaves the index
 /// where it found it, so the caller can carry on looking.
+/// The flags that inspect a run rather than shape the board: which image
+/// the second core runs, what to watch, what to print at the end.
+///
+/// Split out of `parse` for the same reason `parseWorld` was: one chain of
+/// else-ifs per concern keeps each function inside the length gate, and
+/// these five have nothing to say to the timing and memory flags above.
+/// Returns true when the flag was one of these and `index` has been walked
+/// past any value it took.
+fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    const flag = argv[index.*];
+    if (std.mem.eql(u8, flag, "--cpu1")) {
+        index.* += 1;
+        if (index.* >= argv.len) return error.MissingValue;
+        options.cpu1_path = argv[index.*];
+    } else if (std.mem.eql(u8, flag, "--watch")) {
+        index.* += 1;
+        if (index.* >= argv.len) return error.MissingValue;
+        options.watch_place = argv[index.*];
+    } else if (std.mem.eql(u8, flag, "--taken-in")) {
+        index.* += 1;
+        if (index.* >= argv.len) return error.MissingValue;
+        options.taken_in_place = argv[index.*];
+    } else if (std.mem.eql(u8, flag, "--dump-regs")) {
+        options.dump_regs = true;
+    } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {
+        options.stop_on_undefined = true;
+    } else return false;
+    return true;
+}
+
 fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--trace-sd")) {

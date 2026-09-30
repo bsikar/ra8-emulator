@@ -221,3 +221,73 @@ call afterwards. This model takes exceptions only at chunk boundaries,
 so the next measurement to make is whether a boundary switch lands in
 that window more readily than hardware would, and whether the frame it
 stacks for A is one A can ever return on.
+
+## The stranding exception, caught by a window
+
+The tally in the section above located the unpaired increment but could
+not show the exception that caused it, and never could: a tally displaces
+its rarest row when the table fills, and a once-per-run event is exactly
+that row. `src/debug/taken_in.zig` answers it instead. Name a function,
+keep every exception taken inside it, evict nothing:
+
+    ra8_emulator threadx_blink.elf --ms 2000 --taken-in _tx_thread_sleep
+
+Over 2000 modelled milliseconds, `_tx_thread_sleep` is interrupted 112
+times, and **exactly one of those is a PendSV**:
+
+    #1 exception 14 at pc 0x020022B2 _tx_thread_sleep+0xBA
+
+The other 111 are SysTick (exception 15) at `_tx_thread_sleep+0x84`,
+which is the caller-error guard path: once the flag is stuck, every later
+sleep is refused there and returns instantly, and the timer keeps landing
+on the spin. So the single PendSV is first in the window and the 111 are
+its aftermath, which matches what the hotspot table showed from the other
+side.
+
+The companion run is the one that settles it:
+
+    ra8_emulator threadx_blink.elf --ms 2000 --taken-in _tx_thread_system_suspend
+    taken-in: _tx_thread_system_suspend @0x020022D8+0x230, 0 exception(s) taken inside
+
+Zero. The suspend function is never interrupted at all, so nothing is
+lost inside it. The whole loss happens in the caller.
+
+### Where 0x020022B2 sits
+
+    20022a6:  6013       str  r3, [r2, #0]     ; _tx_thread_preempt_disable = 1
+    20022a8:  6b3b       ldr  r3, [r7, #48]
+    20022aa:  60fb       str  r3, [r7, #12]
+    20022ac:  68fb       ldr  r3, [r7, #12]
+    20022ae:  f383 8810  msr  PRIMASK, r3      ; interrupts back on
+    20022b2:  bf00       nop                   ; <-- PendSV taken here
+    20022b4:  6af8       ldr  r0, [r7, #44]
+    20022b6:  f000 f80f  bl   _tx_thread_system_suspend   ; would decrement
+
+The flag goes up at 0x020022A6, interrupts come back on at 0x020022AE,
+and the call that takes the flag down again is four instructions later at
+0x020022B6. The PendSV lands on the first instruction of that window, on
+the `nop`. The thread is switched out holding the flag at 1 and never
+returns to make the call, so `tx_timer_interrupt.S:222` refuses to issue
+a PendSV from then on and no thread is ever scheduled again.
+
+### What this does NOT yet establish
+
+Whether the emulator is wrong to take it there. ICSR.PENDSVSET is sticky,
+so a PendSV pended **before** the flag went up and taken at the first
+boundary where priority allows is legal hardware behaviour, and the
+window at 0x020022AE-0x020022B6 is genuinely interruptible by design.
+Two readings remain open and the next pass should separate them:
+
+1. The model pended PendSV while `_tx_thread_preempt_disable` was already
+   non-zero, which the timer path is supposed to refuse. That is a model
+   bug in the timer handler and the fix is there.
+2. The PendSV was pended legitimately before the increment, and the model
+   is merely taking it at an instruction boundary that real silicon would
+   not offer, most likely because a chunk boundary lets a pending
+   exception in at a point hardware would have run through.
+
+Reading 2 is the one to test first, because `--taken-in` already shows
+the entry is the FIRST exception in the function across the whole run:
+a systematically wrong boundary would be expected to strand more than one
+sleep out of 452. A single strand looks like a rare coincidence of chunk
+edge and window, not a standing rule.
