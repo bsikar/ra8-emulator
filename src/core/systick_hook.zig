@@ -24,6 +24,7 @@
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
 const clocks = @import("../periph/clocks.zig");
+const systick_arm = @import("../periph/systick_arm.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -71,7 +72,7 @@ fn onWrite(
     const handle = uc orelse return;
     const word: u32 = @bitCast(@as(i32, @truncate(value)));
     const offset: u32 = @truncate(address);
-    switch (clocks.observe(offset, word, read(handle, memmap.syst.csr), read(handle, memmap.syst.rvr))) {
+    switch (systick_arm.observe(offset, word, read(handle, memmap.syst.csr), read(handle, memmap.syst.rvr))) {
         .none => {},
         .rearm => {
             // Put the store where it was going before stopping, so the

@@ -47,7 +47,15 @@ pub const Clocks = struct {
     /// Instructions charged per advance. A field rather than a constant so a
     /// test can run a short chunk; the default is the C tree's chunk.
     per_chunk: u32 = chunk_instructions,
-    /// Cycles charged to DWT_CYCCNT.
+    /// Modelled cycles this run covered, one per instruction. Unconditional,
+    /// because time passes whether or not the firmware is watching it: this
+    /// is the run's own account of how far it got, and it is the only field
+    /// here that every image has.
+    elapsed: u64 = 0,
+    /// Of those, the ones handed to DWT_CYCCNT. The register only counts once
+    /// the firmware arms it, so this stays zero for an image that never does,
+    /// and the gap between it and `elapsed` is exactly the time that passed
+    /// while nothing was watching.
     cycles: u64 = 0,
     /// SysTick periods that elapsed.
     ticks: u64 = 0,
@@ -103,9 +111,17 @@ pub const Clocks = struct {
         return reload + 1;
     }
 
-    /// Charge `instructions` worth of time to both bases. `core` is anything
-    /// that can read and write a PPB word; the engine is one.
+    /// Charge `instructions` worth of time. `core` is anything that can read
+    /// and write a PPB word; the engine is one.
+    ///
+    /// The run's own count moves first and always. The two bases below are
+    /// the firmware's, and each has its own opt-in: DWT_CYCCNT counts only
+    /// once the firmware arms it, and SysTick only once it is enabled with a
+    /// reload. An image that arms neither still spends time here, and saying
+    /// so is the difference between a run that did nothing and a run whose
+    /// firmware asked for no clock.
     pub fn advance(self: *Clocks, core: anytype, instructions: u32) !void {
+        self.elapsed += instructions;
         try self.advanceCycleCounter(core, instructions);
         try self.advanceSysTick(core, instructions);
     }
@@ -166,46 +182,6 @@ pub const Clocks = struct {
         if (next != csr) try core.writeWord(memmap.syst.csr, next);
     }
 };
-
-/// What a store into the SysTick window means for the stretch in flight.
-pub const Observed = enum { none, rearm };
-
-/// Does this store re-size the period the stretch in flight was cut from?
-///
-/// A pure decision over four words, so it is tested without an engine:
-/// `offset` and `word` are the store, `csr` and `rvr` the two registers as
-/// they stand before it lands.
-///
-/// A RELOAD is only interesting while the counter runs. With the counter
-/// stopped the period is zero either way, so the reload can be staged as
-/// freely as the driver likes and nothing is owed; it is the store that
-/// STARTS the counter which ends a stretch, and by then the reload beside it
-/// is the one that will govern. `ra8_systick_configure` writes the reload,
-/// then the counter, then the control word, which is exactly that order.
-///
-/// A RE-ARM while running is the retune path (`ra8_threadx_systick_retune`
-/// reprogrammes SYST_RVR off the live CPUCLK0), and it ends a stretch only
-/// when the reload actually moves: writing the same reload back leaves the
-/// period where it was.
-///
-/// STOPPING the counter is deliberately not one of these. A stretch cut from
-/// a period is never wider than the period, so finishing it swallows
-/// nothing; the next one widens on its own once nothing is armed.
-pub fn observe(offset: u32, word: u32, csr: u32, rvr: u32) Observed {
-    const running = csr & csr_enable != 0;
-    if (offset == memmap.syst.rvr) {
-        if (!running) return .none;
-        if (word & counter_mask == rvr & counter_mask) return .none;
-        return .rearm;
-    }
-    if (offset == memmap.syst.csr) {
-        if (running) return .none;
-        if (word & csr_enable == 0) return .none;
-        if (rvr & counter_mask == 0) return .none;
-        return .rearm;
-    }
-    return .none;
-}
 
 pub const Wrapped = struct { value: u32, periods: u64 };
 

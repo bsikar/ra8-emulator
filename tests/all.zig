@@ -178,6 +178,7 @@ test {
     _ = @import("periph/pfs_test.zig");
     _ = @import("periph/syrstmsk_test.zig");
     _ = @import("periph/sysclk_test.zig");
+    _ = @import("periph/systick_arm_test.zig");
     _ = @import("periph/subclock_test.zig");
     _ = @import("periph/lpm_test.zig");
     _ = @import("periph/pll_test.zig");

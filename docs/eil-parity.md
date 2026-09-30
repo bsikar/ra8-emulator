@@ -100,6 +100,45 @@ comparison against this figure. Until that run exists, the honest statement is
 that the Zig side matches the C side on the 36 images built here, and that the
 remaining 86 are unmeasured on either.
 
+## The probe windows are not reachable at the firmware's own clock
+
+Measured 2026-09-30, and it constrains any full-set parity run.
+
+`jlink_memprobe` is the mode the 36 built images use, and its contract is a
+window in *seconds*: read `HIL_PROBE_SYMBOL`, wait `HIL_PROBE_SECONDS`, assert
+the symbol advanced by `HIL_PROBE_MIN_ADVANCE`, with `HIL_PROBE_FAILURE_SYMBOL`
+still at or under `HIL_PROBE_MAX_FAILURE`. Windows in this tree run 3 to 5
+seconds, plus a boot window of 12 to 15 on the four filesystem apps.
+
+The model charges one cycle per instruction, so a modelled second costs as many
+instructions as the firmware's clock has hertz. `k_ra8_cpuclk0_hz` is
+1,000,000,000: an image that completes CGC bring-up runs its probe window at a
+gigahertz, so a 4-second window is **four billion instructions**. Measured on
+this box at roughly 2.5 M instructions per second of wall time, that is over
+four hours for one image.
+
+The exception is the handful that never leave the clock they reset on.
+`blink` stays on MOCO at about 8.4 MHz, so its 3-second window is 25.2 M
+instructions and runs in 2 seconds of wall time. It passes its contract outright:
+`g_blink_tick` reaches 6 against a `HIL_PROBE_MIN_ADVANCE` of 5.
+
+    blink            --ms 3000   2 s wall     g_blink_tick 6   >= 5   PASS
+    threadx_blink    --ms 4000   519 s wall   (did not reach the window)
+
+So the two ends of the corpus differ by two and a half orders of magnitude in
+cost per modelled second, and the split is not slow images against fast ones:
+it is images that brought the PLL up against images that did not.
+
+What this means for PR #15. A full-set parity run cannot be a straight
+execution of every probe window; the fast-clock images need either a longer
+wall budget than a CI run has, or an idle seam. The ThreadX images spend that
+budget in `__tx_ts_wait`, a three-instruction spin with interrupts briefly
+open, waiting for the SysTick handler to make a thread ready. Nothing in it
+needs to be executed four billion times, so the seam is available, but it is
+its own slice and it is not written yet. Until it is, the parity statement for
+the timed images has to name the budget it ran under rather than claim the
+contract was met.
+
 ## Re-deriving it
 
     tools/eil_set.sh /path/to/ra8-firmware

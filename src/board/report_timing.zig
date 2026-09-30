@@ -1,5 +1,11 @@
-//! The time bases at the end of a run: what was charged, what elapsed, and
-//! what the firmware was never told about.
+//! The time bases at the end of a run: what elapsed, what the firmware was
+//! watching, and what it was never told about.
+//!
+//! Two cycle numbers rather than one, because they answer different
+//! questions. How far the run got is a property of the run. What DWT_CYCCNT
+//! holds is a property of the firmware, which only counts once it arms the
+//! counter, and on this corpus most images never do. Printing only the
+//! second made a run that covered two million instructions report zero.
 //!
 //! Its own file because the two counters it prints come from different models
 //! (the time base in periph/clocks.zig, the controller in periph/nvic.zig) and
@@ -16,8 +22,8 @@ const Writer = @import("report.zig").Writer;
 /// number down, each one a stretch whose cycles went uncharged.
 pub fn timing(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void {
     try out.print(
-        "time: {d} cycles charged, {d} SysTick periods, {d} pended",
-        .{ timebase.cycles, timebase.ticks, timebase.pends },
+        "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
+        .{ timebase.elapsed, timebase.ticks, timebase.pends },
     );
     if (timebase.collapsed != 0) {
         try out.print(
@@ -26,6 +32,12 @@ pub fn timing(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void
         );
     }
     try out.print("\n", .{});
+    if (timebase.cycles != timebase.elapsed) {
+        try out.print(
+            "time: DWT_CYCCNT counted {d} of them; the firmware armed it late or never\n",
+            .{timebase.cycles},
+        );
+    }
     if (timebase.rearms != 0) {
         try out.print(
             "time: {d} boundary(ies) ended where the firmware armed SysTick\n",
