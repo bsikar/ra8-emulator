@@ -222,6 +222,7 @@ pub const periph = struct {
     pub const rtt_line = @import("periph/rtt_line.zig");
     pub const scb = @import("periph/scb.zig");
     pub const sci = @import("periph/sci.zig");
+    pub const sau = @import("periph/sau.zig");
     pub const sci_line = @import("periph/sci_line.zig");
     pub const sci_error = @import("periph/sci_error.zig");
     pub const sci_ring = @import("periph/sci_ring.zig");

@@ -207,6 +207,7 @@ test {
     _ = @import("periph/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/sci_test.zig");
+    _ = @import("periph/sau_test.zig");
     _ = @import("periph/sci_line_test.zig");
     _ = @import("periph/sci_error_test.zig");
     _ = @import("periph/sci_ring_test.zig");
