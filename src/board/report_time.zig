@@ -42,6 +42,24 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{unit.refused_read_only},
         );
     }
+    if (unit.count_source.chosen) {
+        try out.print(
+            "RTC: counting from the {s} (RCR4.RCKSEL)\n",
+            .{unit.count_source.source.name()},
+        );
+    }
+    if (unit.count_source.late != 0) {
+        try out.print(
+            "RTC: {d} RCKSEL store(s) after the initial register settings\n",
+            .{unit.count_source.late},
+        );
+    }
+    if (unit.count_source.unsourced != 0) {
+        try out.print(
+            "RTC: {d} software reset(s) with no count source selected\n",
+            .{unit.count_source.unsourced},
+        );
+    }
     if (unit.divisor.hot_stores != 0) {
         try out.print(
             "RTC: {d} frequency register store(s) taken with the prescaler running\n",
