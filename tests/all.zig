@@ -117,6 +117,7 @@ test {
     _ = @import("periph/gtclkcr_test.zig");
     _ = @import("periph/gpt_test.zig");
     _ = @import("periph/gpt_buffer_test.zig");
+    _ = @import("periph/gpt_channel_test.zig");
     _ = @import("periph/gpt_period_test.zig");
     _ = @import("periph/gpt_clock_test.zig");
     _ = @import("periph/gpt_compare_test.zig");

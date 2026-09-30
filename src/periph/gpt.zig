@@ -83,6 +83,7 @@
 const std = @import("std");
 
 const buf = @import("gpt_buffer.zig");
+const ch = @import("gpt_channel.zig");
 const clk = @import("gpt_clock.zig");
 const compare = @import("gpt_compare.zig");
 const lk = @import("gpt_lock.zig");
@@ -111,9 +112,12 @@ pub const protection = lk;
 /// The channel window's addressing, reached as `gpt.window`.
 pub const window = win;
 
+/// One channel, reached as `gpt.Channel` the way it was when it lived here.
+pub const Channel = ch.Channel;
+
 /// GPT geometry (ra8_gpt_regs.h).
 pub const win_base: u32 = 0x4032_2000;
-pub const stride: u32 = 0x100;
+pub const stride: u32 = ch.stride;
 pub const channels: usize = 14;
 pub const win_span: u32 = stride * @as(u32, channels);
 
@@ -124,183 +128,24 @@ pub const off = win.off;
 /// GTPR and its buffer GTPBR live in src/periph/gpt_period.zig.
 pub const periods = prd;
 
-/// GTCR: the count-start bit. The rest of the register's fields live in
-/// gpt_clock.zig, which reads the prescaler out of it.
-pub const control = struct {
-    pub const cst: u32 = clk.field.cst;
-};
-
-/// GTST: the status bits dev's enumeration names.
-pub const status = struct {
-    pub const tcfa: u32 = compare.flag.tcfa;
-    pub const tcfb: u32 = compare.flag.tcfb;
-    pub const tcfpo: u32 = 0x0000_0040;
-    pub const tcfpu: u32 = 0x0000_0080;
-};
+/// GTCR's count-start bit and GTST's status bits, re-exported from the
+/// channel that interprets them.
+pub const control = ch.control;
+pub const status = ch.status;
 
 /// GPT0's counter-overflow event (RA8D2 ELC signal table; FSP bsp_elc.h).
 pub const event = struct {
     pub const gpt0_overflow: u16 = 0x0C1;
 };
 
-/// The advance one chunk boundary stands for at the UNDIVIDED clock, carried
-/// from dev with its
-/// reason: it is ODD, so it is coprime to the 2^16 and 2^32 saw periods the
-/// drivers use. A power-of-two advance divides those periods evenly, GTCNT
-/// then visits a handful of values, and a demo sampling on a power-of-two
-/// millisecond cadence reads the same count every time and calls the timer
-/// wedged.
-pub const step_per_tick: u32 = 0x0000_4001;
-
-/// GTPR = 0 counts to the 16-bit wrap, as dev does. The rule lives with the
-/// register in gpt_period.zig.
-pub const default_period: u32 = prd.default;
+/// The advance one chunk boundary stands for, and the period GTPR = 0 counts
+/// to, both re-exported from the channel so callers reach them where they
+/// always did.
+pub const step_per_tick: u32 = ch.step_per_tick;
+pub const default_period: u32 = ch.default_period;
 
 /// At most one event per boundary, from channel 0.
 pub const Due = std.BoundedArray(u16, 1);
-
-/// One channel: the counter, its period, the control and status words, and a
-/// shadow for every register this model does not interpret.
-pub const Channel = struct {
-    cnt: u32 = 0,
-    period: prd.Period = .{},
-    cr: u32 = 0,
-    st: u32 = 0,
-    shadow: [stride]u8 = @splat(0),
-    overflows: u32 = 0,
-    /// Times a triangle came back to zero. Always zero outside one.
-    underflows: u32 = 0,
-    /// Which way the count is going. Only a triangle ever sets it false.
-    rising: bool = true,
-    compares: compare.Pair = .{},
-    buffered: buf.Buffers = .{},
-    guard: lk.Lock = .{},
-    /// Which shapes GTCR.MD has selected, so a mode a later store
-    /// took away is visible instead of silent.
-    shapes: md.Log = .{},
-
-    pub fn running(self: Channel) bool {
-        return self.cr & control.cst != 0;
-    }
-
-    /// The clock this channel counts on, out of GTCR.TPCS.
-    pub fn source(self: Channel) clk.Source {
-        return clk.sourceOf(self.cr);
-    }
-
-    /// The shape this channel counts in, out of GTCR.MD.
-    pub fn shape(self: Channel) md.Mode {
-        return md.modeOf(self.cr);
-    }
-
-    /// The period a zero GTPR stands for.
-    pub fn periodOrDefault(self: Channel) u32 {
-        return self.period.span();
-    }
-
-    /// One chunk of counting, in the shape GTCR.MD selects. Returns how many
-    /// times the count reached the period, which is zero for a stopped or
-    /// in-range channel.
-    pub fn tick(self: *Channel) u32 {
-        if (!self.running()) return 0;
-        const period = self.periodOrDefault();
-        const before = self.cnt;
-        const kind = self.shape();
-        const moved = md.advance(kind, self.cnt, self.rising, period, clk.step(step_per_tick, self.source()));
-        self.cnt = moved.cnt;
-        self.rising = moved.rising;
-        if (moved.peaks != 0) {
-            self.st |= status.tcfpo;
-            self.overflows +%= moved.peaks;
-        }
-        if (moved.troughs != 0) {
-            self.st |= status.tcfpu;
-            self.underflows +%= moved.troughs;
-        }
-        if (moved.halted) self.cr &= ~control.cst;
-        self.st |= self.matched(kind, before, moved, period);
-        if (md.endedCycle(kind, moved)) self.reload();
-        return moved.peaks;
-    }
-
-    /// Hand the buffered compares over, the way GTBER's single-buffer
-    /// selection says to. The chunk's own matches were judged above against
-    /// the values that were live while it ran, so a duty arriving here
-    /// governs the next cycle and not the one that just finished.
-    fn reload(self: *Channel) void {
-        if (self.buffered.take(.a)) |value| self.compares.load(.a, value);
-        if (self.buffered.take(.b)) |value| self.compares.load(.b, value);
-        self.period.reload();
-    }
-
-    /// The compare flags this chunk raised. A saw chunk is an up-count and is
-    /// described by its wraps; a triangle one may have turned, so it is
-    /// described by the span of counts it covered.
-    fn matched(self: *Channel, kind: md.Mode, before: u32, moved: md.Step, period: u32) u32 {
-        if (!kind.symmetric()) return self.compares.step(before, moved.cnt, moved.peaks);
-        const span = md.visited(before, moved, period);
-        return self.compares.stepSpan(before, span.lo, span.hi);
-    }
-
-    fn readByte(self: *const Channel, local: u32) u8 {
-        if (local < lk.off.gtwp + 4) return win.lane(self.guard.value(), local - lk.off.gtwp);
-        if (compare.which(local)) |side| {
-            const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
-            return win.lane(self.compares.value(side), local - base);
-        }
-        if (buf.which(local)) |side| {
-            const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
-            return win.lane(self.buffered.value(side), local - base);
-        }
-        if (prd.which(local)) |part| {
-            const base = if (part == .live) prd.off.gtpr else prd.off.gtpbr;
-            return win.lane(self.period.value(part), local - base);
-        }
-        return switch (win.cellOf(local)) {
-            buf.off.gtber => win.lane(self.buffered.ber, local - buf.off.gtber),
-            off.gtcnt => win.lane(self.cnt, local - off.gtcnt),
-            off.gtcr => win.lane(self.cr, local - off.gtcr),
-            off.gtst => win.lane(self.st, local - off.gtst),
-            else => self.shadow[local],
-        };
-    }
-
-    fn writeByte(self: *Channel, local: u32, byte: u8) void {
-        if (compare.which(local)) |side| {
-            const base = if (side == .a) compare.off.gtccra else compare.off.gtccrb;
-            self.compares.set(side, win.merge(self.compares.value(side), local - base, byte));
-            return;
-        }
-        if (buf.which(local)) |side| {
-            const base = if (side == .a) buf.off.buffer_a else buf.off.buffer_b;
-            self.buffered.set(side, win.merge(self.buffered.value(side), local - base, byte));
-            return;
-        }
-        if (prd.which(local)) |part| {
-            const base = if (part == .live) prd.off.gtpr else prd.off.gtpbr;
-            self.period.set(part, win.merge(self.period.value(part), local - base, byte));
-            return;
-        }
-        switch (win.cellOf(local)) {
-            buf.off.gtber => self.buffered.ber = win.merge(self.buffered.ber, local - buf.off.gtber, byte),
-            off.gtcnt => self.cnt = win.merge(self.cnt, local - off.gtcnt, byte),
-            off.gtcr => self.cr = self.shapes.note(self.cr, win.merge(self.cr, local - off.gtcr, byte)),
-            // GTST is cleared by writing the word back with the target bits
-            // zero, so a store can only take bits away.
-            off.gtst => self.st &= win.merge(self.st, local - off.gtst, byte),
-            // GTSTR, GTSTP and GTCLR name channels by bit, so the bank takes
-            // them whole before an access is broken into lanes.
-            off.gtstr, off.gtstp, off.gtclr => {},
-            else => self.shadow[local] = byte,
-        }
-    }
-
-    pub fn quiet(self: Channel) bool {
-        if (!self.compares.quiet() or !self.buffered.quiet() or !self.guard.quiet()) return false;
-        if (!self.shapes.quiet()) return false;
-        return self.overflows == 0 and self.underflows == 0 and !self.running();
-    }
-};
 
 pub const Gpt = struct {
     channels: [channels]Channel = @splat(.{}),
