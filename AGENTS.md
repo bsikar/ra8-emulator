@@ -6,19 +6,37 @@ writing code here.
 
 ## Layout
 
-Source is grouped, not a flat folder of `.zig` files. The model is
-ra8-firmware's `libs/<lib>/` on `zig/dev`, where a library's parts sit side by
-side:
+Source is grouped by job, not a flat folder of `.zig` files. Each top directory
+answers one question, and a file's path is the first thing that says what it is
+for:
 
 ```
 src/main.zig          the program: argument in, run, report out
 src/root.zig          the module index, imported as "ra8"
-src/core/             the machine: engine, elf, memmap, disasm, cli, c
-src/periph/           everything that answers on the peripheral bus:
-                      registry (the bus itself), clocks, nvic, mstp,
-                      gpio, crc, doc
+src/core/             the machine: engine, memmap, elf, session, the run
+                      loop, the hooks the machine itself installs, and
+                      src/core/c.zig
+src/debug/            the debugger surface: breakpoints, watchpoints, their
+                      hooks, disassembly, symbols, register and memory dumps
+src/interfaces/cli/   the command line and the report renderers that write
+                      its output
+src/board/            how the board is wired: which blocks exist and what
+                      they are connected to
+src/periph/           everything that answers on the peripheral bus
 tests/                one test file per source file, on the mirrored path
 ```
+
+`src/periph/` is one directory per peripheral block, named for the block:
+`src/periph/gpt/`, `src/periph/sci/`, `src/periph/glcdc/`, and so on. A block
+with several files (the register file, its channels, its FIFO, its frames)
+keeps them together. A genuine singleton stays flat at `src/periph/`: `nvic`,
+`clocks`, `registry`, `crc` and the rest are one file each and a one-file
+directory would say nothing. Give a block its own directory when it grows a
+second file, not before.
+
+`tests/` mirrors `src/` on the same paths, all the way down:
+`src/periph/gpt/gpt_channel.zig` is tested by
+`tests/periph/gpt/gpt_channel_test.zig`.
 
 `src/core/c.zig` is the only `@cImport` in the tree and the only place a C
 boundary is allowed to show.
