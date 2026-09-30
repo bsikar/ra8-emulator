@@ -15,6 +15,7 @@ const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const report = @import("report.zig");
 const report_timing = @import("report_timing.zig");
+const idle = @import("../core/idle.zig");
 const report_steps = @import("report_steps.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
@@ -28,6 +29,8 @@ const undefined_ops = @import("../core/undefined_ops.zig");
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
     timebase: clocks.Clocks,
+    /// What the run never had to execute; src/core/idle.zig says why.
+    idle: idle.Seam = .{},
     interrupts: nvic.Nvic,
     reboot: reboot.Reboot,
     loops: lob.Loops,
@@ -41,7 +44,7 @@ pub const Tally = struct {
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
-    try report_timing.timing(out, of.timebase, of.interrupts);
+    try report_timing.timing(out, of.timebase, of.idle, of.interrupts);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);
