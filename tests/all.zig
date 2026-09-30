@@ -9,6 +9,7 @@ test {
     _ = @import("board/report_dma_test.zig");
     _ = @import("core/board_ram_test.zig");
     _ = @import("core/session_test.zig");
+    _ = @import("core/second_core_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("core/cli_test.zig");
     _ = @import("core/disasm_test.zig");
