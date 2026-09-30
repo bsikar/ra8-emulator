@@ -20,6 +20,9 @@ const mpu = @import("../periph/mpu.zig");
 const mpu_hook = @import("mpu_hook.zig");
 const sau = @import("../periph/sau.zig");
 const sau_hook = @import("sau_hook.zig");
+const tz = @import("tz.zig");
+const tz_hook = @import("tz_hook.zig");
+const symbols = @import("symbols.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
@@ -206,6 +209,22 @@ pub const Engine = struct {
     /// enforce attribution by it, so there is nothing to arm.
     pub fn attachPartitions(self: Engine, unit: *sau.Sau) Error!void {
         sau_hook.attach(self.handle, unit) catch return Error.AttachFailed;
+    }
+
+    /// Perform the secure boot's one BLXNS by hand, so the Non-Secure world
+    /// runs; src/core/tz.zig says why the CPU model cannot be left to. An
+    /// image whose secure boot is not linked in, or whose jump routine holds
+    /// no BLXNS, keeps the all-Secure path it already had. The instruction
+    /// is found in the image as loaded, so the bytes scanned are the bytes
+    /// that will execute.
+    pub fn attachWorlds(self: Engine, image: elf.Image, worlds: *tz.Worlds) Error!void {
+        const found = symbols.extentOf(image, tz.jump_routine) orelse return;
+        if (found.size > tz.limits.routine_bytes) return;
+        var body: [tz.limits.routine_bytes]u8 = undefined;
+        const code = body[0..found.size];
+        self.read(found.address, code) catch return;
+        const offset = tz.findBlxns(code) orelse return;
+        tz_hook.attach(self.handle, worlds, found.address +% offset) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M conditional selects the CPU model cannot decode.

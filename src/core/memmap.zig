@@ -122,6 +122,11 @@ pub const ram = [_]Region{
 pub const scb = struct {
     pub const icsr: u32 = 0xE000_ED04;
     pub const vtor: u32 = 0xE000_ED08;
+    /// The Non-Secure view of the vector base, at the SCB_NS alias. The
+    /// secure boot writes the Non-Secure vector table's base here right
+    /// before it hands the world over, so it is where the Non-Secure stack
+    /// and reset handler can be found.
+    pub const vtor_ns: u32 = 0xE002_ED08;
     pub const aircr: u32 = 0xE000_ED0C;
     pub const ccr: u32 = 0xE000_ED14;
     /// SHPR1 holds the configurable fault priorities: MemManage in its low

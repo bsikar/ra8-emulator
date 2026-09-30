@@ -129,6 +129,35 @@ pub fn addressOf(image: elf.Image, wanted: []const u8) ?u32 {
     return null;
 }
 
+/// A named function: where its first instruction is, and how long it is.
+pub const Extent = struct {
+    address: u32,
+    size: u32,
+};
+
+/// The function called `wanted`, or null when the image names no sized
+/// function by that name.
+///
+/// A Thumb function's st_value carries the interworking bit, so the address
+/// of its first instruction is st_value with bit 0 cleared. A zero-sized
+/// symbol is refused rather than reported with a length of nothing: a
+/// caller asking for an extent wants somewhere to look, and guessing one
+/// from the next symbol along would put a wrong length on a real function.
+pub fn extentOf(image: elf.Image, wanted: []const u8) ?Extent {
+    const found = tables(image) orelse return null;
+    var offset: usize = 0;
+    while (offset + @sizeOf(Symbol) <= found.symbols.len) : (offset += found.entry_size) {
+        const entry: *align(1) const Symbol =
+            std.mem.bytesAsValue(Symbol, found.symbols[offset..][0..@sizeOf(Symbol)]);
+        if (entry.st_info & 0xF != symbol_type.func) continue;
+        if (entry.st_size == 0) continue;
+        const name = nameAt(found.strings, entry.st_name) orelse continue;
+        if (!std.mem.eql(u8, name, wanted)) continue;
+        return .{ .address = entry.st_value & ~@as(u32, 1), .size = entry.st_size };
+    }
+    return null;
+}
+
 /// How many symbols the image carries, for a report that wants to say the
 /// table was read rather than guessed at.
 pub fn count(image: elf.Image) usize {
