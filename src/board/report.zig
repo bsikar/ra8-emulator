@@ -134,6 +134,12 @@ fn accuracy(board: *Board, out: Writer) !void {
             @intFromBool(board.accuracy.flagSet(cac.status.ferrf)),
         },
     );
+    if (board.accuracy.hot_config > 0) {
+        try out.print(
+            "CAC: {d} store(s) into a clock select or window limit with CFME set\n",
+            .{board.accuracy.hot_config},
+        );
+    }
 }
 
 /// Safe shutoff, one line per group the firmware moved. The refused store is

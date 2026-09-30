@@ -121,3 +121,64 @@ test "the block answers through the bus in both security windows" {
         bus.read(cac.regAddress(cac.off_castr), 1),
     );
 }
+
+test "programming the window with the measurement stopped is not counted hot" {
+    var u = unit();
+    u.write(cac.regAddress(cac.off_cacr1), 1, 0x01);
+    u.write(cac.regAddress(cac.off_cacr2), 1, 0x02);
+    u.write(cac.regAddress(cac.off_callvr), 2, 1000);
+    u.write(cac.regAddress(cac.off_caulvr), 2, 1100);
+    try std.testing.expectEqual(@as(u32, 0), u.hot_config);
+    try std.testing.expect(u.quiet());
+}
+
+test "a clock select moved with CFME set is counted" {
+    var u = unit();
+    runOnce(&u, 1000, 1100);
+    try std.testing.expect(u.measuring());
+    u.write(cac.regAddress(cac.off_cacr2), 1, 0x02);
+    try std.testing.expectEqual(@as(u32, 1), u.hot_config);
+}
+
+test "a window limit moved with CFME set is counted, and still lands" {
+    var u = unit();
+    runOnce(&u, 1000, 1100);
+    u.write(cac.regAddress(cac.off_caulvr), 2, 2000);
+    try std.testing.expectEqual(@as(u32, 1), u.hot_config);
+    try std.testing.expectEqual(
+        @as(u32, 2000),
+        u.read(cac.regAddress(cac.off_caulvr), 2),
+    );
+}
+
+test "every byte of a hot halfword store is counted" {
+    var u = unit();
+    runOnce(&u, 1000, 1100);
+    u.write(cac.regAddress(cac.off_callvr), 1, 0x10);
+    u.write(cac.regAddress(cac.off_callvr + 1), 1, 0x20);
+    try std.testing.expectEqual(@as(u32, 2), u.hot_config);
+}
+
+test "CACR0 and CAICR are outside the rule" {
+    var u = unit();
+    runOnce(&u, 1000, 1100);
+    u.write(cac.regAddress(cac.off_caicr), 1, cac.clear.mendfcl);
+    u.write(cac.regAddress(cac.off_cacr0), 1, 0);
+    try std.testing.expectEqual(@as(u32, 0), u.hot_config);
+    try std.testing.expect(!u.measuring());
+}
+
+test "stopping the measurement reopens the window to configuration" {
+    var u = unit();
+    runOnce(&u, 1000, 1100);
+    u.write(cac.regAddress(cac.off_cacr0), 1, 0);
+    u.write(cac.regAddress(cac.off_cacr1), 1, 0x01);
+    try std.testing.expectEqual(@as(u32, 0), u.hot_config);
+}
+
+test "a hot store alone is enough to earn a report line" {
+    var u = unit();
+    u.write(cac.regAddress(cac.off_cacr0), 1, cac.cfme);
+    u.write(cac.regAddress(cac.off_cacr1), 1, 0x01);
+    try std.testing.expect(!u.quiet());
+}
