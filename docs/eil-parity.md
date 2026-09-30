@@ -1,11 +1,26 @@
 # Where the other 39 EIL apps went
 
 The number this document settles: the C emulator's EIL baseline was recorded as
-**83 apps passing, zero failures**, while the app set is **122**. The 39 were
-read for a long time as apps the suite skipped, or as a modelling gap that hid
-them. They are neither. No app is excluded, skipped, or dropped: a full-set run
-of `scripts/emu/eil_all.sh` cannot report 83 of 122, so the 83 was never a
-full-set figure.
+**83 apps passing, zero failures**, while the app set was **122** when that was
+written. The 39 were read for a long time as apps the suite skipped, or as a
+modelling gap that hid them. They are neither. No app is excluded, skipped, or
+dropped: a full-set run of `scripts/emu/eil_all.sh` cannot report 83 of a set
+it enumerates, so the 83 was never a full-set figure.
+
+**The set is not a fixed number, and that is the rest of the answer.** This
+document recorded 122 when it was written on 2026-09-28 (emulator commit
+`5b5effd`). Re-deriving it two days later against `ra8-firmware` `fcb624f` on
+`zig/dev` gives **125**: three more `uart_scrape` apps under
+`hw_validated/hil`, nothing removed. So the set grew by three in two days, on
+the only tree either emulator is measured against. A count of it is meaningful
+only against the revision it was taken from, so the numbers below now carry
+one and `tools/eil_set.sh` prints the revision beside the count. Quoting a
+bare figure is exactly how "83 of 122" outlived the tree it was measured on,
+and 122 was already on its way to becoming another one.
+
+The revision the 122 was taken at is not recorded, and this tree's history
+does not reach back far enough to recover it, so it is left unstated rather
+than guessed.
 
 Everything below was re-derived from the `ra8-firmware` tree on `zig/dev`
 (`scripts/emu/eil_all.sh`, `scripts/hil/lib/hil_conf.sh`,
@@ -21,21 +36,26 @@ falls out without being named). `EIL_RA8P1_DIR` is
 `examples/ra8p1_foundation`, from which it takes every app carrying a
 `hil.conf`; those are EIL-only, since no RA8P1 HIL rig exists.
 
-    118  app directories under hw_validated/hil   (119 entries, one is README.md)
-      4  ra8p1_foundation apps with a hil.conf
-    ---
-    122  discovered
+At `fcb624f` (`zig/dev`):
 
-All 122 carry both a `hil.conf` and a `CMakeLists.txt`, so none falls out of
-discovery and none is missing a build target. The `HIL_MODE` histogram over
-exactly that set:
+    121  app directories under hw_validated/hil   (122 entries, one is README.md)
+      4  ra8p1_foundation apps with a hil.conf    (blink_ra8p1, npu_infer,
+    ---                                            npu_smoke, npu_vela)
+    125  discovered
 
-     91  uart_scrape
+All 125 carry a `hil.conf`, so none falls out of discovery. The `HIL_MODE`
+histogram over exactly that set:
+
+     94  uart_scrape
      29  jlink_memprobe
       1  rtt_scrape
       1  hil_eth_tcp
     ---
-    122
+    125
+
+When this document was first written on 2026-09-28 the same command gave
+118 + 4 = 122 with 91 `uart_scrape`. The three that have arrived since are all
+`uart_scrape`, which is why only that row moved.
 
 Every one of those four modes is in the `run_one` dispatch that
 `check_hil_eil_parity.py` parses as the EIL-capable set. Not one app in the set
@@ -60,7 +80,8 @@ the selected list, not by globbing result files:
     else line="FAIL|${app}|unknown|worker produced no result (crash?)"; fi
 
 A build failure, a missing ELF, and a crashed worker are all `FAIL`. So for a
-full-set run, passed + failed = 122, always.
+full-set run, passed + failed equals the discovered count, always, whatever
+that count happens to be that week.
 
 ## What that leaves
 
@@ -83,6 +104,8 @@ remaining 86 are unmeasured on either.
 
     tools/eil_set.sh /path/to/ra8-firmware
 
-prints the discovered count and the mode histogram. For the verdict arithmetic:
+prints the tree's revision, the discovered count and the mode histogram. Add
+`--list` for the app names, so the next time the count moves the difference is
+a diff rather than a discrepancy nobody can place. For the verdict arithmetic:
 
     grep -o 'eil_emit "$rf" [A-Z]*' scripts/emu/eil_all.sh | sort | uniq -c

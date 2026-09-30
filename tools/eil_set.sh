@@ -10,11 +10,17 @@
 # that cannot be re-derived is how the "83 of 122" figure outlived the tree it
 # was measured on, so the numbers in that document carry this command.
 #
-# Usage: tools/eil_set.sh <path-to-ra8-firmware>
+# A count is only re-derivable against the tree it was taken from, and this set
+# moves: it was 122 when the document was written and 125 a few days later. So
+# the revision is printed with the numbers, and --list prints the app names, so
+# a later drift is a diff rather than a discrepancy nobody can place.
+#
+# Usage: tools/eil_set.sh <path-to-ra8-firmware> [--list]
 
 set -u
 
-root="${1:?usage: eil_set.sh <path-to-ra8-firmware>}"
+root="${1:?usage: eil_set.sh <path-to-ra8-firmware> [--list]}"
+list_names="${2:-}"
 hil="${root}/examples/ek_ra8d2/hw_validated/hil"
 ra8p1="${root}/examples/ra8p1_foundation"
 
@@ -38,8 +44,16 @@ for d in "${apps[@]}"; do
   [ -f "${d}/hil.conf" ] || { no_conf=$((no_conf + 1)); echo "no hil.conf: $(basename "$d")"; }
 done
 
+rev="$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+branch="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+echo "tree ${root} at ${rev} (${branch})"
 echo "discovered ${total} app(s), ${no_conf} without a hil.conf"
 echo "modes:"
 for d in "${apps[@]}"; do
   [ -f "${d}/hil.conf" ] && grep -E '^HIL_MODE=' "${d}/hil.conf" | head -1 | cut -d= -f2 | tr -d '"'
 done | sort | uniq -c | sort -rn | sed 's/^/  /'
+
+if [ "$list_names" = "--list" ]; then
+  echo "apps:"
+  for d in "${apps[@]}"; do basename "$d"; done | sort | sed 's/^/  /'
+fi
