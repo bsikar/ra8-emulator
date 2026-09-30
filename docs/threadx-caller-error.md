@@ -63,16 +63,64 @@ interrupt bookkeeping is not at fault. The other two both do:
   counter is not being clobbered by thread bookkeeping. The 151 and 301 are
   real toggles, and the GPIO side agrees with them.
 
-## What is open
+## Where the fault actually sits
 
-Why `_tx_thread_preempt_disable` latches. ThreadX increments it around
-suspend and resume and drops it again at the end of its preempt check, so a
-latch at 1 means the model reaches the increment and never the matching
-decrement. The two things worth reading first are the PendSV path out of
-`_tx_thread_system_return` and whether the preempt check runs to its end at
-all; `where:` already shows PendSV_Handler as a live sample site in other
-images, so PendSV is taken in general and the question is this path.
+Measured after the watch learned to keep both ends of a place (#268), which is
+what made any of this readable.
 
-The boot burst may well be the same story one step earlier, since a thread
-running with a null `current_ptr` is the dispatcher having gone only half way.
-Do not assume they are one fix until the second is shown.
+`_tx_thread_preempt_disable` takes 920 stores over 1200 ms. Counted by site,
+that is 452 increments from `_tx_thread_sleep+0xAE` against 451 decrements from
+`_tx_thread_system_suspend+0x54`. One unpaired increment is the whole freeze.
+
+The window that increment opens is **deliberately interruptible**, so an
+interrupt landing in it is not the bug. `_tx_thread_sleep` stores the increment
+at 0x020022A6 and then restores PRIMASK at 0x020022AE, four instructions later,
+before it calls `_tx_thread_system_suspend` at 0x020022B6. ThreadX guards the
+window with the flag itself, not with a mask, which is what
+`#ifndef TX_NOT_INTERRUPTABLE` around the decrement means. So the thread is
+expected to be interrupted there and expected to come back and finish.
+
+It never comes back. That is ours, and this is the evidence:
+
+- `_tx_thread_execute_ptr` takes 305 stores, and **the last one sets it to
+  0x220008F8**, written by `_tx_thread_system_resume+0xC0` by way of
+  `_tx_thread_timeout+0x40`. So ThreadX has picked a thread to run and said so.
+- The run nonetheless parks with 94% of its boundary samples at pc
+  0x0200029C, inside `__tx_ts_wait`. That loop reads `_tx_thread_execute_ptr`,
+  stores it to `_tx_thread_current_ptr`, and leaves on `cbnz` the moment the
+  value is non-zero.
+
+A scheduler that has named its next thread, and a machine sitting in the loop
+whose only job is to notice that, do not belong in the same run. The question
+is no longer why ThreadX latches; it is why the wait loop does not observe a
+word that has already been written.
+
+## Ruled out, each of which looked right
+
+- **Delivering an interrupt through ThreadX's mask.** Over 1200 ms the run
+  reports 1023 pends waited out a mask over 4518 instructions, with **0
+  abandoned and 0 still masked**, and 1204 taken against 1203 returned. The
+  unmask seam's step bound is never reached in this image.
+- **BASEPRI masking we do not model.** This port can mask with BASEPRI instead
+  of PRIMASK, and we honour only PRIMASK, so it looked like the answer. The
+  built image contains **zero `msr BASEPRI` instructions**, so this ThreadX is
+  masking with `cpsid`, which we do honour.
+- **A thread starved by its sibling.** Both threads are refused equally; thread
+  B is not special. The earlier reading, that B stops blocking after its first
+  expiry and starves A, is wrong.
+
+## What to read first
+
+Whether the idle seam is what keeps the wait loop from seeing the store. The
+seam skips a spin it has proven cannot change anything and charges the modelled
+time instead, and `__tx_ts_wait` is a spin whose exit condition is a word an
+interrupt writes. If the seam's proof treats that load as inert, the loop would
+keep being skipped after the value it waits on has already changed, which is
+exactly the shape above. Start at `src/core/idle.zig` and the boundary sampling
+in `src/core/run_loop.zig`, and check what the seam concludes about a loop that
+loads from memory rather than only from registers.
+
+The boot burst (guard 84, a thread body running with a null `current_ptr`) may
+be the same fault one step earlier, since a null `current_ptr` is what the wait
+loop writes when `execute_ptr` reads 0. Do not assume one fix covers both until
+that is shown.
