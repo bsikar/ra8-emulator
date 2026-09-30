@@ -47,6 +47,13 @@
 //! tree a driver reading a message through two halfword loads drains two
 //! stages and assembles a word out of the low halves of both.
 //!
+//! THE SEMAPHORES BELOW THE CHANNELS take the same question and answer it
+//! differently, because LOCK is one bit rather than a message: an access
+//! that names bit 0 carries the lock whatever its width, and one that does
+//! not carries nothing and must not take it. ipc_sync.zig owns that rule;
+//! this file's job is to hand it the lanes the access actually named
+//! instead of only the offset it landed on.
+//!
 //! NOT MODELLED, AND NOT GUESSED: any IPC interrupt besides the two receive
 //! events, and NMI delivery, which is latched and counted here but reaches
 //! no core. The event is queued for the chunk boundary rather than raised
@@ -54,6 +61,7 @@
 //! one.
 const std = @import("std");
 const periph = @import("registry.zig");
+const lanes = @import("lanes.zig");
 const sync = @import("ipc_sync.zig");
 
 /// IPC geometry (ra8_ipc_regs.h). The bus folds the Non-secure alias onto
@@ -256,7 +264,7 @@ pub const Ipc = struct {
         if (decode(offset)) |slot| {
             const unit = &self.channels[slot.index];
             switch (slot.reg) {
-                off_sta => return part(unit.status(), byte, width),
+                off_sta => return lanes.part(unit.status(), byte, width),
                 // A stage is consumed by the load, so a load that cannot
                 // carry a whole one must not make it. The refusal reads
                 // back zero, which is what a stage nobody took holds for
@@ -272,10 +280,10 @@ pub const Ipc = struct {
                 off_iset, off_txd, off_clr => return 0,
                 else => {},
             }
-        } else if (self.locks.read(offset)) |value| {
-            return part(value, byte, width);
+        } else if (self.locks.read(offset, lanes.named(byte, width))) |value| {
+            return lanes.part(value, byte, width);
         }
-        return part(self.shadow[offset / 4], byte, width);
+        return lanes.part(self.shadow[offset / 4], byte, width);
     }
 
     pub fn write(self: *Ipc, address: u32, width: u3, value: u32) void {
@@ -283,7 +291,7 @@ pub const Ipc = struct {
         if (offset >= win_span) return;
         const byte = offset % 4;
         if (decode(offset)) |slot| {
-            const named = merge(0, byte, width, value);
+            const named = lanes.merge(0, byte, width, value);
             switch (slot.reg) {
                 // ISET and CLR name lines, one bit each, so the lanes a
                 // narrow store reaches are exactly the lines it asks for.
@@ -304,7 +312,7 @@ pub const Ipc = struct {
             }
             return;
         }
-        if (self.locks.write(offset, merge(0, byte, width, value))) return;
+        if (self.locks.write(offset, lanes.merge(0, byte, width, value))) return;
         self.shadowWrite(offset, byte, width, value);
     }
 
@@ -321,7 +329,7 @@ pub const Ipc = struct {
 
     fn shadowWrite(self: *Ipc, offset: u32, byte: u32, width: u3, value: u32) void {
         const word = offset / 4;
-        self.shadow[word] = merge(self.shadow[word], byte, width, value);
+        self.shadow[word] = lanes.merge(self.shadow[word], byte, width, value);
     }
 
     pub fn block(self: *Ipc) periph.Block {
@@ -344,32 +352,6 @@ fn decode(offset: u32) ?Slot {
     const index = relative / ch_stride;
     if (index >= ch_count) return null;
     return .{ .index = index, .reg = (relative % ch_stride) & ~@as(u32, 3) };
-}
-
-/// The bits an access of this width names.
-fn widthMask(width: u3) u32 {
-    return switch (width) {
-        1 => 0xFF,
-        2 => 0xFFFF,
-        else => 0xFFFF_FFFF,
-    };
-}
-
-/// The part of a 32-bit register a narrow access names.
-fn part(value: u32, byte_offset: u32, width: u3) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    return (value >> shift) & widthMask(width);
-}
-
-/// Fold a narrow write into a 32-bit register, leaving the bytes the access
-/// does not name where they were.
-fn merge(current: u32, byte_offset: u32, width: u3, value: u32) u32 {
-    if (width >= 4) return value;
-    const shift: u5 = @intCast(byte_offset * 8);
-    const bits = widthMask(width);
-    const window: u32 = bits << shift;
-    return (current & ~window) | ((value & bits) << shift);
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {

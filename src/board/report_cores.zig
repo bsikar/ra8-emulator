@@ -189,6 +189,12 @@ fn locks(unit: *const sync.Sync, out: Writer) !void {
                 .{ index, one.stray_releases },
             );
         }
+        if (one.unnamed_reads != 0) {
+            try out.print(
+                "IPCSEM{d}: {d} read(s) too narrow to carry LOCK, so they took nothing\n",
+                .{ index, one.unnamed_reads },
+            );
+        }
     }
     for (&unit.doorbells, 0..) |*one, index| {
         if (one.quiet()) continue;

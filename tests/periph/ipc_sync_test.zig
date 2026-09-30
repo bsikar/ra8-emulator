@@ -160,3 +160,46 @@ test "the channel windows are untouched by all of this" {
         try std.testing.expect(channel.quiet());
     }
 }
+
+test "a byte read above LOCK takes nothing and leaves the lock free" {
+    var unit = ipc.Ipc{};
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(6) + 1, 1));
+    // The lock was never taken, so the next honest claimant wins it.
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(6), 4));
+    try std.testing.expectEqual(sem_lock, unit.read(semAddress(6), 4));
+}
+
+test "a byte read above LOCK leaves a held lock held" {
+    var unit = ipc.Ipc{};
+    _ = unit.read(semAddress(8), 4);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(8) + 3, 1));
+    try std.testing.expectEqual(sem_lock, unit.read(semAddress(8), 4));
+}
+
+test "a halfword read of the upper half cannot carry LOCK either" {
+    var unit = ipc.Ipc{};
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(1) + 2, 2));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(1), 4));
+}
+
+test "a halfword read of the lower half does carry LOCK and takes it" {
+    var unit = ipc.Ipc{};
+    try std.testing.expectEqual(@as(u32, 0), unit.read(semAddress(10), 2));
+    try std.testing.expectEqual(sem_lock, unit.read(semAddress(10), 4));
+}
+
+test "reads too narrow to carry LOCK are counted" {
+    var unit = ipc.Ipc{};
+    _ = unit.read(semAddress(11) + 1, 1);
+    _ = unit.read(semAddress(11) + 2, 2);
+    try std.testing.expectEqual(@as(u32, 2), unit.locks.semaphores[11].unnamed_reads);
+    try std.testing.expectEqual(@as(u32, 0), unit.locks.semaphores[11].takes);
+    try std.testing.expect(!unit.locks.semaphores[11].locked);
+}
+
+test "a semaphore reached only by unnamed reads is not quiet" {
+    var unit = ipc.Ipc{};
+    try std.testing.expect(unit.locks.semaphores[12].quiet());
+    _ = unit.read(semAddress(12) + 1, 1);
+    try std.testing.expect(!unit.locks.semaphores[12].quiet());
+}
