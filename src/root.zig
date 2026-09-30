@@ -38,6 +38,7 @@ pub const core = struct {
     pub const mem_dump = @import("debug/mem_dump.zig");
     pub const place = @import("debug/place.zig");
     pub const registers = @import("debug/registers.zig");
+    pub const hotspots = @import("debug/hotspots.zig");
     pub const stop = @import("core/stop.zig");
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");
@@ -295,4 +296,5 @@ pub const board = struct {
     pub const report_steps = @import("interfaces/cli/report_steps.zig");
     pub const report_run = @import("interfaces/cli/report_run.zig");
     pub const report_dumps = @import("interfaces/cli/report_dumps.zig");
+    pub const report_hotspots = @import("interfaces/cli/report_hotspots.zig");
 };
