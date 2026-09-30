@@ -13,11 +13,11 @@ const sau = @import("../periph/sau.zig");
 
 const Board = @import("board.zig").Board;
 
-const bkup = @import("../periph/bkup.zig");
-const dmac = @import("../periph/dmac.zig");
-const drw = @import("../periph/drw.zig");
-const eink = @import("../periph/eink.zig");
-const modem = @import("../periph/modem.zig");
+const bkup = @import("../periph/bkup/bkup.zig");
+const dmac = @import("../periph/dmac/dmac.zig");
+const drw = @import("../periph/drw/drw.zig");
+const eink = @import("../periph/eink/eink.zig");
+const modem = @import("../periph/modem/modem.zig");
 const ckcr = @import("../periph/ckcr.zig");
 const octaclk = @import("../periph/octaclk.zig");
 const mrms = @import("../periph/mrms.zig");
@@ -25,17 +25,17 @@ const ckdiv = @import("../periph/ckdiv.zig");
 const oscsf = @import("../periph/oscsf.zig");
 const subclock = @import("../periph/subclock.zig");
 const reset = @import("../periph/reset.zig");
-const sysclk = @import("../periph/sysclk.zig");
+const sysclk = @import("../periph/sysclk/sysclk.zig");
 const voltage_hazard = @import("../periph/voltage_hazard.zig");
-const lpm = @import("../periph/lpm.zig");
-const pll = @import("../periph/pll.zig");
+const lpm = @import("../periph/lpm/lpm.zig");
+const pll = @import("../periph/pll/pll.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const pscu = @import("../periph/pscu.zig");
 const cpscu = @import("../periph/cpscu.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
-const sd_card = @import("../periph/sd_card.zig");
-const sd_card_line = @import("../periph/sd_card_line.zig");
+const sd_card = @import("../periph/sd/sd_card.zig");
+const sd_card_line = @import("../periph/sd/sd_card_line.zig");
 
 /// The module-stop shadow, the attribution words that decide which of its
 /// bits a Secure store may move, and the gate the rest of the bus hangs off.

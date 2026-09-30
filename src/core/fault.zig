@@ -11,7 +11,7 @@
 //! need them and the engine needs the hooks: with the pair in their own file
 //! that is a line, not a loop.
 const std = @import("std");
-const disasm = @import("disasm.zig");
+const disasm = @import("../debug/disasm.zig");
 
 pub const Fault = struct {
     pc: u32,

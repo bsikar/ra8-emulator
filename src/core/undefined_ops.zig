@@ -32,7 +32,7 @@
 //! longer calls such a run clean without qualification.
 const std = @import("std");
 const elf = @import("elf.zig");
-const symbols = @import("symbols.zig");
+const symbols = @import("../debug/symbols.zig");
 
 pub const limits = struct {
     /// How many sites the report names before it stops listing them. The

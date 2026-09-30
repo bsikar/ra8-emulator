@@ -42,7 +42,7 @@
 //! clock rate is derived either: BPEN selects PCLKA as the synchronous
 //! source, and this emulator has no frequency behind PCLKA to select.
 const periph = @import("registry.zig");
-const mstp = @import("mstp.zig");
+const mstp = @import("mstp/mstp.zig");
 
 pub const win_base: u32 = 0x4032_3F10;
 pub const win_span: u32 = 4;
