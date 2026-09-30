@@ -14,6 +14,7 @@ const std = @import("std");
 const elf = @import("../core/elf.zig");
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
+const spacing_mod = @import("spacing.zig");
 const tally_mod = @import("tally.zig");
 
 pub const limits = struct {
@@ -83,6 +84,10 @@ pub const Watched = struct {
     /// instead of at the end of the run. Null leaves every stamp zero,
     /// which is every unit test and every image that never arms SysTick.
     now: ?*const u64 = null,
+    /// How far apart in modelled time the stores landed. The list keeps
+    /// only both ends, so this is the only thing that says whether the
+    /// middle was spread out or bunched. src/debug/spacing.zig carries why.
+    spacing: spacing_mod.Spacing = .{},
 
     /// Record a store. Everything between the two ends is counted and
     /// dropped, so the memory a watch costs is fixed.
@@ -96,6 +101,7 @@ pub const Watched = struct {
             .when = if (self.now) |clock| clock.* else 0,
         };
         self.tally.record(pc, value);
+        self.spacing.record(one.when);
         if (self.seen < limits.head) self.first[self.seen] = one;
         self.last[self.seen % limits.tail] = one;
         self.seen += 1;
@@ -177,7 +183,27 @@ pub fn print(out: anytype, image: elf.Image, spec: ?[]const u8, watched: ?Watche
     }
     var room: [limits.tail]Store = undefined;
     for (one.closing(&room)) |store| try line(out, image, store);
+    try spaced(out, one.spacing);
     try tallied(out, image, one.tally);
+}
+
+/// The shape of the writing over modelled time.
+///
+/// Printed above the tally because it answers a different question: the
+/// tally divides the stores by who made them, this divides them by when.
+/// A place written in bursts and a place written steadily look the same
+/// in every other line of the report.
+fn spaced(out: anytype, gaps: spacing_mod.Spacing) !void {
+    if (gaps.quiet()) return;
+    try out.print(
+        "                  {d} group(s), {d} store(s) landed in the period before them\n",
+        .{ gaps.groups(), gaps.together },
+    );
+    if (gaps.apart == 0) return;
+    try out.print(
+        "                  gaps of {d} to {d} period(s), {d} on average\n",
+        .{ gaps.shortest, gaps.longest, gaps.mean() },
+    );
 }
 
 /// Who wrote here, most often first.

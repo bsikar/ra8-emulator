@@ -35,6 +35,7 @@ pub const core = struct {
     pub const tick = @import("core/tick.zig");
     pub const breakpoint = @import("debug/breakpoint.zig");
     pub const watchpoint = @import("debug/watchpoint.zig");
+    pub const spacing = @import("debug/spacing.zig");
     pub const tally = @import("debug/tally.zig");
     pub const taken_in = @import("debug/taken_in.zig");
     pub const mem_dump = @import("debug/mem_dump.zig");
