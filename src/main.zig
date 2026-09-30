@@ -95,13 +95,14 @@ pub fn main() !u8 {
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();
     try core.attachUndefined(&undefined_found);
+    var storage: second_core.Second = undefined;
     var timed = resolveDeadline(options);
-    const budget = options.budgetFor(stop != null);
-    var second = second_core.start(allocator, &core, &board, options.cpu1_path) catch |err| {
+    const second = second_core.start(allocator, &core, &board, options.cpu1_path, &storage) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ options.cpu1_path orelse "?", @errorName(err) });
         return 1;
     };
-    defer if (second) |*one| one.close();
+    defer if (second) |one| one.close();
+    const budget = options.budgetFor(stop != null);
     const fault = try second_core.interleave(core, entry, budget, .{
         .watch = &watch,
         .timebase = &timebase,
@@ -113,11 +114,10 @@ pub fn main() !u8 {
         .brk = if (point) |*one| one else null,
         .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
-    }, if (second) |*one| one else null);
+    }, second);
 
-    const tally = report_run.Tally{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .worlds = worlds, .undefined_found = undefined_found };
-    try report_run.all(out, &board, image, tally);
-    try second_core.report(out, if (second) |*one| one else null);
+    try report_run.all(out, &board, image, .{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .worlds = worlds, .undefined_found = undefined_found });
+    try second_core.report(out, second);
     try dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }

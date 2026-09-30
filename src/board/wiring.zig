@@ -9,6 +9,7 @@
 //! paint into or read out of RAM need the engine handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
 const engine = @import("../core/engine.zig");
+const sau = @import("../periph/sau.zig");
 
 const Board = @import("board.zig").Board;
 
@@ -121,7 +122,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
     try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core);
+    try primeCoreWindows(self, core, &self.partitions);
 }
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
@@ -142,13 +143,33 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
 /// on behalf of whoever programmed them, and in this model CPU0 is the core
 /// that owns the clocks and the interrupt controller; handing them CPU1
 /// instead would move the asymmetry, not remove it.
-pub fn attachSecond(self: *Board, core: *engine.Engine) !void {
+///
+/// THE SAU IS NOT ONE OF THE SHARED BLOCKS. It is taken as a parameter
+/// because it lives inside the core rather than on the bus: see
+/// `primeCoreWindows`.
+pub fn attachSecond(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !void {
     try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core);
+    try primeCoreWindows(self, core, partitions);
     self.second_core.mapped = true;
 }
 
-fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
+/// The windows that live inside a core rather than on the bus, seeded and
+/// hooked for the core in front of them.
+///
+/// `partitions` is the caller's because the SAU is CORE-PRIVATE STATE: each
+/// Cortex-M has its own, reached through its own PPB, and two cores
+/// programme two different maps. Sharing one model let CPU1's SAU
+/// bring-up land on top of CPU0's, and the report then described neither
+/// core: with `cpu1_pingpong_ipc` mapped onto CPU1, CPU0's five regions and
+/// two Non-Secure Callable entries read back as five regions and none,
+/// because CPU1 had overwritten the first four with its own.
+///
+/// THE MPU BESIDE IT IS STILL SHARED, deliberately and not by oversight. It
+/// is core-private in exactly the same way and wants the same treatment, but
+/// no image in this tree programmes the MPU from CPU1, so there is nothing
+/// to check a split against. It goes the same way as this one the day an
+/// image does.
+fn primeCoreWindows(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !void {
     // AIRCR: the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);
     // CTR read as zero, so the firmware computed a four-byte line and
@@ -165,11 +186,11 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine) !void {
     // SAU_TYPE read as zero, so the secure boot's capability check failed
     // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
     // error, parking the run in the Secure fallback main() forever.
-    try self.partitions.prime(core.*);
+    try partitions.prime(core.*);
     // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
     // the five regions the boot map programs need the same hook to keep
     // from collapsing onto one entry.
-    try core.attachPartitions(&self.partitions);
+    try core.attachPartitions(partitions);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer

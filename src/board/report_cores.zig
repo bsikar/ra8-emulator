@@ -129,11 +129,19 @@ fn regions(board: *Board, out: Writer) !void {
 /// map and says plainly that this model keeps it without enforcing it, so
 /// nobody reads the absence of a violation count as a clean bill of health.
 fn partitions(board: *Board, out: Writer) !void {
-    const unit = &board.partitions;
+    try partitionsOf(out, "SAU", &board.partitions);
+}
+
+/// The same lines for any core's SAU, under the name that core answers to.
+/// Taken apart from `partitions` because the SAU is core-private: CPU1
+/// carries one of its own (src/core/second_core.zig), and its map is a
+/// different map, not a second opinion about CPU0's.
+pub fn partitionsOf(out: Writer, label: []const u8, unit: *const sau.Sau) !void {
     if (unit.quiet()) return;
     try out.print(
-        "SAU: {s}, {d} of {d} region(s) enabled, {d} Non-Secure Callable{s}\n",
+        "{s}: {s}, {d} of {d} region(s) enabled, {d} Non-Secure Callable{s}\n",
         .{
+            label,
             if (unit.on()) "enabled" else "programmed but never enabled",
             unit.programmed(),
             sau.geometry.regions,
@@ -143,8 +151,8 @@ fn partitions(board: *Board, out: Writer) !void {
     );
     if (unit.refused != 0) {
         try out.print(
-            "SAU: REFUSED {d} store(s) to the hardwired TYPE\n",
-            .{unit.refused},
+            "{s}: REFUSED {d} store(s) to the hardwired TYPE\n",
+            .{ label, unit.refused },
         );
     }
 }
