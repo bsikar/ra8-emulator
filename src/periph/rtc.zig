@@ -47,14 +47,17 @@
 //! encoding table, and the driver only ever writes the register as zero);
 //! the day-of-week counter and its alarm, which dev does not maintain
 //! either; RCR2's adjustment and output bits, for the reasons rtc_reset.zig
-//! gives; and RCR4's count source. Those are shadowed for readback and
-//! never interpreted.
+//! gives. Those are shadowed for readback and never interpreted. RCR4's
+//! count source used to sit on that list and no longer does: it is read in
+//! rtc_source.zig, which carries the rule and says what is still not
+//! modelled there.
 const std = @import("std");
 
 const periph = @import("registry.zig");
 const clock = @import("rtc_clock.zig");
 const reset = @import("rtc_reset.zig");
 const frequency = @import("rtc_frequency.zig");
+const rtc_source = @import("rtc_source.zig");
 
 /// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -145,6 +148,9 @@ pub const Rtc = struct {
     resets: u32 = 0,
     /// The frequency registers and what the run made of their two rules.
     divisor: frequency.Frequency = .{},
+    /// RCR4's count source, and what the run made of the order it was
+    /// selected in.
+    count_source: rtc_source.Select = .{},
     due_alarm: bool = false,
     due_periodic: bool = false,
 
@@ -157,7 +163,7 @@ pub const Rtc = struct {
     pub fn quiet(self: *const Rtc) bool {
         return self.seconds == 0 and self.matches == 0 and self.periodics == 0 and
             self.refused_running == 0 and self.refused_read_only == 0 and
-            self.resets == 0 and self.divisor.quiet();
+            self.resets == 0 and self.divisor.quiet() and self.count_source.quiet();
     }
 
     pub fn running(self: *const Rtc) bool {
@@ -235,6 +241,11 @@ pub const Rtc = struct {
             if (reset.requested(byte)) self.softwareReset();
             return false;
         }
+        if (offset == off.rcr4) {
+            self.count_source.select(byte);
+            self.reg[offset] = byte;
+            return false;
+        }
         if (frequency.names(offset)) {
             self.divisor.note(offset, self.running());
             self.reg[offset] = byte;
@@ -258,6 +269,7 @@ pub const Rtc = struct {
     /// nothing else is touched.
     fn softwareReset(self: *Rtc) void {
         self.resets +%= 1;
+        self.count_source.initialise();
         self.r64 = 0;
         self.reg[off.r64cnt] = 0;
         self.divisor.clear();
