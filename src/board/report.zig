@@ -367,17 +367,6 @@ fn leds(board: *Board, out: Writer) !void {
     try out.print("\n", .{});
 }
 
-pub fn timing(out: Writer, timebase: clocks.Clocks, interrupts: nvic.Nvic) !void {
-    try out.print(
-        "time: {d} cycles charged, {d} SysTick periods, {d} pended\n",
-        .{ timebase.cycles, timebase.ticks, timebase.pends },
-    );
-    try out.print(
-        "interrupts: {d} taken, {d} returned, {d} held\n",
-        .{ interrupts.taken, interrupts.returned, interrupts.held },
-    );
-}
-
 /// Reboots the run actually performed. Silent on a run that never reset,
 /// which is nearly all of them.
 pub fn reboots(out: Writer, pending: reboot.Reboot) !void {

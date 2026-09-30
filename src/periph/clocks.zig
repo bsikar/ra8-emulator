@@ -53,6 +53,11 @@ pub const Clocks = struct {
     ticks: u64 = 0,
     /// Periods that pended the SysTick exception (TICKINT was set).
     pends: u64 = 0,
+    /// Periods a single boundary swallowed: wraps that happened but raised
+    /// nothing the firmware could count, because COUNTFLAG and the pend bit
+    /// are single latches and the handler cannot run mid-stretch. Time the
+    /// firmware is owed and will never be paid.
+    collapsed: u64 = 0,
 
     /// How many instructions apart the armed SysTick periods are, or zero
     /// when nothing is armed to ask for a boundary at all.
@@ -99,8 +104,19 @@ pub const Clocks = struct {
 
     /// SysTick counts down from SYST_RVR, wraps to the reload, and sets
     /// COUNTFLAG on every wrap; with TICKINT set a wrap also pends the SysTick
-    /// exception in ICSR. Taking that exception is the NVIC's job and is not
-    /// modelled yet, so the pend bit is left standing for it.
+    /// exception in ICSR. Taking that exception is the NVIC's job, so the pend
+    /// bit is left standing for it.
+    ///
+    /// Both of those are single bits, and the handler cannot run part way
+    /// through a stretch, so a stretch covering several periods delivers one.
+    /// `period()` below is what normally keeps a boundary from being wider
+    /// than the period it carries, but it stops following the period at
+    /// `cadence.floor`: under that the collapse is deliberate, and every
+    /// period past the first is one the firmware is never told about. A
+    /// firmware counting them (`s_tick_ms` in ra8_time.c, which `ra8_delay_ms`
+    /// then loops on) advances once where the part advances it many times, so
+    /// every delay built on it runs long by that ratio. Deliberate is not the
+    /// same as harmless, so the ones that go missing are counted.
     ///
     /// COUNTFLAG is cleared by a read of SYST_CSR on hardware. A plain-RAM PPB
     /// cannot see reads, so it is cleared at the next chunk boundary instead:
@@ -118,6 +134,7 @@ pub const Clocks = struct {
             try core.writeWord(memmap.syst.cvr, wrapped.value);
             if (wrapped.periods == 0) break :defer_write;
             self.ticks += wrapped.periods;
+            self.collapsed += wrapped.periods - 1;
             next |= csr_countflag;
             if (csr & csr_tickint != 0) {
                 const icsr = try core.readWord(memmap.scb.icsr);

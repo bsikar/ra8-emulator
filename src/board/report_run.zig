@@ -14,6 +14,7 @@
 const Board = @import("board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const report = @import("report.zig");
+const report_timing = @import("report_timing.zig");
 const report_steps = @import("report_steps.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
@@ -38,7 +39,7 @@ pub const Tally = struct {
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
-    try report.timing(out, of.timebase, of.interrupts);
+    try report_timing.timing(out, of.timebase, of.interrupts);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);

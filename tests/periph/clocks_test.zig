@@ -228,3 +228,80 @@ test "one boundary per period pends every period rather than collapsing them" {
     try std.testing.expectEqual(@as(u64, 6), followed.ticks);
     try std.testing.expectEqual(@as(u64, 6), followed.pends);
 }
+
+test "a stretch covering one period tells the firmware about all of it" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(999, csr_enable | csr_tickint);
+    var clocks = Clocks{};
+
+    // A period is reload + 1 ticks, so exactly one wrap.
+    try clocks.advance(&ppb, 1000);
+    try std.testing.expectEqual(@as(u64, 1), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 1), clocks.pends);
+    try std.testing.expectEqual(@as(u64, 0), clocks.collapsed);
+}
+
+test "a stretch covering several periods raises for one and counts the rest" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(99, csr_enable | csr_tickint);
+    var clocks = Clocks{};
+
+    // Ten periods of 100 ticks inside one stretch. COUNTFLAG and the pend
+    // bit are single latches and the handler cannot run part way through, so
+    // the firmware is told about one of the ten.
+    try clocks.advance(&ppb, 1000);
+    try std.testing.expectEqual(@as(u64, 10), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 1), clocks.pends);
+    try std.testing.expectEqual(@as(u64, 9), clocks.collapsed);
+}
+
+test "the collapse is counted whether or not the firmware asked for the interrupt" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    // TICKINT clear: no pend, but COUNTFLAG is still a single bit, so a
+    // firmware polling it loses the same periods.
+    try ppb.armSysTick(99, csr_enable);
+    var clocks = Clocks{};
+
+    try clocks.advance(&ppb, 500);
+    try std.testing.expectEqual(@as(u64, 5), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 0), clocks.pends);
+    try std.testing.expectEqual(@as(u64, 4), clocks.collapsed);
+}
+
+test "a stretch too short to wrap owes the firmware nothing" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(999, csr_enable | csr_tickint);
+    var clocks = Clocks{};
+
+    try clocks.advance(&ppb, 400);
+    try std.testing.expectEqual(@as(u64, 0), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 0), clocks.collapsed);
+}
+
+test "a disabled counter collapses nothing" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(9, csr_tickint);
+    var clocks = Clocks{};
+
+    try clocks.advance(&ppb, 10_000);
+    try std.testing.expectEqual(@as(u64, 0), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 0), clocks.collapsed);
+}
+
+test "the collapse accumulates across stretches" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    try ppb.armSysTick(99, csr_enable | csr_tickint);
+    var clocks = Clocks{};
+
+    try clocks.advance(&ppb, 300);
+    try clocks.advance(&ppb, 300);
+    try std.testing.expectEqual(@as(u64, 6), clocks.ticks);
+    try std.testing.expectEqual(@as(u64, 2), clocks.pends);
+    try std.testing.expectEqual(@as(u64, 4), clocks.collapsed);
+}
