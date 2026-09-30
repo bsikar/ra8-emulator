@@ -15,6 +15,8 @@ test {
     _ = @import("core/disasm_test.zig");
     _ = @import("core/elf_test.zig");
     _ = @import("core/symbols_test.zig");
+    _ = @import("core/run_loop_test.zig");
+    _ = @import("core/systick_hook_test.zig");
     _ = @import("core/tz_test.zig");
     _ = @import("core/undefined_ops_test.zig");
     _ = @import("core/breakpoint_test.zig");

@@ -78,12 +78,12 @@ pub fn main() !u8 {
         return 1;
     };
     try core.resetFromVectorTable(vector_base);
-
     const entry = try core.register(.pc);
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
 
     var timebase = clocks.Clocks{};
+    try core.attachTimebase(&timebase);
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
