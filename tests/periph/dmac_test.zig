@@ -37,7 +37,7 @@ fn programCopy(unit: *dmac.Dmac, count: u32) void {
 }
 
 /// A machine with board RAM and a known pattern at the source.
-fn scene(core: engine.Engine) !void {
+fn scene(core: *engine.Engine) !void {
     try core.mapBoardRam();
     var pattern: [16]u8 = undefined;
     for (&pattern, 0..) |*cell, index| cell.* = @intCast(0xA0 + index);
@@ -54,7 +54,7 @@ fn byteAt(core: engine.Engine, address: u32) !u8 {
 test "a request with the module never started moves nothing" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = dma_bank.Bank.init();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -67,7 +67,7 @@ test "a request with the module never started moves nothing" {
 test "a request on a channel that was never armed moves nothing" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -80,7 +80,7 @@ test "a request on a channel that was never armed moves nothing" {
 test "one request moves ONE unit with CLRS clear, not the whole count" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -95,7 +95,7 @@ test "one request moves ONE unit with CLRS clear, not the whole count" {
 test "the addresses are left where the unit stopped, so requests carry on" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -110,7 +110,7 @@ test "the addresses are left where the unit stopped, so requests carry on" {
 test "CLRS keeps the request asserted, so one store drains the count" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -128,7 +128,7 @@ test "CLRS keeps the request asserted, so one store drains the count" {
 test "the count spent takes DMCNT.DTE down and latches DMSTS.DTIF" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -142,7 +142,7 @@ test "the count spent takes DMCNT.DTE down and latches DMSTS.DTIF" {
 test "a further request on a spent channel copies nothing, which dev gets wrong" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -157,7 +157,7 @@ test "a further request on a spent channel copies nothing, which dev gets wrong"
 test "re-arming the channel reloads the counts" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -171,7 +171,7 @@ test "re-arming the channel reloads the counts" {
 test "block mode moves one block per request, not the whole buffer" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -192,7 +192,7 @@ test "block mode moves one block per request, not the whole buffer" {
 test "a decrementing source walks backwards, which dev treats as fixed" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -207,7 +207,7 @@ test "a decrementing source walks backwards, which dev treats as fixed" {
 test "a fixed destination is written over and over, the way a FIFO is fed" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -221,7 +221,7 @@ test "a fixed destination is written over and over, the way a FIFO is fed" {
 test "word units move four bytes at a time" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -236,7 +236,7 @@ test "word units move four bytes at a time" {
 test "a repeat-mode channel is declined instead of approximated" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -253,7 +253,7 @@ test "a repeat-mode channel is declined instead of approximated" {
 test "the transfer-end event is queued only when DMINT.DTIE is set" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -273,7 +273,7 @@ test "the transfer-end event is queued only when DMINT.DTIE is set" {
 test "DMSTS is write-0-to-clear, the same polarity the ICU uses" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -332,7 +332,7 @@ fn shortBlock(unit: *dmac.Dmac, size: u32, fits: u32) void {
 test "a block memory cut short keeps the units that landed, addresses over them" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     try core.write(source_at, &[_]u8{0x11} ** 8);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
@@ -348,7 +348,7 @@ test "a block memory cut short keeps the units that landed, addresses over them"
 test "a block memory cut short neither ends the transfer nor pays its counts" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -365,7 +365,7 @@ test "a block memory cut short neither ends the transfer nor pays its counts" {
 test "a continuous request stops at the address memory refused" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;
@@ -387,7 +387,7 @@ test "a continuous request stops at the address memory refused" {
 test "a request nothing refuses still ends the transfer as it did" {
     var core = try engine.Engine.open();
     defer core.close();
-    try scene(core);
+    try scene(&core);
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;

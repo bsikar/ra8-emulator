@@ -9,6 +9,7 @@ const c = @import("c.zig");
 const elf = @import("elf.zig");
 const pages = @import("pages.zig");
 const memmap = @import("memmap.zig");
+const board_ram = @import("board_ram.zig");
 const periph = @import("../periph/registry.zig");
 const disasm = @import("disasm.zig");
 const cadence = @import("cadence.zig");
@@ -115,6 +116,11 @@ pub const Tick = @import("tick.zig").Tick;
 
 pub const Engine = struct {
     handle: ?*c.uc.uc_engine,
+    /// The host pages behind the board's aliased regions, so the Secure and
+    /// Non-secure views of one region answer out of the same bytes. Owned
+    /// here and released by `close`; empty until `mapBoardRam` runs. See
+    /// src/core/board_ram.zig.
+    ram: board_ram.Store = .{},
 
     pub fn open() Error!Engine {
         var handle: ?*c.uc.uc_engine = null;
@@ -128,6 +134,7 @@ pub const Engine = struct {
     pub fn close(self: *Engine) void {
         if (self.handle) |handle| _ = c.uc.uc_close(handle);
         self.handle = null;
+        self.ram.deinit();
     }
 
     pub fn map(self: Engine, base: u32, size: u32) Error!void {
@@ -135,11 +142,7 @@ pub const Engine = struct {
     }
 
     pub fn mapWithPerms(self: Engine, base: u32, size: u32, perms: memmap.Region.Perms) Error!void {
-        var prot: c_uint = 0;
-        if (perms.read) prot |= c.uc.UC_PROT_READ;
-        if (perms.write) prot |= c.uc.UC_PROT_WRITE;
-        if (perms.exec) prot |= c.uc.UC_PROT_EXEC;
-        if (c.uc.uc_mem_map(self.handle, base, size, prot) != c.uc.UC_ERR_OK) {
+        if (c.uc.uc_mem_map(self.handle, base, size, board_ram.protOf(perms)) != c.uc.UC_ERR_OK) {
             return Error.MapFailed;
         }
     }
@@ -186,8 +189,10 @@ pub const Engine = struct {
     }
 
     /// Map the RAM regions the board has before any image lands in them.
-    pub fn mapBoardRam(self: Engine) Error!void {
-        for (memmap.ram) |region| try self.mapWithPerms(region.base, region.size, region.perms);
+    /// The aliased ones are backed by pages this engine owns, so both views
+    /// of a region are the same bytes; src/core/board_ram.zig has the why.
+    pub fn mapBoardRam(self: *Engine) Error!void {
+        board_ram.mapBoard(self.handle, &self.ram) catch return Error.MapFailed;
     }
 
     /// Put the peripheral bus behind the peripheral window and its Non-secure
@@ -256,7 +261,7 @@ pub const Engine = struct {
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
         const needed = pages.forImage(image) catch return Error.MapFailed;
         for (needed.items()) |range| {
-            if (coveredByBoard(range.base, range.size())) continue;
+            if (board_ram.covers(range.base, range.size())) continue;
             try self.map(range.base, range.size());
         }
         var written: u32 = 0;
@@ -391,10 +396,3 @@ pub const Engine = struct {
         };
     }
 };
-
-fn coveredByBoard(base: u32, size: u32) bool {
-    for (memmap.ram) |region| {
-        if (base >= region.base and @as(u64, base) + size <= region.end()) return true;
-    }
-    return false;
-}
