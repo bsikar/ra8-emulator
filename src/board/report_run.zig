@@ -16,6 +16,7 @@ const Writer = @import("report.zig").Writer;
 const report = @import("report.zig");
 const report_timing = @import("report_timing.zig");
 const idle = @import("../core/idle.zig");
+const unmask = @import("../core/unmask.zig");
 const report_steps = @import("report_steps.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
@@ -31,6 +32,8 @@ pub const Tally = struct {
     timebase: clocks.Clocks,
     /// What the run never had to execute; src/core/idle.zig says why.
     idle: idle.Seam = .{},
+    /// Pends that had to wait out PRIMASK; src/core/unmask.zig says why.
+    release: unmask.Release = .{},
     interrupts: nvic.Nvic,
     reboot: reboot.Reboot,
     loops: lob.Loops,
@@ -44,7 +47,7 @@ pub const Tally = struct {
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
-    try report_timing.timing(out, of.timebase, of.idle, of.interrupts);
+    try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);

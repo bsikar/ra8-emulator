@@ -1,0 +1,104 @@
+//! When a pend is ready and PRIMASK is the only thing holding it back.
+//!
+//! WHY THIS EXISTS. src/periph/nvic.zig runs at the chunk boundary, which is
+//! the right seam for almost everything: the clocks are charged there, the
+//! board's blocks raise there, and the controller picks there. But it makes
+//! the boundary the ONLY instant at which an exception can be taken, and the
+//! architecture does not work that way. On silicon a pend that arrives under
+//! `cpsid i` is held in hardware and taken the moment PRIMASK clears
+//! (DDI0553 B3.19). Here it was offered once, at whatever instruction the
+//! boundary happened to land on, and if that instruction sat inside a masked
+//! region the pend was counted as held and not looked at again for a whole
+//! period.
+//!
+//! That is not a corner case, it is the ThreadX idle loop. `__tx_ts_wait` is
+//! six instructions and four of them are masked:
+//!
+//!     cpsid i
+//!     ldr  r1, [r2]      ; _tx_thread_execute_ptr
+//!     str  r1, [r0]      ; _tx_thread_current_ptr
+//!     cbnz r1, ready
+//!     cpsie i
+//!     b    wait
+//!
+//! Measured on `threadx_blink`: the boundary landed on the `str` at
+//! 0x0200029E every single time, PRIMASK 1, SysTick pending, and the run
+//! finished 500 periods having taken FOUR interrupts and held 9961. The
+//! scheduler therefore never ran, `g_threadx_blink_tick` never moved off
+//! 151, and the image could not pass its own probe contract at any window
+//! length. Lengthening the window changed nothing, which is the signature of
+//! a pend that is never delivered rather than one that is delivered late.
+//!
+//! WHAT THIS DOES. At a boundary where a pend is ready and masked, step the
+//! core forward until PRIMASK clears, then let the controller pick as usual.
+//! The instructions spent are real instructions: the caller charges them to
+//! the clocks and to the run's budget, so modelled time still matches the
+//! work done. Bounded by `limits.steps`, because firmware that masks
+//! interrupts for a long stretch during bring-up must not be single-stepped
+//! through it; past the bound the pend stays pending and is offered again at
+//! the next boundary, exactly as before.
+//!
+//! `core` is `anytype` for the reason src/core/idle.zig takes it that way: it
+//! keeps this file off the engine's import cycle and nothing here touches C.
+const nvic = @import("../periph/nvic.zig");
+
+pub const limits = struct {
+    /// Instructions a lift may step before giving up. A mask held longer
+    /// than this is a bring-up sequence rather than an idle loop, and is
+    /// better left to the next boundary than stepped through. ThreadX's
+    /// masked window is four instructions.
+    pub const steps: usize = 64;
+};
+
+/// What one lift did.
+pub const Lift = struct {
+    /// Instructions actually stepped. The caller owes these to the clocks.
+    ran: usize = 0,
+    /// PRIMASK came clear, so the pend can be taken now.
+    cleared: bool = false,
+};
+
+/// The running tally, kept across a whole run for the end-of-run line.
+pub const Release = struct {
+    /// Pends that were masked at a boundary and became takeable after
+    /// stepping.
+    lifted: u64 = 0,
+    /// Instructions spent stepping to those unmasks.
+    stepped: u64 = 0,
+    /// Masked pends still masked after `limits.steps`, left for the next
+    /// boundary.
+    stuck: u64 = 0,
+    /// Lifts abandoned because a step faulted. The machine is left where the
+    /// step put it and the ordinary stretch handles it next time round,
+    /// which is also how an exception return inside a lift is dealt with.
+    faulted: u64 = 0,
+
+    /// Step until PRIMASK clears, at most `bound` instructions.
+    pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
+        var out = Lift{};
+        while (out.ran < bound) {
+            if (try core.runChunk(try core.register(.pc), 1, null)) |_| {
+                self.faulted += 1;
+                return out;
+            }
+            out.ran += 1;
+            self.stepped += 1;
+            if (!(try masked(core))) {
+                out.cleared = true;
+                self.lifted += 1;
+                return out;
+            }
+        }
+        self.stuck += 1;
+        return out;
+    }
+
+    /// Whether anything happened worth a line at the end of a run.
+    pub fn quiet(self: *const Release) bool {
+        return self.lifted == 0 and self.stuck == 0 and self.faulted == 0;
+    }
+};
+
+fn masked(core: anytype) !bool {
+    return (try core.register(.primask)) & nvic.primask_pm != 0;
+}

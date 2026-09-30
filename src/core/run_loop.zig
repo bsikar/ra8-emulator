@@ -17,6 +17,7 @@ const cadence = @import("cadence.zig");
 const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
+const unmask = @import("unmask.zig");
 const Session = @import("session.zig").Session;
 
 /// Run a bounded number of instructions. A fault is a result, not a
@@ -89,7 +90,10 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             pc = pending.perform(core, session.interrupts) catch return error.RunFailed;
             continue;
         };
-        if (session.interrupts) |controller| _ = controller.dispatch(core) catch return error.RunFailed;
+        if (session.interrupts) |controller| {
+            remaining -= liftMask(core, controller, session, remaining) catch return error.RunFailed;
+            _ = controller.dispatch(core) catch return error.RunFailed;
+        }
         // The counter is read here, after the boundary's blocks have
         // run, so a value a peripheral advanced this chunk is seen.
         if (session.stop) |watch| if (watch.met(core.readWord(watch.address) catch null)) break;
@@ -130,6 +134,26 @@ fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault
     }
     if (looked.ran >= chunk) return null;
     return core.runChunk(try core.register(.pc), chunk - looked.ran, session.watch);
+}
+
+/// Let a pend that is ready but masked wait out the mask, and report the
+/// instructions that cost.
+///
+/// The controller can only take an exception at a boundary, so a pend that
+/// lands inside a `cpsid i` region would be counted as held and not offered
+/// again until the next period. The architecture takes it the instant the
+/// mask clears, so the boundary steps there. The instructions are charged to
+/// the clocks here and returned so the caller can charge the budget too:
+/// they are ordinary executed instructions and modelled time has to keep
+/// matching the work done. Bounded by the budget left as well as by the
+/// seam's own cap, so the return can never exceed what the caller has.
+fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
+    const seam = session.unmask orelse return 0;
+    if (!(try controller.pendingMasked(core))) return 0;
+    const lifted = try seam.lift(core, @min(remaining, unmask.limits.steps));
+    if (lifted.ran == 0) return 0;
+    if (session.timebase) |clock| try clock.advance(core, @intCast(lifted.ran));
+    return lifted.ran;
 }
 
 /// The boundary this stretch gets. The armed period is read every time

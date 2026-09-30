@@ -134,6 +134,21 @@ pub const Nvic = struct {
         return candidate.number;
     }
 
+    /// A pend is ready and PRIMASK is the only thing holding it back.
+    ///
+    /// The boundary is the only instant this controller can take an
+    /// exception at, so a pend that lands inside a masked region would be
+    /// counted as held and not looked at again for a whole period. The
+    /// architecture holds it in hardware and takes it the moment the mask
+    /// clears. src/core/unmask.zig is what the run loop does about it; this
+    /// is only the question, asked before `dispatch` so the held counter
+    /// still means what it says.
+    pub fn pendingMasked(self: *Nvic, core: anytype) !bool {
+        if (!(try masked(core))) return false;
+        try foldClearRegisters(core);
+        return (try self.pick(core)) != null;
+    }
+
     /// Enter `exc`: stack the caller-saved frame at SP, hand the handler an
     /// EXC_RETURN in LR, and jump to its vector.
     pub fn enter(self: *Nvic, core: anytype, exc: Candidate) !void {

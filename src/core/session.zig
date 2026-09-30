@@ -22,6 +22,7 @@ const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const idle = @import("idle.zig");
+const unmask = @import("unmask.zig");
 
 /// Records the invalid access behind a fault.
 pub const Watch = fault.Watch;
@@ -68,6 +69,11 @@ pub const Session = struct {
     /// wants. src/core/idle.zig says what has to hold before one is
     /// skipped.
     idle: ?*idle.Seam = null,
+    /// Lets a pend that is ready but masked wait out the mask instead of
+    /// being dropped for a whole period. Null keeps the old behaviour, which
+    /// is what every test that is not about delivery timing wants.
+    /// src/core/unmask.zig says what it costs and what bounds it.
+    unmask: ?*unmask.Release = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.

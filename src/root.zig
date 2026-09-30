@@ -23,6 +23,7 @@ pub const core = struct {
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
     pub const idle = @import("core/idle.zig");
+    pub const unmask = @import("core/unmask.zig");
     pub const idle_hook = @import("core/idle_hook.zig");
     pub const run_loop = @import("core/run_loop.zig");
     pub const symbols = @import("core/symbols.zig");

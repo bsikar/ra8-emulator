@@ -60,6 +60,7 @@ const Parts = struct {
     selects: ra8.core.csel.Selects = .{},
     worlds: ra8.core.tz.Worlds = .{},
     idle: ra8.core.idle.Seam = .{},
+    release: ra8.core.unmask.Release = .{},
     timebase: clocks.Clocks = .{},
 };
 
@@ -139,9 +140,10 @@ pub fn main() !u8 {
         .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
         .idle = &parts.idle,
+        .unmask = &parts.release,
     }, second);
 
-    try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
+    try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
