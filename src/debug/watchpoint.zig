@@ -16,10 +16,20 @@ const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 
 pub const limits = struct {
-    /// Stores kept in full. A value written once at the end of a failed
-    /// path is the usual case; a counter incremented in a loop is not what
-    /// this flag is for, and the tail of one is noise.
-    pub const listed: usize = 8;
+    /// Stores kept from the start of the run. The opening of a sequence is
+    /// where a place is set up, and it names the code that owns it.
+    pub const head: usize = 4;
+    /// Stores kept from the end of the run. A value written once at the end
+    /// of a failed path is one case this flag is for, but the sharper one is
+    /// a place written in a loop that STOPS being written, or that latches:
+    /// there the opening is setup noise and the last few stores are the
+    /// whole answer. Measured on `threadx_blink`, where
+    /// `_tx_thread_preempt_disable` takes 920 stores and the only ones worth
+    /// reading are the last four, which show an increment from
+    /// `_tx_thread_sleep` that never gets its matching decrement. Keeping
+    /// the oldest stores alone could not show that at any list length a run
+    /// could afford.
+    pub const tail: usize = 4;
     /// The width of the window watched around the named address: a word,
     /// so a byte store anywhere in it is caught.
     pub const window: u32 = 4;
@@ -52,26 +62,48 @@ pub const Watched = struct {
     /// was kept: a count that stops at the list length would understate a
     /// value written in a loop, which is exactly when the count matters.
     seen: usize = 0,
-    kept: [limits.listed]Store = undefined,
+    /// The first stores of the run, in order.
+    first: [limits.head]Store = undefined,
+    /// The most recent stores, held in a ring so the cost of a watch does
+    /// not grow with the run however long it writes.
+    last: [limits.tail]Store = undefined,
 
-    /// Record a store. Anything past the list is counted and dropped, so
-    /// the memory a watch costs does not grow with the run.
+    /// Record a store. Everything between the two ends is counted and
+    /// dropped, so the memory a watch costs is fixed.
     pub fn record(self: *Watched, pc: u32, lr: u32, address: u32, width: u8, value: u32) void {
-        if (self.seen < limits.listed) {
-            self.kept[self.seen] = .{
-                .pc = pc,
-                .lr = lr,
-                .value = value,
-                .width = width,
-                .offset = @truncate(address -% self.address),
-            };
-        }
+        const one: Store = .{
+            .pc = pc,
+            .lr = lr,
+            .value = value,
+            .width = width,
+            .offset = @truncate(address -% self.address),
+        };
+        if (self.seen < limits.head) self.first[self.seen] = one;
+        self.last[self.seen % limits.tail] = one;
         self.seen += 1;
     }
 
-    /// The stores kept in full, oldest first.
-    pub fn listed(self: *const Watched) []const Store {
-        return self.kept[0..@min(self.seen, limits.listed)];
+    /// The stores that opened the run, oldest first.
+    pub fn opening(self: *const Watched) []const Store {
+        return self.first[0..@min(self.seen, limits.head)];
+    }
+
+    /// The stores that closed the run, oldest first, never repeating one
+    /// the opening already carries. Written into the caller's buffer
+    /// because the ring holds them out of order.
+    pub fn closing(self: *const Watched, into: *[limits.tail]Store) []const Store {
+        if (self.seen <= limits.head) return into[0..0];
+        const held = @min(self.seen - limits.head, limits.tail);
+        for (0..held) |index| {
+            into[index] = self.last[(self.seen - held + index) % limits.tail];
+        }
+        return into[0..held];
+    }
+
+    /// Stores that fell between the two ends and were counted only.
+    pub fn dropped(self: *const Watched) usize {
+        var room: [limits.tail]Store = undefined;
+        return self.seen - self.opening().len - self.closing(&room).len;
     }
 
     /// The last address of the watched window.
@@ -120,23 +152,29 @@ pub fn print(out: anytype, image: elf.Image, spec: ?[]const u8, watched: ?Watche
         "  watch         : {s} @0x{X:0>8}, {d} store(s)\n",
         .{ spec orelse "", one.address, one.seen },
     );
-    for (one.listed()) |store| {
-        try out.print(
-            "                  +{d} {d}-byte 0x{X:0>8} from pc 0x{X:0>8}",
-            .{ store.offset, store.width, store.value, store.pc },
-        );
-        if (symbols.inside(image, store.pc)) |at| {
-            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
-        }
-        // The return address, minus the Thumb bit, names the caller. A
-        // shared helper is the common case and the pc alone is useless
-        // there, so this is printed whenever it resolves to a function.
-        if (symbols.inside(image, store.lr & ~@as(u32, 1))) |at| {
-            try out.print(" via {s}+0x{X}", .{ at.name, at.offset });
-        }
-        try out.print("\n", .{});
+    for (one.opening()) |store| try line(out, image, store);
+    const skipped = one.dropped();
+    if (skipped > 0) {
+        try out.print("                  and {d} more, ending with\n", .{skipped});
     }
-    if (one.seen > limits.listed) {
-        try out.print("                  and {d} more\n", .{one.seen - limits.listed});
+    var room: [limits.tail]Store = undefined;
+    for (one.closing(&room)) |store| try line(out, image, store);
+}
+
+/// One store, named.
+fn line(out: anytype, image: elf.Image, store: Store) !void {
+    try out.print(
+        "                  +{d} {d}-byte 0x{X:0>8} from pc 0x{X:0>8}",
+        .{ store.offset, store.width, store.value, store.pc },
+    );
+    if (symbols.inside(image, store.pc)) |at| {
+        try out.print(" {s}+0x{X}", .{ at.name, at.offset });
     }
+    // The return address, minus the Thumb bit, names the caller. A
+    // shared helper is the common case and the pc alone is useless
+    // there, so this is printed whenever it resolves to a function.
+    if (symbols.inside(image, store.lr & ~@as(u32, 1))) |at| {
+        try out.print(" via {s}+0x{X}", .{ at.name, at.offset });
+    }
+    try out.print("\n", .{});
 }
