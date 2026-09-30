@@ -52,6 +52,12 @@ fn bankSync(board: *Board, out: Writer) !void {
             .{state.absent},
         );
     }
+    if (state.stray != 0) {
+        try out.print(
+            "GPT bank: {d} store(s) named a channel but not the window they came through\n",
+            .{state.stray},
+        );
+    }
 }
 
 /// The independent watchdog. An image that never touched it says nothing.

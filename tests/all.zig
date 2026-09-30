@@ -123,6 +123,7 @@ test {
     _ = @import("periph/gpt_lock_test.zig");
     _ = @import("periph/gpt_mode_test.zig");
     _ = @import("periph/gpt_window_test.zig");
+    _ = @import("periph/gpt_sync_test.zig");
     _ = @import("periph/gptp_test.zig");
     _ = @import("periph/gptp_timer_test.zig");
     _ = @import("periph/i3c_gt911_test.zig");
