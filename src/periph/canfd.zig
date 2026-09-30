@@ -67,6 +67,7 @@ const lanes = @import("lanes.zig");
 const fifo = @import("canfd_fifo.zig");
 const sleep = @import("canfd_sleep.zig");
 const rx_config = @import("canfd_rx_config.zig");
+const rx_status = @import("canfd_rx_status.zig");
 const tx_status = @import("canfd_tx_status.zig");
 const registers = @import("canfd_regs.zig");
 const errors = @import("canfd_error.zig");
@@ -98,6 +99,9 @@ pub const Mode = registers.Mode;
 /// The error-flag rule, reached as `canfd.error_flags` the way the other
 /// split parts of this block are reached through it.
 pub const error_flags = errors;
+
+/// The CFDRFSTS rule, reached the same way.
+pub const rx_flags = rx_status;
 
 const part = lanes.part;
 const merge = lanes.merge;
@@ -133,6 +137,9 @@ pub const Unit = struct {
     refused: u32 = 0,
     /// Accepted frames with no stage free.
     lost: u32 = 0,
+    /// CFDRFSTS[0]'s latched half: RFMLT, and the stores aimed at it. See
+    /// src/periph/canfd_rx_status.zig.
+    rx_sts: rx_status.Status = .{},
     /// Accepted frames dropped because CFDRFCC.RFE was never set, so there
     /// was no FIFO to queue them in. See src/periph/canfd_rx_config.zig.
     unarmed: u32 = 0,
@@ -147,6 +154,7 @@ pub const Unit = struct {
         return self.sent == 0 and self.refused == 0 and self.starved == 0 and
             self.faked == 0 and self.unarmed == 0 and self.faults.quiet() and
             self.rx.quiet() and self.tx.quiet() and self.dozing.quiet() and
+            self.rx_sts.quiet() and
             self.global == .reset and self.channel == .reset;
     }
 
@@ -171,9 +179,9 @@ pub const Unit = struct {
         };
     }
 
+    /// CFDRFSTS: the queue's live state plus whatever RFMLT is still holding.
     fn fifoStatus(self: *const Unit) u32 {
-        if (self.queue.empty()) return field.rfemp;
-        return field.rfif;
+        return self.rx_sts.read(self.queue.empty(), self.queue.full());
     }
 
     /// Does the programmed filter let this identifier through? An entry is
@@ -224,6 +232,9 @@ pub const Unit = struct {
         }
         if (!self.queue.push(frame)) {
             self.lost +%= 1;
+            // The firmware's only way to find out, and it stands until the
+            // firmware lowers it.
+            self.rx_sts.lose();
             return false;
         }
         self.received +%= 1;
@@ -268,7 +279,8 @@ pub const Unit = struct {
                 self.shadow[offset / 4] = held;
                 if (self.dozing.channel.store(held)) self.channel = Mode.fromBits(held);
             },
-            off_gsts, off_cnsts, off_rfsts0 => self.faked +%= 1,
+            off_gsts, off_cnsts => self.faked +%= 1,
+            off_rfsts0 => self.rx_sts.store(byte, width, value),
             off_tmsts0 => {
                 // Only mailbox 0 is modelled; a store that names none of
                 // its byte is a store into a register nothing here owns.

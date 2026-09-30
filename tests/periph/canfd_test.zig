@@ -176,15 +176,24 @@ test "an unprogrammed filter is open, as it is on dev" {
 test "a store into a status register is refused" {
     var model = canfd.Canfd.init();
     start(&model, unit0);
-    model.write(unit0 + canfd.off_rfsts0, 4, canfd.field.rfif);
     model.write(unit0 + canfd.off_gsts, 4, canfd.field.ghltsts);
     model.write(unit0 + canfd.off_cnsts, 4, canfd.field.chltsts);
     // CFDTMSTS[1..3] are mailboxes this model does not carry.
     model.write(unit0 + canfd.off_tmsts0 + 1, 1, canfd.field.tmtrf_done);
-    try std.testing.expectEqual(@as(u32, 4), model.units[0].faked);
-    try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
+    try std.testing.expectEqual(@as(u32, 3), model.units[0].faked);
     try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_gsts, 4));
     try std.testing.expectEqual(@as(u32, 0), model.read(unit0 + canfd.off_tmsts0, 4));
+}
+
+test "a store into CFDRFSTS goes to the flag rule rather than the faked count" {
+    var model = canfd.Canfd.init();
+    start(&model, unit0);
+    // RFIF is the controller's, so the store is counted as an invented flag
+    // by canfd_rx_status.zig and the register still reads empty.
+    model.write(unit0 + canfd.off_rfsts0, 4, canfd.field.rfif);
+    try std.testing.expectEqual(@as(u32, 0), model.units[0].faked);
+    try std.testing.expectEqual(@as(u32, 1), model.units[0].rx_sts.invented);
+    try std.testing.expectEqual(canfd.field.rfemp, model.read(unit0 + canfd.off_rfsts0, 4));
 }
 
 test "a transmit request is dropped while the previous result stands" {

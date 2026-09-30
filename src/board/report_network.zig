@@ -209,6 +209,49 @@ fn camera(board: *Board, out: Writer) !void {
     try out.print("\n", .{});
 }
 
+/// Everything the receive FIFO got wrong on one controller: the frames that
+/// never reached a stage, and what CFDRFSTS said about it. Apart from can()
+/// because the register's own flags are a story of their own, and because
+/// that function had grown past the length gate.
+fn receiveFifo(index: usize, unit: anytype, out: Writer) !void {
+    if (unit.lost != 0) {
+        try out.print("CANFD{d}: {d} frame(s) LOST, no receive stage free\n", .{ index, unit.lost });
+    }
+    if (unit.rx_sts.lost_latched) {
+        try out.print(
+            "CANFD{d}: CFDRFSTS.RFMLT still standing, the overrun was never acknowledged\n",
+            .{index},
+        );
+    }
+    if (unit.rx_sts.acknowledged != 0) {
+        try out.print(
+            "CANFD{d}: {d} overrun acknowledgement(s) lowered CFDRFSTS.RFMLT\n",
+            .{ index, unit.rx_sts.acknowledged },
+        );
+    }
+    if (unit.rx_sts.invented != 0) {
+        try out.print(
+            "CANFD{d}: REFUSED {d} store(s) to CFDRFSTS that would have raised a flag the controller owns\n",
+            .{ index, unit.rx_sts.invented },
+        );
+    }
+    if (unit.unarmed != 0) {
+        try out.print(
+            "CANFD{d}: {d} frame(s) DROPPED, the receive FIFO was never enabled\n",
+            .{ index, unit.unarmed },
+        );
+    }
+    if (unit.rx.refused != 0) {
+        try out.print(
+            "CANFD{d}: REFUSED {d} store(s) asking for CFDRFCC.RFE, out of reset or with no depth\n",
+            .{ index, unit.rx.refused },
+        );
+    }
+    if (unit.starved != 0) {
+        try out.print("CANFD{d}: {d} pop(s) of an empty receive FIFO\n", .{ index, unit.starved });
+    }
+}
+
 /// One block per CAN controller that saw traffic.
 fn can(board: *Board, out: Writer) !void {
     for (&board.can.units, 0..) |*unit, index| {
@@ -229,29 +272,12 @@ fn can(board: *Board, out: Writer) !void {
                 .{ index, unit.filtered },
             );
         }
-        if (unit.lost != 0) {
-            try out.print("CANFD{d}: {d} frame(s) LOST, no receive stage free\n", .{ index, unit.lost });
-        }
-        if (unit.unarmed != 0) {
-            try out.print(
-                "CANFD{d}: {d} frame(s) DROPPED, the receive FIFO was never enabled\n",
-                .{ index, unit.unarmed },
-            );
-        }
-        if (unit.rx.refused != 0) {
-            try out.print(
-                "CANFD{d}: REFUSED {d} store(s) asking for CFDRFCC.RFE, out of reset or with no depth\n",
-                .{ index, unit.rx.refused },
-            );
-        }
+        try receiveFifo(index, unit, out);
         if (unit.tx.stalled != 0) {
             try out.print(
                 "CANFD{d}: DROPPED {d} transmit request(s), CFDTMSTS.TMTRF was never cleared\n",
                 .{ index, unit.tx.stalled },
             );
-        }
-        if (unit.starved != 0) {
-            try out.print("CANFD{d}: {d} pop(s) of an empty receive FIFO\n", .{ index, unit.starved });
         }
         if (!unit.dozing.quiet()) {
             try out.print(

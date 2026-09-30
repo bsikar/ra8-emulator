@@ -48,6 +48,7 @@ test {
     _ = @import("periph/canfd_error_test.zig");
     _ = @import("periph/canfd_fifo_test.zig");
     _ = @import("periph/canfd_rx_config_test.zig");
+    _ = @import("periph/canfd_rx_status_test.zig");
     _ = @import("periph/canfd_sleep_test.zig");
     _ = @import("periph/canfd_tx_status_test.zig");
     _ = @import("periph/canfd_test.zig");
