@@ -377,7 +377,7 @@ fn texture(unit: *const @TypeOf(@as(Board, undefined).raster), out: Writer) !voi
 /// PDCTRGD itself, once the firmware has been near it. A write dropped by
 /// the PRC1 lock is the silent failure: no fault, no flag, domain still dark.
 pub fn domain(board: *Board, out: Writer) !void {
-    const unit = &board.graphics;
+    const unit = &board.domains.graphics;
     if (unit.quiet()) return;
     try out.print(
         "PWR-GRAPHICS: domain {s}, {d} power-on(s), {d} power-off(s)\n",

@@ -24,8 +24,8 @@ fn unlockedGuard() prcr.Prcr {
 
 /// A powered graphics domain: PDDE written as 0, which is the polarity trap.
 fn poweredDomain(guard: *const prcr.Prcr) pdctr.Pdctr {
-    var domain = pdctr.Pdctr.init(guard);
-    domain.write(pdctr.win_base, 1, 0);
+    var domain = pdctr.Pdctr.init(guard, .graphics);
+    domain.write(pdctr.Domain.graphics.base(), 1, 0);
     return domain;
 }
 
@@ -51,7 +51,7 @@ fn programFill(unit: *drw.Drw, width: u32, height: u32, pitch: u32, color: u32) 
 
 test "the block is dark until the graphics domain is powered" {
     const guard = unlockedGuard();
-    var domain = pdctr.Pdctr.init(&guard);
+    var domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = drw.Drw.init(&domain);
     try std.testing.expectEqual(@as(u32, 0), unit.read(at(drw.off.control2), 4));
     unit.write(at(drw.off.color1), 4, 0xFF00_FF00);

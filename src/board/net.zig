@@ -7,6 +7,7 @@ const engine = @import("../core/engine.zig");
 const eth = @import("../periph/eth.zig");
 const eth_queue = @import("../periph/eth_queue.zig");
 const gateway = @import("../periph/eth_gateway.zig");
+const pdctr = @import("../periph/pdctr.zig");
 const periph = @import("../periph/registry.zig");
 const regs = @import("../periph/eth_regs.zig");
 
@@ -23,9 +24,18 @@ pub const Rswitch = struct {
 
     /// Put every window the cluster answers for on the bus. The blocks hold
     /// pointers into this struct, so this runs once the board has stopped
-    /// moving.
-    pub fn attach(self: *Rswitch, bus: *periph.Bus, memory: engine.Engine) periph.Error!void {
+    /// moving, and the ESWM power domain is wired to each port here for the
+    /// same reason.
+    pub fn attach(
+        self: *Rswitch,
+        bus: *periph.Bus,
+        memory: engine.Engine,
+        domain: *const pdctr.Pdctr,
+    ) periph.Error!void {
         for (&self.ports) |*port| {
+            // The whole cluster sits in the ESWM power domain, so every port
+            // asks the same one before it answers.
+            port.domain = domain;
             try bus.add(port.ethaBlock());
             try bus.add(port.rmacBlock());
             try bus.add(port.macBlock());

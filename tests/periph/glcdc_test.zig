@@ -24,8 +24,8 @@ fn unlockedGuard() prcr.Prcr {
 
 /// A powered graphics domain: PDDE written as 0, which is the polarity trap.
 fn poweredDomain(guard: *const prcr.Prcr) pdctr.Pdctr {
-    var domain = pdctr.Pdctr.init(guard);
-    domain.write(pdctr.win_base, 1, 0);
+    var domain = pdctr.Pdctr.init(guard, .graphics);
+    domain.write(pdctr.Domain.graphics.base(), 1, 0);
     return domain;
 }
 
@@ -40,7 +40,7 @@ fn programLayer(unit: *glcdc.Glcdc, layer: u32, base: u32) void {
 
 test "the block answers from the documented base and span" {
     const guard = prcr.Prcr.init();
-    const domain = pdctr.Pdctr.init(&guard);
+    const domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = glcdc.Glcdc.init(&domain);
     const block = unit.block();
     try std.testing.expectEqual(@as(u32, 0x4034_2000), block.base);
@@ -51,14 +51,14 @@ test "the block answers from the documented base and span" {
 
 test "a run that never touched the controller stays quiet" {
     const guard = prcr.Prcr.init();
-    const domain = pdctr.Pdctr.init(&guard);
+    const domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = glcdc.Glcdc.init(&domain);
     try std.testing.expect(unit.quiet());
 }
 
 test "the domain is gated at reset so a write reaches no register" {
     const guard = prcr.Prcr.init();
-    const domain = pdctr.Pdctr.init(&guard);
+    const domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = glcdc.Glcdc.init(&domain);
     unit.write(bg_en, 4, 1);
     try std.testing.expectEqual(@as(u32, 0), unit.writes);
@@ -68,7 +68,7 @@ test "the domain is gated at reset so a write reaches no register" {
 
 test "an unpowered read gives zero and is counted" {
     const guard = prcr.Prcr.init();
-    const domain = pdctr.Pdctr.init(&guard);
+    const domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = glcdc.Glcdc.init(&domain);
     try std.testing.expectEqual(@as(u32, 0), unit.read(bg_en, 4));
     try std.testing.expectEqual(@as(u32, 1), unit.dark_reads);
@@ -76,7 +76,7 @@ test "an unpowered read gives zero and is counted" {
 
 test "a layer programmed while the domain is dark has no framebuffer" {
     const guard = prcr.Prcr.init();
-    const domain = pdctr.Pdctr.init(&guard);
+    const domain = pdctr.Pdctr.init(&guard, .graphics);
     var unit = glcdc.Glcdc.init(&domain);
     programLayer(&unit, layer1, fb_base);
     try std.testing.expectEqual(@as(?glcdc.Framebuffer, null), unit.framebuffer());
@@ -231,7 +231,7 @@ test "powering the domain back off takes the framebuffer away again" {
     var unit = glcdc.Glcdc.init(&domain);
     programLayer(&unit, layer1, fb_base);
     try std.testing.expect(unit.framebuffer() != null);
-    domain.write(pdctr.win_base, 1, pdctr.field.pdde);
+    domain.write(pdctr.Domain.graphics.base(), 1, pdctr.field.pdde);
     try std.testing.expectEqual(@as(?glcdc.Framebuffer, null), unit.framebuffer());
 }
 
