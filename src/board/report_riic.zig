@@ -35,6 +35,12 @@ pub fn channels(board: *Board, out: Writer) !void {
                 .{channel.restart.dropped},
             );
         }
+        if (channel.stop.deferred != 0) {
+            try out.print(
+                ", {d} STOP(S) ASKED FOR WITH THE FRAME STILL RUNNING",
+                .{channel.stop.deferred},
+            );
+        }
         if (channel.ack.protected != 0) {
             try out.print(
                 ", {d} ACKBT STORE(S) WITH ACKWP NOT YET IN FORCE",
@@ -44,8 +50,8 @@ pub fn channels(board: *Board, out: Writer) !void {
         if (channel.no_start != 0) {
             try out.print(", {d} DATA WRITE(S) WITH NO TRANSACTION OPEN", .{channel.no_start});
         }
-        if (channel.overread != 0) {
-            try out.print(", {d} READ(S) PAST WHAT THE DEVICE HAD TO SAY", .{channel.overread});
+        if (channel.rx.overread != 0) {
+            try out.print(", {d} READ(S) PAST WHAT THE DEVICE HAD TO SAY", .{channel.rx.overread});
         }
         try out.print("\n", .{});
         if (channel.target.cycles != 0 or channel.target.unaddressed != 0) {
