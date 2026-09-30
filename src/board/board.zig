@@ -10,6 +10,7 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
+const construct = @import("construct.zig");
 const boundary = @import("boundary.zig");
 const part = @import("../core/part.zig");
 const reboot = @import("../core/reboot.zig");
@@ -50,6 +51,7 @@ const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp.zig");
 const octaclk = @import("../periph/octaclk.zig");
 const pscu = @import("../periph/pscu.zig");
+const cpscu = @import("../periph/cpscu.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const npu = @import("../periph/npu.zig");
 const ckcr = @import("../periph/ckcr.zig");
@@ -132,6 +134,10 @@ pub const Board = struct {
     /// The peripheral clock source selects, built in attach() for the same
     /// reason the two below are: each needs this board's own protection.
     branches: ckcr.Ckcr,
+    /// The chip-level security attribution: which bus masters, master-MPU
+    /// windows and CPUs the Secure boot gave away. Built in attach(): every
+    /// store is PRC4-gated, so it needs this board's own protection.
+    chip_attribution: cpscu.Unit,
     /// The handshake CPU0 uses to take the second core out of reset. Keyed,
     /// so nothing lands here without the key the driver writes.
     second_core: cpu_ctrl.CpuCtrl = .{},
@@ -288,72 +294,10 @@ pub const Board = struct {
     /// before attach(); a test's board is an RA8D2 unless it says otherwise.
     part: part.Part = .ra8d2,
 
+    /// A fresh board. What each block starts as lives next door in
+    /// construct.zig, so this file stays the list of what a board is.
     pub fn init(allocator: std.mem.Allocator) Board {
-        return .{
-            .bus = periph.Bus.init(allocator),
-            .events = icu.Icu.init(),
-            .links = elc.Elc.init(),
-            .transfers = dtc.Dtc.init(),
-            .dma = undefined,
-            .pins = gpio.Gpio.init(),
-            .pinfunc = pfs.Pfs.init(),
-            .checksum = crc.Crc.init(),
-            .dataops = doc.Doc.init(),
-            .accuracy = cac.Cac.init(),
-            .comparators = acmphs.Acmphs.init(),
-            .capture = ceu.Ceu.init(),
-            .analog = dac.Dac.init(),
-            .adc = adc.Adc.init(),
-            .shutoff = poeg.Poeg.init(),
-            .protection = prcr.Prcr.init(),
-            // Patched in attach(): the backup file has to point at this
-            // board's own protection model, not a copy of it.
-            .backup = undefined,
-            .oscillators = undefined,
-            .subclk = undefined,
-            .tree = undefined,
-            .low_power = undefined,
-            .plls = undefined,
-            .gpt_clock = undefined,
-            .voltage = undefined,
-            .brownout = undefined,
-            .ratios = undefined,
-            .branches = undefined,
-            .domains = undefined,
-            .display = undefined,
-            .raster = undefined,
-            .serial = sci.Sci.init(),
-            .spi = spi.Spi.init(),
-            .sd = sd_card.Card.init(allocator),
-            .flash = xspi.Xspi.init(allocator),
-            .octa = undefined,
-            .cipher = dotf.Dotf.init(),
-            .card = sdhi.Sdhi.init(allocator),
-            .options = mram.Mram.init(allocator),
-            .ecc = sram.Sram.init(),
-            .audio = ssie.Ssie.init(),
-            .microphone = pdm.Pdm.init(),
-            .clock = rtc.Rtc.init(),
-            .can = canfd.Canfd.init(),
-            .mailbox = ipc.Ipc.init(),
-            .npu = npu.Npu.init(),
-            .lowpower = ulpt.Ulpt.init(),
-            .interval = agt.Agt.init(),
-            .pwm = gpt.Gpt.init(),
-            .ptp = gptp.Gptp.init(),
-            .monitors = lvd.Lvd.init(),
-            .watchdog = wdt.Wdt.init(),
-            .heartbeat = iwdt.Iwdt.init(),
-            .link = mipi_phy.MipiPhy.init(),
-            .receiver = mipi_csi.MipiCsi.init(),
-            .host = mipi_dsi.MipiDsi.init(),
-            .causes = reset.Reset.init(),
-            .control = scb.Scb.init(),
-            .caches = cache.Cache.init(),
-            .regions = mpu.Mpu.init(),
-            .guard = mpu_guard.Guard.init(),
-            .partitions = sau.Sau.init(),
-        };
+        return construct.build(allocator);
     }
 
     pub fn deinit(self: *Board) void {
