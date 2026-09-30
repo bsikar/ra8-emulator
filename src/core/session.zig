@@ -39,6 +39,12 @@ pub const Session = struct {
     watch: ?*Watch = null,
     /// Charged one chunk of time per chunk of execution.
     timebase: ?*clocks.Clocks = null,
+
+    /// An explicit boundary width, from `--chunk`, overriding the time
+    /// base's own. Null leaves the cadence where it was. This exists to
+    /// test whether a result depends on where the boundaries fall, so it
+    /// deliberately outranks the clock: see cadence.configuredFrom.
+    per_boundary: ?u32 = null,
     /// Consulted at each chunk boundary for an exception to take.
     interrupts: ?*nvic.Nvic = null,
     /// Run at each chunk boundary, before the controller picks: the

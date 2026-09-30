@@ -164,6 +164,10 @@ pub const Options = struct {
     /// `--taken-in`: a function to catch every exception taken inside.
     /// src/debug/taken_in.zig says why a tally cannot answer that.
     taken_in_place: ?[]const u8 = null,
+    /// `--chunk`: how many instructions between two boundaries, overriding
+    /// the run's own cadence. For asking whether a result depends on where
+    /// the boundaries fall. src/core/cadence.zig carries the default.
+    chunk_instructions: ?u32 = null,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -298,6 +302,12 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         index.* += 1;
         if (index.* >= argv.len) return error.MissingValue;
         options.taken_in_place = argv[index.*];
+    } else if (std.mem.eql(u8, flag, "--chunk")) {
+        index.* += 1;
+        if (index.* >= argv.len) return error.MissingValue;
+        const width = try std.fmt.parseInt(u32, argv[index.*], 0);
+        if (width == 0) return error.BadValue;
+        options.chunk_instructions = width;
     } else if (std.mem.eql(u8, flag, "--dump-regs")) {
         options.dump_regs = true;
     } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {

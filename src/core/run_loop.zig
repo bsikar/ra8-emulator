@@ -36,9 +36,10 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
     if (session.timebase == null and session.interrupts == null) {
         return core.runChunk(start, instructions, session.watch);
     }
-    const configured = cadence.Cadence{
-        .per_boundary = if (session.timebase) |clock| clock.per_chunk else cadence.instructions,
-    };
+    const configured = cadence.configuredFrom(
+        session.per_boundary,
+        if (session.timebase) |clock| clock.per_chunk else null,
+    );
     var remaining = instructions;
     var pc = start;
     while (remaining > 0) {
@@ -55,17 +56,11 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             remaining -= 1;
             continue;
         }
-        // A store into a read-only region stopped the chunk early, so the
-        // exception is taken here, at the boundary the trap made, before
-        // the clocks are charged for a chunk that did not finish. The
-        // stretch is charged one instruction for the same reason the
-        // exception return above is: enough to keep the budget monotone.
-        if (session.protection) |guard| if (guard.latch.take()) |hit| {
-            guard.synthesise(core, session.interrupts, hit) catch return error.RunFailed;
+        if (try trapped(core, session)) |resumed| {
             remaining -= 1;
-            pc = try core.register(.pc);
+            pc = resumed;
             continue;
-        };
+        }
         if (endsHere(session)) break;
         // The firmware armed or re-armed SysTick inside this stretch, so
         // the boundary it was cut from no longer applies and the periods
@@ -110,6 +105,22 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         if (session.fns) |table| table.sample(pc);
     }
     return null;
+}
+
+/// A store into a read-only region that stopped the chunk early, turned
+/// into the exception it should have raised.
+///
+/// Taken here, at the boundary the trap made, before the clocks are
+/// charged for a chunk that did not finish. Returns where to resume, or
+/// null when no trap was latched. The caller charges the stretch one
+/// instruction for the same reason an exception return is charged one:
+/// enough to keep the budget monotone and a bad frame from looping
+/// forever.
+fn trapped(core: anytype, session: Session) !?u32 {
+    const guard = session.protection orelse return null;
+    const hit = guard.latch.take() orelse return null;
+    guard.synthesise(core, session.interrupts, hit) catch return error.RunFailed;
+    return try core.register(.pc);
 }
 
 /// Execute one stretch of a run.

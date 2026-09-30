@@ -111,3 +111,25 @@ test "a narrowed boundary delivers one period per chunk" {
     const pace = (cadence.Cadence{ .per_boundary = 50_000 }).narrowedTo(8_401);
     try std.testing.expectEqual(@as(usize, 8_401), pace.chunk(100_000));
 }
+
+test "an asked-for boundary wins over the time base" {
+    const pace = cadence.configuredFrom(1_000, 50_000);
+    try std.testing.expectEqual(@as(u32, 1_000), pace.per_boundary);
+}
+
+test "without one, the time base's own width is used" {
+    const pace = cadence.configuredFrom(null, 7_500);
+    try std.testing.expectEqual(@as(u32, 7_500), pace.per_boundary);
+}
+
+test "with neither, the default stands" {
+    const pace = cadence.configuredFrom(null, null);
+    try std.testing.expectEqual(cadence.instructions, pace.per_boundary);
+}
+
+test "a boundary of zero is refused, not honoured" {
+    // A boundary every no instructions is a loop that never advances.
+    const pace = cadence.configuredFrom(0, 9_000);
+    try std.testing.expectEqual(@as(u32, 9_000), pace.per_boundary);
+    try std.testing.expectEqual(cadence.instructions, cadence.configuredFrom(0, null).per_boundary);
+}
