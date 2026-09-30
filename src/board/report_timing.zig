@@ -14,12 +14,19 @@
 //! run that idled and a run that worked, and the reader cannot tell them
 //! apart from the elapsed count alone.
 //!
+//! A fourth when a pend had to wait out PRIMASK. The controller can only
+//! take an exception at a chunk boundary, so a pend that lands inside a
+//! `cpsid i` region is stepped to the unmask rather than dropped until the
+//! next period; how often that happened, and what it cost in instructions,
+//! is the difference between a scheduler that runs and one that starves.
+//!
 //! Its own file because the two counters it prints come from different models
 //! (the time base in periph/clocks.zig, the controller in periph/nvic.zig) and
 //! the interesting part is the relation between them, which belongs to neither.
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("../core/idle.zig");
+const unmask = @import("../core/unmask.zig");
 
 const Writer = @import("report.zig").Writer;
 
@@ -28,7 +35,13 @@ const Writer = @import("report.zig").Writer;
 /// can tell a slow run from a run whose clock is lying to it, and `rearms`
 /// is the other side of the same ledger: stretches ended early to keep that
 /// number down, each one a stretch whose cycles went uncharged.
-pub fn timing(out: Writer, timebase: clocks.Clocks, seam: idle.Seam, interrupts: nvic.Nvic) !void {
+pub fn timing(
+    out: Writer,
+    timebase: clocks.Clocks,
+    seam: idle.Seam,
+    interrupts: nvic.Nvic,
+    release: unmask.Release,
+) !void {
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
@@ -62,4 +75,10 @@ pub fn timing(out: Writer, timebase: clocks.Clocks, seam: idle.Seam, interrupts:
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
+    if (!release.quiet()) {
+        try out.print(
+            "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
+            .{ release.lifted, release.stepped, release.stuck, release.faulted },
+        );
+    }
 }
