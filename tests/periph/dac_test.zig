@@ -114,3 +114,55 @@ test "the block descriptor covers both channels and nothing else" {
     try std.testing.expect(descriptor.covers(ch1 + 0xFF));
     try std.testing.expect(!descriptor.covers(dac.win_base + dac.win_span));
 }
+
+test "a store in the reserved halfword above DADR is not a code" {
+    var block = unit();
+    enable(&block, ch0);
+    block.write(ch0 + dac.off_dadr, 2, 0x0ABC);
+    block.write(ch0 + dac.off_dadr + dac.data_bytes, 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 0x0ABC), block.read(ch0 + dac.off_dadr, 2));
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].outputs);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].above_data);
+}
+
+test "the reserved halfword above DADR reads zero" {
+    var block = unit();
+    enable(&block, ch0);
+    block.write(ch0 + dac.off_dadr, 2, 0x0FFF);
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + dac.off_dadr + 2, 2));
+    try std.testing.expectEqual(@as(u32, 0), block.read(ch0 + dac.off_dadr + 3, 1));
+}
+
+test "a byte store above DADR moves no peak on an enabled channel" {
+    var block = unit();
+    enable(&block, ch0);
+    block.write(ch0 + dac.off_dadr + 3, 1, 0xFF);
+    try std.testing.expectEqual(@as(u16, 0), block.channels[0].peak);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].outputs);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].above_data);
+}
+
+test "a store above DADR on a disabled channel is not a dark code" {
+    var block = unit();
+    block.write(ch0 + dac.off_dadr + 2, 2, 0x1234);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].dark);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].above_data);
+    try std.testing.expect(!block.channels[0].quiet());
+}
+
+test "a word store at DADR still carries the code it names" {
+    var block = unit();
+    enable(&block, ch0);
+    block.write(ch0 + dac.off_dadr, 4, 0xFFFF_0777);
+    try std.testing.expectEqual(@as(u32, 0x0777), block.read(ch0 + dac.off_dadr, 2));
+    try std.testing.expectEqual(@as(u32, 1), block.channels[0].outputs);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].above_data);
+}
+
+test "the reserved halfword is per channel" {
+    var block = unit();
+    block.write(ch1 + dac.off_dadr + 2, 2, 0x5555);
+    try std.testing.expectEqual(@as(u32, 0), block.channels[0].above_data);
+    try std.testing.expectEqual(@as(u32, 1), block.channels[1].above_data);
+    try std.testing.expect(block.channels[0].quiet());
+}

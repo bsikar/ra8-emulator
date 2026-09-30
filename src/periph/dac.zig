@@ -35,6 +35,20 @@
 //! fixed low-twelve. Both live in src/periph/dac_output.zig, which carries
 //! the bit map and what is deliberately left alone in it.
 //!
+//! THE HALFWORD ABOVE DADR IS NOT DADR. The register is sixteen bits wide at
+//! +0x00 and the sixteen bits above it are the reserved gap FSP carries as
+//! `reserved_dadr` and ra8_dac_b_regs.h marks "RESERVED (must read as 0)".
+//! Every access landing in that upper half used to run the DADR prong, so a
+//! store there was taken for a code: it walked the enable gate and bumped
+//! `outputs`, `dark` or `blocked` and could move `peak`, reporting a waveform
+//! the firmware never wrote. It cannot move the code itself (the merge lands
+//! above the sixteen bits DADR keeps), so the register readback was right all
+//! along and only the count was wrong. Now the gap reads zero the way the
+//! header says and a store to it latches nothing, counted in `above_data`.
+//! An access that STARTS in DADR still carries, whatever its width: a word
+//! store at +0x00 is the whole pair and its upper half is dropped, and the
+//! driver's own single 16-bit store to DADR (ra8_dac_b.c:182) is untouched.
+//!
 //! NOT MODELLED, AND NOT GUESSED: DACR0.DAE and DACR2.OFSSEL, for the reasons
 //! that file gives. The rest of the window is shadowed so a read-modify-write
 //! survives, and never read.
@@ -54,6 +68,9 @@ pub const win_span: u32 = channel_stride * @as(u32, channel_count);
 
 /// The two registers this model interprets.
 pub const off_dadr: u32 = 0x00;
+/// How many bytes of the DADR word are the data register. The halfword above
+/// it is the reserved gap, not part of DADR.
+pub const data_bytes: u32 = 2;
 pub const off_dacr0: u32 = 0x04;
 pub const off_dacr1: u32 = output.off.dacr1;
 
@@ -88,6 +105,9 @@ pub const Channel = struct {
     dark: u32 = 0,
     /// Codes written to an enabled channel whose output was disabled.
     blocked: u32 = 0,
+    /// Stores that landed wholly in the reserved halfword above DADR. They
+    /// carry no code, so they are counted rather than latched.
+    above_data: u32 = 0,
 
     pub fn enabled(self: *const Channel) bool {
         return self.dacr0 & field.dacen != 0;
@@ -108,7 +128,14 @@ pub const Channel = struct {
     }
 
     pub fn quiet(self: *const Channel) bool {
-        return self.outputs == 0 and self.dark == 0 and self.blocked == 0;
+        return self.outputs == 0 and self.dark == 0 and
+            self.blocked == 0 and self.above_data == 0;
+    }
+
+    /// Whether an access at this byte offset in the DADR word names the data
+    /// register at all. An access starting inside it carries, however wide.
+    fn namesData(byte: u32) bool {
+        return byte < data_bytes;
     }
 
     /// Take a code. Whether it converts is the output gate's call, but the
@@ -149,7 +176,7 @@ pub const Dac = struct {
         const unit = &self.channels[index];
         const inner = offset % channel_stride;
         return switch (inner & ~@as(u32, 3)) {
-            off_dadr => part(unit.dadr, inner % 4, width),
+            off_dadr => if (Channel.namesData(inner % 4)) part(unit.dadr, inner % 4, width) else 0,
             off_dacr0 => part(unit.dacr0, inner % 4, width),
             off_dacr1 => part(unit.dacr1, inner % 4, width),
             else => part(unit.shadow[inner / 4], inner % 4, width),
@@ -164,7 +191,11 @@ pub const Dac = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_dadr => unit.latch(merge(unit.dadr, byte, width, value)),
+            off_dadr => if (Channel.namesData(byte))
+                unit.latch(merge(unit.dadr, byte, width, value))
+            else {
+                unit.above_data +%= 1;
+            },
             off_dacr0 => unit.dacr0 = merge(unit.dacr0, byte, width, value),
             off_dacr1 => unit.dacr1 = merge(unit.dacr1, byte, width, value),
             else => {
