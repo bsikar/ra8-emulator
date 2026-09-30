@@ -187,6 +187,7 @@ test {
     _ = @import("periph/pfs_protect_test.zig");
     _ = @import("periph/pfs_route_test.zig");
     _ = @import("periph/pscu_test.zig");
+    _ = @import("periph/cpscu_test.zig");
     _ = @import("periph/poeg_test.zig");
     _ = @import("periph/oscsf_test.zig");
     _ = @import("periph/prcr_test.zig");

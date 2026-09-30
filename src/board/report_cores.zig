@@ -6,6 +6,7 @@ const Writer = @import("report.zig").Writer;
 const ipc = @import("../periph/ipc.zig");
 const sync = @import("../periph/ipc_sync.zig");
 const ipc_attr = @import("../periph/ipc_attr.zig");
+const cpscu = @import("../periph/cpscu.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mpu = @import("../periph/mpu.zig");
 const sau = @import("../periph/sau.zig");
@@ -177,11 +178,44 @@ fn attribution(board: *Board, out: Writer) !void {
     }
 }
 
+/// What the Secure boot handed to the rest of the chip. Recorded, not
+/// enforced: this board has no bus arbiter and no master MPU, so the words
+/// are reported and nothing is refused on the strength of them.
+fn chipAttribution(board: *Board, out: Writer) !void {
+    const unit = &board.chip_attribution;
+    if (unit.quiet()) return;
+    try out.print(
+        "CPSCU attribution: BUSSAR 0x{X:0>8}/0x{X:0>8}/0x{X:0>8}, " ++
+            "MMPUSAR 0x{X:0>8}/0x{X:0>8}, CPUSAR 0x{X:0>8}\n",
+        .{
+            unit.wordOf(.bussara),
+            unit.wordOf(.bussarb),
+            unit.wordOf(.bussarc),
+            unit.wordOf(.mmpusara),
+            unit.wordOf(.mmpusarb),
+            unit.wordOf(.cpusar),
+        },
+    );
+    if (unit.locked_writes != 0) {
+        try out.print(
+            "CPSCU attribution: REFUSED {d} store(s) with PRCR_S.PRC4 shut, the words never landed\n",
+            .{unit.locked_writes},
+        );
+    }
+    if (unit.reserved_writes != 0) {
+        try out.print(
+            "CPSCU attribution: {d} store(s) named an offset in the window that is not a register\n",
+            .{unit.reserved_writes},
+        );
+    }
+}
+
 pub fn sections(board: *Board, out: Writer) !void {
     try secondCore(board, out);
     try regions(board, out);
     try partitions(board, out);
     try attribution(board, out);
+    try chipAttribution(board, out);
     const mailbox = &board.mailbox;
     if (mailbox.quiet()) return;
     for (&mailbox.channels, 0..) |*unit, index| {

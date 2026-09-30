@@ -31,6 +31,7 @@ const lpm = @import("../periph/lpm.zig");
 const pll = @import("../periph/pll.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const pscu = @import("../periph/pscu.zig");
+const cpscu = @import("../periph/cpscu.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd_card.zig");
@@ -251,4 +252,8 @@ fn attachProtected(self: *Board) !void {
     // mailbox window, so the mailbox offers them as a block of their own.
     self.mailbox.protect(&self.protection);
     try self.bus.add(self.mailbox.attributionBlock());
+    // The rest of the CPSCU attribution the boot writes in the same scope:
+    // the bus masters, the master MPUs and the second CPU, behind PRC4 too.
+    self.chip_attribution = cpscu.Unit.init(&self.protection);
+    try self.bus.add(self.chip_attribution.block());
 }

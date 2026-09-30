@@ -186,6 +186,7 @@ pub const periph = struct {
     pub const pfs_protect = @import("periph/pfs_protect.zig");
     pub const pfs_route = @import("periph/pfs_route.zig");
     pub const pscu = @import("periph/pscu.zig");
+    pub const cpscu = @import("periph/cpscu.zig");
     pub const pdm = @import("periph/pdm.zig");
     pub const poeg = @import("periph/poeg.zig");
     pub const ckcr = @import("periph/ckcr.zig");
