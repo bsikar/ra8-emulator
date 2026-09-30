@@ -22,6 +22,8 @@ pub const core = struct {
     pub const pages = @import("core/pages.zig");
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
+    pub const idle = @import("core/idle.zig");
+    pub const idle_hook = @import("core/idle_hook.zig");
     pub const run_loop = @import("core/run_loop.zig");
     pub const symbols = @import("core/symbols.zig");
     pub const systick_hook = @import("core/systick_hook.zig");
@@ -291,4 +293,5 @@ pub const board = struct {
     pub const report_dma = @import("board/report_dma.zig");
     pub const report_steps = @import("board/report_steps.zig");
     pub const report_run = @import("board/report_run.zig");
+    pub const report_dumps = @import("board/report_dumps.zig");
 };

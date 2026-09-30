@@ -16,6 +16,7 @@
 const cadence = @import("cadence.zig");
 const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
+const idle = @import("idle.zig");
 const Session = @import("session.zig").Session;
 
 /// Run a bounded number of instructions. A fault is a result, not a
@@ -41,7 +42,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
     while (remaining > 0) {
         const pace = paceFor(core, configured, session);
         const chunk = pace.chunk(remaining);
-        if (try core.runChunk(pc, chunk, session.watch)) |taken| {
+        if (try stretch(core, pc, chunk, session)) |taken| {
             const controller = session.interrupts orelse return taken;
             if (!nvic.isExceptionReturn(taken.pc)) return taken;
             controller.exit(core, taken.pc) catch return error.RunFailed;
@@ -101,6 +102,34 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         pc = try core.register(.pc);
     }
     return null;
+}
+
+/// Execute one stretch of a run.
+///
+/// Without an idle seam this is the bounded stretch and nothing else. With
+/// one it is the same stretch in two parts: the head is stepped looking for
+/// a loop that comes back to its own opening state, and if one closes, the
+/// tail is handed to the clocks without being executed. The caller is told
+/// nothing about which happened, because nothing downstream differs: the
+/// budget falls by the whole chunk either way and the clocks are charged
+/// the whole chunk either way, so the interrupt that ends the spin arrives
+/// at the modelled time it always would have.
+fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault {
+    const seam = session.idle orelse return core.runChunk(pc, chunk, session.watch);
+    // Already proved, and still standing in the same place: the common case
+    // once a run goes idle, and the one that has to stay cheap.
+    if (try seam.resting(core)) {
+        seam.skip(chunk);
+        return null;
+    }
+    const looked = try seam.look(core, pc, @min(chunk, idle.limits.probe));
+    if (looked.fault) |taken| return taken;
+    if (looked.closed) {
+        seam.skip(chunk - looked.ran);
+        return null;
+    }
+    if (looked.ran >= chunk) return null;
+    return core.runChunk(try core.register(.pc), chunk - looked.ran, session.watch);
 }
 
 /// The boundary this stretch gets. The armed period is read every time

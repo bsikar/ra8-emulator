@@ -31,6 +31,7 @@ const Board = ra8.board.Board;
 const report = ra8.board.report;
 const report_steps = ra8.board.report_steps;
 const report_run = ra8.board.report_run;
+const report_dumps = ra8.board.report_dumps;
 
 /// Read the image off disk and parse it, saying which of the two failed.
 fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
@@ -39,6 +40,38 @@ fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
         std.debug.print("{s} is not a loadable image: {s}\n", .{ path, @errorName(err) });
         return err;
     };
+}
+
+/// Everything that has to be hooked onto the core before the image runs,
+/// and the image itself, which is loaded in the middle of it.
+///
+/// The order matters in one place and not the rest: the Non-Secure world's
+/// BLXNS is found by reading the bytes as loaded, so `attachWorlds` has to
+/// follow `loadImage`. Everything else is independent, and the caller owns
+/// all of it, which is why each piece arrives as a pointer and the count
+/// of bytes written goes back.
+/// The pieces a run hangs on the core before it starts and reads back
+/// once it has stopped. One struct rather than six locals because that is
+/// what they are: every one of them is attached in the same breath and
+/// reported on in the same breath.
+const Parts = struct {
+    watch: engine.Watch = .{},
+    loops: lob.Loops = .{},
+    selects: ra8.core.csel.Selects = .{},
+    worlds: ra8.core.tz.Worlds = .{},
+    idle: ra8.core.idle.Seam = .{},
+    timebase: clocks.Clocks = .{},
+};
+
+fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts) !u32 {
+    try core.attachWatch(&parts.watch);
+    try core.attachLoops(&parts.loops);
+    try core.attachSelects(&parts.selects);
+    try core.attachIdle(&parts.idle);
+    try core.attachTimebase(&parts.timebase);
+    const written = try core.loadImage(image);
+    try core.attachWorlds(image, &parts.worlds);
+    return written;
 }
 
 pub fn main() !u8 {
@@ -63,15 +96,8 @@ pub fn main() !u8 {
     fitBoard(&board, options) catch return 2;
     try board.attach(&core);
 
-    var watch = engine.Watch{};
-    try core.attachWatch(&watch);
-    var loops = lob.Loops{};
-    try core.attachLoops(&loops);
-    var selects = ra8.core.csel.Selects{};
-    try core.attachSelects(&selects);
-    const written = try core.loadImage(image);
-    var worlds = ra8.core.tz.Worlds{};
-    try core.attachWorlds(image, &worlds);
+    var parts = Parts{};
+    const written = try attachAll(&core, image, &parts);
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
@@ -82,8 +108,6 @@ pub fn main() !u8 {
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
 
-    var timebase = clocks.Clocks{};
-    try core.attachTimebase(&timebase);
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
@@ -104,8 +128,8 @@ pub fn main() !u8 {
     defer if (second) |one| one.close();
     const budget = options.budgetFor(stop != null);
     const fault = try second_core.interleave(core, entry, budget, .{
-        .watch = &watch,
-        .timebase = &timebase,
+        .watch = &parts.watch,
+        .timebase = &parts.timebase,
         .interrupts = &interrupts,
         .board = board.ticker(),
         .reboot = &reboot,
@@ -114,91 +138,13 @@ pub fn main() !u8 {
         .brk = if (point) |*one| one else null,
         .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
+        .idle = &parts.idle,
     }, second);
 
-    try report_run.all(out, &board, image, .{ .timebase = timebase, .interrupts = interrupts, .reboot = reboot, .loops = loops, .selects = selects, .worlds = worlds, .undefined_found = undefined_found });
+    try report_run.all(out, &board, image, .{ .timebase = parts.timebase, .idle = parts.idle, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found });
     try second_core.report(out, second);
-    try dumps(out, core, image, options, &board, watched);
+    try report_dumps.dumps(out, core, image, options, &board, watched);
     return verdict(out, core, options, fault, stop, point, timed, budget);
-}
-
-/// Everything a flag asked to be printed once the run is over.
-///
-/// These are the reader's own questions rather than the board's account of
-/// itself, so they come after the block reports and stay together: a run
-/// with no flags prints none of them and this is one call that does
-/// nothing.
-fn dumps(
-    out: anytype,
-    core: engine.Engine,
-    image: elf.Image,
-    options: cli.Options,
-    board: *Board,
-    watched: ?watchpoint.Watched,
-) !void {
-    try dumpSymbols(out, core, image, options);
-    try dumpBlock(out, board, options);
-    try dumpRegisters(out, core, options);
-    try mem_dump.print(out, core, image, options.dump_mem, options.dump_mem_words);
-    try watchpoint.print(out, image, options.watch_place, watched);
-}
-
-/// The core registers as the run left them, when `--dump-regs` asked.
-///
-/// At a break this is the function's own call boundary, so r0-r3 and the
-/// words at the stack pointer are still its arguments. A register the
-/// core refuses to hand back is printed as unreadable rather than as a
-/// zero that would read like a real value.
-fn dumpRegisters(out: anytype, core: engine.Engine, options: cli.Options) !void {
-    if (!options.dump_regs) return;
-    try out.print("  dump-regs     :", .{});
-    for (registers.dumped, 0..) |named, index| {
-        if (core.register(named.which)) |value| {
-            try out.print(" {s} 0x{X:0>8}", .{ named.name, value });
-        } else |_| {
-            try out.print(" {s} <unreadable>", .{named.name});
-        }
-        if (registers.endsLine(index)) try out.print("\n                 ", .{});
-    }
-    const sp = core.register(.sp) catch return out.print("sp unreadable\n", .{});
-    for (0..registers.limits.stack_words) |index| {
-        const at = registers.stackWord(sp, index);
-        if (core.readWord(at)) |value| {
-            try out.print(" [sp+{d}] 0x{X:0>8}", .{ index * 4, value });
-        } else |_| {
-            try out.print(" [sp+{d}] <unreadable>", .{index * 4});
-        }
-    }
-    try out.print("\n", .{});
-}
-
-/// One card block back as hex, when `--dump-sd` asked for it.
-///
-/// Rows of nothing but zeros are dropped: a block of a freshly formatted
-/// volume is mostly zeros, and the few rows carrying a directory entry or a
-/// boot field are the whole reason to look. The count of dropped rows is
-/// printed so a reader can tell an elided block from a short one.
-fn dumpBlock(out: anytype, board: anytype, options: cli.Options) !void {
-    const index = options.dump_sd orelse return;
-    var block: sd_image.Block = undefined;
-    if (!board.sd.img.read(index, &block)) {
-        try out.print("  dump-sd       : block {d} is not on this card\n", .{index});
-        return;
-    }
-    try out.print("  dump-sd       : block {d} (0x{X})\n", .{ index, index });
-    var offset: usize = 0;
-    var dropped: usize = 0;
-    while (offset < block.len) : (offset += sd_dump.row_bytes) {
-        const end = @min(offset + sd_dump.row_bytes, block.len);
-        const bytes = block[offset..end];
-        if (sd_dump.blank(bytes)) {
-            dropped += 1;
-            continue;
-        }
-        var buf: sd_dump.Buffer = undefined;
-        try out.print("{s}\n", .{sd_dump.row(&buf, offset, bytes)});
-    }
-    if (dropped > 0) try out.print("  dump-sd       : {d} zero row(s) not shown\n", .{dropped});
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
@@ -311,31 +257,6 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
         return null;
     };
     return .{ .address = address, .reaches = options.stop_at };
-}
-
-/// Read each `--dump-sym` global out of RAM and print it.
-///
-/// The shape of the line is load-bearing: the firmware's own
-/// emulator-in-the-loop suite parses it with a regex over
-/// "dump-sym : <name> @0x<addr> = <decimal> ", so the name, the address,
-/// the decimal value and something after it all have to be there. A symbol
-/// the image does not carry, or an address that will not read, says so
-/// plainly instead of printing a number nothing measured.
-fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
-    for (options.dumps()) |name| {
-        const address = symbols.addressOf(image, name) orelse {
-            try out.print("  dump-sym      : {s} <unresolved>\n", .{name});
-            continue;
-        };
-        const value = core.readWord(address) catch {
-            try out.print("  dump-sym      : {s} @0x{X:0>8} <unreadable>\n", .{ name, address });
-            continue;
-        };
-        try out.print(
-            "  dump-sym      : {s} @0x{X:0>8} = {d} (0x{X:0>8})\n",
-            .{ name, address, value, value },
-        );
-    }
 }
 
 /// Put the world the command line described onto the board: the part it is,

@@ -41,6 +41,8 @@ const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const run_loop = @import("run_loop.zig");
+const idle = @import("idle.zig");
+const idle_hook = @import("idle_hook.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -73,6 +75,23 @@ pub const Cortex = enum(c_int) {
     // frame it has to save and writes it to name the thread it picked, so
     // exception entry and return both keep it current.
     psp = c.uc.UC_ARM_REG_PSP,
+    // The callee-saved half of the file, the Main stack pointer and the
+    // three remaining words that mask or select interrupts. None of them is
+    // an argument at a call boundary, which is why the dump above leaves
+    // them out; src/core/idle.zig needs the WHOLE architectural state,
+    // because a loop that walks any one of these is making progress.
+    r4 = c.uc.UC_ARM_REG_R4,
+    r5 = c.uc.UC_ARM_REG_R5,
+    r6 = c.uc.UC_ARM_REG_R6,
+    r7 = c.uc.UC_ARM_REG_R7,
+    r8 = c.uc.UC_ARM_REG_R8,
+    r9 = c.uc.UC_ARM_REG_R9,
+    r10 = c.uc.UC_ARM_REG_R10,
+    r11 = c.uc.UC_ARM_REG_R11,
+    msp = c.uc.UC_ARM_REG_MSP,
+    basepri = c.uc.UC_ARM_REG_BASEPRI,
+    faultmask = c.uc.UC_ARM_REG_FAULTMASK,
+    control = c.uc.UC_ARM_REG_CONTROL,
 };
 
 /// What a run is allowed to do, re-exported so `engine.Session` resolves.
@@ -235,6 +254,13 @@ pub const Engine = struct {
         self.read(found.address, code) catch return;
         const offset = tz.findBlxns(code) orelse return;
         tz_hook.attach(self.handle, worlds, found.address +% offset) catch return Error.AttachFailed;
+    }
+
+    /// Watch every store a closure probe makes, so a loop that stores can
+    /// still be proved harmless. src/core/idle.zig says what is proved and
+    /// what a store outside ordinary RAM costs.
+    pub fn attachIdle(self: Engine, seam: *idle.Seam) Error!void {
+        idle_hook.attach(self.handle, seam) catch return Error.AttachFailed;
     }
 
     /// Step the Armv8.1-M conditional selects the CPU model cannot decode.
