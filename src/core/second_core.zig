@@ -26,6 +26,22 @@
 //! interrupts. Said plainly here so a later slice does not read the silence
 //! as an oversight.
 //!
+//! WHAT CPU1 OWNS ALONE. The blocks on the bus are shared, but the windows
+//! inside the core are not: a Cortex-M carries its own SAU, reached through
+//! its own PPB, and two cores programme two different maps. CPU1 therefore
+//! holds an SAU of its own here. Sharing one model let CPU1's bring-up land
+//! on top of CPU0's: `cpu1_pingpong_ipc` programmes five regions and two
+//! Non-Secure Callable entries on CPU0, and once its second half was mapped
+//! the run reported five regions and NO callable entries, because CPU1 had
+//! overwritten the first four with its own four. The count was right and
+//! every value in it was wrong.
+//!
+//! THIS CORE IS NOT COPYABLE once it is open, and that is why `open` fills a
+//! caller's `Second` in place instead of returning one. Its watch and its
+//! SAU are registered with Unicorn BY ADDRESS, so a `Second` returned by
+//! value leaves both hooks pointing at the temporary they were taken from
+//! and every record they make lands in freed memory.
+//!
 //! THE INTERLEAVE IS ROUND ROBIN at the chunk boundary: CPU0 runs a round,
 //! then CPU1 runs a round, until CPU0's budget is spent or something ends
 //! its run. It is not concurrency and does not pretend to be. What it buys
@@ -35,9 +51,11 @@ const std = @import("std");
 const engine = @import("engine.zig");
 const elf = @import("elf.zig");
 const cadence = @import("cadence.zig");
+const sau = @import("../periph/sau.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
+const report_cores = @import("../board/report_cores.zig");
 const Engine = engine.Engine;
 
 pub const limits = struct {
@@ -64,30 +82,37 @@ pub const Second = struct {
     /// halted, the way a core that has taken an unrecoverable fault is.
     fault: ?engine.Fault = null,
     watch: engine.Watch = .{},
+    /// This core's own Security Attribution Unit. Core-private state, not a
+    /// block on the shared bus: the header says what sharing one cost.
+    partitions: sau.Sau = sau.Sau.init(),
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
     written: u32 = 0,
 
     /// Open CPU1 against the board `owner` already holds, load its image and
-    /// reset it out of its own vector table. The caller attaches the board
-    /// afterwards, because the board is the caller's.
+    /// reset it out of its own vector table.
+    ///
+    /// IN PLACE, into the caller's storage, because two of this core's own
+    /// fields are handed to Unicorn as pointers and have to keep the address
+    /// they were registered at for the rest of the run.
+    ///
     /// The order here is the order `main` brings CPU0 up in: share the
     /// board RAM, go on the bus, then write the image on top. The board is
     /// joined with `attachSecond`, which repeats the per-core wiring only:
     /// the blocks are registered once, on the one bus, so both cores reach
-    /// the same IPCSEM and the same IPC channels.
-    pub fn open(owner: *Engine, board: *Board, image: elf.Image) !Second {
-        var self = Second{ .core = try Engine.open() };
+    /// the same IPCSEM and the same IPC channels, while the SAU this core
+    /// carries stays its own.
+    pub fn open(self: *Second, owner: *Engine, board: *Board, image: elf.Image) !void {
+        self.* = .{ .core = try Engine.open() };
         errdefer self.core.close();
         try self.core.shareBoardRamWith(owner);
         try self.core.attachWatch(&self.watch);
-        try wiring.attachSecond(board, &self.core);
+        try wiring.attachSecond(board, &self.core, &self.partitions);
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
-        return self;
     }
 
     pub fn close(self: *Second) void {
@@ -113,18 +138,24 @@ pub const Second = struct {
 };
 
 /// CPU1, when a path was named for it, read and reset and ready for its
-/// first turn. Null when the run is a single-core one, which is every image
-/// that does not name a second ELF.
+/// first turn, built into `into` and handed back as a pointer to it. Null
+/// when the run is a single-core one, which is every image that does not
+/// name a second ELF, and then `into` is left untouched.
 ///
-/// The board is NOT attached here: the board belongs to the caller, and a
-/// core that reaches the peripheral bus has to be put on the bus the caller
-/// built. `main` does that on the returned engine.
-pub fn start(allocator: std.mem.Allocator, owner: *Engine, board: *Board, path: ?[]const u8) !?Second {
+/// The caller owns the storage so the core keeps one address: see `open`.
+pub fn start(
+    allocator: std.mem.Allocator,
+    owner: *Engine,
+    board: *Board,
+    path: ?[]const u8,
+    into: *Second,
+) !?*Second {
     const named = path orelse return null;
     const file = try std.fs.cwd().openFile(named, .{});
     defer file.close();
     const bytes = try file.readToEndAlloc(allocator, limits.image_bytes);
-    return try Second.open(owner, board, try elf.Image.init(bytes));
+    try into.open(owner, board, try elf.Image.init(bytes));
+    return into;
 }
 
 /// Run CPU0 to its budget, giving CPU1 a turn between rounds.
@@ -175,4 +206,7 @@ pub fn report(out: anytype, second: ?*const Second) !void {
     if (other.fault) |taken| {
         try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
     }
+    // Under its own name, because this is a second map rather than more
+    // detail about CPU0's. Silent on a core that never programmed one.
+    try report_cores.partitionsOf(out, "CPU1 SAU", &other.partitions);
 }
