@@ -58,6 +58,27 @@ pub const Clocks = struct {
     /// are single latches and the handler cannot run mid-stretch. Time the
     /// firmware is owed and will never be paid.
     collapsed: u64 = 0,
+    /// Boundaries cut short because the firmware armed or re-armed SysTick
+    /// inside them. Each one is a stretch of execution whose time is not
+    /// charged, which is the price of not swallowing the periods it covered.
+    rearms: u64 = 0,
+    /// Set by src/core/systick_hook.zig when one of those stores lands, and
+    /// taken by the run loop at the boundary it caused.
+    restart: bool = false,
+
+    /// The hook saw a store that re-sized the period. Counted and latched;
+    /// the run loop is what acts on it.
+    pub fn armed(self: *Clocks) void {
+        self.rearms += 1;
+        self.restart = true;
+    }
+
+    /// Take the latch, so one store ends one boundary.
+    pub fn took(self: *Clocks) bool {
+        const hit = self.restart;
+        self.restart = false;
+        return hit;
+    }
 
     /// How many instructions apart the armed SysTick periods are, or zero
     /// when nothing is armed to ask for a boundary at all.
@@ -145,6 +166,46 @@ pub const Clocks = struct {
         if (next != csr) try core.writeWord(memmap.syst.csr, next);
     }
 };
+
+/// What a store into the SysTick window means for the stretch in flight.
+pub const Observed = enum { none, rearm };
+
+/// Does this store re-size the period the stretch in flight was cut from?
+///
+/// A pure decision over four words, so it is tested without an engine:
+/// `offset` and `word` are the store, `csr` and `rvr` the two registers as
+/// they stand before it lands.
+///
+/// A RELOAD is only interesting while the counter runs. With the counter
+/// stopped the period is zero either way, so the reload can be staged as
+/// freely as the driver likes and nothing is owed; it is the store that
+/// STARTS the counter which ends a stretch, and by then the reload beside it
+/// is the one that will govern. `ra8_systick_configure` writes the reload,
+/// then the counter, then the control word, which is exactly that order.
+///
+/// A RE-ARM while running is the retune path (`ra8_threadx_systick_retune`
+/// reprogrammes SYST_RVR off the live CPUCLK0), and it ends a stretch only
+/// when the reload actually moves: writing the same reload back leaves the
+/// period where it was.
+///
+/// STOPPING the counter is deliberately not one of these. A stretch cut from
+/// a period is never wider than the period, so finishing it swallows
+/// nothing; the next one widens on its own once nothing is armed.
+pub fn observe(offset: u32, word: u32, csr: u32, rvr: u32) Observed {
+    const running = csr & csr_enable != 0;
+    if (offset == memmap.syst.rvr) {
+        if (!running) return .none;
+        if (word & counter_mask == rvr & counter_mask) return .none;
+        return .rearm;
+    }
+    if (offset == memmap.syst.csr) {
+        if (running) return .none;
+        if (word & csr_enable == 0) return .none;
+        if (rvr & counter_mask == 0) return .none;
+        return .rearm;
+    }
+    return .none;
+}
 
 pub const Wrapped = struct { value: u32, periods: u64 };
 

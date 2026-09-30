@@ -28,6 +28,7 @@ const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
 const csel_hook = @import("csel_hook.zig");
+const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("break_hook.zig");
 const watchpoint = @import("watchpoint.zig");
 const watch_hook = @import("watch_hook.zig");
@@ -39,6 +40,7 @@ const stop = @import("stop.zig");
 const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
+const run_loop = @import("run_loop.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -211,6 +213,14 @@ pub const Engine = struct {
         sau_hook.attach(self.handle, unit) catch return Error.AttachFailed;
     }
 
+    /// End the stretch of execution in which the firmware arms SysTick, so
+    /// the boundary after it is cut from the period just asked for rather
+    /// than from the nothing that was armed when the stretch began.
+    /// src/core/systick_hook.zig says what is swallowed without this.
+    pub fn attachTimebase(self: Engine, clock: *clocks.Clocks) Error!void {
+        systick_hook.attach(self.handle, clock) catch return Error.AttachFailed;
+    }
+
     /// Perform the secure boot's one BLXNS by hand, so the Non-Secure world
     /// runs; src/core/tz.zig says why the CPU model cannot be left to. An
     /// image whose secure boot is not linked in, or whose jump routine holds
@@ -286,97 +296,19 @@ pub const Engine = struct {
         try self.setRegister(.pc, reset_vector & ~@as(u32, 1));
     }
 
-    /// Run a bounded number of instructions. A fault is a result, not a
-    /// crash: it comes back with the PC that took it.
-    ///
-    /// With a time base attached the run is cut into chunks and the clocks
-    /// are charged one chunk of time per chunk of execution, which is what
-    /// keeps a firmware that waits on DWT_CYCCNT or on SysTick from spinning
-    /// out the whole budget in one loop. With a controller attached, each of
-    /// those boundaries is also where a pending exception is taken, and a
-    /// handler branching to its EXC_RETURN is unwound rather than reported:
-    /// Unicorn cannot fetch from 0xFFFFFFxx and does not have to.
-    pub fn run(self: Engine, start: u32, instructions: usize, session: Session) Error!?Fault {
-        if (session.watch) |w| w.clear();
-        if (session.timebase == null and session.interrupts == null) {
-            return self.runChunk(start, instructions, session.watch);
-        }
-        const configured = cadence.Cadence{
-            .per_boundary = if (session.timebase) |clock| clock.per_chunk else cadence.instructions,
-        };
-        var remaining = instructions;
-        var pc = start;
-        while (remaining > 0) {
-            // Read the armed period every time round rather than once: the
-            // firmware arms SysTick well after reset, and may re-arm it.
-            const pace = if (session.timebase) |clock|
-                configured.narrowedTo(clock.period(self))
-            else
-                configured;
-            const chunk = pace.chunk(remaining);
-            if (try self.runChunk(pc, chunk, session.watch)) |taken| {
-                const controller = session.interrupts orelse return taken;
-                if (!nvic.isExceptionReturn(taken.pc)) return taken;
-                controller.exit(self, taken.pc) catch return Error.RunFailed;
-                pc = try self.register(.pc);
-                // The stretch that ended in the return cannot be measured, so
-                // it is charged one instruction: enough to keep the budget
-                // monotone and a bad frame from looping forever.
-                remaining -= 1;
-                continue;
-            }
-            // A store into a read-only region stopped the chunk early, so the
-            // exception is taken here, at the boundary the trap made, before
-            // the clocks are charged for a chunk that did not finish. The
-            // stretch is charged one instruction for the same reason the
-            // exception return above is: enough to keep the budget monotone.
-            if (session.protection) |guard| if (guard.latch.take()) |hit| {
-                guard.synthesise(self, session.interrupts, hit) catch return Error.RunFailed;
-                remaining -= 1;
-                pc = try self.register(.pc);
-                continue;
-            };
-            // The break's hook stopped the chunk on the break's own
-            // instruction, so the run ends here rather than at the next
-            // boundary: this is where the program counter still points at
-            // it, and where the register file is the function's caller's.
-            if (session.brk) |point| if (point.reached) break;
-            // The undefined hook stopped the chunk the same way, one
-            // instruction before the encoding runs, and for the same
-            // reason: here the program counter still points at it.
-            if (session.undefined_sites) |f| if (f.stoppedAt() != null) break;
-            remaining -= chunk;
-            if (session.timebase) |clock| clock.advance(self, @intCast(chunk)) catch return Error.RunFailed;
-            // The budget is spent: do not enter a handler there is no room
-            // left to run, which would report a run that ended inside an
-            // exception it never actually took.
-            if (!pace.closes(remaining)) break;
-            if (session.board) |tick| tick.run(self) catch return Error.RunFailed;
-            // A part that just reset has nothing pending, so the controller
-            // does not get to pick this boundary: carry straight on into the
-            // reset vector.
-            if (session.reboot) |pending| if (pending.requested) {
-                pc = pending.perform(self, session.interrupts) catch return Error.RunFailed;
-                continue;
-            };
-            if (session.interrupts) |controller| _ = controller.dispatch(self) catch return Error.RunFailed;
-            // The counter is read here, after the boundary's blocks have
-            // run, so a value a peripheral advanced this chunk is seen.
-            if (session.stop) |watch| if (watch.met(self.readWord(watch.address) catch null)) break;
-            // Modelled time is read from the same boundary, after the counter:
-            // when both land on one boundary the counter is the verdict the
-            // suite asked for and the deadline is only the window it allowed.
-            if (session.deadline) |due| if (session.timebase) |clock| {
-                if (due.met(clock.ticks)) break;
-            };
-            pc = try self.register(.pc);
-        }
-        return null;
-    }
-
     /// One uninterrupted stretch of execution. The clocks stand still inside
     /// it: a chunk is the unit of modelled time.
-    fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
+    /// Run a bounded number of instructions. A fault is a result, not a
+    /// crash: it comes back with the PC that took it. The policy over the
+    /// stretches this is cut into lives in src/core/run_loop.zig; the engine
+    /// keeps only the bounded stretch it is built out of.
+    pub fn run(self: Engine, start: u32, instructions: usize, session: Session) Error!?Fault {
+        return run_loop.run(self, start, instructions, session);
+    }
+
+    /// One bounded stretch of execution, with no boundary at either end.
+    /// Public because the run loop is what puts the boundaries in.
+    pub fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
         const err = c.uc.uc_emu_start(
             self.handle,
             start | 1,
