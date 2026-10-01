@@ -147,6 +147,9 @@ pub const Pend = struct {
     /// told by the run loop as it dispatches. Cleared as the next stretch
     /// opens, so it only ever describes the boundary just closed.
     entry: ?u16 = null,
+    /// Whether the unmask seam stepped the core at the boundary behind
+    /// this stretch, cleared the same way as `entry`.
+    stepped: bool = false,
     /// Stretches that opened somewhere other than the stop because the
     /// boundary between them ENTERED A HANDLER, with the first such case.
     ///
@@ -164,6 +167,21 @@ pub const Pend = struct {
     handled_at: u32 = 0,
     handled_from: u32 = 0,
     handled_exception: u16 = 0,
+    /// Stretches that opened somewhere other than the stop because the
+    /// unmask seam STEPPED the core at the boundary between them, with
+    /// the first such pair.
+    ///
+    /// A pend stop inside a `cpsid i` region leaves the controller unable
+    /// to take anything, so src/core/unmask.zig steps forward looking for
+    /// the mask to clear. When it gives up, the next stretch opens where
+    /// the stepping stopped, which is not the store and is not a handler.
+    /// That read as a run past the store. On wdt_supervisor_demo it is
+    /// _tx_thread_suspend's PENDSVSET store at +0x104 with the thread
+    /// stepped round to +0xE6, the same place the lift gave up. Nothing ran
+    /// past anything there either; the model moved the pc on purpose.
+    lift_moved: usize = 0,
+    lift_moved_at: u32 = 0,
+    lift_moved_from: u32 = 0,
     /// The address of the first swallowed store, and how many of the rest
     /// came from somewhere else.
     ///
@@ -244,6 +262,7 @@ pub const Pend = struct {
         if (self.ended) self.reopenedAt(pc);
         self.ended = false;
         self.entry = null;
+        self.stepped = false;
         if (self.in_stretch == 0) return;
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;
@@ -264,6 +283,7 @@ pub const Pend = struct {
             return;
         }
         if (self.entry) |number| return self.handledAt(pc, number);
+        if (self.stepped) return self.liftMovedAt(pc);
         self.reopened +%= 1;
         if (self.reopened_placed) return;
         self.reopened_placed = true;
@@ -281,6 +301,20 @@ pub const Pend = struct {
         self.handled +%= 1;
     }
 
+    /// The stop was followed by the unmask seam stepping the core.
+    fn liftMovedAt(self: *Pend, pc: u32) void {
+        if (self.lift_moved == 0) {
+            self.lift_moved_at = pc;
+            self.lift_moved_from = self.ended_at;
+        }
+        self.lift_moved +%= 1;
+    }
+
+    /// The unmask seam stepped the core at the boundary now closing.
+    pub fn lifted(self: *Pend) void {
+        self.stepped = true;
+    }
+
     /// The run loop entered exception `number` at the boundary now
     /// closing.
     pub fn entered(self: *Pend, number: u16) void {
@@ -289,7 +323,7 @@ pub const Pend = struct {
 
     /// Every stop the next boundary consumed, whichever way it went.
     pub fn consumed(self: *const Pend) usize {
-        return self.reentered + self.handled + self.reopened;
+        return self.reentered + self.handled + self.lift_moved + self.reopened;
     }
 
     /// Take the second-look latch, if one is standing.

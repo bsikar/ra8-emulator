@@ -33,6 +33,7 @@ pub const core = struct {
     pub const unmask = @import("core/unmask.zig");
     pub const idle_hook = @import("core/idle_hook.zig");
     pub const run_loop = @import("core/run_loop.zig");
+    pub const run_pace = @import("core/run_pace.zig");
     pub const symbols = @import("debug/symbols.zig");
     pub const systick_hook = @import("core/systick_hook.zig");
     pub const tz = @import("core/tz.zig");

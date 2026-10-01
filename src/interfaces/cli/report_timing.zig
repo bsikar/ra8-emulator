@@ -136,6 +136,12 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
             .{ pending.handled, pending.handled_exception, pending.handled_at, pending.handled_from },
         );
     }
+    if (pending.lift_moved != 0) {
+        try out.print(
+            "time: {d} stretch(es) opened where the mask lift stepped the thread to, first at pc 0x{X:0>8} after a stop at 0x{X:0>8}\n",
+            .{ pending.lift_moved, pending.lift_moved_at, pending.lift_moved_from },
+        );
+    }
     if (pending.reopened != 0) {
         try out.print(
             "time: {d} stretch(es) opened PAST the store that ended them with nothing taken, first at pc 0x{X:0>8} after a stop read as 0x{X:0>8}\n",

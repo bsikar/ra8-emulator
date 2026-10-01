@@ -14,13 +14,12 @@
 //! the engine is what keeps this file off the engine's import cycle, and is
 //! the same shape src/periph/clocks.zig already uses for the same reason.
 const cadence = @import("cadence.zig");
-const mask_pace = @import("mask_pace.zig");
+const run_pace = @import("run_pace.zig");
 const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
-const pend_pace = @import("pend_pace.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -50,7 +49,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         // swallowed can be read against the boundary that failed to drain
         // it. src/core/pend_break.zig carries why that matters.
         if (session.pend) |pending| pending.boundary(pc);
-        const pace = paceFor(core, configured, session);
+        const pace = run_pace.forStretch(core, configured, session);
         const chunk = pace.chunk(remaining);
         if (try stretch(core, pc, chunk, session)) |taken| {
             const controller = session.interrupts orelse return taken;
@@ -351,41 +350,9 @@ fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usi
     }
     const lifted = try seam.lift(core, @min(remaining, unmask.limits.steps));
     if (lifted.ran == 0) return 0;
+    if (session.pend) |pending| pending.lifted();
     if (session.timebase) |clock| try clock.advance(core, @intCast(lifted.ran));
     return lifted.ran;
-}
-
-/// The boundary this stretch gets. The armed period is read every time
-/// round rather than once: the firmware arms SysTick well after reset,
-/// and may re-arm it.
-fn paceFor(core: anytype, configured: cadence.Cadence, session: Session) cadence.Cadence {
-    var pace = configured;
-    if (session.timebase) |clock| pace = pace.narrowedTo(clock.period(core));
-    pace = whileStanding(pace, session);
-    // Narrowed again while a masked pend keeps coming back stuck, so the
-    // mask is re-tested within a couple of thousand instructions instead
-    // of a whole chunk. Off unless asked for: src/core/mask_pace.zig
-    // carries the measurement that says it recovers nothing.
-    if (session.mask_pace) |tracker| if (session.unmask) |seam| {
-        pace = .{ .per_boundary = tracker.widthFor(pace.per_boundary, seam.run) };
-    };
-    return pace;
-}
-
-/// Narrow this boundary while a pend the firmware wrote is still standing
-/// unserved, so the controller is asked again within a couple of thousand
-/// instructions instead of a whole chunk.
-///
-/// Read off the controller's own run of unserved boundaries, which the
-/// boundary just passed updated, so a pend that was entered puts the width
-/// straight back. Nothing is forced and no time is invented: the stretch
-/// is charged the instructions it actually runs, the same as any other.
-/// src/core/pend_pace.zig carries why the boundary is the thing to shorten
-/// and `--drain-pends` is not.
-fn whileStanding(pace: cadence.Cadence, session: Session) cadence.Cadence {
-    const tracker = session.pend_pace orelse return pace;
-    const controller = session.interrupts orelse return pace;
-    return .{ .per_boundary = tracker.widthFor(pace.per_boundary, controller.standing.run) };
 }
 
 /// A hook that stopped the chunk on its own instruction rather than at a
