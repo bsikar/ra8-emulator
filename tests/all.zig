@@ -18,6 +18,8 @@ test {
     _ = @import("core/cpu/fpu/case_test.zig");
     _ = @import("core/cpu/fpu/add_test.zig");
     _ = @import("core/cpu/fpu/add_vectors_test.zig");
+    _ = @import("core/cpu/fpu/mul_test.zig");
+    _ = @import("core/cpu/fpu/mul_vectors_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");

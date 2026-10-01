@@ -9,7 +9,8 @@ pub const table_path = "docs/conformance.md";
 
 const fpu_sign = @import("../fpu/sign_vectors.zig");
 const fpu_add = @import("../fpu/add_vectors.zig");
+const fpu_mul = @import("../fpu/mul_vectors.zig");
 
-pub const claimed: []const []const u8 = &(fpu_sign.claimed ++ fpu_add.claimed);
+pub const claimed: []const []const u8 = &(fpu_sign.claimed ++ fpu_add.claimed ++ fpu_mul.claimed);
 
-pub const covered: []const []const u8 = &(fpu_sign.covered ++ fpu_add.covered);
+pub const covered: []const []const u8 = &(fpu_sign.covered ++ fpu_add.covered ++ fpu_mul.covered);
