@@ -31,3 +31,18 @@ test "the table lists every claim in order and marks the gap" {
         stream.getWritten(),
     );
 }
+
+test "the document says so when nothing is claimed yet" {
+    var buf: [1024]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try coverage.writeDocument(stream.writer(), &.{}, &.{});
+    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "# Conformance coverage\n"));
+    try std.testing.expect(std.mem.endsWith(u8, stream.getWritten(), "No encodings claimed yet.\n"));
+}
+
+test "the document ends with the table once something is claimed" {
+    var buf: [1024]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try coverage.writeDocument(stream.writer(), &claimed, &covered);
+    try std.testing.expect(std.mem.endsWith(u8, stream.getWritten(), "| VMUL.F32 T1 | 1 |\n"));
+}

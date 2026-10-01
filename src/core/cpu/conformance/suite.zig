@@ -6,6 +6,9 @@
 //!
 //! Empty until the first semantics module lands; the checks over it still run,
 //! so the first claim without a vector fails the build.
+/// Where the generated coverage table lives, relative to the build root.
+pub const table_path = "docs/conformance.md";
+
 pub const claimed: []const []const u8 = &.{};
 
 pub const covered: []const []const u8 = &.{};

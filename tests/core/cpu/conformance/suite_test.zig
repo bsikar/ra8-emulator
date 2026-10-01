@@ -18,3 +18,27 @@ test "every vector names an encoding the core claims" {
         return error.UnclaimedConformanceVector;
     }
 }
+
+/// The coverage document as it should read for the suite as it stands.
+fn expectedDocument(allocator: std.mem.Allocator) ![]u8 {
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+    try coverage.writeDocument(out.writer(), suite.claimed, suite.covered);
+    return out.toOwnedSlice();
+}
+
+test "docs/conformance.md matches the suite, or is rewritten when blessed" {
+    const allocator = std.testing.allocator;
+    const want = try expectedDocument(allocator);
+    defer allocator.free(want);
+    if (std.process.hasEnvVarConstant("RA8_BLESS_CONFORMANCE")) {
+        try std.fs.cwd().writeFile(.{ .sub_path = suite.table_path, .data = want });
+        return;
+    }
+    const have = try std.fs.cwd().readFileAlloc(allocator, suite.table_path, 1 << 20);
+    defer allocator.free(have);
+    if (!std.mem.eql(u8, have, want)) {
+        std.debug.print("conformance: {s} is stale; run RA8_BLESS_CONFORMANCE=1 zig build test\n", .{suite.table_path});
+        return error.StaleConformanceTable;
+    }
+}

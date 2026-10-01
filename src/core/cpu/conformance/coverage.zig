@@ -44,3 +44,24 @@ pub fn writeTable(writer: anytype, claimed: []const []const u8, covered: []const
         }
     }
 }
+
+/// The whole coverage document, docs/conformance.md: a short header saying
+/// what the table is and how to regenerate it, then the table.
+pub fn writeDocument(writer: anytype, claimed: []const []const u8, covered: []const []const u8) !void {
+    try writer.writeAll(
+        \\# Conformance coverage
+        \\
+        \\Every encoding the Zig core's semantics claim, and how many vectors from
+        \\the Arm ARM (DDI0553) pseudocode cover it. Generated from
+        \\src/core/cpu/conformance/suite.zig; `zig build test` fails when this file
+        \\is stale or an encoding is missing. Regenerate with
+        \\`RA8_BLESS_CONFORMANCE=1 zig build test`.
+        \\
+        \\
+    );
+    if (claimed.len == 0) {
+        try writer.writeAll("No encodings claimed yet.\n");
+        return;
+    }
+    try writeTable(writer, claimed, covered);
+}
