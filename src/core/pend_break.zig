@@ -119,12 +119,41 @@ pub const Pend = struct {
     /// the instruction stream, so it is measured.
     ended_at: u32 = 0,
     ended: bool = false,
+    /// Stops the hook asked for, counted where it asks.
+    ///
+    /// The reason to count the asks separately from the two outcomes below
+    /// is that they are supposed to add up, and a reader cannot check that
+    /// without this number. Every stop should be consumed by the very next
+    /// boundary and land in `reentered` or `reopened`, so `stops` should
+    /// equal their sum. A shortfall is not a rounding error: it means a
+    /// stop was overwritten by a later one before any boundary saw it,
+    /// which can only happen if the stretch did not actually end where the
+    /// hook asked it to.
+    stops: usize = 0,
     /// Stretches that opened on the very address the one before them
     /// ended on.
     reentered: usize = 0,
     /// The first address it happened on, so the loop can be named rather
     /// than counted.
     reentered_at: u32 = 0,
+    /// Stretches that opened somewhere ELSE after a pend stop, with the
+    /// first such pair.
+    ///
+    /// This is the other half of `reentered`, and without it that counter
+    /// cannot be read. `reentered` compares two addresses: the one the
+    /// hook saw while the store was executing, and the one the next
+    /// stretch opens at. It counts only the matches, so a zero is
+    /// ambiguous in the worst way: it means either that no stretch ever
+    /// reopened on the store, or that the two addresses are never the same
+    /// thing and the comparison has been answering no all along. Counting
+    /// the mismatches too tells those apart, and naming the first pair
+    /// says by how much they differ.
+    reopened: usize = 0,
+    /// Where the first mismatched stretch opened, and the stop it was
+    /// compared against.
+    reopened_at: u32 = 0,
+    reopened_from: u32 = 0,
+    reopened_placed: bool = false,
     /// The address of the first swallowed store, and how many of the rest
     /// came from somewhere else.
     ///
@@ -150,6 +179,7 @@ pub const Pend = struct {
     pub fn endedAt(self: *Pend, pc: u32) void {
         self.ended_at = pc;
         self.ended = true;
+        self.stops +%= 1;
     }
 
     /// Called from the hook: the firmware just set a pend bit.
@@ -200,15 +230,32 @@ pub const Pend = struct {
     /// counted, so `stretches` reads as how often this happens rather than
     /// how long the run was.
     pub fn boundary(self: *Pend, pc: u32) void {
-        if (self.ended and pc == self.ended_at) {
-            if (self.reentered == 0) self.reentered_at = pc;
-            self.reentered +%= 1;
-        }
+        if (self.ended) self.reopenedAt(pc);
         self.ended = false;
         if (self.in_stretch == 0) return;
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;
         self.in_stretch = 0;
+    }
+
+    /// A stretch opened at `pc` after a pend stop at `self.ended_at`:
+    /// record which of the two it was.
+    ///
+    /// Called only when a stop actually happened, so every pend stop lands
+    /// in exactly one of the two counters and the pair adds up to the
+    /// stops. Whether they are ever equal is the question; this does not
+    /// assume an answer either way.
+    fn reopenedAt(self: *Pend, pc: u32) void {
+        if (pc == self.ended_at) {
+            if (self.reentered == 0) self.reentered_at = pc;
+            self.reentered +%= 1;
+            return;
+        }
+        self.reopened +%= 1;
+        if (self.reopened_placed) return;
+        self.reopened_placed = true;
+        self.reopened_at = pc;
+        self.reopened_from = self.ended_at;
     }
 
     /// Take the second-look latch, if one is standing.

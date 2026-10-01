@@ -218,3 +218,63 @@ test "no swallowed store leaves the address unplaced" {
     try std.testing.expect(!pending.swallowed_placed);
     try std.testing.expectEqual(@as(u32, 0), pending.swallowed_at);
 }
+
+test "a stretch reopening on the stop address counts as a re-entry" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 1), pending.reentered);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.reentered_at);
+    try std.testing.expectEqual(@as(usize, 0), pending.reopened);
+}
+
+test "a stretch reopening past the stop address is counted apart" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x0200245A);
+    try std.testing.expectEqual(@as(usize, 0), pending.reentered);
+    try std.testing.expectEqual(@as(usize, 1), pending.reopened);
+    try std.testing.expectEqual(@as(u32, 0x0200245A), pending.reopened_at);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.reopened_from);
+}
+
+test "the first mismatched pair is kept, not the latest" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x0200245A);
+    pending.endedAt(0x02002CFC);
+    pending.boundary(0x02002D00);
+    try std.testing.expectEqual(@as(usize, 2), pending.reopened);
+    try std.testing.expectEqual(@as(u32, 0x0200245A), pending.reopened_at);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.reopened_from);
+}
+
+test "every pend stop lands in exactly one of the two counters" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    pending.endedAt(0x02002458);
+    pending.boundary(0x0200245A);
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 3), pending.reentered + pending.reopened);
+}
+
+test "a boundary with no pend stop behind it counts neither way" {
+    var pending = pend_break.Pend{};
+    pending.boundary(0x02002458);
+    pending.boundary(0x0200245A);
+    try std.testing.expectEqual(@as(usize, 0), pending.reentered);
+    try std.testing.expectEqual(@as(usize, 0), pending.reopened);
+    try std.testing.expect(!pending.reopened_placed);
+}
+
+test "a stop is consumed by the next boundary only" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x0200245A);
+    pending.boundary(0x0200245A);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 1), pending.reopened);
+    try std.testing.expectEqual(@as(usize, 0), pending.reentered);
+}
