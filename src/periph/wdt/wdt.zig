@@ -160,11 +160,13 @@ pub const Wdt = struct {
     }
 
     /// True while the counter sits inside the refresh window RPSS/RPES marks
-    /// out. Both edges are percentages of the reload, measured down from it,
-    /// so the window opens once the counter has fallen past RPSS and closes
-    /// when it falls past RPES.
+    /// out. Both edges are percentages of the FULL timeout, the TOPS cycle
+    /// count, not of the reload one below it: ra8_wdt.h says so for both
+    /// fields, and wdt_window_demo bounds its own refreshes at 25% and 75%
+    /// of 1024, 256 and 768. Taken against the 1023 reload, 75% came out at
+    /// 767 and the demo's refresh at 768 was refused. Both edges inclusive.
     pub fn windowOpen(self: *const Wdt) bool {
-        const full = self.reload();
+        const full = tops_cycles[self.wdtcr & control.tops];
         const opens = percentOf(full, window_start_percent[(self.wdtcr & control.rpss) >> control.rpss_shift]);
         const closes = percentOf(full, window_end_percent[(self.wdtcr & control.rpes) >> control.rpes_shift]);
         return self.counter <= opens and self.counter >= closes;
