@@ -6,6 +6,7 @@ const decode = ra8.core.cpu.decode;
 test "a known encoding comes back with its class" {
     const hit = decode.decode(.{ .address = 0, .hw1 = 0xBF00, .size = 2 }).?;
     try std.testing.expectEqualStrings("hint", hit.group);
+    try std.testing.expect(hit.oracle);
 }
 
 test "an encoding no group claims is refused" {

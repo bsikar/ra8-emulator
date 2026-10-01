@@ -35,6 +35,7 @@ pub const Run = struct {
             const fetched = Instr.fetch(ours.bus, address) catch null;
             switch (try step.one(ours, theirs)) {
                 .matched => |class| try self.counts.record(gpa, class, .matched),
+                .skipped => |class| try self.counts.record(gpa, class, .skipped),
                 .diverged => |found| {
                     try self.counts.record(gpa, found.class, .diverged);
                     return .{ .diverged = found };

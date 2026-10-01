@@ -16,4 +16,8 @@ pub const Exec = *const fn (cpu: *Cpu, instr: Instr) Error!void;
 pub const Group = struct {
     name: []const u8,
     decode: *const fn (instr: Instr) ?Exec,
+    /// False for a group Unicorn cannot check: the Armv8.1-M encodings it does
+    /// not implement. A lockstep run steps only the Zig core for these and
+    /// counts them as skipped.
+    oracle: bool = true,
 };

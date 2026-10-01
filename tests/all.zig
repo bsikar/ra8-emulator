@@ -30,6 +30,7 @@ test {
     _ = @import("core/cpu/op_test.zig");
     _ = @import("core/cpu/regs_test.zig");
     _ = @import("core/cpu/reset_test.zig");
+    _ = @import("core/cpu/lockstep/catch_up_test.zig");
     _ = @import("core/cpu/lockstep/diff_test.zig");
     _ = @import("core/cpu/lockstep/history_test.zig");
     _ = @import("core/cpu/lockstep/memory_diff_test.zig");
