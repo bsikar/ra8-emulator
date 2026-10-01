@@ -255,8 +255,55 @@ fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault
         seam.skip(chunk - looked.ran);
         return null;
     }
+    if (askedToStop(session)) return null;
     if (looked.ran >= chunk) return null;
     return core.runChunk(try core.register(.pc), chunk - looked.ran, session.watch);
+}
+
+/// Did the pend hook ask for this stretch to end while the probe was still
+/// stepping the head of it?
+///
+/// WHY THE STRETCH WOULD END HERE. The probe single-steps, and inside a
+/// one-instruction run a hook's request to stop buys nothing: the run was
+/// ending after that instruction anyway. src/core/idle.zig ends the PROBE
+/// at the disturbance, which is the first half. This is the second: without
+/// it the probe hands back after two or three instructions and the tail of
+/// the chunk is run anyway, so the thread carries straight on past the
+/// store it just pended at, and the next pend store overwrites the address
+/// the first one recorded. On `threadx_blink` with `--drain-pends` that was
+/// 20002 stops asked for against 10002 reaching a boundary, exactly one per
+/// stretch lost. Honouring it takes the swallowed pends from 10000 to 1 and
+/// the overwritten stops from 10000 to 1.
+///
+/// `ended` is the hook's own flag, cleared at every boundary before the
+/// stretch opens, so reading it asks only about THIS stretch. It covers
+/// both reasons the hook stops, a pend it raised and a second look at one
+/// already standing: both leave the program counter on the store and both
+/// want the same boundary.
+///
+/// BEHIND THE EXPERIMENT FLAG, and that is a finding rather than caution.
+/// Ungated, this is not confined to the `--drain-pends` path, because the
+/// hook sets `ended` for a pend it RAISED too, and that happens with the
+/// flag off. Two images move when it does, measured over 200 modelled ms
+/// against the tip: `threadx_canfd_demo` goes from 206 exceptions taken to
+/// 3202 and from 199 proved closures to 50, and `wdt_supervisor_demo` goes
+/// from 296 watchdog refreshes to 2. Both stop reaching the modelled
+/// deadline and run their instruction budget out instead. The direction is
+/// not obviously wrong, since a pend taken at its store is what the
+/// architecture does, but there is no board reading in this tree that says
+/// 3202 is nearer the truth than 206, and a supervisor that refreshes its
+/// watchdog twice in 200 ms is a reason to look rather than a result to
+/// ship. So it rides the switch that already carries this experiment, the
+/// default path stays bit-identical across all 36 images, and the next
+/// slice can judge the ungated version against a board.
+///
+/// Nothing is charged here: the caller's `interposed` charges a raised pend
+/// the whole chunk, the way it already does for a stop that lands in the
+/// tail, and charges a second look one instruction.
+pub fn askedToStop(session: Session) bool {
+    const pending = session.pend orelse return false;
+    if (!pending.look_again) return false;
+    return pending.ended;
 }
 
 /// Take what the boundary owes: a pend that has been waiting out a mask,
