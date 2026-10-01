@@ -22,3 +22,17 @@ test "a break that was not reached does not" {
     var point = breakpoint.Break{ .address = 0x0200_0000 };
     try std.testing.expect(!mod.endsHere(.{ .brk = &point }));
 }
+
+test "a tail chain is counted only when the return entered another handler" {
+    var controller = ra8.periph.nvic.Nvic{};
+    try std.testing.expectEqual(@as(u64, 0), controller.chained);
+    controller.taken += 1;
+    controller.chained += 1;
+    try std.testing.expectEqual(@as(u64, 1), controller.chained);
+}
+
+test "a controller that has entered nothing has chained nothing" {
+    const controller = ra8.periph.nvic.Nvic{};
+    try std.testing.expectEqual(@as(u64, 0), controller.taken);
+    try std.testing.expectEqual(@as(u64, 0), controller.chained);
+}

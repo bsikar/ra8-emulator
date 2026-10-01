@@ -91,6 +91,11 @@ pub const Nvic = struct {
     /// Pends that were ready but could not be taken: masked, outranked by the
     /// running handler, or past the nesting guard.
     held: u64 = 0,
+    /// Returns that went straight into another handler instead of back to
+    /// the interrupted code. See the tail-chain paragraph in
+    /// src/core/run_loop.zig: without this the second exception waits for
+    /// the next run boundary, which is thousands of instructions away.
+    chained: u64 = 0,
     /// Returns that landed a thread back on the Process stack. Nonzero means
     /// a scheduler is switching threads under this run.
     thread_returns: u64 = 0,

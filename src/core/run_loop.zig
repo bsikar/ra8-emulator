@@ -49,12 +49,8 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         if (try stretch(core, pc, chunk, session)) |taken| {
             const controller = session.interrupts orelse return taken;
             if (!nvic.isExceptionReturn(taken.pc)) return taken;
-            controller.exit(core, taken.pc) catch return error.RunFailed;
+            remaining -= try returned(core, controller, session, remaining, taken.pc);
             pc = try core.register(.pc);
-            // The stretch that ended in the return cannot be measured, so
-            // it is charged one instruction: enough to keep the budget
-            // monotone and a bad frame from looping forever.
-            remaining -= 1;
             continue;
         }
         if (try trapped(core, session)) |resumed| {
@@ -110,6 +106,49 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         if (session.fns) |table| table.sample(pc);
     }
     return null;
+}
+
+/// Unwind a handler that branched to its EXC_RETURN, and tail-chain.
+///
+/// The stretch that ended in the return cannot be measured, so it is
+/// charged one instruction: enough to keep the budget monotone and a bad
+/// frame from looping forever. The tail chain is charged whatever its own
+/// lift spent. Returns the whole charge.
+fn returned(core: anytype, controller: anytype, session: Session, left: usize, from: u32) !usize {
+    controller.exit(core, from) catch return error.RunFailed;
+    const chain = tailChained(core, controller, session, left - 1) catch
+        return error.RunFailed;
+    return 1 + chain;
+}
+
+/// The exception that was still pending when a handler returned, entered
+/// without going back to the interrupted code first.
+///
+/// WHY THIS EXISTS. The architecture tail-chains: at the end of a handler,
+/// if another exception is pending and takeable, it is entered directly
+/// (DDI0553 B3.14), without unstacking and restacking a frame the thread
+/// would never have got to use. This model only dispatched at a run
+/// boundary, so a second exception waited thousands of instructions, and
+/// one of them never arrived at all.
+///
+/// Measured on `threadx_blink`: ThreadX gives SysTick and PendSV the same
+/// lowest priority, so PendSV cannot preempt a running SysTick handler,
+/// which is correct. But SysTick pends again every period, and every
+/// boundary found it pending and took it, so the PendSV standing behind it
+/// was outranked forever. Over 1000 modelled milliseconds the run entered
+/// SysTick 999 times and PendSV four, and the scheduler ran four times when
+/// the firmware asked for it eighteen times. Raising the unmask seam's step
+/// bound from 64 to 4096 changed none of it, which is the signature of a
+/// pend that is outranked rather than one that is masked.
+///
+/// Returns the instructions the lift inside it spent, which the caller owes
+/// the budget. Entering a handler costs none of its own.
+fn tailChained(core: anytype, controller: anytype, session: Session, left: usize) !usize {
+    if (left == 0) return 0;
+    const before = controller.taken;
+    const lifted = try service(core, controller, session, left);
+    if (controller.taken != before) controller.chained += 1;
+    return lifted;
 }
 
 /// A pend the firmware wrote, taken at the store that wrote it.

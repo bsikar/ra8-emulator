@@ -87,6 +87,10 @@ pub fn timing(
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
     );
+    if (interrupts.chained != 0) try out.print(
+        "interrupts: {d} return(s) went straight into another handler\n",
+        .{interrupts.chained},
+    );
     if (!release.quiet()) {
         try out.print(
             "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
