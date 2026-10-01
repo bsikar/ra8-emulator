@@ -86,6 +86,19 @@ pub const Release = struct {
     /// which code, which is the part that decides whether the mask is the
     /// firmware's own doing or the model holding one it should not.
     gave_up: pend_sites.Sites = .{},
+    /// Whether the firmware has ever been seen running with interrupts on.
+    ///
+    /// Reset leaves PRIMASK clear on this architecture, but a boot path
+    /// masks early and stays masked until it is ready, so everything
+    /// before that first unmasked instant is bring-up. Only a direct read
+    /// of PRIMASK sets this: a boundary with no pend standing says
+    /// nothing, and neither does a lift that gave up.
+    enabled_once: bool = false,
+    /// Give-ups that happened before that instant. A pend held here was
+    /// never takeable: the firmware had not yet reached the point where
+    /// it accepts interrupts at all, so no amount of stepping would have
+    /// released it and the tick it would have carried does not exist.
+    booting: u64 = 0,
 
     /// Step until PRIMASK clears, at most `bound` instructions.
     pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
@@ -101,18 +114,26 @@ pub const Release = struct {
                 out.cleared = true;
                 self.lifted += 1;
                 self.run = 0;
+                self.enabled_once = true;
                 return out;
             }
         }
         self.stuck += 1;
         self.run +%= 1;
+        if (!self.enabled_once) self.booting +%= 1;
         self.gave_up.record(try core.register(.pc));
         return out;
     }
 
     /// No pend was masked at this boundary, so there is nothing to wait
     /// out and the run starts again from zero.
-    pub fn nothingMasked(self: *Release) void {
+    ///
+    /// PRIMASK is read here rather than inferred: this boundary had no
+    /// masked pend either because the firmware is running unmasked or
+    /// because nothing was pending at all, and only the first of those
+    /// says the firmware has finished bringing itself up.
+    pub fn nothingMasked(self: *Release, core: anytype) !void {
+        if (!(try masked(core))) self.enabled_once = true;
         self.run = 0;
     }
 

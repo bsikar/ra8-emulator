@@ -344,7 +344,7 @@ fn service(core: anytype, controller: anytype, session: Session, remaining: usiz
 fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
     const seam = session.unmask orelse return 0;
     if (!(try controller.pendingMasked(core))) {
-        seam.nothingMasked();
+        try seam.nothingMasked(core);
         return 0;
     }
     const lifted = try seam.lift(core, @min(remaining, unmask.limits.steps));
