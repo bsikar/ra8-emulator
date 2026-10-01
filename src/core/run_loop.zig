@@ -326,8 +326,9 @@ fn service(core: anytype, controller: anytype, session: Session, remaining: usiz
     if (entered) |number| {
         if (session.taken_from) |counted| counted.record(interrupted, number);
         if (session.taken_in) |window| window.record(interrupted, number);
+        if (session.pend) |pending| pending.entered(number);
+        if (session.idle) |seam| seam.stir();
     }
-    if (entered != null) if (session.idle) |seam| seam.stir();
     return lifted;
 }
 

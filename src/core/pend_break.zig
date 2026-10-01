@@ -143,6 +143,27 @@ pub const Pend = struct {
     reopened_at: u32 = 0,
     reopened_from: u32 = 0,
     reopened_placed: bool = false,
+    /// The exception the boundary behind this stretch entered, if any,
+    /// told by the run loop as it dispatches. Cleared as the next stretch
+    /// opens, so it only ever describes the boundary just closed.
+    entry: ?u16 = null,
+    /// Stretches that opened somewhere other than the stop because the
+    /// boundary between them ENTERED A HANDLER, with the first such case.
+    ///
+    /// Without this a stop the controller served correctly read as a
+    /// stretch that ran past its store. On every image in the set that
+    /// pends at all, the stop is ThreadX asking for PendSV at
+    /// _tx_thread_schedule+0x1E and the next stretch opens on
+    /// SysTick_Handler+0x0: the boundary found SysTick pending too, took
+    /// it first because it outranks PendSV, and the stretch opened on its
+    /// vector, which is what the architecture does. Counting those as
+    /// `reopened` hid the one case that would be a real fault (the thread
+    /// carrying on past its own store with nothing taken) inside a pile of
+    /// correct ones. `reopened` now means only that.
+    handled: usize = 0,
+    handled_at: u32 = 0,
+    handled_from: u32 = 0,
+    handled_exception: u16 = 0,
     /// The address of the first swallowed store, and how many of the rest
     /// came from somewhere else.
     ///
@@ -222,6 +243,7 @@ pub const Pend = struct {
     pub fn boundary(self: *Pend, pc: u32) void {
         if (self.ended) self.reopenedAt(pc);
         self.ended = false;
+        self.entry = null;
         if (self.in_stretch == 0) return;
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;
@@ -232,20 +254,42 @@ pub const Pend = struct {
     /// record which of the two it was.
     ///
     /// Called only when a stop actually happened, so every pend stop lands
-    /// in exactly one of the two counters and the pair adds up to the
-    /// stops. Whether they are ever equal is the question; this does not
-    /// assume an answer either way.
+    /// in exactly one of the three counters and they add up to the stops.
+    /// A stretch opening on the stop address is a re-entry whatever the
+    /// boundary did, because that is the question re-entry asks.
     fn reopenedAt(self: *Pend, pc: u32) void {
         if (pc == self.ended_at) {
             if (self.reentered == 0) self.reentered_at = pc;
             self.reentered +%= 1;
             return;
         }
+        if (self.entry) |number| return self.handledAt(pc, number);
         self.reopened +%= 1;
         if (self.reopened_placed) return;
         self.reopened_placed = true;
         self.reopened_at = pc;
         self.reopened_from = self.ended_at;
+    }
+
+    /// The stop was followed by the controller entering `number`.
+    fn handledAt(self: *Pend, pc: u32, number: u16) void {
+        if (self.handled == 0) {
+            self.handled_at = pc;
+            self.handled_from = self.ended_at;
+            self.handled_exception = number;
+        }
+        self.handled +%= 1;
+    }
+
+    /// The run loop entered exception `number` at the boundary now
+    /// closing.
+    pub fn entered(self: *Pend, number: u16) void {
+        self.entry = number;
+    }
+
+    /// Every stop the next boundary consumed, whichever way it went.
+    pub fn consumed(self: *const Pend) usize {
+        return self.reentered + self.handled + self.reopened;
     }
 
     /// Take the second-look latch, if one is standing.
