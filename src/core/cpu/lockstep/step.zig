@@ -31,6 +31,9 @@ pub const Divergence = struct {
     class: []const u8,
     instr: Instr,
     what: What,
+    /// Both backends' registers after the instruction.
+    ours: snapshot.Snapshot,
+    oracle: snapshot.Snapshot,
 };
 
 pub const Result = union(enum) {
@@ -66,11 +69,11 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine) engine.Error!Result {
     if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
     const mine = snapshot.Snapshot.fromRegs(&ours.regs);
     const other = try oracle.read(theirs);
-    if (diff.first(mine, other)) |found| return diverged(class, instr, .{ .register = found });
-    if (try memory_diff.first(made.items(), theirs)) |found| return diverged(class, instr, .{ .memory = found });
+    if (diff.first(mine, other)) |found| return diverged(class, instr, .{ .register = found }, mine, other);
+    if (try memory_diff.first(made.items(), theirs)) |found| return diverged(class, instr, .{ .memory = found }, mine, other);
     return .{ .matched = class };
 }
 
-fn diverged(class: []const u8, instr: Instr, what: What) Result {
-    return .{ .diverged = .{ .class = class, .instr = instr, .what = what } };
+fn diverged(class: []const u8, instr: Instr, what: What, mine: snapshot.Snapshot, other: snapshot.Snapshot) Result {
+    return .{ .diverged = .{ .class = class, .instr = instr, .what = what, .ours = mine, .oracle = other } };
 }
