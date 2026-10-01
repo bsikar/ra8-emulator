@@ -33,6 +33,7 @@ const serial = @import("report_serial.zig");
 const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
 const timers = @import("report_timers.zig");
+const watchdog = @import("report_watchdog.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const poeg = @import("../../periph/poeg.zig");
 const reset = @import("../../periph/reset.zig");
@@ -53,7 +54,7 @@ pub fn bus(board: *Board, out: Writer) !void {
 
 /// One line per block that was actually used, so a run only reports the
 /// peripherals the firmware touched.
-pub fn blocks(board: *Board, out: Writer) !void {
+pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     if (!board.checksum.quiet()) {
         try out.print(
             "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
@@ -92,7 +93,7 @@ pub fn blocks(board: *Board, out: Writer) !void {
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try mipi.sections(board, out);
     try graphics.sections(board, out);
-    try watchdog(board, out);
+    try watchdog.section(board, out, timebase);
     try causes(board, out);
     try masks(board, out);
     try control(board, out);
@@ -170,23 +171,6 @@ fn shutoff(board: *Board, out: Writer) !void {
             );
         }
     }
-}
-
-/// The refused refresh is the loud case: on silicon an early reload is a
-/// refresh error that resets the part, and the C tree accepts it silently.
-fn watchdog(board: *Board, out: Writer) !void {
-    const unit = &board.watchdog;
-    if (unit.quiet()) return;
-    if (unit.early != 0) {
-        try out.print("WDT0: refreshes={d} REFUSED={d} (refresh outside the RPSS/RPES window, REFEF latched)\n", .{ unit.refreshes, unit.early });
-    } else {
-        try out.print("WDT0: refreshes={d}, counter {d}/{d}, underflows={d}\n", .{ unit.refreshes, unit.counter, unit.reload(), unit.underflows });
-    }
-    if (unit.bad_acks != 0) {
-        try out.print("WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
-    }
-    if (unit.locked_writes == 0) return;
-    try out.print("WDT0: DROPPED {d} control store(s), WDTCR/WDTRCR/WDTCSTPR take one write each after reset\n", .{unit.locked_writes});
 }
 
 /// Why the part booted, and whether anything asked it to boot again. A
