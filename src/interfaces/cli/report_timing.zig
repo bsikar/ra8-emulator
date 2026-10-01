@@ -59,6 +59,10 @@ pub fn timing(
             "time: {d} more pend(s) landed on one already standing and raised nothing, {d} of them inside a handler\n",
             .{ pending.swallowed, pending.swallowed_in_handler },
         );
+        try out.print(
+            "time: {d} of them landed inside one stretch at worst, over {d} stretch(es)\n",
+            .{ pending.longest_stretch, pending.stretches },
+        );
     }
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
