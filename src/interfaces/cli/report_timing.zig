@@ -33,6 +33,7 @@ const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const pend_ledger = @import("../../core/pend_ledger.zig");
 const pend_break = @import("../../core/pend_break.zig");
+const pend_pace = @import("../../core/pend_pace.zig");
 const pend_sites = @import("../../core/pend_sites.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 
@@ -66,14 +67,28 @@ fn ledger(out: Writer, pending: pend_break.Pend, entered: u64) !void {
     }
 }
 
+/// Boundaries cut short while a switch stood unserved.
+///
+/// Read next to the asks-per-rise ratio above: that number is what this is
+/// for. src/core/pend_pace.zig carries why the boundary is shortened and
+/// why nothing is forced.
+fn paced(out: Writer, pacing: pend_pace.Pace) !void {
+    if (pacing.quiet()) return;
+    try out.print(
+        "time: {d} boundary(ies) were cut to {d} instruction(s) while a switch stood unserved, {d} boundary(ies) deep at worst\n",
+        .{ pacing.narrowed, pend_pace.limits.while_standing, pacing.longest_run },
+    );
+}
+
 /// Everything a run can say about pends the firmware wrote by hand.
 ///
 /// Its own function rather than more lines inside `timing`, which the
 /// length gate was right to stop: this is one subject (what the firmware
 /// asked of the controller and what became of it) and the rest of `timing`
 /// is another (cycles, periods, the idle seam).
-fn pends(out: Writer, pending: pend_break.Pend, entered: u64) !void {
+fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.Pace) !void {
     try ledger(out, pending, entered);
+    try paced(out, pacing);
     if (pending.cuts != 0) {
         try out.print(
             "time: {d} boundary(ies) ended where the firmware pended an exception\n",
@@ -144,8 +159,9 @@ pub fn timing(
     interrupts: nvic.Nvic,
     release: unmask.Release,
     pending: pend_break.Pend,
+    pacing: pend_pace.Pace,
 ) !void {
-    try pends(out, pending, interrupts.standing.entries);
+    try pends(out, pending, interrupts.standing.entries, pacing);
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },

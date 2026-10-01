@@ -24,6 +24,7 @@ const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
+const pend_pace = @import("pend_pace.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const tally = @import("../debug/tally.zig");
 const taken_in = @import("../debug/taken_in.zig");
@@ -121,4 +122,11 @@ pub const Session = struct {
     /// every test that is not about delivery timing wants.
     /// src/core/pend_break.zig says what it costs.
     pend: ?*pend_break.Pend = null,
+    /// Shortens the next stretch while a pend the firmware wrote is still
+    /// standing unserved, so the controller's next look is a couple of
+    /// thousand instructions away rather than a whole chunk. Null keeps
+    /// the full boundary, which is what every test that is not about
+    /// delivery timing wants. src/core/pend_pace.zig says why this is the
+    /// side of the seam worth shortening.
+    pend_pace: ?*pend_pace.Pace = null,
 };
