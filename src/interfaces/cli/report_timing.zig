@@ -170,6 +170,15 @@ fn controller(out: Writer, interrupts: nvic.Nvic) !void {
         "interrupts: exception {d} first waited on exception {d}\n",
         .{ interrupts.why.waiting, interrupts.why.winner },
     );
+    if (!interrupts.standing.quiet()) try out.print(
+        "interrupts: PendSV stood pending at {d} boundary(ies), entered at {d} of them, {d} unserved, worst run {d}\n",
+        .{
+            interrupts.standing.boundaries,
+            interrupts.standing.entries,
+            interrupts.standing.unserved(),
+            interrupts.standing.worst,
+        },
+    );
     if (interrupts.passed.quiet()) return;
     try out.print(
         "interrupts: {d} pend(s) lost the pick, exception {d} first lost to exception {d}\n",
