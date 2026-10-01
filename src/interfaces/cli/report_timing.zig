@@ -83,6 +83,20 @@ pub fn timing(
             .{ seam.skipped, seam.closures, seam.boundaries },
         );
     }
+    try controller(out, interrupts);
+    if (!release.quiet()) {
+        try out.print(
+            "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
+            .{ release.lifted, release.stepped, release.stuck, release.faulted },
+        );
+    }
+}
+
+/// What the controller did with the pends it was offered: the headline, then
+/// the three ways a pend can fail to run. Held is the pick's winner being
+/// refused (src/periph/held.zig); passed is a pend that never got that far
+/// because something more urgent was pending too (src/periph/passed.zig).
+fn controller(out: Writer, interrupts: nvic.Nvic) !void {
     try out.print(
         "interrupts: {d} taken, {d} returned, {d} held\n",
         .{ interrupts.taken, interrupts.returned, interrupts.held },
@@ -104,12 +118,15 @@ pub fn timing(
         "interrupts: exception {d} first waited on exception {d}\n",
         .{ interrupts.why.waiting, interrupts.why.winner },
     );
-    if (!release.quiet()) {
-        try out.print(
-            "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
-            .{ release.lifted, release.stepped, release.stuck, release.faulted },
-        );
-    }
+    if (interrupts.passed.quiet()) return;
+    try out.print(
+        "interrupts: {d} pend(s) lost the pick, exception {d} first lost to exception {d}\n",
+        .{ interrupts.passed.losses, interrupts.passed.loser, interrupts.passed.winner },
+    );
+    try out.print(
+        "interrupts: exception {d} lost {d} boundary(ies) in a row at its worst\n",
+        .{ interrupts.passed.starved, interrupts.passed.longest },
+    );
 }
 
 /// Where the machine was when each exception was taken.
