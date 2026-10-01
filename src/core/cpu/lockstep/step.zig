@@ -13,6 +13,7 @@ const diff = @import("diff.zig");
 const oracle = @import("oracle.zig");
 const writes = @import("writes.zig");
 const memory_diff = @import("memory_diff.zig");
+const catch_up = @import("catch_up.zig");
 
 /// What the two backends disagree on.
 pub const What = union(enum) {
@@ -39,6 +40,9 @@ pub const Result = union(enum) {
     /// The Zig core did not execute it. Unicorn was not stepped either, so
     /// the two still agree.
     stopped: cpu_mod.Stop,
+    /// Unicorn cannot check this class, so only the Zig core ran it and
+    /// Unicorn was brought to the same state; the payload is its class.
+    skipped: []const u8,
     /// The Zig core executed it and Unicorn faulted on it.
     oracle_fault: engine.Fault,
 };
@@ -55,6 +59,10 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine) engine.Error!Result {
     ours.bus = made.inner;
     if (stopped) |why| return .{ .stopped = why };
     const class = hit.?.group;
+    if (!hit.?.oracle) {
+        try catch_up.toZig(theirs, &ours.regs, made.items());
+        return .{ .skipped = class };
+    }
     if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
     const mine = snapshot.Snapshot.fromRegs(&ours.regs);
     const other = try oracle.read(theirs);

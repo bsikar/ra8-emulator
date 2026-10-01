@@ -91,6 +91,7 @@ pub const core = struct {
         pub const regs = @import("core/cpu/regs.zig");
         pub const reset = @import("core/cpu/reset.zig");
         pub const lockstep = struct {
+            pub const catch_up = @import("core/cpu/lockstep/catch_up.zig");
             pub const diff = @import("core/cpu/lockstep/diff.zig");
             pub const history = @import("core/cpu/lockstep/history.zig");
             pub const memory_diff = @import("core/cpu/lockstep/memory_diff.zig");

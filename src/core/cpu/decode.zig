@@ -8,11 +8,13 @@ pub const Hit = struct {
     /// The class the instruction was decoded under.
     group: []const u8,
     exec: op.Exec,
+    /// Whether Unicorn can be the lockstep oracle for it; see `op.Group`.
+    oracle: bool,
 };
 
 pub fn decode(instr: Instr) ?Hit {
     for (table.groups) |group| {
-        if (group.decode(instr)) |exec| return .{ .group = group.name, .exec = exec };
+        if (group.decode(instr)) |exec| return .{ .group = group.name, .exec = exec, .oracle = group.oracle };
     }
     return null;
 }
