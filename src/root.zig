@@ -62,6 +62,20 @@ pub const core = struct {
     pub const conformance_vector = @import("core/cpu/conformance/vector.zig");
     pub const conformance_coverage = @import("core/cpu/conformance/coverage.zig");
     pub const conformance_suite = @import("core/cpu/conformance/suite.zig");
+    /// The Zig CPU core (RA8EMU-10), growing beside Unicorn until it replaces it.
+    pub const cpu = struct {
+        pub const bus = @import("core/cpu/bus.zig");
+        pub const cpu = @import("core/cpu/cpu.zig");
+        pub const decode = @import("core/cpu/decode.zig");
+        pub const instr = @import("core/cpu/instr.zig");
+        pub const op = @import("core/cpu/op.zig");
+        pub const regs = @import("core/cpu/regs.zig");
+        pub const reset = @import("core/cpu/reset.zig");
+        pub const ops = struct {
+            pub const hint = @import("core/cpu/ops/hint.zig");
+            pub const table = @import("core/cpu/ops/table.zig");
+        };
+    };
 };
 
 pub const periph = struct {

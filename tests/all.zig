@@ -8,6 +8,15 @@ test {
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
+    _ = @import("core/cpu/bus_test.zig");
+    _ = @import("core/cpu/cpu_test.zig");
+    _ = @import("core/cpu/decode_test.zig");
+    _ = @import("core/cpu/instr_test.zig");
+    _ = @import("core/cpu/op_test.zig");
+    _ = @import("core/cpu/regs_test.zig");
+    _ = @import("core/cpu/reset_test.zig");
+    _ = @import("core/cpu/ops/hint_test.zig");
+    _ = @import("core/cpu/ops/table_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("interfaces/cli/report_dma_test.zig");
     _ = @import("interfaces/cli/report_watchdog_test.zig");

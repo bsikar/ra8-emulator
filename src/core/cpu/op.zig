@@ -1,0 +1,19 @@
+//! What an instruction group gives the decoder: a name for its class and a
+//! function that turns an encoding it recognises into the code that runs it.
+//!
+//! The name is the class a lockstep divergence table reports under, so keep
+//! it short and stable.
+const Cpu = @import("cpu.zig").Cpu;
+const Instr = @import("instr.zig").Instr;
+const bus = @import("bus.zig");
+
+pub const Error = bus.Error;
+
+/// Runs one decoded instruction. The PC already points past it when this is
+/// called; a branch writes the PC, everything else leaves it alone.
+pub const Exec = *const fn (cpu: *Cpu, instr: Instr) Error!void;
+
+pub const Group = struct {
+    name: []const u8,
+    decode: *const fn (instr: Instr) ?Exec,
+};
