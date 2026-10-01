@@ -15,6 +15,7 @@ const Board = @import("../../board/board.zig").Board;
 const Writer = @import("report.zig").Writer;
 const report = @import("report.zig");
 const report_timing = @import("report_timing.zig");
+const pend_break = @import("../../core/pend_break.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const report_steps = @import("report_steps.zig");
@@ -34,6 +35,8 @@ pub const Tally = struct {
     idle: idle.Seam = .{},
     /// Pends that had to wait out PRIMASK; src/core/unmask.zig says why.
     release: unmask.Release = .{},
+
+    pend: pend_break.Pend = .{},
     interrupts: nvic.Nvic,
     reboot: reboot.Reboot,
     loops: lob.Loops,
@@ -47,7 +50,7 @@ pub const Tally = struct {
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
-    try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release);
+    try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);

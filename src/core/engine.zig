@@ -32,6 +32,8 @@ const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("../debug/break_hook.zig");
 const watchpoint = @import("../debug/watchpoint.zig");
 const watch_hook = @import("../debug/watch_hook.zig");
+const pend_hook = @import("pend_hook.zig");
+const pend_break = @import("pend_break.zig");
 const undefined_hook = @import("undefined_hook.zig");
 const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
@@ -282,6 +284,13 @@ pub const Engine = struct {
     /// written more than once tells its whole story in one run.
     pub fn attachWatchpoint(self: Engine, watched: *watchpoint.Watched) Error!void {
         watch_hook.attach(self.handle, watched) catch return Error.AttachFailed;
+    }
+
+    /// Stop the stretch on a store that pends an exception by hand, so
+    /// the controller can take it where the architecture would rather
+    /// than at the next boundary. src/core/pend_break.zig carries why.
+    pub fn attachPend(self: Engine, pending: *pend_break.Pend) Error!void {
+        pend_hook.attach(self.handle, pending) catch return Error.AttachFailed;
     }
 
     /// Count every arrival at an undefined site the sweep found, so the

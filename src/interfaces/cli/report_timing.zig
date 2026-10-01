@@ -31,6 +31,7 @@ const elf = @import("../../core/elf.zig");
 const symbols = @import("../../debug/symbols.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
+const pend_break = @import("../../core/pend_break.zig");
 
 const Writer = @import("report.zig").Writer;
 
@@ -45,7 +46,14 @@ pub fn timing(
     seam: idle.Seam,
     interrupts: nvic.Nvic,
     release: unmask.Release,
+    pending: pend_break.Pend,
 ) !void {
+    if (pending.cuts != 0) {
+        try out.print(
+            "time: {d} boundary(ies) ended where the firmware pended an exception\n",
+            .{pending.cuts},
+        );
+    }
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
