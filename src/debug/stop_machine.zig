@@ -77,6 +77,13 @@ pub const Machine = struct {
         self.start(.running, null);
     }
 
+    /// Run from a fresh start rather than a resume: the first instruction
+    /// is checked like any other, so a break on it counts its arrival.
+    pub fn begin(self: *Machine) void {
+        self.start(.running, null);
+        self.resumed = false;
+    }
+
     /// Run exactly one instruction.
     pub fn step(self: *Machine) void {
         self.start(.step, null);
