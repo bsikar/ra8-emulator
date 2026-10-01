@@ -17,7 +17,7 @@ pub const usage =
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR]
-    \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig]
+    \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
