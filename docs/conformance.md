@@ -16,3 +16,7 @@ is stale or an encoding is missing. Regenerate with
 | VADD.F64 T1 | 3 |
 | VSUB.F32 T1 | 10 |
 | VSUB.F64 T1 | 3 |
+| VMUL.F32 T2 | 19 |
+| VMUL.F64 T2 | 4 |
+| VNMUL.F32 T2 | 6 |
+| VNMUL.F64 T2 | 2 |

@@ -76,6 +76,8 @@ pub const core = struct {
     pub const fpu_case = @import("core/cpu/fpu/case.zig");
     pub const fpu_add = @import("core/cpu/fpu/add.zig");
     pub const fpu_add_vectors = @import("core/cpu/fpu/add_vectors.zig");
+    pub const fpu_mul = @import("core/cpu/fpu/mul.zig");
+    pub const fpu_mul_vectors = @import("core/cpu/fpu/mul_vectors.zig");
     /// The Zig CPU core (RA8EMU-10), growing beside Unicorn until it replaces it.
     pub const cpu = struct {
         pub const boot = @import("core/cpu/boot.zig");
