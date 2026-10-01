@@ -25,12 +25,24 @@ const pend_sites = @import("../../core/pend_sites.zig");
 /// where it accepts interrupts, and the tick it would have carried was
 /// never owed. A give-up after that instant is a critical section, which
 /// is the only one worth arguing about.
+///
+/// And a third line says how FAR the worst one went, which is what
+/// decides whether the bound is set anywhere near right. One give-up and
+/// gone by the next boundary is a mask that overran the bound by less
+/// than a chunk. Several in a row is a mask the model keeps failing to
+/// wait out, and the stepped instructions under it are a floor rather
+/// than its length: the ordinary stretches between those boundaries ran
+/// under the same mask and are not counted.
 pub fn maskSites(out: anytype, image: elf.Image, release: unmask.Release) !void {
     var sites = release.gave_up;
     if (sites.quiet()) return;
     try out.print(
         "interrupts: {d} of those give-up(s) came before the firmware first ran unmasked, {d} after\n",
         .{ release.booting, release.stuck - release.booting },
+    );
+    try out.print(
+        "interrupts: the most stubborn mask outlasted {d} lift(s) in a row, {d} instruction(s) of stepping\n",
+        .{ release.longest, release.longest_held },
     );
     for (sites.ranked()) |site| {
         try out.print(

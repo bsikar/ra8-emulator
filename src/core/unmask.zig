@@ -99,6 +99,22 @@ pub const Release = struct {
     /// it accepts interrupts at all, so no amount of stepping would have
     /// released it and the tick it would have carried does not exist.
     booting: u64 = 0,
+    /// Instructions stepped so far under the mask currently being waited
+    /// out, zeroed the moment it clears or no pend is masked at all.
+    held: u64 = 0,
+    /// The most consecutive give-ups one mask ever caused, and the
+    /// instructions stepped across them.
+    ///
+    /// `stuck` says how OFTEN a mask outlasted the bound and never how
+    /// FAR, which is the figure that decides whether the bound is set
+    /// anywhere near right. A mask that gives up once and is gone by the
+    /// next boundary outlasted the bound by less than a chunk. One that
+    /// gives up five times in a row held for at least five bounds of
+    /// stepping and is a different animal. Stepped instructions only, so
+    /// it is a floor: the ordinary stretches between those boundaries ran
+    /// under the same mask and are not counted here.
+    longest: u64 = 0,
+    longest_held: u64 = 0,
 
     /// Step until PRIMASK clears, at most `bound` instructions.
     pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
@@ -114,12 +130,18 @@ pub const Release = struct {
                 out.cleared = true;
                 self.lifted += 1;
                 self.run = 0;
+                self.held = 0;
                 self.enabled_once = true;
                 return out;
             }
         }
         self.stuck += 1;
         self.run +%= 1;
+        self.held +%= out.ran;
+        if (self.run > self.longest) {
+            self.longest = self.run;
+            self.longest_held = self.held;
+        }
         if (!self.enabled_once) self.booting +%= 1;
         self.gave_up.record(try core.register(.pc));
         return out;
@@ -135,6 +157,7 @@ pub const Release = struct {
     pub fn nothingMasked(self: *Release, core: anytype) !void {
         if (!(try masked(core))) self.enabled_once = true;
         self.run = 0;
+        self.held = 0;
     }
 
     /// Whether anything happened worth a line at the end of a run.
