@@ -63,6 +63,10 @@ pub fn timing(
             "time: {d} of them landed inside one stretch at worst, over {d} stretch(es)\n",
             .{ pending.longest_stretch, pending.stretches },
         );
+        if (pending.swallowed_placed) try out.print(
+            "time: the first of them stored at pc 0x{X:0>8}, {d} of the rest stored somewhere else\n",
+            .{ pending.swallowed_at, pending.swallowed_elsewhere },
+        );
         if (pending.looks != 0) try out.print(
             "time: {d} of them ended the stretch so the pend could be looked at again\n",
             .{pending.looks},

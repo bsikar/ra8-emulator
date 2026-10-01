@@ -124,6 +124,18 @@ pub const Pend = struct {
     /// The first address it happened on, so the loop can be named rather
     /// than counted.
     reentered_at: u32 = 0,
+    /// The address of the first swallowed store, and how many of the rest
+    /// came from somewhere else.
+    ///
+    /// This is the difference between one site asking over and over and
+    /// the whole firmware asking once each. The run already says how many
+    /// stores landed on a standing pend; it has never said WHERE, and the
+    /// two readings want opposite fixes. A single address with every store
+    /// on it is one loop to go and read. Hundreds of thousands spread over
+    /// many addresses is the model never draining the bit at all.
+    swallowed_at: u32 = 0,
+    swallowed_placed: bool = false,
+    swallowed_elsewhere: usize = 0,
 
     /// Called from the hook as it stops the stretch: the store was at
     /// `pc`. Both reasons for stopping come through here, because both
@@ -162,6 +174,17 @@ pub const Pend = struct {
         if (self.placed) return;
         self.placed = true;
         self.swallowed_under = executing;
+    }
+
+    /// Called from the hook with the address of a swallowed store, which
+    /// the hook knows and this does not.
+    pub fn swallowedAt(self: *Pend, pc: u32) void {
+        if (!self.swallowed_placed) {
+            self.swallowed_placed = true;
+            self.swallowed_at = pc;
+            return;
+        }
+        if (pc != self.swallowed_at) self.swallowed_elsewhere +%= 1;
     }
 
     /// Called by the run loop as a stretch opens at `pc`: close the books

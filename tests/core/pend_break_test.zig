@@ -192,3 +192,29 @@ test "closing the swallow books still works alongside the address check" {
     try std.testing.expectEqual(@as(usize, 1), pending.stretches);
     try std.testing.expectEqual(@as(usize, 1), pending.reentered);
 }
+
+test "the first swallowed store address is kept" {
+    var pending = pend_break.Pend{};
+    pending.swallowedAt(0x02002458);
+    pending.swallowedAt(0x02002458);
+    try std.testing.expect(pending.swallowed_placed);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.swallowed_at);
+    try std.testing.expectEqual(@as(usize, 0), pending.swallowed_elsewhere);
+}
+
+test "a swallowed store from another address is counted apart" {
+    var pending = pend_break.Pend{};
+    pending.swallowedAt(0x02002458);
+    pending.swallowedAt(0x02002CFC);
+    pending.swallowedAt(0x02002CFC);
+    pending.swallowedAt(0x02002458);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.swallowed_at);
+    try std.testing.expectEqual(@as(usize, 2), pending.swallowed_elsewhere);
+}
+
+test "no swallowed store leaves the address unplaced" {
+    var pending = pend_break.Pend{};
+    pending.alreadyPending(0);
+    try std.testing.expect(!pending.swallowed_placed);
+    try std.testing.expectEqual(@as(u32, 0), pending.swallowed_at);
+}
