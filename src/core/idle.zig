@@ -154,6 +154,25 @@ pub const Seam = struct {
     /// fixed count lands wherever the loop's length leaves it. A loop of
     /// length L closes within L steps, so the budget bounds the loop width
     /// this can see rather than the work it does on an idle machine.
+    ///
+    /// A DISTURBED PROBE STOPS STEPPING AT ONCE rather than running its
+    /// budget out. Once a store the model cannot show was harmless has
+    /// happened, no later step can prove anything: the answer is already
+    /// "not closed", and every further step is work done for a result that
+    /// cannot change. Checking it only where the loop closes, which is what
+    /// this did, means a probe that never closes steps the whole budget
+    /// anyway.
+    ///
+    /// That is not merely wasted work, and the reason is the single step.
+    /// A hook that wants to END the stretch stops the emulator by asking
+    /// Unicorn to stop, and inside a one-instruction run that request buys
+    /// nothing: the run was ending after that instruction regardless, and
+    /// the loop here simply steps again. So a hook could ask 64 times and
+    /// be overridden 64 times. Measured on `threadx_blink` with
+    /// `--drain-pends`: 639936 pend stops asked for and 10002 honoured,
+    /// and 639936 is exactly 64 (this budget) times the 9999 stretches
+    /// that carried any. The stop a hook asks for during a probe is now
+    /// the end of the probe.
     pub fn look(self: *Seam, core: anytype, pc: u32, budget: usize) !Look {
         const opening = try snapshot(core);
         self.disturbed = false;
@@ -173,6 +192,7 @@ pub const Seam = struct {
                 self.known = opening;
                 return .{ .ran = ran, .closed = true };
             }
+            if (self.disturbed) return .{ .ran = ran };
             at = try core.register(.pc);
         }
         return .{ .ran = ran };
