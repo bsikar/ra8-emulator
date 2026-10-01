@@ -7,6 +7,7 @@ const memmap = ra8.core.memmap;
 const Engine = engine.Engine;
 const Board = ra8.board.Board;
 const sau = ra8.periph.sau;
+const mpu = ra8.periph.mpu;
 
 /// A thumb image is not needed to test the wiring: what matters is that the
 /// second core is put in front of the first core's board and takes turns.
@@ -129,4 +130,46 @@ test "one core's SAU map does not land in the other's table" {
 
 test "a round is the chunk boundary" {
     try std.testing.expectEqual(ra8.core.cadence.instructions, mod.limits.round);
+}
+
+test "a second core carries an MPU and guard of its own, not the board's" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    cpu1.regions = mpu.Mpu.init();
+    cpu1.guard = ra8.core.mpu_guard.Guard.init();
+
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    try std.testing.expect(&cpu1.regions != &board.regions);
+    try std.testing.expect(&cpu1.guard != &board.guard);
+
+    // The guard CPU1 attaches enforces CPU1's table, never the board's.
+    try cpu1.core.attachRegions(&cpu1.regions, &cpu1.guard);
+    try std.testing.expect(cpu1.guard.unit.? == &cpu1.regions);
+    try std.testing.expect(board.guard.unit == null);
+}
+
+test "programming one core's MPU leaves the other's table alone" {
+    var cpu0_regions = mpu.Mpu.init();
+    const cpu1_regions = mpu.Mpu.init();
+
+    // CPU0 programmes region 2 over the first SRAM page and enables.
+    _ = cpu0_regions.observe(memmap.mpu.rnr, 2);
+    _ = cpu0_regions.observe(memmap.mpu.rbar, memmap.sram_base);
+    _ = cpu0_regions.observe(memmap.mpu.rlar, (memmap.sram_base + 0xFE0) | 1);
+    _ = cpu0_regions.observe(memmap.mpu.ctrl, mpu.field.ctrl_enable);
+
+    try std.testing.expectEqual(memmap.sram_base, cpu0_regions.table[2].base);
+    try std.testing.expectEqual(@as(u8, 2), cpu0_regions.selected);
+    try std.testing.expectEqual(@as(u32, 0), cpu1_regions.table[2].base);
+    try std.testing.expectEqual(@as(u8, 0), cpu1_regions.selected);
+    try std.testing.expectEqual(@as(u32, 0), cpu1_regions.ctrl);
+}
+
+test "a fresh second core's MPU is empty and off" {
+    const cpu1 = mod.Second{ .core = undefined };
+    try std.testing.expectEqual(@as(u32, 0), cpu1.regions.ctrl);
+    try std.testing.expect(cpu1.guard.unit == null);
 }
