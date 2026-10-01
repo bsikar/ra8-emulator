@@ -132,6 +132,7 @@ src/periph/           everything that answers on the peripheral bus
 tests/                one test file per source file, on the mirrored path
 tools/gate.zig        the light build gate (file and function length)
 tools/eil_set.sh      re-derives the EIL app set from a ra8-firmware tree
+tools/lockstep_corpus.sh  runs a directory of ELFs under --cpu lockstep, one table
 docs/                 notes: EIL parity, a GCC miscompile, a ThreadX caller error
 ```
 
