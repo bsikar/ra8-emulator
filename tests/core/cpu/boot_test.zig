@@ -1,0 +1,51 @@
+//! Covers src/core/cpu/boot.zig.
+const std = @import("std");
+const ra8 = @import("ra8");
+const memmap = ra8.core.memmap;
+const boot = ra8.core.cpu.boot;
+const Engine = ra8.core.engine.Engine;
+
+/// A vector table at the base of SRAM pointing at code right after it:
+/// bf00 nop ; f3af 8000 nop.w ; de00 udf #0.
+fn loadTiny(core: *Engine) !void {
+    const base = memmap.sram_base;
+    var image: [16]u8 = undefined;
+    std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
+    std.mem.writeInt(u32, image[4..8], (base + 8) | 1, .little);
+    @memcpy(image[8..16], &[_]u8{ 0x00, 0xBF, 0xAF, 0xF3, 0x00, 0x80, 0x00, 0xDE });
+    try core.write(base, &image);
+}
+
+test "a zig run stops on the first unknown encoding and says where" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadTiny(&core);
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    const status = try boot.run(stream.writer(), &core, memmap.sram_base, 100);
+    try std.testing.expectEqual(@as(u8, 1), status);
+    var want: [128]u8 = undefined;
+    const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xde00 after 2 instructions\n", .{memmap.sram_base + 0xE});
+    try std.testing.expectEqualStrings(line, stream.getWritten());
+}
+
+test "a zig run that spends its budget is clean" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadTiny(&core);
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), &core, memmap.sram_base, 1));
+    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 1 instructions clean"));
+}
+
+test "no vector table is said plainly" {
+    var core = try Engine.open();
+    defer core.close();
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), &core, memmap.sram_base, 1));
+    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: no vector table"));
+}

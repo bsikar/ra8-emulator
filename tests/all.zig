@@ -8,7 +8,10 @@ test {
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
+    _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
+    _ = @import("core/cpu/choice_test.zig");
+    _ = @import("core/cpu/engine_bus_test.zig");
     _ = @import("core/cpu/cpu_test.zig");
     _ = @import("core/cpu/decode_test.zig");
     _ = @import("core/cpu/instr_test.zig");

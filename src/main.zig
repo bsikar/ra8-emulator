@@ -112,7 +112,6 @@ pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
     const argv = try std.process.argsAlloc(allocator);
     const options = cli.parse(argv) catch {
         std.debug.print("{s}", .{cli.usage});
@@ -141,6 +140,7 @@ pub fn main() !u8 {
     const entry = try core.register(.pc);
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
+    if (options.cpu == .zig) return ra8.core.cpu.boot.run(out, &core, vector_base, options.budgetFor(false));
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
