@@ -71,3 +71,33 @@ test "the first swallowed store keeps where it happened, Thread mode included" {
     try std.testing.expectEqual(@as(u16, 0), pending.swallowed_under);
     try std.testing.expectEqual(@as(usize, 1), pending.swallowed_in_handler);
 }
+
+test "the worst stretch is the most swallowed stores between two boundaries" {
+    var pending = pend_break.Pend{};
+    pending.alreadyPending(0);
+    pending.alreadyPending(0);
+    pending.alreadyPending(0);
+    pending.boundary();
+    pending.alreadyPending(0);
+    pending.boundary();
+    try std.testing.expectEqual(@as(usize, 3), pending.longest_stretch);
+    try std.testing.expectEqual(@as(usize, 2), pending.stretches);
+}
+
+test "a stretch that swallowed nothing is not counted" {
+    var pending = pend_break.Pend{};
+    pending.boundary();
+    pending.boundary();
+    pending.alreadyPending(0);
+    pending.boundary();
+    try std.testing.expectEqual(@as(usize, 1), pending.stretches);
+    try std.testing.expectEqual(@as(usize, 1), pending.longest_stretch);
+}
+
+test "the stretch still open is not folded in until its boundary" {
+    var pending = pend_break.Pend{};
+    pending.alreadyPending(0);
+    pending.alreadyPending(0);
+    try std.testing.expectEqual(@as(usize, 0), pending.longest_stretch);
+    try std.testing.expectEqual(@as(usize, 2), pending.in_stretch);
+}

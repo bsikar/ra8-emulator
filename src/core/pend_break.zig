@@ -61,6 +61,22 @@ pub const Pend = struct {
     /// Set once `swallowed_under` has been written, so a first store in
     /// Thread mode is not overwritten by a later one in a handler.
     placed: bool = false,
+    /// Swallowed stores piled on the standing pend inside the stretch
+    /// running right now.
+    in_stretch: usize = 0,
+    /// The most swallowed stores any one stretch carried.
+    ///
+    /// This is what decides whether the boundary width is the hole. The
+    /// controller can only take an exception at a boundary, so every store
+    /// that lands inside one stretch is a switch the firmware asked for and
+    /// could not get until the stretch ran out. A worst of one says the
+    /// losses are spread thin and the stretch is innocent; a worst near the
+    /// whole swallowed count says they all happened between two boundaries
+    /// and the chunk is exactly the thing to shorten.
+    longest_stretch: usize = 0,
+    /// Stretches that carried at least one swallowed store, so the worst
+    /// can be read against how often it happens at all.
+    stretches: usize = 0,
 
     /// Called from the hook: the firmware just set a pend bit.
     pub fn record(self: *Pend) void {
@@ -73,10 +89,22 @@ pub const Pend = struct {
     /// store, zero in Thread mode.
     pub fn alreadyPending(self: *Pend, executing: u16) void {
         self.swallowed +%= 1;
+        self.in_stretch +%= 1;
         if (executing != 0) self.swallowed_in_handler +%= 1;
         if (self.placed) return;
         self.placed = true;
         self.swallowed_under = executing;
+    }
+
+    /// Called by the run loop as a stretch opens: close the books on the
+    /// one that just ended. A stretch that swallowed nothing is not
+    /// counted, so `stretches` reads as how often this happens rather than
+    /// how long the run was.
+    pub fn boundary(self: *Pend) void {
+        if (self.in_stretch == 0) return;
+        if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
+        self.stretches +%= 1;
+        self.in_stretch = 0;
     }
 
     /// Take the latch, if one is standing. Clears it, so one store ends
