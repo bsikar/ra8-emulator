@@ -75,6 +75,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             continue;
         };
         remaining -= chunk;
+        if (session.unmask) |seam| seam.ran(chunk);
         if (session.timebase) |clock| clock.advance(core, @intCast(chunk)) catch return error.RunFailed;
         // The budget is spent: do not enter a handler there is no room
         // left to run, which would report a run that ended inside an

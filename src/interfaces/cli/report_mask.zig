@@ -30,9 +30,9 @@ const pend_sites = @import("../../core/pend_sites.zig");
 /// decides whether the bound is set anywhere near right. One give-up and
 /// gone by the next boundary is a mask that overran the bound by less
 /// than a chunk. Several in a row is a mask the model keeps failing to
-/// wait out, and the stepped instructions under it are a floor rather
-/// than its length: the ordinary stretches between those boundaries ran
-/// under the same mask and are not counted.
+/// wait out. The line gives the span from its first give-up to its last
+/// beside the stepping alone: the span is its length unless something in
+/// between cleared and re-set the mask, and the stepping is the floor.
 pub fn maskSites(out: anytype, image: elf.Image, release: unmask.Release) !void {
     var sites = release.gave_up;
     if (sites.quiet()) return;
@@ -41,8 +41,8 @@ pub fn maskSites(out: anytype, image: elf.Image, release: unmask.Release) !void 
         .{ release.booting, release.stuck - release.booting },
     );
     try out.print(
-        "interrupts: the most stubborn mask outlasted {d} lift(s) in a row, {d} instruction(s) of stepping\n",
-        .{ release.longest, release.longest_held },
+        "interrupts: the most stubborn mask outlasted {d} lift(s) in a row, spanning {d} instruction(s), {d} of them stepped\n",
+        .{ release.longest, release.longest_held, release.longest_stepped },
     );
     for (sites.ranked()) |site| {
         try out.print(
