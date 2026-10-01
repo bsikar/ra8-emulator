@@ -173,9 +173,9 @@ fn shutoff(board: *Board, out: Writer) !void {
     }
 }
 
-/// Why the part booted, and whether anything asked it to boot again. A
-/// software request is carried out (the reboots line counts those); a
-/// watchdog one still only latches the cause and lets the run carry on.
+/// Why the part booted, and whether anything asked it to boot again. Every
+/// request is carried out, software and watchdog alike; the reboots line
+/// counts those.
 fn causes(board: *Board, out: Writer) !void {
     const unit = &board.causes;
     if (unit.quiet()) return;
@@ -187,7 +187,7 @@ fn causes(board: *Board, out: Writer) !void {
     try out.print(")\n", .{});
     if (unit.requests != 0) {
         try out.print(
-            "RESET: {d} RESET(S) REQUESTED (a software request is performed; a watchdog one only latches the cause)\n",
+            "RESET: {d} RESET(S) REQUESTED (each one performed as a warm reboot)\n",
             .{unit.requests},
         );
     }

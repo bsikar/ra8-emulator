@@ -122,9 +122,9 @@ pub const Iwdt = struct {
     }
 
     /// One run-loop chunk of counting. The counter cannot be stopped by
-    /// software, so it reloads and keeps going past an underflow: on silicon
-    /// the reset would have ended the run, and here the cause is latched and
-    /// the run carries on.
+    /// software, so it reloads and keeps going past an underflow. In RSTIRQS
+    /// mode the board then performs the reset this asks for as a warm
+    /// reboot, the same seam a software reset takes.
     pub fn tick(self: *Iwdt) void {
         if (!self.armed) return;
         if (self.counter > counts_per_tick) {

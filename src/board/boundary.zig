@@ -9,6 +9,7 @@
 const engine = @import("../core/engine.zig");
 
 const Board = @import("board.zig").Board;
+const reset = @import("../periph/reset.zig");
 
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
@@ -60,11 +61,14 @@ pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
 }
 
 /// Whoever asked for a reset this boundary hands the request to the reset
-/// block, which latches the cause the firmware will read on the way back up.
-/// A software request is then performed: the run has a reboot seam and the
-/// firmware behind AIRCR is sitting in a wait loop expecting the part to go
-/// away. A watchdog request still only latches, because the image that
-/// tripped it has nothing waiting on the reboot.
+/// block, which latches the cause the firmware will read on the way back up,
+/// and then the reset is performed through the run's reboot seam. That holds
+/// for all three sources: the firmware behind AIRCR sits in a wait loop
+/// expecting the part to go away, and an image that let a watchdog underflow
+/// is either waiting on that reboot to read WDTRF or IWDTRF back
+/// (wdt_reset_recovery_demo's second boot is its pass banner) or would have
+/// been reset on silicon anyway, so carrying on past it reports a run the
+/// bench never sees.
 ///
 /// The PPB windows are polled here too. They are RAM rather than bus blocks,
 /// so nothing else would look at them: the cache geometry, and the MPU's
@@ -72,16 +76,22 @@ pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
 pub fn takeResetRequests(self: *Board, core: anytype) !void {
     if (self.watchdog.reset_requested) {
         self.watchdog.reset_requested = false;
-        self.causes.request(.watchdog);
+        resetFor(self, .watchdog);
     }
     if (self.heartbeat.reset_requested) {
         self.heartbeat.reset_requested = false;
-        self.causes.request(.iwdt);
+        resetFor(self, .iwdt);
     }
     try self.caches.poll(core);
     try self.regions.poll(core);
-    if (!try self.control.poll(core)) return;
-    self.causes.request(.software);
+    if (try self.control.poll(core)) resetFor(self, .software);
+}
+
+/// Latch one cause and ask for the reboot. The interrupt latches go down on
+/// the way past: a line still pending would be entered before the firmware
+/// coming back up has put its vector table back.
+fn resetFor(self: *Board, source: reset.Source) void {
+    self.causes.request(source);
     self.events.clearLatches();
     if (self.reboot) |pending| pending.requested = true;
 }
