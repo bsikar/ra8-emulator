@@ -32,6 +32,7 @@ const symbols = @import("../../debug/symbols.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const pend_break = @import("../../core/pend_break.zig");
+const pend_sites = @import("../../core/pend_sites.zig");
 
 const Writer = @import("report.zig").Writer;
 
@@ -212,5 +213,36 @@ pub fn takenIn(out: anytype, image: elf.Image, spec: ?[]const u8, window: ?taken
     }
     if (one.missed() > 0) {
         try out.print("                  and {d} more not kept\n", .{one.missed()});
+    }
+}
+
+/// Where the firmware stored a pend that was already standing.
+///
+/// The count of swallowed stores says the scheduler asked for a switch it
+/// did not get; it cannot say whether one site asked a million times or a
+/// million sites asked once, and the two want opposite fixes. Naming the
+/// addresses answers it. On ThreadX there are two by construction,
+/// `_tx_thread_system_suspend` and `_tx_thread_system_resume`, both
+/// writing `ICSR.PENDSVSET` by hand at the end of their own bookkeeping.
+pub fn pendStores(out: anytype, image: elf.Image, pending: pend_break.Pend) !void {
+    // Ranked on a copy: the sort is the report's business and the run's
+    // own table has no reason to come back reordered.
+    var sites = pending.sites;
+    if (sites.quiet()) return;
+    for (sites.ranked()) |site| {
+        try out.print(
+            "time: {d} pend(s) landed on a standing one from pc 0x{X:0>8}",
+            .{ site.count, site.pc },
+        );
+        if (symbols.inside(image, site.pc)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print("\n", .{});
+    }
+    if (sites.overflowed != 0) {
+        try out.print(
+            "time: and {d} more from addresses past the {d} the table keeps\n",
+            .{ sites.overflowed, pend_sites.limits.sites },
+        );
     }
 }

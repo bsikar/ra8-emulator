@@ -23,6 +23,7 @@
 //! lets the controller dispatch, and the exception lands where the
 //! architecture puts it.
 const std = @import("std");
+const pend_sites = @import("pend_sites.zig");
 
 /// A pend written by the firmware, waiting to be taken.
 pub const Pend = struct {
@@ -136,6 +137,12 @@ pub const Pend = struct {
     swallowed_at: u32 = 0,
     swallowed_placed: bool = false,
     swallowed_elsewhere: usize = 0,
+    /// Every address a swallowed store came from, with its count.
+    ///
+    /// `swallowed_at` and `swallowed_elsewhere` answer "all at one site or
+    /// not" and cannot tell one other address from a hundred. This names
+    /// them. src/core/pend_sites.zig carries why it is a fixed table.
+    sites: pend_sites.Sites = .{},
 
     /// Called from the hook as it stops the stretch: the store was at
     /// `pc`. Both reasons for stopping come through here, because both
@@ -179,6 +186,7 @@ pub const Pend = struct {
     /// Called from the hook with the address of a swallowed store, which
     /// the hook knows and this does not.
     pub fn swallowedAt(self: *Pend, pc: u32) void {
+        self.sites.record(pc);
         if (!self.swallowed_placed) {
             self.swallowed_placed = true;
             self.swallowed_at = pc;
