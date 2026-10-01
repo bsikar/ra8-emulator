@@ -33,6 +33,7 @@ const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const pend_break = @import("../../core/pend_break.zig");
 const pend_sites = @import("../../core/pend_sites.zig");
+const pc_hits = @import("../../debug/pc_hits.zig");
 
 const Writer = @import("report.zig").Writer;
 
@@ -243,6 +244,31 @@ pub fn pendStores(out: anytype, image: elf.Image, pending: pend_break.Pend) !voi
         try out.print(
             "time: and {d} more from addresses past the {d} the table keeps\n",
             .{ sites.overflowed, pend_sites.limits.sites },
+        );
+    }
+}
+
+/// How many times each counted instruction ran.
+///
+/// Every other counter in the report is a side effect of something else:
+/// stores that landed in a word, stores that found a pend standing,
+/// exceptions taken. When two of those disagree about the same stretch of
+/// code there is nothing in the tree to settle it, because neither of them
+/// measures the execution. This does, and nothing else, so a count here is
+/// the one number that can call another one wrong.
+pub fn pcHits(out: anytype, image: elf.Image, hits: pc_hits.Hits) !void {
+    if (hits.quiet()) return;
+    for (hits.asked()) |one| {
+        try out.print("time: pc 0x{X:0>8}", .{one.at});
+        if (symbols.inside(image, one.at)) |at| {
+            try out.print(" {s}+0x{X}", .{ at.name, at.offset });
+        }
+        try out.print(" ran {d} time(s)\n", .{one.hits});
+    }
+    if (hits.refused != 0) {
+        try out.print(
+            "time: {d} more address(es) asked for than the {d} a run can count\n",
+            .{ hits.refused, pc_hits.limits.places },
         );
     }
 }
