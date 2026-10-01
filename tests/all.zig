@@ -17,6 +17,7 @@ test {
     _ = @import("debug/symbols_test.zig");
     _ = @import("core/idle_test.zig");
     _ = @import("core/pend_break_test.zig");
+    _ = @import("core/pend_sites_test.zig");
     _ = @import("core/unmask_test.zig");
     _ = @import("core/run_loop_test.zig");
     _ = @import("core/systick_hook_test.zig");

@@ -198,6 +198,7 @@ fn reportAll(
     try report_run.all(out, board, image, run);
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
+    try report_timing.pendStores(out, image, parts.pend);
     try report_timing.takenFrom(out, image, parts.taken);
     try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);
