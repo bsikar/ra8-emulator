@@ -66,9 +66,34 @@ test "a store the model cannot show harmless refuses the closure" {
     var core = Fake{ .script = &.{ 10, 20, 30 }, .seam = &seam, .disturbs = &.{1} };
     const looked = try seam.look(&core, 0, idle.limits.probe);
     try std.testing.expect(!looked.closed);
-    // The steps still ran and are still owed to the clocks.
-    try std.testing.expectEqual(@as(usize, 3), looked.ran);
+    // Two, not the three it takes to come back round: the probe stops on
+    // the disturbing step rather than finishing a loop whose answer is
+    // already settled. The steps it did take are still owed to the clocks.
+    try std.testing.expectEqual(@as(usize, 2), looked.ran);
     try std.testing.expectEqual(@as(u64, 0), seam.closures);
+}
+
+test "a disturbed probe stops stepping instead of running its budget out" {
+    var seam = idle.Seam{};
+    var walking = [_]u32{0} ** (idle.limits.probe + 8);
+    for (&walking, 0..) |*slot, index| slot.* = @intCast(index + 1);
+    var core = Fake{ .script = &walking, .seam = &seam, .disturbs = &.{2} };
+    const looked = try seam.look(&core, 0, idle.limits.probe);
+    try std.testing.expect(!looked.closed);
+    // Without the early exit this walks the whole budget, because the
+    // state never returns to its opening and the disturbance is only
+    // consulted where a loop closes.
+    try std.testing.expectEqual(@as(usize, 3), looked.ran);
+    try std.testing.expectEqual(@as(usize, 3), core.steps);
+}
+
+test "an undisturbed probe still walks the whole budget" {
+    var seam = idle.Seam{};
+    var walking = [_]u32{0} ** (idle.limits.probe + 8);
+    for (&walking, 0..) |*slot, index| slot.* = @intCast(index + 1);
+    var core = Fake{ .script = &walking, .seam = &seam };
+    const looked = try seam.look(&core, 0, idle.limits.probe);
+    try std.testing.expectEqual(idle.limits.probe, looked.ran);
 }
 
 test "a loop wider than the probe budget is not seen" {
