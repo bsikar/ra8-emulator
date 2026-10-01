@@ -31,10 +31,12 @@
 //! the register. `counts_per_tick` below is an emulator-time choice in the
 //! same spirit as wdt.zig's, not a silicon number. IWDTCSTPR.SLCSTP halts
 //! the counter in Sleep, and Sleep is not modelled, so it rides too.
+const iwdt_ofs0 = @import("iwdt_ofs0.zig");
 const iwdt_refresh = @import("iwdt_refresh.zig");
 const iwdt_status = @import("iwdt_status.zig");
 const periph = @import("../registry.zig");
 
+pub const ofs0 = iwdt_ofs0;
 pub const refresh = iwdt_refresh;
 pub const status = iwdt_status;
 
@@ -89,10 +91,17 @@ pub const Iwdt = struct {
     iwdtcstpr: u8 = 0,
     sequence: iwdt_refresh.Sequence = .{},
     counter: u16 = full_scale,
-    /// The counter runs once a refresh has arrived. On silicon OFS0 starts
-    /// it at reset; option memory is not read here, and a blank one leaves
-    /// IWDTSTRT set, which is the stopped selection.
+    /// Whether the counter is running. Once the board has read OFS0
+    /// (applyOptionWord), OFS0 alone decides: auto-start arms it at reset,
+    /// and IWDTSTRT set leaves it stopped for good. A unit that was never
+    /// handed an option word, as in a bare test, still starts on its first
+    /// refresh.
     armed: bool = false,
+    /// The option word the board read at OFS0, once it has read one.
+    option_word: ?u32 = null,
+    /// Refresh sequences that arrived while OFS0 held the counter stopped.
+    /// On silicon they do nothing, so they start nothing here either.
+    stopped_refreshes: u32 = 0,
     flags: u16 = 0,
     /// Completed two-byte sequences that reloaded the counter.
     refreshes: u32 = 0,
@@ -118,7 +127,22 @@ pub const Iwdt = struct {
 
     pub fn quiet(self: *const Iwdt) bool {
         return !self.armed and self.refreshes == 0 and self.dropped == 0 and
-            self.flags == 0 and self.bad_acks == 0 and self.frozen_writes == 0;
+            self.flags == 0 and self.bad_acks == 0 and self.frozen_writes == 0 and
+            self.stopped_refreshes == 0;
+    }
+
+    /// Take the OFS0 word the image carries, the way the boot ROM does at
+    /// reset: auto-start arms a full counter, and IWDTSTRT set stops it.
+    pub fn applyOptionWord(self: *Iwdt, word: u32) void {
+        self.option_word = word;
+        self.armed = iwdt_ofs0.autoStarts(word);
+        self.counter = full_scale;
+    }
+
+    /// OFS0 was read and selected the stopped counter.
+    pub fn stoppedByOptions(self: *const Iwdt) bool {
+        const word = self.option_word orelse return false;
+        return !iwdt_ofs0.autoStarts(word);
     }
 
     /// One run-loop chunk of counting. The counter cannot be stopped by
@@ -144,6 +168,10 @@ pub const Iwdt = struct {
     fn refreshWrite(self: *Iwdt, value: u8) void {
         switch (self.sequence.accept(value)) {
             .reloaded => {
+                if (self.stoppedByOptions()) {
+                    self.stopped_refreshes +%= 1;
+                    return;
+                }
                 self.armed = true;
                 self.counter = full_scale;
                 self.refreshes +%= 1;

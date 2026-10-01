@@ -68,6 +68,12 @@ fn independent(board: *Board, out: Writer) !void {
         "IWDT: {d} refresh(es), counter {d}/{d}, {d} underflow(s), {s}\n",
         .{ unit.refreshes, unit.counter, iwdt.full_scale, unit.underflows, if (unit.armed) "running" else "stopped" },
     );
+    if (unit.stoppedByOptions()) {
+        try out.print(
+            "IWDT: stopped by OFS0 (0x{X:0>8}, IWDTSTRT set); {d} refresh sequence(s) started nothing\n",
+            .{ unit.option_word.?, unit.stopped_refreshes },
+        );
+    }
     if (unit.dropped != 0) {
         try out.print(
             "IWDT: {d} IWDTRR write(s) refreshed nothing (0x00 then 0xFF, in order, or the counter keeps falling)\n",

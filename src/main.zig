@@ -70,6 +70,14 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
     try core.attachWatchpoint(one);
 }
 
+/// Load the image, then read its option-setting memory the way the boot ROM
+/// does before the first instruction: src/board/option_memory.zig.
+fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
+    const written = try attachAll(core, image, parts, options);
+    ra8.board.option_memory.apply(board, core.*);
+    return written;
+}
+
 fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
     // Addresses come off the command line already parsed, so nothing here
     // can fail: an empty list counts nothing and attaches no hook.
@@ -123,7 +131,7 @@ pub fn main() !u8 {
     try board.attach(&core);
 
     var parts = Parts{};
-    const written = try attachAll(&core, image, &parts, options);
+    const written = try loadAll(&core, &board, image, &parts, options);
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
