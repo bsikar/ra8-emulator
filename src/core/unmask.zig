@@ -99,9 +99,11 @@ pub const Release = struct {
     /// it accepts interrupts at all, so no amount of stepping would have
     /// released it and the tick it would have carried does not exist.
     booting: u64 = 0,
-    /// Instructions stepped so far under the mask currently being waited
-    /// out, zeroed the moment it clears or no pend is masked at all.
+    /// Instructions run so far under the mask currently being waited out,
+    /// stepped and stretched alike, zeroed the moment it clears or no pend
+    /// is masked at all. `held_stepped` is the stepped part alone.
     held: u64 = 0,
+    held_stepped: u64 = 0,
     /// The most consecutive give-ups one mask ever caused, and the
     /// instructions stepped across them.
     ///
@@ -110,11 +112,19 @@ pub const Release = struct {
     /// anywhere near right. A mask that gives up once and is gone by the
     /// next boundary outlasted the bound by less than a chunk. One that
     /// gives up five times in a row held for at least five bounds of
-    /// stepping and is a different animal. Stepped instructions only, so
-    /// it is a floor: the ordinary stretches between those boundaries ran
-    /// under the same mask and are not counted here.
+    /// stepping and is a different animal.
+    ///
+    /// `longest_held` is the SPAN from that mask's first give-up to its
+    /// last: the stepping plus every ordinary stretch the run loop reports
+    /// through `ran` in between. Each of those stretches opened and closed
+    /// with PRIMASK set, so the span is the mask's length if nothing in the
+    /// middle cleared and re-set it, which the firmware's own code has to
+    /// settle and this cannot. `longest_stepped` is the stepping alone, the
+    /// floor that holds either way. The stretch in which the mask finally
+    /// cleared is not in either: where in it the clear landed is unknown.
     longest: u64 = 0,
     longest_held: u64 = 0,
+    longest_stepped: u64 = 0,
 
     /// Step until PRIMASK clears, at most `bound` instructions.
     pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
@@ -129,8 +139,7 @@ pub const Release = struct {
             if (!(try masked(core))) {
                 out.cleared = true;
                 self.lifted += 1;
-                self.run = 0;
-                self.held = 0;
+                self.forget();
                 self.enabled_once = true;
                 return out;
             }
@@ -138,9 +147,11 @@ pub const Release = struct {
         self.stuck += 1;
         self.run +%= 1;
         self.held +%= out.ran;
+        self.held_stepped +%= out.ran;
         if (self.run > self.longest) {
             self.longest = self.run;
             self.longest_held = self.held;
+            self.longest_stepped = self.held_stepped;
         }
         if (!self.enabled_once) self.booting +%= 1;
         self.gave_up.record(try core.register(.pc));
@@ -156,8 +167,21 @@ pub const Release = struct {
     /// says the firmware has finished bringing itself up.
     pub fn nothingMasked(self: *Release, core: anytype) !void {
         if (!(try masked(core))) self.enabled_once = true;
+        self.forget();
+    }
+
+    /// The run loop ran an ordinary stretch of `instructions`. While a
+    /// mask is being waited out it opened under that mask, so it is
+    /// charged to the span; it only counts once the next boundary finds
+    /// the mask still standing and gives up again.
+    pub fn ran(self: *Release, instructions: usize) void {
+        if (self.run != 0) self.held +%= instructions;
+    }
+
+    fn forget(self: *Release) void {
         self.run = 0;
         self.held = 0;
+        self.held_stepped = 0;
     }
 
     /// Whether anything happened worth a line at the end of a run.

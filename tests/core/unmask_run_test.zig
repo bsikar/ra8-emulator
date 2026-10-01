@@ -149,3 +149,44 @@ test "a later shorter run does not lower the stubborn figure" {
     try std.testing.expectEqual(@as(u64, 2), seam.longest);
     try std.testing.expectEqual(@as(u64, 8), seam.longest_held);
 }
+
+test "a stretch with no mask being waited out is charged nowhere" {
+    var seam = unmask.Release{};
+    seam.ran(500);
+    try std.testing.expectEqual(@as(u64, 0), seam.held);
+}
+
+test "a stretch between two give-ups joins the span but not the stepping" {
+    var core = Scripted{ .masks = &.{1} };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&core, 4);
+    seam.ran(100);
+    _ = try seam.lift(&core, 4);
+    try std.testing.expectEqual(@as(u64, 2), seam.longest);
+    try std.testing.expectEqual(@as(u64, 108), seam.longest_held);
+    try std.testing.expectEqual(@as(u64, 8), seam.longest_stepped);
+}
+
+test "the stretch in which the mask cleared is not in the span" {
+    var core = Scripted{ .masks = &.{1} };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&core, 4);
+    seam.ran(100);
+    var clear = Still{ .primask = 0 };
+    try seam.nothingMasked(&clear);
+    try std.testing.expectEqual(@as(u64, 4), seam.longest_held);
+    try std.testing.expectEqual(@as(u64, 0), seam.held);
+}
+
+test "a mask waited out by stepping drops the stretches charged to it" {
+    var stuck = Scripted{ .masks = &.{1} };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&stuck, 4);
+    seam.ran(100);
+    var clears = Scripted{ .masks = &.{ 1, 0 } };
+    _ = try seam.lift(&clears, 4);
+    try std.testing.expectEqual(@as(u64, 0), seam.held);
+    try std.testing.expectEqual(@as(u64, 0), seam.held_stepped);
+    seam.ran(100);
+    try std.testing.expectEqual(@as(u64, 0), seam.held);
+}
