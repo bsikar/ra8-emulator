@@ -23,9 +23,9 @@ test "a register the backends disagree on is reported with both values" {
     const result = try step.one(&pair.cpu, pair.theirs);
     const found = result.diverged;
     try std.testing.expectEqualStrings("hint", found.class);
-    try std.testing.expectEqual(ra8.core.cpu.regs.Name.r0, found.mismatch.name);
-    try std.testing.expectEqual(@as(u32, 0), found.mismatch.ours);
-    try std.testing.expectEqual(@as(u32, 1), found.mismatch.oracle);
+    try std.testing.expectEqual(ra8.core.cpu.regs.Name.r0, found.what.register.name);
+    try std.testing.expectEqual(@as(u32, 0), found.what.register.ours);
+    try std.testing.expectEqual(@as(u32, 1), found.what.register.oracle);
 }
 
 test "an encoding the Zig core does not know stops both, unstepped" {
