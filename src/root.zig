@@ -82,7 +82,9 @@ pub const core = struct {
         pub const reset = @import("core/cpu/reset.zig");
         pub const lockstep = struct {
             pub const diff = @import("core/cpu/lockstep/diff.zig");
+            pub const oracle = @import("core/cpu/lockstep/oracle.zig");
             pub const snapshot = @import("core/cpu/lockstep/snapshot.zig");
+            pub const step = @import("core/cpu/lockstep/step.zig");
             pub const tally = @import("core/cpu/lockstep/tally.zig");
         };
         pub const ops = struct {
