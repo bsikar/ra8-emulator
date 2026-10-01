@@ -6,4 +6,9 @@ src/core/cpu/conformance/suite.zig; `zig build test` fails when this file
 is stale or an encoding is missing. Regenerate with
 `RA8_BLESS_CONFORMANCE=1 zig build test`.
 
-No encodings claimed yet.
+| Encoding | Vectors |
+|---|---|
+| VNEG.F32 T1 | 7 |
+| VNEG.F64 T1 | 5 |
+| VABS.F32 T1 | 5 |
+| VABS.F64 T1 | 4 |
