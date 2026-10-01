@@ -64,9 +64,18 @@ fn onWrite(
     var standing: u32 = 0;
     if (c.uc.uc_mem_read(handle, memmap.scb.icsr, &standing, @sizeOf(u32)) != c.uc.UC_ERR_OK) return;
     if (standing & nvic.icsr_pendsvset != 0) {
-        pending.alreadyPending();
+        pending.alreadyPending(executing(handle));
         return;
     }
     pending.record();
     _ = c.uc.uc_emu_stop(handle);
+}
+
+/// The exception executing at the store, from IPSR. Zero is Thread mode,
+/// and an unreadable register reads as Thread mode too: this only labels a
+/// counter and must never be the reason a pend is handled differently.
+fn executing(handle: *c.uc.uc_engine) u16 {
+    var ipsr: u32 = 0;
+    if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_IPSR, &ipsr) != c.uc.UC_ERR_OK) return 0;
+    return @truncate(ipsr & nvic.ipsr_mask);
 }

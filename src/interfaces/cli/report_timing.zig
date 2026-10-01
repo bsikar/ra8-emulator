@@ -56,8 +56,8 @@ pub fn timing(
     }
     if (pending.swallowed != 0) {
         try out.print(
-            "time: {d} more pend(s) landed on one already standing and raised nothing\n",
-            .{pending.swallowed},
+            "time: {d} more pend(s) landed on one already standing and raised nothing, {d} of them inside a handler\n",
+            .{ pending.swallowed, pending.swallowed_in_handler },
         );
     }
     try out.print(
