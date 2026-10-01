@@ -48,8 +48,41 @@ test "a store past the last slot is counted, not dropped" {
     try std.testing.expectEqual(@as(usize, pend_sites.limits.sites), sites.used);
     sites.record(0x0200FFFF);
     sites.record(0x0200FFFF);
-    try std.testing.expectEqual(@as(usize, 2), sites.overflowed);
+    try std.testing.expectEqual(@as(usize, 1), sites.overflowed);
     try std.testing.expectEqual(@as(usize, pend_sites.limits.sites), sites.used);
+}
+
+test "a newcomer takes the thinnest slot rather than being refused" {
+    var sites = pend_sites.Sites{};
+    var pc: u32 = 0x02000000;
+    for (0..pend_sites.limits.sites) |_| {
+        sites.record(pc);
+        pc += 4;
+    }
+    for (0..5) |_| sites.record(0x02000000);
+    sites.record(0x0200FFFF);
+    const ranked = sites.ranked();
+    try std.testing.expectEqual(@as(u32, 0x02000000), ranked[0].pc);
+    try std.testing.expectEqual(@as(usize, 6), ranked[0].count);
+    var found = false;
+    for (ranked) |site| {
+        if (site.pc != 0x0200FFFF) continue;
+        found = true;
+        try std.testing.expectEqual(@as(usize, 2), site.count);
+    }
+    try std.testing.expect(found);
+    try std.testing.expectEqual(@as(usize, 1), sites.overflowed);
+}
+
+test "a busy site entered late still outranks the one-offs that filled the table" {
+    var sites = pend_sites.Sites{};
+    var pc: u32 = 0x02000000;
+    for (0..pend_sites.limits.sites) |_| {
+        sites.record(pc);
+        pc += 4;
+    }
+    for (0..40) |_| sites.record(0x02001654);
+    try std.testing.expectEqual(@as(u32, 0x02001654), sites.ranked()[0].pc);
 }
 
 test "a known address still counts once the table is full" {

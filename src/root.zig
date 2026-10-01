@@ -317,4 +317,5 @@ pub const board = struct {
     pub const report_dumps = @import("interfaces/cli/report_dumps.zig");
     pub const report_hotspots = @import("interfaces/cli/report_hotspots.zig");
     pub const report_timing = @import("interfaces/cli/report_timing.zig");
+    pub const report_mask = @import("interfaces/cli/report_mask.zig");
 };
