@@ -82,13 +82,17 @@ pub const Table = struct {
     }
 
     /// Count an arrival at `pc` and say which break, if any, ends the run
-    /// here. A disabled break neither counts nor stops.
+    /// here. A disabled break neither counts nor stops. A counted break
+    /// stops on its wanted arrival and on every one after it, as a break
+    /// a debugger continues past has to; `--break-sym`, which stops once,
+    /// keeps that rule in src/debug/break_hook.zig.
     pub fn hit(self: *Table, pc: u32) ?Id {
         const want = pc & ~breakpoint.limits.thumb_bit;
         for (self.slots[0..self.len]) |*slot| {
             if (!slot.enabled) continue;
             if (slot.point.address & ~breakpoint.limits.thumb_bit != want) continue;
-            return if (slot.point.count()) slot.id else null;
+            _ = slot.point.count();
+            return if (slot.point.reached) slot.id else null;
         }
         return null;
     }

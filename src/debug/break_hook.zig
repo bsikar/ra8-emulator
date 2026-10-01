@@ -35,10 +35,11 @@ pub const Link = struct {
         const stop = self.machine.onInstruction(event);
         if (self.machine.breaks.get(self.id)) |counted| self.point.* = counted;
         if (stop == null) return false;
-        // Arrivals after the wanted one keep counting, as they always did,
-        // so a report can say how many there were.
+        // The table stops on every arrival from the wanted one on. The flag
+        // stops on the wanted one only and keeps counting the rest, as it
+        // always did, so a report can say how many there were.
         self.machine.begin();
-        return true;
+        return self.point.seen == self.point.arrival;
     }
 };
 
