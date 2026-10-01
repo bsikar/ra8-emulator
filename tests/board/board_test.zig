@@ -124,6 +124,42 @@ test "a keyed SYSRESETREQ latches a software cause and asks for the reboot" {
     try std.testing.expectEqual(@as(u32, 1), unit.control.requests);
 }
 
+test "a watchdog reset asks for the reboot, not only the cause" {
+    var unit = board();
+    defer unit.deinit();
+    var ppb = Ppb{};
+    var pending = reboot.Reboot{ .vector_base = 0x0200_0000 };
+    unit.reboot = &pending;
+    unit.watchdog.reset_requested = true;
+    try unit.takeResetRequests(&ppb);
+    try std.testing.expect(unit.causes.latched(reset.cause.wdtrf));
+    try std.testing.expect(pending.requested);
+}
+
+test "an IWDT reset asks for the reboot too" {
+    var unit = board();
+    defer unit.deinit();
+    var ppb = Ppb{};
+    var pending = reboot.Reboot{ .vector_base = 0x0200_0000 };
+    unit.reboot = &pending;
+    unit.heartbeat.reset_requested = true;
+    try unit.takeResetRequests(&ppb);
+    try std.testing.expect(unit.causes.latched(reset.cause.iwdtrf));
+    try std.testing.expect(pending.requested);
+}
+
+test "a watchdog reset takes the interrupt latches down" {
+    var unit = board();
+    defer unit.deinit();
+    var ppb = Ppb{};
+    var pending = reboot.Reboot{ .vector_base = 0x0200_0000 };
+    unit.reboot = &pending;
+    unit.events.links[3] = icu.field.ir | 7;
+    unit.watchdog.reset_requested = true;
+    try unit.takeResetRequests(&ppb);
+    try std.testing.expect(!unit.events.latched(3));
+}
+
 test "a keyless SYSRESETREQ reboots nothing" {
     var unit = board();
     defer unit.deinit();

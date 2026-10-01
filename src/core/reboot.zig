@@ -1,7 +1,7 @@
 //! The warm reboot: what performing a reset request does to the core.
 //!
-//! A block decides the part should reset (AIRCR.SYSRESETREQ today, a watchdog
-//! underflow one day); the core is the engine's, so the board asks here and
+//! A block decides the part should reset (AIRCR.SYSRESETREQ, or a watchdog
+//! underflow with RSTIRQS set); the core is the engine's, so the board asks here and
 //! the run loop performs it at the next chunk boundary.
 //!
 //! Performing it is deliberately small. SP and PC come back out of the vector

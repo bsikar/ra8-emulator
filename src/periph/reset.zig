@@ -51,8 +51,7 @@ pub const cause = struct {
     pub const rstsr1_all: u32 = iwdtrf | wdtrf | swrf;
 };
 
-/// What asked for the reboot. The watchdog is the only source wired up so far;
-/// a software reset arrives once the engine models AIRCR.SYSRESETREQ.
+/// What asked for the reboot: either watchdog, or AIRCR.SYSRESETREQ.
 pub const Source = enum { watchdog, iwdt, software };
 
 /// The latched cause flags plus the pending reboot request.
