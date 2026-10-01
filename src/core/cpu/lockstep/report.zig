@@ -1,6 +1,7 @@
 //! How a lockstep run ended, in one line, then the instructions that led
 //! there.
 const run_mod = @import("run.zig");
+const states = @import("states.zig");
 
 pub fn write(out: anytype, lock: *const run_mod.Run, ended: run_mod.End) !void {
     switch (ended) {
@@ -9,6 +10,7 @@ pub fn write(out: anytype, lock: *const run_mod.Run, ended: run_mod.End) !void {
             try out.print("lockstep: divergence after {} ({s}), ", .{ found.instr, found.class });
             try found.what.write(out);
             try out.writeAll("\n");
+            try states.write(out, found.ours, found.oracle);
         },
         .stopped => |why| switch (why) {
             .unknown => |instr| try out.print("lockstep: zig core stopped, unknown encoding at {}\n", .{instr}),

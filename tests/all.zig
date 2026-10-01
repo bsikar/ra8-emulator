@@ -39,6 +39,7 @@ test {
     _ = @import("core/cpu/lockstep/report_test.zig");
     _ = @import("core/cpu/lockstep/run_test.zig");
     _ = @import("core/cpu/lockstep/snapshot_test.zig");
+    _ = @import("core/cpu/lockstep/states_test.zig");
     _ = @import("core/cpu/lockstep/step_test.zig");
     _ = @import("core/cpu/lockstep/tally_test.zig");
     _ = @import("core/cpu/lockstep/writes_test.zig");

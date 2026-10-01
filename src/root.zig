@@ -102,6 +102,7 @@ pub const core = struct {
             pub const report = @import("core/cpu/lockstep/report.zig");
             pub const run = @import("core/cpu/lockstep/run.zig");
             pub const snapshot = @import("core/cpu/lockstep/snapshot.zig");
+            pub const states = @import("core/cpu/lockstep/states.zig");
             pub const step = @import("core/cpu/lockstep/step.zig");
             pub const tally = @import("core/cpu/lockstep/tally.zig");
             pub const writes = @import("core/cpu/lockstep/writes.zig");
