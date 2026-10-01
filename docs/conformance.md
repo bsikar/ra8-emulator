@@ -12,3 +12,7 @@ is stale or an encoding is missing. Regenerate with
 | VNEG.F64 T1 | 5 |
 | VABS.F32 T1 | 5 |
 | VABS.F64 T1 | 4 |
+| VADD.F32 T1 | 18 |
+| VADD.F64 T1 | 3 |
+| VSUB.F32 T1 | 10 |
+| VSUB.F64 T1 | 3 |
