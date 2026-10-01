@@ -69,6 +69,7 @@ const Parts = struct {
     taken: ra8.core.tally.Tally = .{},
     timebase: clocks.Clocks = .{},
     pend: ra8.core.pend_break.Pend = .{},
+    pacing: ra8.core.pend_pace.Pace = .{},
     hits: ra8.core.pc_hits.Hits = .{},
 };
 
@@ -171,6 +172,7 @@ pub fn main() !u8 {
         .idle = &parts.idle,
         .unmask = &parts.release,
         .pend = &parts.pend,
+        .pend_pace = &parts.pacing,
         .pcs = &parts.pcs,
         .fns = &parts.fns.?,
         .taken_from = &parts.taken,
@@ -178,7 +180,7 @@ pub fn main() !u8 {
         .per_boundary = options.chunk_instructions,
     }, second);
 
-    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .pend = parts.pend, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
+    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .pend = parts.pend, .pacing = parts.pacing, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 

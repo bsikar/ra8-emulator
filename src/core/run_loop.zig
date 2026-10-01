@@ -19,6 +19,7 @@ const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
+const pend_pace = @import("pend_pace.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -352,8 +353,25 @@ fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usi
 /// round rather than once: the firmware arms SysTick well after reset,
 /// and may re-arm it.
 fn paceFor(core: anytype, configured: cadence.Cadence, session: Session) cadence.Cadence {
-    const clock = session.timebase orelse return configured;
-    return configured.narrowedTo(clock.period(core));
+    var pace = configured;
+    if (session.timebase) |clock| pace = pace.narrowedTo(clock.period(core));
+    return whileStanding(pace, session);
+}
+
+/// Narrow this boundary while a pend the firmware wrote is still standing
+/// unserved, so the controller is asked again within a couple of thousand
+/// instructions instead of a whole chunk.
+///
+/// Read off the controller's own run of unserved boundaries, which the
+/// boundary just passed updated, so a pend that was entered puts the width
+/// straight back. Nothing is forced and no time is invented: the stretch
+/// is charged the instructions it actually runs, the same as any other.
+/// src/core/pend_pace.zig carries why the boundary is the thing to shorten
+/// and `--drain-pends` is not.
+fn whileStanding(pace: cadence.Cadence, session: Session) cadence.Cadence {
+    const tracker = session.pend_pace orelse return pace;
+    const controller = session.interrupts orelse return pace;
+    return .{ .per_boundary = tracker.widthFor(pace.per_boundary, controller.standing.run) };
 }
 
 /// A hook that stopped the chunk on its own instruction rather than at a
