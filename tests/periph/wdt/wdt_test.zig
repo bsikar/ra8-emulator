@@ -46,11 +46,11 @@ test "a lone 0xFF is not a refresh sequence" {
     try std.testing.expectEqual(@as(u32, 0), unit.refreshes);
 }
 
-test "an armed counter runs down a tick at a time" {
+test "an armed counter runs down a count at a time" {
     var unit = openWindow();
     refresh(&unit);
     const start = unit.counter;
-    for (0..3) |_| unit.tick();
+    for (0..3) |_| unit.count();
     try std.testing.expectEqual(start - 3, unit.counter);
 }
 
@@ -62,12 +62,51 @@ test "a longer timeout period reloads further, which dev flattens to one constan
     try std.testing.expect(long.reload() > short.reload());
 }
 
-test "the clock divider scales the reload too" {
+test "the divider slows the count and leaves the reload alone" {
     var plain = wdt.Wdt.init();
-    plain.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 0, 3, 3));
+    plain.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 3, 3));
     var divided = wdt.Wdt.init();
     divided.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 4, 3, 3));
-    try std.testing.expectEqual(plain.reload() * 16, divided.reload());
+    try std.testing.expectEqual(plain.reload(), divided.reload());
+}
+
+test "a 1024-cycle period reloads CNTVAL to 1023, the count the firmware compares" {
+    var unit = openWindow();
+    refresh(&unit);
+    try std.testing.expectEqual(@as(u16, 1023), statusOf(&unit));
+}
+
+test "the counter moves once per ticksPerCount ticks, not once a tick" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 3, 3));
+    refresh(&unit);
+    const step = wdt.clock.ticksPerCount(1);
+    for (0..step - 1) |_| unit.tick();
+    try std.testing.expectEqual(unit.reload(), unit.counter);
+    unit.tick();
+    try std.testing.expectEqual(unit.reload() - 1, unit.counter);
+}
+
+test "a refresh starts the next count afresh" {
+    var unit = openWindow();
+    refresh(&unit);
+    for (0..wdt.clock.ticksPerCount(0) - 1) |_| unit.tick();
+    refresh(&unit);
+    unit.tick();
+    try std.testing.expectEqual(unit.reload(), unit.counter);
+}
+
+test "a 50 ms supervisor at TOPS 1024, CKS /4 never runs its watchdog out" {
+    // wdt_supervisor_demo: refresh every 50 ms, 1000 ticks of 50000
+    // instructions at 1e9 instructions a second.
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 3, 3));
+    for (0..40) |_| {
+        refresh(&unit);
+        for (0..1000) |_| unit.tick();
+    }
+    try std.testing.expectEqual(@as(u32, 0), unit.underflows);
+    try std.testing.expectEqual(@as(u32, 40), unit.refreshes);
 }
 
 test "a refresh before the window opens is refused and latches REFEF" {
@@ -76,7 +115,7 @@ test "a refresh before the window opens is refused and latches REFEF" {
     unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 0, 0, 3));
     refresh(&unit);
     const loaded = unit.counter;
-    unit.tick();
+    unit.count();
     refresh(&unit);
     try std.testing.expectEqual(@as(u32, 1), unit.early);
     try std.testing.expectEqual(loaded - 1, unit.counter);
@@ -87,7 +126,7 @@ test "the same refresh inside the window reloads and latches nothing" {
     var unit = wdt.Wdt.init();
     unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 0, 0, 3));
     refresh(&unit);
-    while (unit.counter > unit.reload() / 4) unit.tick();
+    while (unit.counter > unit.reload() / 4) unit.count();
     refresh(&unit);
     try std.testing.expectEqual(@as(u32, 0), unit.early);
     try std.testing.expectEqual(@as(u32, 2), unit.refreshes);
@@ -99,8 +138,8 @@ test "a refresh after the window closes is refused as well" {
     // RPES 75%: the window shuts once a quarter of the count has gone.
     unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 0, 3, 0));
     refresh(&unit);
-    while (unit.counter > (unit.reload() * 3) / 4) unit.tick();
-    unit.tick();
+    while (unit.counter > (unit.reload() * 3) / 4) unit.count();
+    unit.count();
     refresh(&unit);
     try std.testing.expectEqual(@as(u32, 1), unit.early);
     try std.testing.expect(statusOf(&unit) & wdt.status.refef != 0);
@@ -109,7 +148,7 @@ test "a refresh after the window closes is refused as well" {
 test "running out latches UNDFF once and stops the counter" {
     var unit = openWindow();
     refresh(&unit);
-    for (0..unit.reload() + 8) |_| unit.tick();
+    for (0..unit.reload() + 8) |_| unit.count();
     try std.testing.expectEqual(@as(u32, 1), unit.underflows);
     try std.testing.expect(!unit.armed);
     try std.testing.expect(statusOf(&unit) & wdt.status.undff != 0);
@@ -118,13 +157,13 @@ test "running out latches UNDFF once and stops the counter" {
 test "an underflow in reset mode asks for a reset, in IRQ mode it does not" {
     var irq = openWindow();
     refresh(&irq);
-    for (0..irq.reload() + 1) |_| irq.tick();
+    for (0..irq.reload() + 1) |_| irq.count();
     try std.testing.expect(!irq.reset_requested);
 
     var reset = openWindow();
     reset.write(wdt.win_base + wdt.off.wdtrcr, 1, wdt.reset_control.rstirqs);
     refresh(&reset);
-    for (0..reset.reload() + 1) |_| reset.tick();
+    for (0..reset.reload() + 1) |_| reset.count();
     try std.testing.expect(reset.reset_requested);
 }
 
@@ -133,7 +172,7 @@ test "a refresh error in reset mode asks for a reset too" {
     unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 0, 0, 3));
     unit.write(wdt.win_base + wdt.off.wdtrcr, 1, wdt.reset_control.rstirqs);
     refresh(&unit);
-    unit.tick();
+    unit.count();
     refresh(&unit);
     try std.testing.expect(unit.reset_requested);
 }
@@ -141,7 +180,7 @@ test "a refresh error in reset mode asks for a reset too" {
 test "a flag is cleared by writing zero at it, and a one clears nothing" {
     var unit = openWindow();
     refresh(&unit);
-    for (0..unit.reload() + 1) |_| unit.tick();
+    for (0..unit.reload() + 1) |_| unit.count();
     try std.testing.expect(statusOf(&unit) & wdt.status.undff != 0);
 
     // The ack every other flag on this part wants: write the bit as a one.
@@ -234,7 +273,7 @@ test "a second WDTRCR store cannot move the part off reset-on-underflow" {
     try std.testing.expectEqual(@as(u32, wdt.reset_control.rstirqs), unit.read(wdt.win_base + wdt.off.wdtrcr, 1));
     // The underflow still asks for a reset, because RSTIRQS never came off.
     refresh(&unit);
-    for (0..unit.reload() + 2) |_| unit.tick();
+    for (0..unit.reload() + 2) |_| unit.count();
     try std.testing.expect(unit.reset_requested);
 }
 
@@ -259,7 +298,7 @@ test "a byte store spends WDTCR's one write, so the other half never lands" {
 test "the refresh register is not one of the three and takes every sequence" {
     var unit = openWindow();
     refresh(&unit);
-    for (0..unit.reload()) |_| unit.tick();
+    for (0..unit.reload()) |_| unit.count();
     refresh(&unit);
     try std.testing.expectEqual(@as(u32, 2), unit.refreshes);
     try std.testing.expectEqual(@as(u32, 0), unit.locked_writes);
