@@ -337,6 +337,7 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
 /// them in order.
 fn fitBoard(board: *Board, options: cli.Options) !void {
     board.part = options.part;
+    board.wire.click = options.click;
     try prepareCard(board, options);
     queueTouches(board, options);
     try setBattery(board, options);

@@ -10,9 +10,8 @@ const sd_format = @import("../../periph/sd/sd_format.zig");
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
-    \\                    [--dump-sd BLOCK]
-    \\                    [--touch X,Y]
-    \\                    [--battery PCT] [--charge]
+    \\                    [--dump-sd BLOCK] [--touch X,Y]
+    \\                    [--battery PCT] [--charge] [--click]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
@@ -76,6 +75,7 @@ pub const usage =
     \\  --battery PCT      state-of-charge the fuel gauge reports (default 72)
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
+    \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
     \\
 ;
 
@@ -138,9 +138,10 @@ pub const Options = struct {
     /// firmware reads.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,
-    /// What the fuel gauge on the I2C line says is in the battery. The
-    /// percent is range-checked by the gauge itself, not here.
+    /// What the fuel gauge says is in the battery; the gauge range-checks it.
     battery: max17048.Battery = .{},
+    /// Fit the Click module, so the IMU and the fuel gauge answer at all.
+    click: bool = false,
     /// Globals to read out of RAM once the run is over, in the order asked.
     dump: [dump_limit][]const u8 = .{""} ** dump_limit,
     dump_count: usize = 0,
@@ -360,6 +361,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.trace_sd = true;
     } else if (std.mem.eql(u8, flag, "--charge")) {
         options.battery.charging = true;
+    } else if (std.mem.eql(u8, flag, "--click")) {
+        options.click = true;
     } else if (std.mem.eql(u8, flag, "--sd-size")) {
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {

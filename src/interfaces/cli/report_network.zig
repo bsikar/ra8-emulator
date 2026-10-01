@@ -35,6 +35,21 @@ fn i2c(board: *Board, out: Writer) !void {
     try panel(board, out);
     try imu(board, out);
     try gauge(board, out);
+    try optional(board, out);
+}
+
+/// Which optional parts the run fitted. The Click-module parts are not on the
+/// EK-RA8D2, so a run without `--click` answers nothing at their addresses,
+/// and a firmware probing for them should be read against this line.
+fn optional(board: *Board, out: Writer) !void {
+    const wire = &board.wire;
+    if (!wire.click and wire.quiet()) return;
+    const addresses = .{ @as(u8, lsm6dso.address), @as(u8, max17048.address) };
+    if (wire.click) {
+        try out.print("I2C optional parts: Click module fitted, LSM6DSO 0x{X:0>2} and MAX17048 0x{X:0>2}\n", addresses);
+    } else {
+        try out.print("I2C optional parts: none fitted, nothing answers at 0x{X:0>2} or 0x{X:0>2} (--click fits them)\n", addresses);
+    }
 }
 
 /// The LSM6DSO IMU at 0x6B. A store into a register the part measures for
