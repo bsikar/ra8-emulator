@@ -98,14 +98,14 @@ test "an underflow with RSTIRQS set reaches the reset block through the board" {
     defer unit.deinit();
     var ppb = Ppb{};
     // Arm the counter the way the refresh sequence does, ask for a reset on
-    // underflow, then run it dry a boundary at a time.
+    // underflow, then run it dry a watchdog count at a time.
     unit.watchdog.wdtrcr = wdt.reset_control.rstirqs;
     unit.watchdog.armed = true;
     unit.watchdog.counter = 1;
-    unit.watchdog.tick();
+    unit.watchdog.count();
     try unit.takeResetRequests(&ppb);
     try std.testing.expect(unit.causes.quiet());
-    unit.watchdog.tick();
+    unit.watchdog.count();
     try unit.takeResetRequests(&ppb);
     try std.testing.expectEqual(@as(u32, 1), unit.watchdog.underflows);
     try std.testing.expect(unit.causes.latched(reset.cause.wdtrf));

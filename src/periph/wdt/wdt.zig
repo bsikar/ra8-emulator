@@ -30,10 +30,12 @@
 //!
 //! Three: dev maps every timeout to one constant number of chunks, so a
 //! firmware that shortens its timeout period sees no change and a firmware
-//! that lengthens it sees no change either. The emulator has no watchdog clock
-//! and absolute time is not modelled, but TOPS and CKS are at least ordered
-//! here: the reload is the configured cycle count scaled down to ticks, so a
-//! longer configured timeout takes proportionally longer to trip.
+//! that lengthens it sees no change either. Here the counter holds watchdog
+//! counts, TOPS cycles less one after a reload the way CNTVAL reads on
+//! silicon, so a driver comparing CNTVAL against its own window bounds
+//! (wdt_window_demo checks 256..768 of 1024) reads the units it expects.
+//! How many ticks one count takes comes from src/periph/wdt/wdt_clock.zig,
+//! which carries the bench's measured rate.
 //!
 //! Four: the three control registers take one write each after reset and are
 //! deaf afterwards (HUM Ch 27.3.2, and see src/periph/wdt_write_once.zig).
@@ -49,7 +51,7 @@
 //! though only RSTIRQS is implemented, and the odd byte above each 8-bit
 //! control register still reaches it the way it always has here. Both are the
 //! narrow-access vein, not this rule.
-const cadence = @import("../../core/cadence.zig");
+pub const clock = @import("wdt_clock.zig");
 const periph = @import("../registry.zig");
 const write_once = @import("wdt_write_once.zig");
 
@@ -104,10 +106,6 @@ pub const count_stop = struct {
 /// TOPS[1:0]: the counter's full reload, in watchdog cycles.
 pub const tops_cycles = [4]u32{ 1024, 4096, 8192, 16384 };
 
-/// CKS[3:0]: the PCLKB divider in front of the counter. The encodings this
-/// part leaves reserved divide by 1, which is what an unprogrammed CKS reads.
-pub const cks_divider = [16]u32{ 1, 1, 1, 1, 16, 32, 64, 1, 256, 512, 2048, 8192, 1, 1, 1, 1 };
-
 /// RPSS[1:0]: where the permitted window opens, as a percentage of the count
 /// still to run. 100% means the window is open from the reload.
 pub const window_start_percent = [4]u8{ 25, 50, 75, 100 };
@@ -115,24 +113,8 @@ pub const window_start_percent = [4]u8{ 25, 50, 75, 100 };
 /// RPES[1:0]: where the window closes. 0% means it stays open to underflow.
 pub const window_end_percent = [4]u8{ 75, 50, 25, 0 };
 
-/// How many instructions one watchdog cycle stands for. dev charged 128
-/// cycles per 500000-instruction chunk, which is this number, and pinning the
-/// watchdog to instructions rather than to boundaries is what keeps a
-/// timeout the same length of run whatever the cadence is: a finer boundary
-/// (src/core/cadence.zig) has to make the counter last proportionally more
-/// ticks, or a firmware that refreshed in time starts tripping its watchdog
-/// for no reason it can see.
-pub const instructions_per_cycle: u32 = 3906;
-
-/// One emulated tick is one run-loop boundary, and this is how many watchdog
-/// cycles that stands for. Derived, so the shortest timeout (1024 cycles,
-/// divide by 1) still takes several ticks to run out and the longest stays
-/// inside a normal run budget.
-pub const cycles_per_tick: u32 = @max(1, cadence.instructions / instructions_per_cycle);
-
-/// The largest reload the counter can hold, so a long timeout saturates
-/// instead of wrapping into a short one.
-pub const max_ticks: u32 = status.cntval;
+/// The largest count CNTVAL can hold.
+pub const max_count: u32 = status.cntval;
 
 pub const Wdt = struct {
     wdtcr: u16 = 0,
@@ -143,6 +125,8 @@ pub const Wdt = struct {
     last_rr: u8 = 0xFF,
     armed: bool = false,
     counter: u32 = 0,
+    /// Ticks run since the counter last moved.
+    pace: u32 = 0,
     flags: u16 = 0,
     /// Refreshes that reloaded the counter.
     refreshes: u32 = 0,
@@ -169,12 +153,10 @@ pub const Wdt = struct {
             self.early == 0 and self.bad_acks == 0 and self.locked_writes == 0;
     }
 
-    /// The full reload for the programmed TOPS and CKS, in ticks.
+    /// The full reload for the programmed TOPS, in watchdog counts: a
+    /// 1024-cycle period reloads to 1023 and counts down to zero.
     pub fn reload(self: *const Wdt) u32 {
-        const cycles = tops_cycles[self.wdtcr & control.tops];
-        const divider = cks_divider[(self.wdtcr & control.cks) >> control.cks_shift];
-        const ticks = (cycles / cycles_per_tick) * divider;
-        return @min(@max(ticks, 1), max_ticks);
+        return @min(tops_cycles[self.wdtcr & control.tops] - 1, max_count);
     }
 
     /// True while the counter sits inside the refresh window RPSS/RPES marks
@@ -188,10 +170,20 @@ pub const Wdt = struct {
         return self.counter <= opens and self.counter >= closes;
     }
 
-    /// One run-loop chunk of counting. An armed counter that reaches zero
-    /// underflows once: the flag latches, a reset is asked for in RSTIRQS
-    /// mode, and the counter disarms so it cannot fire again unrefreshed.
+    /// One run-loop chunk. The counter moves once every
+    /// `clock.ticksPerCount` of these at the programmed divider.
     pub fn tick(self: *Wdt) void {
+        if (!self.armed) return;
+        self.pace += 1;
+        if (self.pace < clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift))) return;
+        self.pace = 0;
+        self.count();
+    }
+
+    /// One watchdog count. An armed counter that reaches zero underflows
+    /// once: the flag latches, a reset is asked for in RSTIRQS mode, and the
+    /// counter disarms so it cannot fire again unrefreshed.
+    pub fn count(self: *Wdt) void {
         if (!self.armed) return;
         if (self.counter > 0) {
             self.counter -= 1;
@@ -217,6 +209,7 @@ pub const Wdt = struct {
         }
         self.armed = true;
         self.counter = self.reload();
+        self.pace = 0;
         self.refreshes +%= 1;
     }
 
