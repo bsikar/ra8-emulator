@@ -29,7 +29,11 @@ test {
     _ = @import("core/cpu/regs_test.zig");
     _ = @import("core/cpu/reset_test.zig");
     _ = @import("core/cpu/lockstep/diff_test.zig");
+    _ = @import("core/cpu/lockstep/history_test.zig");
+    _ = @import("core/cpu/lockstep/mode_test.zig");
     _ = @import("core/cpu/lockstep/oracle_test.zig");
+    _ = @import("core/cpu/lockstep/report_test.zig");
+    _ = @import("core/cpu/lockstep/run_test.zig");
     _ = @import("core/cpu/lockstep/snapshot_test.zig");
     _ = @import("core/cpu/lockstep/step_test.zig");
     _ = @import("core/cpu/lockstep/tally_test.zig");

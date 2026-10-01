@@ -8,6 +8,18 @@
 const engine = @import("../engine.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
 const cpu_mod = @import("cpu.zig");
+const elf = @import("../elf.zig");
+const Choice = @import("choice.zig").Choice;
+const lockstep_mode = @import("lockstep/mode.zig");
+
+/// The hand-off from main for any CPU but Unicorn.
+pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
+    return switch (choice) {
+        .unicorn => unreachable,
+        .zig => run(out, core, vector_base, budget),
+        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget),
+    };
+}
 
 /// Run the image already loaded into `core` on the Zig core, print how it
 /// ended, and return the exit status: 0 when the budget was spent, 1 when
