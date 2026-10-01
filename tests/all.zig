@@ -40,6 +40,7 @@ test {
     _ = @import("debug/breakpoint_test.zig");
     _ = @import("debug/break_table_test.zig");
     _ = @import("debug/stop_machine_test.zig");
+    _ = @import("debug/watch_table_test.zig");
     _ = @import("debug/pc_hits_test.zig");
     _ = @import("debug/watchpoint_test.zig");
     _ = @import("debug/spacing_test.zig");

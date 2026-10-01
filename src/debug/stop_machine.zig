@@ -19,6 +19,7 @@
 //! and only then does the machine start asking.
 const break_table = @import("break_table.zig");
 const breakpoint = @import("breakpoint.zig");
+const watch_table = @import("watch_table.zig");
 
 /// What the CPU is about to execute, as the driver sees it.
 pub const Event = struct {
@@ -42,6 +43,9 @@ pub const Stop = union(enum) {
     stepped,
     /// A break counted the arrival it was waiting for.
     breakpoint: break_table.Id,
+    /// A watched range was read or written. The access has happened and
+    /// the instruction that made it has retired, the way GDB reports one.
+    watchpoint: watch_table.Hit,
     /// Someone asked the running session to halt.
     halt_requested,
 };
@@ -57,11 +61,16 @@ const Target = struct {
 
 pub const Machine = struct {
     breaks: break_table.Table = .{},
+    watches: watch_table.Table = .{},
     mode: Mode = .halted,
     /// Set by `resume`; cleared once the instruction resumed on has run.
     resumed: bool = false,
     halt_pending: bool = false,
     target: ?Target = null,
+    /// A watch tripped during the instruction that just ran. It is reported
+    /// before the next one, so the stop lands after the access, never
+    /// halfway through the instruction that made it.
+    watch_pending: ?watch_table.Hit = null,
 
     /// Run until a break or a halt request.
     pub fn proceed(self: *Machine) void {
@@ -99,6 +108,7 @@ pub const Machine = struct {
             self.armFrom(event);
             return null;
         }
+        if (self.watch_pending) |tripped| return self.halt(.{ .watchpoint = tripped });
         if (self.halt_pending) return self.halt(.halt_requested);
         if (self.breaks.hit(event.pc)) |id| return self.halt(.{ .breakpoint = id });
         return switch (self.mode) {
@@ -108,10 +118,18 @@ pub const Machine = struct {
         };
     }
 
+    /// Hand the machine a bus access made by the instruction now running.
+    /// The stop it may cause is reported on the next `onInstruction`.
+    pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access) void {
+        if (self.mode == .halted or self.watch_pending != null) return;
+        self.watch_pending = self.watches.hit(address, width, access);
+    }
+
     fn start(self: *Machine, mode: Mode, target: ?Target) void {
         self.mode = mode;
         self.resumed = true;
         self.halt_pending = false;
+        self.watch_pending = null;
         self.target = target;
     }
 
@@ -134,6 +152,7 @@ pub const Machine = struct {
     fn halt(self: *Machine, why: Stop) Stop {
         self.mode = .halted;
         self.halt_pending = false;
+        self.watch_pending = null;
         self.target = null;
         return why;
     }
