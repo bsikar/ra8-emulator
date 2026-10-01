@@ -77,11 +77,24 @@ fn onWrite(
         // and the thread must not be allowed to carry on past it. Nothing
         // is raised here: the bit was already up, and the stop only buys
         // the controller another look at it.
-        if (pending.again) _ = c.uc.uc_emu_stop(handle);
+        if (pending.again) {
+            pending.endedAt(programCounter(handle));
+            _ = c.uc.uc_emu_stop(handle);
+        }
         return;
     }
     pending.record();
+    pending.endedAt(programCounter(handle));
     _ = c.uc.uc_emu_stop(handle);
+}
+
+/// The address of the storing instruction. Stopping here leaves the
+/// program counter ON it rather than past it, so this is also the address
+/// the next stretch will open on if nothing moves it along.
+fn programCounter(handle: *c.uc.uc_engine) u32 {
+    var pc: u32 = 0;
+    if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_PC, &pc) != c.uc.UC_ERR_OK) return 0;
+    return pc;
 }
 
 /// The exception executing at the store, from IPSR. Zero is Thread mode,

@@ -77,19 +77,19 @@ test "the worst stretch is the most swallowed stores between two boundaries" {
     pending.alreadyPending(0);
     pending.alreadyPending(0);
     pending.alreadyPending(0);
-    pending.boundary();
+    pending.boundary(0);
     pending.alreadyPending(0);
-    pending.boundary();
+    pending.boundary(0);
     try std.testing.expectEqual(@as(usize, 3), pending.longest_stretch);
     try std.testing.expectEqual(@as(usize, 2), pending.stretches);
 }
 
 test "a stretch that swallowed nothing is not counted" {
     var pending = pend_break.Pend{};
-    pending.boundary();
-    pending.boundary();
+    pending.boundary(0);
+    pending.boundary(0);
     pending.alreadyPending(0);
-    pending.boundary();
+    pending.boundary(0);
     try std.testing.expectEqual(@as(usize, 1), pending.stretches);
     try std.testing.expectEqual(@as(usize, 1), pending.longest_stretch);
 }
@@ -136,4 +136,59 @@ test "no second look is asked for unless it was switched on" {
     try std.testing.expect(!pending.again);
     try std.testing.expectEqual(@as(usize, 0), pending.looks);
     try std.testing.expectEqual(@as(usize, 2), pending.swallowed);
+}
+
+test "a stretch that opens where the last one ended is counted" {
+    var pending = pend_break.Pend{};
+    pending.record();
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 1), pending.reentered);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.reentered_at);
+}
+
+test "a stretch that opens past the store is not counted" {
+    var pending = pend_break.Pend{};
+    pending.record();
+    pending.endedAt(0x02002458);
+    pending.boundary(0x0200245A);
+    try std.testing.expectEqual(@as(usize, 0), pending.reentered);
+    try std.testing.expectEqual(@as(u32, 0), pending.reentered_at);
+}
+
+test "the ended address is spent by the boundary that reads it" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 1), pending.reentered);
+}
+
+test "a boundary with no store behind it counts nothing" {
+    var pending = pend_break.Pend{};
+    pending.boundary(0);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 0), pending.reentered);
+    try std.testing.expect(!pending.ended);
+}
+
+test "the first re-entry address is kept, not the latest" {
+    var pending = pend_break.Pend{};
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    pending.endedAt(0x0200213E);
+    pending.boundary(0x0200213E);
+    try std.testing.expectEqual(@as(usize, 2), pending.reentered);
+    try std.testing.expectEqual(@as(u32, 0x02002458), pending.reentered_at);
+}
+
+test "closing the swallow books still works alongside the address check" {
+    var pending = pend_break.Pend{};
+    pending.alreadyPending(0);
+    pending.alreadyPending(0);
+    pending.endedAt(0x02002458);
+    pending.boundary(0x02002458);
+    try std.testing.expectEqual(@as(usize, 2), pending.longest_stretch);
+    try std.testing.expectEqual(@as(usize, 1), pending.stretches);
+    try std.testing.expectEqual(@as(usize, 1), pending.reentered);
 }

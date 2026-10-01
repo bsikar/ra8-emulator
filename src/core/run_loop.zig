@@ -47,7 +47,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         // Opening a stretch closes the one before it, so a pend that was
         // swallowed can be read against the boundary that failed to drain
         // it. src/core/pend_break.zig carries why that matters.
-        if (session.pend) |pending| pending.boundary();
+        if (session.pend) |pending| pending.boundary(pc);
         const pace = paceFor(core, configured, session);
         const chunk = pace.chunk(remaining);
         if (try stretch(core, pc, chunk, session)) |taken| {

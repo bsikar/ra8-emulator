@@ -105,6 +105,33 @@ pub const Pend = struct {
     /// Second looks given, so the cost of this is readable rather than
     /// assumed.
     looks: usize = 0,
+    /// The address of the store that ended the stretch running now, and
+    /// whether one has been written at all.
+    ///
+    /// The hook stops the stretch AS THE STORE HAPPENS, which leaves the
+    /// program counter on the store rather than past it. That is the
+    /// right place to stop and the wrong place to come back to: if the
+    /// controller takes the exception here, the return address it stacks
+    /// is the store itself, and the thread re-runs it the moment the
+    /// handler returns, asking for a switch it has already been given.
+    /// Whether that actually happens is not a thing to reason about from
+    /// the instruction stream, so it is measured.
+    ended_at: u32 = 0,
+    ended: bool = false,
+    /// Stretches that opened on the very address the one before them
+    /// ended on.
+    reentered: usize = 0,
+    /// The first address it happened on, so the loop can be named rather
+    /// than counted.
+    reentered_at: u32 = 0,
+
+    /// Called from the hook as it stops the stretch: the store was at
+    /// `pc`. Both reasons for stopping come through here, because both
+    /// leave the program counter in the same place.
+    pub fn endedAt(self: *Pend, pc: u32) void {
+        self.ended_at = pc;
+        self.ended = true;
+    }
 
     /// Called from the hook: the firmware just set a pend bit.
     pub fn record(self: *Pend) void {
@@ -137,11 +164,16 @@ pub const Pend = struct {
         self.swallowed_under = executing;
     }
 
-    /// Called by the run loop as a stretch opens: close the books on the
-    /// one that just ended. A stretch that swallowed nothing is not
+    /// Called by the run loop as a stretch opens at `pc`: close the books
+    /// on the one that just ended. A stretch that swallowed nothing is not
     /// counted, so `stretches` reads as how often this happens rather than
     /// how long the run was.
-    pub fn boundary(self: *Pend) void {
+    pub fn boundary(self: *Pend, pc: u32) void {
+        if (self.ended and pc == self.ended_at) {
+            if (self.reentered == 0) self.reentered_at = pc;
+            self.reentered +%= 1;
+        }
+        self.ended = false;
         if (self.in_stretch == 0) return;
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;

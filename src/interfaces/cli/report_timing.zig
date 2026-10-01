@@ -68,6 +68,12 @@ pub fn timing(
             .{pending.looks},
         );
     }
+    if (pending.reentered != 0) {
+        try out.print(
+            "time: {d} stretch(es) opened on the very store that ended the one before, first at pc 0x{X:0>8}\n",
+            .{ pending.reentered, pending.reentered_at },
+        );
+    }
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
