@@ -268,6 +268,7 @@ test {
     _ = @import("periph/rtc/rtc_source_test.zig");
     _ = @import("periph/rtc/rtc_test.zig");
     _ = @import("periph/scb_test.zig");
+    _ = @import("periph/cpuid_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
     _ = @import("periph/sci/sci_line_test.zig");

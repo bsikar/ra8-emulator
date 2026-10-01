@@ -288,6 +288,7 @@ pub const periph = struct {
     pub const rtt_block = @import("periph/rtt/rtt_block.zig");
     pub const rtt_line = @import("periph/rtt/rtt_line.zig");
     pub const scb = @import("periph/scb.zig");
+    pub const cpuid = @import("periph/cpuid.zig");
     pub const sci = @import("periph/sci/sci.zig");
     pub const sau = @import("periph/sau.zig");
     pub const sci_line = @import("periph/sci/sci_line.zig");

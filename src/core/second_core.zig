@@ -54,6 +54,7 @@ const cadence = @import("cadence.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
+const cpuid = @import("../periph/cpuid.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -119,6 +120,7 @@ pub const Second = struct {
             .partitions = &self.partitions,
             .regions = &self.regions,
             .guard = &self.guard,
+            .identity = cpuid.cpu1,
         });
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
