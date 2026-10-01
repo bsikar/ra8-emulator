@@ -175,7 +175,9 @@ test {
     _ = @import("periph/npu/npu_cmd_test.zig");
     _ = @import("periph/npu/npu_test.zig");
     _ = @import("periph/nvic_test.zig");
+    _ = @import("periph/candidate_test.zig");
     _ = @import("periph/held_test.zig");
+    _ = @import("periph/passed_test.zig");
     _ = @import("periph/pdctr_test.zig");
     _ = @import("periph/pdm_test.zig");
     _ = @import("periph/iwdt/iwdt_test.zig");

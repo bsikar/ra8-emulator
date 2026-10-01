@@ -16,6 +16,8 @@
 //! an unmapped fetch as far as Unicorn is concerned, and the run loop unwinds
 //! the frame instead of reporting a fault.
 const held_reasons = @import("held.zig");
+const candidates = @import("candidate.zig");
+const passed_pends = @import("passed.zig");
 const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
@@ -63,13 +65,11 @@ pub fn isExceptionReturn(address: u32) bool {
     return exc_return.is(address);
 }
 
-/// A pending exception and the priority it would run at. Lower is more
-/// urgent, the architecture's convention, kept here so the comparisons read
-/// the way the manual does.
-pub const Candidate = struct {
-    number: u16,
-    priority: u8,
-};
+/// A pending exception and the priority it would run at. The type and the
+/// comparison live in src/periph/candidate.zig, where src/periph/passed.zig
+/// can reach them without putting the two files in an import cycle; this is
+/// the name the rest of the tree already uses.
+pub const Candidate = candidates.Candidate;
 
 pub const Error = error{ NotInHandler, TooDeep, NoVector };
 
@@ -96,6 +96,9 @@ pub const Nvic = struct {
     held: u64 = 0,
     /// The same refusals, one counter per reason. See src/periph/held.zig.
     why: held_reasons.Held = .{},
+    /// Pends that lost the pick and stayed pending. `held` is about the
+    /// pick's WINNER; these left no trace at all. See src/periph/passed.zig.
+    passed: passed_pends.Passed = .{},
     /// Returns that went straight into another handler instead of back to
     /// the interrupted code. See the tail-chain paragraph in
     /// src/core/run_loop.zig: without this the second exception waits for
@@ -120,7 +123,7 @@ pub const Nvic = struct {
     /// entered. Call it at the chunk boundary, after the clocks are charged.
     pub fn dispatch(self: *Nvic, core: anytype) !?u16 {
         try foldClearRegisters(core);
-        const candidate = (try self.pick(core)) orelse return null;
+        const candidate = (try self.pick(core, &self.passed)) orelse return null;
         if (try masked(core)) {
             self.held += 1;
             self.why.masked +%= 1;
@@ -160,7 +163,7 @@ pub const Nvic = struct {
     pub fn pendingMasked(self: *Nvic, core: anytype) !bool {
         if (!(try masked(core))) return false;
         try foldClearRegisters(core);
-        return (try self.pick(core)) != null;
+        return (try self.pick(core, null)) != null;
     }
 
     /// Enter `exc`: stack the caller-saved frame at SP, hand the handler an
@@ -273,19 +276,33 @@ pub const Nvic = struct {
         return handler & ~@as(u32, 1);
     }
 
+    /// The more urgent of the candidate standing and the one offered, with
+    /// the loser counted. See src/periph/passed.zig for why losing matters.
+    fn consider(tally: ?*passed_pends.Passed, standing: ?Candidate, offered: Candidate) Candidate {
+        const winner = candidates.better(standing, offered);
+        if (tally) |keep| {
+            if (candidates.loser(standing, offered, winner)) |lost| {
+                keep.lost(lost.number, winner.number);
+            }
+        }
+        return winner;
+    }
+
     /// The most urgent pending exception that is enabled, or null. Ties go to
     /// the lower exception number, which is what the architecture does.
-    fn pick(self: *Nvic, core: anytype) !?Candidate {
+    /// `tally` is null for a pick that only asks whether anything is pending:
+    /// a masked boundary picks twice and the losses are counted once.
+    fn pick(self: *Nvic, core: anytype, tally: ?*passed_pends.Passed) !?Candidate {
         _ = self;
         var best: ?Candidate = null;
         const icsr = try core.readWord(memmap.scb.icsr);
         const shpr3 = try core.readWord(memmap.scb.shpr3);
         // SysTick and PendSV have no enable of their own: pending is enough.
         if (icsr & icsr_pendstset != 0) {
-            best = better(best, .{ .number = systick, .priority = @truncate(shpr3 >> 24) });
+            best = consider(tally, best, .{ .number = systick, .priority = @truncate(shpr3 >> 24) });
         }
         if (icsr & icsr_pendsvset != 0) {
-            best = better(best, .{ .number = pendsv, .priority = @truncate(shpr3 >> 16) });
+            best = consider(tally, best, .{ .number = pendsv, .priority = @truncate(shpr3 >> 16) });
         }
         var word: u16 = 0;
         while (word < irq_words) : (word += 1) {
@@ -297,7 +314,7 @@ pub const Nvic = struct {
             while (true) : (bit += 1) {
                 if (ready & (@as(u32, 1) << bit) != 0) {
                     const line = word * 32 + bit;
-                    best = better(best, .{
+                    best = consider(tally, best, .{
                         .number = first_irq + line,
                         .priority = try irqPriority(core, line),
                     });
@@ -305,16 +322,10 @@ pub const Nvic = struct {
                 if (bit == 31) break;
             }
         }
+        if (tally) |keep| keep.boundary();
         return best;
     }
 };
-
-fn better(current: ?Candidate, candidate: Candidate) Candidate {
-    const held = current orelse return candidate;
-    if (candidate.priority < held.priority) return candidate;
-    if (candidate.priority == held.priority and candidate.number < held.number) return candidate;
-    return held;
-}
 
 /// NVIC_IPR is a byte per line, four to a word.
 fn irqPriority(core: anytype, line: u16) !u8 {
