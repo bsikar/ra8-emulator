@@ -124,6 +124,12 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.heartbeat.block());
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
+    try attachCore(self, core);
+}
+
+/// Last step of `attach`: hand the finished bus to the engine, then prime
+/// CPU0's own SAU and MPU windows.
+fn attachCore(self: *Board, core: *engine.Engine) !void {
     try core.attachPeriph(&self.bus);
     try primeCoreWindows(self, core, .{
         .partitions = &self.partitions,

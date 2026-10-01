@@ -21,6 +21,9 @@ test {
     _ = @import("core/cpu/op_test.zig");
     _ = @import("core/cpu/regs_test.zig");
     _ = @import("core/cpu/reset_test.zig");
+    _ = @import("core/cpu/lockstep/diff_test.zig");
+    _ = @import("core/cpu/lockstep/snapshot_test.zig");
+    _ = @import("core/cpu/lockstep/tally_test.zig");
     _ = @import("core/cpu/ops/hint_test.zig");
     _ = @import("core/cpu/ops/table_test.zig");
     _ = @import("board/board_test.zig");

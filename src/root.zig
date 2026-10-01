@@ -80,6 +80,11 @@ pub const core = struct {
         pub const op = @import("core/cpu/op.zig");
         pub const regs = @import("core/cpu/regs.zig");
         pub const reset = @import("core/cpu/reset.zig");
+        pub const lockstep = struct {
+            pub const diff = @import("core/cpu/lockstep/diff.zig");
+            pub const snapshot = @import("core/cpu/lockstep/snapshot.zig");
+            pub const tally = @import("core/cpu/lockstep/tally.zig");
+        };
         pub const ops = struct {
             pub const hint = @import("core/cpu/ops/hint.zig");
             pub const table = @import("core/cpu/ops/table.zig");
