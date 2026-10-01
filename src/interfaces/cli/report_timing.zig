@@ -37,19 +37,13 @@ const pc_hits = @import("../../debug/pc_hits.zig");
 
 const Writer = @import("report.zig").Writer;
 
-/// A SysTick period is only worth anything to the firmware if something
-/// raised for it. `collapsed` is how many wraps raised nothing, so a reader
-/// can tell a slow run from a run whose clock is lying to it, and `rearms`
-/// is the other side of the same ledger: stretches ended early to keep that
-/// number down, each one a stretch whose cycles went uncharged.
-pub fn timing(
-    out: Writer,
-    timebase: clocks.Clocks,
-    seam: idle.Seam,
-    interrupts: nvic.Nvic,
-    release: unmask.Release,
-    pending: pend_break.Pend,
-) !void {
+/// Everything a run can say about pends the firmware wrote by hand.
+///
+/// Its own function rather than more lines inside `timing`, which the
+/// length gate was right to stop: this is one subject (what the firmware
+/// asked of the controller and what became of it) and the rest of `timing`
+/// is another (cycles, periods, the idle seam).
+fn pends(out: Writer, pending: pend_break.Pend) !void {
     if (pending.cuts != 0) {
         try out.print(
             "time: {d} boundary(ies) ended where the firmware pended an exception\n",
@@ -80,6 +74,38 @@ pub fn timing(
             .{ pending.reentered, pending.reentered_at },
         );
     }
+    if (pending.reopened != 0) {
+        try out.print(
+            "time: {d} stretch(es) opened PAST the store that ended them, first at pc 0x{X:0>8} after a stop read as 0x{X:0>8}\n",
+            .{ pending.reopened, pending.reopened_at, pending.reopened_from },
+        );
+    }
+    if (pending.stops != pending.reentered + pending.reopened) {
+        try out.print(
+            "time: {d} stop(s) were asked for but only {d} reached a boundary, so {d} WERE OVERWRITTEN BEFORE THE STRETCH ENDED\n",
+            .{
+                pending.stops,
+                pending.reentered + pending.reopened,
+                pending.stops - (pending.reentered + pending.reopened),
+            },
+        );
+    }
+}
+
+/// A SysTick period is only worth anything to the firmware if something
+/// raised for it. `collapsed` is how many wraps raised nothing, so a reader
+/// can tell a slow run from a run whose clock is lying to it, and `rearms`
+/// is the other side of the same ledger: stretches ended early to keep that
+/// number down, each one a stretch whose cycles went uncharged.
+pub fn timing(
+    out: Writer,
+    timebase: clocks.Clocks,
+    seam: idle.Seam,
+    interrupts: nvic.Nvic,
+    release: unmask.Release,
+    pending: pend_break.Pend,
+) !void {
+    try pends(out, pending);
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
