@@ -57,12 +57,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
             pc = try core.register(.pc);
             continue;
         }
-        if (try trapped(core, session)) |resumed| {
-            remaining -= 1;
-            pc = resumed;
-            continue;
-        }
-        if (try servedPend(core, session, &remaining, chunk)) |resumed| {
+        if (try interposed(core, session, &remaining, chunk)) |resumed| {
             pc = resumed;
             continue;
         }
@@ -178,6 +173,42 @@ fn servedPend(core: anytype, session: Session, remaining: *usize, chunk: usize) 
     if (!pending.take()) return null;
     remaining.* -= chunk;
     if (session.timebase) |clock| clock.advance(core, @intCast(chunk)) catch return error.RunFailed;
+    if (session.interrupts) |controller| {
+        remaining.* -= service(core, controller, session, remaining.*) catch return error.RunFailed;
+    }
+    return try core.register(.pc);
+}
+
+/// The three things that can end a stretch before its chunk runs out and
+/// hand execution straight back, in the order they are allowed to.
+///
+/// All three are boundaries the firmware made rather than ones the clock
+/// made, so none of them charges a chunk: a trap and a second look cost one
+/// instruction, and a raised pend charges the chunk it cut because it also
+/// moves the clocks. Returns where to resume, or null when the stretch
+/// simply ran to its end.
+fn interposed(core: anytype, session: Session, remaining: *usize, chunk: usize) !?u32 {
+    if (try trapped(core, session)) |resumed| {
+        remaining.* -= 1;
+        return resumed;
+    }
+    if (try servedPend(core, session, remaining, chunk)) |resumed| return resumed;
+    return try lookedAgain(core, session, remaining);
+}
+
+/// The firmware asked again, from Thread mode, for a switch it is still
+/// owed, so the controller gets another look at the pend already standing.
+///
+/// Charged one instruction and NOT a chunk, the same as a trap and an
+/// exception return, because nothing was raised here. The bit was already
+/// up; all this boundary buys is a chance to dispatch it. Advancing the
+/// clocks by a chunk would invent modelled time the firmware never spent,
+/// and at a hundred and fifty of these a second that is a visible lie.
+/// src/core/pend_break.zig carries why the look is owed at all.
+fn lookedAgain(core: anytype, session: Session, remaining: *usize) !?u32 {
+    const pending = session.pend orelse return null;
+    if (!pending.lookAgain()) return null;
+    remaining.* -= 1;
     if (session.interrupts) |controller| {
         remaining.* -= service(core, controller, session, remaining.*) catch return error.RunFailed;
     }

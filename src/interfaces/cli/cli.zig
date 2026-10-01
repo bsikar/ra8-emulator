@@ -168,6 +168,11 @@ pub const Options = struct {
     /// the run's own cadence. For asking whether a result depends on where
     /// the boundaries fall. src/core/cadence.zig carries the default.
     chunk_instructions: ?u32 = null,
+    /// `--drain-pends`: let a Thread-mode store that raises nothing still
+    /// end the stretch, so the controller gets another look at a pend it
+    /// still owes the firmware. Off by default; src/core/pend_break.zig
+    /// carries what it measures and why it is not the default yet.
+    drain_pends: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -308,6 +313,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         const width = try std.fmt.parseInt(u32, argv[index.*], 0);
         if (width == 0) return error.BadValue;
         options.chunk_instructions = width;
+    } else if (std.mem.eql(u8, flag, "--drain-pends")) {
+        options.drain_pends = true;
     } else if (std.mem.eql(u8, flag, "--dump-regs")) {
         options.dump_regs = true;
     } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {

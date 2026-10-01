@@ -77,6 +77,34 @@ pub const Pend = struct {
     /// Stretches that carried at least one swallowed store, so the worst
     /// can be read against how often it happens at all.
     stretches: usize = 0,
+    /// Whether a Thread-mode store that raises nothing may still end the
+    /// stretch. OFF by default, and `--drain-pends` turns it on.
+    ///
+    /// It is off because the experiment it enables does not yet produce a
+    /// right answer, only a differently wrong one. Measured on
+    /// threadx_blink over 1000 ms at the 50000 default: LED1 falls from
+    /// 150 toggles to 1 where the board shows 2, and over 4000 ms it is
+    /// still 1 where the board shows 8, so the thread stops blinking
+    /// rather than blinking correctly. Exceptions taken go from 1004 to
+    /// 11002 and swallowed stores from 151 to 639937. Shipping that as the
+    /// default would trade a number that is too high for one that is too
+    /// low and call it a fix. The switch keeps the experiment reproducible
+    /// without any image's behaviour depending on it.
+    look_again: bool = false,
+    /// Set by the hook when the firmware asked AGAIN, in Thread mode, for
+    /// a switch it is still owed. Taken by the run loop as a second look.
+    ///
+    /// Separate from `latched` because the two cost different things. A
+    /// rising edge is a pend that did not exist a moment ago, so the
+    /// stretch it cut is charged and the clocks move. This one raises
+    /// nothing: the bit was already standing, and all the boundary buys is
+    /// another chance to dispatch it. Charging a chunk of modelled time for
+    /// that would invent time the firmware never spent, and at 150 of them
+    /// a second it would be a visible lie.
+    again: bool = false,
+    /// Second looks given, so the cost of this is readable rather than
+    /// assumed.
+    looks: usize = 0,
 
     /// Called from the hook: the firmware just set a pend bit.
     pub fn record(self: *Pend) void {
@@ -90,7 +118,20 @@ pub const Pend = struct {
     pub fn alreadyPending(self: *Pend, executing: u16) void {
         self.swallowed +%= 1;
         self.in_stretch +%= 1;
-        if (executing != 0) self.swallowed_in_handler +%= 1;
+        if (executing != 0) {
+            self.swallowed_in_handler +%= 1;
+        } else {
+            // Thread mode: the thread is running on top of a switch it
+            // already asked for, which on silicon it would never get to
+            // do. Give the controller another look. A store from INSIDE a
+            // handler is left alone on purpose: PendSV cannot preempt
+            // itself, so a look there can never take it and would only
+            // spin the boundary.
+            if (self.look_again) {
+                self.again = true;
+                self.looks +%= 1;
+            }
+        }
         if (self.placed) return;
         self.placed = true;
         self.swallowed_under = executing;
@@ -105,6 +146,13 @@ pub const Pend = struct {
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;
         self.in_stretch = 0;
+    }
+
+    /// Take the second-look latch, if one is standing.
+    pub fn lookAgain(self: *Pend) bool {
+        if (!self.again) return false;
+        self.again = false;
+        return true;
     }
 
     /// Take the latch, if one is standing. Clears it, so one store ends
