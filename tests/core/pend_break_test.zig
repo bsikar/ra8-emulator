@@ -102,26 +102,35 @@ test "the stretch still open is not folded in until its boundary" {
     try std.testing.expectEqual(@as(usize, 2), pending.in_stretch);
 }
 
+test "no look is given unless a policy switched one on" {
+    var quiet = pend_break.Pend{};
+    quiet.alreadyPending(0);
+    quiet.alreadyPending(0);
+    try std.testing.expect(!quiet.again);
+    try std.testing.expectEqual(@as(usize, 0), quiet.look.given);
+    try std.testing.expectEqual(@as(usize, 2), quiet.swallowed);
+}
+
 test "a Thread-mode swallowed store asks for another look" {
-    var pending = pend_break.Pend{ .look_again = true };
+    var pending = pend_break.Pend{ .look = .{ .policy = .every } };
     pending.alreadyPending(0);
     try std.testing.expect(pending.again);
-    try std.testing.expectEqual(@as(usize, 1), pending.looks);
+    try std.testing.expectEqual(@as(usize, 1), pending.look.given);
     try std.testing.expect(pending.lookAgain());
     try std.testing.expect(!pending.lookAgain());
 }
 
 test "a swallowed store inside a handler asks for no look" {
-    var pending = pend_break.Pend{ .look_again = true };
+    var pending = pend_break.Pend{ .look = .{ .policy = .every } };
     pending.alreadyPending(14);
     pending.alreadyPending(15);
     try std.testing.expect(!pending.again);
-    try std.testing.expectEqual(@as(usize, 0), pending.looks);
+    try std.testing.expectEqual(@as(usize, 0), pending.look.given);
     try std.testing.expect(!pending.lookAgain());
 }
 
 test "the second look is its own latch and leaves a raised pend alone" {
-    var pending = pend_break.Pend{ .look_again = true };
+    var pending = pend_break.Pend{ .look = .{ .policy = .every } };
     pending.record();
     pending.alreadyPending(0);
     try std.testing.expect(pending.lookAgain());
@@ -129,13 +138,35 @@ test "the second look is its own latch and leaves a raised pend alone" {
     try std.testing.expectEqual(@as(usize, 1), pending.cuts);
 }
 
-test "no second look is asked for unless it was switched on" {
-    var pending = pend_break.Pend{};
+test "under per-rise one re-ask per rise gets a look and the rest do not" {
+    var pending = pend_break.Pend{ .look = .{ .policy = .per_rise } };
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.again);
     pending.alreadyPending(0);
     pending.alreadyPending(0);
-    try std.testing.expect(!pending.again);
-    try std.testing.expectEqual(@as(usize, 0), pending.looks);
-    try std.testing.expectEqual(@as(usize, 2), pending.swallowed);
+    try std.testing.expectEqual(@as(usize, 1), pending.look.given);
+    try std.testing.expectEqual(@as(usize, 2), pending.look.refused);
+    try std.testing.expectEqual(@as(usize, 3), pending.swallowed);
+}
+
+test "a boundary does not hand the allowance back, because the look made it" {
+    var pending = pend_break.Pend{ .look = .{ .policy = .per_rise } };
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.lookAgain());
+    pending.boundary(0x0200_1234);
+    pending.alreadyPending(0);
+    try std.testing.expect(!pending.lookAgain());
+    try std.testing.expectEqual(@as(usize, 1), pending.look.given);
+}
+
+test "the next rise gets its own look" {
+    var pending = pend_break.Pend{ .look = .{ .policy = .per_rise } };
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.lookAgain());
+    pending.record();
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.lookAgain());
+    try std.testing.expectEqual(@as(usize, 2), pending.look.given);
 }
 
 test "a stretch that opens where the last one ended is counted" {

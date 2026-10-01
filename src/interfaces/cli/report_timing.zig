@@ -108,9 +108,9 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
             "time: the first of them stored at pc 0x{X:0>8}, {d} of the rest stored somewhere else\n",
             .{ pending.swallowed_at, pending.swallowed_elsewhere },
         );
-        if (pending.looks != 0) try out.print(
-            "time: {d} of them ended the stretch so the pend could be looked at again\n",
-            .{pending.looks},
+        if (!pending.look.quiet()) try out.print(
+            "time: {d} of them ended the stretch so the pend could be looked at again, {d} found that stretch's look already spent\n",
+            .{ pending.look.given, pending.look.refused },
         );
     }
     if (!pending.cleared.quiet()) {

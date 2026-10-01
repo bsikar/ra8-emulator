@@ -303,7 +303,7 @@ fn stretch(core: anytype, pc: u32, chunk: usize, session: Session) !?fault.Fault
 /// tail, and charges a second look one instruction.
 pub fn askedToStop(session: Session) bool {
     const pending = session.pend orelse return false;
-    if (!pending.look_again) return false;
+    if (!pending.look.cuts()) return false;
     return pending.ended;
 }
 

@@ -38,13 +38,13 @@ test "a controller that has entered nothing has chained nothing" {
 }
 
 test "a pend stop asked for during the probe ends the stretch" {
-    var pending = ra8.core.pend_break.Pend{ .look_again = true };
+    var pending = ra8.core.pend_break.Pend{ .look = .{ .policy = .every } };
     pending.endedAt(0x0200_1234);
     try std.testing.expect(mod.askedToStop(.{ .pend = &pending }));
 }
 
 test "a stretch the hook never stopped runs its tail" {
-    var pending = ra8.core.pend_break.Pend{ .look_again = true };
+    var pending = ra8.core.pend_break.Pend{ .look = .{ .policy = .every } };
     try std.testing.expect(!mod.askedToStop(.{ .pend = &pending }));
 }
 
@@ -56,7 +56,7 @@ test "the experiment is off by default, so a raised pend does not cut the probe"
 }
 
 test "a boundary clears the ask, so the next stretch starts clean" {
-    var pending = ra8.core.pend_break.Pend{ .look_again = true };
+    var pending = ra8.core.pend_break.Pend{ .look = .{ .policy = .every } };
     pending.endedAt(0x0200_1234);
     pending.boundary(0x0200_1234);
     try std.testing.expect(!mod.askedToStop(.{ .pend = &pending }));
@@ -67,7 +67,7 @@ test "a session with no pend break never ends a stretch this way" {
 }
 
 test "a second look at a standing pend asks for the same stop" {
-    var pending = ra8.core.pend_break.Pend{ .look_again = true };
+    var pending = ra8.core.pend_break.Pend{ .look = .{ .policy = .every } };
     pending.alreadyPending(0);
     try std.testing.expect(pending.again);
     try std.testing.expect(!mod.askedToStop(.{ .pend = &pending }));
