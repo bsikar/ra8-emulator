@@ -194,6 +194,7 @@ test {
     _ = @import("periph/pdctr_test.zig");
     _ = @import("periph/pdm_test.zig");
     _ = @import("periph/iwdt/iwdt_test.zig");
+    _ = @import("periph/iwdt/iwdt_ofs0_test.zig");
     _ = @import("periph/iwdt/iwdt_refresh_test.zig");
     _ = @import("periph/iwdt/iwdt_status_test.zig");
     _ = @import("periph/ipc/ipc_test.zig");

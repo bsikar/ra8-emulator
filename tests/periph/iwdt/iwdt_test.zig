@@ -121,3 +121,35 @@ test "the block covers the window the header gives it" {
     try std.testing.expectEqual(@as(u32, 0x0C), desc.size);
     try std.testing.expectEqualStrings("IWDT", desc.name);
 }
+
+test "an erased OFS0 keeps the counter stopped through every refresh" {
+    var unit = iwdt.Iwdt.init();
+    unit.applyOptionWord(iwdt.ofs0.erased);
+    refreshed(&unit);
+    refreshed(&unit);
+    try std.testing.expect(!unit.armed);
+    try std.testing.expectEqual(@as(u32, 0), unit.refreshes);
+    try std.testing.expectEqual(@as(u32, 2), unit.stopped_refreshes);
+    try std.testing.expect(unit.stoppedByOptions());
+    for (0..64) |_| unit.tick();
+    try std.testing.expectEqual(@as(u32, 0), unit.underflows);
+    try std.testing.expectEqual(iwdt.full_scale, unit.counter);
+}
+
+test "an erased OFS0 that nothing refreshes stays quiet" {
+    var unit = iwdt.Iwdt.init();
+    unit.applyOptionWord(iwdt.ofs0.erased);
+    try std.testing.expect(unit.quiet());
+}
+
+test "an auto-start OFS0 runs the counter from reset without a refresh" {
+    var unit = iwdt.Iwdt.init();
+    unit.applyOptionWord(iwdt.ofs0.erased & ~iwdt.ofs0.field.strt);
+    try std.testing.expect(unit.armed);
+    try std.testing.expect(!unit.stoppedByOptions());
+    unit.tick();
+    try std.testing.expect(unit.counter < iwdt.full_scale);
+    refreshed(&unit);
+    try std.testing.expectEqual(@as(u32, 1), unit.refreshes);
+    try std.testing.expectEqual(iwdt.full_scale, unit.counter);
+}
