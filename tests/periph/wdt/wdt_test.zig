@@ -311,3 +311,35 @@ test "a dropped control store alone is enough to put WDT0 in the report" {
     unit.write(wdt.win_base + wdt.off.wdtrcr, 1, 0);
     try std.testing.expect(!unit.quiet());
 }
+
+test "the window edges are percentages of the full 1024, so 768 and 256 are inside" {
+    var unit = wdt.Wdt.init();
+    // wdt_window_demo: RPSS 75%, RPES 25%, refreshes while 256 <= CNTVAL <= 768.
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 2, 2));
+    refresh(&unit);
+    while (unit.counter > 768) unit.count();
+    try std.testing.expect(unit.windowOpen());
+    while (unit.counter > 256) unit.count();
+    try std.testing.expect(unit.windowOpen());
+}
+
+test "one count either side of the 75%/25% window is outside it" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 2, 2));
+    refresh(&unit);
+    while (unit.counter > 769) unit.count();
+    try std.testing.expect(!unit.windowOpen());
+    while (unit.counter > 255) unit.count();
+    try std.testing.expect(!unit.windowOpen());
+}
+
+test "a demo that refreshes at 768 of a 75%/25% window is accepted, not refused" {
+    var unit = wdt.Wdt.init();
+    unit.write(wdt.win_base + wdt.off.wdtcr, 2, wdt.controlWord(0, 1, 2, 2));
+    refresh(&unit);
+    while (unit.counter > 768) unit.count();
+    refresh(&unit);
+    try std.testing.expectEqual(@as(u32, 0), unit.early);
+    try std.testing.expectEqual(@as(u32, 2), unit.refreshes);
+    try std.testing.expectEqual(unit.reload(), unit.counter);
+}
