@@ -8,6 +8,7 @@ const Engine = engine.Engine;
 const Board = ra8.board.Board;
 const sau = ra8.periph.sau;
 const mpu = ra8.periph.mpu;
+const scb = ra8.periph.scb;
 
 /// A thumb image is not needed to test the wiring: what matters is that the
 /// second core is put in front of the first core's board and takes turns.
@@ -197,4 +198,52 @@ test "moving CPU0's vector table leaves CPU1's VTOR where it was" {
     try cpu0.writeWord(memmap.scb.vtor, memmap.sram_base);
     try std.testing.expectEqual(memmap.sram_base, try cpu0.readWord(memmap.scb.vtor));
     try std.testing.expectEqual(base, try cpu1.core.readWord(memmap.scb.vtor));
+}
+
+test "each core's AIRCR model keeps the PRIGROUP that core programmed" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    cpu1.control = scb.Scb.init();
+    var cpu0_control = scb.Scb.init();
+    try cpu0_control.prime(cpu0);
+    try cpu1.control.prime(cpu1.core);
+
+    const keyed: u32 = scb.key.write << scb.key.shift;
+    try cpu1.core.writeWord(memmap.scb.aircr, keyed | (5 << 8));
+    try std.testing.expect(!try cpu1.control.poll(cpu1.core));
+    try std.testing.expect(!try cpu0_control.poll(cpu0));
+
+    try std.testing.expectEqual(@as(u3, 5), cpu1.control.priorityGroup());
+    try std.testing.expectEqual(@as(u3, 0), cpu0_control.priorityGroup());
+    try std.testing.expectEqual(scb.key.status, try cpu0.readWord(memmap.scb.aircr));
+}
+
+test "a reset CPU1 asks for is counted on CPU1's model, not CPU0's" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    cpu1.control = scb.Scb.init();
+    const cpu0_control = scb.Scb.init();
+    try cpu1.control.prime(cpu1.core);
+
+    const keyed: u32 = scb.key.write << scb.key.shift;
+    try cpu1.core.writeWord(memmap.scb.aircr, keyed | scb.field.sysresetreq);
+    try std.testing.expect(try cpu1.control.poll(cpu1.core));
+    try std.testing.expectEqual(@as(u32, 1), cpu1.control.requests);
+    try std.testing.expectEqual(@as(u32, 0), cpu0_control.requests);
+}
+
+test "CCR, SHCSR and the fault status words are each core's own" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    const words = [_]u32{ memmap.scb.ccr, 0xE000_ED24, 0xE000_ED28, 0xE000_ED2C, 0xE000_ED34, 0xE000_ED38 };
+    for (words, 0..) |address, i| {
+        try cpu0.writeWord(address, 0x100 + @as(u32, @intCast(i)));
+        try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(address));
+    }
 }
