@@ -31,11 +31,40 @@ const elf = @import("../../core/elf.zig");
 const symbols = @import("../../debug/symbols.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
+const pend_ledger = @import("../../core/pend_ledger.zig");
 const pend_break = @import("../../core/pend_break.zig");
 const pend_sites = @import("../../core/pend_sites.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 
 const Writer = @import("report.zig").Writer;
+
+/// Whether the PendSV pend bit adds up, and how many asks each served rise
+/// had to carry. src/core/pend_ledger.zig carries why this is the reading
+/// that matters and why the two counters either side of it are not.
+fn ledger(out: Writer, pending: pend_break.Pend, entered: u64) !void {
+    const books = pend_ledger.Ledger{
+        .raised = pending.cuts,
+        .entered = entered,
+        .unpended = pending.cleared.count,
+    };
+    if (books.quiet()) return;
+    try out.print(
+        "time: PendSV pends: {d} raised, {d} entered, {d} unpended by the firmware\n",
+        .{ books.raised, books.entered, books.unpended },
+    );
+    if (books.asksPerRise(pending.cuts + pending.swallowed)) |ratio| {
+        try out.print(
+            "time: {d} store(s) asked for a switch, {d:.1} per rise that was served\n",
+            .{ pending.cuts + pending.swallowed, ratio },
+        );
+    }
+    if (!books.balanced()) {
+        try out.print(
+            "time: THE PEND BOOKS DO NOT CLOSE: {d} rise(s) unaccounted for, {d} disposal(s) with no rise behind them\n",
+            .{ books.outstanding(), books.phantom() },
+        );
+    }
+}
 
 /// Everything a run can say about pends the firmware wrote by hand.
 ///
@@ -43,7 +72,8 @@ const Writer = @import("report.zig").Writer;
 /// length gate was right to stop: this is one subject (what the firmware
 /// asked of the controller and what became of it) and the rest of `timing`
 /// is another (cycles, periods, the idle seam).
-fn pends(out: Writer, pending: pend_break.Pend) !void {
+fn pends(out: Writer, pending: pend_break.Pend, entered: u64) !void {
+    try ledger(out, pending, entered);
     if (pending.cuts != 0) {
         try out.print(
             "time: {d} boundary(ies) ended where the firmware pended an exception\n",
@@ -115,7 +145,7 @@ pub fn timing(
     release: unmask.Release,
     pending: pend_break.Pend,
 ) !void {
-    try pends(out, pending);
+    try pends(out, pending, interrupts.standing.entries);
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
