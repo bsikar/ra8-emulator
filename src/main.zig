@@ -69,6 +69,7 @@ const Parts = struct {
     taken: ra8.core.tally.Tally = .{},
     timebase: clocks.Clocks = .{},
     pend: ra8.core.pend_break.Pend = .{},
+    hits: ra8.core.pc_hits.Hits = .{},
 };
 
 /// Hand the watched place the run's own period counter, then hook it.
@@ -81,7 +82,11 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
     try core.attachWatchpoint(one);
 }
 
-fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, drain_pends: bool) !u32 {
+fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
+    // Addresses come off the command line already parsed, so nothing here
+    // can fail: an empty list counts nothing and attaches no hook.
+    for (options.count_pc[0..options.count_pc_len]) |at| parts.hits.want(at);
+    try core.attachHits(&parts.hits);
     try core.attachWatch(&parts.watch);
     try core.attachLoops(&parts.loops);
     try core.attachSelects(&parts.selects);
@@ -90,7 +95,7 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, drain_pends:
     // Set before the hook is attached, since it is read as a store
     // retires. src/core/pend_break.zig carries what it does and why it is
     // off unless asked for.
-    parts.pend.look_again = drain_pends;
+    parts.pend.look_again = options.drain_pends;
     try core.attachPend(&parts.pend);
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);
@@ -120,7 +125,7 @@ pub fn main() !u8 {
     try board.attach(&core);
 
     var parts = Parts{};
-    const written = try attachAll(&core, image, &parts, options.drain_pends);
+    const written = try attachAll(&core, image, &parts, options);
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
@@ -199,6 +204,7 @@ fn reportAll(
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
     try report_timing.pendStores(out, image, parts.pend);
+    try report_timing.pcHits(out, image, parts.hits);
     try report_timing.takenFrom(out, image, parts.taken);
     try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);

@@ -30,7 +30,9 @@ const csel = @import("csel.zig");
 const csel_hook = @import("csel_hook.zig");
 const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("../debug/break_hook.zig");
+const hits_hook = @import("../debug/hits_hook.zig");
 const watchpoint = @import("../debug/watchpoint.zig");
+const pc_hits = @import("../debug/pc_hits.zig");
 const watch_hook = @import("../debug/watch_hook.zig");
 const pend_hook = @import("pend_hook.zig");
 const pend_break = @import("pend_break.zig");
@@ -277,6 +279,13 @@ pub const Engine = struct {
     /// asked-for number of times stops the run where it stands.
     pub fn attachBreak(self: Engine, point: *breakpoint.Break) Error!void {
         break_hook.attach(self.handle, point) catch return Error.AttachFailed;
+    }
+
+    /// Count the executions of each instruction the run asked about. The
+    /// run is never stopped here, so the count cannot be a number about
+    /// its own hook.
+    pub fn attachHits(self: Engine, hits: *pc_hits.Hits) Error!void {
+        hits_hook.attach(self.handle, hits) catch return Error.AttachFailed;
     }
 
     /// Watch one word: every store that lands in it is recorded with the

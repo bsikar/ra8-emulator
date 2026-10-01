@@ -2,6 +2,7 @@
 const std = @import("std");
 const part = @import("../../core/part.zig");
 const place = @import("../../debug/place.zig");
+const pc_hits = @import("../../debug/pc_hits.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
@@ -15,6 +16,7 @@ pub const usage =
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
+    \\                    [--count-pc ADDR]
     \\                    [--cpu1 IMAGE.elf]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
@@ -54,6 +56,11 @@ pub const usage =
     \\                     Takes the same place spelling as --dump-mem, minus
     \\                     the dereference: the address has to be known
     \\                     before the run starts
+    \\  --count-pc ADDR    count every execution of the instruction at that
+    \\                     address, repeatable up to four times. For
+    \\                     settling a disagreement between two counters
+    \\                     that are each one step removed from the
+    \\                     instruction itself
     \\  --stop-on-undefined
     \\                     end the run the first time it reaches an
     \\                     instruction the architecture leaves undefined,
@@ -164,6 +171,12 @@ pub const Options = struct {
     /// `--taken-in`: a function to catch every exception taken inside.
     /// src/debug/taken_in.zig says why a tally cannot answer that.
     taken_in_place: ?[]const u8 = null,
+    /// `--count-pc`: instruction addresses to count executions of, in the
+    /// order they were given. src/debug/pc_hits.zig says why a counter
+    /// that measures nothing but the execution is worth having.
+    count_pc: [pc_hits.limits.places]u32 = [_]u32{0} ** pc_hits.limits.places,
+    /// How many of `count_pc` were actually given.
+    count_pc_len: usize = 0,
     /// `--chunk`: how many instructions between two boundaries, overriding
     /// the run's own cadence. For asking whether a result depends on where
     /// the boundaries fall. src/core/cadence.zig carries the default.
@@ -307,6 +320,12 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         index.* += 1;
         if (index.* >= argv.len) return error.MissingValue;
         options.taken_in_place = argv[index.*];
+    } else if (std.mem.eql(u8, flag, "--count-pc")) {
+        index.* += 1;
+        if (index.* >= argv.len) return error.MissingValue;
+        if (options.count_pc_len >= options.count_pc.len) return error.BadValue;
+        options.count_pc[options.count_pc_len] = try std.fmt.parseInt(u32, argv[index.*], 0);
+        options.count_pc_len += 1;
     } else if (std.mem.eql(u8, flag, "--chunk")) {
         index.* += 1;
         if (index.* >= argv.len) return error.MissingValue;
