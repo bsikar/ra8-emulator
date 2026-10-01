@@ -50,6 +50,7 @@
 const std = @import("std");
 const engine = @import("engine.zig");
 const elf = @import("elf.zig");
+const memmap = @import("memmap.zig");
 const cadence = @import("cadence.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
@@ -60,6 +61,13 @@ const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
 const report_cores = @import("../interfaces/cli/report_cores.zig");
 const Engine = engine.Engine;
+
+/// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
+/// to zero. The PPB is per-engine RAM here, so the word written lands in this
+/// core's System Control Space only and CPU0's VTOR is left as it was.
+pub fn primeVectorTable(core: Engine, base: u32) !void {
+    try core.writeWord(memmap.scb.vtor, base);
+}
 
 pub const limits = struct {
     /// Instructions one core runs before the other gets its turn. The chunk
@@ -124,6 +132,7 @@ pub const Second = struct {
         });
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
+        try primeVectorTable(self.core, self.vector_base);
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
     }
