@@ -107,6 +107,9 @@ pub const Pend = struct {
     /// Whether that actually happens is not a thing to reason about from
     /// the instruction stream, so it is measured.
     ended_at: u32 = 0,
+    /// Where the thread was put to resume, past the store at `ended_at`.
+    /// src/core/pend_resume.zig carries why.
+    resume_at: ?u32 = null,
     ended: bool = false,
     /// Stops the hook asked for, counted where it asks.
     ///
@@ -263,6 +266,7 @@ pub const Pend = struct {
         self.ended = false;
         self.entry = null;
         self.stepped = false;
+        self.resume_at = null;
         if (self.in_stretch == 0) return;
         if (self.in_stretch > self.longest_stretch) self.longest_stretch = self.in_stretch;
         self.stretches +%= 1;
@@ -277,7 +281,7 @@ pub const Pend = struct {
     /// A stretch opening on the stop address is a re-entry whatever the
     /// boundary did, because that is the question re-entry asks.
     fn reopenedAt(self: *Pend, pc: u32) void {
-        if (pc == self.ended_at) {
+        if (pc == self.ended_at or pc == self.resume_at) {
             if (self.reentered == 0) self.reentered_at = pc;
             self.reentered +%= 1;
             return;
@@ -308,6 +312,11 @@ pub const Pend = struct {
             self.lift_moved_from = self.ended_at;
         }
         self.lift_moved +%= 1;
+    }
+
+    /// The boundary moved the thread past the store it stopped on.
+    pub fn steppedPast(self: *Pend, next: u32) void {
+        self.resume_at = next;
     }
 
     /// The unmask seam stepped the core at the boundary now closing.
