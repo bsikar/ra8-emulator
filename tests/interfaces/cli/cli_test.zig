@@ -51,3 +51,10 @@ test "an asked-for budget wins over either default" {
     try std.testing.expectEqual(@as(usize, 64), options.budgetFor(true));
     try std.testing.expectEqual(@as(usize, 64), options.budgetFor(false));
 }
+
+test "the Click module is off unless --click fits it" {
+    const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(!defaults.click);
+    const fitted = try parse(&[_][]const u8{ "emu", "a.elf", "--click" });
+    try std.testing.expect(fitted.click);
+}

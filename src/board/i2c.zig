@@ -5,6 +5,12 @@
 //!
 //! The controller knows about transfers, not about parts. Which parts a board
 //! populates is a board fact, so it lives here rather than in riic.zig.
+//!
+//! THE IMU AND THE FUEL GAUGE ARE NOT BOARD FACTS. The LSM6DSO and the
+//! MAX17048 are Click-module parts, not soldered to the EK-RA8D2, so a bench
+//! with no module fitted answers nothing at 0x6B or 0x36. They go on the line
+//! only when the run asks for them with `click`; by default those addresses
+//! stay silent, the same as the bench.
 const bus = @import("../periph/riic/riic_bus.zig");
 const gt911 = @import("../periph/i3c/i3c_gt911.zig");
 const i3c = @import("../periph/i3c/i3c.zig");
@@ -19,12 +25,15 @@ pub const Wire = struct {
     controller: riic.Riic = riic.Riic.init(),
     expander: pi4ioe.Expander = .{},
     sensor: ov5640.Sensor = .{},
-    /// The I3C channel in legacy I2C mode, and the three parts on it: the
-    /// touch panel, the IMU and the fuel gauge that reports the battery.
+    /// The I3C channel in legacy I2C mode, and the parts on it: the touch
+    /// panel always, the IMU and the fuel gauge only with `click` set.
     touchline: i3c.I3c = .{},
     panel: gt911.Panel = .{},
     imu: lsm6dso.Imu = .{},
     gauge: max17048.Gauge = .{},
+    /// Whether a Click module carrying the IMU and the fuel gauge is fitted.
+    /// Read by `attach`, so it is set before the board is wired.
+    click: bool = false,
 
     /// Put both lines and the board's parts on the bus. The blocks hold
     /// pointers into this struct, so this runs once the board has stopped
@@ -35,6 +44,7 @@ pub const Wire = struct {
         try self.controller.attachDevice(self.expander.device());
         try self.controller.attachDevice(self.sensor.device());
         try self.touchline.attachDevice(self.panel.device());
+        if (!self.click) return;
         try self.touchline.attachDevice(self.imu.device());
         try self.touchline.attachDevice(self.gauge.device());
     }
