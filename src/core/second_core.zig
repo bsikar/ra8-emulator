@@ -37,8 +37,8 @@
 //! every value in it was wrong.
 //!
 //! THIS CORE IS NOT COPYABLE once it is open, and that is why `open` fills a
-//! caller's `Second` in place instead of returning one. Its watch and its
-//! SAU are registered with Unicorn BY ADDRESS, so a `Second` returned by
+//! caller's `Second` in place instead of returning one. Its watch, its SAU
+//! and its MPU guard are registered with Unicorn BY ADDRESS, so a `Second` returned by
 //! value leaves both hooks pointing at the temporary they were taken from
 //! and every record they make lands in freed memory.
 //!
@@ -52,6 +52,8 @@ const engine = @import("engine.zig");
 const elf = @import("elf.zig");
 const cadence = @import("cadence.zig");
 const sau = @import("../periph/sau.zig");
+const mpu = @import("../periph/mpu/mpu.zig");
+const mpu_guard = @import("mpu_guard.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -85,6 +87,11 @@ pub const Second = struct {
     /// This core's own Security Attribution Unit. Core-private state, not a
     /// block on the shared bus: the header says what sharing one cost.
     partitions: sau.Sau = sau.Sau.init(),
+    /// This core's own MPU table and the guard that enforces it, for the
+    /// same reason: a Cortex-M's MPU sits behind its own PPB, so CPU0
+    /// programming its regions must leave CPU1's untouched.
+    regions: mpu.Mpu = mpu.Mpu.init(),
+    guard: mpu_guard.Guard = mpu_guard.Guard.init(),
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -108,7 +115,11 @@ pub const Second = struct {
         errdefer self.core.close();
         try self.core.shareBoardRamWith(owner);
         try self.core.attachWatch(&self.watch);
-        try wiring.attachSecond(board, &self.core, &self.partitions);
+        try wiring.attachSecond(board, &self.core, .{
+            .partitions = &self.partitions,
+            .regions = &self.regions,
+            .guard = &self.guard,
+        });
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
         try self.core.resetFromVectorTable(self.vector_base);

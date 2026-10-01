@@ -10,6 +10,8 @@
 //! on. Keeping it here leaves board.zig as the list of what the board is.
 const engine = @import("../core/engine.zig");
 const sau = @import("../periph/sau.zig");
+const mpu = @import("../periph/mpu/mpu.zig");
+const mpu_guard = @import("../core/mpu_guard.zig");
 
 const Board = @import("board.zig").Board;
 
@@ -123,8 +125,21 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
     try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core, &self.partitions);
+    try primeCoreWindows(self, core, .{
+        .partitions = &self.partitions,
+        .regions = &self.regions,
+        .guard = &self.guard,
+    });
 }
+
+/// The state that lives inside one core rather than on the bus: its SAU,
+/// its MPU table and the guard that enforces that table. CPU0's are the
+/// board's own; CPU1 brings its own set.
+pub const CoreWindows = struct {
+    partitions: *sau.Sau,
+    regions: *mpu.Mpu,
+    guard: *mpu_guard.Guard,
+};
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
 /// at zero. Every one of these is a register the firmware reads before it
@@ -145,12 +160,12 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
 /// that owns the clocks and the interrupt controller; handing them CPU1
 /// instead would move the asymmetry, not remove it.
 ///
-/// THE SAU IS NOT ONE OF THE SHARED BLOCKS. It is taken as a parameter
-/// because it lives inside the core rather than on the bus: see
+/// THE SAU AND THE MPU ARE NOT SHARED BLOCKS. They are taken as parameters
+/// because they live inside the core rather than on the bus: see
 /// `primeCoreWindows`.
-pub fn attachSecond(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !void {
+pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
     try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core, partitions);
+    try primeCoreWindows(self, core, windows);
     self.second_core.mapped = true;
 }
 
@@ -165,12 +180,11 @@ pub fn attachSecond(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !v
 /// two Non-Secure Callable entries read back as five regions and none,
 /// because CPU1 had overwritten the first four with its own.
 ///
-/// THE MPU BESIDE IT IS STILL SHARED, deliberately and not by oversight. It
-/// is core-private in exactly the same way and wants the same treatment, but
-/// no image in this tree programmes the MPU from CPU1, so there is nothing
-/// to check a split against. It goes the same way as this one the day an
-/// image does.
-fn primeCoreWindows(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !void {
+/// THE MPU BESIDE IT IS CORE-PRIVATE IN EXACTLY THE SAME WAY, so it comes
+/// in with the SAU: the table and the guard that enforces it are the
+/// caller's. Shared, a CTRL store from either core rebuilt the traps from
+/// one table on whichever engine made it, and CPU0's regions were CPU1's.
+fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
     // AIRCR: the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);
     // CTR read as zero, so the firmware computed a four-byte line and
@@ -178,20 +192,20 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, partitions: *sau.Sau) !v
     try self.caches.prime(core.*);
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
-    try self.regions.prime(core.*);
+    try windows.regions.prime(core.*);
     // RBAR/RLAR are one word each in RAM, so without this every region a
     // driver programs overwrites the last and the table reads back empty.
     // The guard goes on with it: the same hook that banks the table is the
     // one that sees CTRL and arms the read-only traps.
-    try core.attachRegions(&self.regions, &self.guard);
+    try core.attachRegions(windows.regions, windows.guard);
     // SAU_TYPE read as zero, so the secure boot's capability check failed
     // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
     // error, parking the run in the Secure fallback main() forever.
-    try partitions.prime(core.*);
+    try windows.partitions.prime(core.*);
     // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
     // the five regions the boot map programs need the same hook to keep
     // from collapsing onto one entry.
-    try core.attachPartitions(partitions);
+    try core.attachPartitions(windows.partitions);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
