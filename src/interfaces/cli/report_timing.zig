@@ -126,7 +126,7 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
     }
     if (pending.reentered != 0) {
         try out.print(
-            "time: {d} stretch(es) opened on the very store that ended the one before, first at pc 0x{X:0>8}\n",
+            "time: {d} stretch(es) opened where the store that ended the one before left the thread, first at pc 0x{X:0>8}\n",
             .{ pending.reentered, pending.reentered_at },
         );
     }

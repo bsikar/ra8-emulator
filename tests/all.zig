@@ -20,6 +20,7 @@ test {
     _ = @import("core/idle_test.zig");
     _ = @import("core/pend_break_test.zig");
     _ = @import("core/pend_break_reopen_test.zig");
+    _ = @import("core/pend_resume_test.zig");
     _ = @import("core/pend_clear_test.zig");
     _ = @import("core/pend_ledger_test.zig");
     _ = @import("core/mask_pace_test.zig");

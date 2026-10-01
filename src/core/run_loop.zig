@@ -20,6 +20,7 @@ const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
+const pend_resume = @import("pend_resume.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -173,6 +174,7 @@ fn tailChained(core: anytype, controller: anytype, session: Session, left: usize
 fn servedPend(core: anytype, session: Session, remaining: *usize, chunk: usize) !?u32 {
     const pending = session.pend orelse return null;
     if (!pending.take()) return null;
+    pend_resume.pastStore(core, pending) catch return error.RunFailed;
     remaining.* -= chunk;
     if (session.timebase) |clock| clock.advance(core, @intCast(chunk)) catch return error.RunFailed;
     if (session.interrupts) |controller| {
@@ -210,6 +212,7 @@ fn interposed(core: anytype, session: Session, remaining: *usize, chunk: usize) 
 fn lookedAgain(core: anytype, session: Session, remaining: *usize) !?u32 {
     const pending = session.pend orelse return null;
     if (!pending.lookAgain()) return null;
+    pend_resume.pastStore(core, pending) catch return error.RunFailed;
     remaining.* -= 1;
     if (session.interrupts) |controller| {
         remaining.* -= service(core, controller, session, remaining.*) catch return error.RunFailed;
