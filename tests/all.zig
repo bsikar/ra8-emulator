@@ -67,6 +67,7 @@ test {
     _ = @import("debug/watch_table_test.zig");
     _ = @import("debug/call_decode_test.zig");
     _ = @import("debug/step_hook_test.zig");
+    _ = @import("debug/step_hook_image_test.zig");
     _ = @import("debug/break_hook_test.zig");
     _ = @import("debug/pc_hits_test.zig");
     _ = @import("debug/watchpoint_test.zig");

@@ -21,13 +21,13 @@ test "the Thumb bit is ignored on both sides" {
     try std.testing.expectEqual(@as(?break_table.Id, id), table.find(0x0200_1001));
 }
 
-test "a counted break waits for its arrival and keeps counting" {
+test "a counted break waits for its arrival, then stops on every one after" {
     var table = break_table.Table{};
     const id = try table.add(.{ .address = 0x0200_1000, .arrival = 3 });
     try std.testing.expectEqual(@as(?break_table.Id, null), table.hit(0x0200_1000));
     try std.testing.expectEqual(@as(?break_table.Id, null), table.hit(0x0200_1000));
     try std.testing.expectEqual(@as(?break_table.Id, id), table.hit(0x0200_1000));
-    try std.testing.expectEqual(@as(?break_table.Id, null), table.hit(0x0200_1000));
+    try std.testing.expectEqual(@as(?break_table.Id, id), table.hit(0x0200_1000));
     try std.testing.expectEqual(@as(u32, 4), table.get(id).?.seen);
 }
 
