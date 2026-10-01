@@ -44,6 +44,23 @@ pub const Pend = struct {
     /// a hundred and fifty of them against one take is the model failing to
     /// drain it.
     swallowed: usize = 0,
+    /// Swallowed stores that happened while an exception was executing,
+    /// rather than in Thread mode.
+    ///
+    /// This is the question the count on its own cannot answer. A pend
+    /// that is standing because the handler for it is ALREADY RUNNING is
+    /// the architecture: PendSV cannot preempt itself, and ThreadX's own
+    /// handler spins in `__tx_ts_wait` with no thread to run. A pend
+    /// standing while Thread mode runs on is the model failing to drain
+    /// it, because on silicon the handler would have been entered an
+    /// instruction after the first store.
+    swallowed_in_handler: usize = 0,
+    /// The exception that was executing at the first swallowed store, or
+    /// zero when the first one happened in Thread mode.
+    swallowed_under: u16 = 0,
+    /// Set once `swallowed_under` has been written, so a first store in
+    /// Thread mode is not overwritten by a later one in a handler.
+    placed: bool = false,
 
     /// Called from the hook: the firmware just set a pend bit.
     pub fn record(self: *Pend) void {
@@ -52,9 +69,14 @@ pub const Pend = struct {
     }
 
     /// Called from the hook: the firmware wrote a pend that was already
-    /// standing, so nothing was raised.
-    pub fn alreadyPending(self: *Pend) void {
+    /// standing, so nothing was raised. `executing` is the IPSR at the
+    /// store, zero in Thread mode.
+    pub fn alreadyPending(self: *Pend, executing: u16) void {
         self.swallowed +%= 1;
+        if (executing != 0) self.swallowed_in_handler +%= 1;
+        if (self.placed) return;
+        self.placed = true;
+        self.swallowed_under = executing;
     }
 
     /// Take the latch, if one is standing. Clears it, so one store ends
