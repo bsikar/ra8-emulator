@@ -96,7 +96,12 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli
     // Set before the hook is attached, since it is read as a store
     // retires. src/core/pend_break.zig carries what it does and why it is
     // off unless asked for.
-    parts.pend.look_again = options.drain_pends;
+    parts.pend.look.policy = if (options.drain_pends)
+        .every
+    else if (options.look_per_rise)
+        .per_rise
+    else
+        .off;
     try core.attachPend(&parts.pend);
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);

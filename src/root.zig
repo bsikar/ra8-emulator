@@ -26,6 +26,7 @@ pub const core = struct {
     pub const pend_break = @import("core/pend_break.zig");
     pub const pend_clear = @import("core/pend_clear.zig");
     pub const pend_ledger = @import("core/pend_ledger.zig");
+    pub const pend_look = @import("core/pend_look.zig");
     pub const pend_pace = @import("core/pend_pace.zig");
     pub const pend_sites = @import("core/pend_sites.zig");
     pub const unmask = @import("core/unmask.zig");

@@ -186,6 +186,10 @@ pub const Options = struct {
     /// still owes the firmware. Off by default; src/core/pend_break.zig
     /// carries what it measures and why it is not the default yet.
     drain_pends: bool = false,
+    /// `--look-per-rise`: the bounded form of `--drain-pends`, one look
+    /// per rise rather than one per store. src/core/pend_look.zig carries
+    /// why the bound does not bound anything in practice.
+    look_per_rise: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -334,6 +338,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.chunk_instructions = width;
     } else if (std.mem.eql(u8, flag, "--drain-pends")) {
         options.drain_pends = true;
+    } else if (std.mem.eql(u8, flag, "--look-per-rise")) {
+        options.look_per_rise = true;
     } else if (std.mem.eql(u8, flag, "--dump-regs")) {
         options.dump_regs = true;
     } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {

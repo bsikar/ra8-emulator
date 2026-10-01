@@ -24,6 +24,7 @@
 //! architecture puts it.
 const std = @import("std");
 const pend_clear = @import("pend_clear.zig");
+const pend_look = @import("pend_look.zig");
 const pend_sites = @import("pend_sites.zig");
 
 /// A pend written by the firmware, waiting to be taken.
@@ -79,20 +80,10 @@ pub const Pend = struct {
     /// Stretches that carried at least one swallowed store, so the worst
     /// can be read against how often it happens at all.
     stretches: usize = 0,
-    /// Whether a Thread-mode store that raises nothing may still end the
-    /// stretch. OFF by default, and `--drain-pends` turns it on.
-    ///
-    /// It is off because the experiment it enables does not yet produce a
-    /// right answer, only a differently wrong one. Measured on
-    /// threadx_blink over 1000 ms at the 50000 default: LED1 falls from
-    /// 150 toggles to 1 where the board shows 2, and over 4000 ms it is
-    /// still 1 where the board shows 8, so the thread stops blinking
-    /// rather than blinking correctly. Exceptions taken go from 1004 to
-    /// 11002 and swallowed stores from 151 to 639937. Shipping that as the
-    /// default would trade a number that is too high for one that is too
-    /// low and call it a fix. The switch keeps the experiment reproducible
-    /// without any image's behaviour depending on it.
-    look_again: bool = false,
+    /// The second-look allowance: one per stretch by default, every
+    /// re-ask under `--drain-pends`. src/core/pend_look.zig carries why
+    /// the stretch is what bounds it and what happens when nothing does.
+    look: pend_look.Look = .{},
     /// Set by the hook when the firmware asked AGAIN, in Thread mode, for
     /// a switch it is still owed. Taken by the run loop as a second look.
     ///
@@ -104,9 +95,6 @@ pub const Pend = struct {
     /// that would invent time the firmware never spent, and at 150 of them
     /// a second it would be a visible lie.
     again: bool = false,
-    /// Second looks given, so the cost of this is readable rather than
-    /// assumed.
-    looks: usize = 0,
     /// The address of the store that ended the stretch running now, and
     /// whether one has been written at all.
     ///
@@ -190,6 +178,7 @@ pub const Pend = struct {
     pub fn record(self: *Pend) void {
         self.latched = true;
         self.cuts +%= 1;
+        self.look.rearm();
     }
 
     /// Called from the hook: the firmware wrote a pend that was already
@@ -207,10 +196,7 @@ pub const Pend = struct {
             // handler is left alone on purpose: PendSV cannot preempt
             // itself, so a look there can never take it and would only
             // spin the boundary.
-            if (self.look_again) {
-                self.again = true;
-                self.looks +%= 1;
-            }
+            if (self.look.ask()) self.again = true;
         }
         if (self.placed) return;
         self.placed = true;
