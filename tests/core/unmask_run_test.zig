@@ -1,6 +1,34 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const unmask = ra8.core.unmask;
+const fault = ra8.core.fault;
+
+/// A core whose PRIMASK follows a script, one value per step, and whose
+/// PC walks two bytes a step. The same shape tests/core/unmask_test.zig
+/// uses; kept local because what these tests drive is the running tally
+/// rather than one lift's decision.
+const Scripted = struct {
+    masks: []const u32,
+    step: usize = 0,
+    pc: u32 = 0x0200_54B2,
+
+    pub fn register(self: *Scripted, which: anytype) !u32 {
+        return switch (which) {
+            .primask => self.masks[@min(self.step, self.masks.len - 1)],
+            .pc => self.pc,
+            else => 0,
+        };
+    }
+
+    pub fn runChunk(self: *Scripted, at: u32, count: usize, watch: ?*fault.Watch) !?fault.Fault {
+        _ = at;
+        _ = count;
+        _ = watch;
+        self.step += 1;
+        self.pc += 2;
+        return null;
+    }
+};
 
 /// A core that only answers PRIMASK, which is all `nothingMasked` reads.
 const Still = struct {
@@ -83,4 +111,41 @@ test "a quiet boundary with PRIMASK set proves nothing" {
     var seam = unmask.Release{};
     try seam.nothingMasked(&core);
     try std.testing.expect(!seam.enabled_once);
+}
+
+test "a fresh seam has no stubborn mask on record" {
+    const seam = unmask.Release{};
+    try std.testing.expectEqual(@as(u64, 0), seam.longest);
+    try std.testing.expectEqual(@as(u64, 0), seam.longest_held);
+}
+
+test "a mask waited out leaves nothing held" {
+    var core = Scripted{ .masks = &.{ 1, 1, 0 } };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&core, 8);
+    try std.testing.expectEqual(@as(u64, 0), seam.held);
+    try std.testing.expectEqual(@as(u64, 0), seam.longest);
+}
+
+test "consecutive give-ups on one mask raise the stubborn figure" {
+    var core = Scripted{ .masks = &.{1} };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&core, 4);
+    _ = try seam.lift(&core, 4);
+    _ = try seam.lift(&core, 4);
+    try std.testing.expectEqual(@as(u64, 3), seam.longest);
+    try std.testing.expectEqual(@as(u64, 12), seam.longest_held);
+}
+
+test "a later shorter run does not lower the stubborn figure" {
+    var stubborn = Scripted{ .masks = &.{1} };
+    var seam = unmask.Release{};
+    _ = try seam.lift(&stubborn, 4);
+    _ = try seam.lift(&stubborn, 4);
+    var clear = Still{ .primask = 0 };
+    try seam.nothingMasked(&clear);
+    var once = Scripted{ .masks = &.{1} };
+    _ = try seam.lift(&once, 4);
+    try std.testing.expectEqual(@as(u64, 2), seam.longest);
+    try std.testing.expectEqual(@as(u64, 8), seam.longest_held);
 }
