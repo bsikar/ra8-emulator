@@ -73,6 +73,7 @@ fn onWrite(
     if (c.uc.uc_mem_read(handle, memmap.scb.icsr, &standing, @sizeOf(u32)) != c.uc.UC_ERR_OK) return;
     if (standing & nvic.icsr_pendsvset != 0) {
         pending.alreadyPending(executing(handle));
+        pending.swallowedAt(programCounter(handle));
         // A Thread-mode store asked again for a switch that is still owed,
         // and the thread must not be allowed to carry on past it. Nothing
         // is raised here: the bit was already up, and the stop only buys
