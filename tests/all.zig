@@ -81,6 +81,7 @@ test {
     _ = @import("debug/step_hook_test.zig");
     _ = @import("debug/step_hook_image_test.zig");
     _ = @import("debug/commands_test.zig");
+    _ = @import("debug/session_test.zig");
     _ = @import("debug/break_hook_test.zig");
     _ = @import("debug/pc_hits_test.zig");
     _ = @import("debug/watchpoint_test.zig");
