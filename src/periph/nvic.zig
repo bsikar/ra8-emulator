@@ -15,6 +15,7 @@
 //! VTOR. Returning is the mirror: the handler branches to EXC_RETURN, which is
 //! an unmapped fetch as far as Unicorn is concerned, and the run loop unwinds
 //! the frame instead of reporting a fault.
+const held_reasons = @import("held.zig");
 const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
@@ -89,8 +90,12 @@ pub const Nvic = struct {
     /// Handlers returned from.
     returned: u64 = 0,
     /// Pends that were ready but could not be taken: masked, outranked by the
-    /// running handler, or past the nesting guard.
+    /// running handler, or past the nesting guard. `why` splits the same
+    /// count by reason; this stays the total so the run's headline line
+    /// does not move.
     held: u64 = 0,
+    /// The same refusals, one counter per reason. See src/periph/held.zig.
+    why: held_reasons.Held = .{},
     /// Returns that went straight into another handler instead of back to
     /// the interrupted code. See the tail-chain paragraph in
     /// src/core/run_loop.zig: without this the second exception waits for
@@ -118,14 +123,17 @@ pub const Nvic = struct {
         const candidate = (try self.pick(core)) orelse return null;
         if (try masked(core)) {
             self.held += 1;
+            self.why.masked +%= 1;
             return null;
         }
         if (self.depth == max_nesting) {
             self.held += 1;
+            self.why.deep +%= 1;
             return null;
         }
         if (self.depth > 0 and candidate.priority >= self.active[self.depth - 1].priority) {
             self.held += 1;
+            self.why.outrankedBy(candidate.number, self.active[self.depth - 1].number);
             return null;
         }
         // An image with no handler for what it pended keeps the pend rather
@@ -133,6 +141,7 @@ pub const Nvic = struct {
         // interrupt in the report instead of a fault somewhere unrelated.
         if ((try self.vectorFor(core, candidate.number)) == null) {
             self.held += 1;
+            self.why.no_vector +%= 1;
             return null;
         }
         try self.enter(core, candidate);
