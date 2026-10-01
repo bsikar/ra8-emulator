@@ -24,6 +24,7 @@ const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
+const mask_pace = @import("mask_pace.zig");
 const pend_pace = @import("pend_pace.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const tally = @import("../debug/tally.zig");
@@ -129,4 +130,10 @@ pub const Session = struct {
     /// delivery timing wants. src/core/pend_pace.zig says why this is the
     /// side of the seam worth shortening.
     pend_pace: ?*pend_pace.Pace = null,
+    /// Narrows the boundary while a masked pend keeps coming back stuck,
+    /// so the mask is re-tested within a couple of thousand instructions
+    /// rather than a whole chunk. Null keeps the full boundary, which is
+    /// what every test that is not about delivery timing wants.
+    /// src/core/mask_pace.zig says what the seam's forgetting costs.
+    mask_pace: ?*mask_pace.Pace = null,
 };

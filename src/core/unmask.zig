@@ -72,6 +72,14 @@ pub const Release = struct {
     /// step put it and the ordinary stretch handles it next time round,
     /// which is also how an exception return inside a lift is dealt with.
     faulted: u64 = 0,
+    /// Lifts that have ended stuck in a row, cleared the moment one
+    /// succeeds or no pend is masked at all.
+    ///
+    /// The bound is deliberate, but giving up and FORGETTING is not: the
+    /// pend is then offered again a whole chunk later. This is what lets
+    /// the boundary be narrowed while the mask holds, without touching the
+    /// bound itself. src/core/mask_pace.zig carries what that is worth.
+    run: u64 = 0,
 
     /// Step until PRIMASK clears, at most `bound` instructions.
     pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
@@ -86,11 +94,19 @@ pub const Release = struct {
             if (!(try masked(core))) {
                 out.cleared = true;
                 self.lifted += 1;
+                self.run = 0;
                 return out;
             }
         }
         self.stuck += 1;
+        self.run +%= 1;
         return out;
+    }
+
+    /// No pend was masked at this boundary, so there is nothing to wait
+    /// out and the run starts again from zero.
+    pub fn nothingMasked(self: *Release) void {
+        self.run = 0;
     }
 
     /// Whether anything happened worth a line at the end of a run.

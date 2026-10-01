@@ -21,7 +21,9 @@ test {
     _ = @import("core/pend_break_test.zig");
     _ = @import("core/pend_clear_test.zig");
     _ = @import("core/pend_ledger_test.zig");
+    _ = @import("core/mask_pace_test.zig");
     _ = @import("core/pend_look_test.zig");
+    _ = @import("core/unmask_run_test.zig");
     _ = @import("core/pend_pace_test.zig");
     _ = @import("core/pend_sites_test.zig");
     _ = @import("core/unmask_test.zig");

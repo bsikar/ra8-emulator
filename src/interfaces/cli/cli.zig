@@ -190,6 +190,10 @@ pub const Options = struct {
     /// per rise rather than one per store. src/core/pend_look.zig carries
     /// why the bound does not bound anything in practice.
     look_per_rise: bool = false,
+    /// `--pace-masked`: narrow the boundary while a masked pend keeps
+    /// coming back stuck. Off by default; src/core/mask_pace.zig carries
+    /// the measurement that says it recovers nothing.
+    pace_masked: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -340,6 +344,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.drain_pends = true;
     } else if (std.mem.eql(u8, flag, "--look-per-rise")) {
         options.look_per_rise = true;
+    } else if (std.mem.eql(u8, flag, "--pace-masked")) {
+        options.pace_masked = true;
     } else if (std.mem.eql(u8, flag, "--dump-regs")) {
         options.dump_regs = true;
     } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {
