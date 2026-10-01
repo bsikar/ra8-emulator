@@ -1,0 +1,69 @@
+//! Everything one run accumulates, in one place.
+//!
+//! These are the counters and tables the hooks write into as the run goes,
+//! kept together so `main` wires them once and the report reads them once.
+//! Lifted out of src/main.zig when the file passed the gate's 400 lines:
+//! holding the run's state is its own purpose, and it grows by a field
+//! every time a slice adds a counter.
+const engine = @import("../../core/engine.zig");
+const csel = @import("../../core/csel.zig");
+const tz = @import("../../core/tz.zig");
+const idle = @import("../../core/idle.zig");
+const unmask = @import("../../core/unmask.zig");
+const hotspots = @import("../../debug/hotspots.zig");
+const functions = @import("../../debug/functions.zig");
+const tally = @import("../../debug/tally.zig");
+const pend_break = @import("../../core/pend_break.zig");
+const pend_pace = @import("../../core/pend_pace.zig");
+const mask_pace = @import("../../core/mask_pace.zig");
+const pc_hits = @import("../../debug/pc_hits.zig");
+const clocks = @import("../../periph/clocks.zig");
+const lob = @import("../../core/lob.zig");
+const nvic = @import("../../periph/nvic.zig");
+const reboot_mod = @import("../../core/reboot.zig");
+const undefined_ops = @import("../../core/undefined_ops.zig");
+const report_run = @import("report_run.zig");
+
+pub const Parts = struct {
+    watch: engine.Watch = .{},
+    loops: lob.Loops = .{},
+    selects: csel.Selects = .{},
+    worlds: tz.Worlds = .{},
+    idle: idle.Seam = .{},
+    release: unmask.Release = .{},
+    pcs: hotspots.Table = .{},
+    fns: ?functions.Table = null,
+    taken: tally.Tally = .{},
+    timebase: clocks.Clocks = .{},
+    pend: pend_break.Pend = .{},
+    pacing: pend_pace.Pace = .{},
+    mask_pacing: mask_pace.Pace = .{},
+    hits: pc_hits.Hits = .{},
+};
+
+/// What the run counted, gathered off the parts for the report.
+///
+/// Its own function so `main` stays inside the gate's 80 lines: this is a
+/// transcription, not a decision, and it grows every time a slice adds a
+/// counter.
+pub fn tallyOf(
+    parts: Parts,
+    interrupts: nvic.Nvic,
+    reboot: reboot_mod.Reboot,
+    undefined_found: undefined_ops.Found,
+) report_run.Tally {
+    return .{
+        .timebase = parts.timebase,
+        .idle = parts.idle,
+        .release = parts.release,
+        .pend = parts.pend,
+        .pacing = parts.pacing,
+        .mask_pacing = parts.mask_pacing,
+        .interrupts = interrupts,
+        .reboot = reboot,
+        .loops = parts.loops,
+        .selects = parts.selects,
+        .worlds = parts.worlds,
+        .undefined_found = undefined_found,
+    };
+}

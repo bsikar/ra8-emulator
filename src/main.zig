@@ -9,6 +9,8 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const cli = ra8.core.cli;
+const parts_mod = ra8.board.parts;
+const Parts = parts_mod.Parts;
 const elf = ra8.core.elf;
 const symbols = ra8.core.symbols;
 const undefined_ops = ra8.core.undefined_ops;
@@ -57,22 +59,6 @@ fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
 /// once it has stopped. One struct rather than six locals because that is
 /// what they are: every one of them is attached in the same breath and
 /// reported on in the same breath.
-const Parts = struct {
-    watch: engine.Watch = .{},
-    loops: lob.Loops = .{},
-    selects: ra8.core.csel.Selects = .{},
-    worlds: ra8.core.tz.Worlds = .{},
-    idle: ra8.core.idle.Seam = .{},
-    release: ra8.core.unmask.Release = .{},
-    pcs: ra8.core.hotspots.Table = .{},
-    fns: ?ra8.core.functions.Table = null,
-    taken: ra8.core.tally.Tally = .{},
-    timebase: clocks.Clocks = .{},
-    pend: ra8.core.pend_break.Pend = .{},
-    pacing: ra8.core.pend_pace.Pace = .{},
-    hits: ra8.core.pc_hits.Hits = .{},
-};
-
 /// Hand the watched place the run's own period counter, then hook it.
 ///
 /// The stamp has to be wired before the first store lands, and the clock it
@@ -102,7 +88,12 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli
         .per_rise
     else
         .off;
+    // Same reason: read as a boundary opens, and off unless asked for.
+    // src/core/mask_pace.zig carries the measurement that says narrowing
+    // while a mask holds recovers nothing.
+    parts.mask_pacing.on = options.pace_masked;
     try core.attachPend(&parts.pend);
+    parts.fns = .{ .image = image };
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);
     return written;
@@ -162,7 +153,6 @@ pub fn main() !u8 {
     };
     defer if (second) |one| one.close();
     const budget = options.budgetFor(stop != null);
-    parts.fns = .{ .image = image };
     const fault = try second_core.interleave(core, entry, budget, .{
         .watch = &parts.watch,
         .timebase = &parts.timebase,
@@ -178,6 +168,7 @@ pub fn main() !u8 {
         .unmask = &parts.release,
         .pend = &parts.pend,
         .pend_pace = &parts.pacing,
+        .mask_pace = &parts.mask_pacing,
         .pcs = &parts.pcs,
         .fns = &parts.fns.?,
         .taken_from = &parts.taken,
@@ -185,7 +176,7 @@ pub fn main() !u8 {
         .per_boundary = options.chunk_instructions,
     }, second);
 
-    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .pend = parts.pend, .pacing = parts.pacing, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
+    try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 

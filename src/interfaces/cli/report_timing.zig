@@ -33,6 +33,7 @@ const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const pend_ledger = @import("../../core/pend_ledger.zig");
 const pend_break = @import("../../core/pend_break.zig");
+const mask_pace = @import("../../core/mask_pace.zig");
 const pend_pace = @import("../../core/pend_pace.zig");
 const pend_sites = @import("../../core/pend_sites.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
@@ -160,6 +161,7 @@ pub fn timing(
     release: unmask.Release,
     pending: pend_break.Pend,
     pacing: pend_pace.Pace,
+    masking: mask_pace.Pace,
 ) !void {
     try pends(out, pending, interrupts.standing.entries, pacing);
     try out.print(
@@ -196,6 +198,10 @@ pub fn timing(
         try out.print(
             "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
             .{ release.lifted, release.stepped, release.stuck, release.faulted },
+        );
+        if (!masking.quiet()) try out.print(
+            "interrupts: {d} boundary(ies) were cut to {d} instruction(s) while a masked pend stayed stuck, {d} lift(s) deep at worst\n",
+            .{ masking.narrowed, mask_pace.limits.while_masked, masking.longest_run },
         );
     }
 }

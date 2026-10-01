@@ -16,6 +16,7 @@ const Writer = @import("report.zig").Writer;
 const report = @import("report.zig");
 const report_timing = @import("report_timing.zig");
 const pend_break = @import("../../core/pend_break.zig");
+const mask_pace = @import("../../core/mask_pace.zig");
 const pend_pace = @import("../../core/pend_pace.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
@@ -41,6 +42,9 @@ pub const Tally = struct {
     /// Boundaries cut short to shorten a switch's wait;
     /// src/core/pend_pace.zig says why.
     pacing: pend_pace.Pace = .{},
+    /// Boundaries cut short while a masked pend stayed stuck;
+    /// src/core/mask_pace.zig says what the seam's forgetting costs.
+    mask_pacing: mask_pace.Pace = .{},
     interrupts: nvic.Nvic,
     reboot: reboot.Reboot,
     loops: lob.Loops,
@@ -54,7 +58,7 @@ pub const Tally = struct {
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
-    try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend, of.pacing);
+    try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend, of.pacing, of.mask_pacing);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);

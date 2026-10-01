@@ -14,6 +14,7 @@
 //! the engine is what keeps this file off the engine's import cycle, and is
 //! the same shape src/periph/clocks.zig already uses for the same reason.
 const cadence = @import("cadence.zig");
+const mask_pace = @import("mask_pace.zig");
 const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
@@ -342,7 +343,10 @@ fn service(core: anytype, controller: anytype, session: Session, remaining: usiz
 /// seam's own cap, so the return can never exceed what the caller has.
 fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
     const seam = session.unmask orelse return 0;
-    if (!(try controller.pendingMasked(core))) return 0;
+    if (!(try controller.pendingMasked(core))) {
+        seam.nothingMasked();
+        return 0;
+    }
     const lifted = try seam.lift(core, @min(remaining, unmask.limits.steps));
     if (lifted.ran == 0) return 0;
     if (session.timebase) |clock| try clock.advance(core, @intCast(lifted.ran));
@@ -355,7 +359,15 @@ fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usi
 fn paceFor(core: anytype, configured: cadence.Cadence, session: Session) cadence.Cadence {
     var pace = configured;
     if (session.timebase) |clock| pace = pace.narrowedTo(clock.period(core));
-    return whileStanding(pace, session);
+    pace = whileStanding(pace, session);
+    // Narrowed again while a masked pend keeps coming back stuck, so the
+    // mask is re-tested within a couple of thousand instructions instead
+    // of a whole chunk. Off unless asked for: src/core/mask_pace.zig
+    // carries the measurement that says it recovers nothing.
+    if (session.mask_pace) |tracker| if (session.unmask) |seam| {
+        pace = .{ .per_boundary = tracker.widthFor(pace.per_boundary, seam.run) };
+    };
+    return pace;
 }
 
 /// Narrow this boundary while a pend the firmware wrote is still standing
