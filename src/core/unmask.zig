@@ -41,6 +41,7 @@
 //! `core` is `anytype` for the reason src/core/idle.zig takes it that way: it
 //! keeps this file off the engine's import cycle and nothing here touches C.
 const nvic = @import("../periph/nvic.zig");
+const pend_sites = @import("pend_sites.zig");
 
 pub const limits = struct {
     /// Instructions a lift may step before giving up. A mask held longer
@@ -80,6 +81,11 @@ pub const Release = struct {
     /// the boundary be narrowed while the mask holds, without touching the
     /// bound itself. src/core/mask_pace.zig carries what that is worth.
     run: u64 = 0,
+    /// Where the stepping stopped on each of those give-ups, busiest site
+    /// first. `stuck` says how often a lift ran out of room; this says in
+    /// which code, which is the part that decides whether the mask is the
+    /// firmware's own doing or the model holding one it should not.
+    gave_up: pend_sites.Sites = .{},
 
     /// Step until PRIMASK clears, at most `bound` instructions.
     pub fn lift(self: *Release, core: anytype, bound: usize) !Lift {
@@ -100,6 +106,7 @@ pub const Release = struct {
         }
         self.stuck += 1;
         self.run +%= 1;
+        self.gave_up.record(try core.register(.pc));
         return out;
     }
 

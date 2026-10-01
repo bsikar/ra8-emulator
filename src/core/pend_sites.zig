@@ -1,10 +1,17 @@
-//! Which addresses stored a pend that was already standing.
+//! A small table of program counters and how often each came up.
 //!
-//! src/core/pend_break.zig counts those stores; this says where they came
-//! from. The count alone cannot tell apart the two shapes that want
-//! opposite fixes: one site asking over and over is a loop to go and read,
-//! and the same count spread across the firmware is the model never
-//! draining the bit at all.
+//! TWO CALLERS, the same question in both: a count on its own cannot tell
+//! apart the two shapes that want opposite fixes, one site coming up over
+//! and over (a loop to go and read) against the same count spread across
+//! the firmware (something the model does everywhere).
+//!
+//! src/core/pend_break.zig counts stores that landed on a pend already
+//! standing; this says where they came from. src/core/unmask.zig counts
+//! lifts that gave up with the pend still masked; this says where the
+//! stepping stopped. Guessing that second one from a nearby number is
+//! exactly the mistake this table exists to stop: an exception's entry pc
+//! says where the firmware WAS when a pend was taken, and reads as an
+//! answer to where a lift gave up without being one.
 //!
 //! A FIXED TABLE, not a map. This is written from inside Unicorn's
 //! memory-write hook, which has no allocator and runs on every store the
@@ -31,22 +38,40 @@ pub const Site = struct {
 pub const Sites = struct {
     seen: [limits.sites]Site = [_]Site{.{}} ** limits.sites,
     used: usize = 0,
-    /// Stores from an address that arrived once the table was full.
+    /// Records that arrived for a new address once the table was full, so
+    /// a run with more sites than slots says so instead of lying by
+    /// omission.
     overflowed: usize = 0,
 
-    /// Called from the hook: a swallowed store came from `pc`.
+    /// Count one record against `pc`.
+    ///
+    /// THE BUSIEST SITES SURVIVE, not the first eight seen. A full table
+    /// that simply refused newcomers would answer the wrong question
+    /// entirely: the sites that matter are usually the ones a loop keeps
+    /// coming back to, and a loop entered late arrives after eight
+    /// one-off addresses have taken every slot. So a new address takes
+    /// the least-counted slot and inherits its count, which is the
+    /// standard way to keep heavy hitters in fixed room. The consequence
+    /// is stated rather than hidden: a surviving count is an upper bound,
+    /// over by at most what the slot held when it was taken over, and
+    /// exact whenever `overflowed` is zero.
     pub fn record(self: *Sites, pc: u32) void {
         for (self.seen[0..self.used]) |*site| {
             if (site.pc != pc) continue;
             site.count +%= 1;
             return;
         }
-        if (self.used == limits.sites) {
-            self.overflowed +%= 1;
+        if (self.used < limits.sites) {
+            self.seen[self.used] = .{ .pc = pc, .count = 1 };
+            self.used += 1;
             return;
         }
-        self.seen[self.used] = .{ .pc = pc, .count = 1 };
-        self.used += 1;
+        self.overflowed +%= 1;
+        var thinnest = &self.seen[0];
+        for (self.seen[1..]) |*site| {
+            if (site.count < thinnest.count) thinnest = site;
+        }
+        thinnest.* = .{ .pc = pc, .count = thinnest.count +% 1 };
     }
 
     /// The sites that were used, busiest first.
