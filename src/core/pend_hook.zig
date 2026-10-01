@@ -15,6 +15,7 @@ const c = @import("c.zig");
 const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
 const pend_break = @import("pend_break.zig");
+const pend_clear = @import("pend_clear.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -68,9 +69,22 @@ fn onWrite(
     const pending: *pend_break.Pend = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
     const written: u32 = @truncate(@as(u64, @bitCast(value)));
-    if (written & nvic.icsr_pendsvset == 0) return;
     var standing: u32 = 0;
     if (c.uc.uc_mem_read(handle, memmap.scb.icsr, &standing, @sizeOf(u32)) != c.uc.UC_ERR_OK) return;
+    if (written & nvic.icsr_pendsvset == 0) {
+        // A store that does not carry PENDSVSET raises nothing, but it can
+        // still TAKE A STANDING PEND DOWN, because against a plain-RAM PPB a
+        // word store is just a word store and the write-one-to-set lane is
+        // not honoured. Counted rather than corrected: this hook's job is to
+        // say what happens, and src/core/pend_clear.zig says why the count
+        // is the reading that settles where the missing pends went.
+        if (standing & nvic.icsr_pendsvset != 0) pending.cleared.record(
+            programCounter(handle),
+            executing(handle),
+            written & nvic.icsr_pendsvclr != 0,
+        );
+        return;
+    }
     if (standing & nvic.icsr_pendsvset != 0) {
         pending.alreadyPending(executing(handle));
         pending.swallowedAt(programCounter(handle));
