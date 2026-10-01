@@ -23,6 +23,7 @@ const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
+const pend_break = @import("pend_break.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const tally = @import("../debug/tally.zig");
 const taken_in = @import("../debug/taken_in.zig");
@@ -114,4 +115,10 @@ pub const Session = struct {
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.
     undefined_sites: ?*undefined_ops.Found = null,
+    /// A pend the firmware wrote inside a stretch, which ends that
+    /// stretch so the controller can take it straight away. Null leaves a
+    /// hand-written pend waiting for the next boundary, which is what
+    /// every test that is not about delivery timing wants.
+    /// src/core/pend_break.zig says what it costs.
+    pend: ?*pend_break.Pend = null,
 };

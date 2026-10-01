@@ -18,6 +18,7 @@ const fault = @import("fault.zig");
 const nvic = @import("../periph/nvic.zig");
 const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
+const pend_break = @import("pend_break.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -58,6 +59,10 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         }
         if (try trapped(core, session)) |resumed| {
             remaining -= 1;
+            pc = resumed;
+            continue;
+        }
+        if (try servedPend(core, session, &remaining, chunk)) |resumed| {
             pc = resumed;
             continue;
         }
@@ -105,6 +110,35 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         if (session.fns) |table| table.sample(pc);
     }
     return null;
+}
+
+/// A pend the firmware wrote, taken at the store that wrote it.
+///
+/// The hook stopped the stretch on the store, so this is the boundary the
+/// architecture would have put the handler at. How far into the stretch
+/// the store happened cannot be measured, so the stretch is charged the
+/// WHOLE chunk, the same approximation the idle seam already makes when
+/// it skips one. Charging a single instruction instead, which is what the
+/// trap path does, is wrong here for a reason the traps never hit: a trap
+/// fires once, a pend fires in a loop. A firmware that pends on every
+/// pass then runs a whole chunk of work for one instruction of budget and
+/// one instruction of modelled time, so the deadline never arrives and
+/// the run grinds. Measured that way, `threadx_canfd_demo` and
+/// `wdt_supervisor_demo` stopped finishing at all. The cost of the other
+/// choice is that modelled time runs at most one boundary ahead of the
+/// work per pend, which on `threadx_blink` is 68 boundaries over 100
+/// periods of a 99-million-cycle run.
+///
+/// Returns where to resume, or null when nothing was latched.
+fn servedPend(core: anytype, session: Session, remaining: *usize, chunk: usize) !?u32 {
+    const pending = session.pend orelse return null;
+    if (!pending.take()) return null;
+    remaining.* -= chunk;
+    if (session.timebase) |clock| clock.advance(core, @intCast(chunk)) catch return error.RunFailed;
+    if (session.interrupts) |controller| {
+        remaining.* -= service(core, controller, session, remaining.*) catch return error.RunFailed;
+    }
+    return try core.register(.pc);
 }
 
 /// A store into a read-only region that stopped the chunk early, turned

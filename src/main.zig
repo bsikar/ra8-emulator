@@ -68,6 +68,7 @@ const Parts = struct {
     fns: ?ra8.core.functions.Table = null,
     taken: ra8.core.tally.Tally = .{},
     timebase: clocks.Clocks = .{},
+    pend: ra8.core.pend_break.Pend = .{},
 };
 
 /// Hand the watched place the run's own period counter, then hook it.
@@ -86,6 +87,7 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts) !u32 {
     try core.attachSelects(&parts.selects);
     try core.attachIdle(&parts.idle);
     try core.attachTimebase(&parts.timebase);
+    try core.attachPend(&parts.pend);
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);
     return written;
@@ -159,6 +161,7 @@ pub fn main() !u8 {
         .deadline = if (timed) |*one| one else null,
         .idle = &parts.idle,
         .unmask = &parts.release,
+        .pend = &parts.pend,
         .pcs = &parts.pcs,
         .fns = &parts.fns.?,
         .taken_from = &parts.taken,
@@ -166,7 +169,7 @@ pub fn main() !u8 {
         .per_boundary = options.chunk_instructions,
     }, second);
 
-    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
+    try reportAll(out, core, &board, image, options, .{ .timebase = parts.timebase, .idle = parts.idle, .release = parts.release, .pend = parts.pend, .interrupts = interrupts, .reboot = reboot, .loops = parts.loops, .selects = parts.selects, .worlds = parts.worlds, .undefined_found = undefined_found }, parts, second, watched, window);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 
