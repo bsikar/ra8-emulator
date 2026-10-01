@@ -56,6 +56,9 @@ pub const core = struct {
     pub const stop = @import("core/stop.zig");
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");
+    pub const conformance_vector = @import("core/cpu/conformance/vector.zig");
+    pub const conformance_coverage = @import("core/cpu/conformance/coverage.zig");
+    pub const conformance_suite = @import("core/cpu/conformance/suite.zig");
 };
 
 pub const periph = struct {
