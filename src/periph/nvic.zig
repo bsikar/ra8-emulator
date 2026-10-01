@@ -22,6 +22,8 @@ const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
 const exc_return = @import("exc_return.zig");
+const nvic_clear = @import("nvic_clear.zig");
+const standing_pends = @import("standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the
 /// firmware actually pends are named; everything at or above `first_irq` is
@@ -40,6 +42,14 @@ pub const icsr_pendstclr: u32 = 1 << 25;
 pub const icsr_pendstset: u32 = clocks.icsr_pendstset;
 pub const icsr_pendsvclr: u32 = 1 << 27;
 pub const icsr_pendsvset: u32 = 1 << 28;
+
+/// The same four, in the shape src/periph/nvic_clear.zig takes them.
+const clear_bits = nvic_clear.Bits{
+    .pendstclr = icsr_pendstclr,
+    .pendstset = icsr_pendstset,
+    .pendsvclr = icsr_pendsvclr,
+    .pendsvset = icsr_pendsvset,
+};
 
 /// xPSR: the low nine bits are IPSR, the exception the core is executing, and
 /// bit 9 records that entry pushed four bytes of padding to realign the stack.
@@ -99,6 +109,10 @@ pub const Nvic = struct {
     /// Pends that lost the pick and stayed pending. `held` is about the
     /// pick's WINNER; these left no trace at all. See src/periph/passed.zig.
     passed: passed_pends.Passed = .{},
+    /// How long PendSV's pend bit stands before anything takes it. See
+    /// src/periph/standing.zig: a bit that stands for thousands of
+    /// boundaries is a scheduler that never runs.
+    standing: standing_pends.Standing = .{},
     /// Returns that went straight into another handler instead of back to
     /// the interrupted code. See the tail-chain paragraph in
     /// src/core/run_loop.zig: without this the second exception waits for
@@ -122,7 +136,8 @@ pub const Nvic = struct {
     /// is allowed to preempt whatever is running. Returns the exception it
     /// entered. Call it at the chunk boundary, after the clocks are charged.
     pub fn dispatch(self: *Nvic, core: anytype) !?u16 {
-        try foldClearRegisters(core);
+        try nvic_clear.registers(core, irq_words, clear_bits);
+        self.standing.boundary((try core.readWord(memmap.scb.icsr)) & icsr_pendsvset != 0);
         const candidate = (try self.pick(core, &self.passed)) orelse return null;
         if (try masked(core)) {
             self.held += 1;
@@ -147,6 +162,7 @@ pub const Nvic = struct {
             self.why.no_vector +%= 1;
             return null;
         }
+        if (candidate.number == pendsv) self.standing.entered();
         try self.enter(core, candidate);
         return candidate.number;
     }
@@ -162,7 +178,7 @@ pub const Nvic = struct {
     /// still means what it says.
     pub fn pendingMasked(self: *Nvic, core: anytype) !bool {
         if (!(try masked(core))) return false;
-        try foldClearRegisters(core);
+        try nvic_clear.registers(core, irq_words, clear_bits);
         return (try self.pick(core, null)) != null;
     }
 
@@ -365,34 +381,4 @@ fn setActiveBit(core: anytype, number: u16, active: bool) !void {
     const mask = @as(u32, 1) << @intCast(line % 32);
     const current = try core.readWord(address);
     try core.writeWord(address, if (active) current | mask else current & ~mask);
-}
-
-/// The clear-side registers only work on hardware because the NVIC sees the
-/// write. Against a plain-RAM PPB the word just sits there, so the fold is
-/// done here instead: whatever the firmware put in ICER is removed from ISER,
-/// whatever it put in ICPR is removed from ISPR, and the clear register is
-/// emptied. A firmware that disables a line therefore stops seeing it from
-/// the next chunk boundary, which is the same seam everything else moves on.
-///
-/// The one behaviour this cannot give back is the read side: on hardware ICER
-/// reads as the enable state, here it reads as zero.
-fn foldClearRegisters(core: anytype) !void {
-    var word: u16 = 0;
-    while (word < irq_words) : (word += 1) {
-        const offset = 4 * @as(u32, word);
-        try fold(core, memmap.nvic.icer + offset, memmap.nvic.iser + offset);
-        try fold(core, memmap.nvic.icpr + offset, memmap.nvic.ispr + offset);
-    }
-    const icsr = try core.readWord(memmap.scb.icsr);
-    var next = icsr;
-    if (icsr & icsr_pendstclr != 0) next &= ~(icsr_pendstclr | icsr_pendstset);
-    if (icsr & icsr_pendsvclr != 0) next &= ~(icsr_pendsvclr | icsr_pendsvset);
-    if (next != icsr) try core.writeWord(memmap.scb.icsr, next);
-}
-
-fn fold(core: anytype, clear_register: u32, set_register: u32) !void {
-    const clear = try core.readWord(clear_register);
-    if (clear == 0) return;
-    try core.writeWord(set_register, (try core.readWord(set_register)) & ~clear);
-    try core.writeWord(clear_register, 0);
 }
