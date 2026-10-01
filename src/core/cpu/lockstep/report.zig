@@ -7,7 +7,7 @@ pub fn write(out: anytype, lock: *const run_mod.Run, ended: run_mod.End) !void {
         .budget => try out.writeAll("lockstep: budget spent, no divergence\n"),
         .diverged => |found| {
             try out.print("lockstep: divergence after {} ({s}), ", .{ found.instr, found.class });
-            try found.mismatch.write(out);
+            try found.what.write(out);
             try out.writeAll("\n");
         },
         .stopped => |why| switch (why) {

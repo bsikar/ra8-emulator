@@ -38,6 +38,6 @@ test "a disagreement ends the run and is counted as diverged" {
     var lock: run.Run = .{};
     defer lock.deinit(gpa);
     const ended = try lock.go(gpa, &pair.cpu, pair.theirs, 10);
-    try std.testing.expectEqual(ra8.core.cpu.regs.Name.r7, ended.diverged.mismatch.name);
+    try std.testing.expectEqual(ra8.core.cpu.regs.Name.r7, ended.diverged.what.register.name);
     try std.testing.expectEqual(@as(u64, 1), lock.counts.find("hint").?.diverged);
 }

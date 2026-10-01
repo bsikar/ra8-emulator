@@ -1,4 +1,5 @@
-//! One instruction on both backends, then a comparison of what each holds.
+//! One instruction on both backends, then a comparison of what each holds:
+//! the registers, and every store the Zig core made.
 //!
 //! Each backend needs its own memory, or a store by one would be read back
 //! by the other and hide a divergence; the driver gives the Zig core an
@@ -10,11 +11,25 @@ const Instr = @import("../instr.zig").Instr;
 const snapshot = @import("snapshot.zig");
 const diff = @import("diff.zig");
 const oracle = @import("oracle.zig");
+const writes = @import("writes.zig");
+const memory_diff = @import("memory_diff.zig");
+
+/// What the two backends disagree on.
+pub const What = union(enum) {
+    register: diff.Mismatch,
+    memory: memory_diff.Mismatch,
+
+    pub fn write(self: What, out: anytype) !void {
+        switch (self) {
+            inline else => |found| try found.write(out),
+        }
+    }
+};
 
 pub const Divergence = struct {
     class: []const u8,
     instr: Instr,
-    mismatch: diff.Mismatch,
+    what: What,
 };
 
 pub const Result = union(enum) {
@@ -34,13 +49,20 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine) engine.Error!Result {
         return .{ .stopped = .{ .bus_fault = address } };
     };
     const hit = decode.decode(instr);
-    if (ours.step()) |stopped| return .{ .stopped = stopped };
+    var made: writes.Recorder = .{ .inner = ours.bus };
+    ours.bus = made.view();
+    const stopped = ours.step();
+    ours.bus = made.inner;
+    if (stopped) |why| return .{ .stopped = why };
     const class = hit.?.group;
     if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
     const mine = snapshot.Snapshot.fromRegs(&ours.regs);
     const other = try oracle.read(theirs);
-    if (diff.first(mine, other)) |mismatch| {
-        return .{ .diverged = .{ .class = class, .instr = instr, .mismatch = mismatch } };
-    }
+    if (diff.first(mine, other)) |found| return diverged(class, instr, .{ .register = found });
+    if (try memory_diff.first(made.items(), theirs)) |found| return diverged(class, instr, .{ .memory = found });
     return .{ .matched = class };
+}
+
+fn diverged(class: []const u8, instr: Instr, what: What) Result {
+    return .{ .diverged = .{ .class = class, .instr = instr, .what = what } };
 }
