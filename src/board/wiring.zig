@@ -13,6 +13,7 @@ const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
+const scb = @import("../periph/scb.zig");
 
 const Board = @import("board.zig").Board;
 
@@ -137,6 +138,7 @@ fn attachCore(self: *Board, core: *engine.Engine) !void {
         .regions = &self.regions,
         .guard = &self.guard,
         .identity = cpuid.cpu0,
+        .control = &self.control,
     });
 }
 
@@ -150,6 +152,10 @@ pub const CoreWindows = struct {
     /// The CPUID word this core answers with: a Cortex-M85 on CPU0, a
     /// Cortex-M33 on CPU1.
     identity: u32,
+    /// The AIRCR model this core's writes are judged by. CPU0's is the
+    /// board's own; CPU1 brings its own, so a PRIGROUP one core programs is
+    /// never the split the other reports.
+    control: *scb.Scb,
 };
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
@@ -199,7 +205,7 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     // CPUID read as zero on both cores, so neither said what it was.
     try cpuid.prime(core.*, windows.identity);
     // AIRCR: the first read of it is 0 rather than the key status.
-    try self.control.prime(core.*);
+    try windows.control.prime(core.*);
     // CTR read as zero, so the firmware computed a four-byte line and
     // walked every range eight times over.
     try self.caches.prime(core.*);

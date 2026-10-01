@@ -56,6 +56,7 @@ const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
+const scb = @import("../periph/scb.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -101,6 +102,9 @@ pub const Second = struct {
     /// programming its regions must leave CPU1's untouched.
     regions: mpu.Mpu = mpu.Mpu.init(),
     guard: mpu_guard.Guard = mpu_guard.Guard.init(),
+    /// CPU1's own AIRCR model: its PRIGROUP and its reset requests are its
+    /// own, polled after each of its turns.
+    control: scb.Scb = scb.Scb.init(),
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -129,6 +133,7 @@ pub const Second = struct {
             .regions = &self.regions,
             .guard = &self.guard,
             .identity = cpuid.cpu1,
+            .control = &self.control,
         });
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
@@ -156,6 +161,8 @@ pub const Second = struct {
         }
         self.ran += instructions;
         self.pc = self.core.register(.pc) catch self.pc;
+        // Counted in `control.requests`; acting on one is RA8EMU-59.
+        _ = self.control.poll(self.core) catch false;
     }
 };
 
