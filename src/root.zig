@@ -45,6 +45,7 @@ pub const core = struct {
     pub const breakpoint = @import("debug/breakpoint.zig");
     pub const break_table = @import("debug/break_table.zig");
     pub const stop_machine = @import("debug/stop_machine.zig");
+    pub const watch_table = @import("debug/watch_table.zig");
     pub const pc_hits = @import("debug/pc_hits.zig");
     pub const watchpoint = @import("debug/watchpoint.zig");
     pub const spacing = @import("debug/spacing.zig");
