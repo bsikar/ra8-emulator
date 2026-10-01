@@ -81,12 +81,16 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
     try core.attachWatchpoint(one);
 }
 
-fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts) !u32 {
+fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, drain_pends: bool) !u32 {
     try core.attachWatch(&parts.watch);
     try core.attachLoops(&parts.loops);
     try core.attachSelects(&parts.selects);
     try core.attachIdle(&parts.idle);
     try core.attachTimebase(&parts.timebase);
+    // Set before the hook is attached, since it is read as a store
+    // retires. src/core/pend_break.zig carries what it does and why it is
+    // off unless asked for.
+    parts.pend.look_again = drain_pends;
     try core.attachPend(&parts.pend);
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);
@@ -116,7 +120,7 @@ pub fn main() !u8 {
     try board.attach(&core);
 
     var parts = Parts{};
-    const written = try attachAll(&core, image, &parts);
+    const written = try attachAll(&core, image, &parts, options.drain_pends);
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});

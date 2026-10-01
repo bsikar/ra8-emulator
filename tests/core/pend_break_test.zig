@@ -101,3 +101,39 @@ test "the stretch still open is not folded in until its boundary" {
     try std.testing.expectEqual(@as(usize, 0), pending.longest_stretch);
     try std.testing.expectEqual(@as(usize, 2), pending.in_stretch);
 }
+
+test "a Thread-mode swallowed store asks for another look" {
+    var pending = pend_break.Pend{ .look_again = true };
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.again);
+    try std.testing.expectEqual(@as(usize, 1), pending.looks);
+    try std.testing.expect(pending.lookAgain());
+    try std.testing.expect(!pending.lookAgain());
+}
+
+test "a swallowed store inside a handler asks for no look" {
+    var pending = pend_break.Pend{ .look_again = true };
+    pending.alreadyPending(14);
+    pending.alreadyPending(15);
+    try std.testing.expect(!pending.again);
+    try std.testing.expectEqual(@as(usize, 0), pending.looks);
+    try std.testing.expect(!pending.lookAgain());
+}
+
+test "the second look is its own latch and leaves a raised pend alone" {
+    var pending = pend_break.Pend{ .look_again = true };
+    pending.record();
+    pending.alreadyPending(0);
+    try std.testing.expect(pending.lookAgain());
+    try std.testing.expect(pending.take());
+    try std.testing.expectEqual(@as(usize, 1), pending.cuts);
+}
+
+test "no second look is asked for unless it was switched on" {
+    var pending = pend_break.Pend{};
+    pending.alreadyPending(0);
+    pending.alreadyPending(0);
+    try std.testing.expect(!pending.again);
+    try std.testing.expectEqual(@as(usize, 0), pending.looks);
+    try std.testing.expectEqual(@as(usize, 2), pending.swallowed);
+}

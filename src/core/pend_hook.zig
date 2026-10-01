@@ -37,15 +37,23 @@ pub fn attach(handle: ?*c.uc.uc_engine, pending: *pend_break.Pend) Error!void {
 /// boundary is the whole point: the instruction after this one is where
 /// the architecture would already be in the handler.
 ///
-/// ONLY A TRANSITION COUNTS. The bit standing in the register already
-/// means the exception is pending and the controller has not been able
-/// to take it yet, so a store that merely carries it along raises
-/// nothing and must not cut the stretch. Two writers do exactly that:
-/// the model's own SysTick pend reads ICSR, ors PENDSTSET in and writes
-/// the word back, PENDSVSET included, and ThreadX writes PENDSVSET on
-/// every suspend whether or not one is outstanding. Latching on the
-/// value alone cut every boundary of the run: 3.5 million of them over
-/// four modelled seconds, against 72 real pends.
+/// ONLY A TRANSITION RAISES A PEND. The bit standing in the register
+/// already means the exception is pending and the controller has not been
+/// able to take it yet, so a store that merely carries it along raises
+/// nothing. Two writers do exactly that: the model's own SysTick pend
+/// reads ICSR, ors PENDSTSET in and writes the word back, PENDSVSET
+/// included, and ThreadX writes PENDSVSET on every suspend whether or not
+/// one is outstanding. Latching a PEND on the value alone cut every
+/// boundary of the run: 3.5 million of them over four modelled seconds,
+/// against 72 real pends.
+///
+/// A store that raises nothing can still END THE STRETCH, and must when
+/// it comes from Thread mode, because the thread is then running on top
+/// of a switch it already asked for. That is bounded by how often the
+/// firmware calls its scheduler, not by how often anything touches ICSR:
+/// 151 a modelled second on threadx_blink against the 3.5 million above.
+/// A store from inside a handler is left alone, since PendSV cannot
+/// preempt itself and the look could never take it.
 fn onWrite(
     uc: ?*c.uc.uc_engine,
     kind: c_int,
@@ -65,6 +73,11 @@ fn onWrite(
     if (c.uc.uc_mem_read(handle, memmap.scb.icsr, &standing, @sizeOf(u32)) != c.uc.UC_ERR_OK) return;
     if (standing & nvic.icsr_pendsvset != 0) {
         pending.alreadyPending(executing(handle));
+        // A Thread-mode store asked again for a switch that is still owed,
+        // and the thread must not be allowed to carry on past it. Nothing
+        // is raised here: the bit was already up, and the stop only buys
+        // the controller another look at it.
+        if (pending.again) _ = c.uc.uc_emu_stop(handle);
         return;
     }
     pending.record();

@@ -63,6 +63,10 @@ pub fn timing(
             "time: {d} of them landed inside one stretch at worst, over {d} stretch(es)\n",
             .{ pending.longest_stretch, pending.stretches },
         );
+        if (pending.looks != 0) try out.print(
+            "time: {d} of them ended the stretch so the pend could be looked at again\n",
+            .{pending.looks},
+        );
     }
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
