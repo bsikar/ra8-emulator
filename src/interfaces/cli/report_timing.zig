@@ -68,6 +68,16 @@ fn pends(out: Writer, pending: pend_break.Pend) !void {
             .{pending.looks},
         );
     }
+    if (!pending.cleared.quiet()) {
+        try out.print(
+            "time: {d} store(s) took a standing PendSV pend back down, {d} of them inside a handler, {d} without naming PENDSVCLR\n",
+            .{ pending.cleared.count, pending.cleared.in_handler, pending.cleared.silent() },
+        );
+        try out.print(
+            "time: the first of them stored at pc 0x{X:0>8}, {d} of the rest stored somewhere else\n",
+            .{ pending.cleared.first_at, pending.cleared.elsewhere },
+        );
+    }
     if (pending.reentered != 0) {
         try out.print(
             "time: {d} stretch(es) opened on the very store that ended the one before, first at pc 0x{X:0>8}\n",

@@ -23,6 +23,7 @@
 //! lets the controller dispatch, and the exception lands where the
 //! architecture puts it.
 const std = @import("std");
+const pend_clear = @import("pend_clear.zig");
 const pend_sites = @import("pend_sites.zig");
 
 /// A pend written by the firmware, waiting to be taken.
@@ -166,6 +167,9 @@ pub const Pend = struct {
     swallowed_at: u32 = 0,
     swallowed_placed: bool = false,
     swallowed_elsewhere: usize = 0,
+    /// Stores that took a standing pend DOWN, the other half of the
+    /// swallowed count. src/core/pend_clear.zig carries why.
+    cleared: pend_clear.Cleared = .{},
     /// Every address a swallowed store came from, with its count.
     ///
     /// `swallowed_at` and `swallowed_elsewhere` answer "all at one site or
