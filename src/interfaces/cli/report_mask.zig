@@ -18,9 +18,20 @@ const pend_sites = @import("../../core/pend_sites.zig");
 /// holding a mask the firmware already cleared gives up somewhere the
 /// firmware believes interrupts are on. Same number, opposite fix, and
 /// nothing else in the report tells them apart.
+///
+/// The same line splits them by WHEN as well as where. A give-up from
+/// before the firmware had ever run unmasked is bring-up: the pend was
+/// never takeable, because the machine had not yet reached the point
+/// where it accepts interrupts, and the tick it would have carried was
+/// never owed. A give-up after that instant is a critical section, which
+/// is the only one worth arguing about.
 pub fn maskSites(out: anytype, image: elf.Image, release: unmask.Release) !void {
     var sites = release.gave_up;
     if (sites.quiet()) return;
+    try out.print(
+        "interrupts: {d} of those give-up(s) came before the firmware first ran unmasked, {d} after\n",
+        .{ release.booting, release.stuck - release.booting },
+    );
     for (sites.ranked()) |site| {
         try out.print(
             "interrupts: {d} lift(s) gave up still masked at pc 0x{X:0>8}",

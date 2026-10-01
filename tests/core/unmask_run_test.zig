@@ -2,14 +2,27 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const unmask = ra8.core.unmask;
 
+/// A core that only answers PRIMASK, which is all `nothingMasked` reads.
+const Still = struct {
+    primask: u32,
+
+    pub fn register(self: *Still, which: anytype) !u32 {
+        return switch (which) {
+            .primask => self.primask,
+            else => 0,
+        };
+    }
+};
+
 test "a fresh seam has no stuck run" {
     const seam = unmask.Release{};
     try std.testing.expectEqual(@as(u64, 0), seam.run);
 }
 
 test "a boundary with nothing masked clears the run" {
+    var core = Still{ .primask = 0 };
     var seam = unmask.Release{ .run = 5, .stuck = 5 };
-    seam.nothingMasked();
+    try seam.nothingMasked(&core);
     try std.testing.expectEqual(@as(u64, 0), seam.run);
     try std.testing.expectEqual(@as(u64, 5), seam.stuck);
 }
@@ -46,7 +59,28 @@ test "sites past the table are counted, not dropped" {
 }
 
 test "a seam that never gave up stays quiet even after lifts cleared" {
+    var core = Still{ .primask = 0 };
     var seam = unmask.Release{ .lifted = 7, .stepped = 40 };
-    seam.nothingMasked();
+    try seam.nothingMasked(&core);
     try std.testing.expect(seam.gave_up.quiet());
+}
+
+test "a fresh seam has not seen the firmware run unmasked" {
+    const seam = unmask.Release{};
+    try std.testing.expect(!seam.enabled_once);
+    try std.testing.expectEqual(@as(u64, 0), seam.booting);
+}
+
+test "a quiet boundary with PRIMASK clear says the firmware is up" {
+    var core = Still{ .primask = 0 };
+    var seam = unmask.Release{};
+    try seam.nothingMasked(&core);
+    try std.testing.expect(seam.enabled_once);
+}
+
+test "a quiet boundary with PRIMASK set proves nothing" {
+    var core = Still{ .primask = 1 };
+    var seam = unmask.Release{};
+    try seam.nothingMasked(&core);
+    try std.testing.expect(!seam.enabled_once);
 }
