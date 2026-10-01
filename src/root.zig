@@ -43,6 +43,7 @@ pub const core = struct {
     pub const undefined_hook = @import("core/undefined_hook.zig");
     pub const tick = @import("core/tick.zig");
     pub const breakpoint = @import("debug/breakpoint.zig");
+    pub const break_hook = @import("debug/break_hook.zig");
     pub const break_table = @import("debug/break_table.zig");
     pub const stop_machine = @import("debug/stop_machine.zig");
     pub const watch_table = @import("debug/watch_table.zig");
