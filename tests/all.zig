@@ -11,6 +11,9 @@ test {
     _ = @import("core/cpu/fpu/fpscr_test.zig");
     _ = @import("core/cpu/fpu/sign_test.zig");
     _ = @import("core/cpu/fpu/sign_vectors_test.zig");
+    _ = @import("core/cpu/fpu/format_test.zig");
+    _ = @import("core/cpu/fpu/unpack_test.zig");
+    _ = @import("core/cpu/fpu/round_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
