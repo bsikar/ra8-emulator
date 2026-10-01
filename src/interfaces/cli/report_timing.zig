@@ -54,6 +54,12 @@ pub fn timing(
             .{pending.cuts},
         );
     }
+    if (pending.swallowed != 0) {
+        try out.print(
+            "time: {d} more pend(s) landed on one already standing and raised nothing\n",
+            .{pending.swallowed},
+        );
+    }
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },

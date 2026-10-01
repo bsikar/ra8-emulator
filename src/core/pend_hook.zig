@@ -63,7 +63,10 @@ fn onWrite(
     if (written & nvic.icsr_pendsvset == 0) return;
     var standing: u32 = 0;
     if (c.uc.uc_mem_read(handle, memmap.scb.icsr, &standing, @sizeOf(u32)) != c.uc.UC_ERR_OK) return;
-    if (standing & nvic.icsr_pendsvset != 0) return;
+    if (standing & nvic.icsr_pendsvset != 0) {
+        pending.alreadyPending();
+        return;
+    }
     pending.record();
     _ = c.uc.uc_emu_stop(handle);
 }

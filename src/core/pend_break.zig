@@ -32,11 +32,29 @@ pub const Pend = struct {
     /// Stretches cut short this way, so a run can say how often the
     /// firmware asked for a switch.
     cuts: usize = 0,
+    /// Stores of `PENDSVSET` that found the bit already standing, so there
+    /// was no transition to latch and the stretch ran on.
+    ///
+    /// This is NOT noise to be filtered away. A pend that is already
+    /// standing is a pend the controller has not managed to take, and every
+    /// further request to switch lands on top of it and is lost: the
+    /// scheduler asks, nothing happens, and the thread that asked to be
+    /// switched away from carries on. One of these is the architecture
+    /// (the bit is a single flag and a second write is genuinely a no-op);
+    /// a hundred and fifty of them against one take is the model failing to
+    /// drain it.
+    swallowed: usize = 0,
 
     /// Called from the hook: the firmware just set a pend bit.
     pub fn record(self: *Pend) void {
         self.latched = true;
         self.cuts +%= 1;
+    }
+
+    /// Called from the hook: the firmware wrote a pend that was already
+    /// standing, so nothing was raised.
+    pub fn alreadyPending(self: *Pend) void {
+        self.swallowed +%= 1;
     }
 
     /// Take the latch, if one is standing. Clears it, so one store ends
