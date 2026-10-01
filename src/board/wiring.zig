@@ -12,6 +12,7 @@ const engine = @import("../core/engine.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
+const cpuid = @import("../periph/cpuid.zig");
 
 const Board = @import("board.zig").Board;
 
@@ -135,6 +136,7 @@ fn attachCore(self: *Board, core: *engine.Engine) !void {
         .partitions = &self.partitions,
         .regions = &self.regions,
         .guard = &self.guard,
+        .identity = cpuid.cpu0,
     });
 }
 
@@ -145,6 +147,9 @@ pub const CoreWindows = struct {
     partitions: *sau.Sau,
     regions: *mpu.Mpu,
     guard: *mpu_guard.Guard,
+    /// The CPUID word this core answers with: a Cortex-M85 on CPU0, a
+    /// Cortex-M33 on CPU1.
+    identity: u32,
 };
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
@@ -191,6 +196,8 @@ pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
 /// caller's. Shared, a CTRL store from either core rebuilt the traps from
 /// one table on whichever engine made it, and CPU0's regions were CPU1's.
 fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
+    // CPUID read as zero on both cores, so neither said what it was.
+    try cpuid.prime(core.*, windows.identity);
     // AIRCR: the first read of it is 0 rather than the key status.
     try self.control.prime(core.*);
     // CTR read as zero, so the firmware computed a four-byte line and
