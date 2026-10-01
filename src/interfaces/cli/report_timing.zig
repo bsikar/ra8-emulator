@@ -91,6 +91,19 @@ pub fn timing(
         "interrupts: {d} return(s) went straight into another handler\n",
         .{interrupts.chained},
     );
+    if (!interrupts.why.quiet()) try out.print(
+        "interrupts: held {d} masked, {d} outranked, {d} too deep, {d} with no vector\n",
+        .{
+            interrupts.why.masked,
+            interrupts.why.outranked,
+            interrupts.why.deep,
+            interrupts.why.no_vector,
+        },
+    );
+    if (interrupts.why.waiting != 0) try out.print(
+        "interrupts: exception {d} first waited on exception {d}\n",
+        .{ interrupts.why.waiting, interrupts.why.winner },
+    );
     if (!release.quiet()) {
         try out.print(
             "interrupts: {d} waited out a mask over {d} instruction(s), {d} still masked, {d} abandoned\n",
