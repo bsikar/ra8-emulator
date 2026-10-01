@@ -6,6 +6,7 @@ const pc_hits = @import("../../debug/pc_hits.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
+const cpu_choice = @import("../../core/cpu/choice.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
@@ -16,7 +17,7 @@ pub const usage =
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR]
-    \\                    [--cpu1 IMAGE.elf]
+    \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -197,6 +198,8 @@ pub const Options = struct {
     pace_masked: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
+    /// `--cpu`: which CPU runs the image; src/core/cpu/choice.zig.
+    cpu: cpu_choice.Choice = .unicorn,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
@@ -318,29 +321,22 @@ pub fn parse(argv: []const []const u8) !Options {
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
-        index.* += 1;
-        if (index.* >= argv.len) return error.MissingValue;
-        options.cpu1_path = argv[index.*];
+        options.cpu1_path = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--watch")) {
-        index.* += 1;
-        if (index.* >= argv.len) return error.MissingValue;
-        options.watch_place = argv[index.*];
+        options.watch_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--taken-in")) {
-        index.* += 1;
-        if (index.* >= argv.len) return error.MissingValue;
-        options.taken_in_place = argv[index.*];
+        options.taken_in_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--count-pc")) {
-        index.* += 1;
-        if (index.* >= argv.len) return error.MissingValue;
+        const at = try std.fmt.parseInt(u32, try next(argv, index), 0);
         if (options.count_pc_len >= options.count_pc.len) return error.BadValue;
-        options.count_pc[options.count_pc_len] = try std.fmt.parseInt(u32, argv[index.*], 0);
+        options.count_pc[options.count_pc_len] = at;
         options.count_pc_len += 1;
     } else if (std.mem.eql(u8, flag, "--chunk")) {
-        index.* += 1;
-        if (index.* >= argv.len) return error.MissingValue;
-        const width = try std.fmt.parseInt(u32, argv[index.*], 0);
+        const width = try std.fmt.parseInt(u32, try next(argv, index), 0);
         if (width == 0) return error.BadValue;
         options.chunk_instructions = width;
+    } else if (std.mem.eql(u8, flag, "--cpu")) {
+        options.cpu = cpu_choice.Choice.parse(try next(argv, index)) orelse return error.BadValue;
     } else if (std.mem.eql(u8, flag, "--drain-pends")) {
         options.drain_pends = true;
     } else if (std.mem.eql(u8, flag, "--look-per-rise")) {

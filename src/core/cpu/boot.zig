@@ -1,0 +1,46 @@
+//! A run on the Zig core instead of Unicorn, chosen with `--cpu zig`.
+//!
+//! The image is loaded and the board RAM mapped exactly as for a Unicorn
+//! run; the Zig core then resets out of the same vector table and runs until
+//! its budget is spent or it meets something it cannot do yet, most often an
+//! encoding no group in src/core/cpu/ops/table.zig claims. The report is one
+//! line saying which, so a corpus sweep can tell how far each image gets.
+const engine = @import("../engine.zig");
+const EngineBus = @import("engine_bus.zig").EngineBus;
+const cpu_mod = @import("cpu.zig");
+
+/// Run the image already loaded into `core` on the Zig core, print how it
+/// ended, and return the exit status: 0 when the budget was spent, 1 when
+/// the core stopped short of it.
+pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
+    var memory: EngineBus = .{ .core = core };
+    var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
+    cpu.reset(vector_base) catch {
+        try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
+        return 1;
+    };
+    const stopped = cpu.run(budget);
+    return report(out, cpu, stopped);
+}
+
+pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
+    switch (stopped) {
+        .count => {
+            try out.print("zig core: ran {d} instructions clean, pc 0x{X:0>8}\n", .{ cpu.retired, cpu.regs.pc });
+            return 0;
+        },
+        .unknown => |instr| try out.print(
+            "zig core: unknown encoding at {} after {d} instructions\n",
+            .{ instr, cpu.retired },
+        ),
+        .invalid_state => |at| try out.print(
+            "zig core: EPSR.T clear at 0x{X:0>8} after {d} instructions\n",
+            .{ at, cpu.retired },
+        ),
+        .bus_fault => |at| try out.print(
+            "zig core: bus fault at 0x{X:0>8} after {d} instructions\n",
+            .{ at, cpu.retired },
+        ),
+    }
+    return 1;
+}
