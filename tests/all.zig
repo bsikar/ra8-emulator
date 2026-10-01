@@ -58,6 +58,7 @@ test {
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/memmap_test.zig");
+    _ = @import("core/mpu_guard_test.zig");
     _ = @import("core/pages_test.zig");
     _ = @import("core/part_test.zig");
     _ = @import("periph/adc/adc_intr_test.zig");
