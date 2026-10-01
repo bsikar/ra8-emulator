@@ -303,6 +303,7 @@ pub const board = struct {
     pub const usb = @import("board/usb.zig");
     pub const report = @import("interfaces/cli/report.zig");
     pub const report_dma = @import("interfaces/cli/report_dma.zig");
+    pub const report_watchdog = @import("interfaces/cli/report_watchdog.zig");
     pub const report_steps = @import("interfaces/cli/report_steps.zig");
     pub const report_run = @import("interfaces/cli/report_run.zig");
     pub const report_dumps = @import("interfaces/cli/report_dumps.zig");

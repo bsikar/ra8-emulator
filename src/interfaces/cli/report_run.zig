@@ -55,6 +55,6 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);
     try report_steps.worlds(out, of.worlds);
-    try report.blocks(board, out);
+    try report.blocks(board, out, of.timebase);
     try undefined_ops.print(out, image, of.undefined_found);
 }
