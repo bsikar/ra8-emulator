@@ -130,20 +130,22 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
             .{ pending.reentered, pending.reentered_at },
         );
     }
+    if (pending.handled != 0) {
+        try out.print(
+            "time: {d} stretch(es) opened in the handler the boundary entered, first exception {d} at pc 0x{X:0>8} after a stop at 0x{X:0>8}\n",
+            .{ pending.handled, pending.handled_exception, pending.handled_at, pending.handled_from },
+        );
+    }
     if (pending.reopened != 0) {
         try out.print(
-            "time: {d} stretch(es) opened PAST the store that ended them, first at pc 0x{X:0>8} after a stop read as 0x{X:0>8}\n",
+            "time: {d} stretch(es) opened PAST the store that ended them with nothing taken, first at pc 0x{X:0>8} after a stop read as 0x{X:0>8}\n",
             .{ pending.reopened, pending.reopened_at, pending.reopened_from },
         );
     }
-    if (pending.stops != pending.reentered + pending.reopened) {
+    if (pending.stops != pending.consumed()) {
         try out.print(
             "time: {d} stop(s) were asked for but only {d} reached a boundary, so {d} WERE OVERWRITTEN BEFORE THE STRETCH ENDED\n",
-            .{
-                pending.stops,
-                pending.reentered + pending.reopened,
-                pending.stops - (pending.reentered + pending.reopened),
-            },
+            .{ pending.stops, pending.consumed(), pending.stops - pending.consumed() },
         );
     }
 }
