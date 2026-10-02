@@ -143,6 +143,8 @@ pub const Board = struct {
     /// windows and CPUs the Secure boot gave away. Built in attach(): every
     /// store is PRC4-gated, so it needs this board's own protection.
     chip_attribution: cpscu.Unit,
+    /// SRAMSAR, SRAMSABAR0..3 and SRAMESAR (RA8EMU-230).
+    sram_attribution: cpscu.sram.Unit = .{},
     /// The handshake CPU0 uses to take the second core out of reset. Keyed,
     /// so nothing lands here without the key the driver writes.
     second_core: cpu_ctrl.CpuCtrl = .{},
