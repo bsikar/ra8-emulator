@@ -267,6 +267,15 @@ pub fn report(out: anytype, second: ?*const Second) !void {
     if (other.fault) |taken| {
         try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
     }
+    // Silent on a core that never waited, which is every image in the
+    // corpus today, so their reports stay as they were.
+    if (other.wait.parks > 0) {
+        const woke = other.wait.wakes;
+        try out.print(
+            "CPU1: parked in WFE {d} time(s), woken {d} by an exception, {d} by SEV, {d} spuriously\n",
+            .{ other.wait.parks, woke.interrupt, woke.event, woke.spurious },
+        );
+    }
     // Under its own name, because this is a second map rather than more
     // detail about CPU0's. Silent on a core that never programmed one.
     try report_cores.partitionsOf(out, "CPU1 SAU", &other.partitions);
