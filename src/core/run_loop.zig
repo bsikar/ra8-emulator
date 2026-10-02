@@ -23,13 +23,16 @@ const pend_break = @import("pend_break.zig");
 const pend_resume = @import("pend_resume.zig");
 const bus_error = @import("bus_error.zig");
 const svc_trap = @import("svc_trap.zig");
+const hint_resume = @import("hint_resume.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
 /// A stretch that stopped on something the part takes as an exception, a
-/// refused access or an SVC, resumes in its handler. Null leaves the stop.
+/// refused access or an SVC, resumes in its handler, and one that stopped on
+/// a WFE or YIELD resumes after it. Null leaves the stop.
 fn excepted(core: anytype, session: Session, taken: fault.Fault) !?u32 {
     if (try bus_error.raised(core, session, taken)) |resumed| return resumed;
+    if (try hint_resume.raised(core, session, taken)) |resumed| return resumed;
     return svc_trap.raised(core, session, taken);
 }
 
