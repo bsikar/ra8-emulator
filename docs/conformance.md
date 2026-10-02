@@ -38,3 +38,5 @@ is stale or an encoding is missing. Regenerate with
 | VFNMS.F64 T2 | 1 |
 | VDIV.F32 T1 | 27 |
 | VDIV.F64 T1 | 6 |
+| VSQRT.F32 T1 | 20 |
+| VSQRT.F64 T1 | 6 |

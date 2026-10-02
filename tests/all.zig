@@ -26,6 +26,8 @@ test {
     _ = @import("core/cpu/fpu/fma_vectors_test.zig");
     _ = @import("core/cpu/fpu/div_test.zig");
     _ = @import("core/cpu/fpu/div_vectors_test.zig");
+    _ = @import("core/cpu/fpu/sqrt_test.zig");
+    _ = @import("core/cpu/fpu/sqrt_vectors_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
