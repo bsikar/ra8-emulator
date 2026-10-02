@@ -35,11 +35,18 @@ pub fn before(core: anytype, pc: u32) ?u16 {
     return if (half == wfe or half == yield) half else null;
 }
 
-/// Where to resume a stop that was a hint, or null to leave the stop.
-pub fn raised(core: anytype, session: Session, taken: fault.Fault) !?u32 {
+/// The hint a stop was, or null when it was something else.
+pub fn stoppedOn(core: anytype, taken: fault.Fault) ?u16 {
     if (taken.access != null) return null;
     if (std.mem.indexOf(u8, taken.detail, invalid) == null) return null;
-    _ = before(core, taken.pc) orelse return null;
+    return before(core, taken.pc);
+}
+
+/// Where to resume a stop that was a hint, or null to leave the stop. A
+/// session that parks on WFE gets its WFE stops left: see `park_on_wfe`.
+pub fn raised(core: anytype, session: Session, taken: fault.Fault) !?u32 {
+    const hint = stoppedOn(core, taken) orelse return null;
+    if (hint == wfe and session.park_on_wfe) return null;
     const stepped = try core.runChunk(taken.pc, 1, session.watch);
     const next = stepped orelse return try core.register(.pc);
     if (next.pc == taken.pc and std.mem.indexOf(u8, next.detail, invalid) != null) return null;
