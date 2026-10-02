@@ -371,7 +371,7 @@ pub const Session = struct {
     /// symbol or literal, one optional dereference, then its offset.
     fn resolve(self: *const Session, text: []const u8) !u32 {
         if (session_source.fileLine(text)) |at| {
-            return session_source.breakAt(session_source.of(self.image), at) orelse Error.Unresolved;
+            return session_source.breakAt(self.image, at) orelse Error.Unresolved;
         }
         const want = try place.parse(text);
         var base = want.address;

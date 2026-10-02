@@ -61,3 +61,27 @@ test "FILE:LINE is told apart from the other places" {
     try std.testing.expectEqual(@as(?session_source.FileLine, null), session_source.fileLine("fw.zig:0"));
     try std.testing.expectEqual(@as(?session_source.FileLine, null), session_source.fileLine("fw.zig:x"));
 }
+
+// Directory none; file "a.c". set_address 0x1000; advance_line +2; copy
+// (0x1000, line 3); advance_pc 1 op; advance_line +1; set_prologue_end;
+// copy (0x1002, line 4); advance_pc 1 op; end_sequence at 0x1004.
+const entry_tables = "\x00a.c\x00\x00\x00\x00\x00";
+const entry_program = [_]u8{ 0x00, 0x05, 0x02, 0x00, 0x10, 0x00, 0x00, 0x03, 0x02, 0x01, 0x02, 0x01, 0x03, 0x01, 0x0a, 0x01, 0x02, 0x01, 0x00, 0x01, 0x01 };
+
+test "a break on a function's entry moves past the prologue, or is refused before its declaration" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    try unit(&list, 4, 2, entry_tables, &entry_program);
+    const s = ra8.core.dwarf_line.Sections{ .line = list.items };
+    try std.testing.expectEqual(@as(?u32, 0x1002), try find.prologueEnd(s, 0x1000, 0x1004));
+    try std.testing.expectEqual(@as(?u32, null), try find.prologueEnd(s, 0x1003, 0x1004));
+    const function = ra8.core.dwarf_info.Function{ .low = 0x1000, .high = 0x1004, .decl_line = 2 };
+    try std.testing.expectEqual(@as(?u32, 0x1002), session_source.settle(s, 0x1000, function, 2));
+    try std.testing.expectEqual(@as(?u32, null), session_source.settle(s, 0x1000, function, 1));
+    try std.testing.expectEqual(@as(?u32, 0x1002), session_source.settle(s, 0x1002, function, 4));
+    try std.testing.expectEqual(@as(?u32, 0x1000), session_source.settle(s, 0x1000, null, 1));
+}
+
+test {
+    _ = @import("dwarf_info_test.zig");
+}
