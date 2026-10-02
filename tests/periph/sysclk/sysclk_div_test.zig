@@ -12,8 +12,17 @@ test "a divider code is an exponent" {
     try std.testing.expectEqual(@as(?u32, 64), div.ratio(6));
 }
 
-test "a code the firmware tree does not define has no ratio" {
+test "codes 8 to 11 divide by three, six, twelve and twenty-four" {
+    // HUM 9.2.2 p 328 and 9.2.3 p 329: 1000 /3, 1001 /6, 1010 /12, 1011 /24.
+    try std.testing.expectEqual(@as(?u32, 3), div.ratio(8));
+    try std.testing.expectEqual(@as(?u32, 6), div.ratio(9));
+    try std.testing.expectEqual(@as(?u32, 12), div.ratio(10));
+    try std.testing.expectEqual(@as(?u32, 24), div.ratio(11));
+}
+
+test "a prohibited code has no ratio" {
     try std.testing.expectEqual(@as(?u32, null), div.ratio(7));
+    try std.testing.expectEqual(@as(?u32, null), div.ratio(12));
     try std.testing.expectEqual(@as(?u32, null), div.ratio(15));
 }
 

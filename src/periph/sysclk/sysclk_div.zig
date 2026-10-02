@@ -6,10 +6,12 @@
 //! ra8_sckdivcr_shift_t enum for the eight in SCKDIVCR, and
 //! ra8_sckdivcr2_shift_t for the four in SCKDIVCR2.
 //!
-//! THE CODE IS AN EXPONENT. ra8_clock_div_t runs div_1 = 0 through div_64 = 6,
-//! so a code of N divides by 2^N and the whole map is one shift. Codes above 6
-//! are not in that enum and are not guessed here: `ratio` answers null for
-//! them and the report says the code rather than inventing a divisor.
+//! TWO RUNS OF CODES. ra8_clock_div_t runs div_1 = 0 through div_64 = 6, so a
+//! code of N up to 6 divides by 2^N. The HUM's own field tables (RA8D2
+//! R01UH1065EJ0130 Rev 1.30, 9.2.2 p 328 and 9.2.3 p 329) add a second run:
+//! 8 = /3, 9 = /6, 10 = /12, 11 = /24. Every other code is "setting
+//! prohibited", and `ratio` answers null for it so the report says the code
+//! rather than inventing a divisor.
 //!
 //! This file is the decode alone. What the tree does with a programmed
 //! divider, and the protection in front of the registers, is `sysclk.zig`.
@@ -34,15 +36,18 @@ pub const shift2 = struct {
     pub const mriclk: u5 = 12;
 };
 
-/// The highest code ra8_clock_div_t defines (div_64). Above this the encoding
-/// is not recorded in the firmware tree, so nothing here claims a ratio.
+/// The highest power-of-two code (div_64).
 pub const code_max: u4 = 6;
 
-/// What a divider code divides by, or null when the code is outside the
-/// documented range.
+/// The first of the HUM's divide-by-three codes (8 = /3).
+pub const code_thirds: u4 = 8;
+
+/// What a divider code divides by, or null when the HUM marks the code
+/// prohibited.
 pub fn ratio(code: u4) ?u32 {
-    if (code > code_max) return null;
-    return @as(u32, 1) << code;
+    if (code <= code_max) return @as(u32, 1) << code;
+    if (code < code_thirds or code > code_thirds + 3) return null;
+    return @as(u32, 3) << (code - code_thirds);
 }
 
 /// One clock domain: the name the report uses and the nibble it reads.
