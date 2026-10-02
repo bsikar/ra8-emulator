@@ -28,6 +28,7 @@ const elf = @import("../core/elf.zig");
 const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
+const session_source = @import("session_source.zig");
 const step_hook = @import("step_hook.zig");
 const breakpoint = @import("breakpoint.zig");
 const symbols = @import("symbols.zig");
@@ -136,6 +137,7 @@ pub const Session = struct {
                 try self.go(out);
             },
             .registers => try session_view.registers(out, self.core.*),
+            .line => |text| try session_source.line(out, session_source.of(self.image), try self.resolve(text)),
             .examine => |want| try session_view.words(out, self.core.*, try self.resolve(want.place), want.words),
             .print => |text| try session_view.word(out, self.core.*, text, try self.resolve(text)),
             .disassemble => |want| try self.disassemble(want, out),
