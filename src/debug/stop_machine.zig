@@ -69,6 +69,9 @@ const Target = struct {
     sp: u32,
 };
 
+/// What a unit event that did not halt would take DebugMonitor for.
+pub const Monitor = enum { breakpoint, watchpoint };
+
 pub const Machine = struct {
     breaks: break_table.Table = .{},
     watches: watch_table.Table = .{},
@@ -81,6 +84,11 @@ pub const Machine = struct {
     /// The core's DHCSR, DCRSR and DCRDR, as the firmware sees them.
     dcb: dcb.Dcb = .{},
     unit_pending: ?usize = null,
+    /// DHCSR.C_DEBUGEN: halting debug is on and a unit event halts. Off, the
+    /// event is held in `monitor_pending` for the driver to pend
+    /// DebugMonitor with, if DEMCR enables it.
+    halting: bool = true,
+    monitor_pending: ?Monitor = null,
     mode: Mode = .halted,
     /// Set by `resume`; cleared once the instruction resumed on has run.
     resumed: bool = false,
@@ -135,11 +143,17 @@ pub const Machine = struct {
             return null;
         }
         if (self.watch_pending) |tripped| return self.halt(.{ .watchpoint = tripped });
-        if (self.unit_pending) |index| return self.halt(.{ .unit_watch = index });
+        if (self.unit_pending) |index| {
+            if (self.unitEvent(.{ .unit_watch = index })) |stop| return stop;
+        }
         if (self.halt_pending) return self.halt(.halt_requested);
         if (self.breaks.hit(event.pc)) |id| return self.halt(.{ .breakpoint = id });
-        if (self.fpb.matches(event.pc)) |index| return self.halt(.{ .unit_break = index });
-        if (self.dwt.matchesPc(event.pc)) |index| return self.halt(.{ .unit_watch = index });
+        if (self.fpb.matches(event.pc)) |index| {
+            if (self.unitEvent(.{ .unit_break = index })) |stop| return stop;
+        }
+        if (self.dwt.matchesPc(event.pc)) |index| {
+            if (self.unitEvent(.{ .unit_watch = index })) |stop| return stop;
+        }
         return switch (self.mode) {
             .halted, .running => null,
             .step => self.halt(.stepped),
@@ -156,6 +170,21 @@ pub const Machine = struct {
         }
         if (self.watch_pending != null) return;
         self.watch_pending = self.watches.hit(address, width, access);
+    }
+
+    /// The monitor event the last instruction raised, once.
+    pub fn takeMonitor(self: *Machine) ?Monitor {
+        defer self.monitor_pending = null;
+        return self.monitor_pending;
+    }
+
+    /// A unit event halts with halting debug on; otherwise it is held for
+    /// DebugMonitor and the core runs on.
+    fn unitEvent(self: *Machine, why: Stop) ?Stop {
+        if (self.halting) return self.halt(why);
+        self.unit_pending = null;
+        self.monitor_pending = if (why == .unit_break) .breakpoint else .watchpoint;
+        return null;
     }
 
     fn start(self: *Machine, mode: Mode, target: ?Target) void {

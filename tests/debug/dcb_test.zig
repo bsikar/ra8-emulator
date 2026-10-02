@@ -40,3 +40,12 @@ test "DCRDR holds a word and DCRSR reads zero" {
     try std.testing.expectEqual(@as(?u32, 0), unit.peek(dcb.offsets.dcrsr));
     try std.testing.expectEqual(dcb.dcrsr_bits.regsel | dcb.dcrsr_bits.regwnr, unit.selector);
 }
+
+test "DFSR latches debug events and a write of one clears each bit" {
+    var unit = dcb.Dcb{};
+    unit.latch(dcb.dfsr_bits.bkpt);
+    unit.latch(dcb.dfsr_bits.dwttrap);
+    try std.testing.expectEqual(dcb.dfsr_bits.bkpt | dcb.dfsr_bits.dwttrap, unit.dfsr);
+    unit.clearStatus(dcb.dfsr_bits.bkpt);
+    try std.testing.expectEqual(dcb.dfsr_bits.dwttrap, unit.dfsr);
+}

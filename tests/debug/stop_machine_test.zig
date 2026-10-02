@@ -171,3 +171,15 @@ test "a halting DWT data comparator stops the run once the access retired" {
     machine.onAccess(0x2000_1000, 4, .write);
     try std.testing.expectEqual(@as(usize, 0), machine.onInstruction(at(0x104)).?.unit_watch);
 }
+
+test "with halting debug off, an FPB match runs on and is held for DebugMonitor" {
+    var machine = Machine{ .halting = false };
+    const fpb = ra8.core.fpb;
+    _ = machine.fpb.write(fpb.offsets.comp0, 0x108 | fpb.comp_enable);
+    _ = machine.fpb.write(fpb.offsets.ctrl, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x108)));
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, .breakpoint), machine.takeMonitor());
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, null), machine.takeMonitor());
+}

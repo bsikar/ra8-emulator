@@ -48,6 +48,8 @@ pub const Driver = struct {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             _ = self.machine.dwt.write(address - dwt.base, value);
+        } else if (address == dcb.dfsr_address) {
+            self.machine.dcb.clearStatus(value);
         } else if (inside(address, dcb.base, dcb.span)) {
             _ = self.machine.dcb.write(address - dcb.base, value);
             if (self.machine.dcb.takeHalt()) self.machine.requestHalt();
@@ -86,7 +88,31 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
     while (offset < dcb.span) : (offset += 4) {
         if (machine.dcb.peek(offset)) |word| put(handle, dcb.base + offset, word);
     }
+    put(handle, dcb.dfsr_address, machine.dcb.dfsr);
     machine.dcb.changed = false;
+}
+
+/// The DFSR bits a halt records.
+fn dfsrFor(stop: stop_machine.Stop) u32 {
+    return switch (stop) {
+        .breakpoint, .unit_break => dcb.dfsr_bits.bkpt,
+        .watchpoint, .unit_watch => dcb.dfsr_bits.dwttrap,
+        .stepped, .halt_requested => dcb.dfsr_bits.halted,
+    };
+}
+
+/// A unit event with halting debug off: if DEMCR.MON_EN is set, latch DFSR
+/// and set DEMCR.MON_PEND for the interrupt controller to take
+/// DebugMonitor at its next boundary. The instruction it matched still
+/// runs; with MON_EN clear the event is dropped.
+fn pendMonitor(handle: *c.uc.uc_engine, machine: *stop_machine.Machine, cause: stop_machine.Monitor) void {
+    var bytes: [4]u8 = .{ 0, 0, 0, 0 };
+    if (c.uc.uc_mem_read(handle, dcb.demcr_address, &bytes, bytes.len) != c.uc.UC_ERR_OK) return;
+    const demcr = std.mem.readInt(u32, &bytes, .little);
+    if (demcr & dcb.demcr_bits.mon_en == 0) return;
+    put(handle, dcb.demcr_address, demcr | dcb.demcr_bits.mon_pend);
+    machine.dcb.latch(if (cause == .breakpoint) dcb.dfsr_bits.bkpt else dcb.dfsr_bits.dwttrap);
+    put(handle, dcb.dfsr_address, machine.dcb.dfsr);
 }
 
 fn unitsChanged(machine: *const stop_machine.Machine) bool {
@@ -107,7 +133,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
         return Error.AttachFailed;
     }
     if (!watch_memory) return;
-    driver.machine.dcb.attachDebugger();
+    if (driver.machine.halting) driver.machine.dcb.attachDebugger();
     if (handle) |live| syncUnits(live, driver.machine);
     const kinds = c.uc.UC_HOOK_MEM_READ | c.uc.UC_HOOK_MEM_WRITE;
     if (c.uc.uc_hook_add(handle, &hook, kinds, @constCast(@as(*const anyopaque, @ptrCast(&onMemory))), driver, 1, 0) != c.uc.UC_ERR_OK) {
@@ -133,8 +159,11 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
         .sp = sp,
         .call = call_decode.isCall(bytes[0..width]),
     };
-    if (driver.machine.onInstruction(event)) |stop| {
-        driver.last = stop;
+    const stop = driver.machine.onInstruction(event);
+    if (driver.machine.takeMonitor()) |cause| pendMonitor(handle, driver.machine, cause);
+    if (stop) |why| {
+        driver.machine.dcb.latch(dfsrFor(why));
+        driver.last = why;
         if (driver.latch) |latch| latch.reached = true;
         _ = c.uc.uc_emu_stop(handle);
     }
