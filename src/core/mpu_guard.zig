@@ -34,7 +34,8 @@ const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_fault = @import("../periph/mpu/mpu_fault.zig");
-const escalate = @import("../periph/mpu/mpu_escalate.zig");
+const fault_route = @import("../periph/fault_route.zig");
+const status = @import("../periph/fault_status.zig");
 const background = @import("../periph/mpu/mpu_background.zig");
 
 /// uc_ctl packs the direction into the control word's top two bits, and the
@@ -183,7 +184,7 @@ pub const Guard = struct {
     /// a configurable fault and runs only while SHCSR.MEMFAULTENA stands;
     /// with it clear the fault is disabled and escalates to HardFault with
     /// HFSR.FORCED set, whatever the table holds at the MemManage slot. See
-    /// src/periph/mpu_escalate.zig.
+    /// src/periph/fault_route.zig.
     ///
     /// With neither handler to reach, the violation is counted and the run
     /// carries on from where the store left it. PC is rewound only once the
@@ -209,20 +210,16 @@ pub const Guard = struct {
             self.standDown(core, hit);
             return;
         };
-        const target = escalate.targetFor(core.readWord(memmap.scb.shcsr) catch 0);
-        const taken: nvic.Candidate = switch (target) {
-            .mem_manage => .{
-                .number = mpu_fault.exception,
-                .priority = @truncate(core.readWord(memmap.scb.shpr1) catch 0),
-            },
-            .hard_fault => .{
-                .number = escalate.hard_fault,
-                .priority = escalate.hard_fault_priority,
-            },
-        };
-        if (escalate.marks(target)) {
+        const route = fault_route.route(
+            .mem_manage,
+            core.readWord(memmap.scb.shcsr) catch 0,
+            core.readWord(memmap.scb.shpr1) catch 0,
+            null,
+        );
+        const taken: nvic.Candidate = .{ .number = route.number, .priority = route.priority };
+        if (route.escalated) {
             const hfsr = core.readWord(memmap.scb.hfsr) catch 0;
-            try core.writeWord(memmap.scb.hfsr, hfsr | escalate.hfsr.forced);
+            try core.writeWord(memmap.scb.hfsr, hfsr | status.Hard.forced.bit());
         }
         const stopped_at = try core.register(.pc);
         try core.setRegister(.pc, hit.pc);
@@ -232,7 +229,7 @@ pub const Guard = struct {
             return;
         };
         self.latch.faults +%= 1;
-        if (target == .hard_fault) self.latch.escalated +%= 1;
+        if (route.escalated) self.latch.escalated +%= 1;
     }
 
     /// A violation with no handler to reach. A STORE carries on from where it
