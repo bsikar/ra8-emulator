@@ -21,6 +21,7 @@ const pend_pace = @import("../../core/pend_pace.zig");
 const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const report_steps = @import("report_steps.zig");
+const report_part = @import("report_part.zig");
 const clocks = @import("../../periph/clocks.zig");
 const nvic = @import("../../periph/nvic.zig");
 const reboot = @import("../../core/reboot.zig");
@@ -57,6 +58,7 @@ pub const Tally = struct {
 /// then time, then the stepped instruction counts, then the blocks, then
 /// the instructions the architecture does not define.
 pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
+    try report_part.print(out, board.part);
     try report.bus(board, out);
     try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend, of.pacing, of.mask_pacing);
     try report.reboots(out, of.reboot);
