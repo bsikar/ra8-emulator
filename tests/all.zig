@@ -381,6 +381,7 @@ test {
     _ = @import("periph/xspi/xspi_reset_test.zig");
     _ = @import("tools/gate_test.zig");
     _ = @import("tools/example_table_test.zig");
+    _ = @import("tools/example_budgets_test.zig");
 
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
