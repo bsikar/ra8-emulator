@@ -106,24 +106,7 @@ pub const core = struct {
         pub const reset = @import("core/cpu/reset.zig");
         pub const shift = @import("core/cpu/shift.zig");
         pub const sysreg = @import("core/cpu/sysreg.zig");
-        pub const lockstep = struct {
-            pub const catch_up = @import("core/cpu/lockstep/catch_up.zig");
-            pub const diff = @import("core/cpu/lockstep/diff.zig");
-            pub const history = @import("core/cpu/lockstep/history.zig");
-            pub const memory_diff = @import("core/cpu/lockstep/memory_diff.zig");
-            pub const mode = @import("core/cpu/lockstep/mode.zig");
-            pub const oracle = @import("core/cpu/lockstep/oracle.zig");
-            pub const periph_log = @import("core/cpu/lockstep/periph_log.zig");
-            pub const replay_bus = @import("core/cpu/lockstep/replay_bus.zig");
-            pub const report = @import("core/cpu/lockstep/report.zig");
-            pub const run = @import("core/cpu/lockstep/run.zig");
-            pub const snapshot = @import("core/cpu/lockstep/snapshot.zig");
-            pub const states = @import("core/cpu/lockstep/states.zig");
-            pub const step = @import("core/cpu/lockstep/step.zig");
-            pub const tally = @import("core/cpu/lockstep/tally.zig");
-            pub const tap_hook = @import("core/cpu/lockstep/tap_hook.zig");
-            pub const writes = @import("core/cpu/lockstep/writes.zig");
-        };
+        pub const lockstep = @import("core/cpu/lockstep/all.zig");
         pub const ops = @import("core/cpu/ops.zig");
     };
 };
