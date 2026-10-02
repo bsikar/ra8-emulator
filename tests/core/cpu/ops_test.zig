@@ -99,5 +99,6 @@ test {
     _ = @import("ops/mve_vcmp_fp_test.zig");
     _ = @import("ops/mve_float_fma_test.zig");
     _ = @import("ops/mve_float_unary_test.zig");
+    _ = @import("ops/mve_float_cvt_half_test.zig");
     _ = @import("ops/table_test.zig");
 }
