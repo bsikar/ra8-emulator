@@ -200,3 +200,7 @@ is stale or an encoding is missing. Regenerate with
 | VPT T4 | 1 |
 | VPT T5 | 1 |
 | VPT T6 | 1 |
+| VMAXV T1 | 4 |
+| VMINV T1 | 3 |
+| VMAXAV T1 | 2 |
+| VMINAV T1 | 2 |

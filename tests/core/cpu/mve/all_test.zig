@@ -14,6 +14,8 @@ test {
     _ = @import("int_insert_vectors_test.zig");
     _ = @import("reduce_test.zig");
     _ = @import("reduce_vectors_test.zig");
+    _ = @import("reduce_minmax_test.zig");
+    _ = @import("reduce_minmax_vectors_test.zig");
     _ = @import("int_mul_test.zig");
     _ = @import("int_mul_vectors_test.zig");
     _ = @import("compare_test.zig");

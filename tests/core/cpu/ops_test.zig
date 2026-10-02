@@ -79,5 +79,6 @@ test {
     _ = @import("ops/mve_vdup_test.zig");
     _ = @import("ops/mve_lane_move_test.zig");
     _ = @import("ops/mve_lane_pair_test.zig");
+    _ = @import("ops/mve_vmaxv_test.zig");
     _ = @import("ops/table_test.zig");
 }
