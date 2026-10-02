@@ -4,6 +4,7 @@
 const fpscr_mod = @import("fpscr.zig");
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
+const Rounding = @import("rounding.zig").Rounding;
 
 /// One operand, as the unary forms (VSQRT, VCVT, VRINT) read it.
 pub fn Unary(comptime B: type) type {
@@ -81,6 +82,21 @@ pub fn Fixed(comptime B: type) type {
 
         pub fn fpscr(self: @This()) Fpscr {
             return .{ .rmode = self.mode, .fz = self.fz };
+        }
+    };
+}
+
+/// One operand for the conversions whose encoding fixes the rounding
+/// (VCVTA/N/P/M), so FPSCR supplies only FZ.
+pub fn Directed(comptime B: type) type {
+    return struct {
+        a: B,
+        unsigned: bool = false,
+        rounding: Rounding,
+        fz: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .fz = self.fz };
         }
     };
 }

@@ -35,6 +35,8 @@ test {
     _ = @import("core/cpu/fpu/to_int_test.zig");
     _ = @import("core/cpu/fpu/from_int_test.zig");
     _ = @import("core/cpu/fpu/int_vectors_test.zig");
+    _ = @import("core/cpu/fpu/rounding_test.zig");
+    _ = @import("core/cpu/fpu/directed_vectors_test.zig");
     _ = @import("core/cpu/board_bus_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
