@@ -38,6 +38,8 @@ pub const weights = @import("npu_vela_weights.zig");
 pub const order = @import("npu_vela_order.zig");
 /// OFM output scaling under the three rounding modes.
 pub const round = @import("npu_vela_round.zig");
+/// The int8 convolution datapath.
+pub const conv = @import("npu_vela_conv.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
