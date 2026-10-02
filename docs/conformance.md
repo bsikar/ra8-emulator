@@ -312,3 +312,6 @@ is stale or an encoding is missing. Regenerate with
 | VMINNMV (MVE) T1 | 1 |
 | VMAXNMAV (MVE) T1 | 1 |
 | VMINNMAV (MVE) T1 | 1 |
+| VCADD (MVE, floating-point) T1 | 4 |
+| VCMLA (MVE) T1 | 6 |
+| VCMUL (MVE) T1 | 5 |
