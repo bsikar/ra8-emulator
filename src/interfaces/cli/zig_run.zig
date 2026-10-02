@@ -11,6 +11,7 @@ const clocks = @import("../../periph/clocks.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
+const report_dumps = @import("report/dumps.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -53,6 +54,11 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
     const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears });
-    if (options.cpu == .zig) try report_run.zigCore(out, board, ran);
+    if (options.cpu == .zig) {
+        try report_run.zigCore(out, board, ran);
+        // The globals a memory-probe verdict reads. The Zig core's stores land
+        // in the same engine memory, so the line is the Unicorn run's line.
+        try report_dumps.dumpSymbols(out, core.*, image, options);
+    }
     return status;
 }

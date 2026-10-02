@@ -30,7 +30,7 @@ const Board = @import("../../../board/board.zig").Board;
 /// the decimal value and something after it all have to be there. A symbol
 /// the image does not carry, or an address that will not read, says so
 /// plainly instead of printing a number nothing measured.
-fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
+pub fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
     if (options.dumps().len == 0) return;
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
