@@ -9,9 +9,10 @@
 //! register-offset forms, byte and halfword loads to the PC (PLD/PLI), a
 //! store of the PC, SP as a byte or halfword Rt, and writeback with Rn = Rt.
 //! An unaligned word or halfword goes through as bytes, the behaviour with
-//! CCR.UNALIGN_TRP clear; the trap arrives with the fault model (RA8EMU-18).
+//! CCR.UNALIGN_TRP clear; with it set the core stops (RA8EMU-85).
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -112,6 +113,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const base = cpu.regs.get(f.rn);
     const offset_address = if (f.add) base +% f.offset else base -% f.offset;
     const address = if (f.index) offset_address else base;
+    try alignment.memU(cpu.bus, address, f.size);
     if (!f.load) {
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, cpu.regs.get(f.rt), .little);
