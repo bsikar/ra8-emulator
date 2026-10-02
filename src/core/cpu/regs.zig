@@ -19,6 +19,10 @@ pub const xpsr_bits = struct {
     pub const thumb: u32 = 1 << 24;
     /// APSR.Q, the sticky saturation flag SSAT, USAT and the DSP forms set.
     pub const q: u32 = 1 << 27;
+    /// APSR.GE[3:0], one bit per byte lane, set by the DSP parallel adds and
+    /// subtracts and read by SEL.
+    pub const ge: u32 = 0xF << ge_shift;
+    pub const ge_shift: u5 = 16;
     /// IPSR, the exception being handled; zero in Thread mode.
     pub const ipsr: u32 = 0x1FF;
 };
