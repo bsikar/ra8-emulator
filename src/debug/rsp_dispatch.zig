@@ -14,6 +14,7 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const features = @import("rsp_features.zig");
 const stop_machine = @import("stop_machine.zig");
+const dwt = @import("dwt.zig");
 
 pub const Error = error{NoSpace};
 
@@ -156,7 +157,21 @@ pub const Dispatch = struct {
             self.core.write(where, bytes) catch return copy(out, memory_error);
             done += take;
         }
+        self.keepNumcomp(address, length);
         return copy(out, "OK");
+    }
+
+    /// DWT_CTRL.NUMCOMP is read-only to a debugger too, so a store over
+    /// DWT_CTRL is put back with this core's comparator count.
+    fn keepNumcomp(self: Dispatch, address: u32, length: usize) void {
+        const machine = self.machine orelse return;
+        const end = @as(u64, address) + length;
+        if (address > dwt.base + 3 or end <= dwt.base) return;
+        var bytes: [4]u8 = undefined;
+        self.core.read(dwt.base, &bytes) catch return;
+        const current = std.mem.readInt(u32, &bytes, .little);
+        std.mem.writeInt(u32, &bytes, machine.dwt.ctrlWord(current), .little);
+        self.core.write(dwt.base, &bytes) catch return;
     }
 };
 

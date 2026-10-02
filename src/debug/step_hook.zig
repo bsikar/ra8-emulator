@@ -22,6 +22,9 @@ const dcb = @import("dcb.zig");
 
 pub const Error = error{AttachFailed};
 
+/// Where every core reads its own CPUID (src/periph/cpuid.zig).
+const cpuid_address: u32 = 0xE000_ED00;
+
 /// The machine a run is driven by, and how the last run ended.
 pub const Driver = struct {
     machine: *stop_machine.Machine,
@@ -48,7 +51,9 @@ pub const Driver = struct {
         } else if (inside(address, fpb.base, fpb.limits.span)) {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (inside(address, dwt.base, dwt.limits.end)) {
-            _ = self.machine.dwt.write(address - dwt.base, value);
+            // A DWT_CTRL store lands after this hook, so NUMCOMP is put
+            // back over it before the next instruction reads it.
+            if (!self.machine.dwt.write(address - dwt.base, value) and address - dwt.base < 4) self.machine.dwt.changed = true;
         } else if (inside(address, dcb.demcr_address, 4)) {
             if (traceEnabled(address, value, width)) |on| self.machine.dwt.trcena = on;
         } else if (address == dcb.dfsr_address) {
@@ -85,6 +90,8 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
     while (offset < fpb.limits.span) : (offset += 4) {
         if (machine.fpb.read(offset)) |word| put(handle, fpb.base + offset, word);
     }
+    const ctrl = get(handle, dwt.base);
+    if (machine.dwt.ctrlWord(ctrl) != ctrl) put(handle, dwt.base, machine.dwt.ctrlWord(ctrl));
     offset = dwt.offsets.comp0;
     while (offset < dwt.limits.end) : (offset += 4) {
         if (machine.dwt.peek(offset)) |word| put(handle, dwt.base + offset, word);
@@ -131,6 +138,12 @@ fn unitsChanged(machine: *const stop_machine.Machine) bool {
     return machine.dwt.changed or machine.itm.changed or machine.dcb.changed;
 }
 
+fn get(handle: *c.uc.uc_engine, address: u32) u32 {
+    var bytes: [4]u8 = .{ 0, 0, 0, 0 };
+    if (c.uc.uc_mem_read(handle, address, &bytes, bytes.len) != c.uc.UC_ERR_OK) return 0;
+    return std.mem.readInt(u32, &bytes, .little);
+}
+
 fn put(handle: *c.uc.uc_engine, address: u32, word: u32) void {
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, word, .little);
@@ -146,7 +159,12 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
     }
     if (!watch_memory) return;
     if (driver.machine.halting) driver.machine.dcb.attachDebugger();
-    if (handle) |live| syncUnits(live, driver.machine);
+    if (handle) |live| {
+        // CPUID names the core, and with it how many comparators it has.
+        const identity = get(live, cpuid_address);
+        if (identity != 0) driver.machine.dwt.numcomp = dwt.numcompOf(identity);
+        syncUnits(live, driver.machine);
+    }
     // READ_AFTER rather than READ, so a load hands over the value it read
     // and Data Value comparators see loads as well as stores.
     const kinds = c.uc.UC_HOOK_MEM_READ_AFTER | c.uc.UC_HOOK_MEM_WRITE;
