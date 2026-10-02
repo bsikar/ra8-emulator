@@ -7,4 +7,6 @@ test {
     _ = @import("int_vectors_test.zig");
     _ = @import("int_shift_test.zig");
     _ = @import("int_shift_vectors_test.zig");
+    _ = @import("int_width_test.zig");
+    _ = @import("int_width_vectors_test.zig");
 }
