@@ -28,6 +28,10 @@ pub const intsts0 = struct {
     pub const ctrt: u16 = 1 << 11;
     pub const vbsts: u16 = 1 << 7;
     pub const valid: u16 = 1 << 3;
+    /// DVSQ[2:0]: the device state the controller tracks on its own.
+    pub const dvsq_mask: u16 = 0x0070;
+    pub const dvsq_powered: u16 = 0x0000;
+    pub const dvsq_default: u16 = 0x0010;
     /// Status flags the driver clears by writing 0; a 1 leaves them alone.
     pub const write_zero_clears: u16 = vbint | resm | sofr | dvst | ctrt | valid;
 };
@@ -48,8 +52,32 @@ pub const Device = struct {
     /// Power the jack, the way plugging a cable in would. VBINT latches the
     /// change for the driver to see.
     pub fn connectVbus(self: *Device) void {
+        defer self.settle();
         if (!self.vbus) self.status |= intsts0.vbint;
         self.vbus = true;
+    }
+
+    fn attached(self: *const Device) bool {
+        return self.lineState() == regs.port.lnst_j and self.syscfg & regs.syscfg.usbe != 0;
+    }
+
+    /// The host on the other jack resets the bus as soon as it sees the
+    /// pull-up, so an attach lands straight in the Default state at full
+    /// speed with DVST latched. Dropping the pull-up goes back to Powered.
+    fn settle(self: *Device) void {
+        const state = self.status & intsts0.dvsq_mask;
+        const want = if (self.attached()) intsts0.dvsq_default else intsts0.dvsq_powered;
+        if (state == want) return;
+        self.status = (self.status & ~intsts0.dvsq_mask) | want | intsts0.dvst;
+    }
+
+    /// DVSTCTR0.RHST: full speed once the reset has put the device in a
+    /// state past Powered. The rest of the register reads back from the
+    /// shadow.
+    pub fn portStatus(self: *const Device) u16 {
+        const stored = self.shadow[regs.reg.dvstctr0 / window.word] & ~regs.port.rhst_mask;
+        if (self.status & intsts0.dvsq_mask == intsts0.dvsq_powered) return stored;
+        return stored | regs.port.rhst_full;
     }
 
     fn aligned(self: *Device, offset: u32) bool {
@@ -80,6 +108,7 @@ pub const Device = struct {
             regs.reg.syscfg => self.syscfg,
             regs.reg.syssts0 => self.lineState(),
             regs.reg.intsts0 => self.interruptStatus(),
+            regs.reg.dvstctr0 => self.portStatus(),
             else => self.shadow[offset / window.word],
         };
     }
@@ -90,7 +119,10 @@ pub const Device = struct {
         if (!self.aligned(offset)) return;
         const v: u16 = @truncate(value);
         switch (offset) {
-            regs.reg.syscfg => self.syscfg = v,
+            regs.reg.syscfg => {
+                self.syscfg = v;
+                self.settle();
+            },
             regs.reg.syssts0 => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
             else => self.shadow[offset / window.word] = v,
