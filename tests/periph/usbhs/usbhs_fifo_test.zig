@@ -61,11 +61,22 @@ test "a short packet drops ready as its last byte leaves" {
     try std.testing.expect(!port.in[0].ready);
 }
 
-test "a read wider than what is left takes what is there and counts the rest" {
+test "a word read across a short packet's tail takes the last bytes" {
+    // The HS HAL reads a 1-3 byte tail as one whole word at CFIFO and
+    // keeps the low bytes; the slots past the packet are don't-care.
     var port = fifo.Port{};
     port.select(0);
     port.in[0].fill(&[_]u8{ 0xAA, 0xBB, 0xCC });
     try std.testing.expectEqual(@as(u32, 0x00CCBBAA), port.readData(4));
+    try std.testing.expectEqual(@as(u32, 0), port.overdrain);
+    try std.testing.expect(!port.in[0].ready);
+}
+
+test "a read from a zero-length packet is counted" {
+    var port = fifo.Port{};
+    port.select(0);
+    port.in[0].fill(&[_]u8{});
+    try std.testing.expectEqual(@as(u32, 0), port.readData(4));
     try std.testing.expectEqual(@as(u32, 1), port.overdrain);
 }
 

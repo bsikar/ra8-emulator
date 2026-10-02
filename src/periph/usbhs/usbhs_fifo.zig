@@ -145,13 +145,15 @@ pub const Port = struct {
 /// data register is wired. Shared by the control port and the two data ports
 /// so a byte crosses the same code whichever port it went through.
 pub fn drainWord(staging: *Staging, width: u3, overdrain: *u32) u32 {
+    if (staging.cursor >= staging.len) {
+        overdrain.* += 1;
+        staging.ready = false;
+        return 0;
+    }
     var value: u32 = 0;
     var i: u3 = 0;
     while (i < width) : (i += 1) {
-        if (staging.cursor >= staging.len) {
-            overdrain.* += 1;
-            break;
-        }
+        if (staging.cursor >= staging.len) break;
         value |= @as(u32, staging.data[staging.cursor]) << (@as(u5, i) * 8);
         staging.cursor += 1;
     }
