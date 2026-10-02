@@ -45,3 +45,6 @@ pub const float_int = @import("float_int.zig");
 pub const float_int_vectors = @import("float_int_vectors.zig");
 pub const float_rint = @import("float_rint.zig");
 pub const float_rint_vectors = @import("float_rint_vectors.zig");
+pub const float_minmax = @import("float_minmax.zig");
+pub const float_minmax_vectors = @import("float_minmax_vectors.zig");
+pub const float_minmaxv_vectors = @import("float_minmaxv_vectors.zig");
