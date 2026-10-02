@@ -35,6 +35,7 @@ pub const groups = [_]op.Group{
     @import("mrs_msr.zig").group,
     @import("ldst_reg_wide.zig").group,
     @import("bitfield.zig").group,
+    @import("mul_acc.zig").group,
     @import("imm_logic.zig").group,
     @import("imm_arith.zig").group,
     @import("branch_wide.zig").group,
