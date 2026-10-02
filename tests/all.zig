@@ -58,6 +58,7 @@ test {
     _ = @import("interfaces/cli/report_usb_test.zig");
     _ = @import("interfaces/cli/report_part_test.zig");
     _ = @import("interfaces/cli/report_run_test.zig");
+    _ = @import("interfaces/cli/zig_run_test.zig");
     _ = @import("periph/standing_test.zig");
     _ = @import("core/banked_test.zig");
     _ = @import("core/board_ram_test.zig");

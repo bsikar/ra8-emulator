@@ -16,14 +16,25 @@ const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 
+/// Where a `--cpu zig` run hands time back to the board. The core runs
+/// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
+/// count, the blocks tick, and whatever they pend is taken by the core's
+/// own NVIC poll before the next instruction. Without one nothing on the
+/// board moves, and a ThreadX image idles forever waiting for its first tick.
+pub const Boundary = struct {
+    context: *anyopaque,
+    widthFn: *const fn (context: *anyopaque) u32,
+    closeFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
+};
+
 /// The hand-off from main for any CPU but Unicorn.
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
 /// `ran` is set to how many instructions a `--cpu zig` run retired.
-pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64) !u8 {
+pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, boundary: ?Boundary) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
-        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran) else run(out, core, vector_base, budget),
+        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, boundary) else run(out, core, vector_base, budget),
         .lockstep => lockstep_mode.run(out, image, core, vector_base, budget),
     };
 }
@@ -33,16 +44,16 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null);
+    return runOn(out, memory.view(), vector_base, budget, null, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
-pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64) !u8 {
+pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary) !u8 {
     var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph };
-    return runOn(out, board.view(), vector_base, budget, ran);
+    return runOn(out, board.view(), vector_base, budget, ran, boundary);
 }
 
-fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64, ran: ?*u64) !u8 {
+fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary) !u8 {
     var cpu: cpu_mod.Cpu = .{ .bus = memory };
     var pending: NvicSource = .{};
     cpu.source = pending.source();
@@ -50,9 +61,24 @@ fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget:
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
-    const stopped = cpu.run(budget);
+    const stopped = try stretches(&cpu, budget, boundary);
     if (ran) |count| count.* = cpu.retired;
     return report(out, cpu, stopped);
+}
+
+/// The budget in stretches, each closed by the boundary. A stretch the core
+/// stops inside is not closed: it never ran to its edge.
+pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary) !cpu_mod.Stop {
+    const edge = boundary orelse return cpu.run(budget);
+    var left = budget;
+    while (left > 0) {
+        const width: u32 = @intCast(@min(left, @max(1, edge.widthFn(edge.context))));
+        const stopped = cpu.run(width);
+        if (stopped != .count) return stopped;
+        left -= width;
+        try edge.closeFn(edge.context, width);
+    }
+    return .count;
 }
 
 pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
