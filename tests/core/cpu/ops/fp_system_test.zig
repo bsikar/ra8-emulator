@@ -69,6 +69,34 @@ test "vmrs r3, FPSCR and vmsr FPSCR, r2 masks reserved bits" {
     try std.testing.expectEqual(@as(u32, 0xFFCF_009F), cpu.regs.get(3));
 }
 
+test "vmsr VPR, r4 clears the reserved byte and vmrs r5, VPR reads it back" {
+    var cpu = fresh();
+    cpu.regs.set(4, 0xFF34_ABCD);
+    try run(&cpu, 0xEEEC, 0x4A10);
+    try std.testing.expectEqual(@as(u16, 0xABCD), cpu.fp.vpr.p0);
+    try std.testing.expectEqual(@as(u4, 0x4), cpu.fp.vpr.mask01);
+    try std.testing.expectEqual(@as(u4, 0x3), cpu.fp.vpr.mask23);
+    try run(&cpu, 0xEEFC, 0x5A10);
+    try std.testing.expectEqual(@as(u32, 0x0034_ABCD), cpu.regs.get(5));
+}
+
+test "vmsr P0, r1 moves only P0 and vmrs r2, P0 zero-extends it" {
+    var cpu = fresh();
+    cpu.fp.vpr.mask01 = 0x8;
+    cpu.regs.set(1, 0xFFFF_00F0);
+    try run(&cpu, 0xEEED, 0x1A10);
+    try std.testing.expectEqual(@as(u16, 0x00F0), cpu.fp.vpr.p0);
+    try std.testing.expectEqual(@as(u4, 0x8), cpu.fp.vpr.mask01);
+    try run(&cpu, 0xEEFD, 0x2A10);
+    try std.testing.expectEqual(@as(u32, 0x00F0), cpu.regs.get(2));
+}
+
+test "VPR and P0 transfers leave SP and PC unclaimed" {
+    try std.testing.expect(fp_system.group.decode(wide(0xEEFC, 0xDA10)) == null);
+    try std.testing.expect(fp_system.group.decode(wide(0xEEED, 0xFA10)) == null);
+    try std.testing.expect(fp_system.group.decode(wide(0xEEFD, 0xFA10)) == null);
+}
+
 test "unclaimed: SBZ bits, D16+, SP or PC, other system registers, arith space" {
     try std.testing.expect(fp_system.group.decode(wide(0xEEB5, 0x1A60)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEEB5, 0x1A41)) == null);

@@ -7,9 +7,11 @@
 //!
 //! VMRS: 1110 1110 1111 0001, Rt 1010 0001 0000. Rt = 15 is the
 //! APSR_nzcv form, which copies FPSCR.NZCV into the APSR flags. VMSR:
-//! 1110 1110 1110 0001, same hw2. Only the FPSCR register field (0001) is
-//! decoded here; the Armv8.1-M VPR, P0 and FPCXT forms are not. SP as Rt,
-//! and PC for VMSR, stay unclaimed.
+//! 1110 1110 1110 0001, same hw2. The register field (hw1[3:0]) decodes
+//! FPSCR (0001) and the Armv8.1-M VPR (1100) and P0 (1101), where P0 moves
+//! only VPR[15:0] and a VPR write clears its reserved top byte. The FPCXT
+//! forms are not decoded, and neither the privilege nor the CPACR checks
+//! are modelled yet. SP as Rt, and PC for VMSR, stay unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -23,6 +25,10 @@ pub const group: op.Group = .{ .name = "fp_system", .decode = decode, .oracle = 
 pub const encodings = struct {
     pub const vmrs: u16 = 0xEEF1;
     pub const vmsr: u16 = 0xEEE1;
+    pub const vmrs_vpr: u16 = 0xEEFC;
+    pub const vmsr_vpr: u16 = 0xEEEC;
+    pub const vmrs_p0: u16 = 0xEEFD;
+    pub const vmsr_p0: u16 = 0xEEED;
     /// hw2 of VMRS and VMSR with Rt ([15:12]) masked out.
     pub const transfer_hw2: u16 = 0x0A10;
 };
@@ -48,6 +54,10 @@ fn decodeTransfer(instr: Instr) ?op.Exec {
     return switch (instr.hw1) {
         encodings.vmrs => if (rt == 13) null else &vmrs,
         encodings.vmsr => if (rt == 13 or rt == 15) null else &vmsr,
+        encodings.vmrs_vpr => if (rt >= 13) null else &vmrsVpr,
+        encodings.vmsr_vpr => if (rt >= 13) null else &vmsrVpr,
+        encodings.vmrs_p0 => if (rt >= 13) null else &vmrsP0,
+        encodings.vmsr_p0 => if (rt >= 13) null else &vmsrP0,
         else => null,
     };
 }
@@ -92,4 +102,22 @@ fn vmrs(cpu: *Cpu, instr: Instr) op.Error!void {
 
 fn vmsr(cpu: *Cpu, instr: Instr) op.Error!void {
     cpu.fp.fpscr = Fpscr.fromBits(cpu.regs.get(@intCast(instr.hw2 >> 12)));
+}
+
+fn vmrsVpr(cpu: *Cpu, instr: Instr) op.Error!void {
+    cpu.regs.set(@intCast(instr.hw2 >> 12), @bitCast(cpu.fp.vpr));
+}
+
+fn vmsrVpr(cpu: *Cpu, instr: Instr) op.Error!void {
+    var vpr: @TypeOf(cpu.fp.vpr) = @bitCast(cpu.regs.get(@intCast(instr.hw2 >> 12)));
+    vpr.reserved = 0;
+    cpu.fp.vpr = vpr;
+}
+
+fn vmrsP0(cpu: *Cpu, instr: Instr) op.Error!void {
+    cpu.regs.set(@intCast(instr.hw2 >> 12), cpu.fp.vpr.p0);
+}
+
+fn vmsrP0(cpu: *Cpu, instr: Instr) op.Error!void {
+    cpu.fp.vpr.p0 = @truncate(cpu.regs.get(@intCast(instr.hw2 >> 12)));
 }
