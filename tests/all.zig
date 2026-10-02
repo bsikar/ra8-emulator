@@ -91,6 +91,7 @@ test {
     _ = @import("debug/commands_test.zig");
     _ = @import("debug/session_test.zig");
     _ = @import("debug/script_test.zig");
+    _ = @import("debug/session_cores_test.zig");
     _ = @import("interfaces/cli/debug_front_test.zig");
     _ = @import("debug/break_hook_test.zig");
     _ = @import("debug/pc_hits_test.zig");
