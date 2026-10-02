@@ -82,7 +82,15 @@ pub fn banking(address: u32) ?Banking {
 
 /// How many SysTick timers the part has. With two, the SysTick fields of
 /// SHPR3 and SHCSR are banked as well.
-pub const SysTicks = enum { one, two };
+pub const SysTicks = enum {
+    one,
+    two,
+
+    /// The variant for a part's timer count, as src/core/part.zig gives it.
+    pub fn of(count: u2) SysTicks {
+        return if (count >= 2) .two else .one;
+    }
+};
 
 const Split = struct {
     offset: u32,

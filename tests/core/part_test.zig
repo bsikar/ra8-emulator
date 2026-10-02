@@ -24,3 +24,7 @@ test "each part says its own name" {
     try std.testing.expectEqualStrings("RA8D2", part.Part.ra8d2.label());
     try std.testing.expectEqualStrings("RA8P1", part.Part.ra8p1.label());
 }
+
+test "CPU0 has a Secure and a Non-secure SysTick" {
+    try std.testing.expectEqual(@as(u2, 2), part.cpu0_systicks);
+}
