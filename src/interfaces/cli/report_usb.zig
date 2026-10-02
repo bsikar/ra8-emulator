@@ -11,6 +11,10 @@ pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
     try out.writeAll("\n");
     try descriptor("device", &host.device, out);
     try descriptor("config", host.configuration(), out);
+    if (host.step != .configured) return;
+    try out.print("USBFS host: configuration value {d}, status {x:0>2} {x:0>2}\n", .{
+        host.config_value[0], host.status[0], host.status[1],
+    });
 }
 
 /// The bytes as the host received them; nothing when none came back.

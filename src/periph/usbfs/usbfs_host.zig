@@ -17,6 +17,8 @@ pub const Step = enum {
     config_descriptor,
     full_config,
     set_configuration,
+    get_configuration,
+    get_status,
     configured,
     failed,
 };
@@ -32,6 +34,8 @@ pub const requests = struct {
         return .{ 0x80, 0x06, 0x00, 0x02, 0x00, 0x00, @truncate(length), @truncate(length >> 8) };
     }
     pub const set_configuration = [8]u8{ 0x00, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    pub const get_configuration = [8]u8{ 0x80, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00 };
+    pub const get_status = [8]u8{ 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00 };
 };
 
 pub const Host = struct {
@@ -49,6 +53,9 @@ pub const Host = struct {
     /// is how much of it the full read asked for, 0 until then.
     config: [255]u8 = .{0} ** 255,
     config_len: u16 = 0,
+    /// GET_CONFIGURATION's one byte and GET_STATUS's two, once configured.
+    config_value: [1]u8 = .{0},
+    status: [2]u8 = .{ 0, 0 },
     got: u16 = 0,
 
     pub fn tick(self: *Host, device: *usbfs.Device) void {
@@ -61,7 +68,9 @@ pub const Host = struct {
             },
             .config_descriptor => self.read(device, requests.config_descriptor, self.config[0..9], .full_config),
             .full_config => self.readAll(device),
-            .set_configuration => self.write(device, requests.set_configuration, .configured),
+            .set_configuration => self.write(device, requests.set_configuration, .get_configuration),
+            .get_configuration => self.read(device, requests.get_configuration, &self.config_value, .get_status),
+            .get_status => self.read(device, requests.get_status, &self.status, .configured),
             .configured, .failed => {},
         }
     }

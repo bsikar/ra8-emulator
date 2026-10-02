@@ -42,6 +42,8 @@ fn answer(device: *usbfs.Device) void {
     const length = device.read(at(regs.reg.usbleng), 2);
     if (request == 0x0680 and value == 0x0100) send(device, &device_descriptor);
     if (request == 0x0680 and value == 0x0200) send(device, config_descriptor[0..@min(length, config_descriptor.len)]);
+    if (request == 0x0880) send(device, &.{1});
+    if (request == 0x0080) send(device, &.{ 1, 0 });
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl | regs.dcpctr.pid_buf);
 }
 
@@ -56,6 +58,8 @@ test "a device that answers is enumerated to Configured" {
     try std.testing.expect(host.done());
     try std.testing.expectEqualSlices(u8, &device_descriptor, &host.device);
     try std.testing.expectEqualSlices(u8, &config_descriptor, host.configuration());
+    try std.testing.expectEqual(@as(u8, 1), host.config_value[0]);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 0 }, &host.status);
     const status = device.read(at(regs.reg.intsts0), 2);
     try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_configured), status & usbfs.intsts0.dvsq_mask);
     try std.testing.expectEqual(@as(u32, usbfs.host.requests.address), device.read(at(regs.reg.usbaddr), 2));
@@ -117,4 +121,39 @@ test "before the full read the host holds the nine-byte header" {
     try std.testing.expectEqual(@as(usize, 9), host.configuration().len);
     host.config_len = 25;
     try std.testing.expectEqual(@as(usize, 25), host.configuration().len);
+}
+
+test "GET_CONFIGURATION asks for the one-byte configuration value" {
+    const packet = usbfs.host.requests.get_configuration;
+    try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x08, 0, 0, 0, 0, 1, 0 }, &packet);
+}
+
+test "GET_STATUS asks the device for its two status bytes" {
+    const packet = usbfs.host.requests.get_status;
+    try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x00, 0, 0, 0, 0, 2, 0 }, &packet);
+}
+
+test "after SET_CONFIGURATION the host reads the value back, then the status" {
+    var device = attached();
+    var host = Host{ .step = .set_configuration };
+    var i: u32 = 0;
+    while (i < 100 and host.step == .set_configuration) : (i += 1) {
+        host.tick(&device);
+        answer(&device);
+    }
+    try std.testing.expectEqual(usbfs.host.Step.get_configuration, host.step);
+    while (i < 200 and host.step == .get_configuration) : (i += 1) {
+        host.tick(&device);
+        answer(&device);
+    }
+    try std.testing.expectEqual(usbfs.host.Step.get_status, host.step);
+    try std.testing.expectEqual(@as(u8, 1), host.config_value[0]);
+}
+
+test "a device that never answers GET_STATUS leaves the host short of configured" {
+    var device = attached();
+    var host = Host{ .step = .get_status, .patience = 5 };
+    var i: u32 = 0;
+    while (i < 20) : (i += 1) host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
 }
