@@ -16,6 +16,8 @@ const call_decode = @import("call_decode.zig");
 const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");
+/// Re-exported for tests/debug/cycle_count_test.zig; src/root.zig is full.
+pub const cycle_count = @import("cycle_count.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");
@@ -38,6 +40,8 @@ pub const Driver = struct {
     /// into memory. The PPB is plain memory, so the word just stored is
     /// what a read would see until the register file is written over it.
     unit_dirty: bool = false,
+    /// DWT_CYCCNT counted per instruction while a cycle watch is live.
+    cycles: cycle_count.Count = .{},
 
     /// Clear the previous verdict before a run is started.
     pub fn arm(self: *Driver) void {
@@ -113,17 +117,21 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
     machine.dcb.changed = false;
 }
 
-/// The DFSR bits a halt records.
-/// clocks.zig counts DWT_CYCCNT by writing it outside any hook, so a
-/// Cycle Counter comparator sees the count each instruction instead.
-fn watchCycles(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
+/// clocks.zig charges DWT_CYCCNT once per chunk outside any hook, so a
+/// Cycle Counter comparator sees it counted per instruction instead
+/// (src/debug/cycle_count.zig).
+fn watchCycles(handle: *c.uc.uc_engine, driver: *Driver) void {
+    const machine = driver.machine;
     if (!machine.dwt.watchesCycles()) {
         machine.dwt.cycles_primed = false;
+        driver.cycles.forget();
         return;
     }
-    if (machine.dwt.cycleCounted(get(handle, dwt.base + dwt.offsets.cyccnt))) |index| machine.onUnitMatch(index);
+    const now = driver.cycles.at(get(handle, dwt.base + dwt.offsets.cyccnt));
+    if (machine.dwt.cycleCounted(now)) |index| machine.onUnitMatch(index);
 }
 
+/// The DFSR bits a halt records.
 fn dfsrFor(stop: stop_machine.Stop) u32 {
     return switch (stop) {
         .breakpoint, .unit_break => dcb.dfsr_bits.bkpt,
@@ -192,7 +200,7 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
         syncUnits(handle, driver.machine);
         driver.unit_dirty = false;
     }
-    watchCycles(handle, driver.machine);
+    watchCycles(handle, driver);
     var sp: u32 = 0;
     if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_SP, &sp) != c.uc.UC_ERR_OK) sp = 0;
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
@@ -207,6 +215,7 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
     const stop = driver.machine.onInstruction(event);
     if (driver.machine.takeMonitor()) |cause| pendMonitor(handle, driver.machine, cause);
     if (stop) |why| {
+        if (driver.cycles.settle()) |count| put(handle, dwt.base + dwt.offsets.cyccnt, count);
         driver.machine.dcb.latch(dfsrFor(why));
         // In memory now, so a debugger reading DFSR at the stop sees why.
         put(handle, dcb.dfsr_address, driver.machine.dcb.dfsr);
