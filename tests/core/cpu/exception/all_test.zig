@@ -2,6 +2,7 @@
 test {
     _ = @import("exc_return_test.zig");
     _ = @import("frame_test.zig");
+    _ = @import("fp_frame_test.zig");
     _ = @import("entry_test.zig");
     _ = @import("ret_test.zig");
     _ = @import("active_test.zig");
