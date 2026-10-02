@@ -58,3 +58,24 @@ test "a probe verdict decides a row with no console, a fault still fails it" {
     row.stopped = "pc 0x00000000";
     try std.testing.expectEqual(table.Verdict.fail, row.verdict());
 }
+
+const booted =
+    \\  dump-sym      : g_sbns_ns_alive @0x32100090 = 4021 (0x00000FB5)
+    \\  dump-sym      : g_sbns_denied @0x22001064 = 0 (0x00000000)
+    \\
+;
+
+const denied =
+    \\  dump-sym      : g_sbns_ns_alive @0x32100090 = 0 (0x00000000)
+    \\  dump-sym      : g_sbns_denied @0x22001064 = 1 (0x00000001)
+    \\
+;
+
+test "secure boot passes on the Non-Secure heartbeat and fails on a denied handover" {
+    const boot = probes.find("secure_boot_ns_hil.elf").?;
+    try std.testing.expectEqualStrings("g_sbns_ns_alive", boot.symbol);
+    try std.testing.expectEqualStrings("g_sbns_denied", boot.failure);
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(boot, booted));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(boot, denied));
+    try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("secure_boot_ns_hil_ns.elf"));
+}

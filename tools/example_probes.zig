@@ -22,6 +22,10 @@ pub const Probe = struct {
 pub const probes = [_]Probe{
     .{ .image = "cpu1_pingpong.elf", .symbol = "g_cpu1_pingpong_match", .min = 5, .failure = "g_cpu1_pingpong_mismatch" },
     .{ .image = "cpu1_pingpong_ipc.elf", .symbol = "g_ns_pingpong_match", .min = 5, .failure = "g_ns_pingpong_mismatch" },
+    // The README's bench verdict: the Non-Secure heartbeat advances and the
+    // secure side never records a denied handover. The heartbeat lives in
+    // the _ns image; --dump-sym looks there when the secure image lacks it.
+    .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
 };
 
 pub const Judgement = enum { pass, fail, unknown };
