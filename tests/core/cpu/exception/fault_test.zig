@@ -75,3 +75,23 @@ test "a fault inside HardFault locks up" {
     ram.putWord(hard_handler, 0x0000_C806);
     try std.testing.expectEqual(hard_handler, cpu.step().?.unaligned);
 }
+
+test "a blx through a null function pointer is taken as INVSTATE at address zero" {
+    // RA8EMU-121: an old usb_selftest_cdc build left its GOT out of the .data
+    // copy, so `blx r4` ran with r4 = 0 and landed with EPSR.T clear.
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, usgfaultena);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putWord(fixture.code, 0x0000_47A0);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[4] = 0;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.pc);
+    try std.testing.expectEqual((fixture.code + 2) | 1, cpu.regs.lr);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 6), ipsr(&cpu));
+    try std.testing.expectEqual(invstate_bit, ram.word(memmap.scb.cfsr));
+    // The stacked return address is the even target the branch landed on.
+    try std.testing.expectEqual(@as(u32, 0), ram.word(cpu.regs.sp() + 24));
+}
