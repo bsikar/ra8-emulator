@@ -16,3 +16,5 @@ pub const reduce = @import("reduce.zig");
 pub const reduce_vectors = @import("reduce_vectors.zig");
 pub const int_mul = @import("int_mul.zig");
 pub const int_mul_vectors = @import("int_mul_vectors.zig");
+pub const compare = @import("compare.zig");
+pub const compare_vectors = @import("compare_vectors.zig");

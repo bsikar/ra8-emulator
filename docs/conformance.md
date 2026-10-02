@@ -188,3 +188,15 @@ is stale or an encoding is missing. Regenerate with
 | VQRDMULH T1 | 3 |
 | VMLA T1 | 3 |
 | VMLAS T1 | 3 |
+| VCMP T1 | 2 |
+| VCMP T2 | 2 |
+| VCMP T3 | 4 |
+| VCMP T4 | 1 |
+| VCMP T5 | 1 |
+| VCMP T6 | 1 |
+| VPT T1 | 1 |
+| VPT T2 | 1 |
+| VPT T3 | 1 |
+| VPT T4 | 1 |
+| VPT T5 | 1 |
+| VPT T6 | 1 |
