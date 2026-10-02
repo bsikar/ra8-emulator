@@ -163,6 +163,7 @@ test "a comparator the firmware enabled in the core's FPB stops the run there" {
 test "a halting DWT data comparator stops the run once the access retired" {
     var machine = Machine{};
     const dwt = ra8.core.dwt;
+    machine.dwt.trcena = true;
     _ = machine.dwt.write(dwt.offsets.comp0, 0x2000_1000);
     _ = machine.dwt.write(dwt.offsets.function0, dwt.match.data_write | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift));
     machine.proceed();

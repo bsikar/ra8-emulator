@@ -48,6 +48,8 @@ pub const Driver = struct {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             _ = self.machine.dwt.write(address - dwt.base, value);
+        } else if (inside(address, dcb.demcr_address, 4)) {
+            if (traceEnabled(address, value, width)) |on| self.machine.dwt.trcena = on;
         } else if (address == dcb.dfsr_address) {
             self.machine.dcb.clearStatus(value);
         } else if (inside(address, dcb.base, dcb.span)) {
@@ -61,6 +63,15 @@ pub const Driver = struct {
         if (inside(address, dwt.base, dwt.limits.end)) self.machine.dwt.loaded(address - dwt.base);
     }
 };
+
+/// DEMCR.TRCENA as a store of `width` bytes at `address` in DEMCR sets it,
+/// or null when the store leaves that bit alone.
+fn traceEnabled(address: u32, value: u32, width: u8) ?bool {
+    const shift: u6 = @intCast((address - dcb.demcr_address) * 8);
+    const span = (@as(u64, 1) << @intCast(@as(u32, width) * 8)) - 1;
+    if ((span << shift) & dcb.demcr_bits.trcena == 0) return null;
+    return (@as(u64, value) << shift) & dcb.demcr_bits.trcena != 0;
+}
 
 fn inside(address: u32, from: u32, span: u32) bool {
     return address >= from and address < from + span;

@@ -27,7 +27,7 @@ test "FUNCTION keeps MATCH, ACTION and DATAVSIZE and drops read-only bits" {
 }
 
 test "a halting data write comparator matches a store and sets MATCHED" {
-    var unit = dwt.Dwt{};
+    var unit = dwt.Dwt{ .trcena = true };
     _ = unit.write(dwt.offsets.comp0, 0x2000_1000);
     _ = unit.write(function(0), dwt.match.data_write | halts | word_size);
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read));
@@ -37,7 +37,7 @@ test "a halting data write comparator matches a store and sets MATCHED" {
 }
 
 test "a trigger-only comparator sets MATCHED without halting, and a read clears it" {
-    var unit = dwt.Dwt{};
+    var unit = dwt.Dwt{ .trcena = true };
     _ = unit.write(dwt.offsets.comp0, 0x2000_1000);
     _ = unit.write(function(0), dwt.match.data | word_size);
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read));
@@ -47,9 +47,23 @@ test "a trigger-only comparator sets MATCHED without halting, and a read clears 
 }
 
 test "an instruction address comparator matches the fetch, Thumb bit or not" {
-    var unit = dwt.Dwt{};
+    var unit = dwt.Dwt{ .trcena = true };
     _ = unit.write(dwt.offsets.comp0, 0x0000_0200);
     _ = unit.write(function(0), dwt.match.instruction | halts | (1 << dwt.function_bits.size_shift));
     try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x202));
     try std.testing.expectEqual(@as(?usize, 0), unit.matchesPc(0x201));
+}
+
+test "with DEMCR.TRCENA clear nothing matches and MATCHED stays clear" {
+    var unit = dwt.Dwt{};
+    _ = unit.write(dwt.offsets.comp0, 0x2000_1000);
+    _ = unit.write(function(0), dwt.match.data | halts | word_size);
+    _ = unit.write(dwt.offsets.comp0 + dwt.offsets.stride, 0x0000_0200);
+    _ = unit.write(function(1), dwt.match.instruction | halts | (1 << dwt.function_bits.size_shift));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x200));
+    try std.testing.expectEqual(@as(u32, 0), unit.peek(function(0)).? & dwt.function_bits.matched);
+    unit.trcena = true;
+    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, 1), unit.matchesPc(0x200));
 }
