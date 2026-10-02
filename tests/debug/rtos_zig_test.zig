@@ -75,3 +75,19 @@ test "exceptions taken and returned are recorded and passed on" {
     try std.testing.expectEqual(@as(u64, 7), got[0].when);
     try std.testing.expectEqual(rtos_trace.Kind.leave, got[1].kind);
 }
+
+test "the core's retired count is lent as the load clock" {
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
+    var listener = Listener{ .tracer = &tracer };
+    const wrap = listener.wrap();
+    var retired: u64 = 41;
+    wrap.retiredFn.?(wrap.context, &retired);
+    try std.testing.expectEqual(@as(?*const u64, &retired), tracer.trace.fine);
+    var word: [4]u8 = undefined;
+    std.mem.writeInt(u32, &word, 0x2200_10F0, .little);
+    var memory = Memory{};
+    const seen = listener.onBus(memory.view());
+    retired = 42;
+    try seen.write(0x2200_1ABC, &word);
+    try std.testing.expectEqual(@as(u64, 42), tracer.trace.loadNow(0));
+}

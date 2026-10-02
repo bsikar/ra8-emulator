@@ -19,7 +19,7 @@ pub const Listener = struct {
 
     /// What boot.zig takes to put this listener in front of a run.
     pub fn wrap(self: *Listener) boot.Wrap {
-        return .{ .context = self, .busFn = busThunk, .sourceFn = sourceThunk };
+        return .{ .context = self, .busFn = busThunk, .sourceFn = sourceThunk, .retiredFn = retiredThunk };
     }
 
     pub fn onBus(self: *Listener, inner: bus.Bus) bus.Bus {
@@ -41,6 +41,13 @@ fn busThunk(context: *anyopaque, inner: bus.Bus) bus.Bus {
 fn sourceThunk(context: *anyopaque, inner: Source) Source {
     const self: *Listener = @ptrCast(@alignCast(context));
     return self.onSource(inner);
+}
+
+/// The core's retired count is the load clock, one tick per instruction,
+/// as Unicorn's code hook gives (RA8EMU-284).
+fn retiredThunk(context: *anyopaque, retired: *const u64) void {
+    const self: *Listener = @ptrCast(@alignCast(context));
+    self.tracer.trace.fine = retired;
 }
 
 fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {

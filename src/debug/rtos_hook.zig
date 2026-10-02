@@ -70,19 +70,23 @@ pub const Tracer = struct {
 
 /// Where the pointer is, when the flag asked for a trace. An image without
 /// ThreadX is reported and traced as nothing.
-pub fn resolve(image: elf.Image, wanted: bool) ?Tracer {
+pub fn resolve(image: elf.Image, wanted: ?load.Window) ?Tracer {
     return resolveOn(image, wanted, 0);
 }
 
 /// As `resolve`, for the image one core runs; CPU1's miss says whose it is.
-pub fn resolveOn(image: elf.Image, wanted: bool, core: u1) ?Tracer {
-    if (!wanted) return null;
+/// `wanted` is the load window, null when no flag asked for a trace.
+pub fn resolveOn(image: elf.Image, wanted: ?load.Window, core: u1) ?Tracer {
+    const window = wanted orelse return null;
     const at = symbols.addressOf(image, symbol) orelse {
         const whose = if (core == 1) "cpu1 image has " else "";
         std.debug.print("--trace-rtos: {s}no symbol named {s}\n", .{ whose, symbol });
         return null;
     };
-    return .{ .address = at, .core = core };
+    var found: Tracer = .{ .address = at, .core = core };
+    found.trace.load.from = window.from;
+    found.trace.load.to = window.to;
+    return found;
 }
 
 /// Resolve and hook. The tracer has to outlive the engine, which keeps its
@@ -91,7 +95,7 @@ pub fn resolveOn(image: elf.Image, wanted: bool, core: u1) ?Tracer {
 pub fn arm(
     handle: ?*c.uc.uc_engine,
     image: elf.Image,
-    wanted: bool,
+    wanted: ?load.Window,
     clock: *const u64,
     controller: *const isr.Nvic,
 ) Error!?*Tracer {

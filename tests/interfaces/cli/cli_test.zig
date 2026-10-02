@@ -77,3 +77,16 @@ test "--ns names the Non-Secure companion image, and is off by default" {
 test {
     _ = @import("touch_spec_test.zig");
 }
+
+test "--cpu-load-from and --cpu-load-to set the load window and turn --cpu-load on" {
+    const plain = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(plain.rtosWanted() == null);
+    const whole = try parse(&[_][]const u8{ "emu", "a.elf", "--cpu-load" });
+    try std.testing.expectEqual(@as(u64, 0), whole.rtosWanted().?.from);
+    try std.testing.expectEqual(std.math.maxInt(u64), whole.rtosWanted().?.to);
+    const windowed = try parse(&[_][]const u8{ "emu", "a.elf", "--cpu-load-from", "1000", "--cpu-load-to", "0x2000" });
+    try std.testing.expect(windowed.cpu_load);
+    try std.testing.expectEqual(@as(u64, 1000), windowed.rtosWanted().?.from);
+    try std.testing.expectEqual(@as(u64, 0x2000), windowed.rtosWanted().?.to);
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu-load-to" }));
+}

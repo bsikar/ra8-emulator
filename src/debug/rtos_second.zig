@@ -18,13 +18,13 @@ var traced: ?*rtos_hook.Tracer = null;
 /// Pass CPU1 through, tracing it when the flag asked and its image (read
 /// again from `path`) has ThreadX. Bringing CPU1 up failing is passed on
 /// as it was; a trace that cannot be armed leaves the run as it would be.
-pub fn arm(started: anyerror!?*second_core.Second, wanted: bool, path: ?[]const u8) anyerror!?*second_core.Second {
+pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Window, path: ?[]const u8) anyerror!?*second_core.Second {
     const one = (try started) orelse return null;
-    if (!wanted) return one;
+    const window = wanted orelse return one;
     const named = path orelse return one;
     const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, named, second_core.limits.image_bytes) catch return one;
     const image = elf.Image.init(bytes) catch return one;
-    const found = rtos_hook.resolveOn(image, true, 1) orelse return one;
+    const found = rtos_hook.resolveOn(image, window, 1) orelse return one;
     traced = rtos_hook.attach(one.core.handle, found, &one.timebase.ticks, &one.interrupts) catch null;
     return one;
 }

@@ -39,6 +39,9 @@ pub const Wrap = struct {
     context: *anyopaque,
     busFn: *const fn (context: *anyopaque, inner: Bus) Bus,
     sourceFn: *const fn (context: *anyopaque, inner: Source) Source,
+    /// Lent the core's retired-instruction count for the run, so a listener
+    /// can time what it sees per instruction (RA8EMU-284).
+    retiredFn: ?*const fn (context: *anyopaque, retired: *const u64) void = null,
 };
 
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
@@ -83,6 +86,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     var cpu: cpu_mod.Cpu = .{ .bus = if (wrap) |w| w.busFn(w.context, memory) else memory };
     var pending: NvicSource = .{};
     cpu.source = if (wrap) |w| w.sourceFn(w.context, pending.source()) else pending.source();
+    if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
