@@ -4,9 +4,9 @@
 //! npu_vela.zig checks the stream's shape, npu_vela_regs.zig keeps what the
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
 //! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig,
-//! MAX pooling through npu_vela_pool.zig and int8 convolution through
-//! npu_vela_convop.zig; any other block operation (depthwise, other pool or
-//! elementwise modes) stops the run with error.OperatorNotModelled, so
+//! MAX pooling through npu_vela_pool.zig and int8 convolution and
+//! depthwise convolution through npu_vela_convop.zig; any other block
+//! operation (other pool or elementwise modes) stops the run with error.OperatorNotModelled, so
 //! nothing that needs an unmodelled operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
 //! between; the feature-map sets go to npu_vela_fm.zig, the scale, activation
@@ -67,14 +67,13 @@ fn setRegister(machine: *Machine, code: u10, word: u32) void {
 
 fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: vela.Op, word: u32) Error!void {
     switch (op) {
-        .depthwise => return error.OperatorNotModelled,
-        .conv => machine.elements += try convop.run(std.heap.page_allocator, memory, regions, .{
+        .conv, .depthwise => machine.elements += try convop.run(std.heap.page_allocator, memory, regions, .{
             .bases = machine.state,
             .maps = machine.maps,
             .quant = machine.quant,
             .kernel = machine.kernel,
             .conv = machine.conv,
-        }),
+        }, op == .depthwise),
         .pool => machine.elements += try pool.run(memory, regions, vela.param(word), .{
             .bases = machine.state,
             .maps = machine.maps,

@@ -2,7 +2,8 @@
 //! Vela 3.12.0 streams (ethos-u55-256) through the runner, so the register
 //! decode, the weight and record loads and the IFM/OFM addressing are all
 //! exercised. The 1x1 case lives in npu_vela_run_test.zig; this file holds
-//! the cases that need padding, stride and a kernel bigger than one tap.
+//! the cases that need padding, stride and a kernel bigger than one tap,
+//! and the depthwise case.
 const std = @import("std");
 const ra8 = @import("ra8");
 const vela = ra8.periph.npu_vela;
@@ -110,4 +111,56 @@ test "a corrupt weight stream is refused as BadWeights" {
     var words = vela_conv3x3;
     words[65] = 0x0000_0010; // WEIGHT_LENGTH payload 0x210 -> 0x10: the stream runs out
     try std.testing.expectError(error.BadWeights, vela.runner.run(&memory, &regions, &words));
+}
+
+/// TFLite DEPTHWISE_CONV_2D, 3x3 kernel, stride 2, SAME padding, depth
+/// multiplier 1, per-channel int8: 1x6x6x8 in (zero point -5) to 1x3x3x8
+/// out (zero point 7). Vela pads one row at the bottom and one column at
+/// the right, sets KERNEL_STRIDE 3 (both strides 2), DMAs flash 0x50 (0xD0
+/// bytes) to region 1 offset 0x170, and runs NPU_OP_DEPTHWISE with the IFM
+/// at region 1 offset 0x000 and the OFM at 0x120. The 336 bytes after the
+/// 32-byte driver header, as Vela emitted them.
+const vela_depthwise = [_]u32{
+    0x00000130, 0x00004030, 0x00000050, 0x00010131, 0x00004031, 0x00000170,
+    0x00004032, 0x000000D0, 0x00000010, 0x0001010F, 0x00004000, 0x00000000,
+    0x00004001, 0x00000000, 0x00004002, 0x00000000, 0x00004003, 0x00000000,
+    0x0005010B, 0x0005010C, 0x0005010A, 0x00070104, 0x00004006, 0x00000001,
+    0x00004005, 0x00000030, 0x00004004, 0x00000008, 0xFFFB0109, 0x00010105,
+    0x00000107, 0x00000100, 0x00000101, 0x00010103, 0x00010102, 0x0001011F,
+    0x00004010, 0x00000120, 0x00004011, 0x00000000, 0x00004012, 0x00000000,
+    0x00004013, 0x00000000, 0x0002011B, 0x0002011C, 0x0002011A, 0x00020112,
+    0x00020111, 0x00070113, 0x00004016, 0x00000001, 0x00004015, 0x00000018,
+    0x00004014, 0x00000008, 0x00070118, 0x00010114, 0x00020121, 0x00020120,
+    0x00030122, 0x00010128, 0x00004020, 0x000001C0, 0x00004021, 0x00000080,
+    0x00010129, 0x00004022, 0x00000170, 0x00004023, 0x00000050, 0x00000125,
+    0xFF800126, 0x007F0127, 0x00030116, 0x00030115, 0x00070117, 0x000A010D,
+    0x001E012D, 0x00000124, 0x0000012F, 0x00000011, 0x00000003, 0xFFFF0000,
+};
+
+/// The 0xD0 flash bytes from offset 0x50: 80 bytes of scale records, then
+/// 128 bytes of weight stream.
+const dw_flash = hexBytes("17faffffff6fcee9642644fbffffff2e57715226b3ffffffff5cb5235526aa05000000fb74dc632623fbffffff9990c0" ++
+    "73273405000000719e475d269a030000006dde1f6a2668f9ffffffcfd28d5b28300254f4bdcefb27c584c3f2a0f02f1f" ++
+    "ff8e2e0ecead9d5d1dfd8c7c6c9cfb7a5a3afae989b900f0e25dfa4ffebb0c1e0300ad00f56d3be2ceaa6b0dd98d11e7" ++
+    "1b00dc81d099d9d20600a07553a7920dab090fe325a91cc700c0fef9023bcc0e7000b8e3c959422000c8829681607c65" ++
+    "008012000735feffffffffffffffffff");
+const dw_ifm = hexBytes("61f1e1115468ccc10716c0db6d415a0be0b32c04eabd018c8e9c5bd79e837145a74d1385a00633eea6e65b9224701fcb" ++
+    "bb6e29e79ab5f4c0c1bfb14efc542a4e2ac4c7cbb60973364b34db57c5438a032a319a438ab1927a0109f722b62bec35" ++
+    "0e96f3933acc7fa10d3ffaf83aae44e78ab2f53f35e60a5a6b3515f604136c7f623886ec43e5285afa211d31c5a9c3f1" ++
+    "6f84390935858d26b4a5e19322aac1ea1cfd25c01d1fb81bc9b71ae10d6e6bfeb650d12e9d26f662ad8bfc0de2654a0c" ++
+    "df849f70383d25e149ae50859f6e3c5526a0b7a9d835eea3f4129adc571364241bcceccc27b04e75c5f03f9057fed726" ++
+    "2564b3d37f49db2b066d83d5f0b3bf82680de518dfe4eb645fbd934ea36993f0188a8913fa26e573b55ff1f3d72caeb4");
+/// TFLite Micro's double-rounding output for that IFM; tflite-runtime
+/// agrees on every byte.
+const dw_ofm = hexBytes("0ba13811005c80eb7f09f37ff02a05f3c5dfaf6d2814ec25d9ffd982da85eff780b376e1dd421ded01d30ef3f837501e" ++
+    "10185e25b52cdc02556f7f7a113ed908110ee72ffc0b151c");
+
+test "a Vela-compiled 3x3 stride-2 SAME depthwise conv writes TFLite Micro's output" {
+    var memory = Memory{};
+    @memcpy(memory.bytes[0x50..][0..dw_flash.len], &dw_flash);
+    @memcpy(memory.bytes[0x800..][0..dw_ifm.len], &dw_ifm);
+    const result = try vela.runner.run(&memory, &regions, &vela_depthwise);
+    try std.testing.expectEqual(@as(u64, 0xD0), result.moved);
+    try std.testing.expectEqual(@as(u64, 72), result.elements);
+    try std.testing.expectEqualSlices(u8, &dw_ofm, memory.bytes[0x920..][0..dw_ofm.len]);
 }
