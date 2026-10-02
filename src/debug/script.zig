@@ -14,7 +14,7 @@ const session = @import("session.zig");
 pub const prompt = "(ra8) ";
 
 /// Play every line of `text` into `target`, stopping early at `quit`.
-pub fn play(target: *session.Session, text: []const u8, out: anytype, echo: bool) !session.Outcome {
+pub fn play(target: anytype, text: []const u8, out: anytype, echo: bool) !session.Outcome {
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
         if (try one(target, line, out, echo) == .quit) return .quit;
@@ -24,7 +24,7 @@ pub fn play(target: *session.Session, text: []const u8, out: anytype, echo: bool
 
 /// Parse and apply a single line. A blank or comment-only line does nothing
 /// and is not echoed.
-pub fn one(target: *session.Session, line: []const u8, out: anytype, echo: bool) !session.Outcome {
+pub fn one(target: anytype, line: []const u8, out: anytype, echo: bool) !session.Outcome {
     const parsed = commands.parse(line) catch |err| {
         if (echo) try out.print("{s}{s}\n", .{ prompt, std.mem.trim(u8, line, " \t\r") });
         try out.print("error: {s}\n", .{@errorName(err)});
