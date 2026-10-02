@@ -1,9 +1,10 @@
 //! Hints: NOP, YIELD, WFE, WFI and SEV, in both widths.
 //!
 //! SEV sets the core's event register and WFE consumes it when it is set
-//! (RA8EMU-129). Waiting is still to come: WFI, and WFE with the event clear,
-//! complete at once for now, which the architecture allows, so a loop around
-//! WFI spins on the budget rather than stopping the run.
+//! (RA8EMU-129). WFI, and WFE with the event clear, leave the core waiting
+//! (exception/sleep.zig) when it has an exception source to wake it. With
+//! none, as in a lockstep step, they complete at once, which the
+//! architecture allows.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -15,6 +16,7 @@ pub const encodings = struct {
     /// hint number 0 NOP, 1 YIELD, 2 WFE, 3 WFI, 4 SEV
     pub const last_hint: u16 = 4;
     pub const wfe: u16 = 2;
+    pub const wfi: u16 = 3;
     pub const sev: u16 = 4;
 };
 
@@ -38,6 +40,7 @@ fn byNumber(number: u16) ?op.Exec {
     if (number > e.last_hint) return null;
     return switch (number) {
         e.wfe => waitForEvent,
+        e.wfi => waitForInterrupt,
         e.sev => sendEvent,
         else => complete,
     };
@@ -48,10 +51,20 @@ fn complete(cpu: *Cpu, instr: Instr) op.Error!void {
     _ = instr;
 }
 
-/// WFE with the event register set clears it and completes.
+/// WFE with the event register set clears it and completes; with it clear
+/// the core waits for it.
 fn waitForEvent(cpu: *Cpu, instr: Instr) op.Error!void {
     _ = instr;
-    cpu.event = false;
+    if (cpu.event) {
+        cpu.event = false;
+    } else if (cpu.source != null) {
+        cpu.waiting = .event;
+    }
+}
+
+fn waitForInterrupt(cpu: *Cpu, instr: Instr) op.Error!void {
+    _ = instr;
+    if (cpu.source != null) cpu.waiting = .interrupt;
 }
 
 fn sendEvent(cpu: *Cpu, instr: Instr) op.Error!void {
