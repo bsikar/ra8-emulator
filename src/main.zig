@@ -18,6 +18,7 @@ const stop_watch = ra8.core.stop;
 const deadline = ra8.core.deadline;
 const engine = ra8.core.engine;
 const second_core = ra8.core.second_core;
+const rtos_hook = ra8.core.step_hook.rtos_hook;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
 const sd_format = ra8.periph.sd_format;
@@ -56,18 +57,6 @@ fn loadNonSecure(allocator: std.mem.Allocator, core: engine.Engine, path: []cons
     _ = try core.loadImage(try openImage(allocator, path));
 }
 
-/// Everything that has to be hooked onto the core before the image runs,
-/// and the image itself, which is loaded in the middle of it.
-///
-/// The order matters in one place and not the rest: the Non-Secure world's
-/// BLXNS is found by reading the bytes as loaded, so `attachWorlds` has to
-/// follow `loadImage`. Everything else is independent, and the caller owns
-/// all of it, which is why each piece arrives as a pointer and the count
-/// of bytes written goes back.
-/// The pieces a run hangs on the core before it starts and reads back
-/// once it has stopped. One struct rather than six locals because that is
-/// what they are: every one of them is attached in the same breath and
-/// reported on in the same breath.
 /// Hand the watched place the run's own period counter, then hook it.
 ///
 /// The stamp has to be wired before the first store lands, and the clock it
@@ -157,6 +146,7 @@ pub fn main() !u8 {
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try armWatch(core, one, &parts.timebase.ticks);
+    const tracer = try rtos_hook.arm(core.handle, image, options.trace_rtos, &parts.timebase.ticks);
     var window = taken_in.resolve(image, options.taken_in_place);
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();
@@ -192,7 +182,7 @@ pub fn main() !u8 {
         .per_boundary = options.chunk_instructions,
     }, second);
 
-    try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window);
+    try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window, tracer);
     return verdict(out, core, options, fault, stop, point, timed, budget);
 }
 
@@ -213,6 +203,7 @@ fn reportAll(
     second: ?*second_core.Second,
     watched: ?watchpoint.Watched,
     window: ?taken_in.Window,
+    tracer: ?*const rtos_hook.Tracer,
 ) !void {
     try report_run.all(out, board, image, run);
     try report_hotspots.spent(out, image, parts.pcs);
@@ -224,6 +215,7 @@ fn reportAll(
     try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, board, watched);
+    try rtos_hook.print(out, tracer);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.

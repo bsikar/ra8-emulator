@@ -44,4 +44,5 @@ test {
     _ = @import("fpb_test.zig");
     _ = @import("watch_link_test.zig");
     _ = @import("rtos_trace_test.zig");
+    _ = @import("rtos_hook_test.zig");
 }
