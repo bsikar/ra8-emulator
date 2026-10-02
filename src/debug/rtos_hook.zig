@@ -26,6 +26,7 @@ pub const names = @import("rtos_names.zig");
 pub const isr = @import("rtos_isr.zig");
 pub const zig = @import("rtos_zig.zig");
 pub const second = @import("rtos_second.zig");
+pub const load = @import("rtos_load.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
