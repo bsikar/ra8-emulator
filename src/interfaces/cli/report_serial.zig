@@ -268,12 +268,11 @@ fn usbRefused(host: *const Host, out: Writer) !void {
     if (host.xfer.refusals() == host.xfer.stalls + data.refusals()) return;
     try out.print(
         "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, " ++
-            "{d} on an unarmed pipe, {d} FIFO not ready, {d} drained past the packet, " ++
+            "{d} FIFO not ready, {d} drained past the packet, " ++
             "{d} out of order at the device\n",
         .{
             host.xfer.no_device,
             host.xfer.stray_ccpl,
-            host.xfer.unarmed,
             host.xfer.port.not_ready,
             host.xfer.port.overdrain,
             host.xfer.device.out_of_order,
