@@ -5,4 +5,6 @@ test {
     _ = @import("predicate_test.zig");
     _ = @import("int_test.zig");
     _ = @import("int_vectors_test.zig");
+    _ = @import("int_shift_test.zig");
+    _ = @import("int_shift_vectors_test.zig");
 }

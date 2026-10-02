@@ -155,3 +155,11 @@ is stale or an encoding is missing. Regenerate with
 | VHADD (vector) T1 | 2 |
 | VRHADD T1 | 2 |
 | VHSUB (vector) T1 | 2 |
+| VSHL (vector) T1 | 3 |
+| VRSHL T1 | 2 |
+| VQSHL (vector) T1 | 2 |
+| VQRSHL T1 | 2 |
+| VSHL (immediate) T1 | 2 |
+| VSHR T1 | 2 |
+| VRSHR T1 | 2 |
+| VQSHL (immediate) T1 | 2 |
