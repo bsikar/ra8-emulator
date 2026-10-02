@@ -49,6 +49,7 @@ pub const csel = @import("ops/csel.zig");
 pub const long_shift = @import("ops/long_shift.zig");
 pub const long_shift_reg = @import("ops/long_shift_reg.zig");
 pub const long_shift_sat = @import("ops/long_shift_sat.zig");
+pub const long_shift_sat64 = @import("ops/long_shift_sat64.zig");
 pub const svc = @import("ops/svc.zig");
 pub const table_branch = @import("ops/table_branch.zig");
 pub const blxns = @import("ops/blxns.zig");
