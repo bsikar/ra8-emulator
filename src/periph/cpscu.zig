@@ -52,6 +52,9 @@ const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
 const lanes = @import("lanes.zig");
 
+/// SRAMSAR, SRAMSABAR0..3 and SRAMESAR, in windows of their own.
+pub const sram = @import("cpscu_sram.zig");
+
 /// The window, from the first register to one past the last.
 pub const win_base: u32 = 0x4000_8100;
 pub const win_span: u32 = 0x74;

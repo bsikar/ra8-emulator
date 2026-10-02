@@ -105,8 +105,9 @@ pub const Counters = struct {
 /// attached, so the next block of any kind failed attach with
 /// TooManyBlocks. A peripheral whose registers sit in two or three separate
 /// runs needs an entry per run, so the ceiling has to lead the tree rather
-/// than sit flush against it.
-pub const max_blocks = 96;
+/// than sit flush against it. 96 filled the same way once the CPSCU SRAM
+/// attribution windows arrived (RA8EMU-230).
+pub const max_blocks = 128;
 
 /// The peripheral bus: a small registry of modelled blocks plus the sparse
 /// register file behind them.

@@ -313,4 +313,5 @@ fn attachProtected(self: *Board) !void {
     // the bus masters, the master MPUs and the second CPU, behind PRC4 too.
     self.chip_attribution = cpscu.Unit.init(&self.protection);
     try self.bus.add(self.chip_attribution.block());
+    for (self.sram_attribution.blocks()) |window| try self.bus.add(window);
 }
