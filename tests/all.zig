@@ -368,6 +368,7 @@ test {
     _ = @import("periph/usbhs/usbhs_msc_test.zig");
     _ = @import("periph/usbhs/usbhs_hold_test.zig");
     _ = @import("periph/usbhs/usbhs_storage_test.zig");
+    _ = @import("periph/usbhs/usbhs_tail_test.zig");
     _ = @import("periph/usbhs/usbhs_test.zig");
     _ = @import("periph/usbhs/usbhs_xfer_test.zig");
     _ = @import("periph/usbfs/usbfs_test.zig");
