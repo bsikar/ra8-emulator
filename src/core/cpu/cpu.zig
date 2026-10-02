@@ -51,6 +51,8 @@ pub const Cpu = struct {
     /// What is pending, asked before each instruction `run` executes. Null
     /// runs with no asynchronous exceptions, as a lockstep step does.
     source: ?exception.source.Source = null,
+    /// The local exclusive monitor: the address a load-exclusive tagged.
+    exclusive: ?u32 = null,
     /// The other Security state's banked registers, which Secure code reaches
     /// through the _NS forms of MRS and MSR.
     banked: banked_mod.Banked = .{},

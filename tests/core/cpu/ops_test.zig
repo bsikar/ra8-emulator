@@ -9,6 +9,7 @@ test {
     _ = @import("ops/ldst_reg_test.zig");
     _ = @import("ops/ldm_stm_test.zig");
     _ = @import("ops/ldrd_strd_test.zig");
+    _ = @import("ops/exclusive_test.zig");
     _ = @import("ops/ldm_stm_wide_test.zig");
     _ = @import("ops/ldst_wide_test.zig");
     _ = @import("ops/ldr_literal_wide_test.zig");
