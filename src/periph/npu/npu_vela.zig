@@ -28,6 +28,8 @@ pub const quant = @import("npu_vela_quant.zig");
 pub const addr = @import("npu_vela_addr.zig");
 /// Elementwise MIN and MAX.
 pub const minmax = @import("npu_vela_minmax.zig");
+/// MAX pooling.
+pub const pool = @import("npu_vela_pool.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
