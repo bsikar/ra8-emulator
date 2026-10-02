@@ -128,6 +128,38 @@ test "exceptions print between the switches they bracket" {
     try std.testing.expectEqualStrings(want, out.items);
 }
 
+test "a CPU1 tracer tags its events and its header cpu1" {
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC, .core = 1 };
+    tracer.trace.exception(1, 4, .enter, 14);
+    tracer.onStore(0x2200_1ABC, 4, 0x2200_10F0);
+    tracer.trace.exception(1, 4, .leave, 14);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    const want =
+        \\  rtos cpu1     : _tx_thread_current_ptr @0x22001ABC, 3 event(s)
+        \\                  tick 4 cpu1 enter PendSV
+        \\                  tick 0 cpu1 -> 0x220010F0 blink_a
+        \\                  tick 4 cpu1 leave PendSV
+        \\
+    ;
+    try std.testing.expectEqualStrings(want, out.items);
+}
+
+test "a CPU1 image without ThreadX traces nothing, and no flag traces nothing" {
+    var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
+    const image = try bareImage(&buffer);
+    try std.testing.expect(rtos_hook.resolveOn(image, true, 1) == null);
+    try std.testing.expect(rtos_hook.resolveOn(image, false, 1) == null);
+}
+
+test "no CPU1 prints nothing for CPU1" {
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try rtos_hook.second.print(out.writer(), null);
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
 test "no trace asked for prints nothing" {
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();

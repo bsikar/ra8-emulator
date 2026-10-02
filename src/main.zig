@@ -153,7 +153,7 @@ pub fn main() !u8 {
     try core.attachUndefined(&undefined_found);
     var storage: second_core.Second = undefined;
     var timed = resolveDeadline(options);
-    const second = second_core.start(allocator, &core, &board, options.cpu1_path, &storage) catch |err| {
+    const second = rtos_hook.second.arm(second_core.start(allocator, &core, &board, options.cpu1_path, &storage), options.trace_rtos, options.cpu1_path) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ options.cpu1_path orelse "?", @errorName(err) });
         return 1;
     };
@@ -216,6 +216,7 @@ fn reportAll(
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, board, watched);
     try rtos_hook.print(out, tracer, rtos_hook.Memory{ .handle = core.handle });
+    try rtos_hook.second.print(out, second);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
