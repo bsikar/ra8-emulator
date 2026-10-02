@@ -42,4 +42,5 @@ test {
     _ = @import("rsp_dispatch_test.zig");
     _ = @import("rsp_units_test.zig");
     _ = @import("fpb_test.zig");
+    _ = @import("watch_link_test.zig");
 }
