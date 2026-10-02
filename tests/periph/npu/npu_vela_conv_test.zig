@@ -105,3 +105,40 @@ test "mismatched buffers and missing records are refused" {
     try std.testing.expectError(error.BadShape, conv.run(params, @ptrCast(ifm_bytes[0..127]), &ohwi, &scales, &ofm));
     try std.testing.expectError(error.MissingRecord, conv.run(params, @ptrCast(&ifm_bytes), &ohwi, scales[0..50], &ofm));
 }
+
+test "a depthwise conv sums each channel only into its own OFM channel" {
+    var records: [20]u8 = undefined;
+    const unit = unitRecord();
+    @memcpy(records[0..10], &unit);
+    @memcpy(records[10..20], &unit);
+    const p = conv.Params{
+        .ifm = .{ .height = 1, .width = 2, .depth = 2 },
+        .ofm = .{ .height = 1, .width = 1, .depth = 2 },
+        .kernel_height = 1,
+        .kernel_width = 2,
+        .ifm_zero_point = 0,
+        .ofm_zero_point = 0,
+        .depthwise = true,
+    };
+    // Pixels (1, 2) and (2, 3); channel 0 weights (3, 4), channel 1 (5, 6).
+    const ifm = [_]i8{ 1, 2, 2, 3 };
+    const weights = [_]i16{ 3, 4, 5, 6 };
+    var ofm: [2]i8 = undefined;
+    try conv.run(p, &ifm, &weights, &records, &ofm);
+    try std.testing.expectEqualSlices(i8, &.{ 1 * 3 + 2 * 4, 2 * 5 + 3 * 6 }, &ofm);
+}
+
+test "a depthwise conv needs as many OFM channels as IFM channels" {
+    const record = unitRecord();
+    const p = conv.Params{
+        .ifm = .{ .height = 1, .width = 1, .depth = 2 },
+        .ofm = .{ .height = 1, .width = 1, .depth = 1 },
+        .kernel_height = 1,
+        .kernel_width = 1,
+        .ifm_zero_point = 0,
+        .ofm_zero_point = 0,
+        .depthwise = true,
+    };
+    var ofm: [1]i8 = undefined;
+    try std.testing.expectError(error.BadShape, conv.run(p, &.{ 1, 2 }, &.{1}, &record, &ofm));
+}

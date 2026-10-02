@@ -1,10 +1,12 @@
-//! NPU_OP_CONV for int8 per-channel convolutions: the registers a Vela
-//! program sets, turned into a call to the datapath in npu_vela_conv.zig.
+//! NPU_OP_CONV and NPU_OP_DEPTHWISE for int8 per-channel convolutions: the
+//! registers a Vela program sets, turned into a call to the datapath in
+//! npu_vela_conv.zig.
 //!
 //! The weight stream is read from WEIGHT_REGION at WEIGHT_BASE for
 //! WEIGHT_LENGTH bytes, decoded (npu_vela_weights.zig) and put back in OHWI
 //! order (npu_vela_order.zig). KERNEL_STRIDE b2 picks the traversal it was
-//! packed in (Ethos-U55 TRM 102420_0200_02, cmd0 0x122) and
+//! packed in (Ethos-U55 TRM 102420_0200_02, cmd0 0x122), or the depthwise
+//! order for NPU_OP_DEPTHWISE (depth multiplier 1), and
 //! OFM_BLK_DEPTH_M1 (0x117) the OFM block depth. The scale-and-bias records
 //! come from SCALE_REGION at SCALE_BASE for SCALE_LENGTH bytes.
 //!
@@ -74,7 +76,7 @@ fn supported(inputs: Inputs) Error!round.Rounding {
 
 /// The datapath's view of the registers: shapes, padding, stride, zero
 /// points and the activation range.
-fn params(inputs: Inputs, rounding: round.Rounding) conv.Params {
+fn params(inputs: Inputs, rounding: round.Rounding, depthwise: bool) conv.Params {
     const maps = inputs.maps;
     const k = inputs.kernel;
     const s = pool.step(k.stride);
@@ -101,6 +103,7 @@ fn params(inputs: Inputs, rounding: round.Rounding) conv.Params {
         .rounding = rounding,
         .activation_min = minmax.signExtend(inputs.quant.activation_min, f8),
         .activation_max = minmax.signExtend(inputs.quant.activation_max, f8),
+        .depthwise = depthwise,
     };
 }
 
@@ -120,15 +123,16 @@ fn loadWeights(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regi
     defer gpa.free(stream);
     const decoded = weights.decode(gpa, stream) catch |why| return if (why == error.OutOfMemory) error.OutOfMemory else error.BadWeights;
     defer gpa.free(decoded);
+    const ifm_depth: u32 = if (p.depthwise) 1 else p.ifm.depth;
     const layout = order.Layout{
         .ofm_depth = p.ofm.depth,
         .kernel_height = p.kernel_height,
         .kernel_width = p.kernel_width,
-        .ifm_depth = p.ifm.depth,
+        .ifm_depth = ifm_depth,
         .ofm_block_depth = @as(u32, inputs.conv.ofm_blk_depth_m1) + 1,
-        .traversal = if (inputs.kernel.stride & part_kernel_first != 0) .part_kernel_first else .depth_first,
+        .traversal = if (p.depthwise) .depthwise else if (inputs.kernel.stride & part_kernel_first != 0) .part_kernel_first else .depth_first,
     };
-    const ohwi = try gpa.alloc(i16, p.ofm.depth * p.kernel_height * p.kernel_width * p.ifm.depth);
+    const ohwi = try gpa.alloc(i16, p.ofm.depth * p.kernel_height * p.kernel_width * ifm_depth);
     errdefer gpa.free(ohwi);
     order.unpack(layout, decoded, ohwi) catch return error.BadWeights;
     return ohwi;
@@ -145,9 +149,10 @@ fn move(memory: anytype, regions: *const dma.Regions, tiles: regs.Tiles, map: fm
     };
 }
 
-/// Run one NPU_OP_CONV over the whole OFM. Returns the elements written.
-pub fn run(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regions, inputs: Inputs) Error!u64 {
-    const p = params(inputs, try supported(inputs));
+/// Run one NPU_OP_CONV (or NPU_OP_DEPTHWISE, `depthwise`) over the whole
+/// OFM. Returns the elements written.
+pub fn run(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regions, inputs: Inputs, depthwise: bool) Error!u64 {
+    const p = params(inputs, try supported(inputs), depthwise);
     const maps = inputs.maps;
     const ifm_f = addr.ifmFormat(maps.ifm.precision).?;
     const ofm_f = addr.ofmFormat(maps.ofm.precision).?;
