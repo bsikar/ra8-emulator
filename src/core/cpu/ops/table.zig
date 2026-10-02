@@ -29,6 +29,7 @@ pub const groups = [_]op.Group{
     @import("mov_wide.zig").group,
     @import("divide.zig").group,
     @import("dp_shifted.zig").group,
+    @import("shift_reg.zig").group,
     @import("imm_logic.zig").group,
     @import("imm_arith.zig").group,
     @import("branch_wide.zig").group,
