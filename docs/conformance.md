@@ -48,3 +48,5 @@ is stale or an encoding is missing. Regenerate with
 | VCMP.F64 T2 | 1 |
 | VCMPE.F64 T1 | 1 |
 | VCMPE.F64 T2 | 1 |
+| VCVT.F64.F32 T1 | 10 |
+| VCVT.F32.F64 T1 | 17 |
