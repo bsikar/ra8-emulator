@@ -173,3 +173,6 @@ is stale or an encoding is missing. Regenerate with
 | VQSHRUN T1 | 2 |
 | VMOVL T1 | 3 |
 | VSHLL T1 | 3 |
+| VSRI T1 | 4 |
+| VSLI T1 | 4 |
+| VQSHLU T1 | 4 |

@@ -9,3 +9,5 @@ pub const int_shift = @import("int_shift.zig");
 pub const int_shift_vectors = @import("int_shift_vectors.zig");
 pub const int_width = @import("int_width.zig");
 pub const int_width_vectors = @import("int_width_vectors.zig");
+pub const int_insert = @import("int_insert.zig");
+pub const int_insert_vectors = @import("int_insert_vectors.zig");
