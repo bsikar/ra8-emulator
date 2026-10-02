@@ -23,6 +23,9 @@ pub const clear = @import("fault_clear.zig");
 /// Where a configurable fault is taken, and when it escalates.
 pub const route = @import("fault_route.zig");
 
+/// Raising a BusFault for an access the bus refused.
+pub const bus = @import("bus_fault.zig");
+
 /// A CFSR cause, valued by its bit position. Positions not listed are
 /// reserved and read as zero on silicon.
 pub const Cause = enum(u5) {
