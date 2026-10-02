@@ -149,3 +149,22 @@ test "MPU pairs bank through RNR on the Zig bus, aliases included" {
     try std.testing.expectEqual(@as(u32, 0x2200_0000), try board.view().readWord(memmap.mpu.rbar));
     try std.testing.expectEqual(@as(u32, 0x2207_FFE1), try board.view().readWord(memmap.mpu.rlar_a1));
 }
+
+test "CFSR and HFSR clear the bits a store writes ones to" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .clears = &clears };
+    try core.writeWord(memmap.scb.cfsr, 0x0001_0182);
+    try storeWord(&board, memmap.scb.cfsr, 0x0000_0100);
+    try std.testing.expectEqual(@as(u32, 0x0001_0082), try board.view().readWord(memmap.scb.cfsr));
+    try board.view().write(memmap.scb.cfsr + 2, &[_]u8{ 0x01, 0x00 });
+    try std.testing.expectEqual(@as(u32, 0x0000_0082), try board.view().readWord(memmap.scb.cfsr));
+    try core.writeWord(memmap.scb.hfsr, 0x4000_0002);
+    try storeWord(&board, memmap.scb.hfsr, 0x4000_0000);
+    try std.testing.expectEqual(@as(u32, 0x0000_0002), try board.view().readWord(memmap.scb.hfsr));
+    try std.testing.expectEqual(@as(u32, 3), clears.stores);
+}

@@ -52,7 +52,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions });
+    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears });
     if (options.cpu == .zig) try report_run.zigCore(out, board, ran);
     return status;
 }
