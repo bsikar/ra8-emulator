@@ -13,6 +13,7 @@ const std = @import("std");
 const periph = @import("../registry.zig");
 const regs = @import("../usbhs/usbhs_regs.zig");
 pub const dcp = @import("usbfs_dcp.zig");
+pub const host = @import("usbfs_host.zig");
 
 pub const window = struct {
     pub const base: u32 = 0x4025_0000;
