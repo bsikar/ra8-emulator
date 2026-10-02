@@ -168,11 +168,12 @@ pub const Machine = struct {
         };
     }
 
-    /// Hand the machine a bus access made by the instruction now running.
-    /// The stop it may cause is reported on the next `onInstruction`.
-    pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access) void {
+    /// Hand the machine a bus access made by the instruction now running,
+    /// with the value it moved when known. The stop it may cause is
+    /// reported on the next `onInstruction`.
+    pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access, value: ?u32) void {
         if (self.mode == .halted) return;
-        if (self.dwt.access(address, width, access)) |index| {
+        if (self.dwt.access(address, width, access, value)) |index| {
             if (self.unit_pending == null) self.unit_pending = index;
         }
         if (self.watch_pending != null) return;

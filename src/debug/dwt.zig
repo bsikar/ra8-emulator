@@ -23,8 +23,13 @@
 //! range (E2.1.107 and E2.1.110). A range match is reported on comparator
 //! n-1: its MATCHED is set and its ACTION applies.
 //!
-//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and
-//! the data value and linked data value match kinds.
+//! Data Value (0b1000, 0b1001 writes, 0b1010 reads) compares the value
+//! a store writes with DWT_COMPn, masked by DWT_VMASKn, in the byte lanes
+//! DATAVSIZE picks (E2.1.109). Only stores carry their value to the DWT
+//! so far, so a load never makes a Data Value match.
+//!
+//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself,
+//! Linked Data Value, and value matches on loads.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;
@@ -34,6 +39,7 @@ pub const base: u32 = 0xE000_1000;
 pub const offsets = struct {
     pub const comp0: u32 = 0x020;
     pub const function0: u32 = 0x028;
+    pub const vmask0: u32 = 0x02C;
     pub const stride: u32 = 0x010;
 };
 
@@ -53,6 +59,9 @@ pub const match = struct {
     pub const data_read: u32 = 0b0110;
     pub const instruction_limit: u32 = 0b0011;
     pub const data_limit: u32 = 0b0111;
+    pub const data_value: u32 = 0b1000;
+    pub const data_value_write: u32 = 0b1001;
+    pub const data_value_read: u32 = 0b1010;
 };
 
 pub const function_bits = struct {
@@ -86,6 +95,7 @@ pub const id = struct {
 pub const Dwt = struct {
     comps: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
     functions: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
+    vmasks: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
     /// A register changed since memory last showed the register file.
     changed: bool = false,
     /// DEMCR.TRCENA: with it clear the DWT is off and nothing matches.
@@ -95,19 +105,24 @@ pub const Dwt = struct {
     /// effects, or null when the offset is not a comparator register.
     pub fn peek(self: *const Dwt, offset: u32) ?u32 {
         const slot = Slot.of(offset) orelse return null;
-        if (!slot.function) return self.comps[slot.index];
-        return self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift;
+        return switch (slot.register) {
+            .comp => self.comps[slot.index],
+            .function => self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift,
+            .vmask => if (isDataValue(self.code(slot.index))) self.vmasks[slot.index] else 0,
+        };
     }
 
     /// Write the register at `offset`. False when it is not one of the
     /// comparator registers, so the caller can treat it as unclaimed.
     pub fn write(self: *Dwt, offset: u32, value: u32) bool {
         const slot = Slot.of(offset) orelse return false;
-        if (slot.function) {
-            const kept = self.functions[slot.index] & function_bits.matched;
-            self.functions[slot.index] = kept | (value & function_bits.writable);
-        } else {
-            self.comps[slot.index] = value;
+        switch (slot.register) {
+            .comp => self.comps[slot.index] = value,
+            .function => {
+                const kept = self.functions[slot.index] & function_bits.matched;
+                self.functions[slot.index] = kept | (value & function_bits.writable);
+            },
+            .vmask => self.vmasks[slot.index] = value,
         }
         self.changed = true;
         return true;
@@ -117,27 +132,28 @@ pub const Dwt = struct {
     /// MATCHED once the read has seen it.
     pub fn loaded(self: *Dwt, offset: u32) void {
         const slot = Slot.of(offset) orelse return;
-        if (!slot.function or self.functions[slot.index] & function_bits.matched == 0) return;
+        if (slot.register != .function or self.functions[slot.index] & function_bits.matched == 0) return;
         self.functions[slot.index] &= ~function_bits.matched;
         self.changed = true;
     }
 
     /// The halting comparator an instruction fetch at `pc` matches.
     pub fn matchesPc(self: *Dwt, pc: u32) ?usize {
-        return self.firstMatch(pc & ~@as(u32, 1), 2, null);
+        return self.firstMatch(pc & ~@as(u32, 1), 2, null, null);
     }
 
     /// The halting comparator a data access matches. Every comparator it
-    /// matches has MATCHED set, halting or not.
-    pub fn access(self: *Dwt, address: u32, width: u8, kind: Access) ?usize {
-        return self.firstMatch(address, width, kind);
+    /// matches has MATCHED set, halting or not. `value` is what the access
+    /// moved, when known; without it no Data Value comparator matches.
+    pub fn access(self: *Dwt, address: u32, width: u8, kind: Access, value: ?u32) ?usize {
+        return self.firstMatch(address, width, kind, value);
     }
 
-    fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access) ?usize {
+    fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access, value: ?u32) ?usize {
         if (!self.trcena) return null;
         var halting: ?usize = null;
         for (0..limits.comparators) |index| {
-            const owner = self.reporter(index, address, width, kind) orelse continue;
+            const owner = self.reporter(index, address, width, kind, value) orelse continue;
             self.functions[owner] |= function_bits.matched;
             self.changed = true;
             const action = (self.functions[owner] >> function_bits.action_shift) & function_bits.action_mask;
@@ -150,7 +166,11 @@ pub const Dwt = struct {
     /// or the lower half of a range when `index` is its limit. Null when
     /// `index` makes no match. A comparator that a limit pairs with matches
     /// only as part of that range.
-    fn reporter(self: *const Dwt, index: usize, address: u32, width: u32, kind: ?Access) ?usize {
+    fn reporter(self: *const Dwt, index: usize, address: u32, width: u32, kind: ?Access, value: ?u32) ?usize {
+        if (isDataValue(self.code(index))) {
+            const seen = kind orelse return null;
+            return if (self.valueMatches(index, width, seen, value orelse return null)) index else null;
+        }
         const limit = if (kind == null) match.instruction_limit else match.data_limit;
         if (self.code(index) == limit) return self.rangeLower(index, address, width, kind);
         if (index + 1 < limits.comparators and self.code(index + 1) == limit) return null;
@@ -172,25 +192,60 @@ pub const Dwt = struct {
         return lower;
     }
 
+    /// DWT_DataValueMatch for an unlinked comparator: the bytes of
+    /// `value` that DATAVSIZE and the access width select, after VMASK,
+    /// against the same lanes of DWT_COMPn.
+    fn valueMatches(self: *const Dwt, index: usize, width: u32, kind: Access, value: u32) bool {
+        const code_now = self.code(index);
+        if (code_now == match.data_value_write and kind != .write) return false;
+        if (code_now == match.data_value_read and kind != .read) return false;
+        if (code_now != match.data_value and code_now != match.data_value_write and code_now != match.data_value_read) return false;
+        const vsize = @as(u32, 1) << @intCast((self.functions[index] >> function_bits.size_shift) & function_bits.size_mask);
+        if (vsize > width or width > 4) return false;
+        const masked = value & ~self.vmasks[index];
+        var equal: [4]bool = undefined;
+        for (&equal, 0..) |*lane, n| {
+            const shift: u5 = @intCast(n * 8);
+            lane.* = n < width and (masked >> shift) & 0xFF == (self.comps[index] >> shift) & 0xFF;
+        }
+        return switch (vsize) {
+            1 => equal[0] or equal[1] or equal[2] or equal[3],
+            2 => (equal[3] and equal[2]) or (equal[1] and equal[0]),
+            else => equal[0] and equal[1] and equal[2] and equal[3],
+        };
+    }
+
     fn code(self: *const Dwt, index: usize) u32 {
         return self.functions[index] & function_bits.match_mask;
     }
 };
 
+/// MATCH 0b10xx: Data Value, its read and write forms, and Linked Data
+/// Value.
+fn isDataValue(code: u32) bool {
+    return code >> 2 == 0b10;
+}
+
 fn isDataAddress(code: u32) bool {
     return code == match.data or code == match.data_write or code == match.data_read;
 }
 
+const Register = enum { comp, function, vmask };
+
 const Slot = struct {
     index: usize,
-    function: bool,
+    register: Register,
 
     fn of(offset: u32) ?Slot {
         if (offset < offsets.comp0 or offset >= limits.end) return null;
         const from = offset - offsets.comp0;
-        const within = from % offsets.stride;
-        if (within != 0 and within != offsets.function0 - offsets.comp0) return null;
-        return .{ .index = from / offsets.stride, .function = within != 0 };
+        const register: Register = switch (from % offsets.stride) {
+            0 => .comp,
+            offsets.function0 - offsets.comp0 => .function,
+            offsets.vmask0 - offsets.comp0 => .vmask,
+            else => return null,
+        };
+        return .{ .index = from / offsets.stride, .register = register };
     }
 };
 

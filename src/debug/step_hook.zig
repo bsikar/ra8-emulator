@@ -191,10 +191,12 @@ fn onMemory(
     _ = uc;
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const access: @import("watch_table.zig").Access = if (kind == c.uc.UC_MEM_WRITE) .write else .read;
+    const written: u32 = @truncate(@as(u64, @bitCast(value)));
     if (access == .write) {
-        driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))), @intCast(size));
+        driver.stored(@truncate(address), written, @intCast(size));
     } else {
         driver.loaded(@truncate(address));
     }
-    driver.machine.onAccess(@truncate(address), @intCast(size), access);
+    const moved: ?u32 = if (access == .write) written else null;
+    driver.machine.onAccess(@truncate(address), @intCast(size), access, moved);
 }
