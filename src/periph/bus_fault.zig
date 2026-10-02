@@ -16,7 +16,7 @@
 const memmap = @import("../core/memmap.zig");
 const status = @import("fault_status.zig");
 const fault_route = @import("fault_route.zig");
-const exec_priority = @import("exec_priority.zig");
+const fault_take = @import("fault_take.zig");
 const nvic = @import("nvic.zig");
 
 pub const bfar: u32 = 0xE000_ED38;
@@ -60,17 +60,5 @@ pub fn raise(
     const cfsr = core.readWord(memmap.scb.cfsr) catch 0;
     try core.writeWord(memmap.scb.cfsr, cfsr | owed.cfsr);
     if (owed.address) |at| try core.writeWord(bfar, at);
-    const route = fault_route.route(
-        .bus_fault,
-        core.readWord(memmap.scb.shcsr) catch 0,
-        core.readWord(memmap.scb.shpr1) catch 0,
-        exec_priority.current(core, controller.running()),
-    );
-    if (route.escalated) {
-        const hfsr = core.readWord(memmap.scb.hfsr) catch 0;
-        try core.writeWord(memmap.scb.hfsr, hfsr | status.Hard.forced.bit());
-    }
-    try core.setRegister(.pc, pc);
-    try controller.enter(core, .{ .number = route.number, .priority = route.priority });
-    return route;
+    return fault_take.take(core, controller, .bus_fault, pc);
 }
