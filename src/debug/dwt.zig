@@ -25,11 +25,14 @@
 //!
 //! Data Value (0b1000, 0b1001 writes, 0b1010 reads) compares the value
 //! a store writes with DWT_COMPn, masked by DWT_VMASKn, in the byte lanes
-//! DATAVSIZE picks (E2.1.109). Only stores carry their value to the DWT
-//! so far, so a load never makes a Data Value match.
+//! DATAVSIZE picks (E2.1.109). Linked Data Value (0b1011) also needs
+//! comparator n-1 to match the access's address. Only the odd comparators
+//! take the value kinds (ID 0b11110); comparator 0 never links. Only
+//! stores carry their value to the DWT so far, so a load never makes a
+//! value match.
 //!
-//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself,
-//! Linked Data Value, and value matches on loads.
+//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and
+//! value matches on loads.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;
@@ -62,6 +65,7 @@ pub const match = struct {
     pub const data_value: u32 = 0b1000;
     pub const data_value_write: u32 = 0b1001;
     pub const data_value_read: u32 = 0b1010;
+    pub const linked_data_value: u32 = 0b1011;
 };
 
 pub const function_bits = struct {
@@ -85,10 +89,21 @@ pub const id = struct {
     /// Instruction Address and its Limit, Data Address and its Limit, Data
     /// Address With Value.
     pub const instruction_data_limits: u32 = 0b11010;
+    /// All of the above plus Data Value and Linked Data Value.
+    pub const instruction_data_values: u32 = 0b11110;
+    /// ID<2>: the comparator takes Data Value and Linked Data Value.
+    pub const value_bit: u32 = 1 << 2;
 
-    /// The ID comparator `index` reads.
+    /// The ID comparator `index` reads. Comparator 0 never links and Arm
+    /// recommends the odd comparators link, so only those take values.
     pub fn of(index: usize) u32 {
-        return if (index == 0) cycles_instruction_data else instruction_data_limits;
+        if (index == 0) return cycles_instruction_data;
+        return if (index % 2 == 1) instruction_data_values else instruction_data_limits;
+    }
+
+    /// Whether comparator `index` takes the Data Value kinds.
+    pub fn takesValues(index: usize) bool {
+        return of(index) & value_bit != 0;
     }
 };
 
@@ -108,7 +123,7 @@ pub const Dwt = struct {
         return switch (slot.register) {
             .comp => self.comps[slot.index],
             .function => self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift,
-            .vmask => if (isDataValue(self.code(slot.index))) self.vmasks[slot.index] else 0,
+            .vmask => if (id.takesValues(slot.index) and isDataValue(self.code(slot.index))) self.vmasks[slot.index] else 0,
         };
     }
 
@@ -169,7 +184,7 @@ pub const Dwt = struct {
     fn reporter(self: *const Dwt, index: usize, address: u32, width: u32, kind: ?Access, value: ?u32) ?usize {
         if (isDataValue(self.code(index))) {
             const seen = kind orelse return null;
-            return if (self.valueMatches(index, width, seen, value orelse return null)) index else null;
+            return if (self.valueMatches(index, address, width, seen, value orelse return null)) index else null;
         }
         const limit = if (kind == null) match.instruction_limit else match.data_limit;
         if (self.code(index) == limit) return self.rangeLower(index, address, width, kind);
@@ -192,21 +207,33 @@ pub const Dwt = struct {
         return lower;
     }
 
-    /// DWT_DataValueMatch for an unlinked comparator: the bytes of
-    /// `value` that DATAVSIZE and the access width select, after VMASK,
-    /// against the same lanes of DWT_COMPn.
-    fn valueMatches(self: *const Dwt, index: usize, width: u32, kind: Access, value: u32) bool {
+    /// DWT_DataValueMatch (E2.1.109): the bytes of `value` that DATAVSIZE
+    /// and the access select, after VMASK, against the same lanes of
+    /// DWT_COMPn. A Linked Data Value comparator also needs comparator n-1,
+    /// a Data Address comparator of the same DATAVSIZE, to match the access,
+    /// and takes its read or write filter and byte lanes from it.
+    fn valueMatches(self: *const Dwt, index: usize, address: u32, width: u32, kind: Access, value: u32) bool {
+        if (!id.takesValues(index) or width > 4) return false;
         const code_now = self.code(index);
         if (code_now == match.data_value_write and kind != .write) return false;
         if (code_now == match.data_value_read and kind != .read) return false;
-        if (code_now != match.data_value and code_now != match.data_value_write and code_now != match.data_value_read) return false;
-        const vsize = @as(u32, 1) << @intCast((self.functions[index] >> function_bits.size_shift) & function_bits.size_mask);
-        if (vsize > width or width > 4) return false;
+        const vsize = sizeOf(self.functions[index]);
+        if (vsize > width) return false;
+        var lanes: u32 = (@as(u32, 1) << @intCast(width)) - 1;
+        if (code_now == match.linked_data_value) {
+            if (index == 0) return false;
+            const lower = index - 1;
+            if (!isDataAddress(self.code(lower)) or !covers(self.functions[lower], kind)) return false;
+            if (sizeOf(self.functions[lower]) != vsize) return false;
+            if (!overlaps(self.comps[lower], self.functions[lower], address, width)) return false;
+            lanes = linkedLanes(vsize, width, self.comps[lower]) orelse return false;
+        }
         const masked = value & ~self.vmasks[index];
         var equal: [4]bool = undefined;
         for (&equal, 0..) |*lane, n| {
             const shift: u5 = @intCast(n * 8);
-            lane.* = n < width and (masked >> shift) & 0xFF == (self.comps[index] >> shift) & 0xFF;
+            const used = lanes >> @intCast(n) & 1 != 0;
+            lane.* = used and (masked >> shift) & 0xFF == (self.comps[index] >> shift) & 0xFF;
         }
         return switch (vsize) {
             1 => equal[0] or equal[1] or equal[2] or equal[3],
@@ -219,6 +246,27 @@ pub const Dwt = struct {
         return self.functions[index] & function_bits.match_mask;
     }
 };
+
+/// DATAVSIZE in bytes.
+fn sizeOf(function: u32) u32 {
+    return @as(u32, 1) << @intCast((function >> function_bits.size_shift) & function_bits.size_mask);
+}
+
+/// The byte lanes a Linked Data Value comparator looks at, picked by the
+/// low bits of the linked address (the byte_mask cases of E2.1.109). Null
+/// when DATAVSIZE is wider than the access.
+fn linkedLanes(vsize: u32, width: u32, linked_address: u32) ?u32 {
+    const low: u5 = @intCast(linked_address & 0b11);
+    return switch (vsize * 8 + width) {
+        1 * 8 + 1 => 0b0001,
+        1 * 8 + 2 => @as(u32, 1) << (low & 1),
+        1 * 8 + 4 => @as(u32, 1) << low,
+        2 * 8 + 2 => 0b0011,
+        2 * 8 + 4 => @as(u32, 0b11) << (low & 0b10),
+        4 * 8 + 4 => 0b1111,
+        else => null,
+    };
+}
 
 /// MATCH 0b10xx: Data Value, its read and write forms, and Linked Data
 /// Value.
