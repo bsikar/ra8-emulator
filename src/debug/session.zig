@@ -30,6 +30,7 @@ const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
 const session_report = @import("session_report.zig");
+const session_place = @import("session_place.zig");
 const core_view = @import("core_view.zig");
 const session_source = @import("session_source.zig");
 const dwarf_line = @import("dwarf_line.zig");
@@ -292,23 +293,12 @@ pub const Session = struct {
             try self.where(pc, out);
             return out.print("\n", .{});
         };
-        switch (stop) {
-            .stepped => {},
-            .breakpoint => |id| {
-                const temporary = self.isTemporary(id);
-                try out.print("{s} {d}, ", .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id });
-                if (temporary) {
-                    try self.driver.machine.breaks.remove(id);
-                    self.forgetTemporary(id);
-                }
-            },
-            .watchpoint => |hit| try out.print("Watchpoint {d}: {s} of {d} at 0x{X:0>8}, ", .{
-                hit.id, @tagName(hit.access), hit.width, hit.address,
-            }),
-            .halt_requested => try out.print("Halted, ", .{}),
-            .unit_break => |index| try out.print("Hardware breakpoint FP_COMP{d}, ", .{index}),
-            .unit_watch => |index| try out.print("Hardware watchpoint DWT_COMP{d}, ", .{index}),
+        const temporary = stop == .breakpoint and self.isTemporary(stop.breakpoint);
+        if (temporary) {
+            try self.driver.machine.breaks.remove(stop.breakpoint);
+            self.forgetTemporary(stop.breakpoint);
         }
+        try session_report.prefix(out, stop, temporary);
         try self.line(pc, out);
     }
 
@@ -341,24 +331,14 @@ pub const Session = struct {
         try session_report.where(self.image, address, out);
     }
 
-    /// The address a place names: a FILE:LINE from the line table, or its
-    /// symbol or literal, one optional dereference, then its offset.
     /// The core as the views read it.
     fn view(self: *const Session) core_view.View {
         return .{ .unicorn = self.core };
     }
 
+    /// The address a place names: a FILE:LINE from the line table, or its
+    /// symbol or literal, one optional dereference, then its offset.
     fn resolve(self: *const Session, text: []const u8) !u32 {
-        if (session_source.fileLine(text)) |at| {
-            return session_source.breakAt(self.image, at) orelse Error.Unresolved;
-        }
-        const want = try place.parse(text);
-        var base = want.address;
-        if (want.name) |name| {
-            const image = self.image orelse return Error.NoSymbols;
-            base = symbols.addressOf(image, name) orelse return Error.Unresolved;
-        }
-        if (want.deref) base = try self.core.readWord(base);
-        return want.apply(base);
+        return session_place.resolve(self.view(), self.image, text);
     }
 };

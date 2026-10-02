@@ -28,6 +28,8 @@ pub const core_view = @import("core_view.zig");
 pub const zig_session = @import("zig_session.zig");
 /// Re-exported for tests/debug/session_report_test.zig, for the same reason.
 pub const session_report = @import("session_report.zig");
+/// Re-exported for tests/debug/zig_script_test.zig, for the same reason.
+pub const zig_script = @import("zig_script.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");
