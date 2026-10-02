@@ -19,6 +19,23 @@ pub fn Binary(comptime B: type) type {
     };
 }
 
+/// Three operands, as the accumulating forms read them: d is the
+/// accumulator, n and m the factors.
+pub fn Ternary(comptime B: type) type {
+    return struct {
+        d: B,
+        n: B,
+        m: B,
+        mode: RMode = .nearest,
+        fz: u1 = 0,
+        dn: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .rmode = self.mode, .fz = self.fz, .dn = self.dn };
+        }
+    };
+}
+
 pub fn Result(comptime B: type) type {
     return struct { bits: B, flags: u32 = 0 };
 }
