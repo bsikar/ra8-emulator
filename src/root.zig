@@ -26,6 +26,7 @@ pub const core = struct {
     pub const reboot = @import("core/reboot.zig");
     pub const idle = @import("core/idle.zig");
     pub const pend_break = @import("core/pend_break.zig");
+    pub const svc_trap = @import("core/svc_trap.zig");
     pub const pend_resume = @import("core/pend_resume.zig");
     pub const pend_clear = @import("core/pend_clear.zig");
     pub const pend_ledger = @import("core/pend_ledger.zig");
