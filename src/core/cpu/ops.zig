@@ -10,6 +10,7 @@ pub const ldm_stm = @import("ops/ldm_stm.zig");
 pub const ldrd_strd = @import("ops/ldrd_strd.zig");
 pub const exclusive = @import("ops/exclusive.zig");
 pub const acq_rel = @import("ops/acq_rel.zig");
+pub const clrm = @import("ops/clrm.zig");
 pub const ldm_stm_wide = @import("ops/ldm_stm_wide.zig");
 pub const ldst_wide = @import("ops/ldst_wide.zig");
 pub const ldr_literal_wide = @import("ops/ldr_literal_wide.zig");
