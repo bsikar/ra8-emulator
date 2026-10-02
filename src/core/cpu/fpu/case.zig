@@ -5,6 +5,20 @@ const fpscr_mod = @import("fpscr.zig");
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
 
+/// One operand, as the unary forms (VSQRT, VCVT, VRINT) read it.
+pub fn Unary(comptime B: type) type {
+    return struct {
+        a: B,
+        mode: RMode = .nearest,
+        fz: u1 = 0,
+        dn: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .rmode = self.mode, .fz = self.fz, .dn = self.dn };
+        }
+    };
+}
+
 pub fn Binary(comptime B: type) type {
     return struct {
         a: B,
