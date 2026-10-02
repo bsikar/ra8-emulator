@@ -13,6 +13,8 @@
 //! This file knows nothing about Unicorn or the Zig core. Whatever sees the
 //! store hands it the core, the virtual time and the value; the hook that
 //! does so is RA8EMU-221.
+const rtos_load = @import("rtos_load.zig");
+
 pub const limits = struct {
     /// Events kept, oldest first. A run that switches more than this keeps
     /// the opening and counts the rest, so the memory a trace costs is
@@ -44,6 +46,14 @@ pub const Trace = struct {
     dropped: usize = 0,
     /// What each core last stored, so a repeat is not taken for a switch.
     current: [limits.cores]?u32 = .{ null, null },
+    /// CPU load, fed every event, kept ones and dropped ones alike
+    /// (RA8EMU-267), so `--cpu-load` covers the whole run.
+    load: rtos_load.Load = .{},
+    /// The clock the load is charged in, borrowed: instructions retired on
+    /// the traced core. Null charges in each event's own stamp, which is
+    /// every unit test. The period clock is too coarse for load: a few
+    /// SysTick periods cover millions of instructions.
+    fine: ?*const u64 = null,
 
     /// Take one store to the current-thread pointer.
     pub fn store(self: *Trace, core: u1, when: u64, value: u32) void {
@@ -65,12 +75,20 @@ pub const Trace = struct {
     }
 
     fn push(self: *Trace, one: Event) void {
+        var timed = one;
+        if (self.fine) |clock| timed.when = clock.*;
+        self.load.feed(timed);
         if (self.len == limits.kept) {
             self.dropped += 1;
             return;
         }
         self.events[self.len] = one;
         self.len += 1;
+    }
+
+    /// The load clock now: the borrowed fine clock, else `fallback`.
+    pub fn loadNow(self: *const Trace, fallback: u64) u64 {
+        return if (self.fine) |clock| clock.* else fallback;
     }
 
     /// The events kept, oldest first.

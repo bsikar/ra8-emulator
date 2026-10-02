@@ -27,6 +27,7 @@ pub const isr = @import("rtos_isr.zig");
 pub const zig = @import("rtos_zig.zig");
 pub const second = @import("rtos_second.zig");
 pub const load = @import("rtos_load.zig");
+pub const report = @import("rtos_report.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -43,6 +44,9 @@ pub const Tracer = struct {
     core: u1 = 0,
     /// Exception entry and return, when a controller was handed over.
     exceptions: ?isr.Watcher = null,
+    /// Instructions seen by the per-instruction hook: the load clock on an
+    /// engine that has one (Unicorn), lent to the trace by `attach`.
+    steps: u64 = 0,
 
     /// One store that touched the pointer's word. Only a full word written
     /// to the word itself names a thread; a narrower store is a partial
@@ -54,6 +58,7 @@ pub const Tracer = struct {
 
     /// Before each instruction: anything entered or returned from since.
     pub fn onInstruction(self: *Tracer) void {
+        self.steps += 1;
         if (self.exceptions) |*watcher| watcher.observe(&self.trace, self.core, self.stamp());
     }
 
@@ -104,6 +109,7 @@ pub fn attach(
 ) Error!*Tracer {
     const owned = std.heap.page_allocator.create(Tracer) catch return Error.AttachFailed;
     owned.* = found;
+    owned.trace.fine = &owned.steps;
     owned.now = clock;
     owned.exceptions = isr.Watcher.start(controller);
     var hook: c.uc.uc_hook = 0;

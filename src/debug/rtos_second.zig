@@ -29,10 +29,10 @@ pub fn arm(started: anyerror!?*second_core.Second, wanted: bool, path: ?[]const 
     return one;
 }
 
-/// CPU1's trace, names read through CPU1's engine. Nothing when CPU1 was
+/// CPU1's trace and load, names read through CPU1's engine. Nothing when CPU1 was
 /// not traced.
-pub fn print(out: anytype, second: ?*const second_core.Second) !void {
+pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second) !void {
     const one = second orelse return;
     const tracer = traced orelse return;
-    try rtos_hook.print(out, tracer, rtos_hook.Memory{ .handle = one.core.handle });
+    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = one.core.handle });
 }

@@ -8,7 +8,7 @@ pub const text =
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
-    \\                    [--count-pc ADDR] [--trace-rtos]
+    \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
     \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
     \\                    [--ns IMAGE.elf]
     \\
@@ -53,6 +53,8 @@ pub const text =
     \\                     before the run starts
     \\  --trace-rtos       record each ThreadX thread switch, the stores to
     \\                     _tx_thread_current_ptr, stamped with modelled time
+    \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
+    \\                     core, over the whole run
     \\  --count-pc ADDR    count every execution of the instruction at that
     \\                     address, repeatable up to four times. For
     \\                     settling a disagreement between two counters
