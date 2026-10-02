@@ -119,3 +119,11 @@ is stale or an encoding is missing. Regenerate with
 | VCVT.F64.U32 fbits T1 | 1 |
 | VCVT.F64.S16 fbits T1 | 1 |
 | VCVT.F64.U16 fbits T1 | 1 |
+| VCVTB.F16.F32 T1 | 25 |
+| VCVTT.F16.F32 T1 | 1 |
+| VCVTB.F16.F64 T1 | 3 |
+| VCVTT.F16.F64 T1 | 2 |
+| VCVTB.F32.F16 T1 | 10 |
+| VCVTT.F32.F16 T1 | 2 |
+| VCVTB.F64.F16 T1 | 3 |
+| VCVTT.F64.F16 T1 | 2 |

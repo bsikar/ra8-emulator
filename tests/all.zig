@@ -45,6 +45,8 @@ test {
     _ = @import("core/cpu/fpu/select_vectors_test.zig");
     _ = @import("core/cpu/fpu/fixed_test.zig");
     _ = @import("core/cpu/fpu/fixed_vectors_test.zig");
+    _ = @import("core/cpu/fpu/half_test.zig");
+    _ = @import("core/cpu/fpu/half_vectors_test.zig");
     _ = @import("core/cpu/board_bus_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");

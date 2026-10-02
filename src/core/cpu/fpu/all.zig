@@ -38,3 +38,5 @@ pub const select = @import("select.zig");
 pub const select_vectors = @import("select_vectors.zig");
 pub const fixed = @import("fixed.zig");
 pub const fixed_vectors = @import("fixed_vectors.zig");
+pub const half = @import("half.zig");
+pub const half_vectors = @import("half_vectors.zig");

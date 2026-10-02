@@ -104,6 +104,25 @@ pub fn Fraction(comptime B: type) type {
     };
 }
 
+/// One operand for VCVTB/VCVTT: the source register, which half of it (or
+/// of the destination) the encoding names, the destination's prior value
+/// (its other half survives), and the FPSCR controls that matter.
+pub fn Halves(comptime B: type) type {
+    return struct {
+        a: B,
+        top: bool = false,
+        d: u32 = 0,
+        ahp: u1 = 0,
+        dn: u1 = 0,
+        mode: RMode = .nearest,
+        fz: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .ahp = self.ahp, .dn = self.dn, .rmode = self.mode, .fz = self.fz };
+        }
+    };
+}
+
 /// One operand for the conversions whose encoding fixes the rounding
 /// (VCVTA/N/P/M), so FPSCR supplies only FZ.
 pub fn Directed(comptime B: type) type {
