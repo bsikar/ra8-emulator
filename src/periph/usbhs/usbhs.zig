@@ -65,7 +65,7 @@ pub const Host = struct {
 
     pub fn read(self: *Host, address: u32, width: u3) u32 {
         const offset = address -% self.base;
-        if (!self.aligned(offset)) return 0;
+        if (!isFifoPort(offset) and !self.aligned(offset)) return 0;
         if (offset == regs.reg.pllsta) return self.pll.status(self.phy.clocked());
         if (!alwaysOn(offset) and !self.phy.powered()) {
             self.off += 1;
@@ -102,7 +102,7 @@ pub const Host = struct {
 
     pub fn write(self: *Host, address: u32, width: u3, value: u32) void {
         const offset = address -% self.base;
-        if (!self.aligned(offset)) return;
+        if (!isFifoPort(offset) and !self.aligned(offset)) return;
         const v: u16 = @truncate(value);
         if (isFifoPort(offset)) {
             if (!self.phy.powered()) {
@@ -162,11 +162,13 @@ pub const Host = struct {
         }
     }
 
-    /// The CFIFO data port. Every access to it is 8, 16 or 32 bits wide at
-    /// the same two words: the byte aliases dev modelled as separate offsets
-    /// (CFIFOH, CFIFOHH) are inside these, reached by the access width.
+    /// The CFIFO data port: the four bytes from CFIFO up. On the
+    /// little-endian HS part a narrowed tail goes to the aliases, the
+    /// halfword to CFIFOH (+2) and the last byte to CFIFOHH (+3), which is
+    /// where the HAL and FSP put them. +3 is odd, so it is let through ahead
+    /// of the alignment check that guards every other register.
     fn isFifoPort(offset: u32) bool {
-        return offset == regs.reg.cfifo or offset == regs.reg.cfifo + regs.window.word;
+        return offset >= regs.reg.cfifo and offset < regs.reg.cfifo + 2 * regs.window.word;
     }
 
     /// A read of one of the two data ports: its data register answers from
