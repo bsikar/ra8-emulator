@@ -82,4 +82,5 @@ pub const mve_int_vqdmlah = @import("ops/mve_int_vqdmlah.zig");
 pub const mve_vldr = @import("ops/mve_vldr.zig");
 pub const mve_vldr_wide = @import("ops/mve_vldr_wide.zig");
 pub const mve_gather = @import("ops/mve_gather.zig");
+pub const mve_gather64 = @import("ops/mve_gather64.zig");
 pub const table = @import("ops/table.zig");

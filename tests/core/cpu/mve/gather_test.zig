@@ -30,3 +30,8 @@ test "os scales the offset by the memory size" {
     try std.testing.expectEqual(@as(u32, 0x2000_000C), gather.address(.{ .base = 0x2000_0000, .offset = 3, .msize = .word, .os = true }));
     try std.testing.expectEqual(@as(u32, 0x2000_0003), gather.address(.{ .base = 0x2000_0000, .offset = 3, .msize = .word, .os = false }));
 }
+
+test "the odd beat of a doubleword sits four bytes above the even one" {
+    try std.testing.expectEqual(@as(u32, 0x2000_001C), gather.beatAddress(.{ .base = 0x2000_0000, .offset = 3, .os = true, .odd = true }));
+    try std.testing.expectEqual(@as(u32, 0x2000_0003), gather.beatAddress(.{ .base = 0x2000_0000, .offset = 3, .os = false, .odd = false }));
+}

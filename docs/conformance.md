@@ -239,3 +239,5 @@ is stale or an encoding is missing. Regenerate with
 | VSTRH.16 scatter | 1 |
 | VSTRH.32 scatter | 1 |
 | VSTRW.32 scatter | 2 |
+| VLDRD.U64 gather | 4 |
+| VSTRD.64 scatter | 3 |
