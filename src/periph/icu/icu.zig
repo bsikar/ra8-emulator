@@ -74,6 +74,15 @@ pub const Icu = struct {
     /// INTSELR, which core each event interrupts. Held here because the
     /// router that will read it is this table's raise.
     select: intsel.Intsel = .{},
+    /// ICU1's event-link table. ICU0 and ICU1 share one address and each
+    /// core reaches only its own (HUM Rev 1.30 14.2, p 526), so a bus access
+    /// from CPU1 lands here and one from CPU0 lands in `links`. Nothing
+    /// raises into this table yet.
+    cpu1: [slots]u32 = [_]u32{0} ** slots,
+    /// Whose access the bus is serving, pointed at the board's bus. Null
+    /// leaves every access on ICU0, which is what a single-core run and the
+    /// unit tests want.
+    issuer: ?*const periph.Issuer = null,
 
     pub fn init() Icu {
         return .{};
@@ -160,9 +169,20 @@ pub const Icu = struct {
     /// to the byte lanes the width names, so a byte poll of the flag at +2
     /// answers IR rather than the bottom of the event number.
     pub fn read(self: *Icu, address: u32, width: u3) u32 {
-        const slot = slotAt(address) orelse return 0;
-        const word = self.links[slot] & field.occupied;
-        return lanes.part(word, lanes.lane(address - win_base), width);
+        return readTable(&self.links, address, width);
+    }
+
+    /// The table the core in front of the bus reaches.
+    pub fn tableFor(self: *Icu, issuer: periph.Issuer) *[slots]u32 {
+        return switch (issuer) {
+            .cpu0 => &self.links,
+            .cpu1 => &self.cpu1,
+        };
+    }
+
+    fn current(self: *Icu) *[slots]u32 {
+        const issuer = self.issuer orelse return &self.links;
+        return self.tableFor(issuer.*);
     }
 
     /// IR is WRITE-ZERO-to-clear: a written 0 takes the latched flag down and
@@ -176,11 +196,7 @@ pub const Icu = struct {
     /// the way a bitfield write reaches this register, and it must not carry
     /// away the event number sitting in the bytes below it.
     pub fn write(self: *Icu, address: u32, width: u3, value: u32) void {
-        const slot = slotAt(address) orelse return;
-        const current = self.links[slot];
-        const next = lanes.merge(current, lanes.lane(address - win_base), width, value) & field.occupied;
-        const keep: u32 = if (next & field.ir != 0) current & field.ir else 0;
-        self.links[slot] = (next & ~field.ir) | keep;
+        writeTable(&self.links, address, width, value);
     }
 
     pub fn block(self: *Icu) periph.Block {
@@ -258,14 +274,29 @@ fn pendingBit(slot: usize) u32 {
     return @as(u32, 1) << @intCast(slot % 32);
 }
 
+fn readTable(table: *const [slots]u32, address: u32, width: u3) u32 {
+    const slot = slotAt(address) orelse return 0;
+    const word = table[slot] & field.occupied;
+    return lanes.part(word, lanes.lane(address - win_base), width);
+}
+
+fn writeTable(table: *[slots]u32, address: u32, width: u3, value: u32) void {
+    const slot = slotAt(address) orelse return;
+    const was = table[slot];
+    const next = lanes.merge(was, lanes.lane(address - win_base), width, value) & field.occupied;
+    const keep: u32 = if (next & field.ir != 0) was & field.ir else 0;
+    table[slot] = (next & ~field.ir) | keep;
+}
+
+/// The bus window picks the table by whose access it is serving.
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Icu = @ptrCast(@alignCast(context));
-    return self.read(address, width);
+    return readTable(self.current(), address, width);
 }
 
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Icu = @ptrCast(@alignCast(context));
-    self.write(address, width, value);
+    writeTable(self.current(), address, width, value);
 }
 
 fn pinsReadThunk(context: *anyopaque, address: u32, width: u3) u32 {

@@ -112,6 +112,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.interval.block());
     try self.bus.add(self.pwm.block());
     try self.bus.add(self.ptp.block());
+    self.events.issuer = &self.bus.issuer;
     try self.bus.add(self.events.block());
     try self.bus.add(self.events.pinsBlock());
     try self.bus.add(self.events.select.block());
