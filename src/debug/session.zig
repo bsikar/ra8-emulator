@@ -142,6 +142,10 @@ pub const Session = struct {
             .print => |text| try session_view.word(out, self.core.*, text, try self.resolve(text)),
             .disassemble => |want| try self.disassemble(want, out),
             .backtrace => try self.backtrace(out),
+            .list => |want| {
+                const from = if (want) |text| try self.resolve(text) else if (self.started) try self.core.register(.pc) else self.entry;
+                try session_source.list(out, session_source.of(self.image), std.fs.cwd(), from);
+            },
             .core => |index| try self.switchTo(index, out),
             .halting => |on| try self.setHalting(on, out),
             .quit => {},

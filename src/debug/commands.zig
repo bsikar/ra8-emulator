@@ -27,6 +27,7 @@
 //! print PLACE         p       the word at PLACE
 //! disassemble [PLACE [N]]     N instructions from PLACE, or the pc
 //! backtrace           bt      the call chain
+//! list [PLACE]        l       the source around PLACE, or the pc
 //! core 0|1                    which CPU the next commands act on
 //! quit                q
 //! ```
@@ -88,6 +89,8 @@ pub const Command = union(enum) {
     print: []const u8,
     disassemble: Disassemble,
     backtrace,
+    /// `list [PLACE]`: the source around a place, or around the pc.
+    list: ?[]const u8,
     core: u8,
     /// `halting on|off`: DHCSR.C_DEBUGEN for the selected core. Off, the
     /// firmware's FPB and DWT events go to DebugMonitor instead of halting.
@@ -114,6 +117,7 @@ const Verb = enum {
     print,
     disassemble,
     backtrace,
+    list,
     core,
     halting,
     quit,
@@ -135,6 +139,7 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "x", .examine },         .{ "print", .print },
     .{ "p", .print },           .{ "disassemble", .disassemble },
     .{ "disas", .disassemble }, .{ "backtrace", .backtrace },
+    .{ "list", .list },         .{ "l", .list },
     .{ "bt", .backtrace },      .{ "where", .backtrace },
     .{ "core", .core },         .{ "quit", .quit },
     .{ "q", .quit },            .{ "halting", .halting },
@@ -176,6 +181,7 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .print => .{ .print = try required(words) },
         .disassemble => .{ .disassemble = try disassemble(words) },
         .backtrace => .backtrace,
+        .list => .{ .list = words.next() },
         .core => .{ .core = try core(try required(words)) },
         .halting => .{ .halting = try onOff(try required(words)) },
         .quit => .quit,
