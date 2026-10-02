@@ -144,3 +144,8 @@ is stale or an encoding is missing. Regenerate with
 | VLDR.F32 T2 | 2 |
 | VSTR.F64 T1 | 1 |
 | VSTR.F32 T2 | 2 |
+| VADD (vector) T1 | 4 |
+| VSUB (vector) T1 | 2 |
+| VMUL (vector) T1 | 3 |
+| VQADD (vector) T1 | 4 |
+| VQSUB (vector) T1 | 4 |

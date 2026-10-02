@@ -3,3 +3,5 @@
 //! their vectors (RA8EMU-25, RA8EMU-23).
 pub const qreg = @import("qreg.zig");
 pub const predicate = @import("predicate.zig");
+pub const int = @import("int.zig");
+pub const int_vectors = @import("int_vectors.zig");
