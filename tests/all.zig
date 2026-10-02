@@ -383,6 +383,7 @@ test {
     _ = @import("periph/xspi/xspi_test.zig");
     _ = @import("periph/xspi/xspi_reset_test.zig");
     _ = @import("tools/gate_test.zig");
+    _ = @import("tools/example_probes_test.zig");
     _ = @import("tools/example_table_test.zig");
     _ = @import("tools/example_budgets_test.zig");
 
