@@ -132,6 +132,12 @@ pub const Nvic = struct {
     /// Entry from a thread on the Process stack puts the handler back on it.
     main_sp: u32 = 0,
 
+    /// The priority of the innermost active handler, or null in Thread mode.
+    /// A fault no more urgent than this cannot preempt it and escalates.
+    pub fn running(self: *const Nvic) ?u8 {
+        return if (self.depth > 0) self.active[self.depth - 1].priority else null;
+    }
+
     /// Fold the write-to-clear registers, then take the most urgent pend that
     /// is allowed to preempt whatever is running. Returns the exception it
     /// entered. Call it at the chunk boundary, after the clocks are charged.

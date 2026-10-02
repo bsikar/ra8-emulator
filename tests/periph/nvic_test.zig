@@ -277,3 +277,14 @@ test "with VTOR still zero the reset vector base is where the table is" {
     try std.testing.expectEqual(@as(?u16, systick), try irqs.dispatch(&core));
     try std.testing.expectEqual(FakeCore.handlerFor(systick), try core.register(.pc));
 }
+
+test "running is null in Thread mode and the innermost handler's priority inside one" {
+    var unit = Nvic{};
+    try std.testing.expect(unit.running() == null);
+    unit.active[0] = .{ .number = 16, .priority = 0x80 };
+    unit.active[1] = .{ .number = 17, .priority = 0x40 };
+    unit.depth = 2;
+    try std.testing.expectEqual(@as(?u8, 0x40), unit.running());
+    unit.depth = 1;
+    try std.testing.expectEqual(@as(?u8, 0x80), unit.running());
+}
