@@ -9,8 +9,12 @@
 //! except 000, the 64-bit transfers (fp_move). d is Vd:D for singles and
 //! D:Vd for doubles. Whatever transfer.zig calls UNDEFINED or
 //! UNPREDICTABLE stays unclaimed, which also leaves VSCCLRM (Rn = PC)
-//! and VLLDM/VLSTM (P U W = 001) to their own groups. Alignment checks
-//! wait on the core lane's MemA support.
+//! and VLLDM/VLSTM (P U W = 001) to their own groups. VLDR/VSTR.16 (hw2
+//! bits 11:8 = 1001, P set, W clear) moves the halfword at imm8 << 1 from
+//! the base: a load writes Zeros(16):value to S[Vd:D], a store writes
+//! S[Vd:D]<15:0>; VSTR.16 with a PC base stays unclaimed, and there is no
+//! 16-bit VLDM/VSTM. Alignment checks wait on the core lane's MemA support
+//! (RA8EMU-85).
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -47,7 +51,9 @@ pub fn plan(b: Bits, base: u32) transfer.Plan {
 }
 
 fn decode(instr: Instr) ?op.Exec {
-    if (instr.size != 4 or instr.hw1 & 0xFE00 != 0xEC00 or instr.hw2 & 0x0E00 != 0x0A00) return null;
+    if (instr.size != 4 or instr.hw1 & 0xFE00 != 0xEC00) return null;
+    if (instr.hw2 & 0x0F00 == 0x0900) return decodeHalf(instr);
+    if (instr.hw2 & 0x0E00 != 0x0A00) return null;
     const b = bits(instr);
     if (b.p == 0 and b.u == 0 and b.w == 0) return null;
     if (plan(b, 0).fault != .none) return null;
@@ -67,6 +73,37 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         for (words[0..p.words], 0..) |word, k| try writeWord(cpu, p.start +% @as(u32, @intCast(k)) * 4, word);
     }
     if (p.wback) |value| cpu.regs.set(b.rn, value);
+}
+
+fn decodeHalf(instr: Instr) ?op.Exec {
+    const p = instr.hw1 >> 8 & 1;
+    const w = instr.hw1 >> 5 & 1;
+    if (p != 1 or w != 0) return null;
+    const load = instr.hw1 >> 4 & 1 == 1;
+    if (!load and instr.hw1 & 0xF == 15) return null;
+    return &runHalf;
+}
+
+/// The address VLDR/VSTR.16 reaches: a PC base is Align(PC, 4).
+pub fn halfAddress(instr: Instr, base: u32) u32 {
+    const aligned = if (instr.hw1 & 0xF == 15) base & ~@as(u32, 3) else base;
+    const imm32: u32 = @as(u32, instr.hw2 & 0xFF) << 1;
+    return if (instr.hw1 >> 7 & 1 == 1) aligned +% imm32 else aligned -% imm32;
+}
+
+fn runHalf(cpu: *Cpu, instr: Instr) op.Error!void {
+    const rn: u4 = @intCast(instr.hw1 & 0xF);
+    const base = if (rn == 15) instr.address +% 4 else cpu.regs.get(rn);
+    const address = halfAddress(instr, base);
+    const d: u5 = @intCast((instr.hw2 >> 12) << 1 | (instr.hw1 >> 6 & 1));
+    var bytes: [2]u8 = undefined;
+    if (instr.hw1 >> 4 & 1 == 1) {
+        try cpu.bus.read(address, &bytes);
+        cpu.fp.bank.writeS(d, @import("std").mem.readInt(u16, &bytes, .little));
+    } else {
+        @import("std").mem.writeInt(u16, &bytes, @truncate(cpu.fp.bank.readS(d)), .little);
+        try cpu.bus.write(address, &bytes);
+    }
 }
 
 fn readWord(cpu: *Cpu, address: u32) op.Error!u32 {
