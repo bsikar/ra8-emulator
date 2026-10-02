@@ -20,6 +20,7 @@ pub const Number = u9;
 /// Take exception `number`, with `return_address` stacked as where to resume.
 pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!void {
     const r = &cpu.regs;
+    cpu.exclusive = null;
     const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
     const stacked: frame.Frame = .{
         r.low[0],  r.low[1], r.low[2],       r.low[3],

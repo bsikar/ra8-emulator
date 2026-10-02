@@ -16,6 +16,7 @@ pub const restored: u32 = 0xFF0F_FDFF;
 pub fn from(cpu: *Cpu, value: u32) Error!void {
     const target = exc_return.decode(value) orelse return error.InvalidReturn;
     const r = &cpu.regs;
+    cpu.exclusive = null;
     const popped = try frame.pop(cpu.bus, if (target.psp) r.psp else r.msp);
     const f = popped.frame;
     // Returning to Thread mode with an exception number stacked, or to
