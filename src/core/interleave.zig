@@ -11,6 +11,7 @@
 
 const engine = @import("engine.zig");
 const second_core = @import("second_core.zig");
+const sev_hook = @import("sev_hook.zig");
 const Engine = engine.Engine;
 
 /// Run CPU0 to its budget, giving CPU1 a turn between rounds.
@@ -29,7 +30,11 @@ pub fn interleave(
     var remaining = budget;
     while (remaining > 0) {
         const round = @min(@as(usize, second_core.limits.round), remaining);
-        if (try cpu0.run(pc, round, session)) |taken| return taken;
+        // A parked CPU1 is watching for CPU0's SEV: src/core/sev_hook.zig.
+        const armed = if (other.wait.parked()) try sev_hook.arm(cpu0.handle, &other.wait) else null;
+        const outcome = cpu0.run(pc, round, session);
+        if (armed) |watch| watch.disarm();
+        if (try outcome) |taken| return taken;
         remaining -= round;
         pc = try cpu0.register(.pc);
         if (ended(cpu0, session)) break;

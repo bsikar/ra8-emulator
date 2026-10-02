@@ -44,3 +44,15 @@ test "the idle count starts again on every park" {
     try std.testing.expectEqual(@as(u32, 0), wait.idle_turns);
     try std.testing.expectEqual(@as(usize, 2), wait.parks);
 }
+
+test "a SEV from the other core wakes a parked core and is counted" {
+    var wait: parking.Wait = .{};
+    _ = wait.arrive();
+    wait.sev();
+    try std.testing.expect(!wait.parked());
+    try std.testing.expectEqual(@as(usize, 1), wait.wakes.event);
+    // A SEV with nobody waiting leaves an event standing, and wakes nothing.
+    wait.sev();
+    try std.testing.expectEqual(@as(usize, 1), wait.wakes.event);
+    try std.testing.expect(!wait.arrive());
+}

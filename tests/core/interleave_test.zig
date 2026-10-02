@@ -287,3 +287,29 @@ test "a parked CPU1 wakes on its own and carries on past the WFE" {
     try std.testing.expectEqual(@as(usize, 1), cpu1.wait.wakes.spurious);
     try std.testing.expectEqual(@as(u32, 7), try cpu1.core.register(.r0));
 }
+
+test "CPU0 posts to a mailbox and runs SEV, and a parked CPU1 wakes to read it" {
+    var cpu1: second_core.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    const mail = memmap.sram_base + 0x3000;
+    // CPU0: 1: str r1, [r3]; sev; b 1b. Its loop is translated before
+    // CPU1 parks, so the wake also shows the watch reaches cached blocks.
+    try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF40_6019);
+    try cpu0.writeWord(memmap.sram_base + 0x1004, 0xBF00_E7FC);
+    try cpu0.setRegister(.r1, 0x2A);
+    try cpu0.setRegister(.r3, mail);
+    // CPU1: wfe; ldr r0, [r3]; b .
+    try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0x6818_BF20);
+    try cpu1.core.writeWord(memmap.sram_base + 0x2004, 0xE7FE_E7FE);
+    try cpu1.core.setRegister(.r3, mail);
+    cpu1.pc = memmap.sram_base + 0x2000;
+
+    _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 4 * second_core.limits.round, .{}, &cpu1);
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.parks);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.wakes.event);
+    try std.testing.expectEqual(@as(usize, 0), cpu1.wait.wakes.spurious);
+    try std.testing.expectEqual(@as(u32, 0x2A), try cpu1.core.register(.r0));
+}
