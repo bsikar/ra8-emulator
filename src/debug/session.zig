@@ -245,6 +245,7 @@ pub const Session = struct {
             }),
             .halt_requested => try out.print("Halted, ", .{}),
             .unit_break => |index| try out.print("Hardware breakpoint FP_COMP{d}, ", .{index}),
+            .unit_watch => |index| try out.print("Hardware watchpoint DWT_COMP{d}, ", .{index}),
         }
         try self.line(pc, out);
     }

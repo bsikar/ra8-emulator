@@ -159,3 +159,15 @@ test "a comparator the firmware enabled in the core's FPB stops the run there" {
     _ = machine.fpb.write(fpb.offsets.ctrl, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
     try std.testing.expectEqual(@as(usize, 1), machine.onInstruction(at(0x108)).?.unit_break);
 }
+
+test "a halting DWT data comparator stops the run once the access retired" {
+    var machine = Machine{};
+    const dwt = ra8.core.dwt;
+    _ = machine.dwt.write(dwt.offsets.comp0, 0x2000_1000);
+    _ = machine.dwt.write(dwt.offsets.function0, dwt.match.data_write | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift));
+    machine.proceed();
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
+    machine.onAccess(0x2000_1000, 4, .write);
+    try std.testing.expectEqual(@as(usize, 0), machine.onInstruction(at(0x104)).?.unit_watch);
+}

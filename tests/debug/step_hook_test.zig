@@ -151,3 +151,26 @@ test "firmware that programs the FPB halts on its comparator and reads FP_CTRL b
     try std.testing.expectEqual(fpb.ctrl_bits.enable, ctrl & 0x3);
     try std.testing.expectEqual(@as(u32, 1), ctrl >> 28);
 }
+
+// str r1,[r0,#0x20] (DWT_COMP0); str r2,[r0,#0x28] (DWT_FUNCTION0); str r4,[r3]; nop; nop.
+test "firmware that arms a DWT write comparator halts after the store and sees MATCHED" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    try fixture.open();
+    defer fixture.engine.close();
+    const dwt = ra8.core.dwt;
+    const function = dwt.match.data_write | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift);
+    try fixture.engine.write(layout.code, &[_]u8{ 0x01, 0x62, 0x82, 0x62, 0x1C, 0x60, 0x00, 0xBF, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, dwt.base);
+    try fixture.engine.setRegister(.r1, layout.data);
+    try fixture.engine.setRegister(.r2, function);
+    try fixture.engine.setRegister(.r3, layout.data);
+    try fixture.engine.setRegister(.r4, 0x77);
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 6, pc);
+    try std.testing.expectEqual(@as(usize, 0), fixture.driver.last.?.unit_watch);
+    try std.testing.expectEqual(@as(u32, 0x77), try fixture.engine.readWord(layout.data));
+    const seen = try fixture.engine.readWord(dwt.base + dwt.offsets.function0);
+    try std.testing.expectEqual(function | dwt.function_bits.matched, seen);
+}
