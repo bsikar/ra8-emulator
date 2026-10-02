@@ -66,6 +66,10 @@ test {
     _ = @import("core/cpu/ops/special_data_test.zig");
     _ = @import("core/cpu/ops/branch_test.zig");
     _ = @import("core/cpu/ops/mov_wide_test.zig");
+    _ = @import("core/cpu/ops/imm_fields_test.zig");
+    _ = @import("core/cpu/ops/imm_logic_test.zig");
+    _ = @import("core/cpu/ops/imm_arith_test.zig");
+    _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("core/cpu/ops/push_pop_test.zig");
     _ = @import("core/cpu/ops/sp_arith_test.zig");
     _ = @import("core/cpu/ops/table_test.zig");
