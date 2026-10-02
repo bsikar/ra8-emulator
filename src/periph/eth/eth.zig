@@ -42,6 +42,8 @@ pub const mac_address = eth_mac;
 pub const agent = @import("eth_agent.zig");
 /// MFWD control and per-port forwarding words: eth_forward.zig.
 pub const forward = @import("eth_forward.zig");
+/// COMA RIC, RRC and RCEC: eth_coma.zig.
+pub const coma = @import("eth_coma.zig");
 
 pub const Port = struct {
     /// Where this port's two agents answer. A board fact, so it is set when

@@ -23,6 +23,8 @@ pub const Rswitch = struct {
     },
     /// The forwarding engine's control and per-port words.
     forward: eth.forward.Forward = .{},
+    /// COMA's reset and clock-enable words.
+    coma: eth.coma.Coma = .{},
     gateway: gateway.Gateway = .{},
     pool: gateway.Pool = .{},
     /// The gateway's descriptor side: the rings in RAM and the frames that
@@ -51,6 +53,7 @@ pub const Rswitch = struct {
             for (agent.blocks()) |block| try bus.add(block);
         }
         for (self.forward.blocks()) |block| try bus.add(block);
+        try bus.add(self.coma.block());
         try bus.add(self.gateway.modeBlock());
         try bus.add(self.gateway.arirmBlock());
         try bus.add(self.pool.block());
@@ -74,6 +77,7 @@ pub const Rswitch = struct {
         for (&self.agents) |*agent| {
             if (!agent.quiet()) return false;
         }
+        if (!self.coma.quiet()) return false;
         return self.forward.quiet() and self.gateway.quiet() and self.pool.quiet() and self.queues.quiet();
     }
 };
