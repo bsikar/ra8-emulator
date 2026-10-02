@@ -170,6 +170,7 @@ test {
     _ = @import("periph/eth/eth_agent_test.zig");
     _ = @import("periph/eth/eth_desc_test.zig");
     _ = @import("periph/eth/eth_dma_test.zig");
+    _ = @import("periph/eth/eth_forward_test.zig");
     _ = @import("periph/eth/eth_gateway_test.zig");
     _ = @import("periph/eth/eth_mac_test.zig");
     _ = @import("periph/eth/eth_mode_test.zig");

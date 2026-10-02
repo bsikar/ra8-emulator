@@ -21,6 +21,8 @@ pub const Rswitch = struct {
         eth.agent.Agent.init(regs.cluster.etha0),
         eth.agent.Agent.init(regs.cluster.etha1),
     },
+    /// The forwarding engine's control and per-port words.
+    forward: eth.forward.Forward = .{},
     gateway: gateway.Gateway = .{},
     pool: gateway.Pool = .{},
     /// The gateway's descriptor side: the rings in RAM and the frames that
@@ -48,6 +50,7 @@ pub const Rswitch = struct {
         for (&self.agents) |*agent| {
             for (agent.blocks()) |block| try bus.add(block);
         }
+        for (self.forward.blocks()) |block| try bus.add(block);
         try bus.add(self.gateway.modeBlock());
         try bus.add(self.gateway.arirmBlock());
         try bus.add(self.pool.block());
@@ -71,6 +74,6 @@ pub const Rswitch = struct {
         for (&self.agents) |*agent| {
             if (!agent.quiet()) return false;
         }
-        return self.gateway.quiet() and self.pool.quiet() and self.queues.quiet();
+        return self.forward.quiet() and self.gateway.quiet() and self.pool.quiet() and self.queues.quiet();
     }
 };
