@@ -6,7 +6,9 @@
 //! core is that debugger, so C_DEBUGEN reads one once it attaches, and a
 //! firmware write cannot change it. With C_DEBUGEN set, a write carrying
 //! DBGKEY may set C_HALT, which halts the core once the store retires, and
-//! C_STEP and C_MASKINTS, which read back but do nothing yet. C_HALT is not
+//! C_STEP and C_MASKINTS. With C_STEP kept, the next resume runs one
+//! instruction and halts again. C_MASKINTS reads back but does nothing
+//! yet. C_HALT is not
 //! kept: the core only runs again after the debugger resumes it, and a
 //! resume clears it. S_REGRDY always reads one because a transfer finishes
 //! at once.
@@ -121,6 +123,11 @@ pub const Dcb = struct {
     pub fn clearStatus(self: *Dcb, value: u32) void {
         self.dfsr &= ~value;
         self.changed = true;
+    }
+
+    /// DHCSR.C_STEP with halting debug on: a resume is a single step.
+    pub fn stepping(self: *const Dcb) bool {
+        return self.debugen and self.controls & dhcsr_bits.c_step != 0;
     }
 
     /// Whether a C_HALT write is waiting for the core to halt, and forget

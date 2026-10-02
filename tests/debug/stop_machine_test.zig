@@ -184,3 +184,28 @@ test "with halting debug off, an FPB match runs on and is held for DebugMonitor"
     try std.testing.expectEqual(@as(?stop_machine.Monitor, .breakpoint), machine.takeMonitor());
     try std.testing.expectEqual(@as(?stop_machine.Monitor, null), machine.takeMonitor());
 }
+
+test "with DHCSR.C_STEP set, a resume runs one instruction and halts" {
+    var machine = Machine{};
+    const dcb = ra8.core.dcb;
+    const keyed = dcb.dhcsr_bits.key << dcb.dhcsr_bits.key_shift;
+    machine.dcb.attachDebugger();
+    _ = machine.dcb.write(dcb.offsets.dhcsr, keyed | dcb.dhcsr_bits.c_debugen | dcb.dhcsr_bits.c_step);
+    machine.proceed();
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
+    try std.testing.expect(isStepped(machine.onInstruction(at(0x102))));
+    _ = machine.dcb.write(dcb.offsets.dhcsr, keyed | dcb.dhcsr_bits.c_debugen);
+    machine.proceed();
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x104)));
+}
+
+test "C_STEP written without a debugger attached is ignored" {
+    var machine = Machine{};
+    const dcb = ra8.core.dcb;
+    const keyed = dcb.dhcsr_bits.key << dcb.dhcsr_bits.key_shift;
+    _ = machine.dcb.write(dcb.offsets.dhcsr, keyed | dcb.dhcsr_bits.c_step);
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
+}
