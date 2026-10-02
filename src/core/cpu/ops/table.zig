@@ -64,6 +64,7 @@ pub const groups = [_]op.Group{
     @import("mve_vpst.zig").group,
     @import("mve_int.zig").group,
     @import("mve_int_pair.zig").group,
+    @import("mve_int_shift.zig").group,
     @import("ldrd_strd.zig").group,
     @import("ldm_stm_wide.zig").group,
 };
