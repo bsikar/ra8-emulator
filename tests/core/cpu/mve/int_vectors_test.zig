@@ -26,6 +26,15 @@ fn vqsub(in: Operands) int.Sat {
     return int.saturating(in.a, in.b, in.size, in.unsigned, true);
 }
 
+fn pairOp(in: vectors.PairCase) u128 {
+    const o = in.operands;
+    return int.pairwise(o.a, o.b, o.size, o.unsigned, in.op);
+}
+
+test "VABD, VMAX, VMIN and the halving ops match the pseudocode" {
+    try vector.expectAll(vectors.PairCase, u128, pairOp, &vectors.pair);
+}
+
 test "VADD (vector) matches the pseudocode" {
     try vector.expectAll(Operands, u128, vadd, &vectors.add);
 }
@@ -47,6 +56,6 @@ test "VQSUB (vector) matches the pseudocode" {
 }
 
 test "every vector is counted in covered" {
-    const total = vectors.add.len + vectors.sub.len + vectors.mul.len + vectors.qadd.len + vectors.qsub.len;
+    const total = vectors.add.len + vectors.sub.len + vectors.mul.len + vectors.qadd.len + vectors.qsub.len + vectors.pair.len;
     try std.testing.expectEqual(total, vectors.covered.len);
 }

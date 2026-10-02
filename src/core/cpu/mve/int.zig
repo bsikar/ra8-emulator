@@ -2,6 +2,8 @@
 //! (RA8EMU-25): VADD, VSUB and VMUL keep the low bits of each lane, and
 //! VQADD and VQSUB clamp each lane to its signed or unsigned range and
 //! report whether any lane clamped, which the caller turns into FPSCR.QC.
+//! VABD, VMAX, VMIN and the halving adds and subtract read each lane signed
+//! or unsigned and work at full precision before the result is narrowed.
 //! Every function works on the whole 128-bit vector; predication and
 //! beats are applied by whoever writes the result back.
 const qreg = @import("qreg.zig");
@@ -59,4 +61,31 @@ pub fn saturating(a: u128, b: u128, size: Size, unsigned: bool, sub: bool) Sat {
         out = qreg.setElem(out, size, e, @truncate(@as(u64, @bitCast(c))));
     }
     return .{ .value = out, .saturated = saturated };
+}
+
+pub const Pairwise = enum { abd, max, min, hadd, rhadd, hsub };
+
+/// One lane of VABD, VMAX, VMIN, VHADD, VRHADD or VHSUB at full precision.
+pub fn pairLane(x: i64, y: i64, op: Pairwise) i64 {
+    return switch (op) {
+        .abd => @intCast(@abs(x - y)),
+        .max => @max(x, y),
+        .min => @min(x, y),
+        .hadd => (x + y) >> 1,
+        .rhadd => (x + y + 1) >> 1,
+        .hsub => (x - y) >> 1,
+    };
+}
+
+/// VABD, VMAX, VMIN, VHADD, VRHADD or VHSUB (vector) on every lane.
+pub fn pairwise(a: u128, b: u128, size: Size, unsigned: bool, op: Pairwise) u128 {
+    var out: u128 = 0;
+    for (0..qreg.lanes(size)) |k| {
+        const e: u8 = @intCast(k);
+        const x = extend(qreg.elem(a, size, e), size, unsigned);
+        const y = extend(qreg.elem(b, size, e), size, unsigned);
+        const r = pairLane(x, y, op);
+        out = qreg.setElem(out, size, e, @truncate(@as(u64, @bitCast(r))));
+    }
+    return out;
 }
