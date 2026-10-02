@@ -92,3 +92,41 @@ test "an access wider than one register is refused" {
     try std.testing.expect(!BoardBus.inWindow(registry.base + registry.size - 2, 4));
     try std.testing.expect(BoardBus.inWindow(registry.ns_base, 4));
 }
+
+fn storeWord(board: *BoardBus, address: u32, value: u32) !void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value, .little);
+    try board.view().write(address, &bytes);
+}
+
+test "SAU RBAR and RLAR bank through RNR on the Zig bus" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var partitions = ra8.periph.sau.Sau.init();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .partitions = &partitions };
+    try storeWord(&board, memmap.sau.rnr, 1);
+    try storeWord(&board, memmap.sau.rbar, 0x0200_0000);
+    try storeWord(&board, memmap.sau.rlar, 0x0207_FFE1);
+    try storeWord(&board, memmap.sau.rnr, 0);
+    try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(memmap.sau.rbar));
+    try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(memmap.sau.rlar));
+    try storeWord(&board, memmap.sau.rnr, 1);
+    try std.testing.expectEqual(@as(u32, 0x0200_0000), try board.view().readWord(memmap.sau.rbar));
+    try std.testing.expectEqual(@as(u32, 0x0207_FFE1), try board.view().readWord(memmap.sau.rlar));
+    try std.testing.expectEqual(@as(u32, 2), partitions.banked);
+}
+
+test "a bus with no SAU leaves the window as plain RAM" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    try storeWord(&board, memmap.sau.rbar, 0x0200_0000);
+    try storeWord(&board, memmap.sau.rnr, 1);
+    try std.testing.expectEqual(@as(u32, 0x0200_0000), try board.view().readWord(memmap.sau.rbar));
+}

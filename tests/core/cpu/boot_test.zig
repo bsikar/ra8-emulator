@@ -93,7 +93,7 @@ test "a zig run on the board closes a boundary after every stretch, the short la
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 10, &ran, edges.boundary());
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 10, &ran, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 10), ran);
     try std.testing.expectEqual(@as(u32, 4), edges.closes);
@@ -110,7 +110,7 @@ test "a stretch the core stops inside is never closed" {
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 100, null, edges.boundary());
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 1), status);
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
 }
