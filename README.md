@@ -126,7 +126,8 @@ src/root.zig          the module index, imported as "ra8"
 src/core/             the machine: engine, memmap, elf, session, run loop,
                       the second core, and src/core/c.zig (the only @cImport)
 src/debug/            breakpoints, watchpoints, disassembly, symbols, dumps
-src/interfaces/cli/   the command line and the report renderers
+src/interfaces/cli/   the command line; the report renderers live in
+                      cli/report.zig and cli/report/
 src/board/            how the board is wired
 src/periph/           everything that answers on the peripheral bus
 tests/                one test file per source file, on the mirrored path

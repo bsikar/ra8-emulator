@@ -5,7 +5,7 @@
 //! its budget is spent or it meets something it cannot do yet, most often an
 //! encoding no group in src/core/cpu/ops/table.zig claims. This file prints
 //! one line saying which, so a corpus sweep can tell how far each image
-//! gets; main then prints the board's own report (report_run.zigCore).
+//! gets; main then prints the board's own report (report/run.zig, zigCore).
 const engine = @import("../engine.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
 const BoardBus = @import("board_bus.zig").BoardBus;

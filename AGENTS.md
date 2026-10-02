@@ -18,8 +18,9 @@ src/core/             the machine: engine, memmap, elf, session, the run
                       src/core/c.zig
 src/debug/            the debugger surface: breakpoints, watchpoints, their
                       hooks, disassembly, symbols, register and memory dumps
-src/interfaces/cli/   the command line and the report renderers that write
-                      its output
+src/interfaces/cli/   the command line; cli/report.zig and cli/report/ hold
+                      the report renderers that write its output, one file
+                      per report section
 src/board/            how the board is wired: which blocks exist and what
                       they are connected to
 src/periph/           everything that answers on the peripheral bus
