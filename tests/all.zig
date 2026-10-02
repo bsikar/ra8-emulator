@@ -330,6 +330,7 @@ test {
     _ = @import("periph/debug_monitor_test.zig");
     _ = @import("core/bus_error_test.zig");
     _ = @import("core/appimg_test.zig");
+    _ = @import("core/module_place_test.zig");
     _ = @import("core/svc_trap_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
