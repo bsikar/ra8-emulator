@@ -178,6 +178,14 @@ pub const Device = struct {
         return 0;
     }
 
+    /// USBFS_INT: some INTSTS0 status bit in 15:8 is set with its INTENB0
+    /// enable. VALID raises nothing on its own; the SETUP stage reaches the
+    /// line through CTRT.
+    pub fn interruptLine(self: *const Device) bool {
+        const enabled = self.shadow[regs.reg.intenb0 / window.word];
+        return self.interruptStatus() & enabled & 0xFF00 != 0;
+    }
+
     pub fn interruptStatus(self: *const Device) u16 {
         const live: u16 = if (self.vbus) intsts0.vbsts else 0;
         return (self.status & ~intsts0.vbsts) | live | self.control.summary();
