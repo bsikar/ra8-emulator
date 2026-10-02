@@ -31,12 +31,15 @@ test {
     _ = @import("core/cpu/lockstep/memory_diff_test.zig");
     _ = @import("core/cpu/lockstep/mode_test.zig");
     _ = @import("core/cpu/lockstep/oracle_test.zig");
+    _ = @import("core/cpu/lockstep/periph_log_test.zig");
+    _ = @import("core/cpu/lockstep/replay_bus_test.zig");
     _ = @import("core/cpu/lockstep/report_test.zig");
     _ = @import("core/cpu/lockstep/run_test.zig");
     _ = @import("core/cpu/lockstep/snapshot_test.zig");
     _ = @import("core/cpu/lockstep/states_test.zig");
     _ = @import("core/cpu/lockstep/step_test.zig");
     _ = @import("core/cpu/lockstep/tally_test.zig");
+    _ = @import("core/cpu/lockstep/tap_hook_test.zig");
     _ = @import("core/cpu/lockstep/writes_test.zig");
     _ = @import("core/cpu/ops_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");

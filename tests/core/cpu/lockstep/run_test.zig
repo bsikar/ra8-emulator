@@ -13,7 +13,7 @@ test "a run counts what matched and ends where the Zig core stops" {
     defer pair.close();
     var lock: run.Run = .{};
     defer lock.deinit(gpa);
-    const ended = try lock.go(gpa, &pair.cpu, pair.theirs, 10);
+    const ended = try lock.go(gpa, &pair.cpu, pair.theirs, &pair.log, 10);
     try std.testing.expectEqual(@as(u16, 0xDE00), ended.stopped.unknown.hw1);
     try std.testing.expectEqual(@as(u64, 2), lock.counts.find("hint").?.matched);
     try std.testing.expectEqual(@as(usize, 2), lock.recent.len);
@@ -26,7 +26,7 @@ test "a run inside its budget ends on the budget" {
     defer pair.close();
     var lock: run.Run = .{};
     defer lock.deinit(gpa);
-    try std.testing.expect((try lock.go(gpa, &pair.cpu, pair.theirs, 1)) == .budget);
+    try std.testing.expect((try lock.go(gpa, &pair.cpu, pair.theirs, &pair.log, 1)) == .budget);
 }
 
 test "a disagreement ends the run and is counted as diverged" {
@@ -37,7 +37,7 @@ test "a disagreement ends the run and is counted as diverged" {
     try pair.theirs.setRegister(.r7, 7);
     var lock: run.Run = .{};
     defer lock.deinit(gpa);
-    const ended = try lock.go(gpa, &pair.cpu, pair.theirs, 10);
+    const ended = try lock.go(gpa, &pair.cpu, pair.theirs, &pair.log, 10);
     try std.testing.expectEqual(ra8.core.cpu.regs.Name.r7, ended.diverged.what.register.name);
     try std.testing.expectEqual(@as(u64, 1), lock.counts.find("hint").?.diverged);
 }

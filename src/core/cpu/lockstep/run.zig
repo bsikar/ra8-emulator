@@ -8,6 +8,7 @@ const Instr = @import("../instr.zig").Instr;
 const step = @import("step.zig");
 const tally = @import("tally.zig");
 const history = @import("history.zig");
+const periph_log = @import("periph_log.zig");
 
 pub const End = union(enum) {
     budget,
@@ -27,13 +28,13 @@ pub const Run = struct {
         self.counts.deinit(gpa);
     }
 
-    pub fn go(self: *Run, gpa: std.mem.Allocator, ours: *cpu_mod.Cpu, theirs: engine.Engine, budget: u64) !End {
+    pub fn go(self: *Run, gpa: std.mem.Allocator, ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, budget: u64) !End {
         var left = budget;
         while (left > 0) : (left -= 1) {
             const address = ours.regs.pc;
             self.at = address;
             const fetched = Instr.fetch(ours.bus, address) catch null;
-            switch (try step.one(ours, theirs)) {
+            switch (try step.one(ours, theirs, log)) {
                 .matched => |class| try self.counts.record(gpa, class, .matched),
                 .skipped => |class| try self.counts.record(gpa, class, .skipped),
                 .diverged => |found| {
