@@ -275,3 +275,5 @@ is stale or an encoding is missing. Regenerate with
 | VABS.F32 (MVE) T1 | 1 |
 | VNEG.F16 (MVE) T1 | 1 |
 | VNEG.F32 (MVE) T1 | 1 |
+| VCMP.F16 (MVE) T1 | 2 |
+| VCMP.F32 (MVE) T1 | 7 |

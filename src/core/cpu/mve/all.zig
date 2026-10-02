@@ -37,3 +37,5 @@ pub const float = @import("float.zig");
 pub const float_vectors = @import("float_vectors.zig");
 pub const float_fma_vectors = @import("float_fma_vectors.zig");
 pub const float_abs_vectors = @import("float_abs_vectors.zig");
+pub const float_cmp = @import("float_cmp.zig");
+pub const float_cmp_vectors = @import("float_cmp_vectors.zig");
