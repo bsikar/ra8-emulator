@@ -44,6 +44,7 @@ test {
     _ = @import("ops/long_shift_test.zig");
     _ = @import("ops/svc_test.zig");
     _ = @import("ops/table_branch_test.zig");
+    _ = @import("ops/blxns_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
