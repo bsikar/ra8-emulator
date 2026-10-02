@@ -41,3 +41,14 @@ pub fn beatAddress(b: Beat) u32 {
     const high: u32 = if (b.odd) 4 else 0;
     return b.base +% (b.offset << shift) +% high;
 }
+
+/// The vector-base forms, VLDRW/VLDRD/VSTRW/VSTRD [Qm, #imm]{!}: each
+/// element (or the even word of each doubleword) of Qm is a base address
+/// moved by imm7 scaled by 4 or 8. With writeback that address replaces
+/// the Qm element whatever the predicate says.
+pub const VectorBase = struct { element: u32, imm7: u7, add: bool, double: bool };
+
+pub fn vectorAddress(v: VectorBase) u32 {
+    const offset: u32 = @as(u32, v.imm7) << if (v.double) 3 else 2;
+    return if (v.add) v.element +% offset else v.element -% offset;
+}

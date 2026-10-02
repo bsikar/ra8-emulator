@@ -85,5 +85,6 @@ test {
     _ = @import("ops/mve_vldr_wide_test.zig");
     _ = @import("ops/mve_gather_test.zig");
     _ = @import("ops/mve_gather64_test.zig");
+    _ = @import("ops/mve_gather_imm_test.zig");
     _ = @import("ops/table_test.zig");
 }

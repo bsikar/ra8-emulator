@@ -28,3 +28,4 @@ pub const contiguous_wide_vectors = @import("contiguous_wide_vectors.zig");
 pub const gather = @import("gather.zig");
 pub const gather_vectors = @import("gather_vectors.zig");
 pub const gather64_vectors = @import("gather64_vectors.zig");
+pub const gather_imm_vectors = @import("gather_imm_vectors.zig");
