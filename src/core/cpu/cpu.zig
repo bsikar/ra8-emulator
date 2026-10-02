@@ -60,6 +60,9 @@ pub const Cpu = struct {
     /// The other Security state's banked registers, which Secure code reaches
     /// through the _NS forms of MRS and MSR.
     banked: banked_mod.Banked = .{},
+    /// The event register WFE waits on: set by SEV and by exception entry
+    /// and return, cleared by a WFE that finds it set.
+    event: bool = false,
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
@@ -67,6 +70,7 @@ pub const Cpu = struct {
         self.vtor = vtor;
         self.raised = null;
         self.active = .{};
+        self.event = false;
     }
 
     /// One instruction, or the reason there was none.
