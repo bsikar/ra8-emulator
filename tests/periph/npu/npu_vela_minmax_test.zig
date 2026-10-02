@@ -81,9 +81,6 @@ test "cases the TRM leaves open are refused, not guessed" {
     var mixed = inputs();
     mixed.maps.ifm2.zero_point = 5;
     try std.testing.expectError(error.OperatorNotModelled, minmax.run(&memory, &regions, minmax.mode_min, mixed));
-    var broadcast = inputs();
-    broadcast.maps.ifm2_broadcast = 1;
-    try std.testing.expectError(error.OperatorNotModelled, minmax.run(&memory, &regions, minmax.mode_max, broadcast));
     var lut = inputs();
     lut.quant.activation = 0x10;
     try std.testing.expectError(error.OperatorNotModelled, minmax.run(&memory, &regions, minmax.mode_max, lut));
@@ -106,4 +103,36 @@ test "the runner executes an elementwise MAX and counts its elements" {
     const result = try vela.runner.run(&memory, &regions, &words);
     try std.testing.expectEqual(@as(u64, 8), result.elements);
     for (0..8) |i| try std.testing.expectEqual(@max(a[i], b[i]), @as(i8, @bitCast(memory.bytes[0x200 + i])));
+}
+
+test "a scalar IFM2 is compared against every IFM element" {
+    var memory = Memory{};
+    fill(&memory);
+    const regions: vela.dma.Regions = .{0} ** 8;
+    var setup = inputs();
+    setup.maps.ifm2_broadcast = minmax.broadcast_scalar;
+    setup.maps.ifm2_scalar = @bitCast(@as(i16, -2));
+    _ = try minmax.run(&memory, &regions, minmax.mode_max, setup);
+    for (0..8) |i| try std.testing.expectEqual(@max(a[i], -2), @as(i8, @bitCast(memory.bytes[0x200 + i])));
+}
+
+test "broadcasting W and C reuses IFM2 element (0, 0, 0)" {
+    var memory = Memory{};
+    fill(&memory);
+    const regions: vela.dma.Regions = .{0} ** 8;
+    var setup = inputs();
+    setup.maps.ifm2_broadcast = minmax.broadcast_w | minmax.broadcast_c;
+    _ = try minmax.run(&memory, &regions, minmax.mode_min, setup);
+    for (0..8) |i| try std.testing.expectEqual(@min(a[i], b[0]), @as(i8, @bitCast(memory.bytes[0x200 + i])));
+}
+
+test "broadcasting C alone keeps IFM2's x and repeats its channel 0" {
+    var memory = Memory{};
+    fill(&memory);
+    const regions: vela.dma.Regions = .{0} ** 8;
+    var setup = inputs();
+    setup.maps.ifm2_broadcast = minmax.broadcast_c;
+    _ = try minmax.run(&memory, &regions, minmax.mode_max, setup);
+    // IFM2 x stride is 4, so column 1 reads b[4].
+    for (0..8) |i| try std.testing.expectEqual(@max(a[i], b[(i / 4) * 4]), @as(i8, @bitCast(memory.bytes[0x200 + i])));
 }

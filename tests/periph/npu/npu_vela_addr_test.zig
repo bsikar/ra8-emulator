@@ -49,3 +49,9 @@ test "coordinates past WIDTH0 and HEIGHT0 move to the other tiles" {
     try std.testing.expectEqual(@as(u64, 0x100 + 1), addr.address(tiles, map, stride, int8_nhwc, 0, 3, 0));
     try std.testing.expectEqual(@as(u64, 0x300 + 1), addr.address(tiles, map, stride, int8_nhwc, 1, 3, 0));
 }
+
+test "the reserved format values 2 and 3 in bits [7:6] are refused" {
+    try std.testing.expectEqual(@as(?addr.Format, null), addr.ifmFormat(1 | (2 << 6)));
+    try std.testing.expectEqual(@as(?addr.Format, null), addr.ofmFormat(1 | (3 << 6)));
+    try std.testing.expectEqual(addr.Layout.nhcwb16, addr.ofmFormat(1 | (1 << 6)).?.layout);
+}
