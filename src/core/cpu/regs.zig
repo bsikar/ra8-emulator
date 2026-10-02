@@ -73,6 +73,10 @@ pub const Regs = struct {
     primask: u32 = 0,
     basepri: u32 = 0,
     faultmask: u32 = 0,
+    /// The stack limits MSR and MRS reach. Bits 2:0 are RES0. Checking a
+    /// stack pointer against them is the m85 lane's RA8EMU-21.
+    msplim: u32 = 0,
+    psplim: u32 = 0,
     /// An EXC_RETURN value a PC write in Handler mode left for the core to
     /// act on once the instruction retires (src/core/cpu/exception/ret.zig).
     exc_return: ?u32 = null,

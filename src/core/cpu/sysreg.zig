@@ -3,8 +3,9 @@
 //!
 //! Unprivileged code reads zero from the stack pointers and masks and its
 //! writes to them are ignored; CONTROL reads back whatever the privilege. EPSR
-//! always reads as zero. MSPLIM, PSPLIM and the Non-secure aliases (SYSm 0x88
-//! and up) are not modelled here yet, so `known` leaves them out.
+//! always reads as zero. MSPLIM and PSPLIM hold bits 31:3. The Non-secure
+//! aliases (SYSm 0x88 and up) are not modelled here yet, so `known` leaves
+//! them out.
 const regs = @import("regs.zig");
 const Regs = regs.Regs;
 
@@ -13,6 +14,8 @@ pub const sysm = struct {
     pub const reserved_psr: u8 = 4;
     pub const msp: u8 = 8;
     pub const psp: u8 = 9;
+    pub const msplim: u8 = 10;
+    pub const psplim: u8 = 11;
     pub const primask: u8 = 16;
     pub const basepri: u8 = 17;
     pub const basepri_max: u8 = 18;
@@ -27,6 +30,9 @@ pub const psr_bits = struct {
     pub const ge: u32 = 0x000F_0000;
 };
 
+/// The bits MSPLIM and PSPLIM keep: the limit is 8-byte aligned.
+pub const limit_bits: u32 = 0xFFFF_FFF8;
+
 /// CONTROL bits MSR may change: nPRIV, SPSEL and FPCA.
 pub const control_writable: u32 = 0x7;
 
@@ -34,7 +40,7 @@ pub const control_writable: u32 = 0x7;
 pub fn known(n: u8) bool {
     return switch (n) {
         0...sysm.xpsr_last => n != sysm.reserved_psr,
-        sysm.msp, sysm.psp => true,
+        sysm.msp...sysm.psplim => true,
         sysm.primask...sysm.control => true,
         else => false,
     };
@@ -52,6 +58,8 @@ pub fn read(r: *const Regs, n: u8) u32 {
     return switch (n) {
         sysm.msp => r.msp,
         sysm.psp => r.psp,
+        sysm.msplim => r.msplim,
+        sysm.psplim => r.psplim,
         sysm.primask => r.primask,
         sysm.basepri, sysm.basepri_max => r.basepri,
         sysm.faultmask => r.faultmask,
@@ -75,6 +83,8 @@ pub fn write(r: *Regs, n: u8, mask: u2, value: u32) void {
     switch (n) {
         sysm.msp => r.write(.msp, value),
         sysm.psp => r.write(.psp, value),
+        sysm.msplim => r.msplim = value & limit_bits,
+        sysm.psplim => r.psplim = value & limit_bits,
         sysm.primask => r.write(.primask, value),
         sysm.basepri => r.write(.basepri, value),
         sysm.basepri_max => writeBasepriMax(r, value),

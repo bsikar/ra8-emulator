@@ -5,11 +5,12 @@ const regs = ra8.core.cpu.regs;
 const sysreg = ra8.core.cpu.sysreg;
 const Regs = regs.Regs;
 
-test "known covers the PSR views, stack pointers, masks and CONTROL only" {
+test "known covers the PSR views, stack pointers and limits, masks and CONTROL only" {
     try std.testing.expect(sysreg.known(0) and sysreg.known(3) and sysreg.known(7));
     try std.testing.expect(!sysreg.known(4));
     try std.testing.expect(sysreg.known(8) and sysreg.known(9));
-    try std.testing.expect(!sysreg.known(10) and !sysreg.known(11)); // MSPLIM, PSPLIM
+    try std.testing.expect(sysreg.known(10) and sysreg.known(11)); // MSPLIM, PSPLIM
+    try std.testing.expect(!sysreg.known(12) and !sysreg.known(15));
     try std.testing.expect(sysreg.known(16) and sysreg.known(20));
     try std.testing.expect(!sysreg.known(0x88)); // MSP_NS
 }
@@ -69,4 +70,16 @@ test "CONTROL: SPSEL changes from thread mode only, and switches SP" {
     r.xpsr = 0x0F; // SysTick handler
     sysreg.write(&r, sysreg.sysm.control, 0b10, 0x5);
     try std.testing.expectEqual(@as(u32, 0x7), r.control);
+}
+
+test "MSPLIM and PSPLIM keep bits 31:3 and are privileged only" {
+    var r: Regs = .{};
+    sysreg.write(&r, sysreg.sysm.msplim, 0b10, 0x2200_0107);
+    sysreg.write(&r, sysreg.sysm.psplim, 0b10, 0x2210_000C);
+    try std.testing.expectEqual(@as(u32, 0x2200_0100), sysreg.read(&r, sysreg.sysm.msplim));
+    try std.testing.expectEqual(@as(u32, 0x2210_0008), sysreg.read(&r, sysreg.sysm.psplim));
+    r.control = regs.control_bits.npriv;
+    sysreg.write(&r, sysreg.sysm.psplim, 0b10, 0x2300_0000);
+    try std.testing.expectEqual(@as(u32, 0x2210_0008), r.psplim);
+    try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, sysreg.sysm.psplim));
 }
