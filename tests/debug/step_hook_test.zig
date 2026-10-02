@@ -156,6 +156,7 @@ test "firmware that programs the FPB halts on its comparator and reads FP_CTRL b
 test "firmware that arms a DWT write comparator halts after the store and sees MATCHED" {
     var fixture: Fixture = undefined;
     fixture.machine = .{};
+    fixture.machine.dwt.trcena = true;
     try fixture.open();
     defer fixture.engine.close();
     const dwt = ra8.core.dwt;
@@ -238,4 +239,34 @@ test "with halting debug off and MON_EN set, an FPB match pends DebugMonitor and
     try std.testing.expect(demcr & dcb.demcr_bits.mon_pend != 0);
     try std.testing.expect(try fixture.engine.readWord(dcb.dfsr_address) & dcb.dfsr_bits.bkpt != 0);
     try std.testing.expectEqual(dcb.dhcsr_bits.s_regrdy, try fixture.engine.readWord(dcb.base));
+}
+
+// str r1,[r0] (DEMCR, TRCENA set); strb r2,[r0] (byte 0 only); nop.
+test "firmware storing DEMCR.TRCENA turns the DWT on, and a byte store elsewhere leaves it" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    try fixture.open();
+    defer fixture.engine.close();
+    const dcb = ra8.core.dcb;
+    try fixture.engine.write(layout.code, &[_]u8{ 0x01, 0x60, 0x02, 0x70, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, dcb.demcr_address);
+    try fixture.engine.setRegister(.r1, dcb.demcr_bits.trcena);
+    try fixture.engine.setRegister(.r2, 0);
+    _ = try fixture.run(layout.code);
+    try std.testing.expect(fixture.machine.dwt.trcena);
+}
+
+// strb r2,[r0,#3] (DEMCR's top byte, TRCENA clear); nop.
+test "firmware clearing DEMCR.TRCENA with a byte store turns the DWT off" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    fixture.machine.dwt.trcena = true;
+    try fixture.open();
+    defer fixture.engine.close();
+    const dcb = ra8.core.dcb;
+    try fixture.engine.write(layout.code, &[_]u8{ 0xC2, 0x70, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, dcb.demcr_address);
+    try fixture.engine.setRegister(.r2, 0);
+    _ = try fixture.run(layout.code);
+    try std.testing.expect(!fixture.machine.dwt.trcena);
 }

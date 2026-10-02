@@ -8,10 +8,13 @@
 //! A match whose ACTION is a debug event halts the core through the stop
 //! machine, the same way a debugger watch does.
 //!
+//! The comparators only match while DEMCR.TRCENA is set, which the debug
+//! core sees when the firmware stores DEMCR.
+//!
 //! DWT_CTRL and DWT_CYCCNT at the bottom of the block belong to
 //! src/periph/clocks.zig and are not claimed here. Not modelled yet:
-//! DWT_CTRL.NUMCOMP, the read-only FUNCTION.ID field (reads zero), the
-//! limit and data value match kinds, and DEMCR.TRCENA gating.
+//! DWT_CTRL.NUMCOMP, the read-only FUNCTION.ID field (reads zero), and
+//! the limit and data value match kinds.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;
@@ -58,6 +61,8 @@ pub const Dwt = struct {
     functions: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
     /// A register changed since memory last showed the register file.
     changed: bool = false,
+    /// DEMCR.TRCENA: with it clear the DWT is off and nothing matches.
+    trcena: bool = false,
 
     /// The register at `offset` from `base`, without a read's side
     /// effects, or null when the offset is not a comparator register.
@@ -101,6 +106,7 @@ pub const Dwt = struct {
     }
 
     fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access) ?usize {
+        if (!self.trcena) return null;
         var halting: ?usize = null;
         for (&self.functions, 0..) |*function, index| {
             if (!covers(function.*, kind)) continue;

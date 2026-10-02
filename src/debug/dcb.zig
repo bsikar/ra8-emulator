@@ -55,6 +55,8 @@ pub const dfsr_bits = struct {
 };
 
 pub const demcr_bits = struct {
+    /// TRCENA: the DWT and ITM are enabled.
+    pub const trcena: u32 = 1 << 24;
     /// MON_EN: a debug event with halting debug off takes DebugMonitor.
     pub const mon_en: u32 = 1 << 16;
     /// MON_PEND: DebugMonitor is pending.
