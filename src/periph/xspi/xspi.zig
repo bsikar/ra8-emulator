@@ -63,6 +63,7 @@ const std = @import("std");
 const octaclk = @import("../octaclk.zig");
 const periph = @import("../registry.zig");
 const flash = @import("xspi_flash.zig");
+pub const reset = @import("xspi_reset.zig");
 const lanes = @import("../lanes.zig");
 
 pub const part = flash.part;
@@ -120,9 +121,9 @@ pub const descriptor = struct {
     }
 };
 
-/// The JEDEC opcodes the engine decodes. Everything else (mode switches, the
-/// 8D and 1S software resets) completes without touching the part, as it
-/// does on dev.
+/// The JEDEC opcodes the engine decodes. The software reset pair is
+/// sequenced in xspi_reset.zig; everything else (mode switches) completes
+/// without touching the part, as it does on dev.
 pub const Opcode = enum(u8) {
     page_program = 0x02,
     read = 0x03,
@@ -154,6 +155,8 @@ pub const Xspi = struct {
     complete: bool = false,
     /// The write-enable latch WREN sets and a program or erase spends.
     write_enabled: bool = false,
+    /// RSTEN then RST, which drops the latch.
+    resetting: reset.Sequence = .{},
     reads: u32 = 0,
     programs: u32 = 0,
     erases: u32 = 0,
@@ -256,6 +259,7 @@ pub const Xspi = struct {
         const cdt = self.buffer(slot.cdt).*;
         const address = self.buffer(slot.address).*;
         const size = descriptor.dataSize(cdt);
+        if (self.resetting.step(descriptor.opcode(cdt))) self.write_enabled = false;
         switch (@as(Opcode, @enumFromInt(descriptor.opcode(cdt)))) {
             .read_id => self.buffer(slot.data0).* = std.mem.readInt(u24, &part.jedec, .little),
             .read_status => self.buffer(slot.data0).* = if (self.write_enabled) status.wel else 0,
