@@ -130,3 +130,22 @@ test "a bus with no SAU leaves the window as plain RAM" {
     try storeWord(&board, memmap.sau.rnr, 1);
     try std.testing.expectEqual(@as(u32, 0x0200_0000), try board.view().readWord(memmap.sau.rbar));
 }
+
+test "MPU pairs bank through RNR on the Zig bus, aliases included" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var regions = ra8.periph.mpu.Mpu.init();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .regions = &regions };
+    try storeWord(&board, memmap.mpu.rnr, 4);
+    try storeWord(&board, memmap.mpu.rbar, 0x2200_0000);
+    try storeWord(&board, memmap.mpu.rlar_a1, 0x2207_FFE1);
+    try storeWord(&board, memmap.mpu.rnr, 0);
+    try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(memmap.mpu.rbar));
+    try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(memmap.mpu.rlar_a1));
+    try storeWord(&board, memmap.mpu.rnr, 4);
+    try std.testing.expectEqual(@as(u32, 0x2200_0000), try board.view().readWord(memmap.mpu.rbar));
+    try std.testing.expectEqual(@as(u32, 0x2207_FFE1), try board.view().readWord(memmap.mpu.rlar_a1));
+}

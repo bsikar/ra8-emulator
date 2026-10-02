@@ -12,6 +12,7 @@ const EngineBus = @import("engine_bus.zig").EngineBus;
 const registry = @import("../../periph/registry.zig");
 const memmap = @import("../memmap.zig");
 const sau = @import("../../periph/sau.zig");
+const mpu = @import("../../periph/mpu/mpu.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
@@ -21,6 +22,9 @@ pub const BoardBus = struct {
     /// This core's SAU, when the board has one: its RBAR/RLAR bank through
     /// RNR on this bus exactly as src/core/sau_hook.zig banks them on Unicorn.
     partitions: ?*sau.Sau = null,
+    /// This core's MPU table, banked through RNR the way src/core/mpu_hook.zig
+    /// banks it on Unicorn. Enforcement is not armed from here.
+    regions: ?*mpu.Mpu = null,
 
     pub fn view(self: *BoardBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -57,6 +61,7 @@ pub const BoardBus = struct {
         if (!inWindow(address, bytes.len)) {
             try self.memory.view().write(address, bytes);
             if (self.partitions) |unit| try bankPartition(self.memory.view(), unit, address, bytes);
+            if (self.regions) |unit| try bankRegion(self.memory.view(), unit, address, bytes);
             return;
         }
         var padded = [_]u8{0} ** 4;
@@ -75,9 +80,32 @@ fn bankPartition(memory: bus.Bus, unit: *sau.Sau, address: u32, bytes: []const u
     const word = std.mem.readInt(u32, bytes[0..4], .little);
     if (unit.observe(address, word) == .none) return;
     const pair = unit.bankedPair();
-    for ([_][2]u32{ .{ memmap.sau.rbar, pair.rbar }, .{ memmap.sau.rlar, pair.rlar } }) |slot| {
-        var word_bytes: [4]u8 = undefined;
-        std.mem.writeInt(u32, &word_bytes, slot[1], .little);
-        try memory.write(slot[0], &word_bytes);
+    try putWord(memory, memmap.sau.rbar, pair.rbar);
+    try putWord(memory, memmap.sau.rlar, pair.rlar);
+}
+
+/// File a word store into the MPU window and, when it moved RNR, put the
+/// four pairs RNR now selects back in RAM. A CTRL store is taken into the
+/// table by `observe`; the Unicorn-only traps it rearms have no Zig twin.
+fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8) bus.Error!void {
+    if (bytes.len != 4 or address < memmap.mpu.type_ or address > memmap.mpu.mair1) return;
+    const word = std.mem.readInt(u32, bytes[0..4], .little);
+    if (unit.observe(address, word) != .rebank) return;
+    const pairs = [_][2]u32{
+        .{ memmap.mpu.rbar, memmap.mpu.rlar },
+        .{ memmap.mpu.rbar_a1, memmap.mpu.rlar_a1 },
+        .{ memmap.mpu.rbar_a2, memmap.mpu.rlar_a2 },
+        .{ memmap.mpu.rbar_a3, memmap.mpu.rlar_a3 },
+    };
+    for (pairs, 0..) |where, offset| {
+        const words = unit.pairFor(@intCast(offset));
+        try putWord(memory, where[0], words[0]);
+        try putWord(memory, where[1], words[1]);
     }
+}
+
+fn putWord(memory: bus.Bus, address: u32, value: u32) bus.Error!void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value, .little);
+    try memory.write(address, &bytes);
 }

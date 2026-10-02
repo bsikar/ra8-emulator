@@ -16,6 +16,7 @@ const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const sau = @import("../../periph/sau.zig");
+const mpu = @import("../../periph/mpu/mpu.zig");
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
 /// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
@@ -29,10 +30,12 @@ pub const Boundary = struct {
 };
 
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
-/// boundary that moves time, and the core-private SAU its stores bank into.
+/// boundary that moves time, and the core-private SAU and MPU its stores
+/// bank into.
 pub const Wiring = struct {
     boundary: ?Boundary = null,
     partitions: ?*sau.Sau = null,
+    regions: ?*mpu.Mpu = null,
 };
 
 /// The hand-off from main for any CPU but Unicorn.
@@ -57,7 +60,7 @@ pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .partitions = wiring.partitions };
+    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .partitions = wiring.partitions, .regions = wiring.regions };
     return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary);
 }
 
