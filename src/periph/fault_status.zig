@@ -29,6 +29,8 @@ pub const bus = @import("bus_fault.zig");
 pub const exec = @import("exec_priority.zig");
 /// Raising a UsageFault. src/periph/usage_fault.zig.
 pub const usage = @import("usage_fault.zig");
+/// Raising a SecureFault. src/periph/secure_fault.zig.
+pub const secure = @import("secure_fault.zig");
 
 /// A CFSR cause, valued by its bit position. Positions not listed are
 /// reserved and read as zero on silicon.
@@ -70,7 +72,7 @@ pub const Cause = enum(u5) {
     }
 };
 
-pub const Fault = enum { mem_manage, bus_fault, usage_fault };
+pub const Fault = enum { mem_manage, bus_fault, usage_fault, secure_fault };
 
 /// An HFSR cause, valued by its bit position.
 pub const Hard = enum(u5) {

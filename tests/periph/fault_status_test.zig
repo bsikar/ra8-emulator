@@ -41,6 +41,9 @@ test "each cause belongs to the sub-register its bit falls in" {
             .mem_manage => status.cfsr.mmfsr,
             .bus_fault => status.cfsr.bfsr,
             .usage_fault => status.cfsr.ufsr,
+            // SecureFault reports in SFSR, never in CFSR, so no cause
+            // may map to it; a zero mask fails the check below if one does.
+            .secure_fault => 0,
         };
         try std.testing.expect(cause.bit() & mask != 0);
     }

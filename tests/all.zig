@@ -299,6 +299,7 @@ test {
     _ = @import("periph/bus_fault_test.zig");
     _ = @import("periph/exec_priority_test.zig");
     _ = @import("periph/usage_fault_test.zig");
+    _ = @import("periph/secure_fault_test.zig");
     _ = @import("core/bus_error_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
