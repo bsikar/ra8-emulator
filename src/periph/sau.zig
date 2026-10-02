@@ -28,6 +28,9 @@
 //! is a separate piece of work and needs the world split first.
 const memmap = @import("../core/memmap.zig");
 
+/// What the programmed map says about an address. src/periph/sau_attr.zig.
+pub const attribution = @import("sau_attr.zig");
+
 /// The window's fixed shape: how many regions this core reports out of TYPE.
 pub const geometry = struct {
     /// Regions the modelled core implements. dev's emu_console.h seeds
