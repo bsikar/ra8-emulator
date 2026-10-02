@@ -16,12 +16,15 @@
 //!
 //! FUNCTION.ID is read-only and says which MATCH kinds a comparator takes.
 //! DDI0553B.y D1.2.64 lists the legal encodings. Comparator 0 must take
-//! Cycle Counter when the cycle counter exists, which clocks.zig models, so
-//! it reads 0b01011; the others read 0b01010 (Instruction Address, Data
-//! Address and Data Address With Value). Those are the smallest legal
-//! encodings that cover what this model compares. Not modelled yet:
-//! DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and the limit, data
-//! value and linked match kinds; ID grows as they land.
+//! Cycle Counter when the cycle counter exists, which clocks.zig models, and
+//! can never be the limit of a pair, so it reads 0b01011. The others read
+//! 0b11010: they also take Instruction Address Limit and Data Address
+//! Limit, which pair comparator n with comparator n-1 as an inclusive
+//! range (E2.1.107 and E2.1.110). A range match is reported on comparator
+//! n-1: its MATCHED is set and its ACTION applies.
+//!
+//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and
+//! the data value and linked data value match kinds.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;
@@ -48,6 +51,8 @@ pub const match = struct {
     pub const data: u32 = 0b0100;
     pub const data_write: u32 = 0b0101;
     pub const data_read: u32 = 0b0110;
+    pub const instruction_limit: u32 = 0b0011;
+    pub const data_limit: u32 = 0b0111;
 };
 
 pub const function_bits = struct {
@@ -68,12 +73,13 @@ pub const function_bits = struct {
 pub const id = struct {
     /// Cycle Counter, Instruction Address, Data Address, Data Address With Value.
     pub const cycles_instruction_data: u32 = 0b01011;
-    /// Instruction Address, Data Address, Data Address With Value.
-    pub const instruction_data: u32 = 0b01010;
+    /// Instruction Address and its Limit, Data Address and its Limit, Data
+    /// Address With Value.
+    pub const instruction_data_limits: u32 = 0b11010;
 
     /// The ID comparator `index` reads.
     pub fn of(index: usize) u32 {
-        return if (index == 0) cycles_instruction_data else instruction_data;
+        return if (index == 0) cycles_instruction_data else instruction_data_limits;
     }
 };
 
@@ -130,17 +136,50 @@ pub const Dwt = struct {
     fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access) ?usize {
         if (!self.trcena) return null;
         var halting: ?usize = null;
-        for (&self.functions, 0..) |*function, index| {
-            if (!covers(function.*, kind)) continue;
-            if (!overlaps(self.comps[index], function.*, address, width)) continue;
-            function.* |= function_bits.matched;
+        for (0..limits.comparators) |index| {
+            const owner = self.reporter(index, address, width, kind) orelse continue;
+            self.functions[owner] |= function_bits.matched;
             self.changed = true;
-            const action = (function.* >> function_bits.action_shift) & function_bits.action_mask;
-            if (halting == null and action == function_bits.action_debug) halting = index;
+            const action = (self.functions[owner] >> function_bits.action_shift) & function_bits.action_mask;
+            if (halting == null and action == function_bits.action_debug) halting = owner;
         }
         return halting;
     }
+
+    /// The comparator that reports a match made by comparator `index`: itself,
+    /// or the lower half of a range when `index` is its limit. Null when
+    /// `index` makes no match. A comparator that a limit pairs with matches
+    /// only as part of that range.
+    fn reporter(self: *const Dwt, index: usize, address: u32, width: u32, kind: ?Access) ?usize {
+        const limit = if (kind == null) match.instruction_limit else match.data_limit;
+        if (self.code(index) == limit) return self.rangeLower(index, address, width, kind);
+        if (index + 1 < limits.comparators and self.code(index + 1) == limit) return null;
+        if (!covers(self.functions[index], kind)) return null;
+        if (!overlaps(self.comps[index], self.functions[index], address, width)) return null;
+        return index;
+    }
+
+    /// Comparator `index - 1` when the access falls in the inclusive range
+    /// from its address up to comparator `index`'s, which is a limit.
+    fn rangeLower(self: *const Dwt, index: usize, address: u32, width: u32, kind: ?Access) ?usize {
+        if (index == 0) return null;
+        const lower = index - 1;
+        const code_lower = self.code(lower);
+        const paired = if (kind == null) code_lower == match.instruction else isDataAddress(code_lower);
+        if (!paired or !covers(self.functions[lower], kind)) return null;
+        const start = self.comps[lower] & ~(width - 1);
+        if (address < start or address > self.comps[index]) return null;
+        return lower;
+    }
+
+    fn code(self: *const Dwt, index: usize) u32 {
+        return self.functions[index] & function_bits.match_mask;
+    }
 };
+
+fn isDataAddress(code: u32) bool {
+    return code == match.data or code == match.data_write or code == match.data_read;
+}
 
 const Slot = struct {
     index: usize,
