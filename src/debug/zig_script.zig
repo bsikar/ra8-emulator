@@ -2,7 +2,7 @@
 //! words (RA8EMU-114). src/debug/session.zig carries a command out on the
 //! Unicorn engine; this carries the same commands out on a ZigSession, and
 //! prints through session_report and session_view, so one script gives one
-//! transcript on either CPU. Watches and core switching are not here yet.
+//! transcript on either CPU. Core switching is not here yet.
 const std = @import("std");
 const break_table = @import("break_table.zig");
 const commands = @import("commands.zig");
@@ -11,6 +11,7 @@ const session = @import("session.zig");
 const session_place = @import("session_place.zig");
 const session_report = @import("session_report.zig");
 const session_view = @import("session_view.zig");
+const watch_table = @import("watch_table.zig");
 const zig_session = @import("zig_session.zig");
 
 pub const Error = error{Unsupported};
@@ -50,6 +51,7 @@ pub const ZigScript = struct {
             .examine => |want| try session_view.words(out, view, try self.resolve(want.place), want.words),
             .print => |text| try session_view.word(out, view, text, try self.resolve(text)),
             .backtrace => try session_report.backtrace(view, self.image, out),
+            .watch => |want| try self.setWatch(want, out),
             else => return Error.Unsupported,
         }
     }
@@ -66,6 +68,15 @@ pub const ZigScript = struct {
         try session_report.where(self.image, address, out);
         if (at.arrival > 1) try out.print(", arrival {d}", .{at.arrival});
         try out.print("\n", .{});
+    }
+
+    /// As session.zig's setWatch. It stops only when the session has a
+    /// listening bus (ZigSession.watch).
+    fn setWatch(self: *ZigScript, want: commands.Watch, out: anytype) !void {
+        const address = try self.resolve(want.place);
+        const span = try watch_table.Watch.span(address, session.limits.watch_bytes, want.kind);
+        const id = try self.session.machine.addWatch(span);
+        try out.print("Watchpoint {d} ({s}) at 0x{X:0>8}\n", .{ id, @tagName(want.kind), address });
     }
 
     fn deleteBreak(self: *ZigScript, id: break_table.Id, out: anytype) !void {

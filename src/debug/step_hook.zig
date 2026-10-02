@@ -30,6 +30,8 @@ pub const zig_session = @import("zig_session.zig");
 pub const session_report = @import("session_report.zig");
 /// Re-exported for tests/debug/zig_script_test.zig, for the same reason.
 pub const zig_script = @import("zig_script.zig");
+/// Re-exported for tests/debug/watch_bus_test.zig, for the same reason.
+pub const watch_bus = @import("watch_bus.zig");
 /// Re-exported for tests/interfaces/cli/zig_debug_front_test.zig: src/root.zig is full.
 pub const zig_debug_front = @import("../interfaces/cli/zig_debug_front.zig");
 const dwt = @import("dwt.zig");
@@ -63,7 +65,7 @@ pub const Driver = struct {
     }
 
     /// A store the firmware made, handed to the FPB when it lands there.
-    fn stored(self: *Driver, address: u32, value: u32, width: u8) void {
+    pub fn stored(self: *Driver, address: u32, value: u32, width: u8) void {
         if (inside(address, itm.base, itm.limits.span)) {
             _ = self.machine.itm.write(address - itm.base, value, width);
         } else if (inside(address, fpb.base, fpb.limits.span)) {
@@ -85,7 +87,7 @@ pub const Driver = struct {
     }
 
     /// A load the firmware made, which may clear a DWT MATCHED flag.
-    fn loaded(self: *Driver, address: u32) void {
+    pub fn loaded(self: *Driver, address: u32) void {
         if (inside(address, dwt.base, dwt.limits.end)) self.machine.dwt.loaded(address - dwt.base);
     }
 };
