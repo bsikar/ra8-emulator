@@ -36,3 +36,5 @@ pub const minmax = @import("minmax.zig");
 pub const minmax_vectors = @import("minmax_vectors.zig");
 pub const select = @import("select.zig");
 pub const select_vectors = @import("select_vectors.zig");
+pub const fixed = @import("fixed.zig");
+pub const fixed_vectors = @import("fixed_vectors.zig");
