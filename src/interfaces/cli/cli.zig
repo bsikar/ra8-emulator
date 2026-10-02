@@ -131,6 +131,8 @@ pub const Options = struct {
     sd_label: []const u8 = "RA8",
     /// The card's size in MiB. Null keeps the image's own default.
     sd_size_mb: ?u32 = null,
+    /// A disk in the HS jack's USB stick: "blank" or a raw image path.
+    usb_disk: ?[]const u8 = null,
     /// Write one line per SD command to stderr.
     trace_sd: bool = false,
     /// Print this card block back as hex once the run is over.
@@ -363,6 +365,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {
         options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
+    } else if (std.mem.eql(u8, flag, "--usb-disk")) {
+        options.usb_disk = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--battery")) {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {

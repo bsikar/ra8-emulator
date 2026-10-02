@@ -383,6 +383,7 @@ pub const board = struct {
     pub const net = @import("board/net.zig");
     pub const usb = @import("board/usb.zig");
     pub const usb_disk = @import("board/usb_disk.zig");
+    pub const usb_plug = @import("board/usb_plug.zig");
     pub const report = @import("interfaces/cli/report.zig");
     pub const report_dma = @import("interfaces/cli/report_dma.zig");
     pub const report_unmodelled = @import("interfaces/cli/report_unmodelled.zig");

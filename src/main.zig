@@ -124,6 +124,7 @@ pub fn main() !u8 {
     var board = Board.init(allocator);
     defer board.deinit();
     fitBoard(&board, options) catch return 2;
+    ra8.board.usb_plug.apply(&board.usb, allocator, options.usb_disk) catch return 2;
     try board.attach(&core);
 
     var parts = Parts{};
