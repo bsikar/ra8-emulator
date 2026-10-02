@@ -21,14 +21,21 @@ fn seeingHost() usbhs_phy.Phy {
     return phy;
 }
 
-test "the module clock is SCKE alone, not the whole power-up" {
+test "HS has no SCKE: the module clock is there from reset and USBE powers it" {
     var phy = usbhs_phy.Phy{};
-    try std.testing.expect(!phy.clocked());
-    phy.setSyscfg(regs.syscfg.usbe);
-    try std.testing.expect(!phy.clocked());
-    phy.setSyscfg(regs.syscfg.scke);
     try std.testing.expect(phy.clocked());
     try std.testing.expect(!phy.powered());
+    phy.setSyscfg(regs.syscfg.usbe);
+    try std.testing.expect(phy.powered());
+}
+
+test "a store to bit 10 of the HS SYSCFG is dropped" {
+    var phy = usbhs_phy.Phy{};
+    phy.setSyscfg(regs.syscfg.scke);
+    try std.testing.expectEqual(@as(u16, 0), phy.syscfg);
+    try std.testing.expect(!phy.powered());
+    phy.setSyscfg(regs.syscfg.usbe | regs.syscfg.scke | regs.syscfg.dcfm);
+    try std.testing.expectEqual(regs.syscfg.usbe | regs.syscfg.dcfm, phy.syscfg);
 }
 
 test "the line reads idle until something is attached" {

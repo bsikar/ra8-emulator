@@ -45,8 +45,8 @@ pub const Pll = struct {
         return self.locks == 0 and self.stalled == 0;
     }
 
-    /// Everything the PLL needs to be running: the module's clock from
-    /// SYSCFG.SCKE, the analog block powered, the PLL out of reset, and the
+    /// Everything the PLL needs to be running: the module's clock (always
+    /// there on HS, see Phy.clocked), the analog block powered, the PLL out of reset, and the
     /// PHY clock oscillating.
     fn ready(self: *const Pll, clocked: bool) bool {
         return clocked and

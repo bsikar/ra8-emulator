@@ -105,9 +105,14 @@ pub const Phy = struct {
 
     /// Just the module clock. The PHY PLL runs off this alone: the driver
     /// will not set USBE until it has seen the lock, so asking for USBE
-    /// here would be asking for something that cannot happen yet.
+    /// here would be asking for something that cannot happen yet. The HS
+    /// instance has no SCKE (HUM Ch 37.2.1 p 2060, quoted in ra8_usb_phy.c):
+    /// its clock is MSTPB12 and USB60CLK, which the module-stop and clock
+    /// models own. So nothing in SYSCFG gates it, and a driver that never
+    /// writes bit 10 still gets a PLL once its PHYSET/LPSTS sequence lands.
     pub fn clocked(self: *const Phy) bool {
-        return self.syscfg & regs.syscfg.scke != 0;
+        _ = self;
+        return true;
     }
 
     /// DCFM: this controller is driving the bus, not answering on it. A host
@@ -158,7 +163,8 @@ pub const Phy = struct {
     }
 
     pub fn setSyscfg(self: *Phy, value: u16) void {
-        self.syscfg = value;
+        // Bit 10 is SCKE on USBFS and nothing here: a store to it is a no-op.
+        self.syscfg = value & ~regs.syscfg.scke;
         if (!self.powered()) {
             self.speed = .none;
             self.dvstctr0 &= ~regs.port.uact;

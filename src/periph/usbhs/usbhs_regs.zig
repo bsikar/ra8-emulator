@@ -74,6 +74,8 @@ pub const syscfg = struct {
     /// CNEN: the single-ended receiver. Without it the HS PHY cannot see the
     /// line at all (HUM Ch 37.2.1 p 2062).
     pub const cnen: u16 = 1 << 8;
+    /// SCKE on USBFS. The HS instance has no such bit (HUM Ch 37.2.1 p 2060):
+    /// it is kept only so a store of it can be dropped by name.
     pub const scke: u16 = 1 << 10;
 };
 
