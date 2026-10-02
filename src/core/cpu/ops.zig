@@ -89,4 +89,5 @@ pub const mve_gather64 = @import("ops/mve_gather64.zig");
 pub const mve_gather_imm = @import("ops/mve_gather_imm.zig");
 pub const mve_vld_il = @import("ops/mve_vld_il.zig");
 pub const mve_beats = @import("ops/mve_beats.zig");
+pub const mve_float = @import("ops/mve_float.zig");
 pub const table = @import("ops/table.zig");
