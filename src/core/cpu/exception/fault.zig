@@ -43,7 +43,7 @@ pub fn invalidReturn(cpu: *Cpu, value: u32) Error!void {
 fn latch(cpu: *Cpu, cause: status.Cause) Error!active.Entry {
     std.debug.assert(cause.fault() == .usage_fault);
     const r = &cpu.regs;
-    const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask);
+    const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, dispatch.prigroup(cpu.bus));
     const route = fault_route.route(
         .usage_fault,
         cpu.bus.readWord(memmap.scb.shcsr) catch 0,

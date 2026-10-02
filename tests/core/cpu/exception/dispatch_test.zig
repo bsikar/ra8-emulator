@@ -109,3 +109,42 @@ test "a step on its own never takes an asynchronous exception" {
     _ = cpu.step();
     try std.testing.expectEqual(@as(u32, 0), fake.taken);
 }
+
+/// The fixture RAM with AIRCR answered on top, so PRIGROUP can be set.
+const WithAircr = struct {
+    ram: *fixture.Ram,
+    aircr: u32,
+
+    fn view(self: *WithAircr) ra8.core.cpu.bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) ra8.core.cpu.bus.Error!void {
+        const self: *WithAircr = @ptrCast(@alignCast(ctx));
+        if (address != ra8.core.memmap.scb.aircr or into.len != 4) return self.ram.view().read(address, into);
+        std.mem.writeInt(u32, into[0..4], self.aircr, .little);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) ra8.core.cpu.bus.Error!void {
+        const self: *WithAircr = @ptrCast(@alignCast(ctx));
+        return self.ram.view().write(address, bytes);
+    }
+};
+
+test "under PRIGROUP a more urgent subpriority in the same group does not preempt" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{ .pending = .{ .number = pendsv, .priority = 0x60 } };
+    var cpu = try setup(&ram, &fake);
+    var split: WithAircr = .{ .ram = &ram, .aircr = 5 << 8 }; // bits [5:0] subpriority
+    cpu.bus = split.view();
+    _ = cpu.run(1);
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    fake.pending = .{ .number = systick, .priority = 0x40 }; // group 0x40, same as 0x60
+    cpu.regs.pc = fixture.handler;
+    _ = cpu.run(1);
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    split.aircr = 0; // PRIGROUP 0: 0x40 beats 0x60
+    cpu.regs.pc = fixture.handler;
+    _ = cpu.run(1);
+    try std.testing.expectEqual(@as(usize, 2), cpu.active.depth);
+}
