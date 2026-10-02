@@ -92,3 +92,38 @@ test "blocks are disjoint and inside the window" {
     try std.testing.expectError(Error.OverlappingBlock, bus.add(second.descriptor(base + 0x8800, 0x1000)));
     try std.testing.expectError(Error.OutsideWindow, bus.add(second.descriptor(0x2000_0000, 0x1000)));
 }
+
+/// A block that writes down whose access it was served, read off the bus.
+const Witness = struct {
+    bus: *Bus,
+    seen: ?mod.Issuer = null,
+
+    fn read(context: *anyopaque, address: u32, width: u3) u32 {
+        _ = address;
+        _ = width;
+        const self: *Witness = @ptrCast(@alignCast(context));
+        self.seen = self.bus.issuer;
+        return 0;
+    }
+
+    fn write(context: *anyopaque, address: u32, width: u3, value: u32) void {
+        _ = address;
+        _ = width;
+        _ = value;
+        const self: *Witness = @ptrCast(@alignCast(context));
+        self.seen = self.bus.issuer;
+    }
+};
+
+test "each core's port stamps its own issuer on the access" {
+    var bus = Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var witness = Witness{ .bus = &bus };
+    try bus.add(.{ .name = "witness", .base = base, .size = 0x10, .context = &witness, .readFn = Witness.read, .writeFn = Witness.write });
+    try std.testing.expectEqual(mod.Issuer.cpu0, bus.issuer);
+    bus.port(.cpu1).write(base, 4, 1);
+    try std.testing.expectEqual(mod.Issuer.cpu1, witness.seen.?);
+    _ = bus.port(.cpu0).read(base, 4);
+    try std.testing.expectEqual(mod.Issuer.cpu0, witness.seen.?);
+    try std.testing.expect(bus.port(.cpu1).bus == &bus);
+}

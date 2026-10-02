@@ -207,7 +207,13 @@ pub const Engine = struct {
     /// access in the window reaches the bus and either a modelled block or the
     /// sparse register file answers it.
     pub fn attachPeriph(self: Engine, bus: *periph.Bus) Error!void {
-        bus_hook.attachBus(self.handle, bus) catch return Error.AttachFailed;
+        return self.attachPeriphAs(bus, .cpu0);
+    }
+
+    /// The same, for the core named `issuer`, so the bus can tell whose
+    /// access it is serving.
+    pub fn attachPeriphAs(self: Engine, bus: *periph.Bus, issuer: periph.Issuer) Error!void {
+        bus_hook.attachBus(self.handle, bus.port(issuer)) catch return Error.AttachFailed;
     }
 
     /// Record the invalid accesses a run takes, so a fault can say which
