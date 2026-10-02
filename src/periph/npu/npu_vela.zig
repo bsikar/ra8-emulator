@@ -36,6 +36,8 @@ pub const bias = @import("npu_vela_bias.zig");
 pub const weights = @import("npu_vela_weights.zig");
 /// The order a decoded weight stream walks the OHWI volume in.
 pub const order = @import("npu_vela_order.zig");
+/// OFM output scaling under the three rounding modes.
+pub const round = @import("npu_vela_round.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
