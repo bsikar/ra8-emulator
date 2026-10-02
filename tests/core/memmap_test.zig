@@ -138,3 +138,10 @@ test "a debug probe and a bus master both reach the Non-secure SRAM view" {
     // One past the alias is nobody's.
     try std.testing.expect(!masterHolds(mod.ns_sram_end, 4));
 }
+
+test "the code MRAM region is the part map's 1 MB at its base" {
+    const geometry = ra8.core.part.map.of(.ra8d2);
+    try std.testing.expectEqual(geometry.mram_base, mod.mram_base);
+    try std.testing.expectEqual(geometry.mram_bytes, mod.mram_end - mod.mram_base);
+    try std.testing.expectEqualStrings("MRAM", ram[0].name);
+}

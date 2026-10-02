@@ -145,3 +145,12 @@ test "a reset takes SP and PC from the vector table and leaves LR all ones" {
     try std.testing.expectEqual(@as(u32, 0x2200_0240), try engine.register(.pc));
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), try engine.register(.lr));
 }
+
+test "a read past the bytes an image loads still lands in code MRAM" {
+    var engine = try Engine.open();
+    defer engine.close();
+    try engine.mapBoardRam();
+    try engine.write(memmap.mram_base + 0x8_0000, &[_]u8{ 0x00, 0x00, 0x18, 0x32 });
+    try std.testing.expectEqual(@as(u32, 0x3218_0000), try engine.readWord(memmap.mram_base + 0x8_0000));
+    try std.testing.expectEqual(@as(u32, 0), try engine.readWord(memmap.mram_base + 0x8_1000));
+}
