@@ -11,8 +11,16 @@
 //!
 //! Like MIN/MAX this models only what holds whatever the hardware does
 //! inside: IFM and OFM of one type (int8, uint8 or int16) sharing a zero
-//! point, no IFM padding, no dilation, no LUT, tanh or sigmoid activation.
-//! AVERAGE, REDUCE_SUM, padding and mixed zero points are
+//! point, no dilation, no LUT, tanh or sigmoid activation.
+//!
+//! IFM padding (cmd0 0x100 to 0x103) is honoured within the TRM's max-pool
+//! range (table 4-124: 0 to 127 top and left, 0 to 128 bottom and right).
+//! The TRM does not say what a padded position holds, so padded positions
+//! take no part in the max: that is TFLite Micro's MAX_POOL_2D, and real
+//! Vela 3.12.0 SAME-padded streams write TFLM's bytes (tests check both a
+//! padding on all four sides and bottom/right only). A window that lies
+//! wholly in the padding is refused rather than given a value.
+//! AVERAGE, REDUCE_SUM and mixed zero points are
 //! error.OperatorNotModelled rather than a guess.
 const regs = @import("npu_vela_regs.zig");
 const dma = @import("npu_vela_dma.zig");
@@ -67,6 +75,10 @@ pub const Inputs = struct {
     kernel: State,
 };
 
+/// The TRM's max-pool padding limits (table 4-124).
+pub const max_pad_before: u16 = 127;
+pub const max_pad_after: u16 = 128;
+
 const dilation_bits: u16 = (1 << 3) | (1 << 4);
 
 fn supported(inputs: Inputs) Error!addr.Format {
@@ -76,7 +88,8 @@ fn supported(inputs: Inputs) Error!addr.Format {
     if (inputs.kernel.stride & dilation_bits != 0) return error.OperatorNotModelled;
     const s = step(inputs.kernel.stride);
     if (s.x > max_step or s.y > max_step) return error.OperatorNotModelled;
-    if (pad.top != 0 or pad.left != 0 or pad.right != 0 or pad.bottom != 0) return error.OperatorNotModelled;
+    if (pad.top > max_pad_before or pad.left > max_pad_before) return error.OperatorNotModelled;
+    if (pad.bottom > max_pad_after or pad.right > max_pad_after) return error.OperatorNotModelled;
     if (maps.ifm.zero_point != maps.ofm.zero_point) return error.OperatorNotModelled;
     const ifm = addr.ifmFormat(maps.ifm.precision) orelse return error.OperatorNotModelled;
     const ofm = addr.ofmFormat(maps.ofm.precision) orelse return error.OperatorNotModelled;
@@ -85,20 +98,36 @@ fn supported(inputs: Inputs) Error!addr.Format {
     return ifm;
 }
 
-/// The largest IFM element in the window whose output is (y, x, c).
+/// The IFM's height and width, from the OFM shape, kernel, stride and
+/// padding.
+fn ifmExtent(inputs: Inputs) Step {
+    const k = inputs.kernel;
+    const s = step(k.stride);
+    const shape = inputs.maps.ofmShape();
+    const pad = inputs.maps.ifm_pad;
+    return .{
+        .y = ((shape.height - 1) * s.y + @as(u32, k.height_m1) + 1) -| (@as(u32, pad.top) + pad.bottom),
+        .x = ((shape.width - 1) * s.x + @as(u32, k.width_m1) + 1) -| (@as(u32, pad.left) + pad.right),
+    };
+}
+
+/// The largest IFM element in the window whose output is (y, x, c),
+/// leaving out positions that fall in the padding.
 fn window(memory: anytype, regions: *const dma.Regions, inputs: Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!i32 {
     const maps = inputs.maps;
     const k = inputs.kernel;
     const s = step(k.stride);
-    var best: i32 = undefined;
+    const extent = ifmExtent(inputs);
+    var best: ?i32 = null;
     for (0..@as(u32, k.height_m1) + 1) |ky| for (0..@as(u32, k.width_m1) + 1) |kx| {
-        const iy = y * s.y + @as(u32, @intCast(ky));
-        const ix = x * s.x + @as(u32, @intCast(kx));
-        const at = addr.address(inputs.bases.ifm, maps.ifm, inputs.quant.ifm_stride, f, iy, ix, c);
+        const iy = @as(i64, y * s.y) + @as(i64, @intCast(ky)) - maps.ifm_pad.top;
+        const ix = @as(i64, x * s.x) + @as(i64, @intCast(kx)) - maps.ifm_pad.left;
+        if (iy < 0 or ix < 0 or iy >= extent.y or ix >= extent.x) continue;
+        const at = addr.address(inputs.bases.ifm, maps.ifm, inputs.quant.ifm_stride, f, @intCast(iy), @intCast(ix), c);
         const v = try minmax.load(memory, try minmax.location(regions, maps.ifm.region, at, f.size), f);
-        best = if (ky == 0 and kx == 0) v else @max(best, v);
+        best = if (best) |b| @max(b, v) else v;
     };
-    return best;
+    return best orelse error.OperatorNotModelled;
 }
 
 /// Run one MAX pool over the whole OFM. Returns the elements written.
