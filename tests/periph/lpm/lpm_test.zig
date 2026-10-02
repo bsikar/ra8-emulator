@@ -155,7 +155,8 @@ test "each register answers at its own address and nowhere else" {
     try std.testing.expectEqual(lpm.index.sbycr, lpm.indexOf(0x4001_E00C).?);
     try std.testing.expectEqual(lpm.index.dpsbycr, lpm.indexOf(0x4001_EA00).?);
     try std.testing.expectEqual(lpm.index.lpscr, lpm.indexOf(0x4001_EA90).?);
-    try std.testing.expect(lpm.indexOf(0x4001_EA98) == null);
+    try std.testing.expectEqual(lpm.index.sscr1, lpm.indexOf(0x4001_EA98).?);
+    try std.testing.expect(lpm.indexOf(0x4001_EA99) == null);
     try std.testing.expect(lpm.indexOf(0x4001_E00D) == null);
 }
 
@@ -175,5 +176,51 @@ test "the group these sit behind is PRC1, not PRC0" {
     fix.init();
     fix.protection.write(prcr.win_base, 2, prcr.unlockWord(prcr.group.cgc));
     fix.store(lpm.index.lpscr, 0x5);
+    try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_locked);
+}
+
+test "SSCR1 reads its cold-reset value of zero" {
+    var fix: Fixture = undefined;
+    fix.init();
+    try std.testing.expectEqual(@as(u32, 0x00), fix.load(lpm.index.sscr1));
+    try std.testing.expect(!fix.unit.fastReturn());
+    try std.testing.expectEqual(@as(u2, 0), fix.unit.standbyLowPower());
+}
+
+test "SSCR1 sits at 0x4001_EA98 in its own one-byte window" {
+    try std.testing.expectEqual(@as(?usize, lpm.index.sscr1), lpm.indexOf(0x4001_EA98));
+    var fix: Fixture = undefined;
+    fix.init();
+    const window = fix.unit.block(lpm.index.sscr1);
+    try std.testing.expectEqual(@as(u32, 0x4001_EA98), window.base);
+    try std.testing.expectEqual(@as(u32, 1), window.size);
+}
+
+test "SSCR1 keeps SS2FR and SS2LP and reads the other bits as zero" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.store(lpm.index.sscr1, 0xFF);
+    try std.testing.expectEqual(@as(u32, 0x0D), fix.load(lpm.index.sscr1));
+    try std.testing.expect(fix.unit.fastReturn());
+    try std.testing.expectEqual(@as(u2, 3), fix.unit.standbyLowPower());
+}
+
+test "SSCR1 takes what ra8_lpm_init packs: SS2LP 1 with fast return" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.unlock();
+    fix.store(lpm.index.sscr1, (1 << lpm.field.ss2lp_shift) | lpm.field.ss2fr);
+    try std.testing.expectEqual(@as(u32, 0x05), fix.load(lpm.index.sscr1));
+    fix.store(lpm.index.sscr1, 0);
+    try std.testing.expectEqual(@as(u32, 0x00), fix.load(lpm.index.sscr1));
+    try std.testing.expectEqual(@as(u32, 2), fix.unit.stores);
+}
+
+test "an SSCR1 store with PRC1 locked is dropped and counted" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.store(lpm.index.sscr1, 0x0D);
+    try std.testing.expectEqual(@as(u32, 0x00), fix.load(lpm.index.sscr1));
     try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_locked);
 }

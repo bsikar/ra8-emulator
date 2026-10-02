@@ -31,9 +31,12 @@
 //!
 //! DELIBERATELY NOT MODELLED: entering any of these states. Nothing here
 //! stops the core, gates a clock or powers a domain down; LPSCR records which
-//! state a WFI would ask for, and the report says so. SSCR1 (0x4001_EA98) is
-//! left out too: ra8_lpm_init writes it, but no image in the corpus calls
-//! ra8_lpm_init, so there is nothing to check a model of it against.
+//! state a WFI would ask for, and the report says so.
+//!
+//! SSCR1 (0x4001_EA98, 8b, HUM Ch 11.2.19 p 456) holds SS2FR (bit 0, fast
+//! return from Software Standby) and SS2LP (bits 3:2, its low-power setting).
+//! ra8_lpm_init writes it and power_profiler reaches that path, so it is held
+//! here behind the same PRC1 gate; the other bits read 0 whatever was written.
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
 const mode = @import("lpm_mode.zig");
@@ -53,12 +56,14 @@ pub const slots = [_]Slot{
     .{ .address = 0x4001_E00C, .name = "SBYCR" },
     .{ .address = 0x4001_EA00, .name = "DPSBYCR" },
     .{ .address = 0x4001_EA90, .name = "LPSCR" },
+    .{ .address = 0x4001_EA98, .name = "SSCR1" },
 };
 
 pub const index = struct {
     pub const sbycr: usize = 0;
     pub const dpsbycr: usize = 1;
     pub const lpscr: usize = 2;
+    pub const sscr1: usize = 3;
 };
 
 /// Which register an access names, if any. A wider access is answered by the
@@ -82,6 +87,11 @@ pub const field = struct {
     pub const dpsbycr_read_as_one: u8 = 0x10;
     /// LPSCR.LPMD, bits 3:0.
     pub const lpmd: u8 = 0x0F;
+    /// SSCR1.SS2FR, bit 0: fast return from Software Standby.
+    pub const ss2fr: u8 = 0x01;
+    /// SSCR1.SS2LP, bits 3:2: the Software Standby low-power setting.
+    pub const ss2lp: u8 = 0x0C;
+    pub const ss2lp_shift: u3 = 2;
 };
 
 pub const reset = struct {
@@ -91,6 +101,8 @@ pub const reset = struct {
     pub const dpsbycr: u8 = 0x14;
     /// LPMD = 0, System Active.
     pub const lpscr: u8 = 0x00;
+    /// SS2FR = 0, SS2LP = 00b, default mode.
+    pub const sscr1: u8 = 0x00;
 };
 
 /// The three retained bytes, plus what the run did to them.
@@ -99,6 +111,7 @@ pub const Unit = struct {
     sbycr: u8 = reset.sbycr,
     dpsbycr: u8 = reset.dpsbycr,
     lpscr: u8 = reset.lpscr,
+    sscr1: u8 = reset.sscr1,
     /// Stores that landed.
     stores: u32 = 0,
     /// Stores dropped because PRCR.PRC1 was locked.
@@ -135,6 +148,16 @@ pub const Unit = struct {
         return self.sbycr & field.ope != 0;
     }
 
+    /// SSCR1.SS2FR: whether a return from Software Standby takes the fast path.
+    pub fn fastReturn(self: *const Unit) bool {
+        return self.sscr1 & field.ss2fr != 0;
+    }
+
+    /// SSCR1.SS2LP as its two-bit code.
+    pub fn standbyLowPower(self: *const Unit) u2 {
+        return @truncate((self.sscr1 & field.ss2lp) >> field.ss2lp_shift);
+    }
+
     /// DPSBYCR.IOKEEP: whether the I/O port state is kept through deep standby.
     pub fn ioKept(self: *const Unit) bool {
         return self.dpsbycr & field.iokeep != 0;
@@ -146,7 +169,8 @@ pub const Unit = struct {
         return switch (which) {
             index.sbycr => self.sbycr,
             index.dpsbycr => self.dpsbycr,
-            else => self.lpscr,
+            index.lpscr => self.lpscr,
+            else => self.sscr1,
         };
     }
 
@@ -162,7 +186,8 @@ pub const Unit = struct {
         switch (which) {
             index.sbycr => self.sbycr = written & field.ope,
             index.dpsbycr => self.storeDeepStandby(written),
-            else => self.storeState(written),
+            index.lpscr => self.storeState(written),
+            else => self.sscr1 = written & (field.ss2fr | field.ss2lp),
         }
         self.stores +%= 1;
     }
