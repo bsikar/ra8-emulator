@@ -6,9 +6,12 @@
 //! no reply) or the other end closing. Requests are answered one at a time.
 //! An interrupt (0x03) sent while a resume runs is picked up between run
 //! chunks by the session's poll (src/debug/rsp_poll.zig), not here.
+//! What firmware printed through ITM port 0 during a resume goes out as
+//! `O` packets just before its stop reply (src/debug/rsp_console.zig).
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
 const rsp_dispatch = @import("rsp_dispatch.zig");
+const console = @import("rsp_console.zig");
 
 pub const limits = struct {
     /// Bytes taken from the connection per read.
@@ -42,6 +45,9 @@ pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: anytype, writer: anytype) 
                     if (std.mem.eql(u8, request, "k")) return .killed;
                     const detach = request.len > 0 and request[0] == 'D';
                     const reply = if (detach) "OK" else try dispatch.answer(request, &payload);
+                    if (dispatch.session) |live| {
+                        if (console.resumes(request)) try console.send(writer, &live.driver.machine.itm, &framed);
+                    }
                     last = try packet.frame(&framed, reply);
                     try writer.writeAll(last);
                     if (detach) return .detached;

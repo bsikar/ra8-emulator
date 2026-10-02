@@ -97,6 +97,8 @@ pub const Session = struct {
     /// at a time, until it stops, faults, or the poll says to halt. That is
     /// how gdb's `continue` runs. Without one, a spent budget ends the run.
     poll: ?Poll = null,
+    /// Under gdb, ITM text waits for the stub's `O` packets instead.
+    console: bool = false,
 
     /// Carry out one command and write what happened.
     pub fn apply(self: *Session, command: commands.Command, out: anytype) !Outcome {
@@ -269,7 +271,7 @@ pub const Session = struct {
         const fault = try self.runFor(from);
         self.faulted = fault != null;
         const pc = try self.core.register(.pc);
-        try self.driver.machine.itm.flush(out, false);
+        if (!self.console) try self.driver.machine.itm.flush(out, false);
         if (fault) |caught| {
             try out.print("Fault: {s} at ", .{caught.detail});
             try self.where(caught.pc, out);
