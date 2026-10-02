@@ -197,3 +197,21 @@ test "firmware printing through ITM port 0 leaves its text with the debug core" 
     try std.testing.expectEqualStrings("Hi", fixture.machine.itm.output());
     try std.testing.expectEqual(itm.fifo_ready, try fixture.engine.register(.r3));
 }
+
+// ldr r3,[r0] (DHCSR); str r1,[r0] (keyed C_HALT); nop; nop.
+test "firmware sees the debugger in DHCSR and halts itself with a keyed C_HALT" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    try fixture.open();
+    defer fixture.engine.close();
+    const dcb = ra8.core.dcb;
+    const bits = dcb.dhcsr_bits;
+    try fixture.engine.write(layout.code, &[_]u8{ 0x03, 0x68, 0x01, 0x60, 0x00, 0xBF, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, dcb.base);
+    try fixture.engine.setRegister(.r1, (bits.key << bits.key_shift) | bits.c_halt | bits.c_debugen);
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 4, pc);
+    try std.testing.expect(fixture.driver.last.? == .halt_requested);
+    try std.testing.expectEqual(bits.c_debugen | bits.s_regrdy, try fixture.engine.register(.r3));
+}
