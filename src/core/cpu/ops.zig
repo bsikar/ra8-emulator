@@ -23,6 +23,7 @@ pub const shift_reg = @import("ops/shift_reg.zig");
 pub const add_sub_wide = @import("ops/add_sub_wide.zig");
 pub const long_mul = @import("ops/long_mul.zig");
 pub const mrs_msr = @import("ops/mrs_msr.zig");
+pub const ldst_reg_wide = @import("ops/ldst_reg_wide.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
