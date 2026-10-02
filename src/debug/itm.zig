@@ -8,6 +8,9 @@
 //! other enabled ports are only counted for now. A stimulus port always
 //! reads FIFOREADY: the modelled FIFO never fills.
 //!
+//! The session writes the text out a line at a time after each run, and
+//! the rest when it ends.
+//!
 //! Each core has its own ITM. The PPB is plain memory, so after a store the
 //! debug core writes these registers back the way a read should see them.
 const std = @import("std");
@@ -80,6 +83,27 @@ pub const Itm = struct {
     /// What port 0 has been sent so far.
     pub fn output(self: *const Itm) []const u8 {
         return self.text.constSlice();
+    }
+
+    /// Write each complete line port 0 has been sent as "itm: <line>",
+    /// and keep an unfinished line for later. With `all`, or once the text
+    /// is full, the unfinished line is written too.
+    pub fn flush(self: *Itm, out: anytype, all: bool) !void {
+        const text = self.text.constSlice();
+        var done: usize = 0;
+        while (std.mem.indexOfScalarPos(u8, text, done, '\n')) |end| {
+            try out.print("itm: {s}\n", .{std.mem.trimRight(u8, text[done..end], "\r")});
+            done = end + 1;
+        }
+        if ((all or text.len == limits.capacity) and done < text.len) {
+            try out.print("itm: {s}\n", .{text[done..]});
+            done = text.len;
+        }
+        if (self.dropped != 0) try out.print("itm: ({d} characters dropped)\n", .{self.dropped});
+        self.dropped = 0;
+        const rest = text.len - done;
+        std.mem.copyForwards(u8, self.text.buffer[0..rest], text[done..]);
+        self.text.len = rest;
     }
 
     /// Forget the port 0 text, once the debugger has shown it.

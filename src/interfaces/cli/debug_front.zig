@@ -196,6 +196,7 @@ fn drive(allocator: std.mem.Allocator, target: *session.Session, mode: Mode) !u8
         .interactive => try converse(target, out),
         .gdb => |port| return listen(target, port),
     }
+    try target.driver.machine.itm.flush(out, true);
     return 0;
 }
 

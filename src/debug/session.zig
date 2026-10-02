@@ -87,7 +87,10 @@ pub const Session = struct {
 
     /// Carry out one command and write what happened.
     pub fn apply(self: *Session, command: commands.Command, out: anytype) !Outcome {
-        if (command == .quit) return .quit;
+        if (command == .quit) {
+            try self.driver.machine.itm.flush(out, true);
+            return .quit;
+        }
         self.dispatch(command, out) catch |err| {
             try out.print("error: {s}\n", .{@errorName(err)});
         };
@@ -220,6 +223,7 @@ pub const Session = struct {
         const fault = if (self.loop) |loop| try self.looped(from, loop) else try self.core.runChunk(from, self.budget, null);
         self.faulted = fault != null;
         const pc = try self.core.register(.pc);
+        try self.driver.machine.itm.flush(out, false);
         if (fault) |caught| {
             try out.print("Fault: {s} at ", .{caught.detail});
             try self.where(caught.pc, out);
