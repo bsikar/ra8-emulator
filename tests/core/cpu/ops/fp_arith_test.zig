@@ -125,7 +125,8 @@ test "f16 denormals follow FZ16, not FZ" {
     cpu.fp.fpscr.fz16 = 1;
     try run(&cpu, 0xEE30, 0x0981);
     try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(0));
-    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.idc);
+    // FPUnpack flushes a half denormal under FZ16 without raising IDC.
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.fpscr.idc);
 }
 
 test "f16 leaves the half-precision VMOV (hw2 bit 4 set) unclaimed" {

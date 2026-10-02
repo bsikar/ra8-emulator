@@ -257,3 +257,9 @@ is stale or an encoding is missing. Regenerate with
 | VST41 | 2 |
 | VST42 | 2 |
 | VST43 | 2 |
+| VADD.F16 (MVE) T1 | 3 |
+| VADD.F32 (MVE) T1 | 1 |
+| VSUB.F16 (MVE) T1 | 1 |
+| VSUB.F32 (MVE) T1 | 1 |
+| VMUL.F16 (MVE) T1 | 1 |
+| VMUL.F32 (MVE) T1 | 1 |

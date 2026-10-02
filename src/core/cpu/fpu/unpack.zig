@@ -1,7 +1,8 @@
 //! FPUnpack from the Arm ARM (DDI0553): classify an encoded value and, when
 //! it is a nonzero number, give its exact real value. With FPSCR.FZ set, a
 //! denormal input reads as a zero of the same sign and sets IDC, the input
-//! denormal flag. NaNs are told apart by the top fraction bit: set is quiet.
+//! denormal flag. A half denormal flushed by FZ16 raises no IDC, as FPUnpack
+//! has it for N == 16. NaNs are told apart by the top fraction bit: set is quiet.
 const format = @import("format.zig");
 const Format = format.Format;
 const Real = format.Real;
@@ -25,7 +26,7 @@ pub fn unpack(comptime fmt: Format, bits: fmt.Bits(), fpscr: *Fpscr) Unpacked {
     if (exp_field == 0) {
         if (frac == 0) return .{ .kind = .zero, .sign = sign };
         if (fpscr.flushes(comptime fmt.width())) {
-            fpscr.idc = 1;
+            if (comptime fmt.width() != 16) fpscr.idc = 1;
             return .{ .kind = .zero, .sign = sign };
         }
         return nonzero(sign, frac, fmt.minExp() - F);

@@ -33,4 +33,6 @@ test {
     _ = @import("interleave_vectors_test.zig");
     _ = @import("eci_test.zig");
     _ = @import("beats_test.zig");
+    _ = @import("float_test.zig");
+    _ = @import("float_vectors_test.zig");
 }
