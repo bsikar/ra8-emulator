@@ -58,4 +58,5 @@ pub const fp_convert = @import("ops/fp_convert.zig");
 pub const fp_directed = @import("ops/fp_directed.zig");
 pub const fp_move = @import("ops/fp_move.zig");
 pub const fp_mem = @import("ops/fp_mem.zig");
+pub const mve_vpst = @import("ops/mve_vpst.zig");
 pub const table = @import("ops/table.zig");

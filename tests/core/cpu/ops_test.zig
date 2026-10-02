@@ -60,5 +60,6 @@ test {
     _ = @import("ops/fp_directed_test.zig");
     _ = @import("ops/fp_move_test.zig");
     _ = @import("ops/fp_mem_test.zig");
+    _ = @import("ops/mve_vpst_test.zig");
     _ = @import("ops/table_test.zig");
 }
