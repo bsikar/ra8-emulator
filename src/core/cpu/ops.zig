@@ -35,4 +35,5 @@ pub const fp_arith = @import("ops/fp_arith.zig");
 pub const fp_unary = @import("ops/fp_unary.zig");
 pub const fp_regs = @import("ops/fp_regs.zig");
 pub const fp_system = @import("ops/fp_system.zig");
+pub const fp_convert = @import("ops/fp_convert.zig");
 pub const table = @import("ops/table.zig");
