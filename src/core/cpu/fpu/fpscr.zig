@@ -65,6 +65,12 @@ pub const Fpscr = packed struct(u32) {
         return self.bits() & 0xF000_0000;
     }
 
+    /// Whether flush-to-zero applies to an operand or result of `width`
+    /// bits: FZ16 for half precision, FZ for single and double.
+    pub fn flushes(self: Fpscr, comptime width: u16) bool {
+        return (if (width == 16) self.fz16 else self.fz) == 1;
+    }
+
     /// The register as VMSR writes it, reserved bits read back as zero.
     pub fn fromBits(value: u32) Fpscr {
         return @bitCast(value & mask.writable);

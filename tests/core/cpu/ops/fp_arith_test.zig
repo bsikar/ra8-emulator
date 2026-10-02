@@ -94,3 +94,40 @@ test "unclaimed: D16+, VDIV with op set, the VMOV/VCVT space, other coprocessors
     try std.testing.expect(fp_arith.group.decode(wide(0xEE30, 0x0A91)) == null);
     try std.testing.expect(fp_arith.group.decode(.{ .address = 0, .hw1 = 0xEE30, .hw2 = 0, .size = 2 }) == null);
 }
+
+test "vadd.f16 s0, s1, s2 reads the low halves and zeroes the top" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(0, 0xFFFF_FFFF);
+    cpu.fp.bank.writeS(1, 0xABCD_3C00);
+    cpu.fp.bank.writeS(2, 0x1234_4000);
+    try run(&cpu, 0xEE30, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0x0000_4200), cpu.fp.bank.readS(0));
+}
+
+test "vmul.f16 s4, s5, s6 overflows to infinity with OFC and IXC" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(5, 0x7BFF);
+    cpu.fp.bank.writeS(6, 0x4000);
+    try run(&cpu, 0xEE22, 0x2983);
+    try std.testing.expectEqual(@as(u32, 0x7C00), cpu.fp.bank.readS(4));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.ofc);
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.ixc);
+}
+
+test "f16 denormals follow FZ16, not FZ" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0x0001);
+    cpu.fp.bank.writeS(2, 0x0001);
+    cpu.fp.fpscr.fz = 1;
+    try run(&cpu, 0xEE30, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0x0002), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.fpscr.idc);
+    cpu.fp.fpscr.fz16 = 1;
+    try run(&cpu, 0xEE30, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.idc);
+}
+
+test "f16 leaves the half-precision VMOV (hw2 bit 4 set) unclaimed" {
+    try std.testing.expect(fp_arith.group.decode(wide(0xEE00, 0x2990)) == null);
+}

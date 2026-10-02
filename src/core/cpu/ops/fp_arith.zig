@@ -7,7 +7,9 @@
 //! and op pick the operation. Registers are Vx:X in single precision and
 //! X:Vx in double, so a double with D, N or M set names D16 or above, which
 //! M-profile does not have; those, and the encodings this table leaves
-//! empty, stay unclaimed. Half precision (sz field 01) is not decoded here.
+//! empty, stay unclaimed. Half precision (hw2 bits 11-8 1001) uses the
+//! single register layout: operands are S[x]<15:0> and the result is
+//! written as Zeros(16):result. FZ16 rather than FZ flushes them.
 //! The CPACR enable check (NOCP) is not modelled yet.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
@@ -52,8 +54,12 @@ pub fn fields(instr: Instr, double: bool) Fields {
 
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4 or instr.hw1 & 0xFF00 != 0xEE00) return null;
-    if (instr.hw2 & 0x0E10 != 0x0A00) return null;
+    const half = instr.hw2 & 0x0F10 == 0x0900;
+    if (!half and instr.hw2 & 0x0E10 != 0x0A00) return null;
     const kind = kindOf(instr) orelse return null;
+    if (half) return switch (kind) {
+        inline else => |k| execFor(k, fpu.format.half),
+    };
     const double = instr.hw2 >> 8 & 1 == 1;
     if (double) {
         const f = fields(instr, true);
@@ -85,7 +91,7 @@ fn execFor(comptime kind: Kind, comptime fmt: Format) op.Exec {
 fn binary(comptime fmt: Format, comptime f: anytype) op.Exec {
     return struct {
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
-            const r = fields(instr, fmt.width() == 64);
+            const r = fields(instr, comptime fmt.width() == 64);
             const bank = &cpu.fp.bank;
             write(fmt, bank, r.d, f(fmt, read(fmt, bank, r.n), read(fmt, bank, r.m), &cpu.fp.fpscr));
         }
@@ -95,7 +101,7 @@ fn binary(comptime fmt: Format, comptime f: anytype) op.Exec {
 fn ternary(comptime fmt: Format, comptime f: anytype) op.Exec {
     return struct {
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
-            const r = fields(instr, fmt.width() == 64);
+            const r = fields(instr, comptime fmt.width() == 64);
             const bank = &cpu.fp.bank;
             const result = f(fmt, read(fmt, bank, r.d), read(fmt, bank, r.n), read(fmt, bank, r.m), &cpu.fp.fpscr);
             write(fmt, bank, r.d, result);
@@ -105,6 +111,7 @@ fn ternary(comptime fmt: Format, comptime f: anytype) op.Exec {
 
 fn read(comptime fmt: Format, bank: *const Bank, index: u5) fmt.Bits() {
     if (comptime fmt.width() == 64) return bank.readD(@intCast(index));
+    if (comptime fmt.width() == 16) return @truncate(bank.readS(index));
     return bank.readS(index);
 }
 
