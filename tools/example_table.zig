@@ -8,7 +8,8 @@
 //! the run stopped on a fault or the console says FAIL. Anything else, LED-only
 //! demos included, is unknown until a reader checks it against its README.
 //! A few images need more than one budget fits; example_budgets.zig lists
-//! them and the floor each runs at.
+//! them and the floor each runs at. A few need hardware the default board
+//! does not fit; example_options.zig lists the flags that fit it.
 //!
 //! A dual-core example is two ELFs side by side, foo.elf for CPU0 and
 //! foo_cpu1.elf for CPU1 (RA8EMU-37). The pair runs as one row, foo.elf with
@@ -17,6 +18,7 @@
 const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
 pub const probes = @import("example_probes.zig");
+pub const options = @import("example_options.zig");
 
 pub const Verdict = enum { pass, fail, unknown };
 
@@ -201,6 +203,7 @@ fn lessThan(_: void, a: []const u8, b: []const u8) bool {
 fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, second: ?[]const u8, probe: ?probes.Probe, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
+    try argv.appendSlice(options.flags(std.fs.path.basename(path)));
     if (second) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol, "--dump-sym", wanted.failure });
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
