@@ -163,3 +163,13 @@ is stale or an encoding is missing. Regenerate with
 | VSHR T1 | 2 |
 | VRSHR T1 | 2 |
 | VQSHL (immediate) T1 | 2 |
+| VMOVN T1 | 2 |
+| VQMOVN T1 | 2 |
+| VQMOVUN T1 | 2 |
+| VSHRN T1 | 2 |
+| VRSHRN T1 | 2 |
+| VQSHRN T1 | 2 |
+| VQRSHRN T1 | 2 |
+| VQSHRUN T1 | 2 |
+| VMOVL T1 | 3 |
+| VSHLL T1 | 3 |
