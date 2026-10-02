@@ -327,6 +327,7 @@ test {
     _ = @import("periph/fault_status_test.zig");
     _ = @import("periph/fault_clear_test.zig");
     _ = @import("periph/fault_route_test.zig");
+    _ = @import("periph/bus_fault_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
     _ = @import("periph/sci/sci_line_test.zig");
