@@ -81,3 +81,20 @@ test "a single-core session names core 0 and refuses core 1" {
     _ = try script.play(&target, "core 0\ncore 1\n", out.writer(), false);
     try std.testing.expectEqualStrings("Core 0, 0x22000000: nop\nerror: CoreNotAttached\n", out.items);
 }
+
+test "halting off hands the selected core's debug events to DebugMonitor" {
+    var cpu0: Cpu = undefined;
+    try cpu0.open(&program0);
+    defer cpu0.core.close();
+    var target = session.Session{ .core = &cpu0.core, .driver = &cpu0.driver, .entry = base, .budget = 50 };
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    cpu0.machine.dcb.attachDebugger();
+    _ = try script.play(&target, "halting off\n", out.writer(), false);
+    try std.testing.expect(!cpu0.machine.halting);
+    try std.testing.expect(!cpu0.machine.dcb.debugen);
+    try std.testing.expectEqualStrings("Halting debug off: debug events on core 0 take DebugMonitor when DEMCR.MON_EN is set.\n", out.items);
+    out.clearRetainingCapacity();
+    _ = try script.play(&target, "halting on\n", out.writer(), false);
+    try std.testing.expect(cpu0.machine.halting and cpu0.machine.dcb.debugen);
+}

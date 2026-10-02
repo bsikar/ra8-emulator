@@ -131,8 +131,20 @@ pub const Session = struct {
             .disassemble => |want| try self.disassemble(want, out),
             .backtrace => try self.backtrace(out),
             .core => |index| try self.switchTo(index, out),
+            .halting => |on| try self.setHalting(on, out),
             .quit => {},
         }
+    }
+
+    /// Turn halting debug on or off for the selected core. The firmware
+    /// sees it as DHCSR.C_DEBUGEN from its next instruction.
+    fn setHalting(self: *Session, on: bool, out: anytype) !void {
+        const machine = self.driver.machine;
+        machine.halting = on;
+        machine.dcb.debugen = on;
+        machine.dcb.changed = true;
+        if (on) return out.print("Halting debug on: debug events halt core {d}.\n", .{self.index});
+        try out.print("Halting debug off: debug events on core {d} take DebugMonitor when DEMCR.MON_EN is set.\n", .{self.index});
     }
 
     /// Give the session to another CPU. Only the selected core runs; the

@@ -35,7 +35,7 @@
 const std = @import("std");
 const watch_table = @import("watch_table.zig");
 
-pub const Error = error{ UnknownCommand, MissingArgument, ExtraArgument, BadNumber, BadCore };
+pub const Error = error{ UnknownCommand, MissingArgument, ExtraArgument, BadNumber, BadCore, BadSwitch };
 
 pub const limits = struct {
     /// Words `x` prints when no count is given.
@@ -86,6 +86,9 @@ pub const Command = union(enum) {
     disassemble: Disassemble,
     backtrace,
     core: u8,
+    /// `halting on|off`: DHCSR.C_DEBUGEN for the selected core. Off, the
+    /// firmware's FPB and DWT events go to DebugMonitor instead of halting.
+    halting: bool,
     quit,
 };
 
@@ -109,6 +112,7 @@ const Verb = enum {
     disassemble,
     backtrace,
     core,
+    halting,
     quit,
 };
 
@@ -130,7 +134,7 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "disas", .disassemble }, .{ "backtrace", .backtrace },
     .{ "bt", .backtrace },      .{ "where", .backtrace },
     .{ "core", .core },         .{ "quit", .quit },
-    .{ "q", .quit },
+    .{ "q", .quit },            .{ "halting", .halting },
 });
 
 /// What `info` can be asked about.
@@ -170,6 +174,7 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .disassemble => .{ .disassemble = try disassemble(words) },
         .backtrace => .backtrace,
         .core => .{ .core = try core(try required(words)) },
+        .halting => .{ .halting = try onOff(try required(words)) },
         .quit => .quit,
     };
     if (words.next() != null) return Error.ExtraArgument;
@@ -205,6 +210,12 @@ fn core(text: []const u8) Error!u8 {
     const index = std.fmt.parseInt(u8, text, 0) catch return Error.BadCore;
     if (index >= limits.cores) return Error.BadCore;
     return index;
+}
+
+fn onOff(text: []const u8) Error!bool {
+    if (std.mem.eql(u8, text, "on")) return true;
+    if (std.mem.eql(u8, text, "off")) return false;
+    return Error.BadSwitch;
 }
 
 fn required(words: *Words) Error![]const u8 {
