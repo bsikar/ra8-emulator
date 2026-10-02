@@ -3,14 +3,16 @@
 //! Qd[i]. Per LLVM's assembler the encoding is hw1 1110 1100 000 op Rt2
 //! (op set moves into the vector) and hw2 Qd 0 1111 000 i Rt. Rt pairs with
 //! lane 2+i and Rt2 with lane i. Following QEMU's trans_VMOV_to_2gp and
-//! trans_VMOV_from_2gp, neither form is predicated or advances a VPT block
-//! (they are only subject to beat-wise execution, which waits on ECI).
+//! trans_VMOV_from_2gp, neither form is predicated or advances a VPT block.
+//! They are beat-wise: a lane in a beat EPSR.ECI marks done is not moved,
+//! and ECI moves on after.
 //! Rt or Rt2 of 13 or 15, and the same register twice when reading into
 //! the core, are UNPREDICTABLE and left unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 
 pub const group: op.Group = .{ .name = "mve_lane_pair", .decode = decode, .oracle = false };
 
@@ -57,14 +59,21 @@ fn toVector(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr);
     const bank = &cpu.fp.bank;
     var q = mve.qreg.read(bank, f.qd);
-    q = mve.qreg.setElem(q, .word, f.high, cpu.regs.get(f.rt));
-    q = mve.qreg.setElem(q, .word, f.low, cpu.regs.get(f.rt2));
+    if (pending(cpu, f.high)) q = mve.qreg.setElem(q, .word, f.high, cpu.regs.get(f.rt));
+    if (pending(cpu, f.low)) q = mve.qreg.setElem(q, .word, f.low, cpu.regs.get(f.rt2));
     mve.qreg.write(bank, f.qd, q);
+    mve_beats.finishEci(cpu);
+}
+
+/// Whether word lane `e`'s beat is still to run under EPSR.ECI.
+fn pending(cpu: *const Cpu, e: u8) bool {
+    return mve_beats.pending(cpu) >> @intCast(e * 4) & 1 == 1;
 }
 
 fn toCore(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr);
     const q = mve.qreg.read(&cpu.fp.bank, f.qd);
-    cpu.regs.set(f.rt, mve.qreg.elem(q, .word, f.high));
-    cpu.regs.set(f.rt2, mve.qreg.elem(q, .word, f.low));
+    if (pending(cpu, f.high)) cpu.regs.set(f.rt, mve.qreg.elem(q, .word, f.high));
+    if (pending(cpu, f.low)) cpu.regs.set(f.rt2, mve.qreg.elem(q, .word, f.low));
+    mve_beats.finishEci(cpu);
 }

@@ -4,14 +4,16 @@
 //! holds it, with opc1:opc2 giving size and index: 1xxx byte, 0xx1 half,
 //! 0x00 word. Reading a byte or half sign-extends unless U is set; U with a
 //! word is undefined. Per QEMU's mve_skip_vmov these moves are not
-//! predicated and do not advance a VPT block (they are only subject to
-//! beat-wise execution, which waits on ECI). D or N set would name D16+,
+//! predicated and do not advance a VPT block. They are beat-wise: a lane
+//! in a beat EPSR.ECI marks done is not moved, and ECI moves on after
+//! (mve_skip_vmov). D or N set would name D16+,
 //! which MVE lacks, and Rt of 13 or 15 is UNPREDICTABLE, so all of those
 //! stay unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_lane_move", .decode = decode, .oracle = false };
@@ -64,7 +66,14 @@ fn toLane(cpu: *Cpu, instr: Instr) op.Error!void {
     const bank = &cpu.fp.bank;
     const old = mve.qreg.read(bank, lane.q);
     const rt = cpu.regs.get(@intCast(instr.hw2 >> 12));
-    mve.qreg.write(bank, lane.q, mve.qreg.setElem(old, lane.size, lane.elem, rt));
+    if (pending(cpu, lane)) mve.qreg.write(bank, lane.q, mve.qreg.setElem(old, lane.size, lane.elem, rt));
+    mve_beats.finishEci(cpu);
+}
+
+/// Whether the lane's beat is still to run under EPSR.ECI.
+fn pending(cpu: *const Cpu, lane: Lane) bool {
+    const byte = @as(u32, lane.elem) * (mve.qreg.bits(lane.size) / 8);
+    return mve_beats.pending(cpu) >> @intCast(byte) & 1 == 1;
 }
 
 fn toCoreFor(comptime signed: bool) op.Exec {
@@ -72,7 +81,8 @@ fn toCoreFor(comptime signed: bool) op.Exec {
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
             const lane = laneOf(instr).?;
             const raw = mve.qreg.elem(mve.qreg.read(&cpu.fp.bank, lane.q), lane.size, lane.elem);
-            cpu.regs.set(@intCast(instr.hw2 >> 12), if (signed) extend(raw, lane.size) else raw);
+            if (pending(cpu, lane)) cpu.regs.set(@intCast(instr.hw2 >> 12), if (signed) extend(raw, lane.size) else raw);
+            mve_beats.finishEci(cpu);
         }
     }.exec;
 }
