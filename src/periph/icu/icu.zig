@@ -32,6 +32,8 @@ const irqcr = @import("icu_irqcr.zig");
 
 /// INTSELR: which core each event interrupts (src/periph/icu/icu_intsel.zig).
 pub const intsel = @import("icu_intsel.zig");
+/// NMIER, NMICLR, NMISR and WUPEN0/1 (src/periph/icu/icu_nmi.zig).
+pub const nmi = @import("icu_nmi.zig");
 
 /// R_ICU geometry (ra8_icu_regs.h): the block is at 0x4000_6000 and the
 /// event-link table sits 0x6300 into it.
@@ -74,6 +76,7 @@ pub const Icu = struct {
     /// INTSELR, which core each event interrupts. Held here because the
     /// router that will read it is this table's raise.
     select: intsel.Intsel = .{},
+    nmi: nmi.Nmi = .{},
     /// ICU1's event-link table. ICU0 and ICU1 share one address and each
     /// core reaches only its own (HUM Rev 1.30 14.2, p 526), so a bus access
     /// from CPU1 lands here and one from CPU0 lands in `links`. Nothing
@@ -240,6 +243,11 @@ pub const Icu = struct {
 
     /// The IRQCRa/IRQCRb window. A store is handed the live routed answer,
     /// so unrouting the event before reconfiguring the pin is quiet.
+    /// INTSELR and the NMI/wake-up words: the ICU windows outside IELSR.
+    pub fn sideBlocks(self: *Icu) [2]periph.Block {
+        return .{ self.select.block(), self.nmi.block() };
+    }
+
     pub fn pinsBlock(self: *Icu) periph.Block {
         return .{
             .name = "ICU IRQ pins",

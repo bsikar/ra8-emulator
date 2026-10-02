@@ -217,6 +217,7 @@ test {
     _ = @import("periph/icu/icu_test.zig");
     _ = @import("periph/icu/icu_irqcr_test.zig");
     _ = @import("periph/icu/icu_intsel_test.zig");
+    _ = @import("periph/icu/icu_nmi_test.zig");
     _ = @import("periph/lanes_test.zig");
     _ = @import("periph/lvd/lvd_field_lock_test.zig");
     _ = @import("periph/lvd/lvd_interlock_test.zig");
