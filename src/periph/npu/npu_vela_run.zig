@@ -3,9 +3,10 @@
 //!
 //! npu_vela.zig checks the stream's shape, npu_vela_regs.zig keeps what the
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
-//! loop over them. A block operation (conv, depthwise, pool, elementwise)
-//! stops the run with error.OperatorNotModelled, so nothing that needs an
-//! operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
+//! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig;
+//! any other block operation (conv, depthwise, pool, other elementwise
+//! modes) stops the run with error.OperatorNotModelled, so nothing that
+//! needs an unmodelled operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
 //! between; the feature-map sets go to npu_vela_fm.zig, the scale, activation
 //! and stride sets to npu_vela_quant.zig, and any other
@@ -16,8 +17,9 @@ const regs = @import("npu_vela_regs.zig");
 const dma = @import("npu_vela_dma.zig");
 const fm = @import("npu_vela_fm.zig");
 const quant = @import("npu_vela_quant.zig");
+const minmax = @import("npu_vela_minmax.zig");
 
-pub const Error = vela.Error || dma.Error || error{OperatorNotModelled};
+pub const Error = vela.Error || dma.Error || minmax.Error;
 
 pub const Result = struct {
     summary: vela.Summary,
@@ -28,6 +30,8 @@ pub const Result = struct {
     maps: fm.State = .{},
     /// The scale, activation and stride registers as the program left them.
     quant: quant.State = .{},
+    /// Output elements the elementwise operators wrote.
+    elements: u64 = 0,
 };
 
 const Machine = struct {
@@ -37,6 +41,7 @@ const Machine = struct {
     src: dma.Region = .{},
     dst: dma.Region = .{},
     moved: u64 = 0,
+    elements: u64 = 0,
 };
 
 fn setRegister(machine: *Machine, code: u10, word: u32) void {
@@ -49,9 +54,14 @@ fn setRegister(machine: *Machine, code: u10, word: u32) void {
     }
 }
 
-fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: vela.Op) Error!void {
+fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: vela.Op, word: u32) Error!void {
     switch (op) {
-        .conv, .depthwise, .pool, .elementwise => return error.OperatorNotModelled,
+        .conv, .depthwise, .pool => return error.OperatorNotModelled,
+        .elementwise => machine.elements += try minmax.run(memory, regions, vela.param(word), .{
+            .bases = machine.state,
+            .maps = machine.maps,
+            .quant = machine.quant,
+        }),
         .dma_start => machine.moved += try dma.copy(memory, regions, machine.src, machine.dst, machine.state.dma0),
         .stop, .irq, .dma_wait, .kernel_wait, .pmu_mask => {},
     }
@@ -79,7 +89,7 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
             continue;
         }
         // walk() already refused any opcode outside Op.
-        try operate(&machine, memory, regions, @enumFromInt(code));
+        try operate(&machine, memory, regions, @enumFromInt(code), word);
     }
-    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps, .quant = machine.quant };
+    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps, .quant = machine.quant, .elements = machine.elements };
 }
