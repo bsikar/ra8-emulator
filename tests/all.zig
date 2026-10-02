@@ -90,6 +90,7 @@ test {
     _ = @import("core/session_test.zig");
     _ = @import("core/second_core_test.zig");
     _ = @import("core/interleave_test.zig");
+    _ = @import("core/fault_hook_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("debug/disasm_test.zig");
@@ -335,6 +336,7 @@ test {
     _ = @import("periph/scb_test.zig");
     _ = @import("periph/cpuid_test.zig");
     _ = @import("periph/fault_status_test.zig");
+    _ = @import("periph/fault_clear_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
     _ = @import("periph/sci/sci_line_test.zig");

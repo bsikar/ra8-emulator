@@ -14,6 +14,7 @@ const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const scb = @import("../periph/scb.zig");
+const fault_clear = @import("../periph/fault_clear.zig");
 
 const Board = @import("board.zig").Board;
 
@@ -139,6 +140,7 @@ fn attachCore(self: *Board, core: *engine.Engine) !void {
         .guard = &self.guard,
         .identity = cpuid.cpu0,
         .control = &self.control,
+        .clears = &self.clears,
     });
 }
 
@@ -156,6 +158,8 @@ pub const CoreWindows = struct {
     /// board's own; CPU1 brings its own, so a PRIGROUP one core programs is
     /// never the split the other reports.
     control: *scb.Scb,
+    /// The CFSR/HFSR clears this core's stores owe, applied at its boundary.
+    clears: *fault_clear.Clears,
 };
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
@@ -225,6 +229,8 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     // the five regions the boot map programs need the same hook to keep
     // from collapsing onto one entry.
     try core.attachPartitions(windows.partitions);
+    // CFSR and HFSR are write-one-to-clear, and RAM is not.
+    try core.attachFaultClears(windows.clears);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer

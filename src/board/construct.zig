@@ -50,6 +50,7 @@ const reset = @import("../periph/reset.zig");
 const rtc = @import("../periph/rtc/rtc.zig");
 const sau = @import("../periph/sau.zig");
 const scb = @import("../periph/scb.zig");
+const fault_clear = @import("../periph/fault_clear.zig");
 const sci = @import("../periph/sci/sci.zig");
 const sd_card = @import("../periph/sd/sd_card.zig");
 const sdhi = @import("../periph/sdhi/sdhi.zig");
@@ -123,6 +124,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .host = mipi_dsi.MipiDsi.init(),
         .causes = reset.Reset.init(),
         .control = scb.Scb.init(),
+        .clears = fault_clear.Clears.init(),
         .caches = cache.Cache.init(),
         .regions = mpu.Mpu.init(),
         .guard = mpu_guard.Guard.init(),

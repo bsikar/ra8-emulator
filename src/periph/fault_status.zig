@@ -16,6 +16,10 @@
 
 const std = @import("std");
 
+/// How a store to CFSR or HFSR clears the bits it wrote ones to. Reached
+/// through here so the status words and their write rule are one name.
+pub const clear = @import("fault_clear.zig");
+
 /// A CFSR cause, valued by its bit position. Positions not listed are
 /// reserved and read as zero on silicon.
 pub const Cause = enum(u5) {

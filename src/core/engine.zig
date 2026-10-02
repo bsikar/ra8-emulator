@@ -35,6 +35,8 @@ const watchpoint = @import("../debug/watchpoint.zig");
 const pc_hits = @import("../debug/pc_hits.zig");
 const watch_hook = @import("../debug/watch_hook.zig");
 const pend_hook = @import("pend_hook.zig");
+const fault_hook = @import("fault_hook.zig");
+const fault_clear = @import("../periph/fault_clear.zig");
 const pend_break = @import("pend_break.zig");
 const undefined_hook = @import("undefined_hook.zig");
 const undefined_ops_mod = @import("undefined_ops.zig");
@@ -300,6 +302,12 @@ pub const Engine = struct {
     /// than at the next boundary. src/core/pend_break.zig carries why.
     pub fn attachPend(self: Engine, pending: *pend_break.Pend) Error!void {
         pend_hook.attach(self.handle, pending) catch return Error.AttachFailed;
+    }
+
+    /// Latch every store to CFSR or HFSR so the boundary can clear the
+    /// bits it wrote ones to. src/periph/fault_clear.zig says why.
+    pub fn attachFaultClears(self: Engine, clears: *fault_clear.Clears) Error!void {
+        fault_hook.attach(self.handle, clears) catch return Error.AttachFailed;
     }
 
     /// Count every arrival at an undefined site the sweep found, so the

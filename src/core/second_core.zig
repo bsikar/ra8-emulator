@@ -57,6 +57,7 @@ const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const scb = @import("../periph/scb.zig");
+const fault_clear = @import("../periph/fault_clear.zig");
 const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
 
@@ -107,6 +108,8 @@ pub const Second = struct {
     /// CPU1's own AIRCR model: its PRIGROUP and its reset requests are its
     /// own, polled after each of its turns.
     control: scb.Scb = scb.Scb.init(),
+    /// CPU1's own owed CFSR/HFSR clears, applied after each of its turns.
+    clears: fault_clear.Clears = fault_clear.Clears.init(),
     /// CPU1's own NVIC: its own pends, priorities and active stack. CPU0's
     /// is the one `main` builds; neither ever dispatches the other's.
     interrupts: nvic.Nvic = .{},
@@ -143,6 +146,7 @@ pub const Second = struct {
             .guard = &self.guard,
             .identity = cpuid.cpu1,
             .control = &self.control,
+            .clears = &self.clears,
         });
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
@@ -182,6 +186,7 @@ pub const Second = struct {
     /// boundary wide, so the run loop spends it before it would service
     /// one; this is where CPU1's own pends are offered to its own NVIC.
     fn boundary(self: *Second) void {
+        self.clears.apply(self.core) catch {};
         // Counted in `control.requests`; acting on one is RA8EMU-59.
         _ = self.control.poll(self.core) catch false;
         _ = self.interrupts.dispatch(self.core) catch null;
