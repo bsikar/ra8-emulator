@@ -31,6 +31,8 @@ const standing_pends = @import("standing.zig");
 pub const pendsv: u16 = 14;
 pub const systick: u16 = 15;
 pub const first_irq: u16 = 16;
+/// Which security state each line targets. src/periph/itns.zig.
+pub const itns = @import("itns.zig");
 
 /// The RA8 ICU drives 96 NVIC lines (IELSR0..IELSR95), so three ISER/ICER
 /// words. Widening the model to a bigger part is this one constant.
