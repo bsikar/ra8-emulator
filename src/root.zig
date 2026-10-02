@@ -65,6 +65,7 @@ pub const core = struct {
     pub const registers = @import("debug/registers.zig");
     pub const hotspots = @import("debug/hotspots.zig");
     pub const functions = @import("debug/functions.zig");
+    pub const rsp_packet = @import("debug/rsp_packet.zig");
     pub const stop = @import("core/stop.zig");
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");
