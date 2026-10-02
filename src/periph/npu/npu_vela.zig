@@ -16,6 +16,8 @@ const std = @import("std");
 
 /// What NPU_OP_DMA_START copies, kept beside the walk so root.zig stays one line.
 pub const dma = @import("npu_vela_dma.zig");
+/// The loop that runs a stream's register sets and DMA against memory.
+pub const runner = @import("npu_vela_run.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
