@@ -39,10 +39,10 @@ test "a configured device prints both descriptors" {
 }
 
 test "a configured device prints its configuration value and status" {
-    var host = Host{ .step = .configured, .config_value = .{1}, .status = .{ 1, 0 } };
+    var host = Host{ .step = .configured, .config_value = .{1}, .status = .{ 1, 0 }, .interface = .stall };
     host.device[0] = 0x12;
     const text = try render(&host);
-    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "configuration value 1, status 01 00\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "configuration value 1, status 01 00, SET_INTERFACE stall\n") != null);
 }
 
 test "a step short of configured prints no configuration value" {
