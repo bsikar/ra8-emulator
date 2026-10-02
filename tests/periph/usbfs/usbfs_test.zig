@@ -71,3 +71,53 @@ test "an odd address is refused" {
     try std.testing.expectEqual(@as(u32, 0), device.read(at(0x21), 1));
     try std.testing.expectEqual(@as(u32, 2), device.refusals());
 }
+
+fn pulledUp() usbfs.Device {
+    var device = usbfs.Device{};
+    device.connectVbus();
+    device.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.dprpu);
+    return device;
+}
+
+test "the pull-up brings a bus reset: Default state, DVST, full speed" {
+    var device = pulledUp();
+    const status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_default), status & usbfs.intsts0.dvsq_mask);
+    try std.testing.expect(status & usbfs.intsts0.dvst != 0);
+    const port = device.read(at(regs.reg.dvstctr0), 2);
+    try std.testing.expectEqual(@as(u32, regs.port.rhst_full), port & regs.port.rhst_mask);
+}
+
+test "no reset while the module is off or VBUS is absent" {
+    var device = usbfs.Device{};
+    device.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe | regs.syscfg.dprpu);
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.intsts0), 2) & usbfs.intsts0.dvst);
+    var off = usbfs.Device{};
+    off.connectVbus();
+    off.write(at(regs.reg.syscfg), 2, regs.syscfg.dprpu);
+    try std.testing.expectEqual(@as(u32, 0), off.read(at(regs.reg.intsts0), 2) & usbfs.intsts0.dvsq_mask);
+}
+
+test "clearing DVST leaves the device state alone" {
+    var device = pulledUp();
+    device.write(at(regs.reg.intsts0), 2, ~@as(u32, usbfs.intsts0.dvst));
+    const status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, 0), status & usbfs.intsts0.dvst);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_default), status & usbfs.intsts0.dvsq_mask);
+}
+
+test "dropping the pull-up goes back to Powered and latches DVST again" {
+    var device = pulledUp();
+    device.write(at(regs.reg.intsts0), 2, ~@as(u32, usbfs.intsts0.dvst));
+    device.write(at(regs.reg.syscfg), 2, regs.syscfg.usbe);
+    const status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_powered), status & usbfs.intsts0.dvsq_mask);
+    try std.testing.expect(status & usbfs.intsts0.dvst != 0);
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.dvstctr0), 2) & regs.port.rhst_mask);
+}
+
+test "RHST cannot be written; the rest of DVSTCTR0 reads back" {
+    var device = usbfs.Device{};
+    device.write(at(regs.reg.dvstctr0), 2, regs.port.rhst_high | regs.port.uact);
+    try std.testing.expectEqual(@as(u32, regs.port.uact), device.read(at(regs.reg.dvstctr0), 2));
+}
