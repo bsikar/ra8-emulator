@@ -73,3 +73,16 @@ test "an opted-in run with BusFault disabled escalates to HardFault" {
     try std.testing.expectEqual(handlers + 0x30, try core.register(.pc));
     try std.testing.expectEqual(@as(u32, 1 << 30), try core.readWord(memmap.scb.hfsr));
 }
+
+test "a refused store under PRIMASK escalates to HardFault" {
+    var watch = engine.Watch{};
+    var core = try bench(&watch, 1 << 17);
+    defer core.close();
+    try core.setRegister(.primask, 1);
+    var unit = Nvic{};
+    var tally = bus.Tally{};
+    const ended = try core.run(entry, 20, .{ .watch = &watch, .interrupts = &unit, .bus_errors = &tally });
+    try std.testing.expect(ended == null);
+    try std.testing.expectEqual(@as(u32, 1), tally.escalated);
+    try std.testing.expectEqual(handlers + 0x30, try core.register(.pc));
+}

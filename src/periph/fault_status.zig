@@ -25,6 +25,8 @@ pub const route = @import("fault_route.zig");
 
 /// Raising a BusFault for an access the bus refused.
 pub const bus = @import("bus_fault.zig");
+/// The execution priority after PRIMASK and BASEPRI. src/periph/exec_priority.zig.
+pub const exec = @import("exec_priority.zig");
 
 /// A CFSR cause, valued by its bit position. Positions not listed are
 /// reserved and read as zero on silicon.

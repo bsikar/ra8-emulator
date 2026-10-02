@@ -8,7 +8,7 @@ const Nvic = ra8.periph.nvic.Nvic;
 
 /// PPB words in a map and registers in an array, enough for a fault entry.
 const FakeCore = struct {
-    const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp };
+    const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, basepri, psp };
 
     words: std.AutoHashMap(u32, u32),
     registers: std.EnumArray(Name, u32) = std.EnumArray(Name, u32).initFill(0),
