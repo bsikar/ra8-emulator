@@ -34,6 +34,7 @@ test {
     _ = @import("ops/parallel_test.zig");
     _ = @import("ops/sel_test.zig");
     _ = @import("ops/sat_arith_test.zig");
+    _ = @import("ops/extend_b16_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
