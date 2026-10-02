@@ -8,7 +8,7 @@
 //! stacked exception frame (unwind_exception.zig) to the interrupted pc,
 //! which is looked up as it is, since nothing called from there.
 const std = @import("std");
-const engine = @import("../core/engine.zig");
+const core_view = @import("core_view.zig");
 const dwarf_frame = @import("dwarf_frame.zig");
 pub const exception = @import("unwind_exception.zig");
 
@@ -33,10 +33,10 @@ pub const Frame = struct {
 /// r0 to r15, indexed the way DWARF numbers them.
 pub const Registers = [dwarf_frame.limits.registers]u32;
 
-const order = [_]engine.Cortex{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc };
+const order = [_]core_view.Cortex{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc };
 
 /// The core's registers, in DWARF order.
-pub fn registersOf(core: engine.Engine) engine.Error!Registers {
+pub fn registersOf(core: core_view.View) core_view.Error!Registers {
     var registers: Registers = undefined;
     for (order, 0..) |which, index| registers[index] = try core.register(which);
     return registers;

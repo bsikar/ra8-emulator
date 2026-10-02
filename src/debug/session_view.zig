@@ -5,7 +5,7 @@
 //! them does.
 const std = @import("std");
 const disasm = @import("disasm.zig");
-const engine = @import("../core/engine.zig");
+const core_view = @import("core_view.zig");
 const registers_list = @import("registers.zig");
 
 pub const limits = struct {
@@ -22,7 +22,7 @@ pub const encoding = struct {
 };
 
 /// The core registers, in the order a register dump prints them.
-pub fn registers(out: anytype, core: engine.Engine) !void {
+pub fn registers(out: anytype, core: core_view.View) !void {
     for (registers_list.dumped, 0..) |named, index| {
         const value = try core.register(named.which);
         try out.print("{s: <3} 0x{X:0>8}", .{ named.name, value });
@@ -31,7 +31,7 @@ pub fn registers(out: anytype, core: engine.Engine) !void {
 }
 
 /// `count` words from `address`, a line every four.
-pub fn words(out: anytype, core: engine.Engine, address: u32, count: u32) !void {
+pub fn words(out: anytype, core: core_view.View, address: u32, count: u32) !void {
     for (0..count) |step| {
         const index: u32 = @intCast(step);
         const at = address +% index * @sizeOf(u32);
@@ -47,13 +47,13 @@ pub fn words(out: anytype, core: engine.Engine, address: u32, count: u32) !void 
 }
 
 /// The word at a place, in hex and in decimal.
-pub fn word(out: anytype, core: engine.Engine, text: []const u8, address: u32) !void {
+pub fn word(out: anytype, core: core_view.View, text: []const u8, address: u32) !void {
     const read = try core.readWord(address);
     try out.print("{s} = 0x{X:0>8} ({d})\n", .{ text, read, read });
 }
 
 /// The instruction at `address`, and how many bytes it takes.
-pub fn instruction(out: anytype, core: engine.Engine, address: u32) !u32 {
+pub fn instruction(out: anytype, core: core_view.View, address: u32) !u32 {
     var bytes: [4]u8 = undefined;
     core.read(address, bytes[0..2]) catch {
         try out.print("<unreadable>", .{});
