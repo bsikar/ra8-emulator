@@ -1,0 +1,129 @@
+#!/bin/bash -p
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Brighton Sikarskie
+#
+# gdb_batch.sh -- RA8EMU-56: drive the emulator's --gdb stub with a real
+# gdb-multiarch in batch mode, on one core and then on two.
+#
+#   tools/gdb_batch.sh EMULATOR [GDB]
+#
+# Builds a small firmware image with zig, serves it with --gdb on a local
+# port, and runs gdb -batch against it: attach, break, continue, stepi,
+# registers, memory read and write, a backtrace, a hardware watchpoint and
+# detach; then the same image on both cores, with the second as thread 2
+# taking the break, a step, a memory read, a backtrace and a watchpoint.
+# Exits 0 when every expected line showed, 1 when one is missing, and 77
+# (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "usage: $0 EMULATOR [GDB]" >&2
+    exit 2
+fi
+emulator=$(realpath "$1")
+gdb=${2:-gdb-multiarch}
+zig=${ZIG:-zig}
+for tool in "$gdb" "$zig"; do
+    if ! command -v "$tool" >/dev/null; then
+        echo "skipped: $tool is not installed"
+        exit 77
+    fi
+done
+
+work=$(mktemp -d)
+pid=
+trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; rm -rf "$work"' EXIT
+cd "$work"
+
+cat >fw.zig <<'ZIG'
+var counter: u32 = 0;
+export fn target(x: u32) callconv(.C) u32 {
+    counter +%= x;
+    return counter;
+}
+export fn reset() callconv(.C) noreturn {
+    var i: u32 = 0;
+    while (i < 5) : (i += 1) _ = @call(.never_inline, target, .{i});
+    while (true) {
+        _ = @call(.never_inline, target, .{1});
+    }
+}
+extern const _stack_top: u32;
+export const vectors linksection(".vectors") = [_]?*const anyopaque{ @ptrCast(&_stack_top), @ptrCast(&reset) };
+ZIG
+cat >link.ld <<'LD'
+ENTRY(reset)
+MEMORY { RAM (rwx) : ORIGIN = 0x22000000, LENGTH = 0x10000 }
+SECTIONS {
+  .text : { KEEP(*(.vectors)) *(.text*) *(.rodata*) } > RAM
+  .data : { *(.data*) *(.bss*) } > RAM
+  _stack_top = ORIGIN(RAM) + LENGTH(RAM);
+}
+LD
+"$zig" build-obj fw.zig -target thumb-freestanding-eabi -mcpu cortex_m33 -O Debug -femit-bin=fw.o
+"$zig" ld.lld --gc-sections -T link.ld fw.o -o fw.elf
+
+port=$((20000 + RANDOM % 20000))
+failed=0
+
+# serve NAME [EMULATOR ARGS...] -- GDB COMMANDS...: one gdb session.
+serve() {
+    local name=$1
+    shift
+    local args=()
+    while [ "$1" != "--" ]; do
+        args+=("$1")
+        shift
+    done
+    shift
+    local commands=()
+    for command in "$@"; do commands+=(-ex "$command"); done
+    port=$((port + 1))
+    "$emulator" fw.elf "${args[@]}" --gdb "$port" 2>"$name.emu" &
+    pid=$!
+    for _ in $(seq 50); do
+        grep -q listening "$name.emu" && break
+        sleep 0.1
+    done
+    "$gdb" -batch -nx fw.elf -ex "target remote :$port" "${commands[@]}" >"$name.out" 2>&1 || true
+    wait "$pid" || true
+    pid=
+}
+
+# expect NAME TEXT...: each text must appear in that session's output.
+expect() {
+    local name=$1
+    shift
+    for text in "$@"; do
+        if ! grep -qF -- "$text" "$name.out"; then
+            echo "$name: missing: $text"
+            failed=1
+        fi
+    done
+}
+
+serve one -- 'break target' continue continue stepi 'info registers pc' \
+    "x/1xw &'fw.counter'" "set var 'fw.counter' = 100" "p 'fw.counter'" 'bt 2' delete \
+    "watch 'fw.counter'" continue detach
+expect one '<fw.counter>:' 'Breakpoint 1, ' 'fw.target (x=0) at fw.zig:' '<fw.target+' \
+    '$1 = 100' 'fw.target (x=1) at fw.zig:3' \
+    'in fw.reset () at fw.zig:8' 'Hardware watchpoint 2' \
+    'Old value = 100' 'New value = 101' '[Inferior 1 (Remote target) detached]'
+
+serve two --cpu1 fw.elf -- 'info threads' 'thread 2' 'info registers pc' \
+    'break target' continue stepi bt "x/1xw &'fw.counter'" delete \
+    "watch 'fw.counter'" continue detach
+expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
+    'Thread 2 hit Breakpoint 1, ' 'in fw.reset () at fw.zig:8' \
+    '<fw.counter>:' 'Thread 2 hit Hardware watchpoint 2' 'New value = ' \
+    '[Inferior 1 (Remote target) detached]'
+
+if [ "$failed" -ne 0 ]; then
+    for name in one two; do
+        echo "--- $name"
+        cat "$name.out" "$name.emu"
+    done
+    exit 1
+fi
+echo "gdb_batch: one core and two cores passed"
