@@ -68,3 +68,34 @@ test "msr psplim, r12 is the ThreadX scheduler encoding and mrs reads it back" {
     try run(&cpu, 0xF3EF, 0x810A); // mrs r1, msplim
     try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[1]);
 }
+
+test "msr msp_ns, r2 from Secure reaches the Non-secure bank, the cpu1_pingpong_ipc encoding" {
+    var cpu = fresh();
+    cpu.regs.low[2] = 0x2210_0403;
+    try run(&cpu, 0xF382, 0x8888); // msr msp_ns, r2
+    try std.testing.expectEqual(@as(u32, 0x2210_0400), cpu.banked.other.msp);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.msp);
+    try run(&cpu, 0xF3EF, 0x8388); // mrs r3, msp_ns
+    try std.testing.expectEqual(@as(u32, 0x2210_0400), cpu.regs.low[3]);
+}
+
+test "the _NS forms are privileged only and Non-secure state reads zero" {
+    var cpu = fresh();
+    cpu.regs.control = regs.control_bits.npriv;
+    cpu.regs.low[2] = 0x2210_0400;
+    try run(&cpu, 0xF382, 0x8888);
+    try std.testing.expectEqual(@as(u32, 0), cpu.banked.other.msp);
+    cpu.regs.control = 0;
+    cpu.banked.other.psp = 0x1234_5678;
+    cpu.banked.current = .non_secure;
+    cpu.regs.low[0] = 0xFFFF;
+    try run(&cpu, 0xF3EF, 0x8089); // mrs r0, psp_ns
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[0]);
+}
+
+test "nsAlias names the banked.zig codes and nothing between them" {
+    try std.testing.expect(mrs_msr.nsAlias(0x88) and mrs_msr.nsAlias(0x94) and mrs_msr.nsAlias(0x98));
+    try std.testing.expect(!mrs_msr.nsAlias(0x8C) and !mrs_msr.nsAlias(0x92) and !mrs_msr.nsAlias(0x99));
+    try std.testing.expect(mrs_msr.group.decode(wide(0xF3EF, 0x808C)) == null);
+    try std.testing.expect(mrs_msr.group.decode(wide(0xF382, 0x8488)) == null); // mask 01
+}

@@ -4,7 +4,12 @@
 //! Left unclaimed, so the core stops rather than guess: SP or PC as the core
 //! register, a SYSm the register file does not model, an MSR mask of 0b00, and
 //! a mask other than 0b10 on a non-xPSR register.
+//!
+//! The Non-secure aliases (MSP_NS and friends, SYSm 0x88 up) go to the other
+//! Security state's bank in src/core/banked.zig. They are privileged only;
+//! from Non-secure state they read zero and ignore writes.
 const op = @import("../op.zig");
+const banked = @import("../../banked.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const sysreg = @import("../sysreg.zig");
@@ -38,7 +43,7 @@ fn spOrPc(n: u4) bool {
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4) return null;
     const n = sysmOf(instr);
-    if (!sysreg.known(n)) return null;
+    if (!sysreg.known(n) and !nsAlias(n)) return null;
     if (instr.hw1 == encodings.mrs and instr.hw2 & encodings.mrs_hw2_mask == encodings.hw2_space) {
         const rd: u4 = @intCast((instr.hw2 >> 8) & 0xF);
         return if (spOrPc(rd)) null else mrs;
@@ -52,12 +57,27 @@ fn decode(instr: Instr) ?op.Exec {
     return msr;
 }
 
+/// Whether SYSm names a Non-secure alias banked.zig answers.
+pub fn nsAlias(n: u8) bool {
+    const s = banked.sysm;
+    return switch (n) {
+        s.msp_ns, s.psp_ns, s.msplim_ns, s.psplim_ns => true,
+        s.primask_ns, s.basepri_ns, s.faultmask_ns, s.control_ns, s.sp_ns => true,
+        else => false,
+    };
+}
+
 fn mrs(cpu: *Cpu, instr: Instr) op.Error!void {
     const rd: u4 = @intCast((instr.hw2 >> 8) & 0xF);
-    cpu.regs.set(rd, sysreg.read(&cpu.regs, sysmOf(instr)));
+    const n = sysmOf(instr);
+    if (!nsAlias(n)) return cpu.regs.set(rd, sysreg.read(&cpu.regs, n));
+    const value = if (sysreg.privileged(&cpu.regs)) cpu.banked.readNs(&cpu.regs, n) else null;
+    cpu.regs.set(rd, value orelse 0);
 }
 
 fn msr(cpu: *Cpu, instr: Instr) op.Error!void {
     const value = cpu.regs.get(@intCast(instr.hw1 & 0xF));
-    sysreg.write(&cpu.regs, sysmOf(instr), maskOf(instr), value);
+    const n = sysmOf(instr);
+    if (!nsAlias(n)) return sysreg.write(&cpu.regs, n, maskOf(instr), value);
+    if (sysreg.privileged(&cpu.regs)) _ = cpu.banked.writeNs(&cpu.regs, n, value);
 }
