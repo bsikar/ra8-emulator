@@ -144,7 +144,7 @@ fn liveHost(host: *usbhs.Host) void {
 /// Program PIPE1 as a bulk OUT on endpoint 2 and arm it.
 fn bulkOut(host: *usbhs.Host) void {
     host.write(regs.window.base + regs.reg.pipesel, 2, 1);
-    host.write(regs.window.base + regs.reg.pipecfg, 2, 2);
+    host.write(regs.window.base + regs.reg.pipecfg, 2, regs.pipe.dir_transmit | 2);
     host.write(regs.window.base + regs.reg.pipemaxp, 2, 64);
     host.write(regs.window.base + regs.reg.pipectr, 2, regs.pipe.pid_buf);
 }

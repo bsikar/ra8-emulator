@@ -118,10 +118,10 @@ test "a port write in device role moves nothing" {
 test "the PIPESEL window reaches the pipe it names" {
     var host = broughtUp();
     host.write(at(regs.reg.pipesel), 2, 2);
-    host.write(at(regs.reg.pipecfg), 2, regs.pipe.dir_in | 1);
+    host.write(at(regs.reg.pipecfg), 2, regs.pipe.dir_transmit | 1);
     host.write(at(regs.reg.pipemaxp), 2, 512);
     try std.testing.expectEqual(@as(u32, 2), host.read(at(regs.reg.pipesel), 2));
-    try std.testing.expectEqual(@as(u32, regs.pipe.dir_in | 1), host.read(at(regs.reg.pipecfg), 2));
+    try std.testing.expectEqual(@as(u32, regs.pipe.dir_transmit | 1), host.read(at(regs.reg.pipecfg), 2));
     try std.testing.expectEqual(@as(u32, 512), host.read(at(regs.reg.pipemaxp), 2));
 }
 

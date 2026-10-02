@@ -18,7 +18,7 @@ fn liveHost(host: *usbhs.Host) void {
 /// PIPE1 as a bulk OUT with a 64-byte packet, aimed at by CFIFO.
 fn aimAtBulk(host: *usbhs.Host) void {
     host.write(base + regs.reg.pipesel, 2, 1);
-    host.write(base + regs.reg.pipecfg, 2, 2);
+    host.write(base + regs.reg.pipecfg, 2, regs.pipe.dir_transmit | 2);
     host.write(base + regs.reg.pipemaxp, 2, 64);
     host.write(base + regs.reg.pipesel, 2, 0);
     host.write(base + regs.reg.cfifosel, 2, regs.fifo.isel | 1);

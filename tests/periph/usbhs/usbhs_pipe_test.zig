@@ -36,10 +36,18 @@ test "PIPESEL zero is no window, not the control pipe" {
 test "a configured pipe reads back its endpoint and direction" {
     var table = usbhs_pipe.Table{};
     table.select(1);
-    try std.testing.expect(table.configure(regs.pipe.dir_in | 2));
+    try std.testing.expect(table.configure(regs.pipe.dir_transmit | 2));
     try std.testing.expectEqual(@as(u8, 2), table.pipes[1].endpoint);
+    try std.testing.expect(!table.pipes[1].in);
+    try std.testing.expectEqual(regs.pipe.dir_transmit | 2, table.config());
+}
+
+test "a host pipe with DIR clear receives" {
+    var table = usbhs_pipe.Table{};
+    table.select(1);
+    try std.testing.expect(table.configure(1));
     try std.testing.expect(table.pipes[1].in);
-    try std.testing.expectEqual(regs.pipe.dir_in | 2, table.config());
+    try std.testing.expectEqual(@as(u16, 1), table.config());
 }
 
 test "a packet size past what the bus carries is refused" {
