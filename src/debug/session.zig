@@ -338,9 +338,12 @@ pub const Session = struct {
         try out.print(" <{s}+{d}>", .{ found.name, found.offset });
     }
 
-    /// The address a place names: its symbol or literal, one optional
-    /// dereference, then its offset.
+    /// The address a place names: a FILE:LINE from the line table, or its
+    /// symbol or literal, one optional dereference, then its offset.
     fn resolve(self: *const Session, text: []const u8) !u32 {
+        if (session_source.fileLine(text)) |at| {
+            return session_source.breakAt(session_source.of(self.image), at) orelse Error.Unresolved;
+        }
         const want = try place.parse(text);
         var base = want.address;
         if (want.name) |name| {

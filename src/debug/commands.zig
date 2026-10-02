@@ -5,9 +5,9 @@
 //! a `Command`. It holds no state and needs no image or core, so a whole
 //! script can be checked line by line before anything runs.
 //!
-//! A place (`target`, `0x22000054`, `target+4`, `@s_open+0x40`) is kept as
-//! written. src/debug/place.zig parses it, and the session resolves it
-//! against the image, because only the session holds one.
+//! A place (`target`, `0x22000054`, `target+4`, `@s_open+0x40`, `fw.zig:8`)
+//! is kept as written. src/debug/place.zig parses it, and the session
+//! resolves it against the image, because only the session holds one.
 //!
 //! The words follow gdb's where gdb has one, so a session reads the way a
 //! gdb user would type it:
