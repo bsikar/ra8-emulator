@@ -29,6 +29,7 @@ pub const mul_acc = @import("ops/mul_acc.zig");
 pub const saturate = @import("ops/saturate.zig");
 pub const misc_wide = @import("ops/misc_wide.zig");
 pub const extend_wide = @import("ops/extend_wide.zig");
+pub const pkh = @import("ops/pkh.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
