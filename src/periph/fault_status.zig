@@ -1,0 +1,115 @@
+//! The fault status words, bit by bit: what CFSR and HFSR can say.
+//!
+//! CFSR at 0xE000_ED28 is three status registers in one word (DDI0553
+//! D1.2.11): MMFSR in the low byte for MemManage, BFSR in the next byte for
+//! BusFault, UFSR in the top half for UsageFault. HFSR at 0xE000_ED2C says
+//! why a HardFault was taken (D1.2.12). Every bit in both is set by the
+//! core when the fault happens and cleared by the firmware writing a one
+//! to it.
+//!
+//! Each core has its own pair, reached through its own PPB, so a fault on
+//! CPU1 never shows in CPU0's CFSR. Today the emulator sets only the
+//! MemManage bits an MPU-refused access raises (src/periph/mpu/) and
+//! HFSR.FORCED when that fault escalates. This file is the one table every
+//! later cause is set from and decoded by, so a cause is named once and a
+//! handler's dump and the run report read the word the same way.
+
+const std = @import("std");
+
+/// A CFSR cause, valued by its bit position. Positions not listed are
+/// reserved and read as zero on silicon.
+pub const Cause = enum(u5) {
+    // MMFSR, MemManage.
+    iaccviol = 0,
+    daccviol = 1,
+    munstkerr = 3,
+    mstkerr = 4,
+    mlsperr = 5,
+    mmarvalid = 7,
+    // BFSR, BusFault.
+    ibuserr = 8,
+    preciserr = 9,
+    impreciserr = 10,
+    unstkerr = 11,
+    stkerr = 12,
+    lsperr = 13,
+    bfarvalid = 15,
+    // UFSR, UsageFault.
+    undefinstr = 16,
+    invstate = 17,
+    invpc = 18,
+    nocp = 19,
+    stkof = 20,
+    unaligned = 24,
+    divbyzero = 25,
+
+    pub fn bit(self: Cause) u32 {
+        return @as(u32, 1) << @intFromEnum(self);
+    }
+
+    /// The fault this cause belongs to.
+    pub fn fault(self: Cause) Fault {
+        const at = @intFromEnum(self);
+        if (at < 8) return .mem_manage;
+        if (at < 16) return .bus_fault;
+        return .usage_fault;
+    }
+};
+
+pub const Fault = enum { mem_manage, bus_fault, usage_fault };
+
+/// An HFSR cause, valued by its bit position.
+pub const Hard = enum(u5) {
+    /// A vector table read failed while taking an exception.
+    vecttbl = 1,
+    /// A configurable fault was disabled or outranked and escalated.
+    forced = 30,
+    /// A debug event arrived with halting debug off.
+    debugevt = 31,
+
+    pub fn bit(self: Hard) u32 {
+        return @as(u32, 1) << @intFromEnum(self);
+    }
+};
+
+pub const cfsr = struct {
+    pub const mmfsr: u32 = 0x0000_00FF;
+    pub const bfsr: u32 = 0x0000_FF00;
+    pub const ufsr: u32 = 0xFFFF_0000;
+    /// Every bit a cause names; the rest of the word is reserved.
+    pub const defined: u32 = maskOf(Cause);
+};
+
+pub const hfsr = struct {
+    pub const defined: u32 = maskOf(Hard);
+};
+
+pub const Causes = std.BoundedArray(Cause, @typeInfo(Cause).@"enum".fields.len);
+pub const HardCauses = std.BoundedArray(Hard, @typeInfo(Hard).@"enum".fields.len);
+
+/// The causes a CFSR word reports, lowest bit first. Reserved bits are
+/// dropped rather than named.
+pub fn decode(word: u32) Causes {
+    var found = Causes{};
+    inline for (@typeInfo(Cause).@"enum".fields) |entry| {
+        const cause: Cause = @enumFromInt(entry.value);
+        if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
+    }
+    return found;
+}
+
+/// The causes an HFSR word reports, lowest bit first.
+pub fn decodeHard(word: u32) HardCauses {
+    var found = HardCauses{};
+    inline for (@typeInfo(Hard).@"enum".fields) |entry| {
+        const cause: Hard = @enumFromInt(entry.value);
+        if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
+    }
+    return found;
+}
+
+fn maskOf(comptime E: type) u32 {
+    var mask: u32 = 0;
+    for (@typeInfo(E).@"enum".fields) |entry| mask |= @as(u32, 1) << entry.value;
+    return mask;
+}

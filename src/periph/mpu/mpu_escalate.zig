@@ -21,6 +21,8 @@
 //!   HFSR  0xE000_ED2C, FORCED     [30]  (DDI0553 D1.2.12)
 
 /// HardFault, exception 3 (DDI0553 B3.6).
+const status = @import("../fault_status.zig");
+
 pub const hard_fault: u16 = 3;
 
 /// The priority an escalated HardFault runs at. Architecturally it is -1,
@@ -34,7 +36,7 @@ pub const shcsr = struct {
 };
 
 pub const hfsr = struct {
-    pub const forced: u32 = 1 << 30;
+    pub const forced: u32 = status.Hard.forced.bit();
 };
 
 /// The exception a refused access is taken as.
