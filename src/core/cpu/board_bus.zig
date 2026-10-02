@@ -10,12 +10,17 @@ const std = @import("std");
 const bus = @import("bus.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
 const registry = @import("../../periph/registry.zig");
+const memmap = @import("../memmap.zig");
+const sau = @import("../../periph/sau.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
     periph: *registry.Bus,
     /// The core this bus view belongs to, stamped on every peripheral access.
     issuer: registry.Issuer = .cpu0,
+    /// This core's SAU, when the board has one: its RBAR/RLAR bank through
+    /// RNR on this bus exactly as src/core/sau_hook.zig banks them on Unicorn.
+    partitions: ?*sau.Sau = null,
 
     pub fn view(self: *BoardBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -49,7 +54,11 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (!inWindow(address, bytes.len)) return self.memory.view().write(address, bytes);
+        if (!inWindow(address, bytes.len)) {
+            try self.memory.view().write(address, bytes);
+            if (self.partitions) |unit| try bankPartition(self.memory.view(), unit, address, bytes);
+            return;
+        }
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
@@ -57,3 +66,18 @@ pub const BoardBus = struct {
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
     }
 };
+
+/// File a word store into the SAU window and, when it moved RNR, put the
+/// selected region's pair back in RAM so the next RBAR/RLAR read gives the
+/// region RNR names rather than the last one programmed.
+fn bankPartition(memory: bus.Bus, unit: *sau.Sau, address: u32, bytes: []const u8) bus.Error!void {
+    if (bytes.len != 4 or address < memmap.sau.ctrl or address > memmap.sau.rlar) return;
+    const word = std.mem.readInt(u32, bytes[0..4], .little);
+    if (unit.observe(address, word) == .none) return;
+    const pair = unit.bankedPair();
+    for ([_][2]u32{ .{ memmap.sau.rbar, pair.rbar }, .{ memmap.sau.rlar, pair.rlar } }) |slot| {
+        var word_bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &word_bytes, slot[1], .little);
+        try memory.write(slot[0], &word_bytes);
+    }
+}
