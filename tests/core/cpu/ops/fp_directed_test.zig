@@ -96,12 +96,64 @@ test "the rm field" {
     try std.testing.expectEqual(ra8.core.fpu.rounding.Rounding.minus_inf, fp_directed.roundingOf(3));
 }
 
-test "unclaimed: VSEL with o set, VRINTA with N set, D16+, VCVT.F64.F32, half precision" {
+test "unclaimed: VSEL with o set, VRINTA with N set, D16+, VCVT.F64.F32" {
     try std.testing.expect(fp_directed.group.decode(wide(0xFE00, 0x0AC1)) == null);
     try std.testing.expect(fp_directed.group.decode(wide(0xFEB8, 0x0AE0)) == null);
     try std.testing.expect(fp_directed.group.decode(wide(0xFE40, 0x0B00)) == null);
     try std.testing.expect(fp_directed.group.decode(wide(0xFE80, 0x0BA0)) == null);
     try std.testing.expect(fp_directed.group.decode(wide(0xEEB7, 0x0AE0)) == null);
-    try std.testing.expect(fp_directed.group.decode(wide(0xFE80, 0x0981)) == null);
+    try std.testing.expect(fp_directed.group.decode(wide(0xFEB8, 0x09E0)) == null);
     try std.testing.expect(fp_directed.group.decode(wide(0xFEBC, 0x0BE1)) == null);
+}
+
+test "vseleq.f16 s0, s1, s2 takes the low half and zeroes the top" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0xFFFF_3C00);
+    cpu.fp.bank.writeS(2, 0xFFFF_4000);
+    cpu.regs.xpsr = 0x4000_0000;
+    try run(&cpu, 0xFE00, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(0));
+    cpu.regs.xpsr = 0;
+    try run(&cpu, 0xFE00, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0x4000), cpu.fp.bank.readS(0));
+}
+
+test "vmaxnm.f16 prefers the number over a quiet NaN; vminnm.f16 picks the lower" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0x7E00);
+    cpu.fp.bank.writeS(2, 0x3C00);
+    try run(&cpu, 0xFE80, 0x0981);
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(0));
+    cpu.fp.bank.writeS(1, 0x4000);
+    cpu.fp.bank.writeS(2, 0xBC00);
+    try run(&cpu, 0xFE80, 0x09C1);
+    try std.testing.expectEqual(@as(u32, 0xBC00), cpu.fp.bank.readS(0));
+}
+
+test "vrinta.f16 and vrintn.f16 on 2.5" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0x4100);
+    try run(&cpu, 0xFEB8, 0x0960);
+    try std.testing.expectEqual(@as(u32, 0x4200), cpu.fp.bank.readS(0));
+    try run(&cpu, 0xFEB9, 0x0960);
+    try std.testing.expectEqual(@as(u32, 0x4000), cpu.fp.bank.readS(0));
+}
+
+test "vcvta.s32.f16 writes the whole word" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0xC100);
+    try run(&cpu, 0xFEBC, 0x09E0);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFD), cpu.fp.bank.readS(0));
+}
+
+test "vrintz.f16 on -2.7, vrintx.f16 on 2.5 raises IXC" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0xC166);
+    try run(&cpu, 0xEEB6, 0x09E0);
+    try std.testing.expectEqual(@as(u32, 0xC000), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.fpscr.ixc);
+    cpu.fp.bank.writeS(1, 0x4100);
+    try run(&cpu, 0xEEB7, 0x0960);
+    try std.testing.expectEqual(@as(u32, 0x4000), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.ixc);
 }
