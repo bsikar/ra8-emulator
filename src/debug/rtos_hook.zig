@@ -13,6 +13,7 @@
 //! RA8EMU-224): before each instruction the NVIC model's counters are read.
 //! That costs a call per instruction, so it is only hooked with the flag.
 //!
+//! A `--cpu zig` run is traced through src/debug/rtos_zig.zig instead.
 //! Only CPU0 on Unicorn is hooked here. CPU1 and the Zig core are their own
 //! tickets under RA8EMU-211.
 const std = @import("std");
@@ -22,6 +23,7 @@ const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
 pub const names = @import("rtos_names.zig");
 pub const isr = @import("rtos_isr.zig");
+pub const zig = @import("rtos_zig.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -52,7 +54,8 @@ pub const Tracer = struct {
         if (self.exceptions) |*watcher| watcher.observe(&self.trace, self.core, self.stamp());
     }
 
-    fn stamp(self: *const Tracer) u64 {
+    /// The run's clock now, or zero with none borrowed.
+    pub fn stamp(self: *const Tracer) u64 {
         return if (self.now) |clock| clock.* else 0;
     }
 };
