@@ -17,6 +17,15 @@ const writes = @import("writes.zig");
 const memory_diff = @import("memory_diff.zig");
 const catch_up = @import("catch_up.zig");
 const periph_log = @import("periph_log.zig");
+const std = @import("std");
+
+const it_state = @import("../it_state.zig");
+
+/// Unicorn runs an IT and its whole block as one step (QEMU translates them
+/// together; checked with blocks of one, two and four instructions), so on a
+/// compared IT the Zig core keeps stepping until the block is over before
+/// the two are compared.
+const it_class = "it";
 
 /// What the two backends disagree on.
 pub const What = union(enum) {
@@ -69,7 +78,8 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engi
     }
     var made: writes.Recorder = .{ .inner = ours.bus };
     ours.bus = made.view();
-    const stopped = ours.step();
+    var stopped = ours.step();
+    if (stopped == null and checked and std.mem.eql(u8, hit.?.group, it_class)) stopped = finishBlock(ours);
     ours.bus = made.inner;
     log.armed = false;
     if (stopped) |why| return .{ .stopped = why };
@@ -79,6 +89,16 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engi
         return .{ .skipped = class };
     }
     return compare(class, instr, ours, theirs, made.items(), log);
+}
+
+/// Step the Zig core through the rest of an IT block; a block is at most
+/// four instructions.
+fn finishBlock(ours: *cpu_mod.Cpu) ?cpu_mod.Stop {
+    for (0..4) |_| {
+        if (!it_state.active(it_state.get(ours.regs.xpsr))) return null;
+        if (ours.step()) |why| return why;
+    }
+    return null;
 }
 
 fn compare(class: []const u8, instr: Instr, ours: *cpu_mod.Cpu, theirs: engine.Engine, made: []const writes.Write, log: *const periph_log.Log) engine.Error!Result {
