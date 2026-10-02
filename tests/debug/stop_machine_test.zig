@@ -209,3 +209,13 @@ test "C_STEP written without a debugger attached is ignored" {
     _ = machine.onInstruction(at(0x100));
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
 }
+
+test "breaks and watches are numbered from one sequence" {
+    var machine = Machine{};
+    const watch = try ra8.core.watch_table.Watch.span(0x2200_0054, 4, .write);
+    try std.testing.expectEqual(@as(u32, 1), try machine.addBreak(.{ .address = 0x2200_0008 }));
+    try std.testing.expectEqual(@as(u32, 2), try machine.addWatch(watch));
+    try std.testing.expectEqual(@as(u32, 3), try machine.addBreak(.{ .address = 0x2200_0010 }));
+    try machine.breaks.remove(1);
+    try std.testing.expectEqual(@as(u32, 4), try machine.addWatch(watch));
+}

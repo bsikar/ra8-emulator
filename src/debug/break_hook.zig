@@ -46,7 +46,7 @@ pub const Link = struct {
 /// Put `point` in a fresh machine and set it running.
 pub fn link(point: *breakpoint.Break) Link {
     var made = Link{ .point = point };
-    made.id = made.machine.breaks.add(point.*) catch unreachable;
+    made.id = made.machine.addBreak(point.*) catch unreachable;
     made.machine.begin();
     return made;
 }

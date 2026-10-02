@@ -108,8 +108,8 @@ const transcript_expected =
     \\Temporary breakpoint 2, 0x22000022: bl #0x22000008
     \\Breakpoint 1, 0x22000008: ldr r1, [pc, #8]
     \\Deleted breakpoint 1
-    \\Watchpoint 1 (write) at 0x22000054
-    \\Watchpoint 1: write of 4 at 0x22000054, 0x22000010: bx lr
+    \\Watchpoint 3 (write) at 0x22000054
+    \\Watchpoint 3: write of 4 at 0x22000054, 0x22000010: bx lr
     \\error: CoreNotAttached
     \\error: NoSymbols
     \\error: NoSuchBreak
@@ -130,4 +130,22 @@ test "a script drives the session through break, step, registers and memory" {
     defer transcript.deinit();
     try fixture.play(script, &transcript);
     try std.testing.expectEqualStrings(transcript_expected, transcript.items);
+}
+
+// One numbering for both kinds, so delete reaches a watch as well as a break.
+test "delete takes out a watch or a break by the id they share" {
+    var fixture: Fixture = undefined;
+    try fixture.open();
+    defer fixture.engine.close();
+    var transcript = std.ArrayList(u8).init(std.testing.allocator);
+    defer transcript.deinit();
+    try fixture.play("watch 0x22000054\nbreak 0x22000008\ndelete 1\ndelete 2\ndelete 1\n", &transcript);
+    try std.testing.expectEqualStrings(
+        \\Watchpoint 1 (write) at 0x22000054
+        \\Breakpoint 2 at 0x22000008
+        \\Deleted watchpoint 1
+        \\Deleted breakpoint 2
+        \\error: NoSuchBreak
+        \\
+    , transcript.items);
 }

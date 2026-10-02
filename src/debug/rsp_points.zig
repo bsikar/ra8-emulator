@@ -50,7 +50,7 @@ fn parse(request: []const u8) ?Request {
 /// gdb re-inserts its breaks on every resume, so a second set on the same
 /// address is already true and answered OK.
 fn addBreak(machine: *stop_machine.Machine, request: Request, out: []u8) Error![]const u8 {
-    _ = machine.breaks.add(.{ .address = request.address }) catch |err| return switch (err) {
+    _ = machine.addBreak(.{ .address = request.address }) catch |err| return switch (err) {
         error.AlreadySet => copy(out, "OK"),
         error.TableFull => copy(out, table_full),
         error.NoSuchBreak => copy(out, request_error),
@@ -66,7 +66,7 @@ fn removeBreak(machine: *stop_machine.Machine, request: Request, out: []u8) Erro
 
 fn addWatch(machine: *stop_machine.Machine, request: Request, out: []u8) Error![]const u8 {
     const span = watch_table.Watch.span(request.address, request.length, kindOf(request.kind)) catch return copy(out, request_error);
-    _ = machine.watches.add(span) catch return copy(out, table_full);
+    _ = machine.addWatch(span) catch return copy(out, table_full);
     return copy(out, "OK");
 }
 
