@@ -2,11 +2,12 @@
 //! each kernel window, clamped to ACTIVATION_MIN/MAX, written to the OFM.
 //!
 //! KERNEL_WIDTH_M1 (0x120), KERNEL_HEIGHT_M1 (0x121) and KERNEL_STRIDE
-//! (0x122) are read the way Arm's Vela 3.12.0 (Apache-2.0)
-//! register_command_stream_generator.py `generate_kernel` writes them:
-//! stride-1 low bits in b0 (x) and b1 (y), the extension bits in b6 (x)
-//! and b9 (y), dilation-1 in b3 (x) and b4 (y). b2 picks the block
-//! traversal, which changes the order of work but not the result.
+//! (0x122) follow the Ethos-U55 TRM (102420_0200_02, cmd0 table): the
+//! stride-1 low bits in b0 (x) and b1 (y), (stride-1)>>1 in b[8:6] (x) and
+//! b[11:9] (y), with a supported stride of 1 to 3. Arm's Vela 3.12.0
+//! `generate_kernel` writes the same, plus dilation-1 in b3 (x) and b4 (y).
+//! b2 picks the block traversal, which changes the order of work but not
+//! the result. A stride outside 1 to 3 is refused.
 //!
 //! Like MIN/MAX this models only what holds whatever the hardware does
 //! inside: IFM and OFM of one type (int8, uint8 or int16) sharing a zero
@@ -50,10 +51,13 @@ pub const Step = struct { x: u32, y: u32 };
 /// The kernel's stride in elements, from KERNEL_STRIDE.
 pub fn step(raw: u16) Step {
     return .{
-        .x = 1 + ((raw & 1) | ((raw >> 6) & 1) << 1),
-        .y = 1 + (((raw >> 1) & 1) | ((raw >> 9) & 1) << 1),
+        .x = 1 + ((raw & 1) | ((raw >> 6) & 7) << 1),
+        .y = 1 + (((raw >> 1) & 1) | ((raw >> 9) & 7) << 1),
     };
 }
+
+/// The TRM's supported stride range, on both axes.
+pub const max_step: u32 = 3;
 
 /// Everything the operator reads, as the program left it.
 pub const Inputs = struct {
@@ -70,6 +74,8 @@ fn supported(inputs: Inputs) Error!addr.Format {
     const pad = maps.ifm_pad;
     if (inputs.quant.activation != 0) return error.OperatorNotModelled;
     if (inputs.kernel.stride & dilation_bits != 0) return error.OperatorNotModelled;
+    const s = step(inputs.kernel.stride);
+    if (s.x > max_step or s.y > max_step) return error.OperatorNotModelled;
     if (pad.top != 0 or pad.left != 0 or pad.right != 0 or pad.bottom != 0) return error.OperatorNotModelled;
     if (maps.ifm.zero_point != maps.ofm.zero_point) return error.OperatorNotModelled;
     const ifm = addr.ifmFormat(maps.ifm.precision) orelse return error.OperatorNotModelled;
