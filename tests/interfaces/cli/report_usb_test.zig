@@ -64,3 +64,15 @@ test "a character outside printable ASCII prints as a question mark" {
     const text = try render(&host);
     try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "product \"A?\"") != null);
 }
+
+test "the halt answers print once the host sent them" {
+    var host = Host{ .step = .configured, .halt_set = .ack, .halt_clear = .stall };
+    const text = try render(&host);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "USBFS host: ENDPOINT_HALT set ack, clear stall\n") != null);
+}
+
+test "no halt line when the device listed no endpoint" {
+    const host = Host{ .step = .configured };
+    const text = try render(&host);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "ENDPOINT_HALT") == null);
+}

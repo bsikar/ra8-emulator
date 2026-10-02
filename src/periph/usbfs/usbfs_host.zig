@@ -23,6 +23,8 @@ pub const Step = enum {
     string_languages,
     string_product,
     set_interface,
+    set_halt,
+    clear_halt,
     configured,
     failed,
 };
@@ -45,6 +47,10 @@ pub const requests = struct {
     /// SET_INTERFACE(alternate 0, interface 0): every configured device
     /// has interface 0, and a device with no alternates may STALL it.
     pub const set_interface = [8]u8{ 0x01, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    /// SET_FEATURE or CLEAR_FEATURE(ENDPOINT_HALT) on `endpoint`.
+    pub fn endpointHalt(set: bool, endpoint: u8) [8]u8 {
+        return .{ 0x02, if (set) 0x03 else 0x01, 0x00, 0x00, endpoint, 0x00, 0x00, 0x00 };
+    }
     pub const get_status = [8]u8{ 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00 };
     /// GET_DESCRIPTOR(String) `index` in `language`, for up to 255 bytes; the
     /// device ends it early with a short packet. Index 0 is the language list.
@@ -79,6 +85,9 @@ pub const Host = struct {
     product: [255]u8 = .{0} ** 255,
     /// How the device answered SET_INTERFACE.
     interface: Answer = .none,
+    /// How the device answered halting, then un-halting, its first endpoint.
+    halt_set: Answer = .none,
+    halt_clear: Answer = .none,
     got: u16 = 0,
     /// Whether the current read ended on a short packet.
     short: bool = false,
@@ -101,6 +110,14 @@ pub const Host = struct {
             .string_product => self.readProduct(device),
             .set_interface => if (self.write(device, requests.set_interface)) |answer| {
                 self.interface = answer;
+                self.advance(if (firstEndpoint(self.configuration()) != null) .set_halt else .configured);
+            },
+            .set_halt => if (self.write(device, requests.endpointHalt(true, self.endpoint()))) |answer| {
+                self.halt_set = answer;
+                self.advance(.clear_halt);
+            },
+            .clear_halt => if (self.write(device, requests.endpointHalt(false, self.endpoint()))) |answer| {
+                self.halt_clear = answer;
                 self.advance(.configured);
             },
             .configured, .failed => {},
@@ -134,6 +151,11 @@ pub const Host = struct {
         if (index == 0 or self.languages[0] < 4) return self.advance(.set_interface);
         const language = std.mem.readInt(u16, self.languages[2..4], .little);
         self.read(device, requests.stringDescriptor(index, language), &self.product, .set_interface);
+    }
+
+    /// The endpoint the halt requests aim at: the first one the set lists.
+    fn endpoint(self: *const Host) u8 {
+        return firstEndpoint(self.configuration()) orelse 0;
     }
 
     pub fn done(self: *const Host) bool {
@@ -199,6 +221,19 @@ pub const Host = struct {
 
 fn state(device: *const usbfs.Device) u16 {
     return device.interruptStatus() & usbfs.intsts0.dvsq_mask;
+}
+
+/// The bEndpointAddress of the first endpoint descriptor in a configuration
+/// set, walking descriptors by bLength; null when it lists none.
+pub fn firstEndpoint(set: []const u8) ?u8 {
+    var at: usize = 0;
+    while (at + 2 < set.len) {
+        const length = set[at];
+        if (length < 2) return null;
+        if (set[at + 1] == 5 and at + 2 < set.len) return set[at + 2];
+        at += length;
+    }
+    return null;
 }
 
 fn stalled(device: *usbfs.Device) bool {
