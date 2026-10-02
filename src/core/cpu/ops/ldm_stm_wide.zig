@@ -8,6 +8,7 @@
 //! list. Every access goes through the bus.
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -82,6 +83,7 @@ fn span(cpu: *const Cpu, form: Form) struct { start: u32, after: u32 } {
 fn stm(cpu: *Cpu, instr: Instr) op.Error!void {
     const form = Form.of(instr).?;
     const at = span(cpu, form);
+    try alignment.memA(at.start, 4);
     var address = at.start;
     for (0..16) |i| {
         if (form.list & (@as(u16, 1) << @intCast(i)) == 0) continue;
@@ -96,6 +98,7 @@ fn stm(cpu: *Cpu, instr: Instr) op.Error!void {
 fn ldm(cpu: *Cpu, instr: Instr) op.Error!void {
     const form = Form.of(instr).?;
     const at = span(cpu, form);
+    try alignment.memA(at.start, 4);
     var values: [16]u32 = undefined;
     var address = at.start;
     for (0..16) |i| {

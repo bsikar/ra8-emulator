@@ -6,8 +6,9 @@
 const Cpu = @import("cpu.zig").Cpu;
 const Instr = @import("instr.zig").Instr;
 const bus = @import("bus.zig");
+const alignment = @import("alignment.zig");
 
-pub const Error = bus.Error;
+pub const Error = bus.Error || alignment.Error;
 
 /// Runs one decoded instruction. The PC already points past it when this is
 /// called; a branch writes the PC, everything else leaves it alone.

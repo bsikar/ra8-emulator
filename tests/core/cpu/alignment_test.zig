@@ -1,0 +1,43 @@
+//! Covers src/core/cpu/alignment.zig and the MemA groups that call it.
+const std = @import("std");
+const ra8 = @import("ra8");
+const alignment = ra8.core.cpu.alignment;
+const Instr = ra8.core.cpu.instr.Instr;
+const fixture = @import("exception/ram.zig");
+
+test "memA accepts aligned accesses of every size" {
+    try alignment.memA(0x2000_0001, 1);
+    try alignment.memA(0x2000_0002, 2);
+    try alignment.memA(0x2000_0004, 4);
+    try alignment.memA(0x2000_0004, 8);
+}
+
+test "memA rejects an access off its natural alignment" {
+    try std.testing.expectError(error.Unaligned, alignment.memA(0x2000_0001, 2));
+    try std.testing.expectError(error.Unaligned, alignment.memA(0x2000_0002, 4));
+    try std.testing.expectError(error.Unaligned, alignment.memA(0x2000_0006, 8));
+}
+
+fn exec(cpu: *ra8.core.cpu.cpu.Cpu, hw1: u16, hw2: u16, size: u3) !void {
+    const instr: Instr = .{ .address = fixture.code, .hw1 = hw1, .hw2 = hw2, .size = size };
+    try ra8.core.cpu.decode.decode(instr).?.exec(cpu, instr);
+}
+
+test "an unaligned ldrex, ldrd and ldm are all refused" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = fixture.base + 0x202;
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xE850, 0x1F00, 4)); // ldrex r1, [r0]
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xE9D0, 0x1200, 4)); // ldrd r1, r2, [r0]
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xC806, 0, 2)); // ldm r0!, {r1, r2}
+}
+
+test "a step that makes an unaligned MemA access stops on it with the PC left there" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.code, 0x0000_C806); // ldm r0!, {r1, r2}; movs r0, r0
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = fixture.base + 0x201;
+    try std.testing.expectEqual(fixture.code, cpu.step().?.unaligned);
+    try std.testing.expectEqual(fixture.code, cpu.regs.pc);
+    try std.testing.expectEqual(fixture.base + 0x201, cpu.regs.low[0]);
+}

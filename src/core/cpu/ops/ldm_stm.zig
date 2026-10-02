@@ -8,6 +8,7 @@
 //! instruction.
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -38,6 +39,7 @@ fn stm(cpu: *Cpu, instr: Instr) op.Error!void {
     const rn = base(instr.hw1);
     const registers: u8 = @truncate(instr.hw1);
     var address = cpu.regs.get(rn);
+    try alignment.memA(address, 4);
     for (0..8) |i| {
         if (registers & (@as(u8, 1) << @intCast(i)) == 0) continue;
         var bytes: [4]u8 = undefined;
@@ -53,6 +55,7 @@ fn ldm(cpu: *Cpu, instr: Instr) op.Error!void {
     const registers: u8 = @truncate(instr.hw1);
     var values: [8]u32 = undefined;
     var address = cpu.regs.get(rn);
+    try alignment.memA(address, 4);
     for (0..8) |i| {
         if (registers & (@as(u8, 1) << @intCast(i)) == 0) continue;
         values[i] = try cpu.bus.readWord(address);
