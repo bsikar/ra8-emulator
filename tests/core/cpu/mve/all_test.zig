@@ -24,4 +24,5 @@ test {
     _ = @import("bit_reverse_vectors_test.zig");
     _ = @import("contiguous_test.zig");
     _ = @import("contiguous_vectors_test.zig");
+    _ = @import("contiguous_wide_vectors_test.zig");
 }
