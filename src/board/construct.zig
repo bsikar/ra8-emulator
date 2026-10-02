@@ -68,6 +68,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .events = icu.Icu.init(),
         .links = elc.Elc.init(),
         .transfers = dtc.Dtc.init(),
+        .transfers1 = dtc.Dtc.init(),
         .dma = undefined,
         .pins = gpio.Gpio.init(),
         .pinfunc = pfs.Pfs.init(),

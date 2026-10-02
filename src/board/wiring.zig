@@ -117,6 +117,8 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.events.pinsBlock());
     try self.bus.add(self.events.select.block());
     try self.bus.add(self.links.block());
+    self.transfers.twin = &self.transfers1;
+    self.transfers.issuer = &self.bus.issuer;
     try self.bus.add(self.transfers.block());
     try self.bus.add(self.dma_module.block());
     self.dma = dmac.Dmac.init(&self.dma_module);
