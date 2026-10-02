@@ -72,5 +72,6 @@ test {
     _ = @import("ops/mve_int_vmla_test.zig");
     _ = @import("ops/mve_int_scalar_test.zig");
     _ = @import("ops/mve_vcmp_test.zig");
+    _ = @import("ops/mve_vpred_test.zig");
     _ = @import("ops/table_test.zig");
 }
