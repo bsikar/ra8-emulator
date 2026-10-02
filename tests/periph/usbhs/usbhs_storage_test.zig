@@ -9,7 +9,7 @@ const setup = ra8.periph.usbhs_setup;
 const usbhs_pipe = ra8.periph.usbhs_pipe;
 const xfer = ra8.periph.usbhs_xfer;
 
-const disk = [_]u8{0x5A} ** (2 * msc.block_len);
+var disk = [_]u8{0x5A} ** (2 * msc.block_len);
 
 fn set(code: u8, value: u16) setup.Packet {
     return .{ .request_type = 0x00, .code = code, .value = value };
