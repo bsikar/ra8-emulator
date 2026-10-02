@@ -73,4 +73,6 @@ pub const mve_int_vmla = @import("ops/mve_int_vmla.zig");
 pub const mve_int_scalar = @import("ops/mve_int_scalar.zig");
 pub const mve_vcmp = @import("ops/mve_vcmp.zig");
 pub const mve_vpred = @import("ops/mve_vpred.zig");
+pub const mve_vdup = @import("ops/mve_vdup.zig");
+pub const mve_lane_move = @import("ops/mve_lane_move.zig");
 pub const table = @import("ops/table.zig");
