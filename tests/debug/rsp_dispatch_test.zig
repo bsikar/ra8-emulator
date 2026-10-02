@@ -8,9 +8,11 @@ const Engine = ra8.core.engine.Engine;
 
 const base: u32 = memmap.sram_base;
 
-// The Z and z tests ride along here because tests/all.zig is at its limit.
+// The Z, z and run-control tests ride along here because tests/all.zig is
+// at its limit.
 test {
     _ = @import("rsp_points_test.zig");
+    _ = @import("rsp_run_test.zig");
 }
 
 fn open() !Engine {

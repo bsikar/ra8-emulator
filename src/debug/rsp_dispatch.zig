@@ -5,7 +5,9 @@
 //! reads and writes of registers and memory: `g`/`G` all registers, `p`/`P`
 //! one, `m`/`M` memory as hex and `X` memory as binary. With a stop
 //! machine attached, `Z`/`z` set and clear breaks and watches
-//! (rsp_points.zig); without one they are not supported.
+//! (rsp_points.zig); without one they are not supported. With a debugger
+//! session attached, `c`, `s`, `vCont` and the thread requests resume and
+//! select cores through it (rsp_run.zig).
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
@@ -17,6 +19,9 @@ pub const Error = error{NoSpace};
 
 /// The Z and z requests, reached through here so tests see them.
 pub const points = @import("rsp_points.zig");
+/// Run control and threads, reached through here for the same reason.
+pub const run_control = @import("rsp_run.zig");
+const debug_session = @import("session.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]engine.Cortex{
@@ -38,9 +43,17 @@ const request_error = "E00";
 pub const Dispatch = struct {
     core: *const engine.Engine,
     machine: ?*stop_machine.Machine = null,
+    /// With a debugger session attached, run control and threads go to it,
+    /// and everything else is answered for the core it has selected.
+    session: ?*debug_session.Session = null,
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
+        if (self.session) |live| {
+            if (run_control.handles(request)) return run_control.answer(live, request, out);
+            const selected = Dispatch{ .core = live.core, .machine = live.driver.machine };
+            return selected.answer(request, out);
+        }
         if (request.len == 0) return out[0..0];
         if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, supported);
         if (std.mem.startsWith(u8, request, xfer)) return features.read(request[xfer.len..], out);
