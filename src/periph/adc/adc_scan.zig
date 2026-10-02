@@ -75,9 +75,10 @@ pub const diag = struct {
     pub const positive_full_scale: u16 = 0x7FFF;
 };
 
-/// The die-temperature code. Paired with the factory calibration the loader
-/// seeds at 0x02C1EDA0, the two-point conversion in the firmware's TSN driver
-/// maps this to about 26 degrees, which is a plausible deterministic die.
+/// The die-temperature code. Paired with the factory calibration board
+/// attach seeds at 0x02C1EDA0 (adc_tsn_cal.zig), the two-point conversion
+/// in the firmware's TSN driver maps this to 26 degrees, a plausible
+/// deterministic die.
 pub const temperature_code: u16 = 1800;
 
 /// What any other internal source reports: a 12-bit half-scale sample.

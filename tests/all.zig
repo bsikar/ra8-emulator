@@ -106,6 +106,7 @@ test {
     _ = @import("core/core_rate_test.zig");
     _ = @import("periph/adc/adc_intr_test.zig");
     _ = @import("periph/adc/adc_scan_test.zig");
+    _ = @import("periph/adc/adc_tsn_cal_test.zig");
     _ = @import("periph/acmphs/acmphs_test.zig");
     _ = @import("periph/acmphs/acmphs_output_test.zig");
     _ = @import("periph/adc/adc_test.zig");
