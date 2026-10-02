@@ -73,21 +73,43 @@ test "POP into the PC returns the same way" {
     try std.testing.expectEqual(fixture.msp_top, cpu.regs.msp);
 }
 
-test "an EXC_RETURN the core cannot honour stops the core" {
+const usage_handler: u32 = fixture.base + 0x1C0;
+
+/// Return from the SVC handler to `value` and expect INVPC tail-chained.
+fn expectInvpc(value: u32) !void {
     var ram: fixture.Ram = .{};
     program(&ram, bx_lr);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putWord(ra8.core.memmap.scb.shcsr, 1 << 18);
     var cpu = try fixture.boot(&ram);
     _ = cpu.step();
-    cpu.regs.lr = 0xFFFF_FFE9; // FP frame
-    try std.testing.expectEqual(fixture.handler, cpu.step().?.invalid_return);
+    const frame_at = cpu.regs.msp;
+    cpu.regs.lr = value;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 6), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(@as(u32, 1 << 18), ram.word(ra8.core.memmap.scb.cfsr));
+    try std.testing.expectEqual(0xF000_0000 +% value, cpu.regs.lr);
+    // No new frame: the refused one is still where the return found it.
+    try std.testing.expectEqual(frame_at, cpu.regs.msp);
+    try std.testing.expectEqual(@as(u9, 6), cpu.active.running().?.number);
 }
 
-test "a frame whose IPSR contradicts the return mode stops the core" {
+test "an EXC_RETURN the core cannot honour tail-chains INVPC" {
+    try expectInvpc(0xFFFF_FFE9); // FP frame
+}
+
+test "a frame whose IPSR contradicts the return mode tail-chains INVPC" {
+    try expectInvpc(0xFFFF_FFF1); // Handler mode, but the frame came from Thread
+}
+
+test "a refused return with FAULTMASK set locks up and stops the core" {
     var ram: fixture.Ram = .{};
     program(&ram, bx_lr);
     var cpu = try fixture.boot(&ram);
     _ = cpu.step();
-    cpu.regs.lr = 0xFFFF_FFF1; // Handler mode, but the frame came from Thread
+    cpu.regs.faultmask = 1;
+    cpu.regs.lr = 0xFFFF_FFE9;
     try std.testing.expectEqual(fixture.handler, cpu.step().?.invalid_return);
 }
 

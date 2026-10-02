@@ -33,6 +33,13 @@ pub fn enter(cpu: *Cpu, which: active.Entry, return_address: u32) bus.Error!void
     if (cpu.source) |from| try from.taken(cpu.bus, which.number);
 }
 
+/// Enter `which` as a tail chain: no frame, `lr` as the link value.
+pub fn chain(cpu: *Cpu, which: active.Entry, lr: u32) bus.Error!void {
+    try entry.chain(cpu, which.number, lr);
+    _ = cpu.active.push(which);
+    if (cpu.source) |from| try from.taken(cpu.bus, which.number);
+}
+
 /// SVC, at the priority SHPR2 gives it.
 pub fn supervisorCall(cpu: *Cpu, number: u9, return_address: u32) bus.Error!void {
     const shpr2 = cpu.bus.readWord(memmap.scb.shpr2) catch 0;

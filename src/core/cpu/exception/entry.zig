@@ -30,6 +30,22 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!void {
     r.setSp(try frame.push(cpu.bus, r.sp(), stacked));
     r.lr = exc_return.forEntry(from);
     r.control &= ~regs_mod.control_bits.spsel;
+    land(cpu, number, handler);
+}
+
+/// Take exception `number` without stacking a frame, with `lr` as the link
+/// value: a fault raised by a failed exception return, whose frame is still
+/// on the stack where the return found it.
+pub fn chain(cpu: *Cpu, number: Number, lr: u32) bus.Error!void {
+    cpu.exclusive = null;
+    const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
+    cpu.regs.lr = lr;
+    land(cpu, number, handler);
+}
+
+/// IPSR, EPSR.T and the PC for a handler about to run.
+fn land(cpu: *Cpu, number: Number, handler: u32) void {
+    const r = &cpu.regs;
     r.xpsr = (r.xpsr & ~(it_bits | regs_mod.xpsr_bits.ipsr)) | number;
     const thumb = regs_mod.xpsr_bits.thumb;
     r.xpsr = if (handler & 1 != 0) r.xpsr | thumb else r.xpsr & ~thumb;

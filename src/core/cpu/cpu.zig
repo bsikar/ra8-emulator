@@ -28,8 +28,8 @@ pub const Stop = union(enum) {
     /// reached memory nothing answers for. The PC is left on it.
     bus_fault: u32,
     /// The instruction at this address branched to an EXC_RETURN value the
-    /// core cannot honour, or to one whose stacked frame contradicts it: an
-    /// INVPC UsageFault the core does not take yet.
+    /// core cannot honour, or to one whose stacked frame contradicts it, and
+    /// the INVPC UsageFault it raises locked up or could not be taken.
     invalid_return: u32,
     /// The instruction at this address made an unaligned access and the
     /// UNALIGNED UsageFault it raises locked up or could not be stacked. The
@@ -99,7 +99,10 @@ pub const Cpu = struct {
         if (self.regs.exc_return) |value| {
             self.regs.exc_return = null;
             exception.ret.from(self, value) catch |err| return switch (err) {
-                error.InvalidReturn => .{ .invalid_return = address },
+                error.InvalidReturn => {
+                    exception.fault.invalidReturn(self, value) catch return .{ .invalid_return = address };
+                    return null;
+                },
                 else => .{ .bus_fault = address },
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };
