@@ -44,6 +44,7 @@ pub const conv = @import("npu_vela_conv.zig");
 pub const convop = @import("npu_vela_convop.zig");
 /// Elementwise MUL (NPU_OP_ELEMENTWISE mode 0).
 pub const mul = @import("npu_vela_mul.zig");
+pub const addsub = @import("npu_vela_addsub.zig");
 /// AVERAGE pooling without padding.
 pub const avgpool = @import("npu_vela_avgpool.zig");
 
