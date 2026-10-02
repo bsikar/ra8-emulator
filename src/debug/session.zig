@@ -14,6 +14,10 @@
 //! interface, so it runs on Unicorn now and on the Zig core once that core
 //! feeds the same stop machine. The caller attaches the step hook first,
 //! with memory watching on if the script sets watches.
+//!
+//! On a dual-core run the second CPU is parked in `other`, and `core N`
+//! swaps it in. Only the selected core runs; the other holds where it
+//! stopped, which is gdb's all-stop with the scheduler locked.
 const std = @import("std");
 const break_table = @import("break_table.zig");
 const commands = @import("commands.zig");
@@ -39,6 +43,20 @@ pub const limits = struct {
 /// Whether the session wants more commands.
 pub const Outcome = enum { more, quit };
 
+const Temporary = std.BoundedArray(break_table.Id, break_table.limits.capacity);
+
+/// One CPU as a session drives it: its engine, the stop machine its hook
+/// feeds, and where its run stands. Each core has its own breaks and
+/// watches, because each has its own machine.
+pub const Slot = struct {
+    core: *const engine.Engine,
+    driver: *step_hook.Driver,
+    entry: u32,
+    image: ?elf.Image = null,
+    started: bool = false,
+    temporary: Temporary = .{},
+};
+
 pub const Session = struct {
     core: *const engine.Engine,
     driver: *step_hook.Driver,
@@ -49,7 +67,12 @@ pub const Session = struct {
     budget: usize = limits.default_budget,
     started: bool = false,
     /// Breaks set with `tbreak`, deleted when they stop the run.
-    temporary: std.BoundedArray(break_table.Id, break_table.limits.capacity) = .{},
+    temporary: Temporary = .{},
+    /// Which CPU the fields above describe.
+    index: u8 = 0,
+    /// The other CPU, parked while this one has the session. Null on a
+    /// single-core run.
+    other: ?Slot = null,
 
     /// Carry out one command and write what happened.
     pub fn apply(self: *Session, command: commands.Command, out: anytype) !Outcome {
@@ -93,9 +116,43 @@ pub const Session = struct {
             .print => |text| try session_view.word(out, self.core.*, text, try self.resolve(text)),
             .disassemble => |want| try self.disassemble(want, out),
             .backtrace => try self.backtrace(out),
-            .core => |index| if (index != 0) return Error.CoreNotAttached,
+            .core => |index| try self.switchTo(index, out),
             .quit => {},
         }
+    }
+
+    /// Give the session to another CPU. Only the selected core runs; the
+    /// other holds where it stopped until it is selected again.
+    fn switchTo(self: *Session, index: u8, out: anytype) !void {
+        if (index != self.index) {
+            const parked = self.other orelse return Error.CoreNotAttached;
+            self.other = self.park();
+            self.take(parked);
+            self.index = index;
+        }
+        try out.print("Core {d}, ", .{self.index});
+        const pc = if (self.started) try self.core.register(.pc) else self.entry;
+        try self.line(pc, out);
+    }
+
+    fn park(self: *const Session) Slot {
+        return .{
+            .core = self.core,
+            .driver = self.driver,
+            .entry = self.entry,
+            .image = self.image,
+            .started = self.started,
+            .temporary = self.temporary,
+        };
+    }
+
+    fn take(self: *Session, slot: Slot) void {
+        self.core = slot.core;
+        self.driver = slot.driver;
+        self.entry = slot.entry;
+        self.image = slot.image;
+        self.started = slot.started;
+        self.temporary = slot.temporary;
     }
 
     fn setBreak(self: *Session, at: commands.At, temporary: bool, out: anytype) !void {
