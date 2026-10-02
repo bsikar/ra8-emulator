@@ -315,3 +315,9 @@ is stale or an encoding is missing. Regenerate with
 | VCADD (MVE, floating-point) T1 | 4 |
 | VCMLA (MVE) T1 | 6 |
 | VCMUL (MVE) T1 | 5 |
+| VADD (MVE, floating-point, by scalar) T2 | 1 |
+| VSUB (MVE, floating-point, by scalar) T2 | 1 |
+| VMUL (MVE, floating-point, by scalar) T2 | 1 |
+| VFMA (MVE, floating-point, by scalar) T1 | 1 |
+| VFMAS (MVE, floating-point, by scalar) T1 | 1 |
+| VCMP (MVE, floating-point, by scalar) T2 | 2 |

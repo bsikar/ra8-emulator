@@ -50,4 +50,7 @@ test {
     _ = @import("float_minmaxv_vectors_test.zig");
     _ = @import("float_complex_test.zig");
     _ = @import("float_complex_vectors_test.zig");
+    _ = @import("float_scalar_test.zig");
+    _ = @import("float_scalar_vectors_test.zig");
+    _ = @import("float_lane_mask_test.zig");
 }
