@@ -21,7 +21,6 @@ pub const DataPort = struct {
 
     /// Accesses refused, each for its own reason.
     bad_pipe: u32 = 0,
-    dcp_aim: u32 = 0,
     contended: u32 = 0,
     bad_width: u32 = 0,
     wrong_way: u32 = 0,
@@ -44,7 +43,7 @@ pub const DataPort = struct {
     }
 
     pub fn refusals(self: *const DataPort) u32 {
-        return self.bad_pipe + self.dcp_aim + self.contended +
+        return self.bad_pipe + self.contended +
             self.bad_width + self.wrong_way;
     }
 };
@@ -54,9 +53,11 @@ pub const DataPort = struct {
 pub const Ports = struct {
     ports: [regs.dfifo.count]DataPort = [_]DataPort{.{}} ** regs.dfifo.count,
 
-    /// DnFIFOSEL. Three things can go wrong with an aim, and each is its own
-    /// refusal: a pipe the part does not have, the DCP (which answers on
-    /// CFIFO and only there), and a pipe the other data port already holds.
+    /// DnFIFOSEL. CURPIPE 0 parks the port: it is the reset value, and the
+    /// way a driver lets go of a data port when it resets the controller.
+    /// The DCP answers on CFIFO only, so a parked port reaches no pipe, but
+    /// parking is not a refusal. Two aims are: a pipe the part does not have,
+    /// and a pipe the other data port or CFIFO already holds.
     pub fn select(self: *Ports, which: u32, value: u16, taken_by_cfifo: ?u32) void {
         const port = &self.ports[which];
         const aimed_at = value & regs.fifo.curpipe_mask;
@@ -66,10 +67,7 @@ pub const Ports = struct {
             port.bad_pipe += 1;
             return;
         }
-        if (aimed_at == 0) {
-            port.dcp_aim += 1;
-            return;
-        }
+        if (aimed_at == 0) return;
         if (self.heldElsewhere(which, aimed_at) or taken_by_cfifo == aimed_at) {
             port.contended += 1;
             return;

@@ -19,11 +19,12 @@ test "a data port aims at a data pipe" {
     try std.testing.expectEqual(@as(u32, 0), ports.refusals());
 }
 
-test "the DCP is not reachable from a data port" {
+test "CURPIPE 0 parks a data port without refusing it" {
     var ports: dfifo.Ports = .{};
+    ports.select(0, sel16(1), null);
     ports.select(0, sel16(0), null);
     try std.testing.expectEqual(@as(?u32, null), ports.ports[0].pipe());
-    try std.testing.expectEqual(@as(u32, 1), ports.ports[0].dcp_aim);
+    try std.testing.expectEqual(@as(u32, 0), ports.refusals());
 }
 
 test "a pipe the part does not have aims the port at nothing" {
@@ -194,11 +195,11 @@ test "the selector reads back through the window" {
 
 test "a bus reset keeps what was already refused" {
     var ports: dfifo.Ports = .{};
-    ports.select(0, sel16(0), null);
+    ports.select(0, sel16(12), null);
     ports.select(0, sel16(1), null);
     ports.release();
     try std.testing.expectEqual(@as(?u32, null), ports.ports[0].pipe());
-    try std.testing.expectEqual(@as(u32, 1), ports.ports[0].dcp_aim);
+    try std.testing.expectEqual(@as(u32, 1), ports.ports[0].bad_pipe);
 }
 
 test "a bus reset lets go of both data ports" {
@@ -213,7 +214,7 @@ test "a bus reset lets go of both data ports" {
 test "the window reports what the data ports refused, after a reset" {
     var host: usbhs.Host = .{};
     liveHost(&host);
-    host.write(regs.window.base + regs.reg.d0fifosel, 2, sel16(0));
+    host.write(regs.window.base + regs.reg.d0fifosel, 2, sel16(12));
     host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.usbrst);
     host.write(regs.window.base + regs.reg.dvstctr0, 2, regs.port.uact);
     try std.testing.expect(host.refusals() != 0);
