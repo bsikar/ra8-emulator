@@ -123,6 +123,7 @@ test {
     _ = @import("debug/registers_test.zig");
     _ = @import("debug/hotspots_test.zig");
     _ = @import("debug/functions_test.zig");
+    _ = @import("debug/rsp_packet_test.zig");
     _ = @import("core/stop_test.zig");
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");
