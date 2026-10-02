@@ -99,9 +99,10 @@ pub const Machine = struct {
     /// halfway through the instruction that made it.
     watch_pending: ?watch_table.Hit = null,
 
-    /// Run until a break or a halt request.
+    /// Run until a break or a halt request, or one instruction when
+    /// DHCSR.C_STEP is set.
     pub fn proceed(self: *Machine) void {
-        self.start(.running, null);
+        self.start(if (self.dcb.stepping()) .step else .running, null);
     }
 
     /// Run from a fresh start rather than a resume: the first instruction
