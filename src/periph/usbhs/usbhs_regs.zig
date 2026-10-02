@@ -126,7 +126,9 @@ pub const pipe = struct {
     /// DCP is pipe 0; PIPE1..PIPE9 follow.
     pub const count: u32 = 10;
     pub const epnum_mask: u16 = 0x000F;
-    pub const dir_in: u16 = 1 << 4;
+    /// PIPECFG.DIR: set, the pipe transmits. On the host that is an OUT
+    /// pipe; a pipe left clear receives, so a host IN pipe has it clear.
+    pub const dir_transmit: u16 = 1 << 4;
     pub const maxp_mask: u16 = 0x07FF;
     /// The largest packet a high-speed bulk endpoint can carry.
     pub const maxp_limit: u16 = 512;

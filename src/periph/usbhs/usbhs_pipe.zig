@@ -10,7 +10,10 @@ const regs = @import("usbhs_regs.zig");
 /// One pipe's configuration, as the host programmed it.
 pub const Pipe = struct {
     endpoint: u8 = 0,
+    /// The host receives on this pipe (PIPECFG.DIR clear).
     in: bool = false,
+    /// PIPECFG.DIR as written, for the readback.
+    dir: u16 = 0,
     maxp: u16 = 0,
     pid: u16 = regs.pipe.pid_nak,
 
@@ -48,14 +51,18 @@ pub const Table = struct {
         self.selected = value;
     }
 
-    /// PIPECFG: the endpoint this pipe talks to and which way it runs.
+    /// PIPECFG: the endpoint this pipe talks to and which way it runs. DIR
+    /// names the way the controller sends, so on the host a set bit is an OUT
+    /// pipe. dev read it as the device would and took IN pipes for OUT ones,
+    /// so a bulk IN answer was never offered on the pipe the host armed.
     pub fn configure(self: *Table, value: u16) bool {
         const pipe = self.current() orelse {
             if (self.selected == 0) self.dcp_config += 1;
             return false;
         };
         pipe.endpoint = @intCast(value & regs.pipe.epnum_mask);
-        pipe.in = value & regs.pipe.dir_in != 0;
+        pipe.dir = value & regs.pipe.dir_transmit;
+        pipe.in = pipe.dir == 0;
         return true;
     }
 
@@ -83,8 +90,7 @@ pub const Table = struct {
 
     pub fn config(self: *Table) u16 {
         const pipe = self.current() orelse return 0;
-        const dir: u16 = if (pipe.in) regs.pipe.dir_in else 0;
-        return @as(u16, pipe.endpoint) | dir;
+        return @as(u16, pipe.endpoint) | pipe.dir;
     }
 
     /// PIPECTR[n], addressed by its own offset rather than through PIPESEL.
