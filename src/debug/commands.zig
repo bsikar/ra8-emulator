@@ -73,6 +73,8 @@ pub const Disassemble = struct {
 };
 
 pub const Command = union(enum) {
+    /// `info breakpoints`: the breaks and watches this core holds.
+    breakpoints,
     brk: At,
     tbreak: At,
     delete: u32,
@@ -145,6 +147,11 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "q", .quit },            .{ "halting", .halting },
 });
 
+/// The names `info` lists breaks and watches under.
+const info_breakpoints = std.StaticStringMap(void).initComptime(.{
+    .{"breakpoints"}, .{"break"}, .{"br"}, .{"b"},
+});
+
 /// What `info` can be asked about.
 const info_registers = std.StaticStringMap(void).initComptime(.{
     .{"registers"}, .{"reg"}, .{"r"},
@@ -200,6 +207,7 @@ fn at(words: *Words) Error!At {
 fn info(words: *Words) Error!Command {
     const what = try required(words);
     if (std.mem.eql(u8, what, "line")) return .{ .line = try required(words) };
+    if (info_breakpoints.get(what) != null) return .breakpoints;
     if (info_registers.get(what) == null) return Error.UnknownCommand;
     return .registers;
 }

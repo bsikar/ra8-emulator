@@ -57,6 +57,7 @@ pub const core = struct {
     pub const session_view = @import("debug/session_view.zig");
     pub const script = @import("debug/script.zig");
     pub const break_table = @import("debug/break_table.zig");
+    pub const break_list = @import("debug/break_list.zig");
     pub const stop_machine = @import("debug/stop_machine.zig");
     pub const watch_table = @import("debug/watch_table.zig");
     pub const call_decode = @import("debug/call_decode.zig");

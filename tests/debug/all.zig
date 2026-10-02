@@ -18,6 +18,7 @@ test {
     _ = @import("session_image_cores_test.zig");
     _ = @import("session_loop_test.zig");
     _ = @import("break_hook_test.zig");
+    _ = @import("break_list_test.zig");
     _ = @import("pc_hits_test.zig");
     _ = @import("watchpoint_test.zig");
     _ = @import("spacing_test.zig");

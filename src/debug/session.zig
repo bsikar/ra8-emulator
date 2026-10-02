@@ -23,6 +23,7 @@
 //! the board still ticks and interrupts are still taken.
 const std = @import("std");
 const break_table = @import("break_table.zig");
+const break_list = @import("break_list.zig");
 const commands = @import("commands.zig");
 const elf = @import("../core/elf.zig");
 const engine = @import("../core/engine.zig");
@@ -141,6 +142,7 @@ pub const Session = struct {
                 try self.go(out);
             },
             .registers => try session_view.registers(out, self.core.*),
+            .breakpoints => try break_list.write(out, .{ .breaks = &machine.breaks, .watches = &machine.watches, .temporary = self.temporary.slice(), .image = self.image }),
             .line => |text| try session_source.line(out, session_source.of(self.image), try self.resolve(text)),
             .examine => |want| try session_view.words(out, self.core.*, try self.resolve(want.place), want.words),
             .print => |text| try session_view.word(out, self.core.*, text, try self.resolve(text)),
