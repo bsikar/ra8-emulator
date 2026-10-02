@@ -28,3 +28,5 @@ pub const convert_vectors = @import("convert_vectors.zig");
 pub const to_int = @import("to_int.zig");
 pub const from_int = @import("from_int.zig");
 pub const int_vectors = @import("int_vectors.zig");
+pub const rounding = @import("rounding.zig");
+pub const directed_vectors = @import("directed_vectors.zig");
