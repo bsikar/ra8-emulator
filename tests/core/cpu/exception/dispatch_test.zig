@@ -189,3 +189,17 @@ test "a more urgent group still preempts, at several PRIGROUP values" {
         try std.testing.expectEqual(@as(usize, 2), try depthAfter(case.prigroup, case.running, case.offered));
     }
 }
+
+test "taking an exception and returning from it both set the event register" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{};
+    var cpu = try setup(&ram, &fake);
+    try std.testing.expect(!cpu.event);
+    fake.pending = .{ .number = pendsv, .priority = 0xFF };
+    _ = cpu.run(1); // taken, then the handler's NOP
+    try std.testing.expect(cpu.event);
+    cpu.event = false;
+    _ = cpu.run(1); // BX LR
+    try std.testing.expect(!cpu.regs.handlerMode());
+    try std.testing.expect(cpu.event);
+}

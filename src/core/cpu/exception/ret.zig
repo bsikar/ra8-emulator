@@ -30,4 +30,5 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     r.lr = f[frame.slot.lr];
     r.pc = f[frame.slot.return_address] & ~@as(u32, 1);
     r.xpsr = f[frame.slot.xpsr] & restored;
+    cpu.event = true;
 }

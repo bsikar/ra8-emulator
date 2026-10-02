@@ -37,3 +37,41 @@ test "wfi falls straight through" {
     try exec(&cpu, .{ .address = 0xFE, .hw1 = 0xBF30, .size = 2 });
     try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
 }
+
+fn runHint(cpu: *ra8.core.cpu.cpu.Cpu, hw1: u16) !void {
+    const exec = narrow(hw1).?;
+    try exec(cpu, .{ .address = 0xFE, .hw1 = hw1, .size = 2 });
+}
+
+test "sev sets the event register in both widths" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+    try runHint(&cpu, 0xBF40);
+    try std.testing.expect(cpu.event);
+    cpu.event = false;
+    const exec = wide(0x8004).?;
+    try exec(&cpu, .{ .address = 0xFC, .hw1 = 0xF3AF, .hw2 = 0x8004, .size = 4 });
+    try std.testing.expect(cpu.event);
+}
+
+test "wfe with the event set clears it and completes" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined, .event = true };
+    cpu.regs.pc = 0x100;
+    try runHint(&cpu, 0xBF20);
+    try std.testing.expect(!cpu.event);
+    try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
+}
+
+test "wfe with the event clear leaves it clear" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+    try runHint(&cpu, 0xBF20);
+    try std.testing.expect(!cpu.event);
+}
+
+test "sev then wfe pairs off, and nop, yield and wfi leave the event alone" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+    try runHint(&cpu, 0xBF40);
+    for ([_]u16{ 0xBF00, 0xBF10, 0xBF30 }) |hw1| try runHint(&cpu, hw1);
+    try std.testing.expect(cpu.event);
+    try runHint(&cpu, 0xBF20);
+    try std.testing.expect(!cpu.event);
+}

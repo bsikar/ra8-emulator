@@ -43,9 +43,11 @@ pub fn chain(cpu: *Cpu, number: Number, lr: u32) bus.Error!void {
     land(cpu, number, handler);
 }
 
-/// IPSR, EPSR.T and the PC for a handler about to run.
+/// IPSR, EPSR.T and the PC for a handler about to run. Entry also sets the
+/// event register.
 fn land(cpu: *Cpu, number: Number, handler: u32) void {
     const r = &cpu.regs;
+    cpu.event = true;
     r.xpsr = (r.xpsr & ~(it_bits | regs_mod.xpsr_bits.ipsr)) | number;
     const thumb = regs_mod.xpsr_bits.thumb;
     r.xpsr = if (handler & 1 != 0) r.xpsr | thumb else r.xpsr & ~thumb;
