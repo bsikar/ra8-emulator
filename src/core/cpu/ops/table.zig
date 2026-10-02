@@ -59,6 +59,7 @@ pub const groups = [_]op.Group{
     @import("branch_wide.zig").group,
     @import("ldst_wide.zig").group,
     @import("ldr_literal_wide.zig").group,
+    @import("preload.zig").group,
     @import("fp_arith.zig").group,
     @import("fp_unary.zig").group,
     @import("fp_system.zig").group,

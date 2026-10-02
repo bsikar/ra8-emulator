@@ -50,10 +50,18 @@ test "ldr.w pc, [pc, #imm] branches with interworking" {
     try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
 }
 
-test "PLD/PLI literal, Rt = SP, other bases and stores stay unclaimed" {
+test "ldr.w sp, [pc, #imm] loads SP; the byte and halfword forms to SP stay unclaimed" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.code + 4 + 0x10, 0x2000_1000);
+    const cpu = try run(&ram, wide(fixture.code, 0xF8DF, 0xD010));
+    try std.testing.expectEqual(@as(u32, 0x2000_1000), cpu.regs.get(13));
+    try std.testing.expect(lit.form(wide(0, 0xF89F, 0xD010)) == null); // ldrb sp
+    try std.testing.expect(lit.form(wide(0, 0xF8BF, 0xD010)) == null); // ldrh sp
+}
+
+test "PLD/PLI literal, other bases and stores stay unclaimed" {
     try std.testing.expect(lit.form(wide(0, 0xF89F, 0xF010)) == null); // pld
     try std.testing.expect(lit.form(wide(0, 0xF99F, 0xF010)) == null); // pli
-    try std.testing.expect(lit.form(wide(0, 0xF8DF, 0xD010)) == null); // rt = sp
     try std.testing.expect(lit.form(wide(0, 0xF8D0, 0x1010)) == null); // ldr.w r1, [r0]
     try std.testing.expect(lit.form(wide(0, 0xF8CF, 0x1010)) == null); // str, L clear
     try std.testing.expect(lit.form(wide(0, 0xF95F, 0x1010)) == null); // S with word size
