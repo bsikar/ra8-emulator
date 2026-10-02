@@ -11,7 +11,9 @@
 # port, and runs gdb -batch against it: attach, break, continue, stepi,
 # registers, memory read and write, a backtrace, a hardware watchpoint and
 # detach; then the same image on both cores, with the second as thread 2
-# taking the break, a step, a memory read, a backtrace and a watchpoint.
+# taking the break, a step, a memory read, a backtrace and a watchpoint;
+# then a continue into the endless loop, run past the old instruction
+# budget and stopped by a Ctrl-C (SIGINT to gdb, sent on as 0x03).
 # Exits 0 when every expected line showed, 1 when one is missing, and 77
 # (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
 
@@ -91,6 +93,27 @@ serve() {
     pid=
 }
 
+# interrupt NAME: continue with nothing to stop on, then interrupt gdb
+# the way Ctrl-C does after two seconds, and read where the core stopped.
+interrupt() {
+    local name=$1
+    port=$((port + 1))
+    "$emulator" fw.elf --gdb "$port" 2>"$name.emu" &
+    pid=$!
+    for _ in $(seq 50); do
+        grep -q listening "$name.emu" && break
+        sleep 0.1
+    done
+    "$gdb" -batch -nx fw.elf -ex "target remote :$port" -ex continue \
+        -ex 'info registers pc' -ex 'bt 2' -ex detach >"$name.out" 2>&1 &
+    local client=$!
+    sleep 2
+    kill -INT "$client" 2>/dev/null || true
+    wait "$client" || true
+    wait "$pid" || true
+    pid=
+}
+
 # expect NAME TEXT...: each text must appear in that session's output.
 expect() {
     local name=$1
@@ -119,11 +142,15 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     '<fw.counter>:' 'Thread 2 hit Hardware watchpoint 2' 'New value = ' \
     '[Inferior 1 (Remote target) detached]'
 
+interrupt stop
+expect stop 'Program received signal SIGINT, Interrupt.' 'in fw.reset () at fw.zig:' \
+    '[Inferior 1 (Remote target) detached]'
+
 if [ "$failed" -ne 0 ]; then
-    for name in one two; do
+    for name in one two stop; do
         echo "--- $name"
         cat "$name.out" "$name.emu"
     done
     exit 1
 fi
-echo "gdb_batch: one core and two cores passed"
+echo "gdb_batch: one core, two cores and an interrupt passed"
