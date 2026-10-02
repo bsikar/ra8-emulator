@@ -374,7 +374,6 @@ pub const periph = struct {
     pub const xspi = @import("periph/xspi/xspi.zig");
     pub const xspi_flash = @import("periph/xspi/xspi_flash.zig");
 };
-
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const boundary = @import("board/boundary.zig");
@@ -393,6 +392,7 @@ pub const board = struct {
     pub const report_steps = @import("interfaces/cli/report_steps.zig");
     pub const parts = @import("interfaces/cli/parts.zig");
     pub const report_run = @import("interfaces/cli/report_run.zig");
+    pub const zig_run = @import("interfaces/cli/zig_run.zig");
     pub const report_dumps = @import("interfaces/cli/report_dumps.zig");
     pub const report_hotspots = @import("interfaces/cli/report_hotspots.zig");
     pub const report_timing = @import("interfaces/cli/report_timing.zig");

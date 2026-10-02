@@ -49,3 +49,68 @@ test "no vector table is said plainly" {
     try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), &core, memmap.sram_base, 1));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: no vector table"));
 }
+
+/// Counts the boundaries a run closes and how many instructions they carry.
+const Edges = struct {
+    width: u32,
+    closes: u32 = 0,
+    charged: u64 = 0,
+
+    fn boundary(self: *Edges) boot.Boundary {
+        return .{ .context = self, .widthFn = widthOf, .closeFn = closeOf };
+    }
+
+    fn widthOf(context: *anyopaque) u32 {
+        const self: *Edges = @ptrCast(@alignCast(context));
+        return self.width;
+    }
+
+    fn closeOf(context: *anyopaque, instructions: u32) anyerror!void {
+        const self: *Edges = @ptrCast(@alignCast(context));
+        self.closes += 1;
+        self.charged += instructions;
+    }
+};
+
+/// A vector table at the base of SRAM pointing at `b .` (0xe7fe).
+fn loadSpin(core: *Engine) !void {
+    const base = memmap.sram_base;
+    var image: [10]u8 = undefined;
+    std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
+    std.mem.writeInt(u32, image[4..8], (base + 8) | 1, .little);
+    @memcpy(image[8..10], &[_]u8{ 0xFE, 0xE7 });
+    try core.write(base, &image);
+}
+
+test "a zig run on the board closes a boundary after every stretch, the short last one too" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadSpin(&core);
+    var edges: Edges = .{ .width = 3 };
+    var ran: u64 = 0;
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 10, &ran, edges.boundary());
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expectEqual(@as(u64, 10), ran);
+    try std.testing.expectEqual(@as(u32, 4), edges.closes);
+    try std.testing.expectEqual(@as(u64, 10), edges.charged);
+}
+
+test "a stretch the core stops inside is never closed" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadTiny(&core);
+    var edges: Edges = .{ .width = 5 };
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 100, null, edges.boundary());
+    try std.testing.expectEqual(@as(u8, 1), status);
+    try std.testing.expectEqual(@as(u32, 0), edges.closes);
+}

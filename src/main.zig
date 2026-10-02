@@ -138,7 +138,7 @@ pub fn main() !u8 {
     const entry = try core.register(.pc);
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
-    if (options.cpu != .unicorn) return runOffUnicorn(out, &core, &board, image, options, vector_base);
+    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
@@ -193,15 +193,6 @@ pub fn main() !u8 {
 /// functions rather than one over the length gate. The order is the
 /// contract: the board's own report first, then where the run spent
 /// itself, then the second core, then whatever was dumped by request.
-/// `--cpu zig` or `--cpu lockstep`: the core's own line, then, for a Zig run,
-/// what the board has to say.
-fn runOffUnicorn(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, image: elf.Image, options: cli.Options, vector_base: u32) !u8 {
-    var ran: u64 = 0;
-    const status = try ra8.core.cpu.boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran);
-    if (options.cpu == .zig) try report_run.zigCore(out, board, ran);
-    return status;
-}
-
 fn reportAll(
     out: anytype,
     core: engine.Engine,
