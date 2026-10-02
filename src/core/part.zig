@@ -5,8 +5,11 @@
 //! an RA8D2 one does. The one difference is that the RA8P1 carries an Arm
 //! Ethos-U55 micro-NPU and the RA8D2 does not, so the choice of part decides
 //! whether the NPU window answers at all. Everything else on the board is
-//! identical, which is why this is an enum and not a table.
+//! identical, which is why this is an enum; the memory geometry, cited per
+//! part, is in src/core/part_map.zig.
 const std = @import("std");
+
+pub const map = @import("part_map.zig");
 
 pub const Part = enum {
     ra8d2,
