@@ -80,3 +80,22 @@ test "unclaimed: SBZ bits, D16+, SP or PC, other system registers, arith space" 
     try std.testing.expect(fp_system.group.decode(wide(0xEEF1, 0x3A30)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEE30, 0x0A81)) == null);
 }
+
+test "vcmp.f16 s0, s1 and vcmp.f16 s0, #0 compare the low halves" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(0, 0xFFFF_3C00);
+    cpu.fp.bank.writeS(1, 0x0000_4000);
+    try run(&cpu, 0xEEB4, 0x0960);
+    try std.testing.expectEqual(@as(u4, 0b1000), nzcv(&cpu));
+    cpu.fp.bank.writeS(0, 0x8000);
+    try run(&cpu, 0xEEB5, 0x0940);
+    try std.testing.expectEqual(@as(u4, 0b0110), nzcv(&cpu));
+}
+
+test "vcmpe.f16 with a quiet NaN is unordered and raises IOC" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(0, 0x7E00);
+    try run(&cpu, 0xEEB4, 0x09E0);
+    try std.testing.expectEqual(@as(u4, 0b0011), nzcv(&cpu));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.ioc);
+}

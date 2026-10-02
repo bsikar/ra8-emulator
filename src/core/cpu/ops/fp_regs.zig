@@ -2,6 +2,8 @@
 //! field is a 4-bit V plus one extra bit X: single precision numbers it
 //! V:X (S0-S31), double precision X:V, which on M-profile only reaches
 //! D0-D15, so a double with X set names a register that does not exist.
+//! Half precision uses the single numbering: it reads S[i]<15:0> and
+//! writes Zeros(16):value.
 const fpu = @import("../fpu/all.zig");
 const Format = fpu.format.Format;
 const Bank = fpu.bank.Bank;
@@ -20,6 +22,7 @@ pub fn exists(i: u5, double: bool) bool {
 
 pub fn read(comptime fmt: Format, bank: *const Bank, i: u5) fmt.Bits() {
     if (comptime fmt.width() == 64) return bank.readD(@intCast(i & 0xF));
+    if (comptime fmt.width() == 16) return @truncate(bank.readS(i));
     return bank.readS(i);
 }
 

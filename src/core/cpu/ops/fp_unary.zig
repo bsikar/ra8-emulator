@@ -8,13 +8,15 @@
 //! imm4L. Registers are Vx:X in single precision and X:Vx in double, so a
 //! double naming D16+ stays unclaimed, as do the should-be-zero bits of
 //! the immediate form and every opc2 this group does not decode (VCMP,
-//! VCVT, VRINT and the rest of the space). Half precision is not decoded.
+//! VCVT, VRINT and the rest of the space). Half precision (hw2 bits 11-8
+//! 1001) covers VMOV (immediate), VABS, VNEG and VSQRT on S[x]<15:0>,
+//! writing Zeros(16):result; VMOV (register) has no half form.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const fpu = @import("../fpu/all.zig");
 const Format = fpu.format.Format;
-const Bank = fpu.bank.Bank;
+const fp_regs = @import("fp_regs.zig");
 
 pub const group: op.Group = .{ .name = "fp_unary", .decode = decode, .oracle = false };
 
@@ -52,8 +54,13 @@ pub fn imm8(instr: Instr) u8 {
 
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4 or instr.hw1 & 0xFFB0 != 0xEEB0) return null;
-    if (instr.hw2 & 0x0E10 != 0x0A00) return null;
+    const half = instr.hw2 & 0x0F10 == 0x0900;
+    if (!half and instr.hw2 & 0x0E10 != 0x0A00) return null;
     const kind = kindOf(instr) orelse return null;
+    if (half) return switch (kind) {
+        .mov => null,
+        inline else => |k| execFor(k, fpu.format.half),
+    };
     const double = instr.hw2 >> 8 & 1 == 1;
     if (double) {
         const f = fields(instr, true);
@@ -69,7 +76,7 @@ fn execFor(comptime kind: Kind, comptime fmt: Format) op.Exec {
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
             const r = fields(instr, comptime fmt.width() == 64);
             const bank = &cpu.fp.bank;
-            const value = read(fmt, bank, r.m);
+            const value = fp_regs.read(fmt, bank, r.m);
             const result: fmt.Bits() = switch (kind) {
                 .mov_imm => fpu.imm.expandImm(fmt, imm8(instr)),
                 .mov => value,
@@ -77,21 +84,11 @@ fn execFor(comptime kind: Kind, comptime fmt: Format) op.Exec {
                 .neg => value ^ sign(fmt),
                 .sqrt => fpu.sqrt.sqrt(fmt, value, &cpu.fp.fpscr),
             };
-            write(fmt, bank, r.d, result);
+            fp_regs.write(fmt, bank, r.d, result);
         }
     }.exec;
 }
 
 fn sign(comptime fmt: Format) fmt.Bits() {
     return @as(fmt.Bits(), 1) << (comptime fmt.width() - 1);
-}
-
-fn read(comptime fmt: Format, bank: *const Bank, index: u5) fmt.Bits() {
-    if (comptime fmt.width() == 64) return bank.readD(@intCast(index & 0xF));
-    return bank.readS(index);
-}
-
-fn write(comptime fmt: Format, bank: *Bank, index: u5, value: fmt.Bits()) void {
-    if (comptime fmt.width() == 64) return bank.writeD(@intCast(index), value);
-    bank.writeS(index, value);
 }
