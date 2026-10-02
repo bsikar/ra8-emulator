@@ -1,6 +1,6 @@
-//! MVE floating-point lane arithmetic (RA8EMU-23): VADD, VSUB and VMUL,
-//! and the fused VFMA, VFMS and VFMAS, on F16 and F32 lanes, as pure
-//! functions over Q register values.
+//! MVE floating-point lane arithmetic (RA8EMU-23): VADD, VSUB, VMUL and
+//! VABD, the fused VFMA, VFMS and VFMAS, and the sign-bit VABS and VNEG, on
+//! F16 and F32 lanes, as pure functions over Q register values.
 //!
 //! The Arm ARM (DDI0553) runs MVE floating point under StandardFPSCRValue:
 //! round to nearest, default NaN and flush-to-zero for single precision,
@@ -17,7 +17,7 @@ const predicate = @import("predicate.zig");
 /// The element widths MVE floating point works on.
 pub const Size = enum { half, word };
 
-pub const Op = enum { add, sub, mul };
+pub const Op = enum { add, sub, mul, abd };
 
 /// StandardFPSCRValue: the controls MVE arithmetic runs under, flags clear.
 pub fn standard(fpscr: Fpscr) Fpscr {
@@ -59,7 +59,31 @@ fn lane(comptime fmt: format.Format, op: Op, x: fmt.Bits(), y: fmt.Bits(), work:
         .add => fpu.add.add(fmt, x, y, work),
         .sub => fpu.add.sub(fmt, x, y, work),
         .mul => fpu.mul.mul(fmt, x, y, work),
+        .abd => fpu.add.sub(fmt, x, y, work) & ~signBit(fmt),
     };
+}
+
+fn signBit(comptime fmt: format.Format) fmt.Bits() {
+    return @as(fmt.Bits(), 1) << @intCast(fmt.width() - 1);
+}
+
+/// The one-operand forms. FPAbs and FPNeg only touch the sign bit: no
+/// flags, no flushing, and a NaN keeps its payload.
+pub const Unary = enum { abs, neg };
+
+/// `op` on every lane of `m`, merged into `d` under `mask`.
+pub fn unary(d: u128, m: u128, size: Size, op: Unary, mask: u16) u128 {
+    const qs = qsize(size);
+    var signs: u128 = 0;
+    for (0..qreg.lanes(qs)) |i| {
+        const bit: u32 = if (size == .half) signBit(format.half) else signBit(format.single);
+        signs = qreg.setElem(signs, qs, @intCast(i), bit);
+    }
+    const out = switch (op) {
+        .abs => m & ~signs,
+        .neg => m ^ signs,
+    };
+    return predicate.merge(d, out, mask);
 }
 
 /// The fused forms, each one FPMulAdd(addend, op1, op2) with one rounding:

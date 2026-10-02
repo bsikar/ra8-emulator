@@ -36,3 +36,4 @@ pub const interleave_vectors = @import("interleave_vectors.zig");
 pub const float = @import("float.zig");
 pub const float_vectors = @import("float_vectors.zig");
 pub const float_fma_vectors = @import("float_fma_vectors.zig");
+pub const float_abs_vectors = @import("float_abs_vectors.zig");
