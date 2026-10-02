@@ -28,3 +28,11 @@ is stale or an encoding is missing. Regenerate with
 | VNMLA.F64 T2 | 1 |
 | VNMLS.F32 T2 | 3 |
 | VNMLS.F64 T2 | 1 |
+| VFMA.F32 T2 | 21 |
+| VFMA.F64 T2 | 3 |
+| VFMS.F32 T2 | 4 |
+| VFMS.F64 T2 | 1 |
+| VFNMA.F32 T2 | 3 |
+| VFNMA.F64 T2 | 1 |
+| VFNMS.F32 T2 | 3 |
+| VFNMS.F64 T2 | 1 |

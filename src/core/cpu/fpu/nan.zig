@@ -43,3 +43,17 @@ pub fn processNaNs(
     if (kind2 == .qnan) return processNaN(fmt, kind2, op2, fpscr);
     return null;
 }
+
+/// The NaN result of a three-operand operation (FPProcessNaNs3), or null.
+/// Any signalling NaN beats any quiet one; within each, the first operand
+/// beats the second and the second beats the third.
+pub fn processNaNs3(
+    comptime fmt: Format,
+    kinds: [3]Kind,
+    ops: [3]fmt.Bits(),
+    fpscr: *Fpscr,
+) ?fmt.Bits() {
+    for (kinds, ops) |kind, op| if (kind == .snan) return processNaN(fmt, kind, op, fpscr);
+    for (kinds, ops) |kind, op| if (kind == .qnan) return processNaN(fmt, kind, op, fpscr);
+    return null;
+}
