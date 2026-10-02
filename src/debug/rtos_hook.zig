@@ -22,6 +22,7 @@ const c = @import("../core/c.zig");
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
+const clocks = @import("../periph/clocks.zig");
 pub const names = @import("rtos_names.zig");
 pub const isr = @import("rtos_isr.zig");
 pub const zig = @import("rtos_zig.zig");
@@ -47,6 +48,15 @@ pub const Tracer = struct {
     /// Instructions seen by the per-instruction hook: the load clock on an
     /// engine that has one (Unicorn), lent to the trace by `attach`.
     steps: u64 = 0,
+    /// The run's virtual-instruction count, which also moves through
+    /// stretches the idle skip charges without executing (src/core/idle.zig).
+    /// Null keeps the load clock on `steps`.
+    elapsed: ?*const u64 = null,
+    /// `elapsed` when the current chunk began, and instructions hooked since.
+    base: u64 = 0,
+    offset: u64 = 0,
+    /// The load clock lent to the trace: virtual time, per instruction.
+    clock: u64 = 0,
 
     /// One store that touched the pointer's word. Only a full word written
     /// to the word itself names a thread; a narrower store is a partial
@@ -59,7 +69,31 @@ pub const Tracer = struct {
     /// Before each instruction: anything entered or returned from since.
     pub fn onInstruction(self: *Tracer) void {
         self.steps += 1;
+        self.advanceClock();
         if (self.exceptions) |*watcher| watcher.observe(&self.trace, self.core, self.stamp());
+    }
+
+    /// A new chunk shows as `elapsed` moving: what it charged, executed or
+    /// skipped, is already in it, so the clock restarts from there.
+    fn advanceClock(self: *Tracer) void {
+        const now = self.elapsed orelse {
+            self.clock = self.steps;
+            return;
+        };
+        if (now.* != self.base) {
+            self.base = now.*;
+            self.offset = 0;
+        }
+        self.offset += 1;
+        self.clock = @max(self.clock, self.base + self.offset);
+    }
+
+    /// The load clock as the run ends: a last stretch the idle skip charged
+    /// has no instruction after it to move the clock.
+    pub fn loadClock(self: *const Tracer) u64 {
+        const fine = self.trace.loadNow(self.stamp());
+        const now = self.elapsed orelse return fine;
+        return @max(fine, now.*);
     }
 
     /// The run's clock now, or zero with none borrowed.
@@ -96,11 +130,13 @@ pub fn arm(
     handle: ?*c.uc.uc_engine,
     image: elf.Image,
     wanted: ?load.Window,
-    clock: *const u64,
+    timebase: *const clocks.Clocks,
     controller: *const isr.Nvic,
 ) Error!?*Tracer {
     const found = resolve(image, wanted) orelse return null;
-    return try attach(handle, found, clock, controller);
+    const owned = try attach(handle, found, &timebase.ticks, controller);
+    owned.elapsed = &timebase.elapsed;
+    return owned;
 }
 
 /// Hook a resolved tracer onto one core's engine, stamped from that core's
@@ -113,7 +149,7 @@ pub fn attach(
 ) Error!*Tracer {
     const owned = std.heap.page_allocator.create(Tracer) catch return Error.AttachFailed;
     owned.* = found;
-    owned.trace.fine = &owned.steps;
+    owned.trace.fine = &owned.clock;
     owned.now = clock;
     owned.exceptions = isr.Watcher.start(controller);
     var hook: c.uc.uc_hook = 0;

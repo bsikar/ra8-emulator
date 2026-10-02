@@ -31,7 +31,7 @@ pub fn all(out: anytype, options: anytype, tracer: ?*const rtos_hook.Tracer, mem
 pub fn load(out: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
     const one = tracer orelse return;
     var copy = one.trace.load;
-    copy.finish(one.trace.loadNow(one.stamp()));
+    copy.finish(one.loadClock());
     const total = copy.total(one.core);
     try out.print("  cpu load cpu{d} : {d} instruction(s)\n", .{ one.core, total });
     if (total == 0) return;
