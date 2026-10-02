@@ -20,6 +20,7 @@ pub const branch_wide = @import("ops/branch_wide.zig");
 pub const cps = @import("ops/cps.zig");
 pub const cbz = @import("ops/cbz.zig");
 pub const extend = @import("ops/extend.zig");
+pub const reverse = @import("ops/reverse.zig");
 pub const push_pop = @import("ops/push_pop.zig");
 pub const sp_arith = @import("ops/sp_arith.zig");
 pub const table = @import("ops/table.zig");
