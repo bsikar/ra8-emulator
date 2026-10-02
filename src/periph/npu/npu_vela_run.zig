@@ -7,13 +7,15 @@
 //! stops the run with error.OperatorNotModelled, so nothing that needs an
 //! operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
-//! between; the feature-map sets go to npu_vela_fm.zig, and any other
+//! between; the feature-map sets go to npu_vela_fm.zig, the scale, activation
+//! and stride sets to npu_vela_quant.zig, and any other
 //! register set is passed over for now.
 const std = @import("std");
 const vela = @import("npu_vela.zig");
 const regs = @import("npu_vela_regs.zig");
 const dma = @import("npu_vela_dma.zig");
 const fm = @import("npu_vela_fm.zig");
+const quant = @import("npu_vela_quant.zig");
 
 pub const Error = vela.Error || dma.Error || error{OperatorNotModelled};
 
@@ -24,11 +26,14 @@ pub const Result = struct {
     state: regs.State = .{},
     /// The feature-map registers as the program left them.
     maps: fm.State = .{},
+    /// The scale, activation and stride registers as the program left them.
+    quant: quant.State = .{},
 };
 
 const Machine = struct {
     state: regs.State = .{},
     maps: fm.State = .{},
+    quant: quant.State = .{},
     src: dma.Region = .{},
     dst: dma.Region = .{},
     moved: u64 = 0,
@@ -38,7 +43,9 @@ fn setRegister(machine: *Machine, code: u10, word: u32) void {
     switch (code) {
         dma.set_dma0_src_region => machine.src = dma.Region.fromParam(vela.param(word)),
         dma.set_dma0_dst_region => machine.dst = dma.Region.fromParam(vela.param(word)),
-        else => _ = fm.apply(&machine.maps, code, vela.param(word)),
+        else => if (fm.apply(&machine.maps, code, vela.param(word)) == .not_modelled) {
+            _ = quant.applyCmd0(&machine.quant, code, vela.param(word));
+        },
     }
 }
 
@@ -58,7 +65,10 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
     while (index < summary.words) {
         const word = words[index];
         if (word & vela.mode_mask == vela.mode_payload32) {
-            _ = regs.apply(&machine.state, word, words[index + 1]);
+            if (regs.apply(&machine.state, word, words[index + 1]) == .not_modelled) {
+                const code: u10 = @truncate(word & vela.opcode_mask);
+                _ = quant.applyCmd1(&machine.quant, code, vela.param(word), words[index + 1]);
+            }
             index += 2;
             continue;
         }
@@ -71,5 +81,5 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
         // walk() already refused any opcode outside Op.
         try operate(&machine, memory, regions, @enumFromInt(code));
     }
-    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps };
+    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps, .quant = machine.quant };
 }
