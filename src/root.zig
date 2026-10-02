@@ -6,6 +6,7 @@ pub const core = struct {
     pub const board_ram = @import("core/board_ram.zig");
     pub const session = @import("core/session.zig");
     pub const second_core = @import("core/second_core.zig");
+    pub const interleave = @import("core/interleave.zig");
     pub const bus_hook = @import("core/bus_hook.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");

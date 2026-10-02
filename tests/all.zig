@@ -71,6 +71,7 @@ test {
     _ = @import("core/board_ram_test.zig");
     _ = @import("core/session_test.zig");
     _ = @import("core/second_core_test.zig");
+    _ = @import("core/interleave_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("debug/disasm_test.zig");
