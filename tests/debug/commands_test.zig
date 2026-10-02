@@ -82,3 +82,9 @@ test "halting takes on or off" {
     try std.testing.expectError(error.BadSwitch, commands.parse("halting maybe"));
     try std.testing.expectError(error.MissingArgument, commands.parse("halting"));
 }
+
+test "breaks and watches are listed as gdb asks" {
+    try expectParsed(.breakpoints, "info breakpoints");
+    try expectParsed(.breakpoints, "i b");
+    try expectParsed(.breakpoints, "info break");
+}
