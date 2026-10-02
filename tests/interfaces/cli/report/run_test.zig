@@ -37,3 +37,26 @@ test "a quiet board prints no console line" {
     const text = try zigReport(&buf);
     try std.testing.expect(std.mem.indexOf(u8, text, "SCI console:") == null);
 }
+
+/// Run `busErrors` into a scratch file and return what it wrote.
+fn busLine(buf: []u8, tally: ra8.periph.fault_status.bus.Tally) ![]const u8 {
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const file = try dir.dir.createFile("bus.txt", .{ .read = true });
+    defer file.close();
+    try report_run.busErrors(file.writer(), tally);
+    try file.seekTo(0);
+    const len = try file.readAll(buf);
+    return buf[0..len];
+}
+
+test "a run that raised no BusFault prints nothing for them" {
+    var buf: [256]u8 = undefined;
+    try std.testing.expectEqualStrings("", try busLine(&buf, .{}));
+}
+
+test "a run that raised BusFaults says how many and how many escalated" {
+    var buf: [256]u8 = undefined;
+    const text = try busLine(&buf, .{ .raised = 3, .escalated = 1 });
+    try std.testing.expectEqualStrings("bus faults: 3 raised, 1 escalated to HardFault\n", text);
+}
