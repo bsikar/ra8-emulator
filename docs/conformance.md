@@ -176,3 +176,9 @@ is stale or an encoding is missing. Regenerate with
 | VSRI T1 | 4 |
 | VSLI T1 | 4 |
 | VQSHLU T1 | 4 |
+| VADDV T1 | 4 |
+| VADDLV T1 | 2 |
+| VMLADAV T1 | 4 |
+| VMLSDAV T1 | 2 |
+| VMLALDAV T1 | 3 |
+| VMLSLDAV T1 | 2 |

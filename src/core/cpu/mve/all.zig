@@ -11,3 +11,5 @@ pub const int_width = @import("int_width.zig");
 pub const int_width_vectors = @import("int_width_vectors.zig");
 pub const int_insert = @import("int_insert.zig");
 pub const int_insert_vectors = @import("int_insert_vectors.zig");
+pub const reduce = @import("reduce.zig");
+pub const reduce_vectors = @import("reduce_vectors.zig");

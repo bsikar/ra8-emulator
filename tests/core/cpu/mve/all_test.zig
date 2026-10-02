@@ -11,4 +11,6 @@ test {
     _ = @import("int_width_vectors_test.zig");
     _ = @import("int_insert_test.zig");
     _ = @import("int_insert_vectors_test.zig");
+    _ = @import("reduce_test.zig");
+    _ = @import("reduce_vectors_test.zig");
 }
