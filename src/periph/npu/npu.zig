@@ -59,6 +59,7 @@ const std = @import("std");
 const engine = @import("../../core/engine.zig");
 const periph = @import("../registry.zig");
 const cmd = @import("npu_cmd.zig");
+const vela_hook = @import("npu_vela_hook.zig");
 
 /// The window, from ra8_npu_regs.h on dev.
 pub const win_base: u32 = 0x4014_0000;
@@ -149,6 +150,8 @@ pub const Npu = struct {
     in_place: u32 = 0,
     /// Stores to NPU_ID or NPU_STATUS: firmware cannot write its own result.
     faked: u32 = 0,
+    /// Kicks whose stream had no stand-in marker, run as Vela programs.
+    vela: vela_hook.Counters = .{},
     reads: u32 = 0,
     writes: u32 = 0,
     due_irq: bool = false,
@@ -237,6 +240,7 @@ pub const Npu = struct {
             field.status_bus_error,
             &self.unreachable_memory,
         );
+        if (stream[0] & cmd.header.magic_mask != cmd.header.magic) return vela_hook.kick(self, memory);
         const program = cmd.decode(self.reg[off.qsize / 4], stream) catch |why| {
             const counter = switch (why) {
                 cmd.Reject.UnknownOpcode => &self.unknown_ops,

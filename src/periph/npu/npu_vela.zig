@@ -18,6 +18,8 @@ const std = @import("std");
 pub const dma = @import("npu_vela_dma.zig");
 /// The loop that runs a stream's register sets and DMA against memory.
 pub const runner = @import("npu_vela_run.zig");
+/// How the NPU model hands a non-stand-in stream to the runner.
+pub const hook = @import("npu_vela_hook.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
