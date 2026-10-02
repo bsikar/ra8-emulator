@@ -83,23 +83,33 @@ test "a core that faults is halted rather than restarted every round" {
 }
 
 /// One interleaved run of two counting loops (`adds r0, #1; b` back), three
-/// of CPU0's rounds long, and what each core counted and was charged.
+/// of CPU0's rounds long, under the SCKDIVCR2 word `dividers`, with both
+/// SysTicks counting (no interrupt) over a 500-instruction period, and what
+/// each core counted and was charged.
 const Race = struct {
     cpu0_count: u32,
     cpu1_count: u32,
     cpu0_charged: u64,
     cpu1_charged: u64,
     turns: usize,
+    cpu0_ticks: u64,
+    cpu1_ticks: u64,
 
     const loop: u32 = 0xE7FD_3001;
     const cpu0_entry: u32 = memmap.sram_base + 0x3000;
     const cpu1_entry: u32 = memmap.sram_base + 0x4000;
 
-    fn run() !Race {
+    fn run(dividers: u16) !Race {
         var cpu1: second_core.Second = undefined;
         var cpu0 = try pair(&cpu1);
         defer cpu0.close();
         defer cpu1.close();
+        cpu1.dividers = &dividers;
+        for ([_]Engine{ cpu0, cpu1.core }) |core| {
+            try core.writeWord(memmap.syst.rvr, 499);
+            try core.writeWord(memmap.syst.cvr, 0);
+            try core.writeWord(memmap.syst.csr, 0b101);
+        }
         try cpu1.core.writeWord(cpu1_entry, loop);
         cpu1.pc = cpu1_entry;
         try cpu0.writeWord(cpu0_entry, loop);
@@ -112,21 +122,39 @@ const Race = struct {
             .cpu0_charged = cpu0_clock.elapsed,
             .cpu1_charged = cpu1.timebase.elapsed,
             .turns = cpu1.turns,
+            .cpu0_ticks = cpu0_clock.ticks,
+            .cpu1_ticks = cpu1.timebase.ticks,
         };
     }
 };
 
 test "each core is charged only for its own instructions" {
-    const race = try Race.run();
+    const race = try Race.run(0);
     try std.testing.expectEqual(@as(u64, 3 * second_core.limits.round), race.cpu0_charged);
     try std.testing.expectEqual(@as(u64, 3 * second_core.limits.round), race.cpu1_charged);
     try std.testing.expectEqual(@as(usize, 3), race.turns);
     try std.testing.expect(race.cpu0_count > 0 and race.cpu1_count > 0);
 }
 
+test "with both dividers at reset the two SysTicks count at the same rate" {
+    const race = try Race.run(0);
+    try std.testing.expect(race.cpu0_ticks > 0);
+    try std.testing.expectEqual(race.cpu0_ticks, race.cpu1_ticks);
+}
+
+test "each core's SysTick counts at that core's own clock" {
+    // SCKDIVCR2 0x2020: CPUCLK0 /1, CPUCLK1 /4. Same reload on both cores,
+    // so CPU1's SysTick wraps a quarter as often as CPU0's.
+    const race = try Race.run(0x2020);
+    try std.testing.expectEqual(@as(u64, 3 * second_core.limits.round), race.cpu0_charged);
+    try std.testing.expectEqual(@as(u64, 3 * second_core.limits.round / 4), race.cpu1_charged);
+    try std.testing.expect(race.cpu1_ticks > 0);
+    try std.testing.expectEqual(race.cpu0_ticks, 4 * race.cpu1_ticks);
+}
+
 test "the same pair of images interleaves the same way every run" {
-    const first = try Race.run();
-    const second = try Race.run();
+    const first = try Race.run(0);
+    const second = try Race.run(0);
     try std.testing.expect(std.meta.eql(first, second));
 }
 
