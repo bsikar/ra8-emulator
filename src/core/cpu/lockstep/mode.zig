@@ -17,6 +17,8 @@ const tap_hook = @import("tap_hook.zig");
 const snapshot = @import("snapshot.zig");
 const oracle = @import("oracle.zig");
 const run_mod = @import("run.zig");
+const sau = @import("../../../periph/sau.zig");
+const mpu = @import("../../../periph/mpu/mpu.zig");
 const report = @import("report.zig");
 
 /// `theirs` is the engine the caller already loaded and reset.
@@ -32,7 +34,9 @@ pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_
 /// with no divergence, 1 otherwise.
 pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64) !u8 {
     var log: periph_log.Log = .{};
-    var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log };
+    var partitions = sau.Sau.init();
+    var regions = mpu.Mpu.init();
+    var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log, .scs = .{ .partitions = &partitions, .regions = &regions } };
     var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
     // The oracle's board wiring may have set PPB state (DWT_CTRL.NUMCOMP)
     // the image alone does not carry.

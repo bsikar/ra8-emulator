@@ -21,16 +21,8 @@ pub const BoardBus = struct {
     periph: *registry.Bus,
     /// The core this bus view belongs to, stamped on every peripheral access.
     issuer: registry.Issuer = .cpu0,
-    /// This core's SAU, when the board has one: its RBAR/RLAR bank through
-    /// RNR on this bus exactly as src/core/sau_hook.zig banks them on Unicorn.
-    partitions: ?*sau.Sau = null,
-    /// This core's MPU table, banked through RNR the way src/core/mpu_hook.zig
-    /// banks it on Unicorn. Enforcement is not armed from here.
-    regions: ?*mpu.Mpu = null,
-    /// CFSR, HFSR and SFSR are write-one-to-clear. Unicorn latches the clear
-    /// in a hook and settles it at the boundary; here the store is settled
-    /// as it lands, so no read in between sees the raw word.
-    clears: ?*fault_clear.Clears = null,
+    /// The core's own SCS models its stores reach.
+    scs: Scs = .{},
 
     pub fn view(self: *BoardBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -64,18 +56,34 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (!inWindow(address, bytes.len)) return self.store(address, bytes);
+        if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
     }
+};
+
+/// The models inside a core that a plain store into its PPB RAM must reach,
+/// the Zig twin of the Unicorn store hooks src/board/wiring.zig attaches.
+/// Each is optional: a bus without one leaves that window as plain RAM.
+pub const Scs = struct {
+    /// SAU RBAR/RLAR bank through RNR, as src/core/sau_hook.zig does.
+    partitions: ?*sau.Sau = null,
+    /// MPU pairs bank through RNR, as src/core/mpu_hook.zig does.
+    /// Enforcement is not armed from here.
+    regions: ?*mpu.Mpu = null,
+    /// CFSR, HFSR and SFSR are write-one-to-clear. Unicorn latches the clear
+    /// in a hook and settles it at the boundary; here the store is settled
+    /// as it lands, so no read in between sees the raw word.
+    clears: ?*fault_clear.Clears = null,
 
     /// A store outside the peripheral windows: RAM, then whichever of the
     /// core's own SCS models the address belongs to.
-    fn store(self: *BoardBus, address: u32, bytes: []const u8) bus.Error!void {
-        const memory = self.memory.view();
+    pub fn store(self: Scs, engine_memory: EngineBus, address: u32, bytes: []const u8) bus.Error!void {
+        var reach = engine_memory;
+        const memory = reach.view();
         const owed = if (self.clears) |unit| (if (unit.slot(address) != null) unit else null) else null;
         const standing = if (owed != null) try memory.readWord(address & ~@as(u32, 3)) else 0;
         try memory.write(address, bytes);
@@ -83,7 +91,7 @@ pub const BoardBus = struct {
             var padded = [_]u8{0} ** 4;
             @memcpy(padded[0..@min(bytes.len, 4)], bytes[0..@min(bytes.len, 4)]);
             unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
-            unit.apply(self.memory.core.*) catch return bus.Error.Unmapped;
+            unit.apply(engine_memory.core.*) catch return bus.Error.Unmapped;
         }
         if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
         if (self.regions) |unit| try bankRegion(memory, unit, address, bytes);
