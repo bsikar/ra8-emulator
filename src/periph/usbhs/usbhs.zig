@@ -222,7 +222,7 @@ pub const Host = struct {
     /// and lose the answer it is about to spin on.
     fn controlPipe(self: *Host, value: u16) void {
         const ccpl_was_set = self.xfer.dcpctr & regs.dcpctr.ccpl != 0;
-        self.xfer.dcpctr = value & ~regs.dcpctr.sureq;
+        self.xfer.dcpctr = value & ~(regs.dcpctr.sureq | regs.dcpctr.sureqclr);
         if (value & regs.dcpctr.sureq != 0) self.xfer.launch(self.live());
         if (value & regs.dcpctr.ccpl != 0 and !ccpl_was_set) self.xfer.complete();
     }

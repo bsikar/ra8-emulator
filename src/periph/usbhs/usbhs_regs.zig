@@ -183,7 +183,11 @@ pub const dcpctr = struct {
     /// PID=BUF, the armed state the host re-arms the pipe with.
     pub const pid_buf: u16 = 0x0001;
     pub const ccpl: u16 = 1 << 2;
-    pub const sureq: u16 = 1 << 6;
+    /// SUREQCLR (HUM 37.2.24): the USBHS host's way to abort a wedged SETUP.
+    /// SUREQ never latches here, so there is nothing for it to clear.
+    pub const sureqclr: u16 = 1 << 11;
+    /// SUREQ is bit 14 (HUM 37.2.24). Bit 6 is SQMON, read-only.
+    pub const sureq: u16 = 1 << 14;
     pub const bsts: u16 = 1 << 15;
 };
 

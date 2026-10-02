@@ -353,6 +353,7 @@ test {
     _ = @import("periph/usbhs/usbhs_pipe_test.zig");
     _ = @import("periph/usbhs/usbhs_pll_test.zig");
     _ = @import("periph/usbhs/usbhs_setup_test.zig");
+    _ = @import("periph/usbhs/usbhs_regs_test.zig");
     _ = @import("periph/usbhs/usbhs_test.zig");
     _ = @import("periph/usbhs/usbhs_xfer_test.zig");
     _ = @import("periph/usbfs/usbfs_test.zig");
