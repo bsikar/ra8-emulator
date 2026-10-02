@@ -55,3 +55,30 @@ test "a pending line that is not enabled is not a winner" {
     ram.putWord(ispr0, 1 << 3);
     try std.testing.expect((try nvic.source().winner(ram.view())) == null);
 }
+
+test "two lines in the same group are taken in subpriority order" {
+    var ram: fixture.Ram = .{};
+    var nvic: NvicSource = .{};
+    ram.putWord(iser0, (1 << 3) | (1 << 5));
+    ram.putWord(ispr0, (1 << 3) | (1 << 5));
+    ram.putWord(ipr0, 0x6000_0000); // line 3 at 0x60
+    ram.putWord(ipr0 + 4, 0x0000_4000); // line 5 at 0x40
+    const source = nvic.source();
+    const first = (try source.winner(ram.view())).?;
+    try std.testing.expectEqual(@as(u9, 16 + 5), first.number);
+    try source.taken(ram.view(), first.number);
+    const second = (try source.winner(ram.view())).?;
+    try std.testing.expectEqual(@as(u9, 16 + 3), second.number);
+    try std.testing.expectEqual(@as(u8, 0x60), second.priority);
+}
+
+test "equal priority and subpriority go to the lower exception number" {
+    var ram: fixture.Ram = .{};
+    var nvic: NvicSource = .{};
+    ram.putWord(iser0, (1 << 2) | (1 << 6));
+    ram.putWord(ispr0, (1 << 2) | (1 << 6));
+    ram.putWord(ipr0, 0x0040_0000); // line 2 at 0x40
+    ram.putWord(ipr0 + 4, 0x0040_0000); // line 6 at 0x40
+    const found = (try nvic.source().winner(ram.view())).?;
+    try std.testing.expectEqual(@as(u9, 16 + 2), found.number);
+}
