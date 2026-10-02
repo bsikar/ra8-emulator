@@ -331,7 +331,8 @@ pub const Session = struct {
     fn backtrace(self: *Session, out: anytype) !void {
         var pcs: [unwind.limits.frames]u32 = undefined;
         const frame = if (self.image) |image| dwarf_line.section(image, ".debug_frame") else &.{};
-        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), self.core.*, &pcs);
+        const psp = try self.core.register(.psp);
+        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), psp, self.core.*, &pcs);
         if (count < 2) {
             pcs[1] = try self.core.register(.lr) & ~@as(u32, 1);
             count = 2;
