@@ -305,6 +305,7 @@ test {
     _ = @import("core/appimg_test.zig");
     _ = @import("core/module_place_test.zig");
     _ = @import("core/svc_trap_test.zig");
+    _ = @import("core/svc_seam_test.zig");
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
     _ = @import("periph/sau_attr_test.zig");
