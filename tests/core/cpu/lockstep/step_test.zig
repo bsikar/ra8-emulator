@@ -67,3 +67,21 @@ test "an ITE and both instructions of its block match as one step" {
     try std.testing.expectEqual(pair_mod.entry + 6, pair.cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 1), pair.cpu.regs.low[0]);
 }
+
+test "the store that starts SysTick matches though Unicorn's hook stops on it" {
+    // str r2, [r1]: r1 = SYST_CSR, r2 = ENABLE, with a reload already set
+    var pair: Pair = undefined;
+    try pair.open(&.{ 0x0A, 0x60 });
+    defer pair.close();
+    var clock: ra8.periph.clocks.Clocks = .{};
+    try pair.theirs.attachTimebase(&clock);
+    const memmap = ra8.core.memmap;
+    try pair.theirs.write(memmap.syst.rvr, &.{ 0xFF, 0x00, 0x00, 0x00 });
+    pair.cpu.regs.low[1] = memmap.syst.csr;
+    pair.cpu.regs.low[2] = 1;
+    try ra8.core.cpu.lockstep.oracle.load(pair.theirs, ra8.core.cpu.lockstep.snapshot.Snapshot.fromRegs(&pair.cpu.regs));
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
+    try std.testing.expectEqualStrings("ldst_imm", result.matched);
+    try std.testing.expectEqual(pair_mod.entry + 2, pair.cpu.regs.pc);
+    try std.testing.expectEqual(@as(u64, 1), clock.rearms);
+}

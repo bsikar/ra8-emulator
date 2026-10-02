@@ -75,6 +75,7 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engi
     log.begin(checked);
     if (checked) {
         if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
+        if (try retire(theirs, address)) |fault| return .{ .oracle_fault = fault };
     }
     var made: writes.Recorder = .{ .inner = ours.bus };
     ours.bus = made.view();
@@ -89,6 +90,18 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engi
         return .{ .skipped = class };
     }
     return compare(class, instr, ours, theirs, made.items(), log);
+}
+
+/// A Unicorn hook that ends the run inside an instruction leaves it landed
+/// but the PC still on it: the SysTick arm store does (src/core/systick_hook.zig
+/// stops on the store that starts the counter). One more step retires it.
+/// The store goes in again with the same value, which the hook does not stop
+/// on because the counter is already running; and an instruction that
+/// really does stay put, `b .`, simply runs once more on Unicorn's side.
+fn retire(theirs: engine.Engine, address: u32) engine.Error!?engine.Fault {
+    const after = try oracle.read(theirs);
+    if (after.get(.pc) != address) return null;
+    return theirs.runChunk(address, 1, null);
 }
 
 /// Step the Zig core through the rest of an IT block; a block is at most
