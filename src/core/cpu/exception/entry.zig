@@ -3,8 +3,8 @@
 //! Handler mode on the Main stack.
 //!
 //! R0-R3 and R12 are left as they were (the architecture makes them
-//! UNKNOWN). Priority, the active bits and escalation to HardFault are the
-//! NVIC's side of the model and come with the next slice of RA8EMU-18.
+//! UNKNOWN). Whether an exception may be taken at all, and the active stack,
+//! are dispatch.zig's; this is only the architectural entry sequence.
 const bus = @import("../bus.zig");
 const regs_mod = @import("../regs.zig");
 const memmap = @import("../../memmap.zig");

@@ -13,6 +13,7 @@ const cpu_mod = @import("cpu.zig");
 const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
+const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 
 /// The hand-off from main for any CPU but Unicorn.
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
@@ -41,6 +42,8 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
 
 fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64) !u8 {
     var cpu: cpu_mod.Cpu = .{ .bus = memory };
+    var pending: NvicSource = .{};
+    cpu.source = pending.source();
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
