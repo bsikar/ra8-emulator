@@ -34,3 +34,5 @@ pub const rint = @import("rint.zig");
 pub const rint_vectors = @import("rint_vectors.zig");
 pub const minmax = @import("minmax.zig");
 pub const minmax_vectors = @import("minmax_vectors.zig");
+pub const select = @import("select.zig");
+pub const select_vectors = @import("select_vectors.zig");

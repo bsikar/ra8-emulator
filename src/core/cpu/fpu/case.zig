@@ -117,6 +117,11 @@ pub fn Integral(comptime B: type) type {
     };
 }
 
+/// Two operands and the APSR flags for VSEL, with N in bit 3 of nzcv.
+pub fn Select(comptime B: type) type {
+    return struct { a: B, b: B, nzcv: u4 };
+}
+
 pub fn Result(comptime B: type) type {
     return struct { bits: B, flags: u32 = 0 };
 }
