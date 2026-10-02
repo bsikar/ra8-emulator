@@ -1,5 +1,8 @@
 //! The exclusive accesses and the local monitor: LDREX, LDREXB, LDREXH (T1),
-//! STREX, STREXB, STREXH (T1) and CLREX.
+//! STREX, STREXB, STREXH (T1), CLREX, and the acquire/release exclusives
+//! LDAEX, LDAEXB, LDAEXH, STLEX, STLEXB and STLEXH (RA8EMU-131). The
+//! acquire/release ordering is a no-op on one core, so those behave as their
+//! plain forms with no offset.
 //!
 //! The monitor is one tagged address in `Cpu.exclusive`. A load-exclusive
 //! sets it, CLREX and exception entry or return clear it, and a
@@ -17,7 +20,7 @@ pub const encodings = struct {
     pub const rn_mask: u16 = 0xFFF0;
     pub const ldrex: u16 = 0xE850;
     pub const strex: u16 = 0xE840;
-    /// LDREXB/H and STREXB/H, picked by hw2[7:4].
+    /// LDREXB/H, LDAEX/B/H and STREXB/H, STLEX/B/H, picked by hw2[7:4].
     pub const ldrex_narrow: u16 = 0xE8D0;
     pub const strex_narrow: u16 = 0xE8C0;
     pub const clrex_hw1: u16 = 0xF3BF;
@@ -40,10 +43,13 @@ fn bad(r: u4) bool {
     return r == 13 or r == 15;
 }
 
+/// op3 = hw2[7:4]: 0x4/0x5 are LDREXB/H and STREXB/H; 0xC/0xD/0xE are the
+/// acquire/release byte, halfword and word forms.
 fn narrowSize(op3: u16) ?u3 {
     return switch (op3) {
-        0x4 => 1,
-        0x5 => 2,
+        0x4, 0xC => 1,
+        0x5, 0xD => 2,
+        0xE => 4,
         else => null,
     };
 }

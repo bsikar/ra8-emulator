@@ -71,6 +71,27 @@ test "byte and halfword forms load zero-extended and store their width" {
     try std.testing.expectEqual(@as(u32, 0xFFFF_5678), try cpu.bus.readWord(data));
 }
 
+test "ldaex then stlex, in word, halfword and byte, use the monitor with no offset" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(data, 0xFFFF_FFFF);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = data;
+    cpu.regs.low[3] = 0x1234_5678;
+    try run(&cpu, 0xE8D0, 0x1FEF); // ldaex r1, [r0]
+    try std.testing.expectEqual(@as(?u32, data), cpu.exclusive);
+    try run(&cpu, 0xE8C0, 0x3FE2); // stlex r2, r3, [r0]
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), try cpu.bus.readWord(data));
+    try run(&cpu, 0xE8D0, 0x1FDF); // ldaexh r1, [r0]
+    try std.testing.expectEqual(@as(u32, 0x5678), cpu.regs.low[1]);
+    cpu.regs.low[3] = 0xAB;
+    try run(&cpu, 0xE8C0, 0x3FC2); // stlexb r2, r3, [r0]: monitor tagged by ldaexh
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 0x1234_56AB), try cpu.bus.readWord(data));
+    try run(&cpu, 0xE8C0, 0x3FD2); // stlexh with the monitor clear
+    try std.testing.expectEqual(@as(u32, 1), cpu.regs.low[2]);
+}
+
 test "exception entry clears the monitor" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
@@ -86,5 +107,7 @@ test "unpredictable registers and TBB stay unclaimed" {
     try std.testing.expect(ex.access(wide(0xE840, 0x3000)) == null); // rd = rn
     try std.testing.expect(ex.access(wide(0xE8D0, 0xF000)) == null); // tbb
     try std.testing.expect(ex.access(wide(0xE8D0, 0x1F6F)) == null); // op3 0110
+    try std.testing.expect(ex.access(wide(0xE8D0, 0x1FAF)) == null); // lda, acq_rel.zig's
+    try std.testing.expect(ex.access(wide(0xE8C0, 0x3FE3)) == null); // stlex rd = rt
     try std.testing.expect(ex.group.decode(wide(0xF3BF, 0x8F4F)) == null); // dsb, not clrex
 }
