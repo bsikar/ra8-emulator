@@ -127,3 +127,8 @@ is stale or an encoding is missing. Regenerate with
 | VCVTT.F32.F16 T1 | 2 |
 | VCVTB.F64.F16 T1 | 3 |
 | VCVTT.F64.F16 T1 | 2 |
+| VMOV.F32 imm T1 | 10 |
+| VMOV.F64 imm T1 | 8 |
+| VMSR T1 | 9 |
+| VMRS T1 | 2 |
+| VMRS APSR_nzcv T1 | 3 |

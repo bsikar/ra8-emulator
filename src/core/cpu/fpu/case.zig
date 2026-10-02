@@ -123,6 +123,12 @@ pub fn Halves(comptime B: type) type {
     };
 }
 
+/// The eight-bit immediate of VMOV (immediate).
+pub const Imm = struct { imm8: u8 };
+
+/// A raw 32-bit operand, for the FPSCR moves.
+pub const Word = struct { a: u32 };
+
 /// One operand for the conversions whose encoding fixes the rounding
 /// (VCVTA/N/P/M), so FPSCR supplies only FZ.
 pub fn Directed(comptime B: type) type {
