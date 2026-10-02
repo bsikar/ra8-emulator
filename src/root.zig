@@ -379,6 +379,7 @@ pub const board = struct {
     pub const report_dma = @import("interfaces/cli/report_dma.zig");
     pub const report_unmodelled = @import("interfaces/cli/report_unmodelled.zig");
     pub const report_watchdog = @import("interfaces/cli/report_watchdog.zig");
+    pub const report_part = @import("interfaces/cli/report_part.zig");
     pub const report_steps = @import("interfaces/cli/report_steps.zig");
     pub const parts = @import("interfaces/cli/parts.zig");
     pub const report_run = @import("interfaces/cli/report_run.zig");

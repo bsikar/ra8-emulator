@@ -43,6 +43,7 @@ test {
     _ = @import("interfaces/cli/report_dma_test.zig");
     _ = @import("interfaces/cli/report_unmodelled_test.zig");
     _ = @import("interfaces/cli/report_watchdog_test.zig");
+    _ = @import("interfaces/cli/report_part_test.zig");
     _ = @import("periph/standing_test.zig");
     _ = @import("core/board_ram_test.zig");
     _ = @import("core/session_test.zig");
