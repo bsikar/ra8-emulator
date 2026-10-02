@@ -173,7 +173,8 @@ test "firmware that arms a DWT write comparator halts after the store and sees M
     try std.testing.expectEqual(@as(usize, 0), fixture.driver.last.?.unit_watch);
     try std.testing.expectEqual(@as(u32, 0x77), try fixture.engine.readWord(layout.data));
     const seen = try fixture.engine.readWord(dwt.base + dwt.offsets.function0);
-    try std.testing.expectEqual(function | dwt.function_bits.matched, seen);
+    const id0 = dwt.id.of(0) << dwt.function_bits.id_shift;
+    try std.testing.expectEqual(id0 | function | dwt.function_bits.matched, seen);
 }
 
 // str r5,[r6] (TER); str r5,[r7] (TCR); strb r1,[r0]; strb r2,[r0]; ldr r3,[r0]; nop.
