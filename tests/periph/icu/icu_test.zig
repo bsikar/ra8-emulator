@@ -317,3 +317,19 @@ test "a unit with no issuer keeps every access on ICU0" {
     try std.testing.expectEqual(@as(u32, 0x9), unit.links[2]);
     try std.testing.expect(unit.tableFor(.cpu1)[2] == 0);
 }
+
+test "an event raised on ICU1 latches there and pends the core it is given" {
+    var core = FakeCore.init(std.testing.allocator);
+    defer core.deinit();
+    var unit = icu.Icu.init();
+    unit.cpu1[4] = 0x55;
+    try unit.raiseOn(.cpu1, &core, 0x55);
+    try std.testing.expect(unit.cpu1[4] & icu.field.ir != 0);
+    try std.testing.expect(!unit.latched(4));
+    try std.testing.expectEqual(@as(u32, 1) << 4, try pendingBits(&core, 0));
+    try core.writeWord(memmap.nvic.ispr, 0);
+    try unit.rependOn(.cpu1, &core);
+    try std.testing.expectEqual(@as(u32, 1) << 4, try pendingBits(&core, 0));
+    unit.clearLatches();
+    try std.testing.expect(unit.cpu1[4] & icu.field.ir == 0);
+}

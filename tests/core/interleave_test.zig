@@ -177,3 +177,34 @@ test "a message CPU0 sends over IPC comes back from CPU1 answered" {
     try std.testing.expectEqual(@as(u32, 1), to_cpu0.pops);
     try std.testing.expectEqual(@as(u32, 0), to_cpu0.lost + to_cpu1.lost);
 }
+
+test "an event INTSELR hands to CPU1 pends CPU1's NVIC and not CPU0's" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.attach(&cpu0);
+
+    var cpu1: second_core.Second = .{ .core = try Engine.open() };
+    defer cpu1.close();
+    try cpu1.core.shareBoardRamWith(&cpu0);
+    try ra8.board.wiring.attachSecond(&board, &cpu1.core, .{
+        .partitions = &cpu1.partitions,
+        .regions = &cpu1.regions,
+        .guard = &cpu1.guard,
+        .identity = ra8.periph.cpuid.cpu1,
+        .control = &cpu1.control,
+        .clears = &cpu1.clears,
+    });
+
+    const icu = ra8.periph.icu;
+    board.events.select.write(icu.intsel.wordAddress(0), 4, 1 << 0x12);
+    board.events.cpu1[3] = 0x12;
+    board.events.links[6] = 0x13;
+    try board.raise(cpu0, 0x12);
+    try board.raise(cpu0, 0x13);
+
+    try std.testing.expectEqual(@as(u32, 1) << 3, try cpu1.core.readWord(memmap.nvic.ispr));
+    try std.testing.expectEqual(@as(u32, 1) << 6, try cpu0.readWord(memmap.nvic.ispr));
+}

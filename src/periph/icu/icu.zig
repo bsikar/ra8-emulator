@@ -97,11 +97,7 @@ pub const Icu = struct {
     /// so the first match wins, the same rule dev's scan uses. IELS = 0 means
     /// the slot is unlinked, so event zero never matches anything.
     pub fn slotFor(self: *const Icu, event: u16) ?usize {
-        if (event == 0) return null;
-        for (self.links, 0..) |link, index| {
-            if (link & field.iels == event) return index;
-        }
-        return null;
+        return slotIn(&self.links, event);
     }
 
     /// The slot that activates the DTC for `event`: one linked to it with
@@ -132,13 +128,20 @@ pub const Icu = struct {
     /// that NVIC line. IR is a flag rather than a count, so an event raised
     /// again while the flag is still up latches nothing new.
     pub fn raise(self: *Icu, core: anytype, event: u16) !void {
-        const slot = self.slotFor(event) orelse {
+        return self.raiseOn(.cpu0, core, event);
+    }
+
+    /// The same, on the ICU of the core `issuer` names, pending `core`,
+    /// which must be that core: ICU1's lines are CPU1's NVIC inputs.
+    pub fn raiseOn(self: *Icu, issuer: periph.Issuer, core: anytype, event: u16) !void {
+        const table = self.tableFor(issuer);
+        const slot = slotIn(table, event) orelse {
             self.unlinked += 1;
             return;
         };
         self.raised += 1;
-        if (self.latched(slot)) return;
-        self.links[slot] |= field.ir;
+        if (table[slot] & field.ir != 0) return;
+        table[slot] |= field.ir;
         try pend(core, slot);
         self.pends += 1;
     }
@@ -148,7 +151,12 @@ pub const Icu = struct {
     /// clearing the flag is entered again immediately. Call it at the chunk
     /// boundary, before the controller picks.
     pub fn repend(self: *Icu, core: anytype) !void {
-        for (self.links, 0..) |link, slot| {
+        return self.rependOn(.cpu0, core);
+    }
+
+    /// The same, for the ICU of the core `issuer` names.
+    pub fn rependOn(self: *Icu, issuer: periph.Issuer, core: anytype) !void {
+        for (self.tableFor(issuer).*, 0..) |link, slot| {
             if (link & field.ir == 0) continue;
             if (try isPending(core, slot)) continue;
             try pend(core, slot);
@@ -163,6 +171,7 @@ pub const Icu = struct {
     /// vector table back yet.
     pub fn clearLatches(self: *Icu) void {
         for (&self.links) |*link| link.* &= ~field.ir;
+        for (&self.cpu1) |*link| link.* &= ~field.ir;
     }
 
     /// A read is served from the IELSR word the access lands in and then cut
@@ -272,6 +281,16 @@ fn pendingWord(slot: usize) u32 {
 
 fn pendingBit(slot: usize) u32 {
     return @as(u32, 1) << @intCast(slot % 32);
+}
+
+/// The slot of `table` listening for `event`, or null. Event zero is no
+/// link, so it never matches.
+pub fn slotIn(table: *const [slots]u32, event: u16) ?usize {
+    if (event == 0) return null;
+    for (table, 0..) |link, index| {
+        if (link & field.iels == event) return index;
+    }
+    return null;
 }
 
 fn readTable(table: *const [slots]u32, address: u32, width: u3) u32 {
