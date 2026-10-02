@@ -46,6 +46,7 @@ const mipi_phy = @import("../periph/mipi/mipi_phy.zig");
 const modem = @import("../periph/modem/modem.zig");
 const net = @import("net.zig");
 const mram = @import("../periph/mram/mram.zig");
+const sdramc = @import("../periph/sdramc.zig");
 const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
 const mrms = @import("../periph/mrms.zig");
 const mstp = @import("../periph/mstp/mstp.zig");
@@ -156,6 +157,8 @@ pub const Board = struct {
     memory_rates: mrms.Mrms = .{},
     /// The MRAM ECC controls and program speed (src/periph/mrms_ecc.zig).
     memory_ecc: mrms.ecc.Ecc = .{},
+    /// The SDRAM controller and SDCKOCR (src/periph/sdramc.zig).
+    sdram: sdramc.Sdramc = .{},
     ratios: ckdiv.Ckdiv,
 
     /// The four clock sources and the stabilisation flags that follow their

@@ -237,6 +237,7 @@ test {
     _ = @import("periph/mstp/mstp_drops_test.zig");
     _ = @import("periph/mrms_test.zig");
     _ = @import("periph/mrms_ecc_test.zig");
+    _ = @import("periph/sdramc_test.zig");
     _ = @import("periph/mstp/mstp_test.zig");
     _ = @import("periph/npu/all_test.zig");
     _ = @import("periph/nvic_test.zig");
