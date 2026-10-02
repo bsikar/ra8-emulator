@@ -11,6 +11,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const vpst = @import("mve_vpst.zig");
 const scalar_ops = @import("mve_int_scalar.zig");
 const Size = mve.qreg.Size;
@@ -60,9 +61,8 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr).?;
     const a = mve.qreg.read(&cpu.fp.bank, f.qn);
     const b = if (f.scalar) scalar_ops.splat(cpu.regs.get(f.rm), f.size) else mve.qreg.read(&cpu.fp.bank, f.qm);
-    var vpr = cpu.fp.vpr;
-    vpr.p0 = mve.compare.compare(a, b, f.size, f.cond) & mve.vpt.elementMask(vpr);
-    vpr = mve.vpt.advance(vpr);
-    if (f.mask != 0) vpr = mve.vpt.open(vpr, f.mask);
-    cpu.fp.vpr = vpr;
+    const done = ~mve_beats.pending(cpu);
+    cpu.fp.vpr.p0 = (cpu.fp.vpr.p0 & done) | (mve.compare.compare(a, b, f.size, f.cond) & mve_beats.mask(cpu));
+    mve_beats.finish(cpu);
+    if (f.mask != 0) cpu.fp.vpr = mve.vpt.open(cpu.fp.vpr, f.mask);
 }

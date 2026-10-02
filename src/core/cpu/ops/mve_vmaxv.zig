@@ -9,6 +9,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const Size = mve.qreg.Size;
 const Form = mve.reduce_minmax.Form;
 
@@ -59,7 +60,7 @@ fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fieldsOf(instr).?;
     const rda: u4 = @intCast(instr.hw2 >> 12);
     const qm = mve.qreg.read(&cpu.fp.bank, @intCast(instr.hw2 >> 1 & 7));
-    const mask = mve.vpt.elementMask(cpu.fp.vpr);
+    const mask = mve_beats.mask(cpu);
     cpu.regs.set(rda, mve.reduce_minmax.maxminv(cpu.regs.get(rda), qm, f.size, mask, f.form));
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    mve_beats.finish(cpu);
 }

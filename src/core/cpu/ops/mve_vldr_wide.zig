@@ -16,6 +16,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const contiguous = mve.contiguous;
 const Size = mve.qreg.Size;
 
@@ -66,14 +67,14 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         .wback = instr.hw1 >> 5 & 1 == 1,
     });
     const qd: u3 = @intCast(instr.hw2 >> 13 & 7);
-    const mask = mve.vpt.elementMask(cpu.fp.vpr);
+    const mask = mve_beats.mask(cpu);
     if (instr.hw1 >> 4 & 1 == 1) {
         const signed = instr.hw1 >> 12 & 1 == 0;
-        mve.qreg.write(&cpu.fp.bank, qd, try load(cpu, p.start, s, mask, signed));
+        mve_beats.keep(cpu, qd, try load(cpu, p.start, s, mask, signed));
     } else {
         try store(cpu, p.start, s, mask, mve.qreg.read(&cpu.fp.bank, qd));
     }
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    mve_beats.finish(cpu);
     if (p.wback) |value| cpu.regs.set(rn, value);
 }
 

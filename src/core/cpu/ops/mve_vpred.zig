@@ -10,6 +10,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 
 pub const group: op.Group = .{ .name = "mve_vpred", .decode = decode, .oracle = false };
 
@@ -32,15 +33,15 @@ fn decode(instr: Instr) ?op.Exec {
 }
 
 fn vpnot(cpu: *Cpu, _: Instr) op.Error!void {
-    var vpr = cpu.fp.vpr;
-    vpr.p0 = ~vpr.p0 & mve.vpt.elementMask(vpr);
-    cpu.fp.vpr = mve.vpt.advance(vpr);
+    const done = ~mve_beats.pending(cpu);
+    cpu.fp.vpr.p0 = (cpu.fp.vpr.p0 & done) | (~cpu.fp.vpr.p0 & mve_beats.mask(cpu));
+    mve_beats.finish(cpu);
 }
 
 fn vpsel(cpu: *Cpu, instr: Instr) op.Error!void {
     const qd: u3 = @intCast(instr.hw2 >> 13);
     const n = mve.qreg.read(&cpu.fp.bank, @intCast(instr.hw1 >> 1 & 7));
     const m = mve.qreg.read(&cpu.fp.bank, @intCast(instr.hw2 >> 1 & 7));
-    mve.qreg.write(&cpu.fp.bank, qd, mve.predicate.merge(m, n, cpu.fp.vpr.p0));
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    mve_beats.keep(cpu, qd, mve.predicate.merge(m, n, cpu.fp.vpr.p0));
+    mve_beats.finish(cpu);
 }

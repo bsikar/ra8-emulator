@@ -9,6 +9,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const mve_int = @import("mve_int.zig");
 const pair = @import("mve_int_pair.zig");
 const Size = mve.qreg.Size;
@@ -65,7 +66,7 @@ fn execFor(comptime size: Size, comptime h: High) op.Exec {
             const b = mve.qreg.read(&cpu.fp.bank, r[2]);
             const result = mve.int_mul.multiplyHigh(a, b, size, h);
             if (h.double) {
-                const live = pair.activeLanes(mve.vpt.elementMask(cpu.fp.vpr), size);
+                const live = pair.activeLanes(mve_beats.mask(cpu), size);
                 if (mve.int_mul.multiplyHigh(a & live, b, size, h).saturated) cpu.fp.fpscr.qc = 1;
             }
             mve_int.writePredicated(cpu, r[0], result.value);

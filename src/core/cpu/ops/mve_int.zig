@@ -9,6 +9,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const Size = mve.qreg.Size;
 const Op = mve.int.Op;
 
@@ -61,7 +62,7 @@ fn execFor(comptime which: Op, comptime size: Size) op.Exec {
 /// Writes Qd under the VPT block's byte mask, then advances the block.
 pub fn writePredicated(cpu: *Cpu, qd: u3, value: u128) void {
     const bank = &cpu.fp.bank;
-    const mask = mve.vpt.elementMask(cpu.fp.vpr);
+    const mask = mve_beats.mask(cpu);
     mve.qreg.write(bank, qd, mve.predicate.merge(mve.qreg.read(bank, qd), value, mask));
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    mve_beats.finish(cpu);
 }
