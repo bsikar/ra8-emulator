@@ -208,6 +208,8 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
     if (driver.machine.takeMonitor()) |cause| pendMonitor(handle, driver.machine, cause);
     if (stop) |why| {
         driver.machine.dcb.latch(dfsrFor(why));
+        // In memory now, so a debugger reading DFSR at the stop sees why.
+        put(handle, dcb.dfsr_address, driver.machine.dcb.dfsr);
         driver.last = why;
         if (driver.latch) |latch| latch.reached = true;
         _ = c.uc.uc_emu_stop(handle);

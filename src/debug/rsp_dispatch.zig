@@ -14,7 +14,6 @@ const std = @import("std");
 const engine = @import("../core/engine.zig");
 const features = @import("rsp_features.zig");
 const stop_machine = @import("stop_machine.zig");
-const dwt = @import("dwt.zig");
 
 pub const Error = error{NoSpace};
 
@@ -22,6 +21,8 @@ pub const Error = error{NoSpace};
 pub const points = @import("rsp_points.zig");
 /// Run control and threads, reached through here for the same reason.
 pub const run_control = @import("rsp_run.zig");
+/// Debugger stores handed on to the debug unit models.
+pub const units = @import("rsp_units.zig");
 /// One connection served end to end.
 pub const server = @import("rsp_server.zig");
 pub const poll = @import("rsp_poll.zig");
@@ -157,23 +158,8 @@ pub const Dispatch = struct {
             self.core.write(where, bytes) catch return copy(out, memory_error);
             done += take;
         }
-        self.keepNumcomp(address, length);
+        if (self.machine) |machine| units.forward(self.core, machine, address, length);
         return copy(out, "OK");
-    }
-
-    /// DWT_CTRL.NUMCOMP is read-only to a debugger too, so a store over
-    /// DWT_CTRL is put back with this core's comparator count.
-    fn keepNumcomp(self: Dispatch, address: u32, length: usize) void {
-        const machine = self.machine orelse return;
-        const end = @as(u64, address) + length;
-        // A debugger store to DWT_CYCCNT is not a count: look again afresh.
-        if (address <= dwt.base + dwt.offsets.cyccnt + 3 and end > dwt.base + dwt.offsets.cyccnt) machine.dwt.cycles_primed = false;
-        if (address > dwt.base + 3 or end <= dwt.base) return;
-        var bytes: [4]u8 = undefined;
-        self.core.read(dwt.base, &bytes) catch return;
-        const current = std.mem.readInt(u32, &bytes, .little);
-        std.mem.writeInt(u32, &bytes, machine.dwt.ctrlWord(current), .little);
-        self.core.write(dwt.base, &bytes) catch return;
     }
 };
 
