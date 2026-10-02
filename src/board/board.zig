@@ -75,6 +75,7 @@ const mpu = @import("../periph/mpu/mpu.zig");
 const sau = @import("../periph/sau.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
+const fault_clear = @import("../periph/fault_clear.zig");
 const sci = @import("../periph/sci/sci.zig");
 const sd_card = @import("../periph/sd/sd_card.zig");
 const sd_card_line = @import("../periph/sd/sd_card_line.zig");
@@ -274,6 +275,8 @@ pub const Board = struct {
     host: mipi_dsi.MipiDsi,
     causes: reset.Reset,
     control: scb.Scb,
+    /// CPU0's owed CFSR/HFSR clears: src/periph/fault_clear.zig.
+    clears: fault_clear.Clears,
     /// The Arm cache window in the PPB: the geometry the firmware reads out
     /// of CTR before every by-address maintenance call, and the maintenance
     /// it then asks for. Primed and polled like AIRCR beside it.

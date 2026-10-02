@@ -156,6 +156,7 @@ test "a message CPU0 sends over IPC comes back from CPU1 answered" {
         .guard = &cpu1.guard,
         .identity = ra8.periph.cpuid.cpu1,
         .control = &cpu1.control,
+        .clears = &cpu1.clears,
     });
 
     try Mailbox.load(cpu0, Mailbox.cpu0_entry, &Mailbox.cpu0_image);

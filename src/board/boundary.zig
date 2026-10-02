@@ -82,6 +82,7 @@ pub fn takeResetRequests(self: *Board, core: anytype) !void {
         self.heartbeat.reset_requested = false;
         resetFor(self, .iwdt);
     }
+    try self.clears.apply(core);
     try self.caches.poll(core);
     try self.regions.poll(core);
     if (try self.control.poll(core)) resetFor(self, .software);
