@@ -6,6 +6,7 @@ test {
     _ = @import("ops/hint_test.zig");
     _ = @import("ops/ldr_literal_test.zig");
     _ = @import("ops/ldst_imm_test.zig");
+    _ = @import("ops/ldst_reg_test.zig");
     _ = @import("ops/ldst_wide_test.zig");
     _ = @import("ops/shift_imm_test.zig");
     _ = @import("ops/add_sub_test.zig");
