@@ -32,6 +32,8 @@ pub const minmax = @import("npu_vela_minmax.zig");
 pub const pool = @import("npu_vela_pool.zig");
 /// The per-channel scale-and-bias records a convolution reads.
 pub const bias = @import("npu_vela_bias.zig");
+/// The compressed weight stream a convolution reads.
+pub const weights = @import("npu_vela_weights.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
