@@ -9,6 +9,7 @@ const clocks = @import("../../periph/clocks.zig");
 const nvic = @import("../../periph/nvic.zig");
 const cac = @import("../../periph/cac.zig");
 const dtc = @import("../../periph/dtc/dtc.zig");
+pub const dtc1 = @import("report_dtc1.zig");
 const analog = @import("report_analog.zig");
 const graphics = @import("report_graphics.zig");
 const audio = @import("report_audio.zig");
@@ -106,6 +107,7 @@ pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     try icu.sections(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
+    try dtc1.section(&board.transfers1, out);
     try dma.section(board, out);
     try serial.sections(board, out);
     try serial.spi(board, out);

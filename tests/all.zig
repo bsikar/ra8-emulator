@@ -46,6 +46,7 @@ test {
     _ = @import("interfaces/cli/report_dma_test.zig");
     _ = @import("interfaces/cli/report_unmodelled_test.zig");
     _ = @import("interfaces/cli/report_watchdog_test.zig");
+    _ = @import("interfaces/cli/report_dtc1_test.zig");
     _ = @import("interfaces/cli/report_usb_test.zig");
     _ = @import("interfaces/cli/report_part_test.zig");
     _ = @import("periph/standing_test.zig");
