@@ -38,3 +38,16 @@ test "an immediate of zero means 32 for LSR and ASR only" {
     try std.testing.expectEqual(@as(u6, 0), shift.immAmount(.lsl, 0));
     try std.testing.expectEqual(@as(u6, 7), shift.immAmount(.lsr, 7));
 }
+
+test "rrx rotates the carry into bit 31 and bit 0 out" {
+    const out = shift.rrx(0x0000_0003, true);
+    try std.testing.expectEqual(@as(u32, 0x8000_0001), out.result);
+    try std.testing.expect(out.carry);
+}
+
+test "immShiftC reads ROR #0 as RRX and LSR #0 as a shift of 32" {
+    try std.testing.expectEqual(@as(u32, 0x0000_0001), shift.immShiftC(0x0000_0002, .ror, 0, false).result);
+    const lsr32 = shift.immShiftC(0x8000_0000, .lsr, 0, false);
+    try std.testing.expectEqual(@as(u32, 0), lsr32.result);
+    try std.testing.expect(lsr32.carry);
+}
