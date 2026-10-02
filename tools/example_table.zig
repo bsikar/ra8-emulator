@@ -176,8 +176,9 @@ pub fn isSecondHalf(allocator: std.mem.Allocator, image: []const u8, names: []co
 }
 
 /// The CPU1 half of `image` in the directory, when the directory has one.
+/// A CPU0 image whose own stem ends in _cpu1 (threadx_cpu1.elf) still pairs:
+/// main() drops true second halves with isSecondHalf before asking.
 pub fn pairedWith(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !?[]const u8 {
-    if (std.mem.endsWith(u8, image, cpu1_suffix)) return null;
     const name = try cpu1Name(allocator, image);
     if (contains(names, name)) return name;
     allocator.free(name);

@@ -5,7 +5,8 @@
 //! that. A few do real work first: ra8_io_swap_demo programs and reads back
 //! the octal flash through a few thousand XSPI commands and only reaches its
 //! "two-backend swap (ram + xs) PASS" line at around 12M instructions, so at
-//! the default it reads "budget" with the swap still running.
+//! the default it reads "budget" with the swap still running. threadx_cpu1
+//! waits on ten ThreadX ticks on CPU1, which CPU1's share of 2M never reaches.
 //!
 //! An override here is a floor, not a replacement: an image runs at the
 //! larger of its own budget and the caller's, so asking the whole table for
@@ -21,6 +22,9 @@ pub const Override = struct {
 /// budget each was seen to finish inside.
 pub const overrides = [_]Override{
     .{ .image = "ra8_io_swap_demo.elf", .instructions = "20000000" },
+    // CPU1's ThreadX kernel needs 10 SysTick ticks (about 2.5M CPU1 cycles at
+    // 250 MHz) before the M85 prints "10 ticks PASS" (RA8EMU-40).
+    .{ .image = "threadx_cpu1.elf", .instructions = "40000000" },
 };
 
 pub fn find(image: []const u8) ?Override {

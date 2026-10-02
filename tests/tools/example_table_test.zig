@@ -76,3 +76,13 @@ test "a CPU0 image runs with its CPU1 half, and a lone image runs alone" {
     try std.testing.expectEqual(@as(?[]const u8, null), try table.pairedWith(a, "blink.elf", &dir));
     try std.testing.expectEqual(@as(?[]const u8, null), try table.pairedWith(a, "orphan_cpu1.elf", &dir));
 }
+
+test "a CPU0 image whose stem ends in _cpu1 still finds its CPU1 half" {
+    const a = std.testing.allocator;
+    const names = [_][]const u8{ "threadx_cpu1.elf", "threadx_cpu1_cpu1.elf" };
+    try std.testing.expect(!try table.isSecondHalf(a, "threadx_cpu1.elf", &names));
+    try std.testing.expect(try table.isSecondHalf(a, "threadx_cpu1_cpu1.elf", &names));
+    const second = (try table.pairedWith(a, "threadx_cpu1.elf", &names)).?;
+    defer a.free(second);
+    try std.testing.expectEqualStrings("threadx_cpu1_cpu1.elf", second);
+}
