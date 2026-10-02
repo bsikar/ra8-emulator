@@ -10,6 +10,7 @@ const sau = ra8.periph.sau;
 const mpu = ra8.periph.mpu;
 const scb = ra8.periph.scb;
 const nvic = ra8.periph.nvic;
+const clocks = ra8.periph.clocks;
 
 /// A thumb image is not needed to test the wiring: what matters is that the
 /// second core is put in front of the first core's board and takes turns.
@@ -341,4 +342,51 @@ test "CPU0's SysTick never ticks CPU1's time base" {
     try std.testing.expectEqual(@as(u64, 0), cpu1.timebase.ticks);
     try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
     try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(memmap.syst.csr));
+}
+
+/// One interleaved run of two counting loops (`adds r0, #1; b` back), three
+/// of CPU0's rounds long, and what each core counted and was charged.
+const Race = struct {
+    cpu0_count: u32,
+    cpu1_count: u32,
+    cpu0_charged: u64,
+    cpu1_charged: u64,
+    turns: usize,
+
+    const loop: u32 = 0xE7FD_3001;
+    const cpu0_entry: u32 = memmap.sram_base + 0x3000;
+
+    fn run() !Race {
+        var cpu1: mod.Second = undefined;
+        var cpu0 = try pair(&cpu1);
+        defer cpu0.close();
+        defer cpu1.close();
+        try Spins.boot(&cpu1);
+        try cpu1.core.writeWord(Spins.spin, loop);
+        try cpu0.writeWord(cpu0_entry, loop);
+        var cpu0_clock = clocks.Clocks{};
+        const session: engine.Session = .{ .timebase = &cpu0_clock };
+        _ = try mod.interleave(cpu0, cpu0_entry, 3 * mod.limits.round, session, &cpu1);
+        return .{
+            .cpu0_count = try cpu0.register(.r0),
+            .cpu1_count = try cpu1.core.register(.r0),
+            .cpu0_charged = cpu0_clock.elapsed,
+            .cpu1_charged = cpu1.timebase.elapsed,
+            .turns = cpu1.turns,
+        };
+    }
+};
+
+test "each core is charged only for its own instructions" {
+    const race = try Race.run();
+    try std.testing.expectEqual(@as(u64, 3 * mod.limits.round), race.cpu0_charged);
+    try std.testing.expectEqual(@as(u64, 3 * mod.limits.round), race.cpu1_charged);
+    try std.testing.expectEqual(@as(usize, 3), race.turns);
+    try std.testing.expect(race.cpu0_count > 0 and race.cpu1_count > 0);
+}
+
+test "the same pair of images interleaves the same way every run" {
+    const first = try Race.run();
+    const second = try Race.run();
+    try std.testing.expect(std.meta.eql(first, second));
 }
