@@ -5,14 +5,20 @@
 //! signed). The immediate forms (VSHL, VSHR, VRSHR, VQSHL) are the same
 //! operation with one shift for every lane. Rounding adds half the weight of
 //! the lowest bit kept; saturating forms clamp to the lane range and report
-//! it for FPSCR.QC.
+//! it for FPSCR.QC. VQSHLU reads signed lanes and saturates them unsigned.
 const std = @import("std");
 const qreg = @import("qreg.zig");
 const int = @import("int.zig");
 const Size = qreg.Size;
 
-/// How the shifted lane is finished.
-pub const Mode = struct { unsigned: bool = false, round: bool = false, saturate: bool = false };
+/// How the shifted lane is finished. `saturate_unsigned` clamps to the
+/// unsigned range even when the lane is read signed (VQSHLU).
+pub const Mode = struct {
+    unsigned: bool = false,
+    round: bool = false,
+    saturate: bool = false,
+    saturate_unsigned: bool = false,
+};
 
 /// One lane shifted at full precision. Shifts past 33 left or 64 right give
 /// the same lane result and saturation as any larger amount, so they are
@@ -29,7 +35,7 @@ pub fn shiftLane(x: i64, shift: i8, round: bool) i128 {
 /// The register forms: each lane of `a` shifted by the bottom byte of the
 /// matching lane of `b`.
 pub fn byRegister(a: u128, b: u128, size: Size, mode: Mode) int.Sat {
-    const lim = int.bounds(size, mode.unsigned);
+    const lim = int.bounds(size, mode.unsigned or mode.saturate_unsigned);
     var out: u128 = 0;
     var saturated = false;
     for (0..qreg.lanes(size)) |k| {
