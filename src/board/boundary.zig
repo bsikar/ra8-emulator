@@ -42,6 +42,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     try drain(self, core, self.usb.dueEvents());
     try drain(self, core, self.links.takeEvents());
     try self.events.repend(core);
+    if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
 }
 
 /// Every event one block has due this boundary, offered one at a time.
@@ -56,6 +57,11 @@ fn drain(self: *Board, core: engine.Engine, events: anytype) !void {
 /// the DTC until its descriptor runs out.
 pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
     _ = self.links.conduct(event);
+    // INTSELR hands the event to CPU1's ICU. With no CPU1 attached it stays
+    // CPU0's, which keeps a single-core run what it was.
+    if (self.events.select.coreFor(event) == .cpu1) {
+        if (self.cpu1) |second| return self.events.raiseOn(.cpu1, second, event);
+    }
     if (self.transfers.activate(core, &self.events, event)) |moved| {
         if (!moved.interrupt) return;
     }

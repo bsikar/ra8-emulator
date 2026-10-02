@@ -142,6 +142,9 @@ pub const Board = struct {
     /// The handshake CPU0 uses to take the second core out of reset. Keyed,
     /// so nothing lands here without the key the driver writes.
     second_core: cpu_ctrl.CpuCtrl = .{},
+    /// CPU1's engine once attachSecond has put it on the bus, so an event
+    /// INTSELR hands to CPU1 pends CPU1's NVIC. Null on a single-core run.
+    cpu1: ?engine.Engine = null,
     /// The code-MRAM frequency latches and the prefetch buffer. Keyed
     /// registers, so nothing lands here without the key the driver writes.
     memory_rates: mrms.Mrms = .{},
