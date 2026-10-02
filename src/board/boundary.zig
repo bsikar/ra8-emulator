@@ -60,7 +60,12 @@ pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
     // INTSELR hands the event to CPU1's ICU. With no CPU1 attached it stays
     // CPU0's, which keeps a single-core run what it was.
     if (self.events.select.coreFor(event) == .cpu1) {
-        if (self.cpu1) |second| return self.events.raiseOn(.cpu1, second, event);
+        if (self.cpu1) |second| {
+            if (self.transfers1.activate(second, &self.events, event)) |moved| {
+                if (!moved.interrupt) return;
+            }
+            return self.events.raiseOn(.cpu1, second, event);
+        }
     }
     if (self.transfers.activate(core, &self.events, event)) |moved| {
         if (!moved.interrupt) return;

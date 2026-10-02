@@ -105,8 +105,17 @@ pub const Icu = struct {
     /// ordinary CPU interrupt and none of the controller's business, so this
     /// keeps scanning rather than filtering slotFor's answer after the fact.
     pub fn dtcSlotFor(self: *const Icu, event: u16) ?usize {
+        return dtcSlotIn(&self.links, event);
+    }
+
+    /// The same, in the table of the core `issuer` names.
+    pub fn dtcSlotOn(self: *Icu, issuer: periph.Issuer, event: u16) ?usize {
+        return dtcSlotIn(self.tableFor(issuer), event);
+    }
+
+    fn dtcSlotIn(table: *const [slots]u32, event: u16) ?usize {
         if (event == 0) return null;
-        for (self.links, 0..) |link, index| {
+        for (table.*, 0..) |link, index| {
             if (link & field.iels != event) continue;
             if (link & field.dtce != 0) return index;
         }
@@ -117,7 +126,11 @@ pub const Icu = struct {
     /// runs out (HUM Ch 18 Figure 18.5 p 801), so the next time that event
     /// fires the CPU takes the interrupt instead of the DTC moving nothing.
     pub fn clearDtce(self: *Icu, slot: usize) void {
-        self.links[slot] &= ~field.dtce;
+        self.clearDtceOn(.cpu0, slot);
+    }
+
+    pub fn clearDtceOn(self: *Icu, issuer: periph.Issuer, slot: usize) void {
+        self.tableFor(issuer)[slot] &= ~field.dtce;
     }
 
     pub fn latched(self: *const Icu, slot: usize) bool {

@@ -117,9 +117,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.events.pinsBlock());
     try self.bus.add(self.events.select.block());
     try self.bus.add(self.links.block());
-    self.transfers.twin = &self.transfers1;
-    self.transfers.issuer = &self.bus.issuer;
-    try self.bus.add(self.transfers.block());
+    try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
     self.dma = dmac.Dmac.init(&self.dma_module);
     self.dma.memory = core.*;
@@ -136,6 +134,15 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
 
 /// Last step of `attach`: hand the finished bus to the engine, then prime
 /// CPU0's own SAU and MPU windows.
+/// DTC0 and DTC1 share one window, served by whichever core is on the bus;
+/// DTC1 starts on the DTCE bits of CPU1's ICU table.
+fn attachTransfers(self: *Board) !void {
+    self.transfers1.table = .cpu1;
+    self.transfers.twin = &self.transfers1;
+    self.transfers.issuer = &self.bus.issuer;
+    try self.bus.add(self.transfers.block());
+}
+
 fn attachCore(self: *Board, core: *engine.Engine) !void {
     try core.attachPeriph(&self.bus);
     try primeCoreWindows(self, core, .{

@@ -130,6 +130,8 @@ pub const Dtc = struct {
     /// the window then serves whichever one `issuer` names.
     twin: ?*Dtc = null,
     issuer: ?*const periph.Issuer = null,
+    /// The ICU table whose DTCE bits start this controller: CPU1's for DTC1.
+    table: periph.Issuer = .cpu0,
 
     pub fn init() Dtc {
         return .{};
@@ -149,7 +151,7 @@ pub const Dtc = struct {
     /// the event is not the controller's and the board raises it as usual,
     /// which is also what a refused activation leaves behind.
     pub fn activate(self: *Dtc, core: anytype, events: *icu.Icu, event: u16) ?Outcome {
-        const slot = events.dtcSlotFor(event) orelse return null;
+        const slot = events.dtcSlotOn(self.table, event) orelse return null;
         if (!self.started()) return self.refuse(.stopped);
         const at = self.descriptorAt(core, slot) orelse return self.refuse(.unprogrammed);
         const vector = vectorOf(slot);
@@ -181,7 +183,7 @@ pub const Dtc = struct {
         self.dtcsts = vectorOf(slot);
         const complete = info.exhausted();
         if (complete) {
-            events.clearDtce(slot);
+            events.clearDtceOn(self.table, slot);
             self.completions +%= 1;
         }
         const interrupt = complete or info.interrupt_each;
