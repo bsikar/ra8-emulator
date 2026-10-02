@@ -1,8 +1,8 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const format = ra8.core.fpu_format;
-const unpack = ra8.core.fpu_unpack;
-const Fpscr = ra8.core.fpu_fpscr.Fpscr;
+const format = ra8.core.fpu.format;
+const unpack = ra8.core.fpu.unpack;
+const Fpscr = ra8.core.fpu.fpscr.Fpscr;
 
 fn kindOf(bits: u32) unpack.Kind {
     var fpscr = Fpscr{};

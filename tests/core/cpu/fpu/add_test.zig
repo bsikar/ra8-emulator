@@ -1,7 +1,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const add = ra8.core.fpu_add;
-const Real = ra8.core.fpu_format.Real;
+const add = ra8.core.fpu.add;
+const Real = ra8.core.fpu.format.Real;
 
 fn r(sign: u1, mant: u128, exp: i32) Real {
     return .{ .sign = sign, .mant = mant, .exp = exp };

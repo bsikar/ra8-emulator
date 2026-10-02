@@ -1,11 +1,11 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const format = ra8.core.fpu_format;
-const fma = ra8.core.fpu_fma;
-const case = ra8.core.fpu_case;
-const vectors = ra8.core.fpu_fma_vectors;
+const format = ra8.core.fpu.format;
+const fma = ra8.core.fpu.fma;
+const case = ra8.core.fpu.case;
+const vectors = ra8.core.fpu.fma_vectors;
 
-fn run(comptime fmt: format.Format, encoding: []const u8, d: fmt.Bits(), n: fmt.Bits(), m: fmt.Bits(), fpscr: *ra8.core.fpu_fpscr.Fpscr) fmt.Bits() {
+fn run(comptime fmt: format.Format, encoding: []const u8, d: fmt.Bits(), n: fmt.Bits(), m: fmt.Bits(), fpscr: *ra8.core.fpu.fpscr.Fpscr) fmt.Bits() {
     if (std.mem.startsWith(u8, encoding, "VFMA.")) return fma.vfma(fmt, d, n, m, fpscr);
     if (std.mem.startsWith(u8, encoding, "VFMS.")) return fma.vfms(fmt, d, n, m, fpscr);
     if (std.mem.startsWith(u8, encoding, "VFNMA.")) return fma.vfnma(fmt, d, n, m, fpscr);
