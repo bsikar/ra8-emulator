@@ -16,6 +16,7 @@ const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");
 const dwt = @import("dwt.zig");
+const itm = @import("itm.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -39,8 +40,10 @@ pub const Driver = struct {
     }
 
     /// A store the firmware made, handed to the FPB when it lands there.
-    fn stored(self: *Driver, address: u32, value: u32) void {
-        if (inside(address, fpb.base, fpb.limits.span)) {
+    fn stored(self: *Driver, address: u32, value: u32, width: u8) void {
+        if (inside(address, itm.base, itm.limits.span)) {
+            _ = self.machine.itm.write(address - itm.base, value, width);
+        } else if (inside(address, fpb.base, fpb.limits.span)) {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             _ = self.machine.dwt.write(address - dwt.base, value);
@@ -69,6 +72,12 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
         if (machine.dwt.peek(offset)) |word| put(handle, dwt.base + offset, word);
     }
     machine.dwt.changed = false;
+    var port: u32 = 0;
+    while (port < itm.limits.ports) : (port += 1) put(handle, itm.base + port * 4, itm.fifo_ready);
+    for ([_]u32{ itm.offsets.ter, itm.offsets.tpr, itm.offsets.tcr }) |register| {
+        if (machine.itm.peek(register)) |word| put(handle, itm.base + register, word);
+    }
+    machine.itm.changed = false;
 }
 
 fn put(handle: *c.uc.uc_engine, address: u32, word: u32) void {
@@ -95,7 +104,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
 fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
-    if (driver.unit_dirty or driver.machine.dwt.changed) {
+    if (driver.unit_dirty or driver.machine.dwt.changed or driver.machine.itm.changed) {
         syncUnits(handle, driver.machine);
         driver.unit_dirty = false;
     }
@@ -129,7 +138,7 @@ fn onMemory(
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const access: @import("watch_table.zig").Access = if (kind == c.uc.UC_MEM_WRITE) .write else .read;
     if (access == .write) {
-        driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))));
+        driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))), @intCast(size));
     } else {
         driver.loaded(@truncate(address));
     }

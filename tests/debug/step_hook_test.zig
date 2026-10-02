@@ -174,3 +174,26 @@ test "firmware that arms a DWT write comparator halts after the store and sees M
     const seen = try fixture.engine.readWord(dwt.base + dwt.offsets.function0);
     try std.testing.expectEqual(function | dwt.function_bits.matched, seen);
 }
+
+// str r5,[r6] (TER); str r5,[r7] (TCR); strb r1,[r0]; strb r2,[r0]; ldr r3,[r0]; nop.
+test "firmware printing through ITM port 0 leaves its text with the debug core" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    try fixture.open();
+    defer fixture.engine.close();
+    const itm = ra8.core.itm;
+    try fixture.engine.write(layout.code, &[_]u8{ 0x35, 0x60, 0x3D, 0x60, 0x01, 0x70, 0x02, 0x70, 0x03, 0x68, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, itm.base);
+    try fixture.engine.setRegister(.r1, 'H');
+    try fixture.engine.setRegister(.r2, 'i');
+    try fixture.engine.setRegister(.r3, 0);
+    try fixture.engine.setRegister(.r5, 1);
+    try fixture.engine.setRegister(.r6, itm.base + itm.offsets.ter);
+    try fixture.engine.setRegister(.r7, itm.base + itm.offsets.tcr);
+    _ = try fixture.machine.breaks.add(.{ .address = layout.code + 10 });
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 10, pc);
+    try std.testing.expectEqualStrings("Hi", fixture.machine.itm.output());
+    try std.testing.expectEqual(itm.fifo_ready, try fixture.engine.register(.r3));
+}
