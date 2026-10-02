@@ -1,7 +1,8 @@
 //! 1 KiB of RAM at 0x2000_0000 for the exception tests: the vector table at
 //! the bottom, code at 0x100, the handler at 0x180, the Process stack top at
-//! 0x300 and the Main stack top at 0x400. Nothing answers at VTOR, so entry
-//! falls back to the table the core reset from.
+//! 0x300 and the Main stack top at 0x400. A page of the System Control Space
+//! at 0xE000_E000 holds the NVIC and SCB registers; VTOR there reads zero, so
+//! entry falls back to the table the core reset from.
 const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
@@ -12,15 +13,18 @@ pub const code: u32 = base + 0x100;
 pub const handler: u32 = base + 0x180;
 pub const psp_top: u32 = base + 0x300;
 pub const msp_top: u32 = base + 0x400;
+pub const scs: u32 = 0xE000_E000;
 
 pub const Ram = struct {
     bytes: [0x400]u8 = [_]u8{0} ** 0x400,
+    scs_page: [0x1000]u8 = [_]u8{0} ** 0x1000,
 
     pub fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
     }
 
     fn slot(self: *Ram, address: u32, len: usize) bus.Error![]u8 {
+        if (address >= scs and address - scs + len <= self.scs_page.len) return self.scs_page[address - scs ..][0..len];
         if (address < base or address - base + len > self.bytes.len) return bus.Error.Unmapped;
         return self.bytes[address - base ..][0..len];
     }

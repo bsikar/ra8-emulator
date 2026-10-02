@@ -45,12 +45,18 @@ pub const Cpu = struct {
     /// An exception the instruction just executed raises (SVC), taken once
     /// it retires.
     raised: ?exception.entry.Number = null,
+    /// The exceptions the core is inside.
+    active: exception.active.Active = .{},
+    /// What is pending, asked before each instruction `run` executes. Null
+    /// runs with no asynchronous exceptions, as a lockstep step does.
+    source: ?exception.source.Source = null,
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
         self.retired = 0;
         self.vtor = vtor;
         self.raised = null;
+        self.active = .{};
     }
 
     /// One instruction, or the reason there was none.
@@ -83,10 +89,11 @@ pub const Cpu = struct {
                 error.InvalidReturn => .{ .invalid_return = address },
                 else => .{ .bus_fault = address },
             };
+            exception.dispatch.left(self) catch return .{ .bus_fault = address };
         }
         if (self.raised) |number| {
             self.raised = null;
-            exception.entry.take(self, number, self.regs.pc) catch return .{ .bus_fault = address };
+            exception.dispatch.supervisorCall(self, number, self.regs.pc) catch return .{ .bus_fault = address };
         }
         return null;
     }
@@ -94,6 +101,7 @@ pub const Cpu = struct {
     pub fn run(self: *Cpu, count: u64) Stop {
         var left = count;
         while (left > 0) : (left -= 1) {
+            _ = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
             if (self.step()) |stopped| return stopped;
         }
         return .count;

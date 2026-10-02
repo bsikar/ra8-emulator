@@ -38,7 +38,7 @@ pub const itns = @import("itns.zig");
 /// The RA8 ICU drives 96 NVIC lines (IELSR0..IELSR95), so three ISER/ICER
 /// words. Widening the model to a bigger part is this one constant.
 pub const irq_lines: u16 = 96;
-const irq_words: u16 = irq_lines / 32;
+pub const irq_words: u16 = irq_lines / 32;
 
 /// ICSR's pend and unpend bits for the two system exceptions.
 pub const icsr_pendstclr: u32 = 1 << 25;
@@ -47,7 +47,7 @@ pub const icsr_pendsvclr: u32 = 1 << 27;
 pub const icsr_pendsvset: u32 = 1 << 28;
 
 /// The same four, in the shape src/periph/nvic_clear.zig takes them.
-const clear_bits = nvic_clear.Bits{
+pub const clear_bits = nvic_clear.Bits{
     .pendstclr = icsr_pendstclr,
     .pendstset = icsr_pendstset,
     .pendsvclr = icsr_pendsvclr,
@@ -317,7 +317,7 @@ pub const Nvic = struct {
     /// the lower exception number, which is what the architecture does.
     /// `tally` is null for a pick that only asks whether anything is pending:
     /// a masked boundary picks twice and the losses are counted once.
-    fn pick(self: *Nvic, core: anytype, tally: ?*passed_pends.Passed) !?Candidate {
+    pub fn pick(self: *Nvic, core: anytype, tally: ?*passed_pends.Passed) !?Candidate {
         _ = self;
         var best: ?Candidate = null;
         const icsr = try core.readWord(memmap.scb.icsr);
@@ -366,7 +366,7 @@ fn masked(core: anytype) !bool {
     return (try core.register(.primask)) & primask_pm != 0;
 }
 
-fn clearPending(core: anytype, number: u16) !void {
+pub fn clearPending(core: anytype, number: u16) !void {
     if (number == debug_monitor.number) return debug_monitor.clear(core);
     if (number == systick or number == pendsv) {
         const bit: u32 = if (number == systick) icsr_pendstset else icsr_pendsvset;
@@ -385,7 +385,7 @@ fn clearPending(core: anytype, number: u16) !void {
 }
 
 /// NVIC_IABR: what a handler reads to ask whether a line is running.
-fn setActiveBit(core: anytype, number: u16, active: bool) !void {
+pub fn setActiveBit(core: anytype, number: u16, active: bool) !void {
     if (number == debug_monitor.number) return debug_monitor.setActive(core, active);
     if (number < first_irq) return;
     const line = number - first_irq;

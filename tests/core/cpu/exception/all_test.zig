@@ -4,4 +4,8 @@ test {
     _ = @import("frame_test.zig");
     _ = @import("entry_test.zig");
     _ = @import("ret_test.zig");
+    _ = @import("active_test.zig");
+    _ = @import("source_test.zig");
+    _ = @import("dispatch_test.zig");
+    _ = @import("nvic_source_test.zig");
 }
