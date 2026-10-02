@@ -245,6 +245,7 @@ test {
     _ = @import("periph/npu/npu_vela_addr_test.zig");
     _ = @import("periph/npu/npu_vela_bias_test.zig");
     _ = @import("periph/npu/npu_vela_weights_test.zig");
+    _ = @import("periph/npu/npu_vela_order_test.zig");
     _ = @import("periph/npu/npu_vela_minmax_test.zig");
     _ = @import("periph/npu/npu_vela_pool_test.zig");
     _ = @import("periph/nvic_test.zig");
