@@ -19,6 +19,7 @@ test {
     _ = @import("core/cpu/decode_test.zig");
     _ = @import("core/cpu/instr_test.zig");
     _ = @import("core/cpu/op_test.zig");
+    _ = @import("core/cpu/alignment_test.zig");
     _ = @import("core/cpu/regs_test.zig");
     _ = @import("core/cpu/reset_test.zig");
     _ = @import("core/cpu/cond_test.zig");

@@ -7,8 +7,9 @@
 //! (stored) or 1 (not stored) in Rd, and clears it either way.
 //!
 //! Left unclaimed: SP or PC as Rt or Rd, PC as Rn, and a store whose Rd
-//! repeats Rt or Rn. Alignment faults belong to RA8EMU-85.
+//! repeats Rt or Rn. Every form is MemA: an unaligned one stops (RA8EMU-85).
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -83,6 +84,7 @@ fn clrex(cpu: *Cpu, _: Instr) op.Error!void {
 fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     const a = access(instr).?;
     const address = cpu.regs.get(a.rn) +% a.offset;
+    try alignment.memA(address, a.size);
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
     try cpu.bus.read(address, bytes[0..a.size]);
     cpu.regs.set(a.rt, @import("std").mem.readInt(u32, &bytes, .little));
@@ -92,6 +94,7 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
 fn store(cpu: *Cpu, instr: Instr) op.Error!void {
     const a = access(instr).?;
     const address = cpu.regs.get(a.rn) +% a.offset;
+    try alignment.memA(address, a.size);
     const held = cpu.exclusive == address;
     cpu.exclusive = null;
     if (held) {

@@ -109,6 +109,7 @@ pub const core = struct {
         pub const thumb_imm = @import("core/cpu/thumb_imm.zig");
         pub const instr = @import("core/cpu/instr.zig");
         pub const op = @import("core/cpu/op.zig");
+        pub const alignment = @import("core/cpu/alignment.zig");
         pub const regs = @import("core/cpu/regs.zig");
         pub const reset = @import("core/cpu/reset.zig");
         pub const shift = @import("core/cpu/shift.zig");

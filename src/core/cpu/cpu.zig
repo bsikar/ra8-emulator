@@ -31,6 +31,9 @@ pub const Stop = union(enum) {
     /// core cannot honour, or to one whose stacked frame contradicts it: an
     /// INVPC UsageFault the core does not take yet.
     invalid_return: u32,
+    /// The instruction at this address made an unaligned MemA access: an
+    /// UNALIGNED UsageFault the core does not take yet. The PC is left on it.
+    unaligned: u32,
 };
 
 pub const Cpu = struct {
@@ -74,9 +77,12 @@ pub const Cpu = struct {
         self.regs.pc = address +% instr.size;
         const it = it_state.get(self.regs.xpsr);
         if (!it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr)) {
-            hit.exec(self, instr) catch {
+            hit.exec(self, instr) catch |err| {
                 self.regs.pc = address;
-                return .{ .bus_fault = address };
+                return switch (err) {
+                    error.Unaligned => .{ .unaligned = address },
+                    else => .{ .bus_fault = address },
+                };
             };
         }
         // An instruction an IT block governs moves the block on whether it

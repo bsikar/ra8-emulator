@@ -8,6 +8,7 @@
 //! (MSPLIM/PSPLIM) arrives with the m85 lane's RA8EMU-21.
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -42,6 +43,7 @@ fn push(cpu: *Cpu, instr: Instr) op.Error!void {
     const registers = list(instr.hw1);
     const start = cpu.regs.sp() -% 4 * @as(u32, @popCount(registers));
     var address = start;
+    try alignment.memA(start, 4);
     for (0..16) |i| {
         if (registers & (@as(u16, 1) << @intCast(i)) == 0) continue;
         var bytes: [4]u8 = undefined;
@@ -56,6 +58,7 @@ fn pop(cpu: *Cpu, instr: Instr) op.Error!void {
     const registers = list(instr.hw1);
     var values: [16]u32 = undefined;
     var address = cpu.regs.sp();
+    try alignment.memA(address, 4);
     for (0..16) |i| {
         if (registers & (@as(u16, 1) << @intCast(i)) == 0) continue;
         values[i] = try cpu.bus.readWord(address);

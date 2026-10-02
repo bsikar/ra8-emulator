@@ -9,6 +9,7 @@
 //! Rt2. Every access goes through the bus.
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -80,6 +81,7 @@ fn addresses(cpu: *const Cpu, form: Form) struct { access: u32, after: u32 } {
 fn ldrd(cpu: *Cpu, instr: Instr) op.Error!void {
     const form = Form.of(instr).?;
     const at = addresses(cpu, form);
+    try alignment.memA(at.access, 8);
     const low = try cpu.bus.readWord(at.access);
     const high = try cpu.bus.readWord(at.access +% 4);
     cpu.regs.set(form.rt, low);
@@ -90,6 +92,7 @@ fn ldrd(cpu: *Cpu, instr: Instr) op.Error!void {
 fn strd(cpu: *Cpu, instr: Instr) op.Error!void {
     const form = Form.of(instr).?;
     const at = addresses(cpu, form);
+    try alignment.memA(at.access, 8);
     var bytes: [8]u8 = undefined;
     std.mem.writeInt(u32, bytes[0..4], cpu.regs.get(form.rt), .little);
     std.mem.writeInt(u32, bytes[4..8], cpu.regs.get(form.rt2), .little);
