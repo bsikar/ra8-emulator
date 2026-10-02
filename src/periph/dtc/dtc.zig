@@ -125,6 +125,11 @@ pub const Dtc = struct {
     last_refusal: ?Refusal = null,
     /// DTCCR.RRS: the descriptor copy the controller is holding.
     cache: skip.Cache = .{},
+    /// DTC1, CPU1's own controller at this same address (HUM Rev 1.30 ch 18:
+    /// DTC0 is reachable only from CPU0, DTC1 only from CPU1). Set on DTC0;
+    /// the window then serves whichever one `issuer` names.
+    twin: ?*Dtc = null,
+    issuer: ?*const periph.Issuer = null,
 
     pub fn init() Dtc {
         return .{};
@@ -336,13 +341,20 @@ fn fold(current: u32, index: u32, byte: u8) u32 {
 }
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
-    const self: *Dtc = @ptrCast(@alignCast(context));
-    return self.read(address, width);
+    return serving(context).read(address, width);
 }
 
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    serving(context).write(address, width, value);
+}
+
+/// The controller the core in front of the bus reaches: DTC1 for CPU1 when
+/// a twin is set, DTC0 otherwise.
+fn serving(context: *anyopaque) *Dtc {
     const self: *Dtc = @ptrCast(@alignCast(context));
-    self.write(address, width, value);
+    const twin = self.twin orelse return self;
+    const issuer = self.issuer orelse return self;
+    return if (issuer.* == .cpu1) twin else self;
 }
 
 /// The vector number behind an ICU slot, which is what DTCSTS reports and

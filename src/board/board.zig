@@ -104,6 +104,8 @@ pub const Board = struct {
     /// The data transfer controller: the other consumer of an event, which
     /// moves bytes on an interrupt instead of letting the CPU take it.
     transfers: dtc.Dtc,
+    /// DTC1, CPU1's own transfer controller at DTC0's address.
+    transfers1: dtc.Dtc,
     /// The DMA module gate, and the eight channels behind it. Both are built
     /// in attach(): the channels need a pointer to this board's own bank, and
     /// the engine whose memory they copy.

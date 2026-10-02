@@ -123,3 +123,33 @@ test "the register map matches the block's own offsets" {
     try std.testing.expectEqual(dtc.off.dtcst, regs.at.dtcst);
     try std.testing.expectEqual(dtc.off.dtcsts, regs.at.dtcsts);
 }
+
+test "CPU1 reaches DTC1 and CPU0 reaches DTC0 at the same address" {
+    var dtc0 = unit();
+    var dtc1 = unit();
+    var issuer: ra8.periph.registry.Issuer = .cpu0;
+    dtc0.twin = &dtc1;
+    dtc0.issuer = &issuer;
+    const window = dtc0.block();
+    const vbr = dtc.win_base + regs.at.dtcvbr;
+
+    issuer = .cpu1;
+    window.writeFn(window.context, vbr, 4, 0x2200_0400);
+    try std.testing.expectEqual(@as(u32, 0x2200_0400), dtc1.dtcvbr);
+    try std.testing.expectEqual(@as(u32, 0), dtc0.dtcvbr);
+
+    issuer = .cpu0;
+    try std.testing.expectEqual(@as(u32, 0), window.readFn(window.context, vbr, 4));
+    window.writeFn(window.context, vbr, 4, 0x2200_0800);
+    try std.testing.expectEqual(@as(u32, 0x2200_0800), dtc0.dtcvbr);
+    try std.testing.expectEqual(@as(u32, 0x2200_0400), dtc1.dtcvbr);
+}
+
+test "with no twin the window is DTC0 whoever asks" {
+    var dtc0 = unit();
+    var issuer: ra8.periph.registry.Issuer = .cpu1;
+    dtc0.issuer = &issuer;
+    const window = dtc0.block();
+    window.writeFn(window.context, dtc.win_base + regs.at.dtcvbr, 4, 0x2200_0400);
+    try std.testing.expectEqual(@as(u32, 0x2200_0400), dtc0.dtcvbr);
+}
