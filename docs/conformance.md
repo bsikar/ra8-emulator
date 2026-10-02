@@ -209,3 +209,9 @@ is stale or an encoding is missing. Regenerate with
 | VMAXAV T1 | 2 |
 | VMINAV T1 | 2 |
 | VBRSR T1 | 9 |
+| VLDRB.8 | 2 |
+| VLDRH.16 | 2 |
+| VLDRW.32 | 2 |
+| VSTRB.8 | 1 |
+| VSTRH.16 | 1 |
+| VSTRW.32 | 2 |
