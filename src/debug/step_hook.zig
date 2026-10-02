@@ -18,6 +18,8 @@ const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");
 /// Re-exported for tests/debug/cycle_count_test.zig; src/root.zig is full.
 pub const cycle_count = @import("cycle_count.zig");
+/// Re-exported for tests/debug/zig_core_test.zig, for the same reason.
+pub const zig_core = @import("zig_core.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");

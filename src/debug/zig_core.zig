@@ -1,0 +1,114 @@
+//! The debugger's view of the Zig core (RA8EMU-105): registers by the same
+//! names the Unicorn engine uses, memory through the core's own bus, one
+//! instruction at a time, and a run that stops on a breakpoint address.
+//!
+//! It owns nothing. The front end builds the `Cpu` on the board's bus and
+//! hands this a pointer to it, so the session can drive either core.
+const engine = @import("../core/engine.zig");
+const cpu_mod = @import("../core/cpu/cpu.zig");
+const bus = @import("../core/cpu/bus.zig");
+const dispatch = @import("../core/cpu/exception/dispatch.zig");
+
+pub const Cortex = engine.Cortex;
+
+/// Why a run handed control back to the debugger.
+pub const Stop = union(enum) {
+    /// The PC reached one of the breakpoint addresses.
+    breakpoint: u32,
+    /// Every instruction it was allowed ran.
+    count,
+    /// The core itself stopped (an unknown encoding, a bus fault, ...).
+    core: cpu_mod.Stop,
+};
+
+pub const ZigCore = struct {
+    cpu: *cpu_mod.Cpu,
+
+    pub fn register(self: ZigCore, which: Cortex) u32 {
+        const r = &self.cpu.regs;
+        return switch (which) {
+            .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => r.low[low(which)],
+            .sp => r.sp(),
+            .lr => r.lr,
+            .pc => r.pc,
+            .xpsr => r.xpsr,
+            .msp => r.msp,
+            .psp => r.psp,
+            .primask => r.primask,
+            .basepri => r.basepri,
+            .faultmask => r.faultmask,
+            .control => r.control,
+        };
+    }
+
+    pub fn setRegister(self: ZigCore, which: Cortex, value: u32) void {
+        const r = &self.cpu.regs;
+        switch (which) {
+            .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => r.low[low(which)] = value,
+            .sp => r.setSp(value),
+            .lr => r.lr = value,
+            .pc => r.pc = value,
+            .xpsr => r.xpsr = value,
+            .msp => r.msp = value,
+            .psp => r.psp = value,
+            .primask => r.primask = value,
+            .basepri => r.basepri = value,
+            .faultmask => r.faultmask = value,
+            .control => r.control = value,
+        }
+    }
+
+    pub fn read(self: ZigCore, address: u32, into: []u8) bus.Error!void {
+        return self.cpu.bus.read(address, into);
+    }
+
+    pub fn readWord(self: ZigCore, address: u32) bus.Error!u32 {
+        return self.cpu.bus.readWord(address);
+    }
+
+    pub fn write(self: ZigCore, address: u32, bytes: []const u8) bus.Error!void {
+        return self.cpu.bus.write(address, bytes);
+    }
+
+    /// One instruction, taking a pending exception first the way `Cpu.run`
+    /// does. Null when it retired cleanly.
+    pub fn step(self: ZigCore) ?cpu_mod.Stop {
+        _ = dispatch.poll(self.cpu) catch return .{ .bus_fault = self.cpu.regs.pc };
+        return self.cpu.step();
+    }
+
+    /// Run up to `count` instructions. The instruction under the PC always
+    /// runs first, so continuing from a breakpoint moves off it; the run
+    /// then stops as soon as the PC lands on any address in `breaks`.
+    pub fn runUntil(self: ZigCore, breaks: []const u32, count: u64) Stop {
+        var left = count;
+        while (left > 0) : (left -= 1) {
+            if (self.step()) |stopped| return .{ .core = stopped };
+            const pc = self.cpu.regs.pc;
+            for (breaks) |at| {
+                if (at & ~@as(u32, 1) == pc) return .{ .breakpoint = pc };
+            }
+        }
+        return .count;
+    }
+};
+
+/// R0-R12's index into `Regs.low`.
+fn low(which: Cortex) usize {
+    return switch (which) {
+        .r0 => 0,
+        .r1 => 1,
+        .r2 => 2,
+        .r3 => 3,
+        .r4 => 4,
+        .r5 => 5,
+        .r6 => 6,
+        .r7 => 7,
+        .r8 => 8,
+        .r9 => 9,
+        .r10 => 10,
+        .r11 => 11,
+        .r12 => 12,
+        else => unreachable,
+    };
+}
