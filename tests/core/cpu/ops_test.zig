@@ -92,5 +92,6 @@ test {
     _ = @import("ops/mve_vld_il_test.zig");
     _ = @import("ops/mve_beats_test.zig");
     _ = @import("ops/mve_float_test.zig");
+    _ = @import("ops/mve_float_scalar_test.zig");
     _ = @import("ops/table_test.zig");
 }
