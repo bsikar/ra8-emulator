@@ -21,6 +21,7 @@ const break_table = @import("break_table.zig");
 const breakpoint = @import("breakpoint.zig");
 const watch_table = @import("watch_table.zig");
 const fpb = @import("fpb.zig");
+const dwt = @import("dwt.zig");
 
 /// What the CPU is about to execute, as the driver sees it.
 pub const Event = struct {
@@ -52,6 +53,9 @@ pub const Stop = union(enum) {
     /// A comparator the firmware programmed into the core's own FPB
     /// matched, by index.
     unit_break: usize,
+    /// A DWT comparator the firmware set to raise a debug event matched,
+    /// by index. A data match is reported once its instruction retired.
+    unit_watch: usize,
 };
 
 /// The point a step over or a step out is running to.
@@ -68,6 +72,9 @@ pub const Machine = struct {
     watches: watch_table.Table = .{},
     /// The core's breakpoint unit, as the firmware programmed it.
     fpb: fpb.Fpb = .{},
+    /// The core's DWT comparators, as the firmware programmed them.
+    dwt: dwt.Dwt = .{},
+    unit_pending: ?usize = null,
     mode: Mode = .halted,
     /// Set by `resume`; cleared once the instruction resumed on has run.
     resumed: bool = false,
@@ -122,9 +129,11 @@ pub const Machine = struct {
             return null;
         }
         if (self.watch_pending) |tripped| return self.halt(.{ .watchpoint = tripped });
+        if (self.unit_pending) |index| return self.halt(.{ .unit_watch = index });
         if (self.halt_pending) return self.halt(.halt_requested);
         if (self.breaks.hit(event.pc)) |id| return self.halt(.{ .breakpoint = id });
         if (self.fpb.matches(event.pc)) |index| return self.halt(.{ .unit_break = index });
+        if (self.dwt.matchesPc(event.pc)) |index| return self.halt(.{ .unit_watch = index });
         return switch (self.mode) {
             .halted, .running => null,
             .step => self.halt(.stepped),
@@ -135,7 +144,11 @@ pub const Machine = struct {
     /// Hand the machine a bus access made by the instruction now running.
     /// The stop it may cause is reported on the next `onInstruction`.
     pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access) void {
-        if (self.mode == .halted or self.watch_pending != null) return;
+        if (self.mode == .halted) return;
+        if (self.dwt.access(address, width, access)) |index| {
+            if (self.unit_pending == null) self.unit_pending = index;
+        }
+        if (self.watch_pending != null) return;
         self.watch_pending = self.watches.hit(address, width, access);
     }
 
@@ -144,6 +157,7 @@ pub const Machine = struct {
         self.resumed = true;
         self.halt_pending = false;
         self.watch_pending = null;
+        self.unit_pending = null;
         self.target = target;
     }
 
@@ -167,6 +181,7 @@ pub const Machine = struct {
         self.mode = .halted;
         self.halt_pending = false;
         self.watch_pending = null;
+        self.unit_pending = null;
         self.target = null;
         return why;
     }

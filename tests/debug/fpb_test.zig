@@ -47,3 +47,7 @@ test "an enabled comparator in an enabled unit matches its address" {
     try std.testing.expectEqual(null, unit.matches(0x2200_0020));
     try std.testing.expectEqual(null, unit.matches(0x2200_000a));
 }
+
+test {
+    _ = @import("dwt_test.zig");
+}

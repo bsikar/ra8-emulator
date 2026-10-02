@@ -15,6 +15,7 @@ const call_decode = @import("call_decode.zig");
 const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");
+const dwt = @import("dwt.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -39,20 +40,41 @@ pub const Driver = struct {
 
     /// A store the firmware made, handed to the FPB when it lands there.
     fn stored(self: *Driver, address: u32, value: u32) void {
-        if (address < fpb.base or address >= fpb.base + fpb.limits.span) return;
-        if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
+        if (inside(address, fpb.base, fpb.limits.span)) {
+            if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
+        } else if (inside(address, dwt.base, dwt.limits.end)) {
+            _ = self.machine.dwt.write(address - dwt.base, value);
+        }
+    }
+
+    /// A load the firmware made, which may clear a DWT MATCHED flag.
+    fn loaded(self: *Driver, address: u32) void {
+        if (inside(address, dwt.base, dwt.limits.end)) self.machine.dwt.loaded(address - dwt.base);
     }
 };
 
-/// Put the FPB's registers in memory the way a read should see them.
-fn syncUnit(handle: *c.uc.uc_engine, unit: *const fpb.Fpb) void {
+fn inside(address: u32, from: u32, span: u32) bool {
+    return address >= from and address < from + span;
+}
+
+/// Put the FPB's and the DWT comparators' registers in memory the way a
+/// read should see them.
+fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
     var offset: u32 = 0;
     while (offset < fpb.limits.span) : (offset += 4) {
-        const word = unit.read(offset) orelse continue;
-        var bytes: [4]u8 = undefined;
-        std.mem.writeInt(u32, &bytes, word, .little);
-        _ = c.uc.uc_mem_write(handle, fpb.base + offset, &bytes, bytes.len);
+        if (machine.fpb.read(offset)) |word| put(handle, fpb.base + offset, word);
     }
+    offset = dwt.offsets.comp0;
+    while (offset < dwt.limits.end) : (offset += 4) {
+        if (machine.dwt.peek(offset)) |word| put(handle, dwt.base + offset, word);
+    }
+    machine.dwt.changed = false;
+}
+
+fn put(handle: *c.uc.uc_engine, address: u32, word: u32) void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, word, .little);
+    _ = c.uc.uc_mem_write(handle, address, &bytes, bytes.len);
 }
 
 /// Install the hooks. The memory hook is only installed when `watch_memory`
@@ -63,7 +85,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
         return Error.AttachFailed;
     }
     if (!watch_memory) return;
-    if (handle) |live| syncUnit(live, &driver.machine.fpb);
+    if (handle) |live| syncUnits(live, driver.machine);
     const kinds = c.uc.UC_HOOK_MEM_READ | c.uc.UC_HOOK_MEM_WRITE;
     if (c.uc.uc_hook_add(handle, &hook, kinds, @constCast(@as(*const anyopaque, @ptrCast(&onMemory))), driver, 1, 0) != c.uc.UC_ERR_OK) {
         return Error.AttachFailed;
@@ -73,8 +95,8 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
 fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
-    if (driver.unit_dirty) {
-        syncUnit(handle, &driver.machine.fpb);
+    if (driver.unit_dirty or driver.machine.dwt.changed) {
+        syncUnits(handle, driver.machine);
         driver.unit_dirty = false;
     }
     var sp: u32 = 0;
@@ -106,6 +128,10 @@ fn onMemory(
     _ = uc;
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const access: @import("watch_table.zig").Access = if (kind == c.uc.UC_MEM_WRITE) .write else .read;
-    if (access == .write) driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))));
+    if (access == .write) {
+        driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))));
+    } else {
+        driver.loaded(@truncate(address));
+    }
     driver.machine.onAccess(@truncate(address), @intCast(size), access);
 }
