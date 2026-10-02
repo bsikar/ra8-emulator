@@ -245,3 +245,15 @@ is stale or an encoding is missing. Regenerate with
 | VLDRD.U64 vector base | 2 |
 | VSTRW.32 vector base | 2 |
 | VSTRD.64 vector base | 2 |
+| VLD20 | 2 |
+| VLD21 | 2 |
+| VLD40 | 2 |
+| VLD41 | 2 |
+| VLD42 | 2 |
+| VLD43 | 2 |
+| VST20 | 2 |
+| VST21 | 2 |
+| VST40 | 2 |
+| VST41 | 2 |
+| VST42 | 2 |
+| VST43 | 2 |
