@@ -2,8 +2,10 @@
 //!
 //! CPU0 runs a round, CPU1 takes a turn, and so on until CPU0's budget is
 //! spent or one of the conditions `Engine.run` stops on is met. A round is
-//! one of CPU0's chunk boundaries (`second_core.limits.round`). Each core is
-//! charged for its own instructions on its own time base, and the order is
+//! one of CPU0's chunk boundaries (`second_core.limits.round`). CPU1's turn
+//! is that round scaled by the two CPU clock dividers (`Second.turn`), so a
+//! CPU1 clocked at a quarter of CPU0 runs a quarter as many instructions.
+//! Each core is charged for its own instructions on its own time base, and the order is
 //! fixed, so the same pair of images interleaves the same way every run.
 //! With no second core this is `Engine.run` and nothing else.
 
@@ -31,7 +33,7 @@ pub fn interleave(
         remaining -= round;
         pc = try cpu0.register(.pc);
         if (ended(cpu0, session)) break;
-        other.step(second_core.limits.round);
+        other.step(other.turn(second_core.limits.round));
     }
     return null;
 }
