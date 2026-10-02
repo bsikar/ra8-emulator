@@ -91,3 +91,7 @@ is stale or an encoding is missing. Regenerate with
 | VRINTZ.F64 T1 | 1 |
 | VRINTR.F64 T1 | 1 |
 | VRINTX.F64 T1 | 2 |
+| VMAXNM.F32 T1 | 15 |
+| VMINNM.F32 T1 | 9 |
+| VMAXNM.F64 T1 | 2 |
+| VMINNM.F64 T1 | 2 |
