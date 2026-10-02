@@ -29,3 +29,10 @@ test "the examples that mount an existing volume get a FAT16 card" {
         try std.testing.expectEqualStrings("fat16", got[1]);
     }
 }
+
+test "the example that formats its own FAT32 volume gets a 4 GB card" {
+    const got = options.flags("ra8_io_sd_demo.elf");
+    try std.testing.expectEqual(@as(usize, 2), got.len);
+    try std.testing.expectEqualStrings("--sd-size", got[0]);
+    try std.testing.expectEqualStrings("4096", got[1]);
+}

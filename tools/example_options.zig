@@ -12,6 +12,10 @@
 //! examples that provision their own files onto an existing FAT volume
 //! (epub_open, epub_toc, tz_secure_only_sd) get a card formatted FAT16, the
 //! filesystem that fits the default 32 MB card (RA8EMU-82).
+//!
+//! ra8_io_sd_demo formats the card FAT32 itself before it mounts, and its
+//! formatter gives up without touching the card on anything under 4 GB, so it
+//! gets a blank 4096 MB card, the smallest size it formats (RA8EMU-82).
 const std = @import("std");
 
 pub const Extra = struct {
@@ -21,6 +25,7 @@ pub const Extra = struct {
 
 const click = [_][]const u8{"--click"};
 const formatted = [_][]const u8{ "--sd-new", "fat16" };
+const large_card = [_][]const u8{ "--sd-size", "4096" };
 
 /// Images that need hardware the default board does not fit, and the flags
 /// that fit it.
@@ -29,6 +34,7 @@ pub const extras = [_]Extra{
     .{ .image = "epub_open.elf", .flags = &formatted },
     .{ .image = "epub_toc.elf", .flags = &formatted },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
+    .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
     .{ .image = "smbus_demo.elf", .flags = &click },
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
 };
