@@ -66,6 +66,9 @@ const wiring = @import("../board/wiring.zig");
 const report_cores = @import("../interfaces/cli/report_cores.zig");
 const Engine = engine.Engine;
 
+/// CPU1's turn length against CPU0's round, from the CPU clock dividers.
+pub const rate = @import("core_rate.zig");
+
 /// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
 /// to zero. The PPB is per-engine RAM here, so the word written lands in this
 /// core's System Control Space only and CPU0's VTOR is left as it was.

@@ -118,6 +118,7 @@ test {
     _ = @import("core/part_test.zig");
     _ = @import("core/part_map_test.zig");
     _ = @import("core/part_clock_test.zig");
+    _ = @import("core/core_rate_test.zig");
     _ = @import("periph/adc/adc_intr_test.zig");
     _ = @import("periph/adc/adc_scan_test.zig");
     _ = @import("periph/acmphs/acmphs_test.zig");
