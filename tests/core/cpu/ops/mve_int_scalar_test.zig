@@ -84,10 +84,23 @@ test "the table routes the T2 encodings here" {
     }
 }
 
-test "unclaimed: VBRSR, Rm SP or PC, size 3, Q8+" {
-    try std.testing.expect(scalar.group.decode(wide(0xFE03, 0x1E62)) == null);
+test "unclaimed: Rm SP or PC, size 3, Q8+" {
     try std.testing.expect(scalar.group.decode(wide(0xEE03, 0x0F4D)) == null);
     try std.testing.expect(scalar.group.decode(wide(0xEE03, 0x0F4F)) == null);
     try std.testing.expect(scalar.group.decode(wide(0xEE33, 0x0F42)) == null);
     try std.testing.expect(scalar.group.decode(wide(0xEE43, 0x0F42)) == null);
+}
+
+test "vbrsr reverses each lane and keeps Rm's bottom byte of bits" {
+    var cpu = fresh();
+    try std.testing.expectEqual(@as(u128, 0x80_01), try run(&cpu, 0xFE03, 0x1E62, 0x01_80, 8) & 0xFFFF);
+    try std.testing.expectEqual(@as(u128, 0b011), try run(&cpu, 0xFE13, 0x1E62, 0b0110, 0x103) & 0xFFFF);
+    try std.testing.expectEqual(@as(u128, 0), try run(&cpu, 0xFE23, 0x1E62, 0xFFFF_FFFF, 0x100) & 0xFFFF_FFFF);
+}
+
+test "vbrsr writes only the lanes VPR leaves live" {
+    var cpu = fresh();
+    qreg.write(&cpu.fp.bank, 0, 0xAAAA_0000);
+    cpu.fp.vpr = ra8.core.mve.vpt.open(.{ .p0 = 0x0003 }, 0b1000);
+    try std.testing.expectEqual(@as(u128, 0xAAAA_8000), try run(&cpu, 0xFE13, 0x1E62, 0x0001_0001, 16) & 0xFFFF_FFFF);
 }

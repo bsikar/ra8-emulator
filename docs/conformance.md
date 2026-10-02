@@ -208,3 +208,4 @@ is stale or an encoding is missing. Regenerate with
 | VMINV T1 | 3 |
 | VMAXAV T1 | 2 |
 | VMINAV T1 | 2 |
+| VBRSR T1 | 9 |

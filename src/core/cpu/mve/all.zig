@@ -20,3 +20,5 @@ pub const int_mul = @import("int_mul.zig");
 pub const int_mul_vectors = @import("int_mul_vectors.zig");
 pub const compare = @import("compare.zig");
 pub const compare_vectors = @import("compare_vectors.zig");
+pub const bit_reverse = @import("bit_reverse.zig");
+pub const bit_reverse_vectors = @import("bit_reverse_vectors.zig");
