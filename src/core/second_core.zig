@@ -210,43 +210,9 @@ pub fn start(
     return into;
 }
 
-/// Run CPU0 to its budget, giving CPU1 a turn between rounds.
-///
-/// With no second core this is `Engine.run` and nothing else, which is what
-/// every single-core image gets: same call, same budget, same boundaries.
-pub fn interleave(
-    cpu0: Engine,
-    entry: u32,
-    budget: usize,
-    session: engine.Session,
-    second: ?*Second,
-) engine.Error!?engine.Fault {
-    const other = second orelse return cpu0.run(entry, budget, session);
-    var pc = entry;
-    var remaining = budget;
-    while (remaining > 0) {
-        const round = @min(@as(usize, limits.round), remaining);
-        if (try cpu0.run(pc, round, session)) |taken| return taken;
-        remaining -= round;
-        pc = try cpu0.register(.pc);
-        if (ended(cpu0, session)) break;
-        other.step(limits.round);
-    }
-    return null;
-}
-
-/// The conditions `Engine.run` itself stops a run on, re-read here because
-/// the interleave calls it a round at a time and would otherwise hand the
-/// same spent run another round.
-fn ended(cpu0: Engine, session: engine.Session) bool {
-    if (session.brk) |point| if (point.reached) return true;
-    if (session.undefined_sites) |found| if (found.stoppedAt() != null) return true;
-    if (session.stop) |watch| if (watch.met(cpu0.readWord(watch.address) catch null)) return true;
-    if (session.deadline) |due| if (session.timebase) |clock| {
-        if (due.met(clock.ticks)) return true;
-    };
-    return false;
-}
+/// The round robin between the two cores lives in interleave.zig; it is
+/// re-exported here because `main` reaches it through this file.
+pub const interleave = @import("interleave.zig").interleave;
 
 /// What CPU1 did, printed under CPU0's own account of the run.
 pub fn report(out: anytype, second: ?*const Second) !void {
