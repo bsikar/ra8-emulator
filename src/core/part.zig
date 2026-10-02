@@ -12,6 +12,15 @@ const std = @import("std");
 pub const map = @import("part_map.zig");
 pub const clock = @import("part_clock.zig");
 
+/// SysTick timers on CPU0, the Cortex-M85 both parts carry: two, one Secure
+/// and one Non-secure. Arm's Cortex-M85 Devices Generic User Guide (101928,
+/// issue 0101), "System timer, SysTick": "There are two 24-bit system
+/// timers, a Non-secure SysTick timer and a Secure SysTick timer." With two,
+/// SHPR3.PRI_15 and SHCSR.SYSTICKACT are banked (src/periph/scb_bank.zig).
+/// CPU1's Cortex-M33 has two only when it carries the Security Extension
+/// (Arm 100235, issue 0100); that is not pinned for the RA8P1's CPU1 yet.
+pub const cpu0_systicks: u2 = 2;
+
 pub const Part = enum {
     ra8d2,
     ra8p1,

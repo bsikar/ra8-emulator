@@ -95,3 +95,8 @@ test "every bit-by-bit register now has a split" {
         try std.testing.expect(bank.bankedBits(0xE000_ED00 + offset, .one) != null);
     }
 }
+
+test "SysTicks.of maps a timer count" {
+    try std.testing.expectEqual(bank.SysTicks.one, bank.SysTicks.of(1));
+    try std.testing.expectEqual(bank.SysTicks.two, bank.SysTicks.of(2));
+}
