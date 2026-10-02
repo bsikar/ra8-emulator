@@ -20,6 +20,9 @@
 # gdb's console (RA8EMU-77).
 # Exits 0 when every expected line showed, 1 when one is missing, and 77
 # (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
+# CPU=zig serves every session from the Zig core (--cpu zig, RA8EMU-118)
+# and leaves out the two-core session and the cycle watch, which that
+# core cannot debug yet (RA8EMU-172 for the cycle watch).
 
 set -euo pipefail
 
@@ -90,6 +93,8 @@ ZIG
 "$zig" ld.lld --gc-sections -T link.ld itm.o -o itm.elf
 image=fw.elf
 
+cpu=${CPU:-unicorn}
+cpu_args=(--cpu "$cpu")
 port=$((20000 + RANDOM % 20000))
 failed=0
 
@@ -106,7 +111,7 @@ serve() {
     local commands=()
     for command in "$@"; do commands+=(-ex "$command"); done
     port=$((port + 1))
-    "$emulator" "$image" "${args[@]}" --gdb "$port" 2>"$name.emu" &
+    "$emulator" "$image" "${cpu_args[@]}" "${args[@]}" --gdb "$port" 2>"$name.emu" &
     pid=$!
     for _ in $(seq 50); do
         grep -q listening "$name.emu" && break
@@ -122,7 +127,7 @@ serve() {
 interrupt() {
     local name=$1
     port=$((port + 1))
-    "$emulator" fw.elf --gdb "$port" 2>"$name.emu" &
+    "$emulator" fw.elf "${cpu_args[@]}" --gdb "$port" 2>"$name.emu" &
     pid=$!
     for _ in $(seq 50); do
         grep -q listening "$name.emu" && break
@@ -158,6 +163,9 @@ expect one '<fw.counter>:' 'Breakpoint 1, ' 'fw.target (x=0) at fw.zig:' '<fw.ta
     'in fw.reset () at fw.zig:8' 'Hardware watchpoint 2' \
     'Old value = 100' 'New value = 101' '[Inferior 1 (Remote target) detached]'
 
+sessions="one stop itm"
+if [ "$cpu" != zig ]; then
+sessions="one two cycle stop itm"
 serve two --cpu1 fw.elf -- 'info threads' 'thread 2' 'info registers pc' \
     'break target' continue stepi bt "x/1xw &'fw.counter'" delete \
     "watch 'fw.counter'" continue detach
@@ -165,7 +173,9 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     'Thread 2 hit Breakpoint 1, ' 'in fw.reset () at fw.zig:8' \
     '<fw.counter>:' 'Thread 2 hit Hardware watchpoint 2' 'New value = ' \
     '[Inferior 1 (Remote target) detached]'
+fi
 
+if [ "$cpu" != zig ]; then
 # RA8EMU-98: a Cycle Counter comparator armed from gdb stops the run with
 # DFSR.DWTTRAP (bit 2) set. RA8EMU-101: on the instruction that brings
 # CYCCNT to its value, not at the next clock charge.
@@ -174,6 +184,7 @@ serve cycle -- 'set *(unsigned*)0xE000EDFC = 0x01000000' 'set *(unsigned*)0xE000
     'p/x *(unsigned*)0xE000ED30' 'p *(unsigned*)0xE0001004 - 400 <= 1' detach
 expect cycle 'Program received signal SIGTRAP' '$1 = 0x4' '$2 = 1' \
     '[Inferior 1 (Remote target) detached]'
+fi
 
 interrupt stop
 expect stop 'Program received signal SIGINT, Interrupt.' 'in fw.reset () at fw.zig:' \
@@ -184,10 +195,10 @@ serve itm -- 'break done' continue detach
 expect itm 'hello from itm' 'Breakpoint 1, ' '[Inferior 1 (Remote target) detached]'
 
 if [ "$failed" -ne 0 ]; then
-    for name in one two cycle stop itm; do
+    for name in $sessions; do
         echo "--- $name"
         cat "$name.out" "$name.emu"
     done
     exit 1
 fi
-echo "gdb_batch: one core, two cores, a cycle watch, an interrupt and ITM output passed"
+echo "gdb_batch ($cpu): $sessions passed"

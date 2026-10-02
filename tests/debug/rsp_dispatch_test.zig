@@ -15,6 +15,7 @@ test {
     _ = @import("rsp_run_test.zig");
     _ = @import("rsp_server_test.zig");
     _ = @import("rsp_console_test.zig");
+    _ = @import("rsp_zig_test.zig");
 }
 
 fn open() !Engine {
