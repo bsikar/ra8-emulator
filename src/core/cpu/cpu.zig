@@ -11,6 +11,7 @@ const cond = @import("cond.zig");
 const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
 const fp_state = @import("fpu/state.zig");
+const exception = @import("exception/all.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
@@ -25,6 +26,10 @@ pub const Stop = union(enum) {
     /// The fetch at this address, or an access the instruction there made,
     /// reached memory nothing answers for. The PC is left on it.
     bus_fault: u32,
+    /// The instruction at this address branched to an EXC_RETURN value the
+    /// core cannot honour, or to one whose stacked frame contradicts it: an
+    /// INVPC UsageFault the core does not take yet.
+    invalid_return: u32,
 };
 
 pub const Cpu = struct {
@@ -34,10 +39,18 @@ pub const Cpu = struct {
     fp: fp_state.State = .{},
     /// Instructions retired since reset.
     retired: u64 = 0,
+    /// The vector table the core reset from, for exception entry while
+    /// nothing answers at VTOR.
+    vtor: u32 = 0,
+    /// An exception the instruction just executed raises (SVC), taken once
+    /// it retires.
+    raised: ?exception.entry.Number = null,
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
         self.retired = 0;
+        self.vtor = vtor;
+        self.raised = null;
     }
 
     /// One instruction, or the reason there was none.
@@ -58,6 +71,23 @@ pub const Cpu = struct {
         // ran or not. IT itself leaves the state it just wrote.
         if (it_state.active(it)) self.regs.xpsr = it_state.put(self.regs.xpsr, it_state.advance(it));
         self.retired += 1;
+        return self.finish(address);
+    }
+
+    /// What an instruction leaves for after it retires and its IT state has
+    /// moved on: an exception return, or an exception it raised.
+    fn finish(self: *Cpu, address: u32) ?Stop {
+        if (self.regs.exc_return) |value| {
+            self.regs.exc_return = null;
+            exception.ret.from(self, value) catch |err| return switch (err) {
+                error.InvalidReturn => .{ .invalid_return = address },
+                else => .{ .bus_fault = address },
+            };
+        }
+        if (self.raised) |number| {
+            self.raised = null;
+            exception.entry.take(self, number, self.regs.pc) catch return .{ .bus_fault = address };
+        }
         return null;
     }
 
