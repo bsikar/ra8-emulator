@@ -49,5 +49,6 @@ test {
     _ = @import("move_vectors_test.zig");
     _ = @import("transfer_test.zig");
     _ = @import("transfer_vectors_test.zig");
+    _ = @import("state_test.zig");
     std.testing.refAllDecls(ra8.core.fpu);
 }
