@@ -36,3 +36,8 @@ test "threadx_cpu1 runs long enough for ten CPU1 kernel ticks" {
     try std.testing.expectEqualStrings("40000000", budgets.pick("threadx_cpu1.elf", null).?);
     try std.testing.expectEqualStrings("40000000", budgets.pick("threadx_cpu1.elf", "2000000").?);
 }
+
+test "txm_manager_cpu1 runs long enough for ten module runs" {
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_manager_cpu1.elf", null).?);
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_manager_cpu1.elf", "2000000").?);
+}
