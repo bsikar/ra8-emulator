@@ -38,6 +38,7 @@ const pend_hook = @import("pend_hook.zig");
 const fault_hook = @import("fault_hook.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 const pend_break = @import("pend_break.zig");
+const cpu_reset = @import("cpu/reset.zig");
 const undefined_hook = @import("undefined_hook.zig");
 const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
@@ -346,11 +347,12 @@ pub const Engine = struct {
     }
 
     /// Reset the core the way the silicon does: SP and PC out of the vector
-    /// table, PC with the Thumb bit stripped.
+    /// table, PC with the Thumb bit stripped, LR all ones as TakeReset sets it.
     pub fn resetFromVectorTable(self: Engine, vector_base: u32) Error!void {
         const stack_pointer = try self.readWord(vector_base);
         const reset_vector = try self.readWord(vector_base + 4);
         try self.setRegister(.sp, stack_pointer);
+        try self.setRegister(.lr, cpu_reset.lr_at_reset);
         try self.setRegister(.pc, reset_vector & ~@as(u32, 1));
     }
 
