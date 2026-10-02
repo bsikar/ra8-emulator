@@ -68,3 +68,14 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.blocks(board, out, of.timebase);
     try undefined_ops.print(out, image, of.undefined_found);
 }
+
+/// What a `--cpu zig` run can report: the part, the bus and the blocks, with
+/// the instructions it retired as the elapsed time. The timebase, the
+/// pend/idle seams and the stepped-instruction counts are fed by hooks only
+/// the Unicorn run attaches, so they are left out and a line says so.
+pub fn zigCore(out: Writer, board: *Board, retired: u64) !void {
+    try report_part.print(out, board.part);
+    try report.bus(board, out);
+    try out.print("zig core: timebase, pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n", .{});
+    try report.blocks(board, out, .{ .elapsed = retired });
+}

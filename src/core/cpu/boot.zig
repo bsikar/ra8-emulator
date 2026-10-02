@@ -3,8 +3,9 @@
 //! The image is loaded and the board RAM mapped exactly as for a Unicorn
 //! run; the Zig core then resets out of the same vector table and runs until
 //! its budget is spent or it meets something it cannot do yet, most often an
-//! encoding no group in src/core/cpu/ops/table.zig claims. The report is one
-//! line saying which, so a corpus sweep can tell how far each image gets.
+//! encoding no group in src/core/cpu/ops/table.zig claims. This file prints
+//! one line saying which, so a corpus sweep can tell how far each image
+//! gets; main then prints the board's own report (report_run.zigCore).
 const engine = @import("../engine.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
 const BoardBus = @import("board_bus.zig").BoardBus;
@@ -18,10 +19,11 @@ const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 /// The hand-off from main for any CPU but Unicorn.
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
-pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64) !u8 {
+/// `ran` is set to how many instructions a `--cpu zig` run retired.
+pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
-        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget) else run(out, core, vector_base, budget),
+        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran) else run(out, core, vector_base, budget),
         .lockstep => lockstep_mode.run(out, image, core, vector_base, budget),
     };
 }
@@ -31,16 +33,16 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget);
+    return runOn(out, memory.view(), vector_base, budget, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
-pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64) !u8 {
+pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64) !u8 {
     var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph };
-    return runOn(out, board.view(), vector_base, budget);
+    return runOn(out, board.view(), vector_base, budget, ran);
 }
 
-fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64) !u8 {
+fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64, ran: ?*u64) !u8 {
     var cpu: cpu_mod.Cpu = .{ .bus = memory };
     var pending: NvicSource = .{};
     cpu.source = pending.source();
@@ -49,6 +51,7 @@ fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget:
         return 1;
     };
     const stopped = cpu.run(budget);
+    if (ran) |count| count.* = cpu.retired;
     return report(out, cpu, stopped);
 }
 
