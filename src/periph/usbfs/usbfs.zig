@@ -12,6 +12,7 @@
 const std = @import("std");
 const periph = @import("../registry.zig");
 const regs = @import("../usbhs/usbhs_regs.zig");
+pub const dcp = @import("usbfs_dcp.zig");
 
 pub const window = struct {
     pub const base: u32 = 0x4025_0000;
@@ -65,6 +66,8 @@ pub const Device = struct {
     syscfg: u16 = 0,
     status: u16 = 0,
     shadow: [window.words]u16 = .{0} ** window.words,
+    /// The control FIFO port, aimed at the DCP.
+    control: dcp.Dcp = .{},
 
     /// Accesses refused, each for its own reason.
     misaligned: u32 = 0,
@@ -180,7 +183,6 @@ pub const Device = struct {
     }
 
     pub fn read(self: *Device, address: u32, width: u3) u32 {
-        _ = width;
         const offset = address -% self.base;
         if (!self.aligned(offset)) return 0;
         return switch (offset) {
@@ -189,12 +191,14 @@ pub const Device = struct {
             regs.reg.intsts0 => self.interruptStatus(),
             regs.reg.dvstctr0 => self.portStatus(),
             regs.reg.dcpctr => self.controlPipeStatus(),
+            regs.reg.cfifo => self.control.readData(width),
+            regs.reg.cfifosel => self.control.sel,
+            regs.reg.cfifoctr => self.control.status(),
             else => self.shadow[offset / window.word],
         };
     }
 
     pub fn write(self: *Device, address: u32, width: u3, value: u32) void {
-        _ = width;
         const offset = address -% self.base;
         if (!self.aligned(offset)) return;
         const v: u16 = @truncate(value);
@@ -207,12 +211,15 @@ pub const Device = struct {
             regs.reg.usbreq, regs.reg.usbval, regs.reg.usbindx, regs.reg.usbleng => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
             regs.reg.dcpctr => self.controlPipe(v),
+            regs.reg.cfifo => self.control.writeData(value, width),
+            regs.reg.cfifosel => self.control.select(v),
+            regs.reg.cfifoctr => self.control.control(v),
             else => self.shadow[offset / window.word] = v,
         }
     }
 
     pub fn refusals(self: *const Device) u32 {
-        return self.misaligned + self.read_only;
+        return self.misaligned + self.read_only + self.control.refusals();
     }
 
     pub fn block(self: *Device) periph.Block {
