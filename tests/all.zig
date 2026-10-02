@@ -378,6 +378,7 @@ test {
     _ = @import("periph/wdt/wdt_write_once_test.zig");
     _ = @import("periph/xspi/xspi_flash_test.zig");
     _ = @import("periph/xspi/xspi_test.zig");
+    _ = @import("periph/xspi/xspi_reset_test.zig");
     _ = @import("tools/gate_test.zig");
     _ = @import("tools/example_table_test.zig");
 
