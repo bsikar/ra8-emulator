@@ -66,6 +66,7 @@ pub const groups = [_]op.Group{
     @import("fp_convert.zig").group,
     @import("fp_directed.zig").group,
     @import("fp_move.zig").group,
+    @import("vscclrm.zig").group,
     @import("fp_mem.zig").group,
     @import("mve_vpst.zig").group,
     @import("mve_int.zig").group,
