@@ -35,6 +35,7 @@ const nvic = @import("../periph/nvic.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_fault = @import("../periph/mpu/mpu_fault.zig");
 const fault_route = @import("../periph/fault_route.zig");
+const exec_priority = @import("../periph/exec_priority.zig");
 const status = @import("../periph/fault_status.zig");
 const background = @import("../periph/mpu/mpu_background.zig");
 
@@ -214,7 +215,7 @@ pub const Guard = struct {
             .mem_manage,
             core.readWord(memmap.scb.shcsr) catch 0,
             core.readWord(memmap.scb.shpr1) catch 0,
-            unit.running(),
+            exec_priority.current(core, unit.running()),
         );
         const taken: nvic.Candidate = .{ .number = route.number, .priority = route.priority };
         if (route.escalated) {
