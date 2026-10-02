@@ -28,3 +28,7 @@ test "each part says its own name" {
 test "CPU0 has a Secure and a Non-secure SysTick" {
     try std.testing.expectEqual(@as(u2, 2), part.cpu0_systicks);
 }
+
+test "CPU1 has a Secure and a Non-secure SysTick too" {
+    try std.testing.expectEqual(@as(u2, 2), part.cpu1_systicks);
+}
