@@ -13,6 +13,8 @@ const registry = @import("../../periph/registry.zig");
 const memmap = @import("../memmap.zig");
 const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
+/// Public so a test can build the latch without a root export.
+pub const fault_clear = @import("../../periph/fault_clear.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
@@ -25,6 +27,10 @@ pub const BoardBus = struct {
     /// This core's MPU table, banked through RNR the way src/core/mpu_hook.zig
     /// banks it on Unicorn. Enforcement is not armed from here.
     regions: ?*mpu.Mpu = null,
+    /// CFSR, HFSR and SFSR are write-one-to-clear. Unicorn latches the clear
+    /// in a hook and settles it at the boundary; here the store is settled
+    /// as it lands, so no read in between sees the raw word.
+    clears: ?*fault_clear.Clears = null,
 
     pub fn view(self: *BoardBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -58,17 +64,29 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (!inWindow(address, bytes.len)) {
-            try self.memory.view().write(address, bytes);
-            if (self.partitions) |unit| try bankPartition(self.memory.view(), unit, address, bytes);
-            if (self.regions) |unit| try bankRegion(self.memory.view(), unit, address, bytes);
-            return;
-        }
+        if (!inWindow(address, bytes.len)) return self.store(address, bytes);
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+    }
+
+    /// A store outside the peripheral windows: RAM, then whichever of the
+    /// core's own SCS models the address belongs to.
+    fn store(self: *BoardBus, address: u32, bytes: []const u8) bus.Error!void {
+        const memory = self.memory.view();
+        const owed = if (self.clears) |unit| (if (unit.slot(address) != null) unit else null) else null;
+        const standing = if (owed != null) try memory.readWord(address & ~@as(u32, 3)) else 0;
+        try memory.write(address, bytes);
+        if (owed) |unit| {
+            var padded = [_]u8{0} ** 4;
+            @memcpy(padded[0..@min(bytes.len, 4)], bytes[0..@min(bytes.len, 4)]);
+            unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
+            unit.apply(self.memory.core.*) catch return bus.Error.Unmapped;
+        }
+        if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
+        if (self.regions) |unit| try bankRegion(memory, unit, address, bytes);
     }
 };
 
