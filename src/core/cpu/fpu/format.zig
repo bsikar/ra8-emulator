@@ -56,6 +56,7 @@ pub const Format = struct {
     }
 };
 
+pub const half: Format = .{ .exp_bits = 5, .frac_bits = 10 };
 pub const single: Format = .{ .exp_bits = 8, .frac_bits = 23 };
 pub const double: Format = .{ .exp_bits = 11, .frac_bits = 52 };
 
