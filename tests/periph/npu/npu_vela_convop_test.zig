@@ -223,3 +223,47 @@ test "a Vela-compiled depth-multiplier-8 depthwise conv writes TFLite Micro's ou
     try std.testing.expectEqual(@as(u64, 200), result.elements);
     try std.testing.expectEqualSlices(u8, &ofm_x8, memory.bytes[0x820..][0..ofm_x8.len]);
 }
+
+/// Depth multiplier 2: TFLite DEPTHWISE_CONV_2D, 3x3 kernel, stride 2,
+/// VALID padding, per-channel int8, 1x4x4x1 in (zero point -5) to 1x1x1x2
+/// out (zero point 7). Vela emits it as NPU_OP_CONV, folding the stride-2
+/// width into channels (IFM described as 3x2x2, kernel 3x2, no padding):
+/// it DMAs flash 0x20 (0x60 bytes) to region 1 offset 0x20, reads the
+/// scale records at 0x20 (0x20 bytes) and the weights at 0x40 (0x40
+/// bytes), with the IFM at region 1 offset 0x000 and the OFM at 0x010.
+/// The 336 bytes after the 32-byte driver header, as Vela emitted them.
+const vela_depthwise_x2 = [_]u32{
+    0x00000130, 0x00004030, 0x00000020, 0x00010131, 0x00004031, 0x00000020,
+    0x00004032, 0x00000060, 0x00000010, 0x0001010F, 0x00004000, 0x00000000,
+    0x00004001, 0x00000000, 0x00004002, 0x00000000, 0x00004003, 0x00000000,
+    0x0002010B, 0x0002010C, 0x0001010A, 0x00010104, 0x00004006, 0x00000001,
+    0x00004005, 0x00000004, 0x00004004, 0x00000002, 0xFFFB0109, 0x00010105,
+    0x00000107, 0x00000100, 0x00000101, 0x00000103, 0x00000102, 0x0001011F,
+    0x00004010, 0x00000010, 0x00004011, 0x00000000, 0x00004012, 0x00000000,
+    0x00004013, 0x00000000, 0x0000011B, 0x0000011C, 0x0000011A, 0x00000112,
+    0x00000111, 0x00010113, 0x00004016, 0x00000001, 0x00004015, 0x00000002,
+    0x00004014, 0x00000002, 0x00070118, 0x00010114, 0x00020121, 0x00010120,
+    0x00040122, 0x00010128, 0x00004020, 0x00000040, 0x00004021, 0x00000040,
+    0x00010129, 0x00004022, 0x00000020, 0x00004023, 0x00000020, 0x00000125,
+    0xFF800126, 0x007F0127, 0x00010116, 0x00010115, 0x00070117, 0x000A010D,
+    0x001E012D, 0x00000124, 0x0000012F, 0x00000011, 0x00000002, 0xFFFF0000,
+};
+
+/// The flash tensor from offset 0; the DMA copies 0x60 bytes from 0x20.
+const flash_x2 = hexBytes("000000000000000000000000000000000000000000000000000000000000000012f7ffffffe77bd358273fffffffffe8" ++
+    "638c53270000000000000000000000008300ec0fdd3f2e2eadecdbab4a8ad9c8f876e605846273f08479f9c41e95050c" ++
+    "0a18c67f1ee01cc6a3fff9e3dffffff8ffffffffffffffffffffffffffffffff");
+const ifm_x2 = hexBytes("61f1e1115468ccc10716c0db6d415a0b");
+/// TFLite Micro's double-rounding output for that IFM; tflite-runtime
+/// agrees on both bytes.
+const ofm_x2 = hexBytes("2ad5");
+
+test "a Vela-compiled depth-multiplier-2 depthwise conv writes TFLite Micro's output" {
+    var memory = Memory{};
+    @memcpy(memory.bytes[0..flash_x2.len], &flash_x2);
+    @memcpy(memory.bytes[0x800..][0..ifm_x2.len], &ifm_x2);
+    const result = try vela.runner.run(&memory, &regions, &vela_depthwise_x2);
+    try std.testing.expectEqual(@as(u64, 0x60), result.moved);
+    try std.testing.expectEqual(@as(u64, 2), result.elements);
+    try std.testing.expectEqualSlices(u8, &ofm_x2, memory.bytes[0x810..][0..ofm_x2.len]);
+}
