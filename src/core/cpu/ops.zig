@@ -32,4 +32,6 @@ pub const push_pop = @import("ops/push_pop.zig");
 pub const sp_arith = @import("ops/sp_arith.zig");
 pub const fp_arith = @import("ops/fp_arith.zig");
 pub const fp_unary = @import("ops/fp_unary.zig");
+pub const fp_regs = @import("ops/fp_regs.zig");
+pub const fp_system = @import("ops/fp_system.zig");
 pub const table = @import("ops/table.zig");

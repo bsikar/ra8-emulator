@@ -35,6 +35,7 @@ pub const groups = [_]op.Group{
     @import("ldst_wide.zig").group,
     @import("fp_arith.zig").group,
     @import("fp_unary.zig").group,
+    @import("fp_system.zig").group,
     @import("ldrd_strd.zig").group,
     @import("ldm_stm_wide.zig").group,
 };
