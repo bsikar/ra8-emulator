@@ -14,6 +14,10 @@ fn scalar(in: vectors.ScalarCase) u128 {
     return mul.multiplyAddScalar(in.da, in.n, in.scalar, in.size, in.form);
 }
 
+fn doubling(in: vectors.DoublingCase) int.Sat {
+    return mul.doublingMultiplyAccumulateHigh(in.da, in.n, in.scalar, in.size, in.form);
+}
+
 test "VMULH, VRMULH, VQDMULH and VQRDMULH match the pseudocode" {
     try vector.expectAll(vectors.HighCase, int.Sat, high, &vectors.high);
 }
@@ -22,6 +26,10 @@ test "VMLA and VMLAS match the pseudocode" {
     try vector.expectAll(vectors.ScalarCase, u128, scalar, &vectors.scalar);
 }
 
+test "VQDMLAH, VQRDMLAH, VQDMLASH and VQRDMLASH match the pseudocode" {
+    try vector.expectAll(vectors.DoublingCase, int.Sat, doubling, &vectors.doubling);
+}
+
 test "every vector is counted in covered" {
-    try std.testing.expectEqual(vectors.high.len + vectors.scalar.len, vectors.covered.len);
+    try std.testing.expectEqual(vectors.high.len + vectors.scalar.len + vectors.doubling.len, vectors.covered.len);
 }

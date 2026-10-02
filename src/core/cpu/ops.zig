@@ -78,4 +78,5 @@ pub const mve_vdup = @import("ops/mve_vdup.zig");
 pub const mve_lane_move = @import("ops/mve_lane_move.zig");
 pub const mve_lane_pair = @import("ops/mve_lane_pair.zig");
 pub const mve_vmaxv = @import("ops/mve_vmaxv.zig");
+pub const mve_int_vqdmlah = @import("ops/mve_int_vqdmlah.zig");
 pub const table = @import("ops/table.zig");

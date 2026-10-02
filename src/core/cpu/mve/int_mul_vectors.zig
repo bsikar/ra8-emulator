@@ -1,7 +1,8 @@
 //! Conformance vectors for the MVE multiplies in int_mul.zig, worked from
 //! the VMULH, VRMULH, VQDMULH, VQRDMULH, VMLA and VMLAS pseudocode in the
 //! Arm ARM (DDI0553). The doubling vectors include the most negative value
-//! squared, the one case that saturates.
+//! squared, the one case that saturates. The VQ{R}DMLA{S}H vectors come from
+//! /workspace/tools/mve_dmlah.py on the lane's box.
 const vector = @import("../conformance/vector.zig");
 const qreg = @import("qreg.zig");
 const int = @import("int.zig");
@@ -9,9 +10,11 @@ const mul = @import("int_mul.zig");
 
 pub const HighCase = struct { a: u128, b: u128, size: qreg.Size, high: mul.High };
 pub const ScalarCase = struct { da: u128, n: u128, scalar: u32, size: qreg.Size, form: mul.ScalarForm };
+pub const DoublingCase = struct { da: u128, n: u128, scalar: u32, size: qreg.Size, form: mul.DoublingForm };
 
 const VHigh = vector.Vector(HighCase, int.Sat);
 const VScalar = vector.Vector(ScalarCase, u128);
+const VDoubling = vector.Vector(DoublingCase, int.Sat);
 
 const a: u128 = 0x80000000_7FFFFFFF_00FF7F80_FFFF0001;
 const b: u128 = 0x80000000_00000001_01017F81_0001FFFF;
@@ -42,7 +45,21 @@ pub const scalar = [_]VScalar{
     .{ .encoding = "VMLAS T1", .name = "i32", .input = .{ .da = d, .n = a, .scalar = 0x80000000, .size = .word, .form = .vmlas }, .expect = 0x80000000_2A998878_18BC1A00_5EEEFF00 },
 };
 
-pub const claimed = [_][]const u8{ "VMULH T1", "VRMULH T1", "VQDMULH T1", "VQRDMULH T1", "VMLA T1", "VMLAS T1" };
+pub const doubling = [_]VDoubling{
+    .{ .encoding = "VQDMLAH T1", .name = "s8 saturates", .input = .{ .da = d, .n = a, .scalar = 0x80, .size = .byte, .form = .{} }, .expect = .{ .value = 0x7F223344D667788999AB804CDEEFFFFF, .saturated = true } },
+    .{ .encoding = "VQDMLAH T1", .name = "s16", .input = .{ .da = d, .n = c, .scalar = 0x1234, .size = .half, .form = .{} }, .expect = .{ .value = 0x112233445566778899A9BBCBF021ECCC, .saturated = false } },
+    .{ .encoding = "VQDMLAH T1", .name = "s32 saturates", .input = .{ .da = d, .n = a, .scalar = 0x80000000, .size = .word, .form = .{} }, .expect = .{ .value = 0x7FFFFFFFD566778998AB3C4CDDEFFEFF, .saturated = true } },
+    .{ .encoding = "VQRDMLAH T1", .name = "s8", .input = .{ .da = d, .n = c, .scalar = 0x7F, .size = .byte, .form = .{ .round = true } }, .expect = .{ .value = 0x112333465569778C98A8BAC95BED8000, .saturated = false } },
+    .{ .encoding = "VQRDMLAH T1", .name = "s16 most negative scalar", .input = .{ .da = a, .n = a, .scalar = 0x8000, .size = .half, .form = .{ .round = true } }, .expect = .{ .value = 0x00000000000000000000000000000000, .saturated = false } },
+    .{ .encoding = "VQRDMLAH T1", .name = "s32", .input = .{ .da = d, .n = c, .scalar = 0x7FFFFFFF, .size = .word, .form = .{ .round = true } }, .expect = .{ .value = 0x112333465569778C99A9BBC95DEE7EFF, .saturated = false } },
+    .{ .encoding = "VQDMLASH T1", .name = "s8", .input = .{ .da = d, .n = c, .scalar = 0x55, .size = .byte, .form = .{ .scalar_addend = true } }, .expect = .{ .value = 0x55555556555755515556555632555655, .saturated = false } },
+    .{ .encoding = "VQDMLASH T1", .name = "s32 saturates", .input = .{ .da = a, .n = a, .scalar = 0x0, .size = .word, .form = .{ .scalar_addend = true } }, .expect = .{ .value = 0x7FFFFFFF7FFFFFFE0001FDFE00000001, .saturated = true } },
+    .{ .encoding = "VQRDMLASH T1", .name = "s16", .input = .{ .da = d, .n = a, .scalar = 0xFFFF8001, .size = .half, .form = .{ .scalar_addend = true, .round = true } }, .expect = .{ .value = 0x80008001D56680008000800080018001, .saturated = true } },
+    .{ .encoding = "VQRDMLASH T1", .name = "s8 saturates", .input = .{ .da = a, .n = a, .scalar = 0x7F, .size = .byte, .form = .{ .scalar_addend = true, .round = true } }, .expect = .{ .value = 0x7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F, .saturated = true } },
+};
+
+pub const claimed = [_][]const u8{ "VMULH T1", "VRMULH T1", "VQDMULH T1", "VQRDMULH T1", "VMLA T1", "VMLAS T1", "VQDMLAH T1", "VQRDMLAH T1", "VQDMLASH T1", "VQRDMLASH T1" };
 
 pub const covered = vector.encodingsOf(HighCase, int.Sat, &high) ++
-    vector.encodingsOf(ScalarCase, u128, &scalar);
+    vector.encodingsOf(ScalarCase, u128, &scalar) ++
+    vector.encodingsOf(DoublingCase, int.Sat, &doubling);
