@@ -119,6 +119,9 @@ pub const Second = struct {
     /// CPU1's own time base: its SysTick counts down on CPU1's own PPB
     /// words and pends into CPU1's own ICSR, charged for CPU1's own turns.
     timebase: clocks.Clocks = .{},
+    /// The board's SCKDIVCR2, read each round to size CPU1's turn against
+    /// CPU0's (`rate.turn`). Null outside a board, where a turn is a round.
+    dividers: ?*const u16 = null,
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -155,12 +158,19 @@ pub const Second = struct {
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
         try primeVectorTable(self.core, self.vector_base);
         self.interrupts.vector_base = self.vector_base;
+        self.dividers = &board.tree.divcr2;
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
     }
 
     pub fn close(self: *Second) void {
         self.core.close();
+    }
+
+    /// CPU1's turn, in instructions, for one CPU0 round of `round`.
+    pub fn turn(self: *const Second, round: u32) u32 {
+        const word = if (self.dividers) |at| at.* else 0;
+        return rate.turn(round, word);
     }
 
     /// One turn. A core that has faulted stays halted rather than being

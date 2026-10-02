@@ -49,6 +49,24 @@ test "a second core takes a turn between the first core's rounds" {
     try std.testing.expect(cpu1.ran >= second_core.limits.round);
 }
 
+test "a CPU1 clocked at a quarter of CPU0 runs a quarter of each round" {
+    var cpu1: second_core.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+
+    // The bring-up dividers: CPUCLK0 /1, CPUCLK1 /4 (SCKDIVCR2 0x2020).
+    const dividers: u16 = 0x2020;
+    cpu1.dividers = &dividers;
+    try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF00_BF00);
+    try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0xBF00_BF00);
+    cpu1.pc = memmap.sram_base + 0x2000;
+
+    _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 2 * second_core.limits.round, .{}, &cpu1);
+    try std.testing.expectEqual(@as(usize, 2), cpu1.turns);
+    try std.testing.expectEqual(@as(usize, second_core.limits.round / 2), cpu1.ran);
+}
+
 test "a core that faults is halted rather than restarted every round" {
     var cpu1: second_core.Second = undefined;
     var cpu0 = try pair(&cpu1);
