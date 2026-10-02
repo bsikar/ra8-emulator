@@ -1,10 +1,10 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const format = ra8.core.fpu_format;
-const mul = ra8.core.fpu_mul;
-const case = ra8.core.fpu_case;
-const vectors = ra8.core.fpu_mul_vectors;
+const format = ra8.core.fpu.format;
+const mul = ra8.core.fpu.mul;
+const case = ra8.core.fpu.case;
+const vectors = ra8.core.fpu.mul_vectors;
 
 const In32 = case.Binary(u32);
 const Out32 = case.Result(u32);

@@ -1,8 +1,8 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const format = ra8.core.fpu_format;
-const mac = ra8.core.fpu_mac;
-const Fpscr = ra8.core.fpu_fpscr.Fpscr;
+const format = ra8.core.fpu.format;
+const mac = ra8.core.fpu.mac;
+const Fpscr = ra8.core.fpu.fpscr.Fpscr;
 
 test "the four forms agree on 1, 2 and 3 in single precision" {
     var fpscr = Fpscr{};

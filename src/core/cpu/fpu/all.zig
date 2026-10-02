@@ -1,0 +1,21 @@
+//! The M85 FPU semantics, one namespace so root.zig carries a single line
+//! for them: pure functions over encoded operands and FPSCR, with their
+//! conformance vectors.
+pub const fpscr = @import("fpscr.zig");
+pub const sign = @import("sign.zig");
+pub const sign_vectors = @import("sign_vectors.zig");
+pub const format = @import("format.zig");
+pub const unpack = @import("unpack.zig");
+pub const round = @import("round.zig");
+pub const nan = @import("nan.zig");
+pub const case = @import("case.zig");
+pub const add = @import("add.zig");
+pub const add_vectors = @import("add_vectors.zig");
+pub const mul = @import("mul.zig");
+pub const mul_vectors = @import("mul_vectors.zig");
+pub const mac = @import("mac.zig");
+pub const mac_vectors = @import("mac_vectors.zig");
+pub const fma = @import("fma.zig");
+pub const fma_vectors = @import("fma_vectors.zig");
+pub const div = @import("div.zig");
+pub const div_vectors = @import("div_vectors.zig");
