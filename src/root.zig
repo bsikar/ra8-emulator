@@ -265,6 +265,7 @@ pub const periph = struct {
     pub const npu = @import("periph/npu/npu.zig");
     pub const npu_cmd = @import("periph/npu/npu_cmd.zig");
     pub const npu_vela = @import("periph/npu/npu_vela.zig");
+    pub const npu_vela_regs = @import("periph/npu/npu_vela_regs.zig");
     pub const nvic = @import("periph/nvic.zig");
     pub const nvic_clear = @import("periph/nvic_clear.zig");
     pub const standing = @import("periph/standing.zig");
