@@ -132,3 +132,15 @@ is stale or an encoding is missing. Regenerate with
 | VMSR T1 | 9 |
 | VMRS T1 | 2 |
 | VMRS APSR_nzcv T1 | 3 |
+| VLDM.F64 T1 | 12 |
+| VLDM.F32 T2 | 5 |
+| VSTM.F64 T1 | 2 |
+| VSTM.F32 T2 | 2 |
+| VPUSH.F64 T1 | 1 |
+| VPUSH.F32 T2 | 1 |
+| VPOP.F64 T1 | 1 |
+| VPOP.F32 T2 | 1 |
+| VLDR.F64 T1 | 3 |
+| VLDR.F32 T2 | 2 |
+| VSTR.F64 T1 | 1 |
+| VSTR.F32 T2 | 2 |

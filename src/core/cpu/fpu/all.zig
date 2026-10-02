@@ -43,3 +43,5 @@ pub const half_vectors = @import("half_vectors.zig");
 pub const imm = @import("imm.zig");
 pub const bank = @import("bank.zig");
 pub const move_vectors = @import("move_vectors.zig");
+pub const transfer = @import("transfer.zig");
+pub const transfer_vectors = @import("transfer_vectors.zig");
