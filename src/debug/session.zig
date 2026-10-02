@@ -29,6 +29,8 @@ const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
 const session_source = @import("session_source.zig");
+const dwarf_line = @import("dwarf_line.zig");
+const unwind = @import("unwind.zig");
 const step_hook = @import("step_hook.zig");
 const breakpoint = @import("breakpoint.zig");
 const symbols = @import("symbols.zig");
@@ -324,12 +326,21 @@ pub const Session = struct {
 
     /// The frame the program counter is in and the one the link register
     /// returns to. Walking further needs the unwind tables (RA8EMU-48).
+    /// The call chain, walked with the image's .debug_frame. Without CFI
+    /// for the stop it is the pc and lr, as it always was.
     fn backtrace(self: *Session, out: anytype) !void {
-        try out.print("#0 ", .{});
-        try self.where(try self.core.register(.pc), out);
-        try out.print("\n#1 ", .{});
-        try self.where(try self.core.register(.lr) & ~@as(u32, 1), out);
-        try out.print("\n", .{});
+        var pcs: [unwind.limits.frames]u32 = undefined;
+        const frame = if (self.image) |image| dwarf_line.section(image, ".debug_frame") else &.{};
+        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), self.core.*, &pcs);
+        if (count < 2) {
+            pcs[1] = try self.core.register(.lr) & ~@as(u32, 1);
+            count = 2;
+        }
+        for (pcs[0..count], 0..) |pc, index| {
+            try out.print("#{d} ", .{index});
+            try self.where(pc, out);
+            try out.print("\n", .{});
+        }
     }
 
     /// An address as eight hex digits, with `<symbol+offset>` when the

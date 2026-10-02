@@ -162,12 +162,14 @@ fn lineEnd(rows: *Rows, found: Row, after: Row) Error!u32 {
 /// sections, which a lookup answers with null.
 pub fn ofImage(image: elf.Image) Sections {
     return .{
-        .line = named(image, ".debug_line"),
-        .strings = .{ .line_str = named(image, ".debug_line_str"), .str = named(image, ".debug_str") },
+        .line = section(image, ".debug_line"),
+        .strings = .{ .line_str = section(image, ".debug_line_str"), .str = section(image, ".debug_str") },
     };
 }
 
-fn named(image: elf.Image, wanted: []const u8) []const u8 {
+/// A section's bytes by name, empty when the image has no such section or
+/// its header points outside the file.
+pub fn section(image: elf.Image, wanted: []const u8) []const u8 {
     const names_head = symbols.section(image, image.header().e_shstrndx) orelse return &.{};
     const names = bounded(image, names_head) orelse return &.{};
     var index: u16 = 0;
