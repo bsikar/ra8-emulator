@@ -13,10 +13,14 @@
 //!                  SCB 0xE000_ED00..ED8F and its alias 0xE002_ED00..ED8F
 //!     B6.3 RCFPK   the Secure view of the NS alias is the Non-secure view
 //!                  of the normal address, unless a register says otherwise
+//!     D1.2         every aliased register's Attributes line: "The location
+//!                  0xE002_Exxx is RES0 to software executing in Non-secure
+//!                  state and the debugger" (read on VTOR p1195, CPUID p890,
+//!                  HFSR p1021, SHCSR p1138, CPACR p885, ICSR p1025, AIRCR
+//!                  p862)
 //!
-//! What a Non-secure access to the alias window does is not pinned here. The
-//! answer says so (`alias_from_non_secure`) and leaves the call to whoever
-//! owns the bus, rather than this file guessing at a rule it has not read.
+//! So Non-secure code on the alias window reads zero and its writes go
+//! nowhere: the answer is `res0`, not a register.
 
 /// Which bank of a banked SCS register an access reads or writes.
 pub const View = enum { secure, non_secure };
@@ -54,8 +58,9 @@ pub const Route = union(enum) {
     outside,
     /// An SCS register, in the bank given.
     register: Target,
-    /// Non-secure code touching the alias window; see the file comment.
-    alias_from_non_secure: u32,
+    /// Non-secure code on the alias window: reads as zero, writes ignored.
+    /// Carries the normal-window address the alias would have named.
+    res0: u32,
 };
 
 /// Route one access from code running in the state `secure` says.
@@ -67,7 +72,7 @@ pub fn route(address: u32, secure: bool) Route {
         } };
     }
     if (scs_ns.covers(address)) {
-        if (!secure) return .{ .alias_from_non_secure = address - offset };
+        if (!secure) return .{ .res0 = address - offset };
         return .{ .register = .{ .address = address - offset, .view = .non_secure } };
     }
     return .outside;

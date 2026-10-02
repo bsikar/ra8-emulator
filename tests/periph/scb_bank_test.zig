@@ -47,3 +47,11 @@ test "a bit-by-bit register is handed back, not placed" {
     try std.testing.expectEqual(@as(u32, 0xE000_ED24), answer.bit_by_bit.address);
     try std.testing.expectEqual(alias.View.non_secure, answer.bit_by_bit.view);
 }
+
+test "bankedBits: whole, none, and AIRCR's PRIGROUP" {
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), bank.bankedBits(0xE000_ED08).?);
+    try std.testing.expectEqual(@as(u32, 0), bank.bankedBits(0xE000_ED2C).?);
+    try std.testing.expectEqual(@as(u32, 0x0000_0700), bank.bankedBits(0xE000_ED0C).?);
+    try std.testing.expect(bank.bankedBits(0xE000_ED24) == null);
+    try std.testing.expect(bank.bankedBits(0xE000_ED3C) == null);
+}

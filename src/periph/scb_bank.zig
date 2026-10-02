@@ -20,6 +20,11 @@
 //! from Secure state (VTOR_NS), so the choice keeps every existing image
 //! reading what it wrote.
 //!
+//! A bit-by-bit register's banked bits are listed only once its page has
+//! been read field by field. So far that is AIRCR (p862 to p865): PRIGROUP
+//! [10:8] is the one banked field; VECTKEY/VECTKEYSTAT, ENDIANNESS, PRIS,
+//! BFHFNMINS, SYSRESETREQS, SYSRESETREQ and VECTCLRACTIVE are not banked.
+//!
 //! A bit-by-bit register is not given an address. Its shared bits have one
 //! home and its banked bits two, so a whole-word answer would be wrong for
 //! one half; the answer says so and the field split is left to the register
@@ -61,6 +66,27 @@ pub fn banking(address: u32) ?Banking {
         if (entry.offset == offset) return entry.banking;
     }
     return null;
+}
+
+const Split = struct { offset: u32, banked: u32 };
+
+/// The banked bits of the bit-by-bit registers read so far.
+const splits = [_]Split{
+    .{ .offset = 0x0C, .banked = 0x0000_0700 }, // AIRCR.PRIGROUP
+};
+
+/// The bits of `address` that have a separate Non-secure copy: all of them
+/// for a banked register, none for an unbanked one, the read fields for a
+/// bit-by-bit one. Null when that has not been read yet.
+pub fn bankedBits(address: u32) ?u32 {
+    const kind = banking(address) orelse return null;
+    return switch (kind) {
+        .banked => 0xFFFF_FFFF,
+        .not_banked => 0,
+        .bit_by_bit => for (splits) |split| {
+            if (split.offset == address - alias.scb.first) break split.banked;
+        } else null,
+    };
 }
 
 pub const Backing = union(enum) {
