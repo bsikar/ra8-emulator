@@ -36,3 +36,34 @@ test "an encoding the Zig core does not know stops both, unstepped" {
     try std.testing.expectEqual(@as(u16, 0xDE00), result.stopped.unknown.hw1);
     try std.testing.expectEqual(pair_mod.entry, try pair.theirs.register(.pc));
 }
+
+test "an IT and its one-instruction block match as one step" {
+    var pair: Pair = undefined;
+    try pair.open(&.{ 0x08, 0xBF, 0x01, 0x20, 0x00, 0xBF }); // it eq; moveq r0, #1; nop
+    defer pair.close();
+    pair.cpu.regs.xpsr |= 1 << 30; // Z
+    try ra8.core.cpu.lockstep.oracle.load(pair.theirs, ra8.core.cpu.lockstep.snapshot.Snapshot.fromRegs(&pair.cpu.regs));
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
+    try std.testing.expectEqualStrings("it", result.matched);
+    try std.testing.expectEqual(pair_mod.entry + 4, pair.cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 1), pair.cpu.regs.low[0]);
+}
+
+test "an IT whose first instruction fails its condition still matches" {
+    var pair: Pair = undefined;
+    try pair.open(&.{ 0x08, 0xBF, 0x01, 0x20, 0x00, 0xBF }); // it eq, Z clear
+    defer pair.close();
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
+    try std.testing.expectEqualStrings("it", result.matched);
+    try std.testing.expectEqual(@as(u32, 0), pair.cpu.regs.low[0]);
+}
+
+test "an ITE and both instructions of its block match as one step" {
+    var pair: Pair = undefined;
+    try pair.open(&.{ 0x14, 0xBF, 0x01, 0x20, 0x02, 0x20, 0x00, 0xBF }); // ite ne; movne r0, #1; moveq r0, #2
+    defer pair.close();
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
+    try std.testing.expectEqualStrings("it", result.matched);
+    try std.testing.expectEqual(pair_mod.entry + 6, pair.cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 1), pair.cpu.regs.low[0]);
+}
