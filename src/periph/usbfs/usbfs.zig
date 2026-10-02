@@ -9,6 +9,7 @@
 //! Everything the model does not own lands in a 16-bit shadow and reads back,
 //! which is what the sparse register file did, minus the alternating
 //! 0/all-ones answers to reads.
+const std = @import("std");
 const periph = @import("../registry.zig");
 const regs = @import("../usbhs/usbhs_regs.zig");
 
@@ -33,6 +34,11 @@ pub const intsts0 = struct {
     pub const dvsq_powered: u16 = 0x0000;
     pub const dvsq_default: u16 = 0x0010;
     /// Status flags the driver clears by writing 0; a 1 leaves them alone.
+    /// CTSQ[2:0]: the control-transfer stage the controller is in.
+    pub const ctsq_mask: u16 = 0x0007;
+    pub const ctsq_read_data: u16 = 0b001;
+    pub const ctsq_write_data: u16 = 0b011;
+    pub const ctsq_no_data_status: u16 = 0b101;
     pub const write_zero_clears: u16 = vbint | resm | sofr | dvst | ctrt | valid;
 };
 
@@ -55,6 +61,25 @@ pub const Device = struct {
         defer self.settle();
         if (!self.vbus) self.status |= intsts0.vbint;
         self.vbus = true;
+    }
+
+    /// A SETUP packet from the host on the other jack lands on the DCP:
+    /// USBREQ, USBVAL, USBINDX and USBLENG take its four fields, VALID and
+    /// CTRT latch, and CTSQ moves to the stage the request asks for.
+    pub fn setup(self: *Device, packet: [8]u8) void {
+        const field = std.mem.readInt;
+        self.shadow[regs.reg.usbreq / window.word] = field(u16, packet[0..2], .little);
+        self.shadow[regs.reg.usbval / window.word] = field(u16, packet[2..4], .little);
+        self.shadow[regs.reg.usbindx / window.word] = field(u16, packet[4..6], .little);
+        const length = field(u16, packet[6..8], .little);
+        self.shadow[regs.reg.usbleng / window.word] = length;
+        const stage = if (packet[0] & 0x80 != 0)
+            intsts0.ctsq_read_data
+        else if (length != 0)
+            intsts0.ctsq_write_data
+        else
+            intsts0.ctsq_no_data_status;
+        self.status = (self.status & ~intsts0.ctsq_mask) | stage | intsts0.valid | intsts0.ctrt;
     }
 
     fn attached(self: *const Device) bool {
@@ -124,6 +149,7 @@ pub const Device = struct {
                 self.settle();
             },
             regs.reg.syssts0 => self.read_only += 1,
+            regs.reg.usbreq, regs.reg.usbval, regs.reg.usbindx, regs.reg.usbleng => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
             else => self.shadow[offset / window.word] = v,
         }
