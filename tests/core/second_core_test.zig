@@ -261,6 +261,7 @@ const Spins = struct {
         try core.writeWord(table, stack);
         try core.writeWord(table + 4, spin | 1);
         try core.writeWord(table + 4 * nvic.pendsv, handler | 1);
+        try core.writeWord(table + 4 * nvic.systick, handler | 1);
         try core.writeWord(spin, 0xE7FE_E7FE);
         try core.writeWord(handler, 0xE7FE_E7FE);
     }
@@ -304,4 +305,40 @@ test "a PendSV pended on CPU0 is never taken by CPU1" {
     try std.testing.expect(cpu1.fault == null);
     try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
     try std.testing.expectEqual(Spins.spin, cpu1.pc & ~@as(u32, 1));
+}
+
+test "CPU1's SysTick counts on CPU1 and pends into CPU1's own NVIC" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try Spins.boot(&cpu1);
+
+    try cpu1.core.writeWord(memmap.syst.rvr, 99);
+    try cpu1.core.writeWord(memmap.syst.cvr, 0);
+    try cpu1.core.writeWord(memmap.syst.csr, 0b111);
+    cpu1.step(1000);
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expect(cpu1.timebase.ticks > 0);
+    try std.testing.expect(cpu1.interrupts.taken >= 1);
+    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+
+    // CPU0's SysTick was never armed and nothing was pended on it.
+    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.syst.csr));
+    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.icsr) & nvic.icsr_pendstset);
+}
+
+test "CPU0's SysTick never ticks CPU1's time base" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try Spins.boot(&cpu1);
+
+    try cpu0.writeWord(memmap.syst.rvr, 99);
+    try cpu0.writeWord(memmap.syst.csr, 0b111);
+    cpu1.step(1000);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.timebase.ticks);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
+    try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(memmap.syst.csr));
 }

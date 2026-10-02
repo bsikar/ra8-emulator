@@ -58,6 +58,7 @@ const mpu_guard = @import("mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const scb = @import("../periph/scb.zig");
 const nvic = @import("../periph/nvic.zig");
+const clocks = @import("../periph/clocks.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -109,6 +110,9 @@ pub const Second = struct {
     /// CPU1's own NVIC: its own pends, priorities and active stack. CPU0's
     /// is the one `main` builds; neither ever dispatches the other's.
     interrupts: nvic.Nvic = .{},
+    /// CPU1's own time base: its SysTick counts down on CPU1's own PPB
+    /// words and pends into CPU1's own ICSR, charged for CPU1's own turns.
+    timebase: clocks.Clocks = .{},
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -132,6 +136,7 @@ pub const Second = struct {
         errdefer self.core.close();
         try self.core.shareBoardRamWith(owner);
         try self.core.attachWatch(&self.watch);
+        try self.core.attachTimebase(&self.timebase);
         try wiring.attachSecond(board, &self.core, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
@@ -156,7 +161,11 @@ pub const Second = struct {
     pub fn step(self: *Second, instructions: usize) void {
         if (self.fault != null) return;
         self.turns += 1;
-        const session: engine.Session = .{ .watch = &self.watch, .interrupts = &self.interrupts };
+        const session: engine.Session = .{
+            .watch = &self.watch,
+            .interrupts = &self.interrupts,
+            .timebase = &self.timebase,
+        };
         const outcome = self.core.run(self.pc, instructions, session) catch |err| {
             self.fault = .{ .pc = self.pc, .detail = @errorName(err), .access = null, .instruction = null };
             return;
