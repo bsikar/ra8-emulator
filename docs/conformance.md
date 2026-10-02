@@ -215,3 +215,12 @@ is stale or an encoding is missing. Regenerate with
 | VSTRB.8 | 1 |
 | VSTRH.16 | 1 |
 | VSTRW.32 | 2 |
+| VLDRB.S16 | 2 |
+| VLDRB.U16 | 1 |
+| VLDRB.S32 | 1 |
+| VLDRB.U32 | 1 |
+| VLDRH.S32 | 1 |
+| VLDRH.U32 | 1 |
+| VSTRB.16 | 1 |
+| VSTRB.32 | 1 |
+| VSTRH.32 | 1 |

@@ -5,7 +5,10 @@
 //! over post-indexing (the base is), and W writes the offset address back
 //! to Rn whatever the predicate says. Element e sits at start + e * size.
 //! A load zeroes the elements the predicate leaves inactive and a store
-//! skips them, touching no memory for either.
+//! skips them, touching no memory for either. Form.size is the size in
+//! memory: the widening loads (VLDRB.S16/U16/S32/U32, VLDRH.S32/U32) and
+//! narrowing stores (VSTRB.16/32, VSTRH.32) step by it and scale imm7 by
+//! it, and `element` converts between the memory and register widths.
 const qreg = @import("qreg.zig");
 const predicate = @import("predicate.zig");
 const Size = qreg.Size;
@@ -39,4 +42,15 @@ pub fn zeroInactive(loaded: u128, mask: u16, size: Size) u128 {
         if (predicate.active(mask, size, e)) out = qreg.setElem(out, size, e, qreg.elem(loaded, size, e));
     }
     return out;
+}
+
+/// One element crossing between memory and a wider register lane.
+pub const Element = struct { value: u32, msize: Size, signed: bool, store: bool };
+
+/// A store keeps the low msize bits; a load sign- or zero-extends them.
+pub fn element(c: Element) u32 {
+    const width: u5 = @intCast(qreg.bits(c.msize));
+    const low = c.value & ((@as(u32, 1) << width) - 1);
+    if (c.store or !c.signed or low >> (width - 1) == 0) return low;
+    return low | ~((@as(u32, 1) << width) - 1);
 }
