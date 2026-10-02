@@ -65,7 +65,7 @@ const second_wait = @import("second_wait.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
-const report_cores = @import("../interfaces/cli/report_cores.zig");
+const report_cores = @import("../interfaces/cli/report/cores.zig");
 const Engine = engine.Engine;
 
 /// CPU1's turn length against CPU0's round, from the CPU clock dividers.

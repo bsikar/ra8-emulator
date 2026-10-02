@@ -10,7 +10,7 @@ const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
-const report_run = @import("report_run.zig");
+const report_run = @import("report/run.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {

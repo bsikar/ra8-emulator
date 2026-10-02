@@ -22,7 +22,7 @@ const lob = @import("../../core/lob.zig");
 const nvic = @import("../../periph/nvic.zig");
 const reboot_mod = @import("../../core/reboot.zig");
 const undefined_ops = @import("../../core/undefined_ops.zig");
-const report_run = @import("report_run.zig");
+const report_run = @import("report/run.zig");
 
 pub const Parts = struct {
     watch: engine.Watch = .{},
