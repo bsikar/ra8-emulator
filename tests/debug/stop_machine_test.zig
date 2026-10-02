@@ -148,3 +148,14 @@ test "resuming clears a watch stop that was already reported" {
     _ = machine.onInstruction(at(0x102));
     try std.testing.expect(isStepped(machine.onInstruction(at(0x104))));
 }
+
+test "a comparator the firmware enabled in the core's FPB stops the run there" {
+    var machine = Machine{};
+    const fpb = ra8.core.fpb;
+    _ = machine.fpb.write(fpb.offsets.comp0 + 4, 0x108 | fpb.comp_enable);
+    machine.proceed();
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x108)));
+    _ = machine.fpb.write(fpb.offsets.ctrl, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    try std.testing.expectEqual(@as(usize, 1), machine.onInstruction(at(0x108)).?.unit_break);
+}
