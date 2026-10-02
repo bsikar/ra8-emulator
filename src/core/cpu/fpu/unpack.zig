@@ -24,7 +24,7 @@ pub fn unpack(comptime fmt: Format, bits: fmt.Bits(), fpscr: *Fpscr) Unpacked {
     const frac = bits & fmt.fracMask();
     if (exp_field == 0) {
         if (frac == 0) return .{ .kind = .zero, .sign = sign };
-        if (fpscr.fz == 1) {
+        if (fpscr.flushes(comptime fmt.width())) {
             fpscr.idc = 1;
             return .{ .kind = .zero, .sign = sign };
         }

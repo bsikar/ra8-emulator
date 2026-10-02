@@ -31,3 +31,12 @@ test "rounding mode reads back from bits 22 and 23" {
     try std.testing.expectEqual(fpscr.RMode.plus_inf, Fpscr.fromBits(0b01 << 22).rmode);
     try std.testing.expectEqual(fpscr.RMode.minus_inf, Fpscr.fromBits(0b10 << 22).rmode);
 }
+
+test "flushes picks FZ16 for half precision and FZ otherwise" {
+    const half_only: Fpscr = .{ .fz16 = 1 };
+    try std.testing.expect(half_only.flushes(16));
+    try std.testing.expect(!half_only.flushes(32));
+    const single_only: Fpscr = .{ .fz = 1 };
+    try std.testing.expect(!single_only.flushes(16));
+    try std.testing.expect(single_only.flushes(64));
+}

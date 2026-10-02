@@ -25,7 +25,7 @@ pub fn round(comptime fmt: Format, real: Real, fpscr: *Fpscr, mode: RMode) fmt.B
     const F = fmt.frac_bits;
     const min_exp = fmt.minExp();
     const exponent: i32 = @as(i32, 127 - @as(i32, @clz(real.mant))) + real.exp;
-    if (fpscr.fz == 1 and exponent < min_exp) {
+    if (fpscr.flushes(comptime fmt.width()) and exponent < min_exp) {
         fpscr.ufc = 1;
         return fmt.zero(real.sign);
     }
