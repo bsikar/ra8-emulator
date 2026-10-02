@@ -207,7 +207,7 @@ pub const Session = struct {
 
     fn setBreak(self: *Session, at: commands.At, temporary: bool, out: anytype) !void {
         const address = try self.resolve(at.place) & ~@as(u32, 1);
-        const id = try self.driver.machine.breaks.add(.{ .address = address, .arrival = at.arrival });
+        const id = try self.driver.machine.addBreak(.{ .address = address, .arrival = at.arrival });
         if (temporary) try self.temporary.append(id);
         const kind = if (temporary) "Temporary breakpoint" else "Breakpoint";
         try out.print("{s} {d} at ", .{ kind, id });
@@ -216,8 +216,14 @@ pub const Session = struct {
         try out.print("\n", .{});
     }
 
+    /// Breaks and watches share one numbering, so `delete N` takes out
+    /// whichever of the two holds that id.
     fn deleteBreak(self: *Session, id: break_table.Id, out: anytype) !void {
-        try self.driver.machine.breaks.remove(id);
+        const machine = self.driver.machine;
+        machine.breaks.remove(id) catch |err| {
+            machine.watches.remove(id) catch return err;
+            return out.print("Deleted watchpoint {d}\n", .{id});
+        };
         self.forgetTemporary(id);
         try out.print("Deleted breakpoint {d}\n", .{id});
     }
@@ -233,7 +239,7 @@ pub const Session = struct {
     fn setWatch(self: *Session, want: commands.Watch, out: anytype) !void {
         const address = try self.resolve(want.place);
         const span = try watch_table.Watch.span(address, limits.watch_bytes, want.kind);
-        const id = try self.driver.machine.watches.add(span);
+        const id = try self.driver.machine.addWatch(span);
         try out.print("Watchpoint {d} ({s}) at 0x{X:0>8}\n", .{ id, @tagName(want.kind), address });
     }
 

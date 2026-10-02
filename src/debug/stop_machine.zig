@@ -98,6 +98,23 @@ pub const Machine = struct {
     /// before the next one, so the stop lands after the access, never
     /// halfway through the instruction that made it.
     watch_pending: ?watch_table.Hit = null,
+    /// The next id a break or a watch gets. The two share one sequence per
+    /// core, as gdb numbers them, so `delete N` names exactly one of either.
+    next_id: u32 = 1,
+
+    /// Add a break, numbered from the sequence breaks and watches share.
+    pub fn addBreak(self: *Machine, point: breakpoint.Break) break_table.Error!break_table.Id {
+        self.breaks.next_id = self.next_id;
+        defer self.next_id = self.breaks.next_id;
+        return self.breaks.add(point);
+    }
+
+    /// Add a watch, numbered from the same sequence as the breaks.
+    pub fn addWatch(self: *Machine, watch: watch_table.Watch) watch_table.Error!watch_table.Id {
+        self.watches.next_id = self.next_id;
+        defer self.next_id = self.watches.next_id;
+        return self.watches.add(watch);
+    }
 
     /// Run until a break or a halt request, or one instruction when
     /// DHCSR.C_STEP is set.
