@@ -20,6 +20,8 @@ const fpb = @import("fpb.zig");
 pub const cycle_count = @import("cycle_count.zig");
 /// Re-exported for tests/debug/zig_core_test.zig, for the same reason.
 pub const zig_core = @import("zig_core.zig");
+/// Re-exported for tests/debug/zig_drive_test.zig, for the same reason.
+pub const zig_drive = @import("zig_drive.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");
