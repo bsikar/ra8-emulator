@@ -27,6 +27,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     self.ptp.tick();
     self.trace.tick();
     self.rswitch.tick();
+    self.usb.tick();
     try takeResetRequests(self, core);
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());
@@ -38,6 +39,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     try drain(self, core, self.pwm.dueEvents());
     try drain(self, core, self.adc.dueEvents());
     try drain(self, core, self.dma.dueEvents());
+    try drain(self, core, self.usb.dueEvents());
     try drain(self, core, self.links.takeEvents());
     try self.events.repend(core);
 }
