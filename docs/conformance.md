@@ -103,3 +103,19 @@ is stale or an encoding is missing. Regenerate with
 | VSELVS.F64 T1 | 3 |
 | VSELGE.F64 T1 | 2 |
 | VSELGT.F64 T1 | 2 |
+| VCVT.S32.F32 fbits T1 | 7 |
+| VCVT.U32.F32 fbits T1 | 3 |
+| VCVT.S16.F32 fbits T1 | 6 |
+| VCVT.U16.F32 fbits T1 | 4 |
+| VCVT.S32.F64 fbits T1 | 2 |
+| VCVT.U32.F64 fbits T1 | 1 |
+| VCVT.S16.F64 fbits T1 | 2 |
+| VCVT.U16.F64 fbits T1 | 2 |
+| VCVT.F32.S32 fbits T1 | 4 |
+| VCVT.F32.U32 fbits T1 | 2 |
+| VCVT.F32.S16 fbits T1 | 3 |
+| VCVT.F32.U16 fbits T1 | 3 |
+| VCVT.F64.S32 fbits T1 | 2 |
+| VCVT.F64.U32 fbits T1 | 1 |
+| VCVT.F64.S16 fbits T1 | 1 |
+| VCVT.F64.U16 fbits T1 | 1 |

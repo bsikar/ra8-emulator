@@ -86,6 +86,24 @@ pub fn Fixed(comptime B: type) type {
     };
 }
 
+/// One operand for VCVT between floating point and fixed point: the
+/// integer side's width (16 or 32) and fraction bits, its signedness, and
+/// FPSCR's rounding mode (used only on the way back to floating point).
+pub fn Fraction(comptime B: type) type {
+    return struct {
+        a: B,
+        width: u6 = 32,
+        fbits: u6,
+        unsigned: bool = false,
+        mode: RMode = .nearest,
+        fz: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .rmode = self.mode, .fz = self.fz };
+        }
+    };
+}
+
 /// One operand for the conversions whose encoding fixes the rounding
 /// (VCVTA/N/P/M), so FPSCR supplies only FZ.
 pub fn Directed(comptime B: type) type {
