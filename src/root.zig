@@ -72,6 +72,7 @@ pub const core = struct {
     pub const dwarf_line = @import("debug/dwarf_line.zig");
     pub const dwarf_cursor = @import("debug/dwarf_cursor.zig");
     pub const session_source = @import("debug/session_source.zig");
+    pub const dwarf_line_find = @import("debug/dwarf_line_find.zig");
     pub const fpb = @import("debug/fpb.zig");
     pub const dwt = @import("debug/dwt.zig");
     pub const itm = @import("debug/itm.zig");
