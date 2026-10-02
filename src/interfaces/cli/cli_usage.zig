@@ -10,7 +10,7 @@ pub const text =
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
     \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
-    \\                    [--ns IMAGE.elf]
+    \\                    [--ns IMAGE.elf] [--bus-errors]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -76,5 +76,7 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
+    \\  --bus-errors       raise a precise BusFault for an access nothing
+    \\                     maps, as the part does, instead of ending the run
     \\
 ;

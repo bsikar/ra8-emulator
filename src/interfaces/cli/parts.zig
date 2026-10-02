@@ -23,6 +23,7 @@ const nvic = @import("../../periph/nvic.zig");
 const reboot_mod = @import("../../core/reboot.zig");
 const undefined_ops = @import("../../core/undefined_ops.zig");
 const report_run = @import("report/run.zig");
+const bus_fault = @import("../../periph/bus_fault.zig");
 
 pub const Parts = struct {
     watch: engine.Watch = .{},
@@ -39,6 +40,8 @@ pub const Parts = struct {
     pacing: pend_pace.Pace = .{},
     mask_pacing: mask_pace.Pace = .{},
     hits: pc_hits.Hits = .{},
+    /// The BusFaults a `--bus-errors` run raised; src/core/bus_error.zig.
+    bus_tally: bus_fault.Tally = .{},
 };
 
 /// What the run counted, gathered off the parts for the report.
@@ -65,5 +68,6 @@ pub fn tallyOf(
         .selects = parts.selects,
         .worlds = parts.worlds,
         .undefined_found = undefined_found,
+        .bus_errors = parts.bus_tally,
     };
 }

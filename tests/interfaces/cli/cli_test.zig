@@ -90,3 +90,10 @@ test "--cpu-load-from and --cpu-load-to set the load window and turn --cpu-load 
     try std.testing.expectEqual(@as(u64, 0x2000), windowed.rtosWanted().?.to);
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu-load-to" }));
 }
+
+test "precise BusFaults are off unless --bus-errors asks for them" {
+    const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(!defaults.bus_errors);
+    const asked = try parse(&[_][]const u8{ "emu", "a.elf", "--bus-errors" });
+    try std.testing.expect(asked.bus_errors);
+}

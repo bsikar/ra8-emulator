@@ -148,8 +148,7 @@ pub fn main() !u8 {
     if (watched) |*one| try armWatch(core, one, &parts.timebase.ticks);
     const tracer = try rtos_hook.arm(core.handle, image, options.rtosWanted(), &parts.timebase, &interrupts);
     var window = taken_in.resolve(image, options.taken_in_place);
-    var undefined_found = undefined_ops.sweep(image);
-    if (options.stop_on_undefined) undefined_found.stopOnRun();
+    var undefined_found = resolveUndefined(image, options);
     try core.attachUndefined(&undefined_found);
     var storage: second_core.Second = undefined;
     var timed = resolveDeadline(options);
@@ -180,6 +179,7 @@ pub fn main() !u8 {
         .taken_from = &parts.taken,
         .taken_in = if (window) |*one| one else null,
         .per_boundary = options.chunk_instructions,
+        .bus_errors = if (options.bus_errors) &parts.bus_tally else null,
     }, second);
 
     try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window, tracer);
@@ -303,6 +303,13 @@ fn arrivals(
 }
 
 /// The modelled-time window a run is allowed, or none.
+/// The undefined-instruction sweep, told to end the run when asked.
+fn resolveUndefined(image: elf.Image, options: cli.Options) undefined_ops.Found {
+    var found = undefined_ops.sweep(image);
+    if (options.stop_on_undefined) found.stopOnRun();
+    return found;
+}
+
 fn resolveDeadline(options: cli.Options) ?deadline.Deadline {
     const milliseconds = options.ms orelse return null;
     return .{ .periods = milliseconds };

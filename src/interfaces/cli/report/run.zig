@@ -30,6 +30,7 @@ const csel = @import("../../../core/csel.zig");
 const tz = @import("../../../core/tz.zig");
 const elf = @import("../../../core/elf.zig");
 const undefined_ops = @import("../../../core/undefined_ops.zig");
+const bus_fault = @import("../../../periph/bus_fault.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -52,6 +53,9 @@ pub const Tally = struct {
     selects: csel.Selects,
     worlds: tz.Worlds,
     undefined_found: undefined_ops.Found,
+    /// BusFaults raised for refused accesses; only a `--bus-errors` run
+    /// raises any, so every other run prints exactly what it did before.
+    bus_errors: bus_fault.Tally = .{},
 };
 
 /// Say what the board and the image have to say, in reading order: the bus,
@@ -66,7 +70,14 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report_steps.selects(out, of.selects);
     try report_steps.worlds(out, of.worlds);
     try report.blocks(board, out, of.timebase);
+    try busErrors(out, of.bus_errors);
     try undefined_ops.print(out, image, of.undefined_found);
+}
+
+/// One line for the BusFaults a run raised, and nothing when it raised none.
+pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {
+    if (tally.raised == 0) return;
+    try out.print("bus faults: {d} raised, {d} escalated to HardFault\n", .{ tally.raised, tally.escalated });
 }
 
 /// What a `--cpu zig` run can report: the part, the bus and the blocks, with
