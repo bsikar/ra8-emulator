@@ -332,3 +332,37 @@ test "a CPU1 that never waited reports no parking line" {
     const text = try reported(&second, &buffer);
     try std.testing.expect(std.mem.indexOf(u8, text, "parked in WFE") == null);
 }
+
+/// A masked spin three instructions wide, entered at its `cpsie i`, so a
+/// turn of a multiple of three meets every boundary with PRIMASK set: the
+/// shape of the module port's `__tx_ts_wait` against CPU1's turn.
+const MaskedSpin = struct {
+    const loop: u32 = Spins.table + 0x300;
+
+    fn boot(cpu1: *mod.Second) !void {
+        try Spins.lay(cpu1.core);
+        // cpsid i; cpsie i; b loop
+        try cpu1.core.writeWord(loop, 0xB662_B672);
+        try cpu1.core.writeWord(loop + 4, 0xE7FE_E7FC);
+        try cpu1.core.writeWord(Spins.table + 4, (loop + 2) | 1);
+        cpu1.interrupts = .{ .vector_base = Spins.table };
+        try mod.primeVectorTable(cpu1.core, Spins.table);
+        try cpu1.core.resetFromVectorTable(Spins.table);
+        cpu1.pc = try cpu1.core.register(.pc);
+    }
+};
+
+test "a SysTick held by CPU1's mask is taken when the mask clears" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try MaskedSpin.boot(&cpu1);
+
+    try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendstset);
+    cpu1.step(999);
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expect(cpu1.release.lifted >= 1);
+    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+}

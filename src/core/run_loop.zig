@@ -362,7 +362,7 @@ fn service(core: anytype, controller: anytype, session: Session, remaining: usiz
 /// they are ordinary executed instructions and modelled time has to keep
 /// matching the work done. Bounded by the budget left as well as by the
 /// seam's own cap, so the return can never exceed what the caller has.
-fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
+pub fn liftMask(core: anytype, controller: anytype, session: Session, remaining: usize) !usize {
     const seam = session.unmask orelse return 0;
     if (!(try controller.pendingMasked(core))) {
         try seam.nothingMasked(core);
