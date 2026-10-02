@@ -26,6 +26,8 @@ pub const fm = @import("npu_vela_fm.zig");
 pub const quant = @import("npu_vela_quant.zig");
 /// Element addresses and storage formats.
 pub const addr = @import("npu_vela_addr.zig");
+/// Elementwise MIN and MAX.
+pub const minmax = @import("npu_vela_minmax.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
