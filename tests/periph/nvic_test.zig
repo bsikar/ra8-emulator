@@ -288,3 +288,20 @@ test "running is null in Thread mode and the innermost handler's priority inside
     unit.depth = 1;
     try std.testing.expectEqual(@as(?u8, 0x80), unit.running());
 }
+
+test "DHCSR.C_MASKINTS holds SysTick and external lines back while debug is on" {
+    var core = FakeCore.init(std.testing.allocator);
+    defer core.deinit();
+    try core.plantVectorTable();
+    try core.setRegister(.sp, 0x2200_8000);
+    try core.writeWord(memmap.nvic.ispr, 1 << 5);
+    try core.writeWord(memmap.nvic.iser, 1 << 5);
+    try core.writeWord(memmap.scb.icsr, icsr_pendstset);
+    const dhcsr = ra8.core.dcb;
+    try core.writeWord(dhcsr.base, dhcsr.dhcsr_bits.c_debugen | dhcsr.dhcsr_bits.c_maskints);
+
+    var irqs = Nvic{};
+    try std.testing.expectEqual(@as(?u16, null), try irqs.dispatch(&core));
+    try core.writeWord(dhcsr.base, dhcsr.dhcsr_bits.c_debugen);
+    try std.testing.expectEqual(@as(?u16, systick), try irqs.dispatch(&core));
+}

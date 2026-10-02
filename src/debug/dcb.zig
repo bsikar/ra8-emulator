@@ -7,7 +7,8 @@
 //! firmware write cannot change it. With C_DEBUGEN set, a write carrying
 //! DBGKEY may set C_HALT, which halts the core once the store retires, and
 //! C_STEP and C_MASKINTS. With C_STEP kept, the next resume runs one
-//! instruction and halts again. C_MASKINTS reads back but does nothing
+//! instruction and halts again. C_MASKINTS reads back, and src/periph/nvic.zig reads it to hold back
+//! PendSV, SysTick and external interrupts (`masksInterrupts`)
 //! yet. C_HALT is not
 //! kept: the core only runs again after the debugger resumes it, and a
 //! resume clears it. S_REGRDY always reads one because a transfer finishes
@@ -69,6 +70,14 @@ pub const dcrsr_bits = struct {
     pub const regsel: u32 = 0x7F;
     pub const regwnr: u32 = 1 << 16;
 };
+
+/// DebugCanMaskInts (DDI0553B.y E2.1.93) for a DHCSR word: C_MASKINTS
+/// counts only with C_DEBUGEN set. S_SDE is not modelled, so Secure
+/// debug counts as enabled.
+pub fn masksInterrupts(dhcsr: u32) bool {
+    const both = dhcsr_bits.c_debugen | dhcsr_bits.c_maskints;
+    return dhcsr & both == both;
+}
 
 pub const Dcb = struct {
     /// C_DEBUGEN: a debugger is attached. Only the debugger sets it.
