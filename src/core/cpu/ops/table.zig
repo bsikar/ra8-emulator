@@ -87,6 +87,7 @@ pub const groups = [_]op.Group{
     @import("mve_gather64.zig").group,
     @import("mve_gather_imm.zig").group,
     @import("mve_vld_il.zig").group,
+    @import("mve_float.zig").group,
     @import("ldrd_strd.zig").group,
     @import("exclusive.zig").group,
     @import("acq_rel.zig").group,
