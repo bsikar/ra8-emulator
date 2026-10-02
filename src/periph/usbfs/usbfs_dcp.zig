@@ -22,6 +22,10 @@ pub const Dcp = struct {
     /// The DCP's packet size; the full-speed control default.
     maxp: u16 = 64,
     packets_sent: u32 = 0,
+    /// BRDYSTS.PIPE0BRDY: an OUT packet is in the buffer for the driver.
+    brdy: bool = false,
+    /// BEMPSTS.PIPE0BEMP: the host took the IN packet and the buffer is empty.
+    bemp: bool = false,
 
     /// Accesses refused, each for its own reason.
     bad_pipe: u32 = 0,
@@ -92,12 +96,21 @@ pub const Dcp = struct {
     /// An OUT data packet from the host lands in the DCP buffer.
     pub fn hostOut(self: *Dcp, bytes: []const u8) void {
         self.out.fill(bytes);
+        self.brdy = true;
     }
 
     /// The host takes the packet the driver committed, if there is one.
     pub fn hostTake(self: *Dcp, into: []u8) ?u16 {
         if (!self.sent.ready) return null;
+        self.bemp = true;
         return self.sent.drain(into);
+    }
+
+    /// INTSTS0.BRDY and BEMP: each is set while its pipe's status bit is.
+    pub fn summary(self: *const Dcp) u16 {
+        const ready: u16 = if (self.brdy) regs.int0.brdy else 0;
+        const empty: u16 = if (self.bemp) regs.int0.bemp else 0;
+        return ready | empty;
     }
 
     pub fn refusals(self: *const Dcp) u32 {
