@@ -281,3 +281,20 @@ is stale or an encoding is missing. Regenerate with
 | VCVTT.F16.F32 (MVE) T1 | 1 |
 | VCVTB.F32.F16 (MVE) T1 | 1 |
 | VCVTT.F32.F16 (MVE) T1 | 1 |
+| VCVT.S32.F32 (MVE) T1 | 1 |
+| VCVT.U32.F32 (MVE) T1 | 1 |
+| VCVT.S16.F16 (MVE) T1 | 1 |
+| VCVT.U16.F16 (MVE) T1 | 1 |
+| VCVTA.S32.F32 (MVE) T1 | 1 |
+| VCVTN.S32.F32 (MVE) T1 | 1 |
+| VCVTP.S32.F32 (MVE) T1 | 1 |
+| VCVTM.S32.F32 (MVE) T1 | 1 |
+| VCVTA.U16.F16 (MVE) T1 | 1 |
+| VCVT.F32.S32 (MVE) T1 | 1 |
+| VCVT.F32.U32 (MVE) T1 | 1 |
+| VCVT.F16.S16 (MVE) T1 | 1 |
+| VCVT.F16.U16 (MVE) T1 | 1 |
+| VCVT.S32.F32 (MVE, fixed-point) T1 | 1 |
+| VCVT.F32.U32 (MVE, fixed-point) T1 | 1 |
+| VCVT.S16.F16 (MVE, fixed-point) T1 | 1 |
+| VCVT.F16.S16 (MVE, fixed-point) T1 | 1 |
