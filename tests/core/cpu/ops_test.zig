@@ -16,6 +16,7 @@ test {
     _ = @import("ops/barrier_test.zig");
     _ = @import("ops/branch_test.zig");
     _ = @import("ops/mov_wide_test.zig");
+    _ = @import("ops/divide_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");

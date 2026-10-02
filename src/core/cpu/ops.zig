@@ -15,6 +15,7 @@ pub const special_data = @import("ops/special_data.zig");
 pub const barrier = @import("ops/barrier.zig");
 pub const branch = @import("ops/branch.zig");
 pub const mov_wide = @import("ops/mov_wide.zig");
+pub const divide = @import("ops/divide.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
