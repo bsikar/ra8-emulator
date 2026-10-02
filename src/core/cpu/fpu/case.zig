@@ -50,6 +50,24 @@ pub fn Ternary(comptime B: type) type {
     };
 }
 
+/// Two operands for VCMP/VCMPE: e set is the VCMPE form, which signals on
+/// a quiet NaN too. The with-zero forms put 0 in b.
+pub fn Compare(comptime B: type) type {
+    return struct {
+        a: B,
+        b: B,
+        e: u1 = 0,
+        fz: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .fz = self.fz };
+        }
+    };
+}
+
+/// What a compare produces: the NZCV it writes to FPSCR, and the flags.
+pub const Ordering = struct { nzcv: u4, flags: u32 = 0 };
+
 pub fn Result(comptime B: type) type {
     return struct { bits: B, flags: u32 = 0 };
 }
