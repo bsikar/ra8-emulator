@@ -51,6 +51,7 @@ pub const groups = [_]op.Group{
     @import("dsp_dual.zig").group,
     @import("csel.zig").group,
     @import("long_shift.zig").group,
+    @import("long_shift_reg.zig").group,
     @import("svc.zig").group,
     @import("table_branch.zig").group,
     @import("blxns.zig").group,

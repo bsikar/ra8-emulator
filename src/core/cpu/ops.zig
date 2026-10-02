@@ -47,6 +47,7 @@ pub const dsp_mul16 = @import("ops/dsp_mul16.zig");
 pub const dsp_dual = @import("ops/dsp_dual.zig");
 pub const csel = @import("ops/csel.zig");
 pub const long_shift = @import("ops/long_shift.zig");
+pub const long_shift_reg = @import("ops/long_shift_reg.zig");
 pub const svc = @import("ops/svc.zig");
 pub const table_branch = @import("ops/table_branch.zig");
 pub const blxns = @import("ops/blxns.zig");

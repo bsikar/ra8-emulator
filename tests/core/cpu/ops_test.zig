@@ -48,6 +48,7 @@ test {
     _ = @import("ops/dsp_dual_test.zig");
     _ = @import("ops/csel_test.zig");
     _ = @import("ops/long_shift_test.zig");
+    _ = @import("ops/long_shift_reg_test.zig");
     _ = @import("ops/svc_test.zig");
     _ = @import("ops/table_branch_test.zig");
     _ = @import("ops/blxns_test.zig");
