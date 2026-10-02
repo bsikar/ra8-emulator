@@ -15,8 +15,15 @@
 //! debug state, which firmware never runs in, so a DCRSR write from
 //! firmware is held but moves nothing. DCRDR is a plain data word, which
 //! debug monitors use to pass values to the debugger. DCRSR is write-only
-//! and reads zero. DEMCR at 0xE000_EDFC belongs to src/periph/clocks.zig.
+//! and reads zero. DEMCR at 0xE000_EDFC belongs to src/periph/clocks.zig;
+//! this file only names the two monitor bits in it.
+//!
+//! DFSR at 0xE000_ED30 records why the core last took a debug event: a
+//! halt, a breakpoint or a DWT trap. Its bits are sticky and a write of one
+//! clears them.
 pub const base: u32 = 0xE000_EDF0;
+pub const dfsr_address: u32 = 0xE000_ED30;
+pub const demcr_address: u32 = 0xE000_EDFC;
 
 pub const offsets = struct {
     pub const dhcsr: u32 = 0x0;
@@ -41,6 +48,19 @@ pub const dhcsr_bits = struct {
     pub const kept: u32 = c_step | c_maskints;
 };
 
+pub const dfsr_bits = struct {
+    pub const halted: u32 = 1 << 0;
+    pub const bkpt: u32 = 1 << 1;
+    pub const dwttrap: u32 = 1 << 2;
+};
+
+pub const demcr_bits = struct {
+    /// MON_EN: a debug event with halting debug off takes DebugMonitor.
+    pub const mon_en: u32 = 1 << 16;
+    /// MON_PEND: DebugMonitor is pending.
+    pub const mon_pend: u32 = 1 << 17;
+};
+
 pub const dcrsr_bits = struct {
     pub const regsel: u32 = 0x7F;
     pub const regwnr: u32 = 1 << 16;
@@ -52,6 +72,8 @@ pub const Dcb = struct {
     controls: u32 = 0,
     selector: u32 = 0,
     data: u32 = 0,
+    /// DFSR, as the debug events so far latched it.
+    dfsr: u32 = 0,
     /// A keyed C_HALT write the core has not yet been halted for.
     halt_asked: bool = false,
     /// A register changed since memory last showed the register file.
@@ -84,6 +106,19 @@ pub const Dcb = struct {
         }
         self.changed = true;
         return true;
+    }
+
+    /// A debug event happened: latch its DFSR bits.
+    pub fn latch(self: *Dcb, bits: u32) void {
+        if (bits == 0) return;
+        self.dfsr |= bits;
+        self.changed = true;
+    }
+
+    /// A firmware store to DFSR: each bit written as one is cleared.
+    pub fn clearStatus(self: *Dcb, value: u32) void {
+        self.dfsr &= ~value;
+        self.changed = true;
     }
 
     /// Whether a C_HALT write is waiting for the core to halt, and forget

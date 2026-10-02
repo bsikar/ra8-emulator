@@ -215,3 +215,27 @@ test "firmware sees the debugger in DHCSR and halts itself with a keyed C_HALT" 
     try std.testing.expect(fixture.driver.last.? == .halt_requested);
     try std.testing.expectEqual(bits.c_debugen | bits.s_regrdy, try fixture.engine.register(.r3));
 }
+
+// str r1,[r0,#8] (FP_COMP0); str r2,[r0] (FP_CTRL); nop x4. Break at +8.
+test "with halting debug off and MON_EN set, an FPB match pends DebugMonitor and latches DFSR" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{ .halting = false };
+    try fixture.open();
+    defer fixture.engine.close();
+    const fpb = ra8.core.fpb;
+    const dcb = ra8.core.dcb;
+    try fixture.engine.write(layout.code, &[_]u8{ 0x81, 0x60, 0x02, 0x60, 0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF });
+    try fixture.engine.writeWord(dcb.demcr_address, dcb.demcr_bits.mon_en);
+    try fixture.engine.setRegister(.r0, fpb.base);
+    try fixture.engine.setRegister(.r1, (layout.code + 6) | fpb.comp_enable);
+    try fixture.engine.setRegister(.r2, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    _ = try fixture.machine.breaks.add(.{ .address = layout.code + 8 });
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 8, pc);
+    try std.testing.expect(fixture.driver.last.? == .breakpoint);
+    const demcr = try fixture.engine.readWord(dcb.demcr_address);
+    try std.testing.expect(demcr & dcb.demcr_bits.mon_pend != 0);
+    try std.testing.expect(try fixture.engine.readWord(dcb.dfsr_address) & dcb.dfsr_bits.bkpt != 0);
+    try std.testing.expectEqual(dcb.dhcsr_bits.s_regrdy, try fixture.engine.readWord(dcb.base));
+}
