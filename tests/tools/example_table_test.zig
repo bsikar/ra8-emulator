@@ -86,3 +86,28 @@ test "a CPU0 image whose stem ends in _cpu1 still finds its CPU1 half" {
     defer a.free(second);
     try std.testing.expectEqualStrings("threadx_cpu1_cpu1.elf", second);
 }
+
+const tz_dir = [_][]const u8{ "blink.elf", "tz_demo.elf", "tz_demo_ns.elf", "lone_ns.elf" };
+
+test "a Secure image's Non-Secure half is the same stem with _ns" {
+    const name = try table.nsName(std.testing.allocator, "tz_demo.elf");
+    defer std.testing.allocator.free(name);
+    try std.testing.expectEqualStrings("tz_demo_ns.elf", name);
+}
+
+test "a Non-Secure half with its Secure image beside it gets no row of its own" {
+    const a = std.testing.allocator;
+    try std.testing.expect(try table.isSecondHalf(a, "tz_demo_ns.elf", &tz_dir));
+    try std.testing.expect(!try table.isSecondHalf(a, "tz_demo.elf", &tz_dir));
+    try std.testing.expect(!try table.isSecondHalf(a, "lone_ns.elf", &tz_dir));
+}
+
+test "a Secure image runs with its Non-Secure half, and a lone image runs alone" {
+    const a = std.testing.allocator;
+    const ns = (try table.nsPairedWith(a, "tz_demo.elf", &tz_dir)).?;
+    defer a.free(ns);
+    try std.testing.expectEqualStrings("tz_demo_ns.elf", ns);
+    try std.testing.expectEqual(@as(?[]const u8, null), try table.nsPairedWith(a, "blink.elf", &tz_dir));
+    try std.testing.expectEqual(@as(?[]const u8, null), try table.nsPairedWith(a, "lone_ns.elf", &tz_dir));
+    try std.testing.expectEqual(@as(?[]const u8, null), try table.pairedWith(a, "tz_demo.elf", &tz_dir));
+}

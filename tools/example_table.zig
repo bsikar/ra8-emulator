@@ -15,6 +15,11 @@
 //! foo_cpu1.elf for CPU1 (RA8EMU-37). The pair runs as one row, foo.elf with
 //! --cpu1 foo_cpu1.elf, and the CPU1 half never gets a row of its own: run
 //! alone it boots from a vector table CPU0 was supposed to release.
+//!
+//! A TrustZone example is two ELFs the same way, foo.elf for the Secure boot
+//! and foo_ns.elf for the Non-Secure image it hands off to (RA8EMU-217). The
+//! pair runs as one row, foo.elf with --ns foo_ns.elf, and the Non-Secure
+//! half gets no row of its own: run alone it has no Secure world to enter it.
 const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
 pub const probes = @import("example_probes.zig");
@@ -135,9 +140,12 @@ pub fn main() !void {
     for (images) |image| {
         if (try isSecondHalf(allocator, image, images)) continue;
         const path = try std.fs.path.join(allocator, &.{ args[2], image });
-        const second = try secondPath(allocator, args[2], image, images);
+        const halves = Halves{
+            .cpu1 = try halfPath(allocator, args[2], try pairedWith(allocator, image, images)),
+            .ns = try halfPath(allocator, args[2], try nsPairedWith(allocator, image, images)),
+        };
         const probe = probes.find(image);
-        const report = try runImage(allocator, args[1], path, second, probe, budgets.pick(image, budget));
+        const report = try runImage(allocator, args[1], path, halves, probe, budgets.pick(image, budget));
         var row = parse(report);
         if (probe) |wanted| row.probe = probes.judge(wanted, report);
         try writeRow(out, image, row);
@@ -159,18 +167,39 @@ fn listImages(allocator: std.mem.Allocator, dir_path: []const u8) ![]const []con
 
 const elf = ".elf";
 const cpu1_suffix = "_cpu1.elf";
+const ns_suffix = "_ns.elf";
+
+/// The second images a row runs with, as paths.
+const Halves = struct {
+    cpu1: ?[]const u8 = null,
+    ns: ?[]const u8 = null,
+};
 
 /// foo.elf's CPU1 half, foo_cpu1.elf. Caller owns the name.
 pub fn cpu1Name(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
-    const stem = image[0 .. image.len - elf.len];
-    return std.mem.concat(allocator, u8, &.{ stem, cpu1_suffix });
+    return halfName(allocator, image, cpu1_suffix);
 }
 
-/// True for foo_cpu1.elf when foo.elf sits beside it: that image is the
-/// second half of a pair, not an example of its own.
+/// foo.elf's Non-Secure half, foo_ns.elf. Caller owns the name.
+pub fn nsName(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
+    return halfName(allocator, image, ns_suffix);
+}
+
+fn halfName(allocator: std.mem.Allocator, image: []const u8, suffix: []const u8) ![]const u8 {
+    const stem = image[0 .. image.len - elf.len];
+    return std.mem.concat(allocator, u8, &.{ stem, suffix });
+}
+
+/// True for foo_cpu1.elf or foo_ns.elf when foo.elf sits beside it: that
+/// image is the second half of a pair, not an example of its own.
 pub fn isSecondHalf(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !bool {
-    if (!std.mem.endsWith(u8, image, cpu1_suffix)) return false;
-    const partner = try std.mem.concat(allocator, u8, &.{ image[0 .. image.len - cpu1_suffix.len], elf });
+    return try hasPartner(allocator, image, cpu1_suffix, names) or
+        try hasPartner(allocator, image, ns_suffix, names);
+}
+
+fn hasPartner(allocator: std.mem.Allocator, image: []const u8, suffix: []const u8, names: []const []const u8) !bool {
+    if (!std.mem.endsWith(u8, image, suffix)) return false;
+    const partner = try std.mem.concat(allocator, u8, &.{ image[0 .. image.len - suffix.len], elf });
     defer allocator.free(partner);
     return contains(names, partner);
 }
@@ -179,7 +208,15 @@ pub fn isSecondHalf(allocator: std.mem.Allocator, image: []const u8, names: []co
 /// A CPU0 image whose own stem ends in _cpu1 (threadx_cpu1.elf) still pairs:
 /// main() drops true second halves with isSecondHalf before asking.
 pub fn pairedWith(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !?[]const u8 {
-    const name = try cpu1Name(allocator, image);
+    return present(allocator, try cpu1Name(allocator, image), names);
+}
+
+/// The Non-Secure half of `image` in the directory, when it has one.
+pub fn nsPairedWith(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !?[]const u8 {
+    return present(allocator, try nsName(allocator, image), names);
+}
+
+fn present(allocator: std.mem.Allocator, name: []const u8, names: []const []const u8) ?[]const u8 {
     if (contains(names, name)) return name;
     allocator.free(name);
     return null;
@@ -192,20 +229,20 @@ fn contains(names: []const []const u8, wanted: []const u8) bool {
     return false;
 }
 
-fn secondPath(allocator: std.mem.Allocator, dir: []const u8, image: []const u8, names: []const []const u8) !?[]const u8 {
-    const name = try pairedWith(allocator, image, names) orelse return null;
-    return try std.fs.path.join(allocator, &.{ dir, name });
+fn halfPath(allocator: std.mem.Allocator, dir: []const u8, name: ?[]const u8) !?[]const u8 {
+    return try std.fs.path.join(allocator, &.{ dir, name orelse return null });
 }
 
 fn lessThan(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
 }
 
-fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, second: ?[]const u8, probe: ?probes.Probe, budget: ?[]const u8) ![]const u8 {
+fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, probe: ?probes.Probe, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
     try argv.appendSlice(options.flags(std.fs.path.basename(path)));
-    if (second) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
+    if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
+    if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
     if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol, "--dump-sym", wanted.failure });
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{
