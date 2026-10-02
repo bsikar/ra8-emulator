@@ -12,6 +12,7 @@ const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
 const report_dumps = @import("report/dumps.zig");
+const rtos_hook = @import("../../debug/rtos_hook.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -53,12 +54,21 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears });
+    // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
+    var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.trace_rtos) else null;
+    var listener: rtos_hook.zig.Listener = undefined;
+    if (tracer) |*found| {
+        found.now = &timebase.ticks;
+        listener = .{ .tracer = found };
+    }
+    const wrap = if (tracer != null) listener.wrap() else null;
+    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap });
     if (options.cpu == .zig) {
         try report_run.zigCore(out, board, ran);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
         try report_dumps.dumpSymbols(out, core.*, image, options);
+        if (tracer) |*found| try rtos_hook.print(out, found, rtos_hook.Memory{ .handle = core.handle });
     }
     return status;
 }

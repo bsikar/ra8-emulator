@@ -18,6 +18,8 @@ const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
+const Bus = @import("bus.zig").Bus;
+const Source = @import("exception/source.zig").Source;
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
 /// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
@@ -30,11 +32,22 @@ pub const Boundary = struct {
     closeFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
 };
 
+/// A debugger listening to a `--cpu zig` run: handed the bus and the
+/// exception source the core would use, it returns the ones the core uses
+/// instead (src/debug/rtos_zig.zig, RA8EMU-261).
+pub const Wrap = struct {
+    context: *anyopaque,
+    busFn: *const fn (context: *anyopaque, inner: Bus) Bus,
+    sourceFn: *const fn (context: *anyopaque, inner: Source) Source,
+};
+
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
 /// boundary that moves time, the core-private SAU and MPU its stores bank
 /// into, and the fault status words its stores clear.
 pub const Wiring = struct {
     boundary: ?Boundary = null,
+    /// A listener put in front of the core's bus and exception source.
+    wrap: ?Wrap = null,
     partitions: ?*sau.Sau = null,
     regions: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
@@ -57,19 +70,19 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null);
+    return runOn(out, memory.view(), vector_base, budget, null, null, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
     var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap);
 }
 
-fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary) !u8 {
-    var cpu: cpu_mod.Cpu = .{ .bus = memory };
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap) !u8 {
+    var cpu: cpu_mod.Cpu = .{ .bus = if (wrap) |w| w.busFn(w.context, memory) else memory };
     var pending: NvicSource = .{};
-    cpu.source = pending.source();
+    cpu.source = if (wrap) |w| w.sourceFn(w.context, pending.source()) else pending.source();
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
