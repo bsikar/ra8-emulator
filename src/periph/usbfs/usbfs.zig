@@ -91,6 +91,8 @@ pub const Device = struct {
     /// USBADDR and moves to the Address state. SET_CONFIGURATION reaches the
     /// driver like any request, and the SIE tracks the state it implies.
     pub fn setup(self: *Device, packet: [8]u8) void {
+        // A SETUP sets the DCP PID back to NAK, clearing any earlier STALL.
+        self.shadow[regs.reg.dcpctr / window.word] &= ~regs.dcpctr.pid_mask;
         if (request.standardOut(packet, request.set_address)) return self.addressed(packet[2]);
         if (request.standardOut(packet, request.set_configuration)) self.configured(packet[2]);
         const field = std.mem.readInt;

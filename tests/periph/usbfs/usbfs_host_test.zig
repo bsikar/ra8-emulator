@@ -68,6 +68,7 @@ test "a device that answers is enumerated to Configured" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 0 }, &host.status);
     try std.testing.expectEqualSlices(u8, &languages, host.languages[0..4]);
     try std.testing.expectEqualSlices(u8, &product, host.product[0..8]);
+    try std.testing.expectEqual(usbfs.host.Answer.ack, host.interface);
     const status = device.read(at(regs.reg.intsts0), 2);
     try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_configured), status & usbfs.intsts0.dvsq_mask);
     try std.testing.expectEqual(@as(u32, usbfs.host.requests.address), device.read(at(regs.reg.usbaddr), 2));
@@ -187,7 +188,7 @@ test "a device that names no product skips the product string" {
     var host = Host{ .step = .string_product };
     host.languages[0] = 4;
     host.tick(&device);
-    try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
+    try std.testing.expectEqual(usbfs.host.Step.set_interface, host.step);
 }
 
 test "the product string is asked for in the device's first language" {
@@ -198,4 +199,28 @@ test "the product string is asked for in the device's first language" {
     host.tick(&device);
     try std.testing.expectEqual(@as(u32, 0x0302), device.read(at(regs.reg.usbval), 2));
     try std.testing.expectEqual(@as(u32, 0x0409), device.read(at(regs.reg.usbindx), 2));
+}
+
+test "SET_INTERFACE asks for alternate 0 of interface 0" {
+    const packet = usbfs.host.requests.set_interface;
+    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x0B, 0, 0, 0, 0, 0, 0 }, &packet);
+}
+
+test "a STALL is a valid answer to SET_INTERFACE" {
+    var device = attached();
+    var host = Host{ .step = .set_interface };
+    host.tick(&device);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
+    try std.testing.expectEqual(usbfs.host.Answer.stall, host.interface);
+}
+
+test "a STALL on SET_CONFIGURATION ends the script in failed" {
+    var device = attached();
+    var host = Host{ .step = .set_configuration };
+    host.tick(&device);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
 }

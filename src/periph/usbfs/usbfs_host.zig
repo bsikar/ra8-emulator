@@ -9,6 +9,7 @@
 //! script in `failed`, so a driver that never answers cannot hold it forever.
 const std = @import("std");
 const usbfs = @import("usbfs.zig");
+const regs = @import("../usbhs/usbhs_regs.zig");
 
 pub const Step = enum {
     waiting,
@@ -21,9 +22,13 @@ pub const Step = enum {
     get_status,
     string_languages,
     string_product,
+    set_interface,
     configured,
     failed,
 };
+
+/// How the device ended a no-data request: CCPL, or a STALL on the DCP.
+pub const Answer = enum { none, ack, stall };
 
 pub const requests = struct {
     pub const address: u8 = 1;
@@ -37,6 +42,9 @@ pub const requests = struct {
     }
     pub const set_configuration = [8]u8{ 0x00, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 };
     pub const get_configuration = [8]u8{ 0x80, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00 };
+    /// SET_INTERFACE(alternate 0, interface 0): every configured device
+    /// has interface 0, and a device with no alternates may STALL it.
+    pub const set_interface = [8]u8{ 0x01, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     pub const get_status = [8]u8{ 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00 };
     /// GET_DESCRIPTOR(String) `index` in `language`, for up to 255 bytes; the
     /// device ends it early with a short packet. Index 0 is the language list.
@@ -69,6 +77,8 @@ pub const Host = struct {
     /// String descriptor 0 (the language IDs) and the iProduct string, as sent.
     languages: [255]u8 = .{0} ** 255,
     product: [255]u8 = .{0} ** 255,
+    /// How the device answered SET_INTERFACE.
+    interface: Answer = .none,
     got: u16 = 0,
     /// Whether the current read ended on a short packet.
     short: bool = false,
@@ -83,11 +93,16 @@ pub const Host = struct {
             },
             .config_descriptor => self.read(device, requests.config_descriptor, self.config[0..9], .full_config),
             .full_config => self.readAll(device),
-            .set_configuration => self.write(device, requests.set_configuration, .get_configuration),
+            .set_configuration => if (self.write(device, requests.set_configuration)) |answer|
+                self.advance(if (answer == .ack) .get_configuration else .failed),
             .get_configuration => self.read(device, requests.get_configuration, &self.config_value, .get_status),
             .get_status => self.read(device, requests.get_status, &self.status, .string_languages),
             .string_languages => self.read(device, requests.stringDescriptor(0, 0), &self.languages, .string_product),
             .string_product => self.readProduct(device),
+            .set_interface => if (self.write(device, requests.set_interface)) |answer| {
+                self.interface = answer;
+                self.advance(.configured);
+            },
             .configured, .failed => {},
         }
     }
@@ -116,9 +131,9 @@ pub const Host = struct {
     /// names no product, or lists no language, has nothing to read.
     fn readProduct(self: *Host, device: *usbfs.Device) void {
         const index = self.device[15];
-        if (index == 0 or self.languages[0] < 4) return self.advance(.configured);
+        if (index == 0 or self.languages[0] < 4) return self.advance(.set_interface);
         const language = std.mem.readInt(u16, self.languages[2..4], .little);
-        self.read(device, requests.stringDescriptor(index, language), &self.product, .configured);
+        self.read(device, requests.stringDescriptor(index, language), &self.product, .set_interface);
     }
 
     pub fn done(self: *const Host) bool {
@@ -163,11 +178,14 @@ pub const Host = struct {
         if (idle(device)) self.advance(next);
     }
 
-    /// A no-data request: SETUP, then the driver's CCPL.
-    fn write(self: *Host, device: *usbfs.Device, packet: [8]u8, next: Step) void {
-        if (!self.send(device, packet)) return;
-        if (!self.patient()) return;
-        if (idle(device)) self.advance(next);
+    /// A no-data request: SETUP, then the driver's CCPL or a STALL. Null
+    /// while the driver has done neither; the caller picks the next step.
+    fn write(self: *Host, device: *usbfs.Device, packet: [8]u8) ?Answer {
+        if (!self.send(device, packet)) return null;
+        if (!self.patient()) return null;
+        if (idle(device)) return .ack;
+        if (stalled(device)) return .stall;
+        return null;
     }
 
     /// True once the SETUP is out; the boundary that sends it does nothing else.
@@ -181,6 +199,10 @@ pub const Host = struct {
 
 fn state(device: *const usbfs.Device) u16 {
     return device.interruptStatus() & usbfs.intsts0.dvsq_mask;
+}
+
+fn stalled(device: *usbfs.Device) bool {
+    return device.read(usbfs.window.base + regs.reg.dcpctr, 2) & regs.dcpctr.pid_stall != 0;
 }
 
 fn idle(device: *const usbfs.Device) bool {

@@ -258,3 +258,10 @@ test "a status token with no data stage in flight changes nothing" {
     try std.testing.expectEqual(usbfs.intsts0.ctsq_idle, device.interruptStatus() & usbfs.intsts0.ctsq_mask);
     try std.testing.expect(device.interruptStatus() & usbfs.intsts0.ctrt == 0);
 }
+
+test "a SETUP sets the DCP PID back to NAK, clearing a STALL" {
+    var device = usbfs.Device{};
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    device.setup(.{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 });
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.dcpctr), 2) & regs.dcpctr.pid_mask);
+}
