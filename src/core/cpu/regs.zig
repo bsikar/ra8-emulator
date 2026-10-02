@@ -17,6 +17,8 @@ pub const xpsr_bits = struct {
     /// EPSR.T. Armv8-M only executes Thumb, so a clear T bit means the next
     /// fetch is an INVSTATE UsageFault.
     pub const thumb: u32 = 1 << 24;
+    /// APSR.Q, the sticky saturation flag SSAT, USAT and the DSP forms set.
+    pub const q: u32 = 1 << 27;
     /// IPSR, the exception being handled; zero in Thread mode.
     pub const ipsr: u32 = 0x1FF;
 };
