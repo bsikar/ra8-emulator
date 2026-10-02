@@ -42,7 +42,9 @@ pub const intsts0 = struct {
     pub const ctsq_mask: u16 = 0x0007;
     pub const ctsq_idle: u16 = 0b000;
     pub const ctsq_read_data: u16 = 0b001;
+    pub const ctsq_read_status: u16 = 0b010;
     pub const ctsq_write_data: u16 = 0b011;
+    pub const ctsq_write_status: u16 = 0b100;
     pub const ctsq_no_data_status: u16 = 0b101;
     pub const write_zero_clears: u16 = vbint | resm | sofr | dvst | ctrt | valid;
 };
@@ -104,6 +106,20 @@ pub const Device = struct {
         else
             intsts0.ctsq_no_data_status;
         self.status = (self.status & ~intsts0.ctsq_mask) | stage | intsts0.valid | intsts0.ctrt;
+    }
+
+    /// The host's status-stage token after a data stage: the OUT handshake
+    /// that ends a control read, or the IN that ends a control write. CTSQ
+    /// moves to the matching status stage with CTRT latched, which is the
+    /// edge a driver waits for before it sets CCPL. A transfer the driver
+    /// already ended, or one with no data stage, is left alone.
+    pub fn statusStage(self: *Device) void {
+        const next = switch (self.status & intsts0.ctsq_mask) {
+            intsts0.ctsq_read_data => intsts0.ctsq_read_status,
+            intsts0.ctsq_write_data => intsts0.ctsq_write_status,
+            else => return,
+        };
+        self.status = (self.status & ~intsts0.ctsq_mask) | next | intsts0.ctrt;
     }
 
     fn addressed(self: *Device, value: u8) void {

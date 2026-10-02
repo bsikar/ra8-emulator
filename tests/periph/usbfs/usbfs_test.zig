@@ -232,3 +232,29 @@ test "CCPL with no transfer in flight latches nothing" {
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl);
     try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.intsts0), 2) & usbfs.intsts0.ctrt);
 }
+
+test "the status token after a read's data stage moves CTSQ to read status" {
+    var device = usbfs.Device{};
+    device.setup(.{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 });
+    device.write(at(regs.reg.intsts0), 2, ~@as(u32, usbfs.intsts0.ctrt));
+    device.statusStage();
+    const status = device.interruptStatus();
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_read_status, status & usbfs.intsts0.ctsq_mask);
+    try std.testing.expect(status & usbfs.intsts0.ctrt != 0);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl);
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_idle, device.interruptStatus() & usbfs.intsts0.ctsq_mask);
+}
+
+test "the status token after a write's data stage moves CTSQ to write status" {
+    var device = usbfs.Device{};
+    device.setup(.{ 0x21, 0x20, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 });
+    device.statusStage();
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_write_status, device.interruptStatus() & usbfs.intsts0.ctsq_mask);
+}
+
+test "a status token with no data stage in flight changes nothing" {
+    var device = usbfs.Device{};
+    device.statusStage();
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_idle, device.interruptStatus() & usbfs.intsts0.ctsq_mask);
+    try std.testing.expect(device.interruptStatus() & usbfs.intsts0.ctrt == 0);
+}
