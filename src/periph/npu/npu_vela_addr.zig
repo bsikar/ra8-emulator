@@ -22,7 +22,6 @@ pub const Format = struct {
 };
 
 pub const brick: u32 = 16;
-const layout_bit: u16 = 1 << 6;
 
 fn sizeOf(precision: u2) ?u32 {
     return switch (precision) {
@@ -33,20 +32,26 @@ fn sizeOf(precision: u2) ?u32 {
     };
 }
 
-fn layoutOf(param: u16) Layout {
-    return if (param & layout_bit != 0) .nhcwb16 else .nhwc;
+/// PRECISION bits [7:6]: 0 NHWC, 1 NHCWB16; 2 and 3 are reserved.
+fn layoutOf(param: u16) ?Layout {
+    return switch (@as(u2, @truncate(param >> 6))) {
+        0 => .nhwc,
+        1 => .nhcwb16,
+        else => null,
+    };
 }
 
-/// Decode IFM_PRECISION or IFM2_PRECISION: signed bit 0, size bits [3:2].
+/// Decode IFM_PRECISION or IFM2_PRECISION: signed bit 0, size bits [3:2],
+/// format bits [7:6] (Ethos-U55 TRM 102420_0200_02, cmd0 0x105 and 0x185).
 pub fn ifmFormat(param: u16) ?Format {
     const size = sizeOf(@truncate(param >> 2)) orelse return null;
-    return .{ .signed = param & 1 != 0, .size = size, .layout = layoutOf(param) };
+    return .{ .signed = param & 1 != 0, .size = size, .layout = layoutOf(param) orelse return null };
 }
 
-/// Decode OFM_PRECISION: signed bit 0, size bits [2:1].
+/// Decode OFM_PRECISION: signed bit 0, size bits [2:1], format bits [7:6].
 pub fn ofmFormat(param: u16) ?Format {
     const size = sizeOf(@truncate(param >> 1)) orelse return null;
-    return .{ .signed = param & 1 != 0, .size = size, .layout = layoutOf(param) };
+    return .{ .signed = param & 1 != 0, .size = size, .layout = layoutOf(param) orelse return null };
 }
 
 /// OFM_PRECISION bits [15:14]: 0 TFL, 1 truncate, 2 natural.
