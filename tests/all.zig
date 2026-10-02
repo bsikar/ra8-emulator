@@ -72,6 +72,7 @@ test {
     _ = @import("core/cpu/ops/imm_logic_test.zig");
     _ = @import("core/cpu/ops/imm_arith_test.zig");
     _ = @import("core/cpu/ops/branch_wide_test.zig");
+    _ = @import("core/cpu/ops/cps_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("core/cpu/ops/push_pop_test.zig");
     _ = @import("core/cpu/ops/sp_arith_test.zig");

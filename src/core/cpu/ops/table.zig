@@ -17,6 +17,7 @@ pub const groups = [_]op.Group{
     @import("add_sub.zig").group,
     @import("dp_reg.zig").group,
     @import("special_data.zig").group,
+    @import("cps.zig").group,
     @import("branch.zig").group,
     @import("mov_wide.zig").group,
     @import("imm_logic.zig").group,
