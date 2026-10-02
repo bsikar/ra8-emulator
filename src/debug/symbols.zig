@@ -129,6 +129,19 @@ pub fn addressOf(image: elf.Image, wanted: []const u8) ?u32 {
     return null;
 }
 
+/// The first image in `images` that names `wanted`, read in order.
+///
+/// A TrustZone run loads two images: the secure one owns the vectors and the
+/// Non-Secure one is copied in beside it. A global the Non-Secure side keeps
+/// lives only in the second symbol table, so a lookup that should find
+/// either asks both, secure first.
+pub fn addressInAny(images: []const elf.Image, wanted: []const u8) ?u32 {
+    for (images) |image| {
+        if (addressOf(image, wanted)) |address| return address;
+    }
+    return null;
+}
+
 /// A named function: where its first instruction is, and how long it is.
 pub const Extent = struct {
     address: u32,

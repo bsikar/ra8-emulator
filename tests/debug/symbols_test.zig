@@ -238,3 +238,24 @@ test "an image with no symbol table names nothing" {
     const image = try elf.Image.init(&buffer);
     try std.testing.expect(symbols.inside(image, 0x0200_7498) == null);
 }
+
+test "a lookup over two images finds a name either one carries, secure first" {
+    var secure_buffer: [1024]u8 = undefined;
+    var ns_buffer: [1024]u8 = undefined;
+    const secure = try elf.Image.init(Builder.build(
+        &secure_buffer,
+        &.{ "g_denied", "g_shared" },
+        &.{ 0x2200_1064, 0x2200_0010 },
+    ));
+    const ns = try elf.Image.init(Builder.build(
+        &ns_buffer,
+        &.{ "g_alive", "g_shared" },
+        &.{ 0x3210_0090, 0x3210_0010 },
+    ));
+    const both = [_]elf.Image{ secure, ns };
+    try std.testing.expectEqual(@as(?u32, 0x2200_1064), symbols.addressInAny(&both, "g_denied"));
+    try std.testing.expectEqual(@as(?u32, 0x3210_0090), symbols.addressInAny(&both, "g_alive"));
+    try std.testing.expectEqual(@as(?u32, 0x2200_0010), symbols.addressInAny(&both, "g_shared"));
+    try std.testing.expectEqual(@as(?u32, null), symbols.addressInAny(&both, "g_missing"));
+    try std.testing.expectEqual(@as(?u32, null), symbols.addressInAny(&.{}, "g_alive"));
+}

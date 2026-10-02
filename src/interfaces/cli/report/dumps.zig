@@ -31,8 +31,17 @@ const Board = @import("../../../board/board.zig").Board;
 /// the image does not carry, or an address that will not read, says so
 /// plainly instead of printing a number nothing measured.
 fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
+    if (options.dumps().len == 0) return;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var images: [2]elf.Image = .{ image, undefined };
+    var count: usize = 1;
+    if (try nonSecure(arena.allocator(), options)) |second| {
+        images[1] = second;
+        count = 2;
+    }
     for (options.dumps()) |name| {
-        const address = symbols.addressOf(image, name) orelse {
+        const address = symbols.addressInAny(images[0..count], name) orelse {
             try out.print("  dump-sym      : {s} <unresolved>\n", .{name});
             continue;
         };
@@ -45,6 +54,16 @@ fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli
             .{ name, address, value, value },
         );
     }
+}
+
+/// The `--ns` image again, for its symbol table: a global the Non-Secure
+/// side keeps (a heartbeat the bench reads by memprobe) is named only there.
+/// The run already loaded its segments; this reads the file once more and
+/// nothing else, so a run without `--ns` reads nothing.
+fn nonSecure(allocator: std.mem.Allocator, options: cli.Options) !?elf.Image {
+    const path = options.ns_path orelse return null;
+    const bytes = try std.fs.cwd().readFileAlloc(allocator, path, 64 << 20);
+    return try elf.Image.init(bytes);
 }
 
 /// Everything a flag asked to be printed once the run is over.
