@@ -314,6 +314,7 @@ pub const periph = struct {
     pub const fault_status = @import("periph/fault_status.zig");
     pub const sci = @import("periph/sci/sci.zig");
     pub const sau = @import("periph/sau.zig");
+    pub const scs_alias = @import("periph/scs_alias.zig");
     pub const sci_line = @import("periph/sci/sci_line.zig");
     pub const sci_error = @import("periph/sci/sci_error.zig");
     pub const sci_ring = @import("periph/sci/sci_ring.zig");

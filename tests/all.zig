@@ -335,6 +335,7 @@ test {
     _ = @import("periph/sci/sci_test.zig");
     _ = @import("periph/sau_test.zig");
     _ = @import("periph/sau_attr_test.zig");
+    _ = @import("periph/scs_alias_test.zig");
     _ = @import("periph/sci/sci_line_test.zig");
     _ = @import("periph/sci/sci_error_test.zig");
     _ = @import("periph/sci/sci_ring_test.zig");
