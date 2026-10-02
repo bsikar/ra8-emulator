@@ -304,3 +304,11 @@ is stale or an encoding is missing. Regenerate with
 | VRINTM (MVE) T1 | 2 |
 | VRINTZ (MVE) T1 | 2 |
 | VRINTX (MVE) T1 | 2 |
+| VMAXNM (MVE) T1 | 1 |
+| VMINNM (MVE) T1 | 1 |
+| VMAXNMA (MVE) T1 | 1 |
+| VMINNMA (MVE) T1 | 1 |
+| VMAXNMV (MVE) T1 | 2 |
+| VMINNMV (MVE) T1 | 1 |
+| VMAXNMAV (MVE) T1 | 1 |
+| VMINNMAV (MVE) T1 | 1 |

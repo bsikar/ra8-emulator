@@ -45,4 +45,7 @@ test {
     _ = @import("float_int_vectors_test.zig");
     _ = @import("float_rint_test.zig");
     _ = @import("float_rint_vectors_test.zig");
+    _ = @import("float_minmax_test.zig");
+    _ = @import("float_minmax_vectors_test.zig");
+    _ = @import("float_minmaxv_vectors_test.zig");
 }
