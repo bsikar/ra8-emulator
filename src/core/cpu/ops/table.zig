@@ -14,6 +14,7 @@ pub const groups = [_]op.Group{
     @import("sp_arith.zig").group,
     @import("ldr_literal.zig").group,
     @import("ldst_imm.zig").group,
+    @import("ldst_reg.zig").group,
     @import("shift_imm.zig").group,
     @import("add_sub.zig").group,
     @import("dp_reg.zig").group,
