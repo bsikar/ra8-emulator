@@ -32,3 +32,14 @@ test "a debugger flag mixed with run flags, or missing its file, is bad usage" {
     try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--cpu1", "--debug" }).?);
     try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug", "--cpu1", "c.elf" }).?);
 }
+
+test "--gdb takes a port, after the second core's image when there is one" {
+    const served = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb", "3333" }).?;
+    try std.testing.expectEqual(@as(u16, 3333), served.mode.gdb);
+    const both = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--cpu1", "cpu1.elf", "--gdb", "1234" }).?;
+    try std.testing.expectEqualStrings("cpu1.elf", both.cpu1.?);
+    try std.testing.expectEqual(@as(u16, 1234), both.mode.gdb);
+    try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb" }).?);
+    try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb", "port" }).?);
+    try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb", "70000" }).?);
+}

@@ -13,6 +13,7 @@ const base: u32 = memmap.sram_base;
 test {
     _ = @import("rsp_points_test.zig");
     _ = @import("rsp_run_test.zig");
+    _ = @import("rsp_server_test.zig");
 }
 
 fn open() !Engine {
