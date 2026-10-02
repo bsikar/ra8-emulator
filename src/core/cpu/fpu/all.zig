@@ -40,3 +40,6 @@ pub const fixed = @import("fixed.zig");
 pub const fixed_vectors = @import("fixed_vectors.zig");
 pub const half = @import("half.zig");
 pub const half_vectors = @import("half_vectors.zig");
+pub const imm = @import("imm.zig");
+pub const bank = @import("bank.zig");
+pub const move_vectors = @import("move_vectors.zig");

@@ -59,6 +59,12 @@ pub const Fpscr = packed struct(u32) {
         return @bitCast(self);
     }
 
+    /// What VMRS APSR_nzcv, FPSCR copies into the APSR: N, Z, C and V in
+    /// bits 31-28, the rest of the APSR value it returns zero.
+    pub fn apsrNzcv(self: Fpscr) u32 {
+        return self.bits() & 0xF000_0000;
+    }
+
     /// The register as VMSR writes it, reserved bits read back as zero.
     pub fn fromBits(value: u32) Fpscr {
         return @bitCast(value & mask.writable);
