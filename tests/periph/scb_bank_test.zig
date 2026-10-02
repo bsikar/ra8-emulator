@@ -55,3 +55,17 @@ test "bankedBits: whole, none, and AIRCR's PRIGROUP" {
     try std.testing.expect(bank.bankedBits(0xE000_ED24) == null);
     try std.testing.expect(bank.bankedBits(0xE000_ED3C) == null);
 }
+
+test "bankedBits: SCR keeps SLEEPDEEP and SLEEPDEEPS shared" {
+    const scr = bank.bankedBits(0xE000_ED10).?;
+    try std.testing.expectEqual(@as(u32, (1 << 4) | (1 << 1)), scr);
+    try std.testing.expect(scr & (1 << 2) == 0);
+    try std.testing.expect(scr & (1 << 3) == 0);
+}
+
+test "bankedBits: CCR banks everything named but BFHFNMIGN" {
+    const ccr = bank.bankedBits(0xE000_ED14).?;
+    const named: u32 = (1 << 18) | (1 << 17) | (1 << 16) | (1 << 10) | (1 << 4) | (1 << 3) | (1 << 1);
+    try std.testing.expectEqual(named, ccr);
+    try std.testing.expect(ccr & (1 << 8) == 0);
+}

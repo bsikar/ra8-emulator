@@ -24,6 +24,11 @@
 //! been read field by field. So far that is AIRCR (p862 to p865): PRIGROUP
 //! [10:8] is the one banked field; VECTKEY/VECTKEYSTAT, ENDIANNESS, PRIS,
 //! BFHFNMINS, SYSRESETREQS, SYSRESETREQ and VECTCLRACTIVE are not banked.
+//! SCR (p1132 to p1133): SEVONPEND [4] and SLEEPONEXIT [1] are banked;
+//! SLEEPDEEPS [3] and SLEEPDEEP [2] are not. CCR (p874 to p877): BP [18],
+//! IC [17], DC [16], STKOFHFNMIGN [10], DIV_0_TRP [4], UNALIGN_TRP [3] and
+//! USERSETMPEND [1] are banked; BFHFNMIGN [8] is not. Reserved bits are
+//! left out of every mask.
 //!
 //! A bit-by-bit register is not given an address. Its shared bits have one
 //! home and its banked bits two, so a whole-word answer would be wrong for
@@ -73,6 +78,8 @@ const Split = struct { offset: u32, banked: u32 };
 /// The banked bits of the bit-by-bit registers read so far.
 const splits = [_]Split{
     .{ .offset = 0x0C, .banked = 0x0000_0700 }, // AIRCR.PRIGROUP
+    .{ .offset = 0x10, .banked = 0x0000_0012 }, // SCR.SEVONPEND, SLEEPONEXIT
+    .{ .offset = 0x14, .banked = 0x0007_041A }, // CCR, see the file comment
 };
 
 /// The bits of `address` that have a separate Non-secure copy: all of them
