@@ -20,6 +20,8 @@ pub const dma = @import("npu_vela_dma.zig");
 pub const runner = @import("npu_vela_run.zig");
 /// How the NPU model hands a non-stand-in stream to the runner.
 pub const hook = @import("npu_vela_hook.zig");
+/// The IFM, IFM2 and OFM shape, precision and region registers.
+pub const fm = @import("npu_vela_fm.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;

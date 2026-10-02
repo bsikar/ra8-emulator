@@ -7,11 +7,13 @@
 //! stops the run with error.OperatorNotModelled, so nothing that needs an
 //! operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
-//! between; any other register set is passed over for now.
+//! between; the feature-map sets go to npu_vela_fm.zig, and any other
+//! register set is passed over for now.
 const std = @import("std");
 const vela = @import("npu_vela.zig");
 const regs = @import("npu_vela_regs.zig");
 const dma = @import("npu_vela_dma.zig");
+const fm = @import("npu_vela_fm.zig");
 
 pub const Error = vela.Error || dma.Error || error{OperatorNotModelled};
 
@@ -20,10 +22,13 @@ pub const Result = struct {
     /// Bytes every DMA_START in the program moved, together.
     moved: u64 = 0,
     state: regs.State = .{},
+    /// The feature-map registers as the program left them.
+    maps: fm.State = .{},
 };
 
 const Machine = struct {
     state: regs.State = .{},
+    maps: fm.State = .{},
     src: dma.Region = .{},
     dst: dma.Region = .{},
     moved: u64 = 0,
@@ -33,7 +38,7 @@ fn setRegister(machine: *Machine, code: u10, word: u32) void {
     switch (code) {
         dma.set_dma0_src_region => machine.src = dma.Region.fromParam(vela.param(word)),
         dma.set_dma0_dst_region => machine.dst = dma.Region.fromParam(vela.param(word)),
-        else => {},
+        else => _ = fm.apply(&machine.maps, code, vela.param(word)),
     }
 }
 
@@ -66,5 +71,5 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
         // walk() already refused any opcode outside Op.
         try operate(&machine, memory, regions, @enumFromInt(code));
     }
-    return .{ .summary = summary, .moved = machine.moved, .state = machine.state };
+    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps };
 }
