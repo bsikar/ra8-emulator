@@ -1,0 +1,61 @@
+//! EXC_RETURN: the value exception entry leaves in LR, and the one a handler
+//! branches to when it returns.
+//!
+//! Bits 31:24 all set is what marks a branch target as an exception return.
+//! Below that, bits 6:0 say which stack the frame is on and what it holds.
+//! The core makes the Secure, default-stacking, basic-frame form only: the
+//! Non-secure banks arrive with RA8EMU-41 and the extended FP frame with a
+//! later slice of RA8EMU-18, so `decode` turns anything else away.
+
+/// Bits 31:7, always set in a valid EXC_RETURN.
+pub const res1: u32 = 0xFFFF_FF80;
+
+pub const bits = struct {
+    /// The exception was taken to the Secure state.
+    pub const es: u32 = 1 << 0;
+    /// The frame is on the Process stack (Thread mode only).
+    pub const spsel: u32 = 1 << 2;
+    /// Return to Thread mode; clear returns to Handler mode.
+    pub const mode: u32 = 1 << 3;
+    /// Set for a basic frame, clear when an FP context was stacked too.
+    pub const ftype: u32 = 1 << 4;
+    /// Default callee-register stacking rules.
+    pub const dcrs: u32 = 1 << 5;
+    /// The frame is on a Secure stack.
+    pub const s: u32 = 1 << 6;
+    /// Bit 1 is reserved and must be clear.
+    pub const reserved: u32 = 1 << 1;
+};
+
+/// The bits every value `forEntry` makes carries.
+const fixed: u32 = res1 | bits.s | bits.dcrs | bits.ftype | bits.es;
+
+/// Where an exception return goes.
+pub const Target = struct {
+    thread: bool,
+    psp: bool,
+};
+
+/// Whether a value written to the PC in Handler mode is an exception return.
+pub fn marks(value: u32) bool {
+    return value >> 24 == 0xFF;
+}
+
+/// LR on entry, from the mode and stack the processor was on when the
+/// exception was taken.
+pub fn forEntry(from: Target) u32 {
+    var value = fixed;
+    if (from.thread) value |= bits.mode;
+    if (from.psp) value |= bits.spsel;
+    return value;
+}
+
+/// The return a value asks for, or null for one the core cannot honour.
+/// Handler mode on the Process stack is never valid.
+pub fn decode(value: u32) ?Target {
+    if (value & fixed != fixed) return null;
+    if (value & bits.reserved != 0) return null;
+    const target: Target = .{ .thread = value & bits.mode != 0, .psp = value & bits.spsel != 0 };
+    if (!target.thread and target.psp) return null;
+    return target;
+}

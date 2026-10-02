@@ -2,7 +2,8 @@
 //! and MOV with any register (T2/T1), CMP with a high register (T2), BX and
 //! BLX by register. A read of R15 here is the instruction address plus 4.
 //! ADD and MOV to the PC branch without changing state; BX and BLX take
-//! EPSR.T from bit 0. EXC_RETURN and FNC_RETURN through BX are RA8EMU-18's;
+//! EPSR.T from bit 0, and BX to an EXC_RETURN value in Handler mode is an
+//! exception return (src/core/cpu/exception/ret.zig). FNC_RETURN is RA8EMU-18's;
 //! BXNS and BLXNS (bit 2 set) belong to TrustZone and stay unclaimed, as do
 //! the UNPREDICTABLE forms.
 const op = @import("../op.zig");
@@ -59,11 +60,10 @@ fn write(cpu: *Cpu, n: u4, value: u32) void {
     if (n == 15) cpu.regs.pc = value & ~@as(u32, 1) else cpu.regs.set(n, value);
 }
 
-/// BXWritePC / BLXWritePC: bit 0 becomes EPSR.T, the rest the PC.
+/// BXWritePC / BLXWritePC: bit 0 becomes EPSR.T, the rest the PC, and an
+/// EXC_RETURN value in Handler mode is an exception return.
 fn exchange(cpu: *Cpu, value: u32) void {
-    const thumb = regs.xpsr_bits.thumb;
-    cpu.regs.xpsr = if (value & 1 != 0) cpu.regs.xpsr | thumb else cpu.regs.xpsr & ~thumb;
-    cpu.regs.pc = value & ~@as(u32, 1);
+    cpu.regs.bxWritePc(value);
 }
 
 fn add(cpu: *Cpu, instr: Instr) op.Error!void {

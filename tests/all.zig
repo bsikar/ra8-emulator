@@ -42,6 +42,7 @@ test {
     _ = @import("core/cpu/lockstep/tap_hook_test.zig");
     _ = @import("core/cpu/lockstep/writes_test.zig");
     _ = @import("core/cpu/ops_test.zig");
+    _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/i2c_test.zig");
