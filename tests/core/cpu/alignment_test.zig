@@ -69,3 +69,26 @@ test "a narrow and a wide LDR stop on an unaligned word only under UNALIGN_TRP" 
     try std.testing.expectError(error.Unaligned, exec(&cpu, 0x6801, 0, 2));
     try std.testing.expectError(error.Unaligned, exec(&cpu, 0xF8D0, 0x1000, 4));
 }
+
+test "an unaligned vldr, vldm and vldr.16 are refused before touching Rn" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = fixture.base + 0x202;
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xED90, 0x0A00, 4)); // vldr s0, [r0]
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xECB0, 0x0A02, 4)); // vldmia r0!, {s0-s1}
+    try std.testing.expectEqual(fixture.base + 0x202, cpu.regs.low[0]);
+    cpu.regs.low[0] = fixture.base + 0x201;
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xED90, 0x0900, 4)); // vldr.16 s0, [r0]
+}
+
+test "aligned vldr and vldr.16 still go through" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.base + 0x204, 0x3F80_0000);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = fixture.base + 0x204;
+    try exec(&cpu, 0xED90, 0x0A00, 4); // vldr s0, [r0]
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), cpu.fp.bank.readS(0));
+    cpu.regs.low[0] = fixture.base + 0x206;
+    try exec(&cpu, 0xED90, 0x0900, 4); // vldr.16 s0, [r0]
+    try std.testing.expectEqual(@as(u32, 0x3F80), cpu.fp.bank.readS(0));
+}
