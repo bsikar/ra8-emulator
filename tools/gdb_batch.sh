@@ -12,6 +12,8 @@
 # registers, memory read and write, a backtrace, a hardware watchpoint and
 # detach; then the same image on both cores, with the second as thread 2
 # taking the break, a step, a memory read, a backtrace and a watchpoint;
+# then a Cycle Counter comparator set from gdb, which must stop the run
+# with DFSR.DWTTRAP (RA8EMU-98);
 # then a continue into the endless loop, run past the old instruction
 # budget and stopped by a Ctrl-C (SIGINT to gdb, sent on as 0x03); then a
 # second image that prints a line through ITM port 0, which must show on
@@ -164,6 +166,14 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     '<fw.counter>:' 'Thread 2 hit Hardware watchpoint 2' 'New value = ' \
     '[Inferior 1 (Remote target) detached]'
 
+# RA8EMU-98: a Cycle Counter comparator armed from gdb stops the run with
+# DFSR.DWTTRAP (bit 2) set, and CYCCNT has counted past its value.
+serve cycle -- 'set *(unsigned*)0xE000EDFC = 0x01000000' 'set *(unsigned*)0xE0001000 = 1' \
+    'set *(unsigned*)0xE0001020 = 400' 'set *(unsigned*)0xE0001028 = 0x11' continue \
+    'p/x *(unsigned*)0xE000ED30' 'p *(unsigned*)0xE0001004 >= 400' detach
+expect cycle 'Program received signal SIGTRAP' '$1 = 0x4' '$2 = 1' \
+    '[Inferior 1 (Remote target) detached]'
+
 interrupt stop
 expect stop 'Program received signal SIGINT, Interrupt.' 'in fw.reset () at fw.zig:' \
     '[Inferior 1 (Remote target) detached]'
@@ -173,10 +183,10 @@ serve itm -- 'break done' continue detach
 expect itm 'hello from itm' 'Breakpoint 1, ' '[Inferior 1 (Remote target) detached]'
 
 if [ "$failed" -ne 0 ]; then
-    for name in one two stop itm; do
+    for name in one two cycle stop itm; do
         echo "--- $name"
         cat "$name.out" "$name.emu"
     done
     exit 1
 fi
-echo "gdb_batch: one core, two cores, an interrupt and ITM output passed"
+echo "gdb_batch: one core, two cores, a cycle watch, an interrupt and ITM output passed"
