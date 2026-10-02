@@ -1,0 +1,94 @@
+//! Covers src/core/cpu/board_bus.zig.
+const std = @import("std");
+const ra8 = @import("ra8");
+const memmap = ra8.core.memmap;
+const registry = ra8.periph.registry;
+const BoardBus = ra8.core.cpu.board_bus.BoardBus;
+const Engine = ra8.core.engine.Engine;
+
+/// One register block that remembers the last access it saw.
+const Probe = struct {
+    address: u32 = 0,
+    width: u3 = 0,
+    value: u32 = 0,
+
+    fn read(context: *anyopaque, address: u32, width: u3) u32 {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.address = address;
+        self.width = width;
+        return 0xA1B2_C3D4;
+    }
+
+    fn write(context: *anyopaque, address: u32, width: u3, value: u32) void {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.address = address;
+        self.width = width;
+        self.value = value;
+    }
+};
+
+const at = registry.base + 0x8_0000;
+
+fn attach(periph: *registry.Bus, probe: *Probe) !void {
+    try periph.add(.{
+        .name = "probe",
+        .base = at,
+        .size = 0x100,
+        .context = probe,
+        .readFn = Probe.read,
+        .writeFn = Probe.write,
+    });
+}
+
+test "a halfword store in the peripheral window reaches the peripheral" {
+    var core = try Engine.open();
+    defer core.close();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var probe: Probe = .{};
+    try attach(&periph, &probe);
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    try board.view().write(at + 4, &[_]u8{ 0x1A, 0x80 });
+    try std.testing.expectEqual(@as(u32, at + 4), probe.address);
+    try std.testing.expectEqual(@as(u3, 2), probe.width);
+    try std.testing.expectEqual(@as(u32, 0x801A), probe.value);
+}
+
+test "a read in the Non-secure alias comes back from the same peripheral" {
+    var core = try Engine.open();
+    defer core.close();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var probe: Probe = .{};
+    try attach(&periph, &probe);
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    try std.testing.expectEqual(@as(u32, 0xA1B2_C3D4), try board.view().readWord(at + registry.ns_offset));
+    try std.testing.expectEqual(@as(u3, 4), probe.width);
+    var byte: [1]u8 = undefined;
+    try board.view().read(at, &byte);
+    try std.testing.expectEqual(@as(u8, 0xD4), byte[0]);
+}
+
+test "memory outside the windows still goes to the engine" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    try board.view().write(memmap.sram_base, &[_]u8{ 1, 2, 3, 4 });
+    try std.testing.expectEqual(@as(u32, 0x0403_0201), try core.readWord(memmap.sram_base));
+    try std.testing.expectEqual(@as(u32, 0), periph.counters.writes);
+}
+
+test "an access wider than one register is refused" {
+    var core = try Engine.open();
+    defer core.close();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var wide: [8]u8 = undefined;
+    try std.testing.expectError(error.Unmapped, board.view().read(at, &wide));
+    try std.testing.expect(!BoardBus.inWindow(registry.base + registry.size - 2, 4));
+    try std.testing.expect(BoardBus.inWindow(registry.ns_base, 4));
+}
