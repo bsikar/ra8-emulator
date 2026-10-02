@@ -68,3 +68,14 @@ test "before reads only the two hints" {
     try std.testing.expect(hint_resume.before(core, entry + 6) == null);
     try std.testing.expectEqual(hint_resume.yield, hint_resume.before(core, entry + 8).?);
 }
+
+test "a session that parks on WFE gets the stop back" {
+    var core = try bench(&.{ 0x2007_BF20, 0xE7FE_E7FE });
+    defer core.close();
+    var unit = Nvic{};
+    const ended = try core.run(entry, 20, .{ .interrupts = &unit, .park_on_wfe = true });
+    try std.testing.expect(ended != null);
+    try std.testing.expectEqual(entry + 2, ended.?.pc);
+    try std.testing.expectEqual(hint_resume.wfe, hint_resume.stoppedOn(core, ended.?).?);
+    try std.testing.expectEqual(@as(u32, 0), try core.register(.r0));
+}

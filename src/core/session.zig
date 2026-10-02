@@ -141,4 +141,7 @@ pub const Session = struct {
     /// what every test that is not about delivery timing wants.
     /// src/core/mask_pace.zig says what the seam's forgetting costs.
     mask_pace: ?*mask_pace.Pace = null,
+    /// Leave a WFE stop for the caller instead of resuming past it. The
+    /// second core parks on it: src/core/second_wait.zig.
+    park_on_wfe: bool = false,
 };

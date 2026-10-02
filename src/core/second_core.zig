@@ -60,6 +60,8 @@ const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
+const hint_resume = @import("hint_resume.zig");
+const second_wait = @import("second_wait.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -122,6 +124,8 @@ pub const Second = struct {
     /// The board's SCKDIVCR2, read each round to size CPU1's turn against
     /// CPU0's (`rate.turn`). Null outside a board, where a turn is a round.
     dividers: ?*const u16 = null,
+    /// Parked in WFE, and what woke it: src/core/second_wait.zig.
+    wait: second_wait.Wait = .{},
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -178,21 +182,39 @@ pub const Second = struct {
     pub fn step(self: *Second, instructions: usize) void {
         if (self.fault != null) return;
         self.turns += 1;
+        if (self.wait.parked()) return self.idle(instructions);
         const session: engine.Session = .{
             .watch = &self.watch,
             .interrupts = &self.interrupts,
             .timebase = &self.timebase,
+            .park_on_wfe = true,
         };
         const outcome = self.core.run(self.pc, instructions, session) catch |err| {
             self.fault = .{ .pc = self.pc, .detail = @errorName(err), .access = null, .instruction = null };
             return;
         };
-        if (outcome) |taken| {
-            self.fault = taken;
-            return;
-        }
         self.ran += instructions;
+        if (outcome) |taken| {
+            if (hint_resume.stoppedOn(self.core, taken) != hint_resume.wfe) {
+                self.ran -= instructions;
+                self.fault = taken;
+                return;
+            }
+            // The WFE completed or parked; either way the PC is past it.
+            _ = self.wait.arrive();
+        }
         self.boundary();
+    }
+
+    /// A parked turn: time passes and the boundary is offered, nothing runs.
+    fn idle(self: *Second, instructions: usize) void {
+        self.ran += instructions;
+        self.timebase.advance(self.core, @intCast(instructions)) catch {};
+        self.clears.apply(self.core) catch {};
+        _ = self.control.poll(self.core) catch false;
+        const entered = self.interrupts.dispatch(self.core) catch null;
+        self.wait.idled(entered != null);
+        self.pc = self.core.register(.pc) catch self.pc;
     }
 
     /// The boundary between two of CPU1's turns. A turn is exactly one
@@ -231,6 +253,9 @@ pub fn start(
 /// The round robin between the two cores lives in interleave.zig; it is
 /// re-exported here because `main` reaches it through this file.
 pub const interleave = @import("interleave.zig").interleave;
+
+/// Parking in WFE, re-exported for the same reason.
+pub const parking = second_wait;
 
 /// What CPU1 did, printed under CPU0's own account of the run.
 pub fn report(out: anytype, second: ?*const Second) !void {

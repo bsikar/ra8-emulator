@@ -254,3 +254,36 @@ test "an event INTSELR hands to CPU1 pends CPU1's NVIC and not CPU0's" {
     try std.testing.expectEqual(@as(u32, 1) << 3, try cpu1.core.readWord(memmap.nvic.ispr));
     try std.testing.expectEqual(@as(u32, 1) << 6, try cpu0.readWord(memmap.nvic.ispr));
 }
+
+/// CPU0 on nops and CPU1 on `wfe; movs r0, #7; b .`, run for `rounds`.
+fn parkedPair(cpu1: *second_core.Second, rounds: usize) !void {
+    var cpu0 = try pair(cpu1);
+    defer cpu0.close();
+    try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF00_BF00);
+    try cpu0.writeWord(memmap.sram_base + 0x1004, 0xE7FC_BF00);
+    try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0x2007_BF20);
+    try cpu1.core.writeWord(memmap.sram_base + 0x2004, 0xE7FE_E7FE);
+    cpu1.pc = memmap.sram_base + 0x2000;
+    _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, rounds * second_core.limits.round, .{}, cpu1);
+}
+
+test "a CPU1 in WFE with no event parks and its turns still pass time" {
+    var cpu1: second_core.Second = undefined;
+    try parkedPair(&cpu1, 4);
+    defer cpu1.close();
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.parks);
+    try std.testing.expect(cpu1.wait.parked());
+    try std.testing.expectEqual(@as(u32, 0), try cpu1.core.register(.r0));
+    try std.testing.expectEqual(@as(usize, 4), cpu1.turns);
+    try std.testing.expect(cpu1.timebase.elapsed >= 3 * second_core.limits.round);
+}
+
+test "a parked CPU1 wakes on its own and carries on past the WFE" {
+    var cpu1: second_core.Second = undefined;
+    try parkedPair(&cpu1, second_core.parking.limits.spurious_after + 3);
+    defer cpu1.close();
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.wakes.spurious);
+    try std.testing.expectEqual(@as(u32, 7), try cpu1.core.register(.r0));
+}
