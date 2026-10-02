@@ -229,3 +229,10 @@ test "a host that never enabled the receiver reads SE0 through the window" {
         host.read(at(regs.reg.dvstctr0), 2) & regs.port.rhst_mask,
     );
 }
+
+test "the PLL locks for a driver that never writes SCKE, as the HS driver does" {
+    var host = usbhs.Host{};
+    bringUpPhy(&host);
+    try std.testing.expectEqual(@as(u32, regs.pllsta.plllock), host.read(at(regs.reg.pllsta), 2));
+    try std.testing.expectEqual(@as(u32, 1), host.pll.locks);
+}
