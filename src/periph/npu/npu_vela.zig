@@ -14,6 +14,9 @@
 //! followed by one 32-bit payload word. The other two modes are not emitted.
 const std = @import("std");
 
+/// What NPU_OP_DMA_START copies, kept beside the walk so root.zig stays one line.
+pub const dma = @import("npu_vela_dma.zig");
+
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
 pub const mode_payload32: u32 = 0x4000;
