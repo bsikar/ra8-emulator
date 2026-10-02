@@ -58,6 +58,7 @@ test {
     _ = @import("core/cpu/ops/shift_imm_test.zig");
     _ = @import("core/cpu/ops/add_sub_test.zig");
     _ = @import("core/cpu/ops/dp_reg_test.zig");
+    _ = @import("core/cpu/ops/special_data_test.zig");
     _ = @import("core/cpu/ops/branch_test.zig");
     _ = @import("core/cpu/ops/mov_wide_test.zig");
     _ = @import("core/cpu/ops/push_pop_test.zig");
