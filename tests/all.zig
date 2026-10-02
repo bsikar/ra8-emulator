@@ -133,6 +133,7 @@ test {
     _ = @import("debug/rsp_packet_test.zig");
     _ = @import("debug/rsp_features_test.zig");
     _ = @import("debug/rsp_dispatch_test.zig");
+    _ = @import("debug/fpb_test.zig");
     _ = @import("core/stop_test.zig");
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");
