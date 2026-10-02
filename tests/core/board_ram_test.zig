@@ -96,8 +96,10 @@ test "covers answers for the board's regions and nothing else" {
     try std.testing.expect(mod.covers(memmap.sram_base, 4));
     try std.testing.expect(mod.covers(memmap.ns_sram_base, 4));
     try std.testing.expect(mod.covers(memmap.ppb_base, 4));
-    // MRAM is where an image lands, not a region the board maps.
-    try std.testing.expect(!mod.covers(0x0200_0000, 4));
+    // The whole code MRAM is the board's, so a page an image never loads
+    // still answers.
+    try std.testing.expect(mod.covers(memmap.mram_base + 0x8_1000, 4));
+    try std.testing.expect(!mod.covers(memmap.mram_end - 2, 4));
     // A span running off the end of a region is not covered by it.
     try std.testing.expect(!mod.covers(memmap.sram_end - 2, 4));
 }

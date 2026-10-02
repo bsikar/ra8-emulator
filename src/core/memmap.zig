@@ -54,6 +54,15 @@ pub const Region = struct {
     }
 };
 
+/// The 1 MB of code MRAM. src/core/part_map.zig gives its size for both
+/// parts. The board maps the whole array, so a read anywhere in it lands,
+/// as it does on silicon. A Secure boot that copies a fixed-size window out
+/// of it (secure_boot_ns_hil copies 64 KB of the Non-Secure image) reads
+/// past the bytes the ELF loads. Unprogrammed cells read as the CPU model's
+/// reset fill (zero). The documentation found so far does not name a value
+/// for them.
+pub const mram_base: u32 = 0x0200_0000;
+pub const mram_end: u32 = 0x0210_0000;
 pub const dtcm_base: u32 = 0x2000_0000;
 pub const dtcm_end: u32 = 0x2001_0000;
 pub const sram_base: u32 = 0x2200_0000;
@@ -109,6 +118,7 @@ pub const ppb_size: u32 = 0x0010_0000;
 
 /// RAM and flash-like regions the loader maps before an image is streamed in.
 pub const ram = [_]Region{
+    .{ .name = "MRAM", .base = mram_base, .size = mram_end - mram_base, .perms = .{} },
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
     .{ .name = "SRAM", .base = sram_base, .size = sram_end - sram_base, .perms = .{} },
     .{ .name = "NS SRAM", .base = ns_sram_base, .size = ns_sram_end - ns_sram_base, .perms = .{} },
