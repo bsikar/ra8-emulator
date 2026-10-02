@@ -40,6 +40,7 @@ test {
     _ = @import("ops/umaal_test.zig");
     _ = @import("ops/dsp_mul16_test.zig");
     _ = @import("ops/dsp_dual_test.zig");
+    _ = @import("ops/csel_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
