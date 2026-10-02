@@ -32,6 +32,8 @@ const xfer = @import("dtc_xfer.zig");
 const skip = @import("dtc_skip.zig");
 const regs = @import("dtc_regs.zig");
 const bytelanes = @import("../bytelanes.zig");
+/// DTCSAR, the two controllers' security attribution word in CPSCU.
+pub const attribution = @import("dtc_sar.zig");
 /// The read-skip cache lives next door; re-exported so a caller holding the
 /// block also has the RRS vocabulary.
 pub const readskip = skip;

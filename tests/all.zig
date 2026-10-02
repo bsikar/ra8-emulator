@@ -174,6 +174,7 @@ test {
     _ = @import("periph/drw/drw_test.zig");
     _ = @import("periph/dtc/dtc_test.zig");
     _ = @import("periph/dtc/dtc_regs_test.zig");
+    _ = @import("periph/dtc/dtc_sar_test.zig");
     _ = @import("periph/dtc/dtc_skip_test.zig");
     _ = @import("periph/dtc/dtc_xfer_test.zig");
     _ = @import("periph/eink/eink_busy_test.zig");
