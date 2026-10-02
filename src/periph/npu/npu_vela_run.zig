@@ -5,7 +5,8 @@
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
 //! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig,
 //! elementwise MUL through npu_vela_mul.zig, MAX pooling through
-//! npu_vela_pool.zig, and int8 convolution and depthwise convolution
+//! npu_vela_pool.zig, unpadded AVERAGE pooling through
+//! npu_vela_avgpool.zig, and int8 convolution and depthwise convolution
 //! through npu_vela_convop.zig; any other block operation (other pool or
 //! elementwise modes) stops the run with error.OperatorNotModelled, so
 //! nothing that needs an unmodelled operator is reported as having run.
@@ -24,6 +25,7 @@ const fm = @import("npu_vela_fm.zig");
 const quant = @import("npu_vela_quant.zig");
 const minmax = @import("npu_vela_minmax.zig");
 const pool = @import("npu_vela_pool.zig");
+const avgpool = @import("npu_vela_avgpool.zig");
 const convop = @import("npu_vela_convop.zig");
 const mul = @import("npu_vela_mul.zig");
 
@@ -77,12 +79,11 @@ fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: 
             .kernel = machine.kernel,
             .conv = machine.conv,
         }, op == .depthwise),
-        .pool => machine.elements += try pool.run(memory, regions, vela.param(word), .{
-            .bases = machine.state,
-            .maps = machine.maps,
-            .quant = machine.quant,
-            .kernel = machine.kernel,
-        }),
+        .pool => {
+            const inputs = pool.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant, .kernel = machine.kernel };
+            const mode = vela.param(word);
+            machine.elements += try if (mode == avgpool.mode_average) avgpool.run(memory, regions, inputs) else pool.run(memory, regions, mode, inputs);
+        },
         .elementwise => {
             const inputs = minmax.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant };
             const mode = vela.param(word);
