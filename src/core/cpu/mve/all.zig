@@ -22,3 +22,5 @@ pub const compare = @import("compare.zig");
 pub const compare_vectors = @import("compare_vectors.zig");
 pub const bit_reverse = @import("bit_reverse.zig");
 pub const bit_reverse_vectors = @import("bit_reverse_vectors.zig");
+pub const contiguous = @import("contiguous.zig");
+pub const contiguous_vectors = @import("contiguous_vectors.zig");
