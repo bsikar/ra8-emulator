@@ -122,7 +122,7 @@ test "a watched write stops after the instruction that made it" {
     machine.proceed();
     _ = machine.onInstruction(at(0x100));
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
-    machine.onAccess(0x2000_0040, 4, .write);
+    machine.onAccess(0x2000_0040, 4, .write, null);
     const stop = machine.onInstruction(at(0x104)).?;
     try std.testing.expectEqual(id, stop.watchpoint.id);
     try std.testing.expectEqual(ra8.core.watch_table.Access.write, stop.watchpoint.access);
@@ -131,7 +131,7 @@ test "a watched write stops after the instruction that made it" {
 test "a watched access on a halted session is ignored" {
     var machine = Machine{};
     _ = try machine.watches.add(try ra8.core.watch_table.Watch.span(0x2000_0040, 4, .access));
-    machine.onAccess(0x2000_0040, 4, .read);
+    machine.onAccess(0x2000_0040, 4, .read, null);
     machine.step();
     _ = machine.onInstruction(at(0x100));
     try std.testing.expect(isStepped(machine.onInstruction(at(0x102))));
@@ -142,7 +142,7 @@ test "resuming clears a watch stop that was already reported" {
     _ = try machine.watches.add(try ra8.core.watch_table.Watch.span(0x2000_0040, 4, .write));
     machine.proceed();
     _ = machine.onInstruction(at(0x100));
-    machine.onAccess(0x2000_0040, 4, .write);
+    machine.onAccess(0x2000_0040, 4, .write, null);
     try std.testing.expect(machine.onInstruction(at(0x102)) != null);
     machine.step();
     _ = machine.onInstruction(at(0x102));
@@ -169,7 +169,7 @@ test "a halting DWT data comparator stops the run once the access retired" {
     machine.proceed();
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
-    machine.onAccess(0x2000_1000, 4, .write);
+    machine.onAccess(0x2000_1000, 4, .write, null);
     try std.testing.expectEqual(@as(usize, 0), machine.onInstruction(at(0x104)).?.unit_watch);
 }
 

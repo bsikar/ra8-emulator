@@ -31,9 +31,9 @@ test "a halting data write comparator matches a store and sets MATCHED" {
     var unit = dwt.Dwt{ .trcena = true };
     _ = unit.write(dwt.offsets.comp0, 0x2000_1000);
     _ = unit.write(function(0), dwt.match.data_write | halts | word_size);
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read));
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1004, 4, .write));
-    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1002, 1, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read, null));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1004, 4, .write, null));
+    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1002, 1, .write, null));
     try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
 }
 
@@ -41,7 +41,7 @@ test "a trigger-only comparator sets MATCHED without halting, and a read clears 
     var unit = dwt.Dwt{ .trcena = true };
     _ = unit.write(dwt.offsets.comp0, 0x2000_1000);
     _ = unit.write(function(0), dwt.match.data | word_size);
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .read, null));
     try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
     unit.loaded(function(0));
     try std.testing.expectEqual(@as(u32, 0), unit.peek(function(0)).? & dwt.function_bits.matched);
@@ -61,11 +61,11 @@ test "with DEMCR.TRCENA clear nothing matches and MATCHED stays clear" {
     _ = unit.write(function(0), dwt.match.data | halts | word_size);
     _ = unit.write(dwt.offsets.comp0 + dwt.offsets.stride, 0x0000_0200);
     _ = unit.write(function(1), dwt.match.instruction | halts | (1 << dwt.function_bits.size_shift));
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .write, null));
     try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x200));
     try std.testing.expectEqual(@as(u32, 0), unit.peek(function(0)).? & dwt.function_bits.matched);
     unit.trcena = true;
-    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1000, 4, .write, null));
     try std.testing.expectEqual(@as(?usize, 1), unit.matchesPc(0x200));
 }
 
@@ -105,10 +105,10 @@ test "a Data Address Limit range keeps the lower comparator's read or write filt
     var unit = dwt.Dwt{ .trcena = true };
     arm(&unit, 2, 0x2000_0000, dwt.match.data_write | halts | one_byte);
     arm(&unit, 3, 0x2000_00FF, dwt.match.data_limit | one_byte);
-    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_0080, 4, .write));
-    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_00FF, 1, .write));
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0080, 4, .read));
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0100, 4, .write));
+    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_0080, 4, .write, null));
+    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_00FF, 1, .write, null));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0080, 4, .read, null));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0100, 4, .write, null));
     try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x2000_0080));
 }
 
@@ -116,7 +116,41 @@ test "a limit with nothing to pair with matches nothing" {
     var unit = dwt.Dwt{ .trcena = true };
     arm(&unit, 0, 0x2000_00FF, dwt.match.data_limit | halts);
     arm(&unit, 2, 0x300, dwt.match.instruction_limit | halts | halfword);
-    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, null));
     try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x200));
     try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x300));
+}
+
+fn vmask(n: u32) u32 {
+    return dwt.offsets.vmask0 + n * dwt.offsets.stride;
+}
+
+test "a Data Value comparator matches a store of its value, in the lanes DATAVSIZE picks" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 1, 0xCAFE_F00D, dwt.match.data_value_write | halts | word_size);
+    try std.testing.expectEqual(@as(?usize, 1), unit.access(0x2000_0010, 4, .write, 0xCAFE_F00D));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0010, 4, .write, 0xCAFE_F00E));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0010, 4, .read, 0xCAFE_F00D));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0010, 4, .write, null));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0010, 2, .write, 0xF00D));
+    try std.testing.expect(unit.peek(function(1)).? & dwt.function_bits.matched != 0);
+}
+
+test "a byte Data Value comparator matches any byte lane the access carries" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 0, 0x5A5A_5A5A, dwt.match.data_value | halts | one_byte);
+    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_0000, 1, .write, 0x5A));
+    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_0000, 4, .write, 0x0000_5A00));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 1, .write, 0x5A00));
+}
+
+test "DWT_VMASK masks bits out of the value compare and reads zero for other MATCH kinds" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 2, 0x0000_1200, dwt.match.data_value | halts | word_size);
+    try std.testing.expect(unit.write(vmask(2), 0x0000_00FF));
+    try std.testing.expectEqual(@as(?u32, 0xFF), unit.peek(vmask(2)));
+    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_0000, 4, .write, 0x0000_12AB));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x0000_13AB));
+    _ = unit.write(function(2), dwt.match.data | word_size);
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(vmask(2)));
 }
