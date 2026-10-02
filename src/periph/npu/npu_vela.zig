@@ -24,6 +24,8 @@ pub const hook = @import("npu_vela_hook.zig");
 pub const fm = @import("npu_vela_fm.zig");
 /// The scale, activation and stride registers.
 pub const quant = @import("npu_vela_quant.zig");
+/// Element addresses and storage formats.
+pub const addr = @import("npu_vela_addr.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
