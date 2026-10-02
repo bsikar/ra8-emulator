@@ -63,6 +63,8 @@ pub const Cpu = struct {
     /// The event register WFE waits on: set by SEV and by exception entry
     /// and return, cleared by a WFE that finds it set.
     event: bool = false,
+    /// What a WFI or WFE left the core waiting for, or null while it runs.
+    waiting: ?exception.sleep.Wait = null,
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
@@ -71,6 +73,7 @@ pub const Cpu = struct {
         self.raised = null;
         self.active = .{};
         self.event = false;
+        self.waiting = null;
     }
 
     /// One instruction, or the reason there was none.
@@ -128,7 +131,15 @@ pub const Cpu = struct {
     pub fn run(self: *Cpu, count: u64) Stop {
         var left = count;
         while (left > 0) : (left -= 1) {
-            _ = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
+            const taken = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
+            if (taken) self.waiting = null;
+            if (self.waiting) |why| {
+                const up = exception.sleep.wakes(self, why) catch return .{ .bus_fault = self.regs.pc };
+                // Asleep with nothing to wake it: nothing changes before the
+                // next boundary, so the rest of the stretch goes by at once.
+                if (!up) return .count;
+                self.waiting = null;
+            }
             if (self.step()) |stopped| return stopped;
         }
         return .count;
