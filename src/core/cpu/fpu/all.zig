@@ -21,3 +21,5 @@ pub const div = @import("div.zig");
 pub const div_vectors = @import("div_vectors.zig");
 pub const sqrt = @import("sqrt.zig");
 pub const sqrt_vectors = @import("sqrt_vectors.zig");
+pub const compare = @import("compare.zig");
+pub const compare_vectors = @import("compare_vectors.zig");
