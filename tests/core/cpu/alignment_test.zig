@@ -41,3 +41,29 @@ test "a step that makes an unaligned MemA access stops on it with the PC left th
     try std.testing.expectEqual(fixture.code, cpu.regs.pc);
     try std.testing.expectEqual(fixture.base + 0x201, cpu.regs.low[0]);
 }
+
+test "memU lets an unaligned access through while CCR.UNALIGN_TRP is clear" {
+    var ram: fixture.Ram = .{};
+    try alignment.memU(ram.view(), 0x2000_0001, 4);
+    try alignment.memU(ram.view(), 0x2000_0001, 2);
+}
+
+test "memU refuses an unaligned access once CCR.UNALIGN_TRP is set" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(alignment.ccr, alignment.unalign_trp);
+    try std.testing.expectError(error.Unaligned, alignment.memU(ram.view(), 0x2000_0002, 4));
+    try std.testing.expectError(error.Unaligned, alignment.memU(ram.view(), 0x2000_0001, 2));
+    try alignment.memU(ram.view(), 0x2000_0004, 4);
+    try alignment.memU(ram.view(), 0x2000_0003, 1);
+}
+
+test "a narrow and a wide LDR stop on an unaligned word only under UNALIGN_TRP" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[0] = fixture.base + 0x202;
+    try exec(&cpu, 0x6801, 0, 2); // ldr r1, [r0]
+    try exec(&cpu, 0xF8D0, 0x1000, 4); // ldr.w r1, [r0]
+    ram.putWord(alignment.ccr, alignment.unalign_trp);
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0x6801, 0, 2));
+    try std.testing.expectError(error.Unaligned, exec(&cpu, 0xF8D0, 0x1000, 4));
+}

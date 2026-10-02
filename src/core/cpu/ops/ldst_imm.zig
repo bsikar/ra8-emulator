@@ -1,10 +1,11 @@
 //! Load and store with an immediate offset, 16-bit: STR/LDR, STRB/LDRB and
 //! STRH/LDRH [Rn, #imm5] (T1), and STR/LDR [SP, #imm8] (T2). No writeback,
 //! and byte and halfword loads zero-extend. An unaligned word or halfword
-//! goes through as bytes, the behaviour with CCR.UNALIGN_TRP clear; the trap
-//! itself arrives with the fault model (RA8EMU-18).
+//! goes through as bytes, the behaviour with CCR.UNALIGN_TRP clear; with it
+//! set the core stops (RA8EMU-85).
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -60,6 +61,7 @@ pub fn access(cpu: *const Cpu, hw1: u16) Access {
 
 fn store(cpu: *Cpu, instr: Instr) op.Error!void {
     const a = access(cpu, instr.hw1);
+    try alignment.memU(cpu.bus, a.address, a.size);
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, cpu.regs.get(a.rt), .little);
     try cpu.bus.write(a.address, bytes[0..a.size]);
@@ -67,6 +69,7 @@ fn store(cpu: *Cpu, instr: Instr) op.Error!void {
 
 fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     const a = access(cpu, instr.hw1);
+    try alignment.memU(cpu.bus, a.address, a.size);
     var bytes = [_]u8{0} ** 4;
     try cpu.bus.read(a.address, bytes[0..a.size]);
     cpu.regs.set(a.rt, std.mem.readInt(u32, &bytes, .little));

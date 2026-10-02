@@ -1,13 +1,14 @@
 //! Load and store with a shifted register offset, 32-bit (T2): STR/STRH/STRB,
 //! LDR/LDRH/LDRB and LDRSB/LDRSH [Rn, Rm, LSL #imm2]. No writeback. An
 //! unaligned word or halfword goes through as bytes, the behaviour with
-//! CCR.UNALIGN_TRP clear; the trap arrives with RA8EMU-18.
+//! CCR.UNALIGN_TRP clear; with it set the core stops (RA8EMU-85).
 //!
 //! Left unclaimed: Rn = PC (the literal forms), Rm of SP or PC, a store of PC,
 //! and Rt of SP or PC on a byte or halfword access (Rt = PC there is PLD, PLI
 //! or an unallocated hint). LDR with Rt = PC branches through BXWritePC.
 const std = @import("std");
 const op = @import("../op.zig");
+const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 
@@ -74,15 +75,19 @@ fn decode(instr: Instr) ?op.Exec {
 
 fn store(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = Fields.of(instr).?;
+    const address = f.address(cpu);
+    try alignment.memU(cpu.bus, address, f.size);
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, cpu.regs.get(f.rt), .little);
-    try cpu.bus.write(f.address(cpu), bytes[0..f.size]);
+    try cpu.bus.write(address, bytes[0..f.size]);
 }
 
 fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = Fields.of(instr).?;
+    const address = f.address(cpu);
+    try alignment.memU(cpu.bus, address, f.size);
     var bytes = [_]u8{0} ** 4;
-    try cpu.bus.read(f.address(cpu), bytes[0..f.size]);
+    try cpu.bus.read(address, bytes[0..f.size]);
     var value = std.mem.readInt(u32, &bytes, .little);
     if (f.signed) {
         const top: u5 = @intCast(@as(u6, f.size) * 8 - 1);
