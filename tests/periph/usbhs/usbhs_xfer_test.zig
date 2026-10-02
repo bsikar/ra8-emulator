@@ -206,8 +206,10 @@ test "a bulk packet on a pipe the host never armed moves nothing" {
     transfer.port.select(regs.fifo.isel | 2);
     transfer.port.writeData(0x42, 1, 64);
     transfer.commit(&pipes);
-    // dev committed whatever PIPECTR said, NAK included.
-    try std.testing.expectEqual(@as(u32, 1), transfer.unarmed);
+    // dev committed whatever PIPECTR said, NAK included. The buffer is valid
+    // and held for the pipe, not sent and not refused.
+    try std.testing.expectEqual(@as(u16, 1 << 2), transfer.held);
+    try std.testing.expectEqual(@as(u32, 0), transfer.refusals());
     try std.testing.expect(!transfer.device.echo_ready);
 }
 

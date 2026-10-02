@@ -93,11 +93,13 @@ pub const Transfer = struct {
     /// Steps refused, each for its own reason.
     no_device: u32 = 0,
     stray_ccpl: u32 = 0,
-    unarmed: u32 = 0,
     /// OUT packets the device would not take, and the bytes still staged
     /// behind them. They are not gone: the host can send them again.
     refused_out: u32 = 0,
     refused_bytes: u32 = 0,
+    /// Pipes whose BVAL landed while PID was still NAK. The buffer is valid
+    /// and waits for the host to arm the pipe; it is not a refusal.
+    held: u16 = 0,
 
     /// DCPCTR.SUREQ: send the staged SETUP. A token needs something on the
     /// bus that has been through a reset; dev delivered it whatever the port
@@ -230,7 +232,7 @@ pub const Transfer = struct {
     /// gone from both ends at once and the retry sent nothing.
     fn commitPipe(self: *Transfer, index: u32, pipes: *usbhs_pipe.Table) void {
         if (index != 0 and !pipes.pipes[index].armed()) {
-            self.unarmed += 1;
+            self.held |= @as(u16, 1) << @intCast(index);
             return;
         }
         const staging = &self.port.out[index];
@@ -247,6 +249,17 @@ pub const Transfer = struct {
         }
         staging.clear();
         self.raiseEmpty(@as(u16, 1) << @intCast(index));
+    }
+
+    /// PIPEnCTR was written. The HAL marks a packet valid with BVAL and only
+    /// then turns PID to BUF, so a held packet goes out the moment its pipe
+    /// is armed, the way the SIE sends a valid buffer on the next token.
+    pub fn pipeArmed(self: *Transfer, index: u32, pipes: *usbhs_pipe.Table) void {
+        if (index == 0 or index >= regs.pipe.count) return;
+        const bit = @as(u16, 1) << @intCast(index);
+        if (self.held & bit == 0 or !pipes.pipes[index].armed()) return;
+        self.held &= ~bit;
+        self.commitPipe(index, pipes);
     }
 
     pub fn clearEmpty(self: *Transfer, value: u16) void {
@@ -330,11 +343,12 @@ pub const Transfer = struct {
         self.intsts0.busReset();
         for (&self.port.in) |*staging| staging.clear();
         for (&self.port.out) |*staging| staging.clear();
+        self.held = 0;
         self.data.release();
     }
 
     pub fn refusals(self: *const Transfer) u32 {
-        return self.no_device + self.stray_ccpl + self.unarmed + self.stalls +
+        return self.no_device + self.stray_ccpl + self.stalls +
             self.refused_out + self.port.refusals() + self.data.refusals() +
             self.device.refusals();
     }

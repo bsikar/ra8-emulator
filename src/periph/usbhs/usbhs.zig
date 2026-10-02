@@ -153,7 +153,8 @@ pub const Host = struct {
             regs.reg.nrdysts => self.shadow[word(offset)] &= v,
             else => {
                 if (regs.isPipeCtr(offset)) {
-                    _ = self.pipes.setControl(regs.pipeCtrIndex(offset), v);
+                    const index = regs.pipeCtrIndex(offset);
+                    if (self.pipes.setControl(index, v)) self.xfer.pipeArmed(index, &self.pipes);
                     return;
                 }
                 self.shadow[word(offset)] = v;
