@@ -22,6 +22,8 @@ test {
     _ = @import("ops/cbz_test.zig");
     _ = @import("ops/extend_test.zig");
     _ = @import("ops/reverse_test.zig");
+    _ = @import("ops/it_test.zig");
+    _ = @import("it_state_test.zig");
     _ = @import("ops/push_pop_test.zig");
     _ = @import("ops/sp_arith_test.zig");
     _ = @import("ops/table_test.zig");

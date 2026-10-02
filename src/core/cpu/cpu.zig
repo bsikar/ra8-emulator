@@ -7,6 +7,8 @@ const bus = @import("bus.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
 const decode = @import("decode.zig");
+const cond = @import("cond.zig");
+const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
 
 /// Why `run` or `step` stopped.
@@ -42,10 +44,16 @@ pub const Cpu = struct {
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         const hit = decode.decode(instr) orelse return .{ .unknown = instr };
         self.regs.pc = address +% instr.size;
-        hit.exec(self, instr) catch {
-            self.regs.pc = address;
-            return .{ .bus_fault = address };
-        };
+        const it = it_state.get(self.regs.xpsr);
+        if (!it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr)) {
+            hit.exec(self, instr) catch {
+                self.regs.pc = address;
+                return .{ .bus_fault = address };
+            };
+        }
+        // An instruction an IT block governs moves the block on whether it
+        // ran or not. IT itself leaves the state it just wrote.
+        if (it_state.active(it)) self.regs.xpsr = it_state.put(self.regs.xpsr, it_state.advance(it));
         self.retired += 1;
         return null;
     }

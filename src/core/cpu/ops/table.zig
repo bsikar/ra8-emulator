@@ -22,6 +22,7 @@ pub const groups = [_]op.Group{
     @import("cbz.zig").group,
     @import("extend.zig").group,
     @import("reverse.zig").group,
+    @import("it.zig").group,
     @import("branch.zig").group,
     @import("mov_wide.zig").group,
     @import("imm_logic.zig").group,

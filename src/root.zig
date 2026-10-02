@@ -85,6 +85,7 @@ pub const core = struct {
         pub const cpu = @import("core/cpu/cpu.zig");
         pub const decode = @import("core/cpu/decode.zig");
         pub const cond = @import("core/cpu/cond.zig");
+        pub const it_state = @import("core/cpu/it_state.zig");
         pub const flags = @import("core/cpu/flags.zig");
         pub const thumb_imm = @import("core/cpu/thumb_imm.zig");
         pub const instr = @import("core/cpu/instr.zig");
