@@ -13,3 +13,5 @@ pub const int_insert = @import("int_insert.zig");
 pub const int_insert_vectors = @import("int_insert_vectors.zig");
 pub const reduce = @import("reduce.zig");
 pub const reduce_vectors = @import("reduce_vectors.zig");
+pub const int_mul = @import("int_mul.zig");
+pub const int_mul_vectors = @import("int_mul_vectors.zig");
