@@ -30,6 +30,10 @@ test "a signed load extends the sign bit of the memory width" {
     try std.testing.expectEqual(@as(u32, 0x0000_8000), contiguous.element(.{ .value = 0x8000, .msize = .half, .signed = false, .store = false }));
 }
 
+test "a word in memory passes through whole" {
+    try std.testing.expectEqual(@as(u32, 0x8000_0001), contiguous.element(.{ .value = 0x8000_0001, .msize = .word, .signed = true, .store = false }));
+}
+
 test "a narrowing store drops the bits above the memory width" {
     try std.testing.expectEqual(@as(u32, 0xEF), contiguous.element(.{ .value = 0xDEAD_BEEF, .msize = .byte, .signed = true, .store = true }));
 }

@@ -224,3 +224,18 @@ is stale or an encoding is missing. Regenerate with
 | VSTRB.16 | 1 |
 | VSTRB.32 | 1 |
 | VSTRH.32 | 1 |
+| VLDRB.U8 gather | 1 |
+| VLDRB.S16 gather | 1 |
+| VLDRB.U16 gather | 1 |
+| VLDRB.S32 gather | 1 |
+| VLDRB.U32 gather | 1 |
+| VLDRH.U16 gather | 2 |
+| VLDRH.S32 gather | 2 |
+| VLDRH.U32 gather | 1 |
+| VLDRW.U32 gather | 1 |
+| VSTRB.8 scatter | 1 |
+| VSTRB.16 scatter | 1 |
+| VSTRB.32 scatter | 1 |
+| VSTRH.16 scatter | 1 |
+| VSTRH.32 scatter | 1 |
+| VSTRW.32 scatter | 2 |
