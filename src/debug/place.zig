@@ -11,6 +11,7 @@
 //! 0x22000058         the words at that address
 //! g_eoh_err          the words at that global
 //! @s_open+0x40       the words 0x40 past whatever s_open points at
+//! *0x22000058        gdb's spelling of an address; the star is dropped
 //! ```
 //!
 //! Parsing is all this file does. Resolving a name to an address and
@@ -58,6 +59,9 @@ pub const Place = struct {
 pub fn parse(text: []const u8) Error!Place {
     var found = Place{};
     var body = text;
+    // gdb spells an address place `*EXPR` (`break *0x22000040`, `info line
+    // *main`). The star only says "this is an address", so it is dropped.
+    if (body.len > 0 and body[0] == '*') body = body[1..];
     if (body.len > 0 and body[0] == '@') {
         found.deref = true;
         body = body[1..];
