@@ -106,6 +106,8 @@ pub const Board = struct {
     transfers: dtc.Dtc,
     /// DTC1, CPU1's own transfer controller at DTC0's address.
     transfers1: dtc.Dtc,
+    /// DTCSAR: which of DTC0 and DTC1 the boot handed to Non-secure.
+    transfer_attribution: dtc.attribution.Unit,
     /// The DMA module gate, and the eight channels behind it. Both are built
     /// in attach(): the channels need a pointer to this board's own bank, and
     /// the engine whose memory they copy.

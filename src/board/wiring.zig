@@ -37,6 +37,7 @@ const pll = @import("../periph/pll/pll.zig");
 const gtclkcr = @import("../periph/gtclkcr.zig");
 const pscu = @import("../periph/pscu.zig");
 const cpscu = @import("../periph/cpscu.zig");
+const dtc = @import("../periph/dtc/dtc.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../periph/sd/sd_card.zig");
@@ -141,6 +142,8 @@ fn attachTransfers(self: *Board) !void {
     self.transfers.twin = &self.transfers1;
     self.transfers.issuer = &self.bus.issuer;
     try self.bus.add(self.transfers.block());
+    self.transfer_attribution = dtc.attribution.Unit.init(&self.protection);
+    try self.bus.add(self.transfer_attribution.block());
 }
 
 fn attachCore(self: *Board, core: *engine.Engine) !void {
