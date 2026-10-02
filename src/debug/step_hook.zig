@@ -9,10 +9,12 @@
 //!
 //! When the core lane's Zig CPU exposes single-step and halt, its loop
 //! feeds the same machine and this file goes with Unicorn.
+const std = @import("std");
 const c = @import("../core/c.zig");
 const call_decode = @import("call_decode.zig");
 const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
+const fpb = @import("fpb.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -25,12 +27,33 @@ pub const Driver = struct {
     /// core ends at the stop instead of starting its next stretch. Null on
     /// a bare run, where stopping the engine is enough.
     latch: ?*breakpoint.Break = null,
+    /// The firmware wrote the FPB since its registers were last put back
+    /// into memory. The PPB is plain memory, so the word just stored is
+    /// what a read would see until the register file is written over it.
+    unit_dirty: bool = false,
 
     /// Clear the previous verdict before a run is started.
     pub fn arm(self: *Driver) void {
         self.last = null;
     }
+
+    /// A store the firmware made, handed to the FPB when it lands there.
+    fn stored(self: *Driver, address: u32, value: u32) void {
+        if (address < fpb.base or address >= fpb.base + fpb.limits.span) return;
+        if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
+    }
 };
+
+/// Put the FPB's registers in memory the way a read should see them.
+fn syncUnit(handle: *c.uc.uc_engine, unit: *const fpb.Fpb) void {
+    var offset: u32 = 0;
+    while (offset < fpb.limits.span) : (offset += 4) {
+        const word = unit.read(offset) orelse continue;
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, word, .little);
+        _ = c.uc.uc_mem_write(handle, fpb.base + offset, &bytes, bytes.len);
+    }
+}
 
 /// Install the hooks. The memory hook is only installed when `watch_memory`
 /// is set, because a hook on every access costs every access.
@@ -40,6 +63,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
         return Error.AttachFailed;
     }
     if (!watch_memory) return;
+    if (handle) |live| syncUnit(live, &driver.machine.fpb);
     const kinds = c.uc.UC_HOOK_MEM_READ | c.uc.UC_HOOK_MEM_WRITE;
     if (c.uc.uc_hook_add(handle, &hook, kinds, @constCast(@as(*const anyopaque, @ptrCast(&onMemory))), driver, 1, 0) != c.uc.UC_ERR_OK) {
         return Error.AttachFailed;
@@ -49,6 +73,10 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
 fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
+    if (driver.unit_dirty) {
+        syncUnit(handle, &driver.machine.fpb);
+        driver.unit_dirty = false;
+    }
     var sp: u32 = 0;
     if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_SP, &sp) != c.uc.UC_ERR_OK) sp = 0;
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
@@ -76,8 +104,8 @@ fn onMemory(
     user: ?*anyopaque,
 ) callconv(.C) void {
     _ = uc;
-    _ = value;
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const access: @import("watch_table.zig").Access = if (kind == c.uc.UC_MEM_WRITE) .write else .read;
+    if (access == .write) driver.stored(@truncate(address), @truncate(@as(u64, @bitCast(value))));
     driver.machine.onAccess(@truncate(address), @intCast(size), access);
 }

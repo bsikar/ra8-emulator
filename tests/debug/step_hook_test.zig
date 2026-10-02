@@ -131,3 +131,23 @@ test "a run with nothing to stop it spends its budget" {
     _ = try fixture.run(layout.store + 2);
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), fixture.driver.last);
 }
+
+// str r1,[r0,#8] (FP_COMP0); str r2,[r0] (FP_CTRL); ldr r3,[r0]; nop; nop.
+test "firmware that programs the FPB halts on its comparator and reads FP_CTRL back" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    try fixture.open();
+    defer fixture.engine.close();
+    const fpb = ra8.core.fpb;
+    try fixture.engine.write(layout.code, &[_]u8{ 0x81, 0x60, 0x02, 0x60, 0x03, 0x68, 0x00, 0xBF, 0x00, 0xBF });
+    try fixture.engine.setRegister(.r0, fpb.base);
+    try fixture.engine.setRegister(.r1, (layout.code + 8) | fpb.comp_enable);
+    try fixture.engine.setRegister(.r2, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 8, pc);
+    try std.testing.expectEqual(@as(usize, 0), fixture.driver.last.?.unit_break);
+    const ctrl = try fixture.engine.register(.r3);
+    try std.testing.expectEqual(fpb.ctrl_bits.enable, ctrl & 0x3);
+    try std.testing.expectEqual(@as(u32, 1), ctrl >> 28);
+}

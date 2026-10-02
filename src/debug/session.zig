@@ -244,6 +244,7 @@ pub const Session = struct {
                 hit.id, @tagName(hit.access), hit.width, hit.address,
             }),
             .halt_requested => try out.print("Halted, ", .{}),
+            .unit_break => |index| try out.print("Hardware breakpoint FP_COMP{d}, ", .{index}),
         }
         try self.line(pc, out);
     }

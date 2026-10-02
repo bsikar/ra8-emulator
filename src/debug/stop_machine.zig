@@ -20,6 +20,7 @@
 const break_table = @import("break_table.zig");
 const breakpoint = @import("breakpoint.zig");
 const watch_table = @import("watch_table.zig");
+const fpb = @import("fpb.zig");
 
 /// What the CPU is about to execute, as the driver sees it.
 pub const Event = struct {
@@ -48,6 +49,9 @@ pub const Stop = union(enum) {
     watchpoint: watch_table.Hit,
     /// Someone asked the running session to halt.
     halt_requested,
+    /// A comparator the firmware programmed into the core's own FPB
+    /// matched, by index.
+    unit_break: usize,
 };
 
 /// The point a step over or a step out is running to.
@@ -62,6 +66,8 @@ const Target = struct {
 pub const Machine = struct {
     breaks: break_table.Table = .{},
     watches: watch_table.Table = .{},
+    /// The core's breakpoint unit, as the firmware programmed it.
+    fpb: fpb.Fpb = .{},
     mode: Mode = .halted,
     /// Set by `resume`; cleared once the instruction resumed on has run.
     resumed: bool = false,
@@ -118,6 +124,7 @@ pub const Machine = struct {
         if (self.watch_pending) |tripped| return self.halt(.{ .watchpoint = tripped });
         if (self.halt_pending) return self.halt(.halt_requested);
         if (self.breaks.hit(event.pc)) |id| return self.halt(.{ .breakpoint = id });
+        if (self.fpb.matches(event.pc)) |index| return self.halt(.{ .unit_break = index });
         return switch (self.mode) {
             .halted, .running => null,
             .step => self.halt(.stepped),
