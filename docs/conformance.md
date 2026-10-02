@@ -269,3 +269,9 @@ is stale or an encoding is missing. Regenerate with
 | VFMS.F32 (MVE) T1 | 1 |
 | VFMAS.F16 (MVE) T1 | 1 |
 | VFMAS.F32 (MVE) T1 | 1 |
+| VABD.F16 (MVE) T1 | 1 |
+| VABD.F32 (MVE) T1 | 1 |
+| VABS.F16 (MVE) T1 | 1 |
+| VABS.F32 (MVE) T1 | 1 |
+| VNEG.F16 (MVE) T1 | 1 |
+| VNEG.F32 (MVE) T1 | 1 |
