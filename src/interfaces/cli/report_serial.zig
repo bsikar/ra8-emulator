@@ -255,11 +255,10 @@ fn usbRefused(host: *const Host, out: Writer) !void {
     const data = &host.xfer.data;
     if (data.refusals() != 0) {
         try out.print(
-            "  data ports refused: {d} bad pipe, {d} aimed at the control pipe, " ++
+            "  data ports refused: {d} bad pipe, " ++
                 "{d} pipe already held, {d} wrong access width, {d} against the pipe's direction\n",
             .{
                 data.ports[0].bad_pipe + data.ports[1].bad_pipe,
-                data.ports[0].dcp_aim + data.ports[1].dcp_aim,
                 data.ports[0].contended + data.ports[1].contended,
                 data.ports[0].bad_width + data.ports[1].bad_width,
                 data.ports[0].wrong_way + data.ports[1].wrong_way,
