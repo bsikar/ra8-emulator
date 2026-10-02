@@ -33,3 +33,5 @@ pub const interleave = @import("interleave.zig");
 pub const eci = @import("eci.zig");
 pub const beats = @import("beats.zig");
 pub const interleave_vectors = @import("interleave_vectors.zig");
+pub const float = @import("float.zig");
+pub const float_vectors = @import("float_vectors.zig");
