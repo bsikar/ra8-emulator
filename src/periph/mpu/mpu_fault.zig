@@ -16,6 +16,8 @@
 //!   MMFAR 0xE000_ED34: the address, valid only while MMARVALID stands.
 
 /// MemManage, exception 4 (DDI0553 B3.6).
+const status = @import("../fault_status.zig");
+
 pub const exception: u16 = 4;
 
 /// The MMFSR bits a refused access sets: DACCVIOL with MMARVALID for a store
@@ -23,9 +25,9 @@ pub const exception: u16 = 4;
 /// MMARVALID clear, because the address that took it is the PC the frame
 /// already carries (DDI0553 D1.2.11).
 pub const mmfsr = struct {
-    pub const iaccviol: u32 = 1 << 0;
-    pub const daccviol: u32 = 1 << 1;
-    pub const mmarvalid: u32 = 1 << 7;
+    pub const iaccviol: u32 = status.Cause.iaccviol.bit();
+    pub const daccviol: u32 = status.Cause.daccviol.bit();
+    pub const mmarvalid: u32 = status.Cause.mmarvalid.bit();
 };
 
 /// Why the region refused it. Both raise the same MemManage; they are kept
