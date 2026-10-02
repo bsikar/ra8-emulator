@@ -49,7 +49,7 @@ test "a DMA-only program moves its bytes between regions and stops" {
 
 test "a program with an operator stops before claiming it ran" {
     var memory = Memory{};
-    const words = dma_program ++ [_]u32{ 0x0000_0002, 0x0000_0000 }; // CONV, STOP
+    const words = dma_program ++ [_]u32{ 0x0000_0003, 0x0000_0000 }; // DEPTHWISE, STOP
     try std.testing.expectError(error.OperatorNotModelled, vela.runner.run(&memory, &regions, &words));
 }
 
@@ -136,4 +136,64 @@ test "a Vela-compiled MAX_POOL_2D writes the largest of each 2x2 window" {
         const got: i8 = @bitCast(memory.bytes[0x880 + h * 16 + w * 8 + c]);
         try std.testing.expectEqual(want, got);
     };
+}
+
+/// A real Vela 3.12.0 stream (ethos-u55-256): a per-channel int8 1x1
+/// CONV_2D, 8 channels in and 6 out over 4x4, IFM zero point -5, OFM zero
+/// point 7. It DMAs flash 0x40 (0xA0 bytes: the scale records, then the
+/// weight stream) from region 0 to region 1 offset 0xE0, then runs the
+/// conv with the IFM at region 1 offset 0x00 and the OFM at 0x80. The 336
+/// bytes after the 32-byte driver header, as Vela emitted them.
+const vela_conv = [_]u32{
+    0x00000130, 0x00004030, 0x00000040, 0x00010131, 0x00004031, 0x000000E0,
+    0x00004032, 0x000000A0, 0x00000010, 0x0001010F, 0x00004000, 0x00000000,
+    0x00004001, 0x00000000, 0x00004002, 0x00000000, 0x00004003, 0x00000000,
+    0x0003010B, 0x0003010C, 0x0003010A, 0x00070104, 0x00004006, 0x00000001,
+    0x00004005, 0x00000020, 0x00004004, 0x00000008, 0xFFFB0109, 0x00010105,
+    0x00000107, 0x00000100, 0x00000101, 0x00000103, 0x00000102, 0x0001011F,
+    0x00004010, 0x00000080, 0x00004011, 0x00000000, 0x00004012, 0x00000000,
+    0x00004013, 0x00000000, 0x0003011B, 0x0003011C, 0x0003011A, 0x00030112,
+    0x00030111, 0x00050113, 0x00004016, 0x00000001, 0x00004015, 0x00000018,
+    0x00004014, 0x00000006, 0x00070118, 0x00010114, 0x00000121, 0x00000120,
+    0x00040122, 0x00010128, 0x00004020, 0x00000120, 0x00004021, 0x00000060,
+    0x00010129, 0x00004022, 0x000000E0, 0x00004023, 0x00000040, 0x00000125,
+    0xFF800126, 0x007F0127, 0x00030116, 0x00030115, 0x00070117, 0x000A010D,
+    0x001E012D, 0x00000124, 0x0000012F, 0x00000011, 0x00000002, 0xFFFF0000,
+};
+
+fn hexBytes(comptime hex: []const u8) [hex.len / 2]u8 {
+    var out: [hex.len / 2]u8 = undefined;
+    _ = std.fmt.hexToBytes(&out, hex) catch unreachable;
+    return out;
+}
+
+/// The 0xA0 flash bytes the conv's DMA reads, from Vela's flash tensor.
+const conv_flash = hexBytes("d605000000e823385327d10a000000df8793742870f6ffffff255fee73264405000000335b42432626fbffffffb6555d61" ++
+    "28f7000000000175c74e2600000000680150f11d2c98615f4f1fff6e4e1e5eed5cccbbab7bcb8a4a2a9a491908d8b75717" ++
+    "571656d80030d8f7f8a6c00b4afca60780113f1eed57008003710d42a47e6b53c98183d437004070830d9652fb7a000002" ++
+    "00fffff33f80ffffffffffffff");
+const conv_ifm = hexBytes("cd47e21bf735d896cb211e7bbeec729c33756a2d64b2412c017e58b57b5adf3248b8c2aff674e3d76cf08f2743f07280" ++
+    "5dc24cf82642651b23ee8db09d489cafb939cfff2e0dfbe271b34babfa24cac6ab83c3b1266b8636e71476e69e5163c3" ++
+    "1522a18385251e781935f793d61730d1a06bba84e8832898cfd638612d10ba29");
+/// TFLite Micro's double-rounding output for that IFM (tflite-runtime
+/// agrees on every byte).
+const conv_ofm = hexBytes("e116e403f4134a0a800cf28b3aece3db0cc1d4146ca0f63abf197f1217ede6db7f043680170c50e71780c31c384906" ++
+    "3aec0530d8fa49db230732248ebe2f4bf7017f272fcee2e78b1e047f00eb7fef0a70e302f4eef54fcd00561f1e8020fd14");
+
+test "a Vela-compiled int8 CONV_2D runs its DMA and conv and writes TFLite Micro's output" {
+    var memory = Memory{};
+    @memcpy(memory.bytes[0x40..0xE0], &conv_flash);
+    @memcpy(memory.bytes[0x800..0x880], &conv_ifm);
+    const result = try vela.runner.run(&memory, &regions, &vela_conv);
+    try std.testing.expectEqual(@as(u64, 0xA0), result.moved);
+    try std.testing.expectEqual(@as(u64, 96), result.elements);
+    try std.testing.expectEqualSlices(u8, &conv_ofm, memory.bytes[0x880..0x8E0]);
+}
+
+test "a conv whose scale records run short is refused" {
+    var memory = Memory{};
+    @memcpy(memory.bytes[0x40..0xE0], &conv_flash);
+    var words = vela_conv;
+    words[70] = 0x00000032; // SCALE_LENGTH 0x40 -> 0x32: five records
+    try std.testing.expectError(error.BadScales, vela.runner.run(&memory, &regions, &words));
 }

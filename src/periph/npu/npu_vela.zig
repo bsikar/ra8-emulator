@@ -40,6 +40,8 @@ pub const order = @import("npu_vela_order.zig");
 pub const round = @import("npu_vela_round.zig");
 /// The int8 convolution datapath.
 pub const conv = @import("npu_vela_conv.zig");
+/// NPU_OP_CONV: the registers turned into a datapath call.
+pub const convop = @import("npu_vela_convop.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
