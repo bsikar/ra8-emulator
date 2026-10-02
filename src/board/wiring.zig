@@ -99,6 +99,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.second_core.block());
     try self.bus.add(self.memory_rates.block());
     try self.memory_ecc.attach(&self.bus);
+    try self.sdram.attach(&self.bus);
     try self.bus.add(self.card.block());
     try self.bus.add(self.ecc.block());
     try self.bus.add(self.audio.block());

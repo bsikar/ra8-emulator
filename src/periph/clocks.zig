@@ -17,6 +17,9 @@ const std = @import("std");
 const cadence = @import("../core/cadence.zig");
 const memmap = @import("../core/memmap.zig");
 
+/// The SDRAM controller and the SDCLK output control: sdramc.zig.
+pub const sdram = @import("sdramc.zig");
+
 /// Instructions per outer chunk, and the cycles charged for one (~1 IPC on
 /// the M85). The width itself is the run's cadence (src/core/cadence.zig):
 /// dev's 500000 was one number for both, and splitting them is what let the
