@@ -38,6 +38,9 @@ pub const Row = struct {
     line: u32,
     /// The first address past a sequence, not an instruction of its own.
     end_sequence: bool = false,
+    /// DW_LNS_set_prologue_end came before this row: the function's
+    /// prologue is done at this address.
+    prologue_end: bool = false,
 };
 
 /// The line-number state machine, emitting one row per `next`.
@@ -68,7 +71,14 @@ pub const Rows = struct {
         const adjusted = opcode - self.header.opcode_base;
         self.advance(adjusted / self.header.line_range);
         self.addLine(@as(i64, self.header.line_base) + adjusted % self.header.line_range);
-        return self.state;
+        return self.emit();
+    }
+
+    /// The current row, clearing the flags DWARF resets after each row.
+    fn emit(self: *Rows) Row {
+        const row = self.state;
+        self.state.prologue_end = false;
+        return row;
     }
 
     fn extended(self: *Rows) Error!?Row {
@@ -91,13 +101,14 @@ pub const Rows = struct {
 
     fn standard(self: *Rows, opcode: u8) Error!?Row {
         switch (opcode) {
-            0x01 => return self.state,
+            0x01 => return self.emit(),
             0x02 => self.advance(try self.cursor.uleb()),
             0x03 => self.addLine(try self.cursor.sleb()),
             0x04 => self.state.file = try self.cursor.uleb(),
             0x08 => self.advance((255 - self.header.opcode_base) / self.header.line_range),
             0x09 => self.state.address +%= try self.cursor.int(u16),
-            // is_stmt, basic_block, prologue_end and epilogue_begin take no
+            0x0a => self.state.prologue_end = true,
+            // is_stmt, basic_block and epilogue_begin take no
             // operand; column and isa take one. None of them moves a row.
             else => {
                 var operands = self.header.standard_lengths[opcode - 1];

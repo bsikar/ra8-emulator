@@ -60,3 +60,21 @@ fn scan(header: dwarf_line.Header, strings: line_header.Strings, file: []const u
         best.* = .{ .line = row.line, .address = row.address };
     }
 }
+
+/// The lowest address in [low, high) that a row marks prologue_end, or
+/// null when no row in that range carries the mark.
+pub fn prologueEnd(sections: dwarf_line.Sections, low: u32, high: u32) Error!?u32 {
+    var best: ?u32 = null;
+    var offset: usize = 0;
+    while (offset < sections.line.len) {
+        const unit = try line_header.read(sections.line, offset);
+        offset = unit.end;
+        var rows = dwarf_line.Rows.init(unit.header);
+        while (try rows.next()) |row| {
+            if (row.end_sequence or !row.prologue_end) continue;
+            if (row.address < low or row.address >= high) continue;
+            if (best == null or row.address < best.?) best = row.address;
+        }
+    }
+    return best;
+}

@@ -8,6 +8,7 @@ const std = @import("std");
 const elf = @import("../core/elf.zig");
 const dwarf_line = @import("dwarf_line.zig");
 const dwarf_line_find = @import("dwarf_line_find.zig");
+const dwarf_info = @import("dwarf_info.zig");
 
 pub const limits = struct {
     /// Lines `list` shows before the one it centres on.
@@ -67,9 +68,26 @@ pub fn fileLine(text: []const u8) ?FileLine {
 }
 
 /// Where a break on FILE:LINE goes, or null when the line table has no
-/// code there or after it in that file.
-pub fn breakAt(sections: dwarf_line.Sections, want: FileLine) ?u32 {
-    return dwarf_line_find.addressOf(sections, want.file, want.line) catch null;
+/// code there or after it in that file, or only in a function declared
+/// after the line.
+pub fn breakAt(image: ?elf.Image, want: FileLine) ?u32 {
+    const sections = of(image);
+    const found = (dwarf_line_find.addressOf(sections, want.file, want.line) catch null) orelse return null;
+    const loaded = image orelse return found;
+    const function = dwarf_info.containing(dwarf_info.ofImage(loaded), found) catch null;
+    return settle(sections, found, function, want.line);
+}
+
+/// gdb's two rules for a line break that landed on a function's entry: a
+/// line before the function's declaration is not in it, so there is no
+/// break; otherwise the break moves past the prologue, to the row the line
+/// table marks prologue_end.
+pub fn settle(sections: dwarf_line.Sections, found: u32, function: ?dwarf_info.Function, asked: u32) ?u32 {
+    const holder = function orelse return found;
+    if (found != holder.low) return found;
+    if (holder.decl_line > asked) return null;
+    const past = dwarf_line_find.prologueEnd(sections, holder.low, holder.high) catch null;
+    return past orelse found;
 }
 
 /// `list`: the ten source lines around the one `address` belongs to, read
