@@ -100,6 +100,7 @@ pub const core = struct {
         pub const regs = @import("core/cpu/regs.zig");
         pub const reset = @import("core/cpu/reset.zig");
         pub const shift = @import("core/cpu/shift.zig");
+        pub const sysreg = @import("core/cpu/sysreg.zig");
         pub const lockstep = struct {
             pub const catch_up = @import("core/cpu/lockstep/catch_up.zig");
             pub const diff = @import("core/cpu/lockstep/diff.zig");

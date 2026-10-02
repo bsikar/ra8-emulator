@@ -23,6 +23,7 @@ test {
     _ = @import("ops/shift_reg_test.zig");
     _ = @import("ops/add_sub_wide_test.zig");
     _ = @import("ops/long_mul_test.zig");
+    _ = @import("ops/mrs_msr_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");

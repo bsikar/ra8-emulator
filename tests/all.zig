@@ -23,6 +23,7 @@ test {
     _ = @import("core/cpu/cond_test.zig");
     _ = @import("core/cpu/flags_test.zig");
     _ = @import("core/cpu/shift_test.zig");
+    _ = @import("core/cpu/sysreg_test.zig");
     _ = @import("core/cpu/lockstep/catch_up_test.zig");
     _ = @import("core/cpu/lockstep/diff_test.zig");
     _ = @import("core/cpu/lockstep/history_test.zig");
