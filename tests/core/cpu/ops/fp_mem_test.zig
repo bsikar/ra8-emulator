@@ -116,14 +116,42 @@ test "a faulting access leaves Rn alone" {
     try std.testing.expectEqual(Ram.base + 4, cpu.regs.get(13));
 }
 
-test "unclaimed: 64-bit transfers, VLLDM, VSCCLRM, VSTR to PC, D16+, half, empty lists" {
+test "unclaimed: 64-bit transfers, VLLDM, VSCCLRM, VSTR to PC, D16+, 16-bit VLDM and PC VSTR.16, empty lists" {
     try std.testing.expect(!claimed(0xEC47, 0x6B13));
     try std.testing.expect(!claimed(0xEC30, 0x0A00));
     try std.testing.expect(!claimed(0xEC9F, 0x0A04));
     try std.testing.expect(!claimed(0xED8F, 0x0A01));
     try std.testing.expect(!claimed(0xEDD0, 0x0B00));
-    try std.testing.expect(!claimed(0xED90, 0x0900));
+    try std.testing.expect(!claimed(0xEC90, 0x0901));
+    try std.testing.expect(!claimed(0xED8F, 0x0901));
+    try std.testing.expect(!claimed(0xEDB0, 0x0901));
     try std.testing.expect(!claimed(0xECBD, 0x0B00));
     try std.testing.expect(!claimed(0xEDBD, 0x0B04));
     try std.testing.expect(claimed(0xED2D, 0x8A08));
+}
+
+test "vstr.16 s1, [r0, #6] then vldr.16 s2, [r0, #6] zero the top half" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(0, Ram.base);
+    ram.put(Ram.base + 8, 0x5555_5555);
+    cpu.fp.bank.writeS(1, 0xFFFF_3C00);
+    try run(&cpu, at(0, 0xEDC0, 0x0903));
+    try std.testing.expectEqual(@as(u32, 0x3C00_0000), ram.word(Ram.base + 4));
+    try std.testing.expectEqual(@as(u32, 0x5555_5555), ram.word(Ram.base + 8));
+    cpu.fp.bank.writeS(2, 0xFFFF_FFFF);
+    try run(&cpu, at(0, 0xED90, 0x1903));
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(2));
+}
+
+test "vldr.16 s0, [r1, #-2] and vldr.16 s0, [pc, #4]" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    ram.put(Ram.base + 4, 0xBEEF_0000);
+    ram.put(Ram.base + 8, 0xAAAA_1234);
+    cpu.regs.set(1, Ram.base + 8);
+    try run(&cpu, at(0, 0xED11, 0x0901));
+    try std.testing.expectEqual(@as(u32, 0xBEEF), cpu.fp.bank.readS(0));
+    try run(&cpu, at(Ram.base + 2, 0xED9F, 0x0902));
+    try std.testing.expectEqual(@as(u32, 0x1234), cpu.fp.bank.readS(0));
 }
