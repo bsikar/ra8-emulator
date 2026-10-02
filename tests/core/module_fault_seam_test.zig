@@ -55,6 +55,12 @@ const Bench = struct {
         self.core = try Engine.open();
         errdefer self.core.close();
         try self.core.mapBoardRam();
+        try self.prepare();
+    }
+
+    /// Everything after the RAM is in place, so a second core sharing
+    /// CPU0's RAM gets the same module, kernel and MPU map.
+    fn prepare(self: *Bench) !void {
         var number: u32 = 0;
         while (number < 16) : (number += 1) {
             try self.core.writeWord(layout.table + 4 * number, layout.handlers + 0x10 * number + 1);
@@ -120,4 +126,21 @@ test "the handler abandons the module and the kernel carries on privileged" {
     try std.testing.expectEqual(@as(u32, 0), try bench.core.register(.r5));
     try std.testing.expectEqual(@as(u32, 0), (try bench.core.register(.xpsr)) & 0x1FF);
     try std.testing.expectEqual(@as(u32, 0), (try bench.core.register(.control)) & 1);
+}
+
+test "a module on CPU1 is stopped by CPU1's own MPU and CPU0 never sees the fault" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var cpu1: Bench = undefined;
+    cpu1.core = try Engine.open();
+    try cpu1.core.shareBoardRamWith(&cpu0);
+    try cpu1.prepare();
+    defer cpu1.close();
+    try std.testing.expect(try cpu1.run(60) == null);
+    try std.testing.expectEqual(layout.recovery + 2, try cpu1.core.register(.pc));
+    try std.testing.expectEqual(@as(u32, 0), try cpu1.core.register(.r5));
+    try std.testing.expectEqual(layout.kernel_only, try cpu1.core.readWord(memmap.scb.mmfar));
+    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.mmfar));
 }
