@@ -29,4 +29,6 @@ test {
     _ = @import("gather_vectors_test.zig");
     _ = @import("gather64_vectors_test.zig");
     _ = @import("gather_imm_vectors_test.zig");
+    _ = @import("interleave_test.zig");
+    _ = @import("interleave_vectors_test.zig");
 }
