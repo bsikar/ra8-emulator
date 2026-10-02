@@ -55,3 +55,56 @@ test "info line takes one place" {
     try std.testing.expectError(error.MissingArgument, commands.parse("info line"));
     try std.testing.expectError(error.ExtraArgument, commands.parse("info line a b"));
 }
+
+fn listed(reader: anytype, first: u32, last: u32, expected: []const u8) !void {
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try session_source.lines(out.writer(), reader, first, last);
+    try std.testing.expectEqualStrings(expected, out.items);
+}
+
+test "list numbers the window's lines and stops where the source does" {
+    var whole = std.io.fixedBufferStream("a\nb\nc\nd\ne\n");
+    try listed(whole.reader(), 2, 3, "2\tb\n3\tc\n");
+    var short = std.io.fixedBufferStream("a\nb\nlast");
+    try listed(short.reader(), 1, 10, "1\ta\n2\tb\n3\tlast\n");
+    var empty = std.io.fixedBufferStream("");
+    try listed(empty.reader(), 1, 10, "");
+}
+
+test "list keeps the start of an overlong line and carries on after it" {
+    const long = "x" ** (session_source.limits.line_bytes + 10);
+    var source = std.io.fixedBufferStream(long ++ "\nnext\n");
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try session_source.lines(out.writer(), source.reader(), 1, 2);
+    try std.testing.expect(std.mem.endsWith(u8, out.items, "\n2\tnext\n"));
+    try std.testing.expectEqual(session_source.limits.line_bytes + 3 + 7, out.items.len);
+}
+
+fn sourced(dir: std.fs.Dir, sections: ra8.core.dwarf_line.Sections, address: u32, expected: []const u8) !void {
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try session_source.list(out.writer(), sections, dir, address);
+    try std.testing.expectEqualStrings(expected, out.items);
+}
+
+test "list reads the line's file under its directory, or says it is missing" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makeDir("src");
+    try tmp.dir.writeFile(.{ .sub_path = "src/main.c", .data = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n" });
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    try unit(&list, 4, 2, tables, &program);
+    const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
+    try sourced(tmp.dir, sections, 0x1000, "1\t1\n2\t2\n3\t3\n4\t4\n5\t5\n6\t6\n7\t7\n8\t8\n9\t9\n10\t10\n");
+    try sourced(tmp.dir, sections, 0x1004, "7\t/abs/boot.s: No such file or directory.\n");
+    try sourced(tmp.dir, sections, 0x2000, "No line number information available for address 0x00002000\n");
+}
+
+test "list takes an optional place" {
+    try std.testing.expectEqual(@as(?[]const u8, null), (try commands.parse("list")).?.list);
+    try std.testing.expectEqualStrings("reset", (try commands.parse("l reset")).?.list.?);
+    try std.testing.expectError(error.ExtraArgument, commands.parse("list a b"));
+}
