@@ -46,15 +46,25 @@ test "msr apsr_nzcvq and apsr_g write their own bits" {
     try std.testing.expectEqual(@as(u32, 0x000F_0000), cpu.regs.xpsr & 0x000F_0000);
 }
 
-test "unclaimed: SP or PC operands, mask 00, a non-10 mask off xPSR, MSPLIM" {
+test "unclaimed: SP or PC operands, mask 00, a non-10 mask off xPSR" {
     try std.testing.expect(mrs_msr.group.decode(wide(0xF3EF, 0x8D05)) == null);
     try std.testing.expect(mrs_msr.group.decode(wide(0xF38D, 0x8810)) == null);
     try std.testing.expect(mrs_msr.group.decode(wide(0xF381, 0x8010)) == null);
     try std.testing.expect(mrs_msr.group.decode(wide(0xF381, 0x8C10)) == null);
-    try std.testing.expect(mrs_msr.group.decode(wide(0xF3EF, 0x800A)) == null);
 }
 
 test "branch_wide does not claim these encodings first" {
     try std.testing.expect(branch_wide.group.decode(wide(0xF3EF, 0x8005)) == null);
     try std.testing.expect(branch_wide.group.decode(wide(0xF381, 0x8810)) == null);
+}
+
+test "msr psplim, r12 is the ThreadX scheduler encoding and mrs reads it back" {
+    var cpu = fresh();
+    cpu.regs.low[12] = 0x2201_0204;
+    try run(&cpu, 0xF38C, 0x880B); // msr psplim, r12
+    try std.testing.expectEqual(@as(u32, 0x2201_0200), cpu.regs.psplim);
+    try run(&cpu, 0xF3EF, 0x800B); // mrs r0, psplim
+    try std.testing.expectEqual(@as(u32, 0x2201_0200), cpu.regs.low[0]);
+    try run(&cpu, 0xF3EF, 0x810A); // mrs r1, msplim
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[1]);
 }
