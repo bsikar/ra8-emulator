@@ -21,6 +21,7 @@ const idle = @import("idle.zig");
 const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
 const pend_resume = @import("pend_resume.zig");
+const bus_error = @import("bus_error.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -53,6 +54,11 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         const pace = run_pace.forStretch(core, configured, session);
         const chunk = pace.chunk(remaining);
         if (try stretch(core, pc, chunk, session)) |taken| {
+            if (try bus_error.raised(core, session, taken)) |resumed| {
+                remaining -|= 1;
+                pc = resumed;
+                continue;
+            }
             const controller = session.interrupts orelse return taken;
             if (!nvic.isExceptionReturn(taken.pc)) return taken;
             remaining -= try returned(core, controller, session, remaining, taken.pc);

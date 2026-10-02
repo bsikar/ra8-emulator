@@ -20,6 +20,12 @@ const nvic = @import("nvic.zig");
 
 pub const bfar: u32 = 0xE000_ED38;
 
+/// What a run that raises BusFaults did with them, for the caller to read.
+pub const Tally = struct {
+    raised: u32 = 0,
+    escalated: u32 = 0,
+};
+
 /// What the refused access was.
 pub const Kind = enum { read, write, fetch };
 
