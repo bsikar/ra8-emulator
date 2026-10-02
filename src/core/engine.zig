@@ -10,6 +10,7 @@ const elf = @import("elf.zig");
 const pages = @import("pages.zig");
 const memmap = @import("memmap.zig");
 const board_ram = @import("board_ram.zig");
+const option_window = @import("../periph/mram/mram_window.zig");
 const periph = @import("../periph/registry.zig");
 const disasm = @import("../debug/disasm.zig");
 const cadence = @import("cadence.zig");
@@ -333,6 +334,7 @@ pub const Engine = struct {
         const needed = pages.forImage(image) catch return Error.MapFailed;
         for (needed.items()) |range| {
             if (board_ram.covers(range.base, range.size())) continue;
+            if (option_window.claim(self, range.base, range.size())) continue;
             try self.map(range.base, range.size());
         }
         var written: u32 = 0;

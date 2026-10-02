@@ -92,6 +92,9 @@ const mram_regs = @import("mram_regs.zig");
 
 pub const window = cells.window;
 
+/// The option window mapped as readable memory: mram_window.zig.
+pub const option_window = @import("mram_window.zig");
+
 /// Where these registers sit and what their bits mean: mram_regs.zig.
 pub const regs = mram_regs.regs;
 pub const command = mram_regs.command;
@@ -300,6 +303,7 @@ pub const Mram = struct {
     /// it the machine a landed program is written through to.
     pub fn attach(self: *Mram, bus: *periph.Bus, machine: engine.Engine) periph.Error!void {
         self.memory = machine;
+        _ = option_window.map(machine) catch 0;
         try bus.add(self.block());
         try bus.add(self.commandBlock());
         try bus.add(self.codeBlock());

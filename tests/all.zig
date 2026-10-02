@@ -233,6 +233,7 @@ test {
     _ = @import("periph/modem/modem_test.zig");
     _ = @import("periph/mram/mram_init_test.zig");
     _ = @import("periph/mram/mram_test.zig");
+    _ = @import("periph/mram/mram_window_test.zig");
     _ = @import("periph/mstp/mstp_drops_test.zig");
     _ = @import("periph/mrms_test.zig");
     _ = @import("periph/mstp/mstp_test.zig");
