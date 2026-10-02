@@ -224,6 +224,9 @@ pub const Nvic = struct {
         try core.writeWord(sp + 24, try core.register(.pc));
         try core.writeWord(sp + 28, stacked_xpsr);
 
+        // IPSR is the running exception, set before the stacks: an unprivileged
+        // thread cannot write PSP, and Handler mode can (RA8EMU-294).
+        try core.setRegister(.xpsr, (xpsr & ~ipsr_mask) | exc.number);
         if (on_process) {
             // The handler runs on the Main stack, so the thread's pointer is
             // left where a handler looks for it (PSP, which is what a
@@ -236,8 +239,6 @@ pub const Nvic = struct {
             try core.setRegister(.sp, sp);
         }
         try core.setRegister(.lr, exc_return.forEntry(from_handler, on_process));
-        // IPSR is the running exception: a handler that reads it gets itself.
-        try core.setRegister(.xpsr, (xpsr & ~ipsr_mask) | exc.number);
         try core.setRegister(.pc, handler);
 
         self.active[self.depth] = exc;

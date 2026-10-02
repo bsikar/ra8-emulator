@@ -25,6 +25,9 @@ const FakeCore = struct {
 
     words: std.AutoHashMap(u32, u32),
     registers: std.EnumArray(Name, u32) = std.EnumArray(Name, u32).initFill(0),
+    /// Unicorn's rule for an unprivileged thread: a PSP write from Thread
+    /// mode is dropped, so only one made from Handler mode lands.
+    unprivileged: bool = false,
 
     fn init(allocator: std.mem.Allocator) FakeCore {
         return .{ .words = std.AutoHashMap(u32, u32).init(allocator) };
@@ -47,6 +50,8 @@ const FakeCore = struct {
     }
 
     pub fn setRegister(self: *FakeCore, which: Name, value: u32) !void {
+        const thread = self.registers.get(.xpsr) & ipsr_mask == 0;
+        if (which == .psp and self.unprivileged and thread) return;
         self.registers.set(which, value);
     }
 
@@ -304,4 +309,22 @@ test "DHCSR.C_MASKINTS holds SysTick and external lines back while debug is on" 
     try std.testing.expectEqual(@as(?u16, null), try irqs.dispatch(&core));
     try core.writeWord(dhcsr.base, dhcsr.dhcsr_bits.c_debugen);
     try std.testing.expectEqual(@as(?u16, systick), try irqs.dispatch(&core));
+}
+
+test "an unprivileged thread on the Process stack has its frame left in PSP" {
+    var core = FakeCore{ .words = std.AutoHashMap(u32, u32).init(std.testing.allocator), .unprivileged = true };
+    defer core.deinit();
+    try core.plantVectorTable();
+    try core.setRegister(.sp, 0x2219_0CF0);
+    try core.setRegister(.pc, 0x020C_1442);
+    try core.writeWord(memmap.scb.icsr, icsr_pendstset);
+
+    var irqs = Nvic{ .on_process = true, .main_sp = 0x2219_FFE0 };
+    try std.testing.expectEqual(@as(?u16, systick), try irqs.dispatch(&core));
+    // A module thread's SVC handler reads its frame through PSP; a dropped
+    // write left it on whatever the last switch-in had put there.
+    const frame = 0x2219_0CF0 - frame_bytes;
+    try std.testing.expectEqual(@as(u32, frame), try core.register(.psp));
+    try std.testing.expectEqual(@as(u32, 0x020C_1442), try core.readWord(frame + 24));
+    try std.testing.expectEqual(@as(u32, 0x2219_FFE0), try core.register(.sp));
 }
