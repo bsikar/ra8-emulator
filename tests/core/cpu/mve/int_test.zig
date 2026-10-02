@@ -27,3 +27,10 @@ test "a saturating op that clamps nothing reports no saturation" {
     try std.testing.expectEqual(@as(u128, 3), r.value);
     try std.testing.expect(!r.saturated);
 }
+
+test "pairLane works at full precision before narrowing" {
+    try std.testing.expectEqual(@as(i64, 0xFF), int.pairLane(-128, 127, .abd));
+    try std.testing.expectEqual(@as(i64, 0xFF), int.pairLane(0xFF, 0xFF, .hadd));
+    try std.testing.expectEqual(@as(i64, 2), int.pairLane(1, 2, .rhadd));
+    try std.testing.expectEqual(@as(i64, -1), int.pairLane(0, 1, .hsub));
+}

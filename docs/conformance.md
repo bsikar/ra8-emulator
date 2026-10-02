@@ -149,3 +149,9 @@ is stale or an encoding is missing. Regenerate with
 | VMUL (vector) T1 | 3 |
 | VQADD (vector) T1 | 4 |
 | VQSUB (vector) T1 | 4 |
+| VABD (vector) T1 | 3 |
+| VMAX T1 | 3 |
+| VMIN T1 | 3 |
+| VHADD (vector) T1 | 2 |
+| VRHADD T1 | 2 |
+| VHSUB (vector) T1 | 2 |
