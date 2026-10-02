@@ -43,4 +43,6 @@ test {
     _ = @import("float_cvt_vectors_test.zig");
     _ = @import("float_int_test.zig");
     _ = @import("float_int_vectors_test.zig");
+    _ = @import("float_rint_test.zig");
+    _ = @import("float_rint_vectors_test.zig");
 }

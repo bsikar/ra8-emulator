@@ -298,3 +298,9 @@ is stale or an encoding is missing. Regenerate with
 | VCVT.F32.U32 (MVE, fixed-point) T1 | 1 |
 | VCVT.S16.F16 (MVE, fixed-point) T1 | 1 |
 | VCVT.F16.S16 (MVE, fixed-point) T1 | 1 |
+| VRINTA (MVE) T1 | 1 |
+| VRINTN (MVE) T1 | 1 |
+| VRINTP (MVE) T1 | 1 |
+| VRINTM (MVE) T1 | 2 |
+| VRINTZ (MVE) T1 | 2 |
+| VRINTX (MVE) T1 | 2 |
