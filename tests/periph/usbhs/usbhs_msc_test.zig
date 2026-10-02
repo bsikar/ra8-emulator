@@ -89,7 +89,7 @@ test "a read past the end fails and REQUEST SENSE says why, once" {
 
 test "a command it doesn't implement fails in the CSW, not on the pipe" {
     var target = msc.Target{ .disk = &disk_bytes };
-    try std.testing.expect(target.command(&cbw(8, 0, &.{ 0x35, 0, 0, 0, 0, 0, 0, 0, 0, 0 })));
+    try std.testing.expect(target.command(&cbw(8, 0, &.{ 0x04, 0, 0, 0, 0, 0 })));
     try std.testing.expectEqual(@as(u8, 1), csw(&target)[12]);
     try std.testing.expectEqual(msc.Sense.invalid_opcode, target.sense);
 }
@@ -119,4 +119,47 @@ test "a bus reset drops the command in flight" {
     var buf: [512]u8 = undefined;
     try std.testing.expectEqual(@as(usize, 0), target.reply(&buf));
     try std.testing.expect(target.command(&cbw(2, 0, &.{msc.op.test_unit_ready})));
+}
+
+test "WRITE(10) takes its data on bulk OUT, then reads back what it wrote" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    const saved = disk_bytes[2 * msc.block_len ..][0..msc.block_len].*;
+    defer disk_bytes[2 * msc.block_len ..][0..msc.block_len].* = saved;
+    try std.testing.expect(target.command(&cbw(5, 512, &.{ msc.op.write10, 0, 0, 0, 0, 2, 0, 0, 1, 0 })));
+    try std.testing.expectEqual(msc.Phase.data_out, target.phase);
+    var buf: [512]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), target.reply(&buf));
+    const half = [_]u8{0x11} ** 256;
+    try std.testing.expect(target.command(&half));
+    try std.testing.expectEqual(msc.Phase.data_out, target.phase);
+    try std.testing.expect(target.command(&([_]u8{0x22} ** 256)));
+    const status = csw(&target);
+    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, status[8..12], .little));
+    try std.testing.expectEqual(@as(u8, 0), status[12]);
+    try std.testing.expectEqual(@as(u32, 1), target.writes);
+    try std.testing.expect(target.command(&cbw(6, 512, &.{ msc.op.read10, 0, 0, 0, 0, 2, 0, 0, 1, 0 })));
+    try std.testing.expectEqual(@as(usize, 512), target.reply(&buf));
+    try std.testing.expectEqual(@as(u8, 0x11), buf[0]);
+    try std.testing.expectEqual(@as(u8, 0x22), buf[511]);
+}
+
+test "WRITE(10) past the end fails without a data stage" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    try std.testing.expect(target.command(&cbw(8, 512, &.{ msc.op.write10, 0, 0, 0, 0, 4, 0, 0, 1, 0 })));
+    try std.testing.expectEqual(msc.Phase.status, target.phase);
+    try std.testing.expectEqual(@as(u8, 1), csw(&target)[12]);
+}
+
+test "SYNCHRONIZE CACHE passes on a disk with medium" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    try std.testing.expect(target.command(&cbw(9, 0, &.{ msc.op.synchronize_cache10, 0, 0, 0, 0, 0, 0, 0, 0, 0 })));
+    try std.testing.expectEqual(@as(u8, 0), csw(&target)[12]);
+}
+
+test "a bus reset in the middle of a write drops the rest of it" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    _ = target.command(&cbw(3, 512, &.{ msc.op.write10, 0, 0, 0, 0, 3, 0, 0, 1, 0 }));
+    target.reset();
+    try std.testing.expectEqual(msc.Phase.command, target.phase);
+    try std.testing.expect(!target.command(&([_]u8{0} ** 8)));
 }

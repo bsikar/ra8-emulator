@@ -1,9 +1,10 @@
 //! The far end's mass-storage function: a Bulk-Only Transport target (USB
 //! MSC BOT 1.0) answering the handful of SCSI commands a host needs to mount
-//! a disk and read a sector, over an image the board hands it.
+//! a disk and read and write its sectors, over an image the board hands it.
 //!
 //! A command arrives as one 31-byte CBW on bulk OUT. What the device owes
 //! comes back on bulk IN: the data stage, if any, then a 13-byte CSW. A
+//! WRITE(10) takes its data stage on bulk OUT instead, before the CSW. A
 //! command it does not implement fails in the CSW with ILLEGAL REQUEST, the
 //! way a real stick answers, rather than stalling the pipe.
 const std = @import("std");
@@ -23,6 +24,8 @@ pub const op = struct {
     pub const prevent_allow: u8 = 0x1E;
     pub const read_capacity10: u8 = 0x25;
     pub const read10: u8 = 0x28;
+    pub const write10: u8 = 0x2A;
+    pub const synchronize_cache10: u8 = 0x35;
 };
 
 /// bCSWStatus.
@@ -41,14 +44,14 @@ pub const Sense = struct {
 };
 
 /// Where the current command has got to.
-pub const Phase = enum { command, data_in, status };
+pub const Phase = enum { command, data_in, data_out, status };
 
 /// Standard INQUIRY data: a removable direct-access block device, SPC-2.
 pub const inquiry_data = [_]u8{ 0x00, 0x80, 0x04, 0x02, 31, 0, 0, 0 } ++
     "RA8EMU  ".* ++ "EMULATED DISK   ".* ++ "1.00".*;
 
 pub const Target = struct {
-    disk: []const u8 = &.{},
+    disk: []u8 = &.{},
     phase: Phase = .command,
     sense: Sense = .{},
     status: Status = .passed,
@@ -57,20 +60,25 @@ pub const Target = struct {
     expected: u32 = 0,
     sent: u32 = 0,
     data: []const u8 = &.{},
+    /// What is left of the blocks a WRITE(10) is filling.
+    sink: []u8 = &.{},
     scratch: [18]u8 = [_]u8{0} ** 18,
     commands: u32 = 0,
     invalid: u32 = 0,
     failed: u32 = 0,
     reads: u32 = 0,
+    writes: u32 = 0,
 
     pub fn blocks(self: *const Target) u32 {
         return @intCast(self.disk.len / block_len);
     }
 
-    /// A packet from the host on bulk OUT. False when it is not a CBW the
-    /// target can take now: a short packet, a bad signature, or a command
-    /// sent while the last one still owes its CSW.
+    /// A packet from the host on bulk OUT: the next piece of a WRITE(10)'s
+    /// data, or a CBW. False when it is not a CBW the target can take now: a
+    /// short packet, a bad signature, or a command sent while the last one
+    /// still owes its CSW.
     pub fn command(self: *Target, packet: []const u8) bool {
+        if (self.phase == .data_out) return self.take(packet);
         if (self.phase != .command or packet.len != cbw_len or
             le32(packet[0..4]) != cbw_signature)
         {
@@ -83,7 +91,19 @@ pub const Target = struct {
         self.commands += 1;
         self.execute(packet[15..31]);
         if (self.data.len > self.expected) self.data = self.data[0..self.expected];
-        self.phase = if (self.data.len > 0) .data_in else .status;
+        if (self.sink.len > self.expected) self.sink = self.sink[0..self.expected];
+        self.phase = if (self.data.len > 0) .data_in else if (self.sink.len > 0) .data_out else .status;
+        return true;
+    }
+
+    /// A data-out packet lands in the blocks being written. The CSW is owed
+    /// once the last byte the CBW promised is in.
+    fn take(self: *Target, packet: []const u8) bool {
+        const n = @min(packet.len, self.sink.len);
+        @memcpy(self.sink[0..n], packet[0..n]);
+        self.sink = self.sink[n..];
+        self.sent += @intCast(n);
+        if (self.sink.len == 0) self.phase = .status;
         return true;
     }
 
@@ -91,7 +111,7 @@ pub const Target = struct {
     /// first, then the CSW. Zero when nothing is owed.
     pub fn reply(self: *Target, buf: []u8) usize {
         switch (self.phase) {
-            .command => return 0,
+            .command, .data_out => return 0,
             .data_in => {
                 const n = @min(buf.len, self.data.len);
                 @memcpy(buf[0..n], self.data[0..n]);
@@ -113,6 +133,7 @@ pub const Target = struct {
     pub fn reset(self: *Target) void {
         self.phase = .command;
         self.data = &.{};
+        self.sink = &.{};
     }
 
     fn writeCsw(self: *const Target, out: *[csw_len]u8) void {
@@ -125,6 +146,7 @@ pub const Target = struct {
     fn execute(self: *Target, cdb: []const u8) void {
         self.status = .passed;
         self.data = &.{};
+        self.sink = &.{};
         switch (cdb[0]) {
             op.test_unit_ready => _ = self.requireMedium(),
             op.request_sense => self.requestSense(),
@@ -136,6 +158,8 @@ pub const Target = struct {
             op.prevent_allow => {},
             op.read_capacity10 => self.readCapacity(),
             op.read10 => self.read(cdb),
+            op.write10 => self.write(cdb),
+            op.synchronize_cache10 => _ = self.requireMedium(),
             else => self.fail(Sense.invalid_opcode),
         }
     }
@@ -173,12 +197,28 @@ pub const Target = struct {
     }
 
     fn read(self: *Target, cdb: []const u8) void {
-        if (!self.requireMedium()) return;
+        const span = self.blocksOf(cdb) orelse return;
+        self.reads += 1;
+        self.data = span;
+    }
+
+    fn write(self: *Target, cdb: []const u8) void {
+        const span = self.blocksOf(cdb) orelse return;
+        self.writes += 1;
+        self.sink = span;
+    }
+
+    /// The disk bytes a READ(10) or WRITE(10) names, or null after failing
+    /// the command when there is no medium or the range runs off the end.
+    fn blocksOf(self: *Target, cdb: []const u8) ?[]u8 {
+        if (!self.requireMedium()) return null;
         const lba: u64 = std.mem.readInt(u32, cdb[2..6], .big);
         const count: u64 = std.mem.readInt(u16, cdb[7..9], .big);
-        if (lba + count > self.blocks()) return self.fail(Sense.lba_out_of_range);
-        self.reads += 1;
-        self.data = self.disk[lba * block_len .. (lba + count) * block_len];
+        if (lba + count > self.blocks()) {
+            self.fail(Sense.lba_out_of_range);
+            return null;
+        }
+        return self.disk[lba * block_len .. (lba + count) * block_len];
     }
 };
 
