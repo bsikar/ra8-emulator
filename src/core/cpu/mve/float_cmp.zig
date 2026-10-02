@@ -6,14 +6,14 @@
 //! negation, GE is FPCompareGE and LT its negation, GT is FPCompareGT and
 //! LE its negation. So an unordered lane is true for NE, LT and LE. EQ and
 //! NE are quiet (IOC only for a signalling NaN); the ordered conditions
-//! signal for any NaN. An inactive lane raises no flags and leaves its
-//! bytes clear, as QEMU's DO_VCMP_FP masks the result with the predicate.
+//! signal for any NaN. As QEMU's DO_VCMP_FP does, a lane is compared when
+//! any of its bytes is predicated, its flags count only when its first
+//! byte is, and the result is masked with the predicate.
 const fpu = @import("../fpu/all.zig");
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
 const nzcv = fpu.compare.nzcv;
 const qreg = @import("qreg.zig");
-const predicate = @import("predicate.zig");
 const float = @import("float.zig");
 
 pub const Cond = enum { eq, ne, ge, lt, gt, le };
@@ -27,7 +27,8 @@ pub fn compare(n: u128, m: u128, size: float.Size, cond: Cond, mask: u16, fpscr:
     var out: u16 = 0;
     for (0..qreg.lanes(qs)) |i| {
         const e: u8 = @intCast(i);
-        if (!predicate.active(mask, qs, e)) continue;
+        const lane_mask = float.laneMask(mask, size, e);
+        if (lane_mask == 0) continue;
         var work = float.standard(fpscr.*);
         const x = qreg.elem(n, qs, e);
         const y = qreg.elem(m, qs, e);
@@ -39,7 +40,7 @@ pub fn compare(n: u128, m: u128, size: float.Size, cond: Cond, mask: u16, fpscr:
             const lane_bits: u16 = (@as(u16, 1) << bytes) - 1;
             out |= lane_bits << @intCast(@as(u8, bytes) * e);
         }
-        float.accumulate(fpscr, work);
+        if (lane_mask & 1 == 1) float.accumulate(fpscr, work);
     }
     return out & mask;
 }

@@ -91,4 +91,5 @@ pub const mve_vld_il = @import("ops/mve_vld_il.zig");
 pub const mve_beats = @import("ops/mve_beats.zig");
 pub const mve_float = @import("ops/mve_float.zig");
 pub const mve_float_scalar = @import("ops/mve_float_scalar.zig");
+pub const mve_vcmp_fp = @import("ops/mve_vcmp_fp.zig");
 pub const table = @import("ops/table.zig");
