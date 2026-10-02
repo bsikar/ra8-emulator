@@ -13,6 +13,8 @@
 # FUNCTION defaults to main and must be one CPU0 reaches. On CPU1 the
 # session breaks a few instructions past where it stopped and steps from
 # there, so it needs no symbol of the second image's.
+# CPU=zig serves CPU0 from the Zig core (--cpu zig, RA8EMU-110); the Zig
+# debugger takes no second core yet, so CPU1_ELF is refused there.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
@@ -24,11 +26,16 @@ image=$2
 second=${3:-}
 function=${4:-main}
 gdb=${5:-gdb-multiarch}
+cpu=${CPU:-unicorn}
+if [ "$cpu" = zig ] && [ -n "$second" ]; then
+    echo "gdb_corpus: CPU=zig takes CPU0 only, leave out CPU1_ELF" >&2
+    exit 2
+fi
 port=$((4500 + RANDOM % 400))
 work=$(mktemp -d)
 trap 'kill "$pid" 2>/dev/null || true; rm -rf "$work"' EXIT
 
-args=("$image")
+args=("$image" --cpu "$cpu")
 [ -n "$second" ] && args+=(--cpu1 "$second")
 "$emulator" "${args[@]}" --gdb "$port" 2>"$work/emu" &
 pid=$!
@@ -67,4 +74,4 @@ if [ "$failed" -ne 0 ]; then
     grep -v "Python\|ModuleNotFound" "$work/out" >&2 || true
     exit 1
 fi
-echo "gdb_corpus: $(basename "$image")${second:+ + $(basename "$second")} passed"
+echo "gdb_corpus ($cpu): $(basename "$image")${second:+ + $(basename "$second")} passed"
