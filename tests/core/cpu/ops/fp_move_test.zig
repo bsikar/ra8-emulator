@@ -60,7 +60,7 @@ test "fields" {
     try std.testing.expectEqual(fp_move.Fields{ .rt = 6, .rt2 = 7, .fp = 3, .to_core = false }, fp_move.pair(wide(0xEC47, 0x6B13)));
 }
 
-test "unclaimed: SP or PC, SBZ bits, S31 pair, D16+, equal destinations, half precision" {
+test "unclaimed: SP or PC, SBZ bits, S31 pair, D16+, equal destinations, half-precision SP" {
     try std.testing.expect(fp_move.group.decode(wide(0xEE00, 0xDA90)) == null);
     try std.testing.expect(fp_move.group.decode(wide(0xEE10, 0xFA10)) == null);
     try std.testing.expect(fp_move.group.decode(wide(0xEE00, 0x2AB0)) == null);
@@ -68,6 +68,21 @@ test "unclaimed: SP or PC, SBZ bits, S31 pair, D16+, equal destinations, half pr
     try std.testing.expect(fp_move.group.decode(wide(0xEC47, 0x6B33)) == null);
     try std.testing.expect(fp_move.group.decode(wide(0xEC51, 0x1B12)) == null);
     try std.testing.expect(fp_move.group.decode(wide(0xEC4F, 0x0A11)) == null);
-    try std.testing.expect(fp_move.group.decode(wide(0xEE00, 0x2990)) == null);
+    try std.testing.expect(fp_move.group.decode(wide(0xEE00, 0xD990)) == null);
+    try std.testing.expect(fp_move.group.decode(wide(0xEE00, 0x2B90)) == null);
     try std.testing.expect(fp_move.group.decode(wide(0xEE30, 0x0A81)) == null);
+}
+
+test "vmov.f16 s1, r2 and vmov.f16 r3, s1 move only the low halfword" {
+    var cpu: Cpu = .{ .bus = undefined };
+    cpu.regs.set(2, 0xDEAD_3C00);
+    cpu.fp.bank.writeS(1, 0xFFFF_FFFF);
+    const to_fp = wide(0xEE00, 0x2990);
+    try (fp_move.group.decode(to_fp) orelse return error.NotClaimed)(&cpu, to_fp);
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(1));
+    cpu.fp.bank.writeS(1, 0xABCD_4000);
+    cpu.regs.set(3, 0xFFFF_FFFF);
+    const to_core = wide(0xEE10, 0x3990);
+    try (fp_move.group.decode(to_core) orelse return error.NotClaimed)(&cpu, to_core);
+    try std.testing.expectEqual(@as(u32, 0x4000), cpu.regs.get(3));
 }
