@@ -6,6 +6,7 @@ pub const hint = @import("ops/hint.zig");
 pub const ldr_literal = @import("ops/ldr_literal.zig");
 pub const ldst_imm = @import("ops/ldst_imm.zig");
 pub const ldst_reg = @import("ops/ldst_reg.zig");
+pub const ldm_stm = @import("ops/ldm_stm.zig");
 pub const ldst_wide = @import("ops/ldst_wide.zig");
 pub const shift_imm = @import("ops/shift_imm.zig");
 pub const add_sub = @import("ops/add_sub.zig");
