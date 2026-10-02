@@ -1,0 +1,72 @@
+//! Covers src/core/cpu/sysreg.zig.
+const std = @import("std");
+const ra8 = @import("ra8");
+const regs = ra8.core.cpu.regs;
+const sysreg = ra8.core.cpu.sysreg;
+const Regs = regs.Regs;
+
+test "known covers the PSR views, stack pointers, masks and CONTROL only" {
+    try std.testing.expect(sysreg.known(0) and sysreg.known(3) and sysreg.known(7));
+    try std.testing.expect(!sysreg.known(4));
+    try std.testing.expect(sysreg.known(8) and sysreg.known(9));
+    try std.testing.expect(!sysreg.known(10) and !sysreg.known(11)); // MSPLIM, PSPLIM
+    try std.testing.expect(sysreg.known(16) and sysreg.known(20));
+    try std.testing.expect(!sysreg.known(0x88)); // MSP_NS
+}
+
+test "xPSR views: IPSR with SYSm[0], flags unless SYSm[2], EPSR reads zero" {
+    var r: Regs = .{ .xpsr = 0xF90F_0000 | regs.xpsr_bits.thumb | 0x0F };
+    try std.testing.expectEqual(@as(u32, 0xF80F_0000), sysreg.read(&r, 0)); // APSR
+    try std.testing.expectEqual(@as(u32, 0xF80F_000F), sysreg.read(&r, 3)); // XPSR
+    try std.testing.expectEqual(@as(u32, 0x0F), sysreg.read(&r, 5)); // IPSR
+    try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, 6)); // EPSR
+}
+
+test "unprivileged thread mode reads zero masks and stack pointers but sees CONTROL" {
+    var r: Regs = .{ .control = regs.control_bits.npriv, .primask = 1, .msp = 0x2000_0000 };
+    try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, sysreg.sysm.primask));
+    try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, sysreg.sysm.msp));
+    try std.testing.expectEqual(regs.control_bits.npriv, sysreg.read(&r, sysreg.sysm.control));
+    sysreg.write(&r, sysreg.sysm.primask, 0b10, 0);
+    try std.testing.expectEqual(@as(u32, 1), r.primask);
+}
+
+test "APSR writes honour the mask and leave IPSR and EPSR alone" {
+    var r: Regs = .{ .xpsr = regs.xpsr_bits.thumb | 0x03 };
+    sysreg.write(&r, 0, 0b10, 0xFFFF_FFFF);
+    try std.testing.expectEqual(0xF800_0000 | regs.xpsr_bits.thumb | 0x03, r.xpsr);
+    sysreg.write(&r, 0, 0b01, 0x000F_0000);
+    try std.testing.expectEqual(@as(u32, 0x000F_0000), r.xpsr & 0x000F_0000);
+    sysreg.write(&r, 5, 0b10, 0); // IPSR ignores it
+    try std.testing.expectEqual(@as(u32, 0x03), r.xpsr & regs.xpsr_bits.ipsr);
+}
+
+test "BASEPRI_MAX only raises the masking priority" {
+    var r: Regs = .{};
+    sysreg.write(&r, sysreg.sysm.basepri_max, 0b10, 0x40);
+    try std.testing.expectEqual(@as(u32, 0x40), r.basepri);
+    sysreg.write(&r, sysreg.sysm.basepri_max, 0b10, 0x80);
+    try std.testing.expectEqual(@as(u32, 0x40), r.basepri);
+    sysreg.write(&r, sysreg.sysm.basepri_max, 0b10, 0);
+    try std.testing.expectEqual(@as(u32, 0x40), r.basepri);
+    sysreg.write(&r, sysreg.sysm.basepri_max, 0b10, 0x20);
+    try std.testing.expectEqual(@as(u32, 0x20), r.basepri);
+}
+
+test "FAULTMASK cannot be set from HardFault but can be cleared" {
+    var r: Regs = .{ .xpsr = 3, .faultmask = 1 };
+    sysreg.write(&r, sysreg.sysm.faultmask, 0b10, 0);
+    try std.testing.expectEqual(@as(u32, 0), r.faultmask);
+    sysreg.write(&r, sysreg.sysm.faultmask, 0b10, 1);
+    try std.testing.expectEqual(@as(u32, 0), r.faultmask);
+}
+
+test "CONTROL: SPSEL changes from thread mode only, and switches SP" {
+    var r: Regs = .{ .msp = 0x2000_1000, .psp = 0x2000_2000 };
+    sysreg.write(&r, sysreg.sysm.control, 0b10, 0xFFFF_FFF2);
+    try std.testing.expectEqual(@as(u32, 0x2), r.control);
+    try std.testing.expectEqual(@as(u32, 0x2000_2000), r.sp());
+    r.xpsr = 0x0F; // SysTick handler
+    sysreg.write(&r, sysreg.sysm.control, 0b10, 0x5);
+    try std.testing.expectEqual(@as(u32, 0x7), r.control);
+}
