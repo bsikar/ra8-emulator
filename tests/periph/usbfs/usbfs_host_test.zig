@@ -18,6 +18,10 @@ const config_descriptor = [25]u8{
     7, 5, 0x81, 2, 64, 0,    0,
 };
 
+/// String descriptor 0 listing US English, and "RA8" as the iProduct string.
+const languages = [4]u8{ 4, 3, 0x09, 0x04 };
+const product = [8]u8{ 8, 3, 'R', 0, 'A', 0, '8', 0 };
+
 fn attached() usbfs.Device {
     var device = usbfs.Device{};
     device.connectVbus();
@@ -43,6 +47,8 @@ fn answer(device: *usbfs.Device) void {
     if (request == 0x0680 and value == 0x0100) send(device, &device_descriptor);
     if (request == 0x0680 and value == 0x0200) send(device, config_descriptor[0..@min(length, config_descriptor.len)]);
     if (request == 0x0880) send(device, &.{1});
+    if (request == 0x0680 and value == 0x0300) send(device, &languages);
+    if (request == 0x0680 and value == 0x0302) send(device, &product);
     if (request == 0x0080) send(device, &.{ 1, 0 });
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl | regs.dcpctr.pid_buf);
 }
@@ -60,6 +66,8 @@ test "a device that answers is enumerated to Configured" {
     try std.testing.expectEqualSlices(u8, &config_descriptor, host.configuration());
     try std.testing.expectEqual(@as(u8, 1), host.config_value[0]);
     try std.testing.expectEqualSlices(u8, &.{ 1, 0 }, &host.status);
+    try std.testing.expectEqualSlices(u8, &languages, host.languages[0..4]);
+    try std.testing.expectEqualSlices(u8, &product, host.product[0..8]);
     const status = device.read(at(regs.reg.intsts0), 2);
     try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_configured), status & usbfs.intsts0.dvsq_mask);
     try std.testing.expectEqual(@as(u32, usbfs.host.requests.address), device.read(at(regs.reg.usbaddr), 2));
@@ -156,4 +164,38 @@ test "a device that never answers GET_STATUS leaves the host short of configured
     var i: u32 = 0;
     while (i < 20) : (i += 1) host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
+}
+
+test "a string read asks for up to 255 bytes of the index in that language" {
+    const packet = usbfs.host.requests.stringDescriptor(2, 0x0409);
+    try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x06, 2, 3, 0x09, 0x04, 0xFF, 0 }, &packet);
+}
+
+test "a short packet ends a read before the requested length" {
+    var device = attached();
+    var host = Host{ .step = .string_languages };
+    host.tick(&device);
+    send(&device, &languages);
+    host.tick(&device);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_read_status, device.interruptStatus() & usbfs.intsts0.ctsq_mask);
+    try std.testing.expectEqualSlices(u8, &languages, host.languages[0..4]);
+}
+
+test "a device that names no product skips the product string" {
+    var device = attached();
+    var host = Host{ .step = .string_product };
+    host.languages[0] = 4;
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
+}
+
+test "the product string is asked for in the device's first language" {
+    var device = attached();
+    var host = Host{ .step = .string_product };
+    host.device[15] = 2;
+    @memcpy(host.languages[0..4], &languages);
+    host.tick(&device);
+    try std.testing.expectEqual(@as(u32, 0x0302), device.read(at(regs.reg.usbval), 2));
+    try std.testing.expectEqual(@as(u32, 0x0409), device.read(at(regs.reg.usbindx), 2));
 }
