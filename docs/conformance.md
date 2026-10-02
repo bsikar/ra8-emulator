@@ -50,3 +50,14 @@ is stale or an encoding is missing. Regenerate with
 | VCMPE.F64 T2 | 1 |
 | VCVT.F64.F32 T1 | 10 |
 | VCVT.F32.F64 T1 | 17 |
+| VCVT.S32.F32 T1 | 14 |
+| VCVTR.S32.F32 T1 | 7 |
+| VCVT.U32.F32 T1 | 6 |
+| VCVTR.U32.F32 T1 | 2 |
+| VCVT.S32.F64 T1 | 4 |
+| VCVTR.S32.F64 T1 | 1 |
+| VCVT.U32.F64 T1 | 3 |
+| VCVT.F32.S32 T1 | 8 |
+| VCVT.F32.U32 T1 | 3 |
+| VCVT.F64.S32 T1 | 2 |
+| VCVT.F64.U32 T1 | 2 |

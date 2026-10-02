@@ -68,6 +68,23 @@ pub fn Compare(comptime B: type) type {
 /// What a compare produces: the NZCV it writes to FPSCR, and the flags.
 pub const Ordering = struct { nzcv: u4, flags: u32 = 0 };
 
+/// One operand for the conversions between floating point and integers:
+/// whether the integer side is unsigned, and the rounding mode the form
+/// uses (round toward zero for VCVT to an integer, FPSCR's for VCVTR and
+/// for the conversions from an integer).
+pub fn Fixed(comptime B: type) type {
+    return struct {
+        a: B,
+        unsigned: bool = false,
+        mode: RMode = .nearest,
+        fz: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .rmode = self.mode, .fz = self.fz };
+        }
+    };
+}
+
 pub fn Result(comptime B: type) type {
     return struct { bits: B, flags: u32 = 0 };
 }
