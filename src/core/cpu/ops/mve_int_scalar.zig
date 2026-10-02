@@ -4,8 +4,8 @@
 //! hw1 is 111U 1110 0 D size Qn B and hw2 is Qd T 1 1 1 1/0 N 1 S 0 Rm, per
 //! LLVM's assembler; B picks the modulo group (VADD/VSUB/VMUL/VQDMULH) from
 //! the saturating/halving one. U is unsigned for the second group, rounding
-//! for VQDMULH, ignored by VADD/VSUB, and makes VMUL into VBRSR (unclaimed
-//! here). Rm of SP or PC is CONSTRAINED UNPREDICTABLE and left unclaimed.
+//! for VQDMULH, ignored by VADD/VSUB, and makes VMUL into VBRSR, whose
+//! Rm[7:0] is a bit count rather than a lane value. Rm of SP or PC is CONSTRAINED UNPREDICTABLE and left unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -32,7 +32,7 @@ pub const encodings = struct {
     pub const vhsub: u16 = 0x1F40;
 };
 
-pub const Kind = enum { vadd, vsub, vmul, vqdmulh, vqrdmulh, vqadd, vqsub, vhadd, vhsub };
+pub const Kind = enum { vadd, vsub, vmul, vbrsr, vqdmulh, vqrdmulh, vqadd, vqsub, vhadd, vhsub };
 
 /// Which instruction an encoding is, or null outside this group.
 pub fn kindOf(instr: Instr) ?Kind {
@@ -43,7 +43,7 @@ pub fn kindOf(instr: Instr) ?Kind {
         e.modulo_hw1 => switch (tail) {
             e.vadd => .vadd,
             e.vsub => .vsub,
-            e.vmul => if (u) null else .vmul,
+            e.vmul => if (u) .vbrsr else .vmul,
             e.vqdmulh => if (u) .vqrdmulh else .vqdmulh,
             else => null,
         },
@@ -92,6 +92,7 @@ fn execFor(comptime kind: Kind, comptime size: Size, comptime unsigned: bool) op
                 .vadd => mve.int.lanewise(a, b, size, .add),
                 .vsub => mve.int.lanewise(a, b, size, .sub),
                 .vmul => mve.int.lanewise(a, b, size, .mul),
+                .vbrsr => mve.bit_reverse.reverseShift(a, cpu.regs.get(@intCast(instr.hw2 & 0xF)), size),
                 .vhadd => mve.int.pairwise(a, b, size, unsigned, .hadd),
                 .vhsub => mve.int.pairwise(a, b, size, unsigned, .hsub),
                 .vqadd, .vqsub => blk: {
