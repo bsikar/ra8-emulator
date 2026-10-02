@@ -10,6 +10,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const mve_int = @import("mve_int.zig");
 const pair = @import("mve_int_pair.zig");
 const Size = mve.qreg.Size;
@@ -87,7 +88,7 @@ fn execFor(comptime kind: Kind, comptime size: Size, comptime unsigned: bool) op
             const qd: u3 = @intCast(instr.hw2 >> 13);
             const a = mve.qreg.read(&cpu.fp.bank, @intCast(instr.hw1 >> 1 & 7));
             const b = splat(cpu.regs.get(@intCast(instr.hw2 & 0xF)), size);
-            const live = pair.activeLanes(mve.vpt.elementMask(cpu.fp.vpr), size);
+            const live = pair.activeLanes(mve_beats.mask(cpu), size);
             const result = switch (kind) {
                 .vadd => mve.int.lanewise(a, b, size, .add),
                 .vsub => mve.int.lanewise(a, b, size, .sub),

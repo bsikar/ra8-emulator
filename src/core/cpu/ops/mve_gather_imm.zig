@@ -15,6 +15,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const gather = mve.gather;
 
 pub const group: op.Group = .{ .name = "mve_gather_imm", .decode = decode, .oracle = false };
@@ -43,7 +44,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const load = instr.hw1 >> 4 & 1 == 1;
     const bases = mve.qreg.read(&cpu.fp.bank, qm);
     const value = mve.qreg.read(&cpu.fp.bank, qd);
-    const mask = mve.vpt.elementMask(cpu.fp.vpr);
+    const mask = mve_beats.mask(cpu);
     var out: u128 = 0;
     var moved = bases;
     for (0..4) |k| {
@@ -67,7 +68,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
             try cpu.bus.write(beat, &buf);
         }
     }
-    if (load) mve.qreg.write(&cpu.fp.bank, qd, out);
-    if (instr.hw1 >> 5 & 1 == 1) mve.qreg.write(&cpu.fp.bank, qm, moved);
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    if (load) mve_beats.keep(cpu, qd, out);
+    if (instr.hw1 >> 5 & 1 == 1) mve_beats.keep(cpu, qm, moved);
+    mve_beats.finish(cpu);
 }

@@ -15,6 +15,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const gather = mve.gather;
 const contiguous = mve.contiguous;
 const Size = mve.qreg.Size;
@@ -67,7 +68,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const base = cpu.regs.get(@intCast(instr.hw1 & 0xF));
     const qd: u3 = @intCast(instr.hw2 >> 13 & 7);
     const offsets = mve.qreg.read(&cpu.fp.bank, @intCast(instr.hw2 >> 1 & 7));
-    const mask = mve.vpt.elementMask(cpu.fp.vpr);
+    const mask = mve_beats.mask(cpu);
     const value = mve.qreg.read(&cpu.fp.bank, qd);
     var out: u128 = 0;
     for (0..mve.qreg.lanes(f.esize)) |k| {
@@ -87,6 +88,6 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
             out = mve.qreg.setElem(out, f.esize, e, contiguous.element(.{ .value = raw, .msize = f.msize, .signed = f.signed, .store = false }));
         }
     }
-    if (!f.store) mve.qreg.write(&cpu.fp.bank, qd, out);
-    cpu.fp.vpr = mve.vpt.advance(cpu.fp.vpr);
+    if (!f.store) mve_beats.keep(cpu, qd, out);
+    mve_beats.finish(cpu);
 }

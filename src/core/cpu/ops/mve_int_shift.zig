@@ -9,6 +9,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const mve_int = @import("mve_int.zig");
 const pair = @import("mve_int_pair.zig");
 const Size = mve.qreg.Size;
@@ -58,7 +59,7 @@ fn execFor(comptime size: Size, comptime mode: Mode) op.Exec {
             const shifts = mve.qreg.read(&cpu.fp.bank, r[1]);
             const result = mve.int_shift.byRegister(values, shifts, size, mode);
             if (mode.saturate) {
-                const live = pair.activeLanes(mve.vpt.elementMask(cpu.fp.vpr), size);
+                const live = pair.activeLanes(mve_beats.mask(cpu), size);
                 if (mve.int_shift.byRegister(values & live, shifts, size, mode).saturated) cpu.fp.fpscr.qc = 1;
             }
             mve_int.writePredicated(cpu, r[0], result.value);

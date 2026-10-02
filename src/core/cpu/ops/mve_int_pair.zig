@@ -9,6 +9,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const mve_int = @import("mve_int.zig");
 const Size = mve.qreg.Size;
 const Pairwise = mve.int.Pairwise;
@@ -80,7 +81,7 @@ fn execFor(comptime kind: Kind, comptime size: Size, comptime unsigned: bool) op
 
 /// VQADD or VQSUB; QC is raised only by a lane the VPT block leaves active.
 fn saturate(cpu: *Cpu, a: u128, b: u128, size: Size, unsigned: bool, sub: bool) u128 {
-    const live = activeLanes(mve.vpt.elementMask(cpu.fp.vpr), size);
+    const live = activeLanes(mve_beats.mask(cpu), size);
     if (mve.int.saturating(a & live, b & live, size, unsigned, sub).saturated) cpu.fp.fpscr.qc = 1;
     return mve.int.saturating(a, b, size, unsigned, sub).value;
 }

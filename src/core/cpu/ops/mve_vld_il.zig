@@ -3,7 +3,8 @@
 //! interleave.zig gives each beat's word offset and the register and
 //! element of every memory element in it. The four words move lowest
 //! beat first; W adds 32 (VLD2/VST2) or 64 (VLD4/VST4) to Rn after.
-//! These are not predicated and leave VPT alone, as QEMU models them.
+//! These are not predicated and leave VPT alone, as QEMU models them;
+//! beats EPSR.ECI marks done are skipped and ECI moves on after.
 //!
 //!   hw1 1111 1100 1 D W L Rn      hw2 Qd 1 111 size pat 0000 four
 //!
@@ -14,6 +15,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const mve = @import("../mve/all.zig");
+const mve_beats = @import("mve_beats.zig");
 const interleave = mve.interleave;
 const Size = mve.qreg.Size;
 
@@ -52,7 +54,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const load = instr.hw1 >> 4 & 1 == 1;
     var q: [4]u128 = undefined;
     for (0..regs) |r| q[r] = mve.qreg.read(&cpu.fp.bank, @intCast(qd + r));
+    const pending = mve_beats.pending(cpu);
     for (0..4) |b| {
+        if (pending >> @intCast(b * 4) & 1 == 0) continue;
         const off = interleave.beatOffset(.{ .regs = regs, .pat = @intCast(instr.hw2 >> 5 & 3), .beat = @intCast(b) });
         var buf: [4]u8 = undefined;
         if (load) {
@@ -65,6 +69,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     }
     if (load) for (0..regs) |r| mve.qreg.write(&cpu.fp.bank, @intCast(qd + r), q[r]);
     if (instr.hw1 >> 5 & 1 == 1) cpu.regs.set(rn, base +% @as(u32, regs) * 16);
+    mve_beats.finishEci(cpu);
 }
 
 /// Spreads one loaded word's elements over the registers.

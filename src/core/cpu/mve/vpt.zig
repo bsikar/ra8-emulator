@@ -31,10 +31,19 @@ pub fn elementMask(vpr: Vpr) u16 {
 
 /// The state after one MVE instruction of the block has run.
 pub fn advance(vpr: Vpr) Vpr {
+    return advanceBeats(vpr, 0xFFFF);
+}
+
+/// advance() for an instruction that ran only the beats whose byte lanes
+/// are set in `ran` (EPSR.ECI resumed it): only those P0 bits invert, and
+/// MASK01 moves only when beat 1 ran. Beat 3 always runs.
+pub fn advanceBeats(vpr: Vpr, ran: u16) Vpr {
     var out = vpr;
-    if (vpr.mask01 > 0b1000) out.p0 ^= 0x00FF;
-    if (vpr.mask23 > 0b1000) out.p0 ^= 0xFF00;
-    out.mask01 = vpr.mask01 << 1;
+    var invert = ran;
+    if (vpr.mask01 <= 0b1000) invert &= 0xFF00;
+    if (vpr.mask23 <= 0b1000) invert &= 0x00FF;
+    out.p0 ^= invert;
+    if (ran & 0x00F0 != 0) out.mask01 = vpr.mask01 << 1;
     out.mask23 = vpr.mask23 << 1;
     return out;
 }
