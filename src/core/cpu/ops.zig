@@ -20,6 +20,7 @@ pub const mov_wide = @import("ops/mov_wide.zig");
 pub const divide = @import("ops/divide.zig");
 pub const dp_shifted = @import("ops/dp_shifted.zig");
 pub const shift_reg = @import("ops/shift_reg.zig");
+pub const add_sub_wide = @import("ops/add_sub_wide.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
