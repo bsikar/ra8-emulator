@@ -62,7 +62,7 @@ pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears };
+    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
     return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary);
 }
 

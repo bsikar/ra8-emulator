@@ -44,3 +44,20 @@ test "an unarmed log refuses window accesses, a mismatched read completes with z
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, &into, .little));
     try std.testing.expect(log.verdict().?.oracle == null);
 }
+
+test "a store outside the window banks the Zig side's own SAU" {
+    var core = try ra8.core.engine.Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var log: periph_log.Log = .{};
+    var partitions = ra8.periph.sau.Sau.init();
+    var replay: ReplayBus = .{ .memory = .{ .core = &core }, .log = &log, .scs = .{ .partitions = &partitions } };
+    const sau = ra8.core.memmap.sau;
+    try replay.view().write(sau.rnr, &[_]u8{ 2, 0, 0, 0 });
+    try replay.view().write(sau.rbar, &[_]u8{ 0x00, 0x00, 0x08, 0x02 });
+    try replay.view().write(sau.rnr, &[_]u8{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(@as(u32, 0), try replay.view().readWord(sau.rbar));
+    try replay.view().write(sau.rnr, &[_]u8{ 2, 0, 0, 0 });
+    try std.testing.expectEqual(@as(u32, 0x0208_0000), try replay.view().readWord(sau.rbar));
+    try std.testing.expectEqual(@as(u32, 1), partitions.banked);
+}

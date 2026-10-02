@@ -9,12 +9,17 @@
 const std = @import("std");
 const bus = @import("../bus.zig");
 const EngineBus = @import("../engine_bus.zig").EngineBus;
-const BoardBus = @import("../board_bus.zig").BoardBus;
+const board_bus = @import("../board_bus.zig");
+const BoardBus = board_bus.BoardBus;
 const periph_log = @import("periph_log.zig");
 
 pub const ReplayBus = struct {
     memory: EngineBus,
     log: *periph_log.Log,
+    /// The Zig side's own SAU and MPU, banked as the oracle's hooks bank
+    /// its copy. Fault clears are left off: the oracle only settles them at
+    /// a board boundary, which a lockstep step never reaches.
+    scs: board_bus.Scs = .{},
 
     pub fn view(self: *ReplayBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -41,7 +46,7 @@ pub const ReplayBus = struct {
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *ReplayBus = @ptrCast(@alignCast(ctx));
-        if (!BoardBus.inWindow(address, bytes.len)) return self.memory.view().write(address, bytes);
+        if (!BoardBus.inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
         if (!self.log.armed) return bus.Error.Unmapped;
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);

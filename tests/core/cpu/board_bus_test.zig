@@ -106,7 +106,7 @@ test "SAU RBAR and RLAR bank through RNR on the Zig bus" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var partitions = ra8.periph.sau.Sau.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .partitions = &partitions };
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .partitions = &partitions } };
     try storeWord(&board, memmap.sau.rnr, 1);
     try storeWord(&board, memmap.sau.rbar, 0x0200_0000);
     try storeWord(&board, memmap.sau.rlar, 0x0207_FFE1);
@@ -138,7 +138,7 @@ test "MPU pairs bank through RNR on the Zig bus, aliases included" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var regions = ra8.periph.mpu.Mpu.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .regions = &regions };
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .regions = &regions } };
     try storeWord(&board, memmap.mpu.rnr, 4);
     try storeWord(&board, memmap.mpu.rbar, 0x2200_0000);
     try storeWord(&board, memmap.mpu.rlar_a1, 0x2207_FFE1);
@@ -157,7 +157,7 @@ test "CFSR and HFSR clear the bits a store writes ones to" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .clears = &clears };
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
     try core.writeWord(memmap.scb.cfsr, 0x0001_0182);
     try storeWord(&board, memmap.scb.cfsr, 0x0000_0100);
     try std.testing.expectEqual(@as(u32, 0x0001_0082), try board.view().readWord(memmap.scb.cfsr));
