@@ -29,6 +29,7 @@ test {
     _ = @import("ops/mul_acc_test.zig");
     _ = @import("ops/saturate_test.zig");
     _ = @import("ops/misc_wide_test.zig");
+    _ = @import("ops/extend_wide_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
