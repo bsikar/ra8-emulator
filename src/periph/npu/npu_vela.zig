@@ -42,6 +42,8 @@ pub const round = @import("npu_vela_round.zig");
 pub const conv = @import("npu_vela_conv.zig");
 /// NPU_OP_CONV: the registers turned into a datapath call.
 pub const convop = @import("npu_vela_convop.zig");
+/// Elementwise MUL (NPU_OP_ELEMENTWISE mode 0).
+pub const mul = @import("npu_vela_mul.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;

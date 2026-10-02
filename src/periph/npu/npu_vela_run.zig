@@ -4,10 +4,12 @@
 //! npu_vela.zig checks the stream's shape, npu_vela_regs.zig keeps what the
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
 //! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig,
-//! MAX pooling through npu_vela_pool.zig and int8 convolution and
-//! depthwise convolution through npu_vela_convop.zig; any other block
-//! operation (other pool or elementwise modes) stops the run with error.OperatorNotModelled, so
-//! nothing that needs an unmodelled operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
+//! elementwise MUL through npu_vela_mul.zig, MAX pooling through
+//! npu_vela_pool.zig, and int8 convolution and depthwise convolution
+//! through npu_vela_convop.zig; any other block operation (other pool or
+//! elementwise modes) stops the run with error.OperatorNotModelled, so
+//! nothing that needs an unmodelled operator is reported as having run.
+//! DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
 //! between; the feature-map sets go to npu_vela_fm.zig, the scale, activation
 //! and stride sets to npu_vela_quant.zig, the kernel sets to
@@ -23,6 +25,7 @@ const quant = @import("npu_vela_quant.zig");
 const minmax = @import("npu_vela_minmax.zig");
 const pool = @import("npu_vela_pool.zig");
 const convop = @import("npu_vela_convop.zig");
+const mul = @import("npu_vela_mul.zig");
 
 pub const Error = vela.Error || dma.Error || minmax.Error || convop.Error;
 
@@ -80,11 +83,11 @@ fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: 
             .quant = machine.quant,
             .kernel = machine.kernel,
         }),
-        .elementwise => machine.elements += try minmax.run(memory, regions, vela.param(word), .{
-            .bases = machine.state,
-            .maps = machine.maps,
-            .quant = machine.quant,
-        }),
+        .elementwise => {
+            const inputs = minmax.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant };
+            const mode = vela.param(word);
+            machine.elements += try if (mode == mul.mode_mul) mul.run(memory, regions, inputs) else minmax.run(memory, regions, mode, inputs);
+        },
         .dma_start => machine.moved += try dma.copy(memory, regions, machine.src, machine.dst, machine.state.dma0),
         .stop, .irq, .dma_wait, .kernel_wait, .pmu_mask => {},
     }
