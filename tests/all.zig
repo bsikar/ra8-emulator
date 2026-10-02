@@ -250,6 +250,7 @@ test {
     _ = @import("periph/npu/npu_vela_order_test.zig");
     _ = @import("periph/npu/npu_vela_round_test.zig");
     _ = @import("periph/npu/npu_vela_conv_test.zig");
+    _ = @import("periph/npu/npu_vela_convop_test.zig");
     _ = @import("periph/npu/npu_vela_minmax_test.zig");
     _ = @import("periph/npu/npu_vela_pool_test.zig");
     _ = @import("periph/nvic_test.zig");
