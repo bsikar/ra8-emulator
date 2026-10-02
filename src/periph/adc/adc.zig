@@ -71,6 +71,8 @@ const intr = @import("adc_intr.zig");
 /// The scan-end interrupt enable, reached as `adc.interrupt` the way the
 /// other split blocks in this tree re-export their halves.
 pub const interrupt = intr;
+/// The TSN factory calibration words the die-temperature line pairs with.
+pub const tsn_cal = @import("adc_tsn_cal.zig");
 
 /// The window. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4033_8000;

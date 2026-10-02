@@ -9,6 +9,7 @@
 //! paint into or read out of RAM need the engine handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
 const engine = @import("../core/engine.zig");
+const tsn_cal = @import("../periph/adc/adc_tsn_cal.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
@@ -54,6 +55,13 @@ fn attachGate(self: *Board) !void {
     self.bus.gate = self.modules.gate();
 }
 
+/// The ADC, and the TSN factory calibration words its die-temperature line
+/// is converted against (adc_tsn_cal.zig).
+fn attachAdc(self: *Board, core: engine.Engine) !void {
+    try self.bus.add(self.adc.block());
+    _ = tsn_cal.map(core) catch false;
+}
+
 /// Put every block on the bus, in the order that works.
 pub fn attach(self: *Board, core: *engine.Engine) !void {
     try attachGate(self);
@@ -66,7 +74,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.capture.memory = core.*;
     try self.bus.add(self.capture.block());
     try self.bus.add(self.analog.block());
-    try self.bus.add(self.adc.block());
+    try attachAdc(self, core.*);
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
     try attachProtected(self);
