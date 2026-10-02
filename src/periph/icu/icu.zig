@@ -30,6 +30,9 @@ const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const irqcr = @import("icu_irqcr.zig");
 
+/// INTSELR: which core each event interrupts (src/periph/icu/icu_intsel.zig).
+pub const intsel = @import("icu_intsel.zig");
+
 /// R_ICU geometry (ra8_icu_regs.h): the block is at 0x4000_6000 and the
 /// event-link table sits 0x6300 into it.
 pub const icu_base: u32 = 0x4000_6000;
