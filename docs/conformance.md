@@ -20,3 +20,11 @@ is stale or an encoding is missing. Regenerate with
 | VMUL.F64 T2 | 4 |
 | VNMUL.F32 T2 | 6 |
 | VNMUL.F64 T2 | 2 |
+| VMLA.F32 T2 | 7 |
+| VMLA.F64 T2 | 1 |
+| VMLS.F32 T2 | 5 |
+| VMLS.F64 T2 | 1 |
+| VNMLA.F32 T2 | 3 |
+| VNMLA.F64 T2 | 1 |
+| VNMLS.F32 T2 | 3 |
+| VNMLS.F64 T2 | 1 |
