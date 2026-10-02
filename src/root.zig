@@ -121,6 +121,7 @@ pub const core = struct {
             pub const imm_logic = @import("core/cpu/ops/imm_logic.zig");
             pub const imm_arith = @import("core/cpu/ops/imm_arith.zig");
             pub const branch_wide = @import("core/cpu/ops/branch_wide.zig");
+            pub const cps = @import("core/cpu/ops/cps.zig");
             pub const push_pop = @import("core/cpu/ops/push_pop.zig");
             pub const sp_arith = @import("core/cpu/ops/sp_arith.zig");
             pub const table = @import("core/cpu/ops/table.zig");
