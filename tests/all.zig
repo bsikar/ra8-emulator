@@ -47,6 +47,7 @@ test {
     _ = @import("core/cpu/lockstep/writes_test.zig");
     _ = @import("core/cpu/ops/hint_test.zig");
     _ = @import("core/cpu/ops/ldr_literal_test.zig");
+    _ = @import("core/cpu/ops/ldst_imm_test.zig");
     _ = @import("core/cpu/ops/push_pop_test.zig");
     _ = @import("core/cpu/ops/sp_arith_test.zig");
     _ = @import("core/cpu/ops/table_test.zig");
