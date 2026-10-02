@@ -241,3 +241,7 @@ is stale or an encoding is missing. Regenerate with
 | VSTRW.32 scatter | 2 |
 | VLDRD.U64 gather | 4 |
 | VSTRD.64 scatter | 3 |
+| VLDRW.U32 vector base | 3 |
+| VLDRD.U64 vector base | 2 |
+| VSTRW.32 vector base | 2 |
+| VSTRD.64 vector base | 2 |

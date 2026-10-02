@@ -35,3 +35,8 @@ test "the odd beat of a doubleword sits four bytes above the even one" {
     try std.testing.expectEqual(@as(u32, 0x2000_001C), gather.beatAddress(.{ .base = 0x2000_0000, .offset = 3, .os = true, .odd = true }));
     try std.testing.expectEqual(@as(u32, 0x2000_0003), gather.beatAddress(.{ .base = 0x2000_0000, .offset = 3, .os = false, .odd = false }));
 }
+
+test "a vector base scales imm7 by the access size" {
+    try std.testing.expectEqual(@as(u32, 0x2000_0008), gather.vectorAddress(.{ .element = 0x2000_0000, .imm7 = 1, .add = true, .double = true }));
+    try std.testing.expectEqual(@as(u32, 0x2000_0000), gather.vectorAddress(.{ .element = 0x2000_0004, .imm7 = 1, .add = false, .double = false }));
+}
