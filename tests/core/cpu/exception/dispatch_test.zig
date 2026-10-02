@@ -148,3 +148,44 @@ test "under PRIGROUP a more urgent subpriority in the same group does not preemp
     _ = cpu.run(1);
     try std.testing.expectEqual(@as(usize, 2), cpu.active.depth);
 }
+
+/// Runs `first`, then offers `second` from inside its handler under
+/// `prigroup`, and gives the nesting depth that leaves.
+fn depthAfter(prigroup: u3, first: u8, second: u8) !usize {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{ .pending = .{ .number = pendsv, .priority = first } };
+    var cpu = try setup(&ram, &fake);
+    var split: WithAircr = .{ .ram = &ram, .aircr = @as(u32, prigroup) << 8 };
+    cpu.bus = split.view();
+    _ = cpu.run(1);
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    fake.pending = .{ .number = systick, .priority = second };
+    cpu.regs.pc = fixture.handler;
+    _ = cpu.run(1);
+    return cpu.active.depth;
+}
+
+test "a more urgent subpriority in the same group never preempts, at several PRIGROUP values" {
+    const Case = struct { prigroup: u3, running: u8, offered: u8 };
+    const cases = [_]Case{
+        .{ .prigroup = 0, .running = 0x61, .offered = 0x60 }, // group [7:1]
+        .{ .prigroup = 3, .running = 0x6C, .offered = 0x60 }, // group [7:4]
+        .{ .prigroup = 5, .running = 0x60, .offered = 0x40 }, // group [7:6]
+        .{ .prigroup = 7, .running = 0xE0, .offered = 0x00 }, // no group bits
+    };
+    for (cases) |case| {
+        try std.testing.expectEqual(@as(usize, 1), try depthAfter(case.prigroup, case.running, case.offered));
+    }
+}
+
+test "a more urgent group still preempts, at several PRIGROUP values" {
+    const Case = struct { prigroup: u3, running: u8, offered: u8 };
+    const cases = [_]Case{
+        .{ .prigroup = 0, .running = 0x62, .offered = 0x60 },
+        .{ .prigroup = 3, .running = 0x70, .offered = 0x60 },
+        .{ .prigroup = 5, .running = 0x80, .offered = 0x40 },
+    };
+    for (cases) |case| {
+        try std.testing.expectEqual(@as(usize, 2), try depthAfter(case.prigroup, case.running, case.offered));
+    }
+}
