@@ -62,6 +62,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // tools/example_table.zig prints the RA8EMU-66 pass table; the tests read
+    // its parser through the same module the executable is built from.
+    const table_mod = b.createModule(.{
+        .root_source_file = b.path("tools/example_table.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const table = b.addRunArtifact(b.addExecutable(.{ .name = "example_table", .root_module = table_mod }));
+    if (b.args) |args| table.addArgs(args);
+    b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
+
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/all.zig"),
         .target = target,
@@ -69,6 +80,7 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("ra8", emu);
     tests.root_module.addImport("gate", gate_mod);
+    tests.root_module.addImport("example_table", table_mod);
     link(b, tests, prefix);
     b.step("test", "Run the unit tests").dependOn(&b.addRunArtifact(tests).step);
 
