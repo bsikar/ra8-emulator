@@ -8,7 +8,7 @@
 //!
 //! U clear makes a load signed and must be clear for a store. Q8+ (D or
 //! M), Rn = PC, a load whose Qd is Qm, memory or element size 11 (the
-//! 64-bit VLDRD/VSTRD, not modelled yet) and the size combinations
+//! 64-bit VLDRD/VSTRD, in mve_gather64.zig) and the size combinations
 //! gather.valid rejects stay unclaimed.
 const std = @import("std");
 const op = @import("../op.zig");
