@@ -22,6 +22,8 @@ pub const runner = @import("npu_vela_run.zig");
 pub const hook = @import("npu_vela_hook.zig");
 /// The IFM, IFM2 and OFM shape, precision and region registers.
 pub const fm = @import("npu_vela_fm.zig");
+/// The scale, activation and stride registers.
+pub const quant = @import("npu_vela_quant.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
