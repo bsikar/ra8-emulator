@@ -34,6 +34,8 @@ pub const pool = @import("npu_vela_pool.zig");
 pub const bias = @import("npu_vela_bias.zig");
 /// The compressed weight stream a convolution reads.
 pub const weights = @import("npu_vela_weights.zig");
+/// The order a decoded weight stream walks the OHWI volume in.
+pub const order = @import("npu_vela_order.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
