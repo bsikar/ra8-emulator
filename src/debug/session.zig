@@ -62,6 +62,12 @@ pub const Slot = struct {
     loop: ?engine.Session = null,
 };
 
+/// Asked between run chunks whether the run should stop: gdb's interrupt.
+pub const Poll = struct {
+    context: *anyopaque,
+    check: *const fn (*anyopaque) bool,
+};
+
 pub const Session = struct {
     core: *const engine.Engine,
     driver: *step_hook.Driver,
@@ -84,6 +90,10 @@ pub const Session = struct {
     /// The other CPU, parked while this one has the session. Null on a
     /// single-core run.
     other: ?Slot = null,
+    /// With a poll, a run that spends its budget keeps going, one budget
+    /// at a time, until it stops, faults, or the poll says to halt. That is
+    /// how gdb's `continue` runs. Without one, a spent budget ends the run.
+    poll: ?Poll = null,
 
     /// Carry out one command and write what happened.
     pub fn apply(self: *Session, command: commands.Command, out: anytype) !Outcome {
@@ -226,13 +236,29 @@ pub const Session = struct {
         return self.core.run(from, self.budget, bounded);
     }
 
+    /// Run from `from` for one budget, or, with a poll, budget after budget
+    /// until something stops the core.
+    fn runFor(self: *Session, from: u32) !?engine.Fault {
+        var at = from;
+        while (true) {
+            const fault = if (self.loop) |loop| try self.looped(at, loop) else try self.core.runChunk(at, self.budget, null);
+            if (fault != null or self.driver.last != null) return fault;
+            const poll = self.poll orelse return null;
+            if (poll.check(poll.context)) {
+                self.driver.last = self.driver.machine.interrupt();
+                return null;
+            }
+            at = try self.core.register(.pc);
+        }
+    }
+
     /// Run from where the session stands until the machine stops it, a
     /// fault ends it, or the budget runs out, and say which.
     fn go(self: *Session, out: anytype) !void {
         const from = if (self.started) try self.core.register(.pc) else self.entry;
         self.started = true;
         self.driver.arm();
-        const fault = if (self.loop) |loop| try self.looped(from, loop) else try self.core.runChunk(from, self.budget, null);
+        const fault = try self.runFor(from);
         self.faulted = fault != null;
         const pc = try self.core.register(.pc);
         try self.driver.machine.itm.flush(out, false);

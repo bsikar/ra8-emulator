@@ -133,6 +133,12 @@ pub const Machine = struct {
         if (self.mode != .halted) self.halt_pending = true;
     }
 
+    /// Halt between runs, with no instruction to wait for: gdb's interrupt
+    /// arriving while a run spent its chunk.
+    pub fn interrupt(self: *Machine) Stop {
+        return self.halt(.halt_requested);
+    }
+
     /// Decide on the instruction about to run. A returned stop means the
     /// driver must stop the CPU now, before this instruction executes.
     pub fn onInstruction(self: *Machine, event: Event) ?Stop {

@@ -28,6 +28,7 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const elf = @import("../../core/elf.zig");
 const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
+const rsp_poll = @import("../../debug/rsp_poll.zig");
 const engine = @import("../../core/engine.zig");
 const Board = @import("../../board/board.zig").Board;
 const clocks = @import("../../periph/clocks.zig");
@@ -211,6 +212,9 @@ fn listen(target: *session.Session, port: u16) !u8 {
     std.debug.print("gdb: listening on 127.0.0.1:{d}\n", .{port});
     const connection = try server.accept();
     defer connection.stream.close();
+    var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
+    target.poll = socket.poll();
+    target.budget = rsp_poll.chunk;
     const stub = rsp_dispatch.Dispatch{ .core = target.core, .session = target };
     const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
     std.debug.print("gdb: {s}\n", .{@tagName(end)});

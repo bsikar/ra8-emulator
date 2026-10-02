@@ -23,6 +23,7 @@ pub const points = @import("rsp_points.zig");
 pub const run_control = @import("rsp_run.zig");
 /// One connection served end to end.
 pub const server = @import("rsp_server.zig");
+pub const poll = @import("rsp_poll.zig");
 const debug_session = @import("session.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
