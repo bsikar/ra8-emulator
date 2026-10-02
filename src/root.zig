@@ -111,6 +111,7 @@ pub const core = struct {
         };
         pub const ops = struct {
             pub const hint = @import("core/cpu/ops/hint.zig");
+            pub const push_pop = @import("core/cpu/ops/push_pop.zig");
             pub const table = @import("core/cpu/ops/table.zig");
         };
     };
