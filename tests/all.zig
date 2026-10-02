@@ -48,6 +48,7 @@ test {
     _ = @import("board/board_test.zig");
     _ = @import("board/i2c_test.zig");
     _ = @import("board/usb_test.zig");
+    _ = @import("board/usb_disk_test.zig");
     _ = @import("interfaces/cli/report_dma_test.zig");
     _ = @import("interfaces/cli/report_unmodelled_test.zig");
     _ = @import("interfaces/cli/report_watchdog_test.zig");
