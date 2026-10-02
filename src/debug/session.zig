@@ -29,6 +29,7 @@ const elf = @import("../core/elf.zig");
 const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
+const core_view = @import("core_view.zig");
 const session_source = @import("session_source.zig");
 const dwarf_line = @import("dwarf_line.zig");
 const unwind = @import("unwind.zig");
@@ -141,11 +142,11 @@ pub const Session = struct {
                 machine.stepOut(try self.core.register(.lr), try self.core.register(.sp));
                 try self.go(out);
             },
-            .registers => try session_view.registers(out, self.core.*),
+            .registers => try session_view.registers(out, self.view()),
             .breakpoints => try break_list.write(out, .{ .breaks = &machine.breaks, .watches = &machine.watches, .temporary = self.temporary.slice(), .image = self.image }),
             .line => |text| try session_source.line(out, session_source.of(self.image), try self.resolve(text)),
-            .examine => |want| try session_view.words(out, self.core.*, try self.resolve(want.place), want.words),
-            .print => |text| try session_view.word(out, self.core.*, text, try self.resolve(text)),
+            .examine => |want| try session_view.words(out, self.view(), try self.resolve(want.place), want.words),
+            .print => |text| try session_view.word(out, self.view(), text, try self.resolve(text)),
             .disassemble => |want| try self.disassemble(want, out),
             .backtrace => try self.backtrace(out),
             .list => |want| {
@@ -318,7 +319,7 @@ pub const Session = struct {
     fn line(self: *Session, address: u32, out: anytype) !void {
         try self.where(address, out);
         try out.print(": ", .{});
-        _ = try session_view.instruction(out, self.core.*, address);
+        _ = try session_view.instruction(out, self.view(), address);
         try out.print("\n", .{});
     }
 
@@ -328,7 +329,7 @@ pub const Session = struct {
         for (0..want.count) |_| {
             try self.where(address, out);
             try out.print(": ", .{});
-            const width = try session_view.instruction(out, self.core.*, address);
+            const width = try session_view.instruction(out, self.view(), address);
             try out.print("\n", .{});
             address +%= width;
         }
@@ -343,7 +344,7 @@ pub const Session = struct {
         var frames: [unwind.limits.frames]unwind.Frame = undefined;
         const frame = if (self.image) |image| dwarf_line.section(image, ".debug_frame") else &.{};
         const psp = try self.core.register(.psp);
-        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), psp, self.core.*, &frames);
+        var count = unwind.walk(frame, try unwind.registersOf(self.view()), psp, self.view(), &frames);
         if (count < 2) {
             frames[1] = .{ .pc = try self.core.register(.lr) & ~@as(u32, 1) };
             count = 2;
@@ -377,6 +378,11 @@ pub const Session = struct {
 
     /// The address a place names: a FILE:LINE from the line table, or its
     /// symbol or literal, one optional dereference, then its offset.
+    /// The core as the views read it.
+    fn view(self: *const Session) core_view.View {
+        return .{ .unicorn = self.core };
+    }
+
     fn resolve(self: *const Session, text: []const u8) !u32 {
         if (session_source.fileLine(text)) |at| {
             return session_source.breakAt(self.image, at) orelse Error.Unresolved;
