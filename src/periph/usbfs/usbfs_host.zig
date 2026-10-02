@@ -7,6 +7,7 @@
 //! stage with CCPL before moving on. SET_ADDRESS needs no wait: the SIE
 //! answers it. A step that takes longer than `patience` boundaries ends the
 //! script in `failed`, so a driver that never answers cannot hold it forever.
+const std = @import("std");
 const usbfs = @import("usbfs.zig");
 
 pub const Step = enum {
@@ -14,6 +15,7 @@ pub const Step = enum {
     device_descriptor,
     set_address,
     config_descriptor,
+    full_config,
     set_configuration,
     configured,
     failed,
@@ -24,6 +26,11 @@ pub const requests = struct {
     pub const device_descriptor = [8]u8{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 };
     pub const set_address = [8]u8{ 0x00, 0x05, address, 0x00, 0x00, 0x00, 0x00, 0x00 };
     pub const config_descriptor = [8]u8{ 0x80, 0x06, 0x00, 0x02, 0x00, 0x00, 0x09, 0x00 };
+    /// GET_DESCRIPTOR(Configuration) for `length` bytes: the whole set once
+    /// the first nine have said how long it is.
+    pub fn configDescriptor(length: u16) [8]u8 {
+        return .{ 0x80, 0x06, 0x00, 0x02, 0x00, 0x00, @truncate(length), @truncate(length >> 8) };
+    }
     pub const set_configuration = [8]u8{ 0x00, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 };
 };
 
@@ -38,7 +45,10 @@ pub const Host = struct {
     patience: u32 = 20_000,
     /// What the device returned, for the run report.
     device: [18]u8 = .{0} ** 18,
-    config: [9]u8 = .{0} ** 9,
+    /// The configuration descriptor set, as much of it as fits; config_len
+    /// is how much of it the full read asked for, 0 until then.
+    config: [255]u8 = .{0} ** 255,
+    config_len: u16 = 0,
     got: u16 = 0,
 
     pub fn tick(self: *Host, device: *usbfs.Device) void {
@@ -49,10 +59,31 @@ pub const Host = struct {
                 device.setup(requests.set_address);
                 self.advance(.config_descriptor);
             },
-            .config_descriptor => self.read(device, requests.config_descriptor, &self.config, .set_configuration),
+            .config_descriptor => self.read(device, requests.config_descriptor, self.config[0..9], .full_config),
+            .full_config => self.readAll(device),
             .set_configuration => self.write(device, requests.set_configuration, .configured),
             .configured, .failed => {},
         }
+    }
+
+    /// The configuration descriptor bytes the host holds: the full set once
+    /// it has been read, the first nine before that.
+    pub fn configuration(self: *const Host) []const u8 {
+        return self.config[0..if (self.config_len != 0) self.config_len else 9];
+    }
+
+    /// The second configuration read, for wTotalLength bytes (capped at the
+    /// buffer). The length is taken once, from the header, before the read
+    /// starts overwriting it. A set no longer than its header needs no
+    /// second read.
+    fn readAll(self: *Host, device: *usbfs.Device) void {
+        if (self.config_len == 0) {
+            const declared = std.mem.readInt(u16, self.config[2..4], .little);
+            self.config_len = @intCast(@min(declared, self.config.len));
+        }
+        const total = self.config_len;
+        if (total <= 9) return self.advance(.set_configuration);
+        self.read(device, requests.configDescriptor(self.config_len), self.config[0..total], .set_configuration);
     }
 
     pub fn done(self: *const Host) bool {

@@ -11,7 +11,12 @@ fn at(offset: u32) u32 {
 }
 
 const device_descriptor = [18]u8{ 18, 1, 0x00, 0x02, 2, 0, 0, 64, 0x5B, 0x04, 0x01, 0x00, 0, 1, 1, 2, 3, 1 };
-const config_descriptor = [9]u8{ 9, 2, 67, 0, 2, 1, 0, 0x80, 50 };
+/// A whole configuration set: header, one interface, one bulk IN endpoint.
+const config_descriptor = [25]u8{
+    9, 2, 25,   0, 1,  1,    0, 0x80, 50,
+    9, 4, 0,    0, 1,  0xFF, 0, 0,    0,
+    7, 5, 0x81, 2, 64, 0,    0,
+};
 
 fn attached() usbfs.Device {
     var device = usbfs.Device{};
@@ -34,7 +39,9 @@ fn answer(device: *usbfs.Device) void {
     device.write(at(regs.reg.intsts0), 2, ~@as(u32, usbfs.intsts0.valid));
     const request = device.read(at(regs.reg.usbreq), 2);
     const value = device.read(at(regs.reg.usbval), 2);
-    if (request == 0x0680) send(device, if (value == 0x0100) &device_descriptor else &config_descriptor);
+    const length = device.read(at(regs.reg.usbleng), 2);
+    if (request == 0x0680 and value == 0x0100) send(device, &device_descriptor);
+    if (request == 0x0680 and value == 0x0200) send(device, config_descriptor[0..@min(length, config_descriptor.len)]);
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl | regs.dcpctr.pid_buf);
 }
 
@@ -48,7 +55,7 @@ test "a device that answers is enumerated to Configured" {
     }
     try std.testing.expect(host.done());
     try std.testing.expectEqualSlices(u8, &device_descriptor, &host.device);
-    try std.testing.expectEqualSlices(u8, &config_descriptor, &host.config);
+    try std.testing.expectEqualSlices(u8, &config_descriptor, host.configuration());
     const status = device.read(at(regs.reg.intsts0), 2);
     try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_configured), status & usbfs.intsts0.dvsq_mask);
     try std.testing.expectEqual(@as(u32, usbfs.host.requests.address), device.read(at(regs.reg.usbaddr), 2));
@@ -97,4 +104,17 @@ test "once the data is in, the host sends the status token before waiting on CCP
     const stage = device.interruptStatus() & usbfs.intsts0.ctsq_mask;
     try std.testing.expectEqual(usbfs.intsts0.ctsq_read_status, stage);
     try std.testing.expectEqual(usbfs.host.Step.device_descriptor, host.step);
+}
+
+test "the second configuration read asks for wTotalLength bytes" {
+    const packet = usbfs.host.requests.configDescriptor(75);
+    try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x06, 0x00, 0x02, 0x00, 0x00, 75, 0 }, &packet);
+}
+
+test "before the full read the host holds the nine-byte header" {
+    var host = Host{};
+    host.config[0] = 9;
+    try std.testing.expectEqual(@as(usize, 9), host.configuration().len);
+    host.config_len = 25;
+    try std.testing.expectEqual(@as(usize, 25), host.configuration().len);
 }

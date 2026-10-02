@@ -48,9 +48,14 @@ pub const Dcp = struct {
     }
 
     /// CFIFOCTR: FRDY while aimed at the DCP, and DTLN for the side faced:
-    /// bytes staged so far on IN, bytes left to read on OUT.
+    /// bytes staged so far on IN, bytes left to read on OUT. The DCP has
+    /// one buffer, so the IN side is not ready while a committed packet is
+    /// still waiting for the host. A driver that polls FRDY before staging
+    /// the next packet of a multi-packet data stage waits there, instead of
+    /// overwriting the packet the host has not taken.
     pub fn status(self: *const Dcp) u16 {
         if (!self.aimed()) return 0;
+        if (self.writing() and self.sent.ready) return self.in.len & regs.fifo.dtln_mask;
         const length = if (self.writing()) self.in.len else self.out.remaining();
         return regs.fifo.frdy | (length & regs.fifo.dtln_mask);
     }

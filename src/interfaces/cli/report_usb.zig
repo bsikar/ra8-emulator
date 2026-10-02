@@ -10,7 +10,7 @@ pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
     if (host.step != .configured) try out.print(" after {d} boundary(ies) on that step", .{host.waited});
     try out.writeAll("\n");
     try descriptor("device", &host.device, out);
-    try descriptor("config", &host.config, out);
+    try descriptor("config", host.configuration(), out);
 }
 
 /// The bytes as the host received them; nothing when none came back.
