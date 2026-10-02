@@ -17,11 +17,12 @@
 //!
 //!   SFSR 0xE000_EDE4  SFAR 0xE000_EDE8  (Armv8-M ARM, D1.2.x)
 
+const fault_clear = @import("fault_clear.zig");
 const fault_route = @import("fault_route.zig");
 const fault_take = @import("fault_take.zig");
 const nvic = @import("nvic.zig");
 
-pub const sfsr: u32 = 0xE000_EDE4;
+pub const sfsr: u32 = fault_clear.sfsr;
 pub const sfar: u32 = 0xE000_EDE8;
 
 /// An SFSR cause, valued by its bit position.
@@ -47,7 +48,8 @@ pub const Cause = enum(u3) {
 /// SFSR.SFARVALID: SFAR holds the address of the latest violation.
 pub const sfarvalid: u32 = 1 << 6;
 
-/// Every SFSR bit that is defined, for the write-to-clear model.
+/// Every SFSR bit that is defined. Each is write-one-to-clear, through
+/// src/periph/fault_clear.zig.
 pub const defined: u32 = 0xFF;
 
 /// What a SecureFault leaves in SFSR, and in SFAR when there is one.

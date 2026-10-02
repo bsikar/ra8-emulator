@@ -41,3 +41,20 @@ test "a byte store to BFSR through the engine clears only BusFault bits" {
     try clears.apply(core);
     try std.testing.expectEqual(@as(u32, 0x0001_0082), try core.readWord(memmap.scb.cfsr));
 }
+
+test "a store to SFSR through the engine is latched and clears at the boundary" {
+    var clears = fault_clear.Clears.init();
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try core.attachFaultClears(&clears);
+    try core.writeWord(fault_clear.sfsr, 0x0000_0048);
+    // str r1, [r0]; b .
+    try core.writeWord(entry, 0xE7FE_6001);
+    try core.setRegister(.r0, fault_clear.sfsr);
+    try core.setRegister(.r1, 0x0000_0008);
+    _ = try core.runChunk(entry, 2, null);
+    try std.testing.expectEqual(@as(u32, 1), clears.stores);
+    try clears.apply(core);
+    try std.testing.expectEqual(@as(u32, 0x0000_0040), try core.readWord(fault_clear.sfsr));
+}

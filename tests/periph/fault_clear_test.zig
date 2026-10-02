@@ -9,8 +9,10 @@ const memmap = ra8.core.memmap;
 const Words = struct {
     cfsr: u32 = 0,
     hfsr: u32 = 0,
+    sfsr: u32 = 0,
 
     fn at(self: *Words, address: u32) *u32 {
+        if (address == fault_clear.sfsr) return &self.sfsr;
         return if (address == memmap.scb.cfsr) &self.cfsr else &self.hfsr;
     }
 
@@ -101,4 +103,22 @@ test "an apply with nothing latched writes nothing" {
     try clears.apply(&words);
     try std.testing.expectEqual(@as(u32, 0x82), words.cfsr);
     try std.testing.expect(clears.slot(memmap.scb.cfsr + 0x10) == null);
+}
+
+test "writing SFSR back to itself clears it and leaves CFSR alone" {
+    var words = Words{ .cfsr = 0x82, .sfsr = 0x48 };
+    var clears = fault_clear.Clears.init();
+    words.store(&clears, fault_clear.sfsr, 4, words.sfsr);
+    try std.testing.expectEqual(@as(u32, 0x48), words.sfsr);
+    try clears.apply(&words);
+    try std.testing.expectEqual(@as(u32, 0), words.sfsr);
+    try std.testing.expectEqual(@as(u32, 0x82), words.cfsr);
+}
+
+test "a zero written to SFSR leaves every SecureFault bit standing" {
+    var words = Words{ .sfsr = 0x10 };
+    var clears = fault_clear.Clears.init();
+    words.store(&clears, fault_clear.sfsr, 4, 0);
+    try clears.apply(&words);
+    try std.testing.expectEqual(@as(u32, 0x10), words.sfsr);
 }
