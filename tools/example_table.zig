@@ -16,6 +16,7 @@
 //! alone it boots from a vector table CPU0 was supposed to release.
 const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
+pub const probes = @import("example_probes.zig");
 
 pub const Verdict = enum { pass, fail, unknown };
 
@@ -27,6 +28,8 @@ pub const Row = struct {
     led_count: usize = 0,
     unmodelled: ?u32 = null,
     stopped: ?[]const u8 = null,
+    /// The memory-probe verdict for an image example_probes.zig lists.
+    probe: ?probes.Judgement = null,
 
     pub fn leds(row: *const Row) []const []const u8 {
         return row.leds_on[0..row.led_count];
@@ -34,6 +37,11 @@ pub const Row = struct {
 
     pub fn verdict(row: Row) Verdict {
         if (row.stopped != null) return .fail;
+        if (row.probe) |judged| return switch (judged) {
+            .pass => .pass,
+            .fail => .fail,
+            .unknown => .unknown,
+        };
         const line = row.console orelse return .unknown;
         if (std.mem.indexOf(u8, line, "FAIL") != null) return .fail;
         if (std.mem.indexOf(u8, line, "OK") != null) return .pass;
@@ -126,8 +134,11 @@ pub fn main() !void {
         if (try isSecondHalf(allocator, image, images)) continue;
         const path = try std.fs.path.join(allocator, &.{ args[2], image });
         const second = try secondPath(allocator, args[2], image, images);
-        const report = try runImage(allocator, args[1], path, second, budgets.pick(image, budget));
-        try writeRow(out, image, parse(report));
+        const probe = probes.find(image);
+        const report = try runImage(allocator, args[1], path, second, probe, budgets.pick(image, budget));
+        var row = parse(report);
+        if (probe) |wanted| row.probe = probes.judge(wanted, report);
+        try writeRow(out, image, row);
     }
 }
 
@@ -187,10 +198,11 @@ fn lessThan(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
 }
 
-fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, second: ?[]const u8, budget: ?[]const u8) ![]const u8 {
+fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, second: ?[]const u8, probe: ?probes.Probe, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
     if (second) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
+    if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol, "--dump-sym", wanted.failure });
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{
         .allocator = allocator,
