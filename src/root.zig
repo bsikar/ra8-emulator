@@ -24,6 +24,7 @@ pub const core = struct {
     pub const pages = @import("core/pages.zig");
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
+    pub const banked = @import("core/banked.zig");
     pub const idle = @import("core/idle.zig");
     pub const pend_break = @import("core/pend_break.zig");
     pub const svc_trap = @import("core/svc_trap.zig");
