@@ -20,3 +20,12 @@ test "a match is on the whole file name" {
     try std.testing.expectEqual(@as(usize, 0), options.flags("smbus_demo").len);
     try std.testing.expectEqual(@as(usize, 0), options.flags("xsmbus_demo.elf").len);
 }
+
+test "the examples that mount an existing volume get a FAT16 card" {
+    for ([_][]const u8{ "epub_open.elf", "epub_toc.elf", "tz_secure_only_sd.elf" }) |image| {
+        const got = options.flags(image);
+        try std.testing.expectEqual(@as(usize, 2), got.len);
+        try std.testing.expectEqualStrings("--sd-new", got[0]);
+        try std.testing.expectEqualStrings("fat16", got[1]);
+    }
+}
