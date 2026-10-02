@@ -147,14 +147,8 @@ fn watchCycles(handle: *c.uc.uc_engine, driver: *Driver) void {
     if (machine.dwt.cycleCounted(now)) |index| machine.onUnitMatch(index);
 }
 
-/// The DFSR bits a halt records.
-fn dfsrFor(stop: stop_machine.Stop) u32 {
-    return switch (stop) {
-        .breakpoint, .unit_break => dcb.dfsr_bits.bkpt,
-        .watchpoint, .unit_watch => dcb.dfsr_bits.dwttrap,
-        .stepped, .halt_requested => dcb.dfsr_bits.halted,
-    };
-}
+/// The DFSR bits a halt records, shared with the Zig path.
+const dfsrFor = @import("zig_cycles.zig").dfsrFor;
 
 /// A unit event with halting debug off: if DEMCR.MON_EN is set, latch DFSR
 /// and set DEMCR.MON_PEND for the interrupt controller to take

@@ -5,6 +5,7 @@
 //! printers and the unwinder the Zig core, so `registers`, `x`, `print`
 //! and `bt` read the same as on Unicorn.
 const zig_core = @import("zig_core.zig");
+const zig_cycles = @import("zig_cycles.zig");
 const zig_drive = @import("zig_drive.zig");
 const core_view = @import("core_view.zig");
 const stop_machine = @import("stop_machine.zig");
@@ -24,6 +25,8 @@ pub const ZigSession = struct {
     /// The core's bus with the debugger listening, so watches and DWT data
     /// matches see its accesses. Null runs without them.
     watch: ?*watch_bus.WatchBus = null,
+    /// DWT_CYCCNT and DFSR kept the way the Unicorn path keeps them.
+    clock: zig_cycles.Clock = .{},
 
     /// Arm the machine for `command` as the Unicorn session does, then run.
     pub fn go(self: *ZigSession, command: Command) Error!zig_drive.Ended {
@@ -38,7 +41,7 @@ pub const ZigSession = struct {
             .finish => self.machine.stepOut(self.core.register(.lr), self.core.register(.sp)),
         }
         self.started = true;
-        return zig_drive.runWatched(self.core, self.machine, self.budget, self.watch);
+        return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
     }
 
     /// The core as the printers and the unwinder read it.
