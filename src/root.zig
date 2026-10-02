@@ -107,26 +107,7 @@ pub const core = struct {
             pub const tally = @import("core/cpu/lockstep/tally.zig");
             pub const writes = @import("core/cpu/lockstep/writes.zig");
         };
-        pub const ops = struct {
-            pub const hint = @import("core/cpu/ops/hint.zig");
-            pub const ldr_literal = @import("core/cpu/ops/ldr_literal.zig");
-            pub const ldst_imm = @import("core/cpu/ops/ldst_imm.zig");
-            pub const ldst_wide = @import("core/cpu/ops/ldst_wide.zig");
-            pub const shift_imm = @import("core/cpu/ops/shift_imm.zig");
-            pub const add_sub = @import("core/cpu/ops/add_sub.zig");
-            pub const dp_reg = @import("core/cpu/ops/dp_reg.zig");
-            pub const special_data = @import("core/cpu/ops/special_data.zig");
-            pub const branch = @import("core/cpu/ops/branch.zig");
-            pub const mov_wide = @import("core/cpu/ops/mov_wide.zig");
-            pub const imm_fields = @import("core/cpu/ops/imm_fields.zig");
-            pub const imm_logic = @import("core/cpu/ops/imm_logic.zig");
-            pub const imm_arith = @import("core/cpu/ops/imm_arith.zig");
-            pub const branch_wide = @import("core/cpu/ops/branch_wide.zig");
-            pub const cps = @import("core/cpu/ops/cps.zig");
-            pub const push_pop = @import("core/cpu/ops/push_pop.zig");
-            pub const sp_arith = @import("core/cpu/ops/sp_arith.zig");
-            pub const table = @import("core/cpu/ops/table.zig");
-        };
+        pub const ops = @import("core/cpu/ops.zig");
     };
 };
 
