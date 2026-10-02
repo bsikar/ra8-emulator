@@ -12,6 +12,7 @@ const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
 const fp_state = @import("fpu/state.zig");
 const exception = @import("exception/all.zig");
+const banked_mod = @import("../banked.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
@@ -50,6 +51,9 @@ pub const Cpu = struct {
     /// What is pending, asked before each instruction `run` executes. Null
     /// runs with no asynchronous exceptions, as a lockstep step does.
     source: ?exception.source.Source = null,
+    /// The other Security state's banked registers, which Secure code reaches
+    /// through the _NS forms of MRS and MSR.
+    banked: banked_mod.Banked = .{},
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
