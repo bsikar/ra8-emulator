@@ -52,4 +52,5 @@ test {
     _ = @import("dwt_test.zig");
     _ = @import("itm_test.zig");
     _ = @import("dcb_test.zig");
+    _ = @import("session_monitor_test.zig");
 }
