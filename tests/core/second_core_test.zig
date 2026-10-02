@@ -9,6 +9,7 @@ const Board = ra8.board.Board;
 const sau = ra8.periph.sau;
 const mpu = ra8.periph.mpu;
 const scb = ra8.periph.scb;
+const nvic = ra8.periph.nvic;
 
 /// A thumb image is not needed to test the wiring: what matters is that the
 /// second core is put in front of the first core's board and takes turns.
@@ -246,4 +247,61 @@ test "CCR, SHCSR and the fault status words are each core's own" {
         try cpu0.writeWord(address, 0x100 + @as(u32, @intCast(i)));
         try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(address));
     }
+}
+
+/// CPU1 parked in a `b .` spin over a vector table whose PendSV entry is a
+/// second spin, so where it ends up says whether the exception was taken.
+const Spins = struct {
+    const table: u32 = memmap.sram_base + 0x1000;
+    const spin: u32 = table + 0x100;
+    const handler: u32 = table + 0x200;
+    const stack: u32 = memmap.sram_base + 0x8000;
+
+    fn lay(core: Engine) !void {
+        try core.writeWord(table, stack);
+        try core.writeWord(table + 4, spin | 1);
+        try core.writeWord(table + 4 * nvic.pendsv, handler | 1);
+        try core.writeWord(spin, 0xE7FE_E7FE);
+        try core.writeWord(handler, 0xE7FE_E7FE);
+    }
+
+    fn boot(cpu1: *mod.Second) !void {
+        try lay(cpu1.core);
+        cpu1.interrupts = .{ .vector_base = table };
+        try mod.primeVectorTable(cpu1.core, table);
+        try cpu1.core.resetFromVectorTable(table);
+        cpu1.pc = try cpu1.core.register(.pc);
+    }
+};
+
+test "a PendSV pended on CPU1 is taken by CPU1's own NVIC" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try Spins.boot(&cpu1);
+
+    try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
+    cpu1.step(1000);
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+
+    // CPU0 saw none of it: nothing is pended in its own ICSR.
+    var cpu0_interrupts = nvic.Nvic{ .vector_base = Spins.table };
+    try std.testing.expect(try cpu0_interrupts.dispatch(cpu0) == null);
+}
+
+test "a PendSV pended on CPU0 is never taken by CPU1" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try Spins.boot(&cpu1);
+
+    try cpu0.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
+    cpu1.step(1000);
+    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
+    try std.testing.expectEqual(Spins.spin, cpu1.pc & ~@as(u32, 1));
 }
