@@ -10,8 +10,11 @@
 //!   VCVTA/N/P/M   1111 1110 1 D 11 11 rm  (o = 1, N = signed)
 //!   VRINTR/Z      1110 1110 1 D 11 0110   (o = 1, N = toward zero)
 //!   VRINTX        1110 1110 1 D 11 0111   (N = 0, o = 1)
-//! rm is 00 ties away, 01 nearest, 10 toward +inf, 11 toward -inf. D16+
-//! and every other bit pattern stay unclaimed.
+//! rm is 00 ties away, 01 nearest, 10 toward +inf, 11 toward -inf. Every
+//! form also has an F16 encoding (hw2 bits 11:8 = 1001), which uses the
+//! single register numbering, reads S[i]<15:0> and writes Zeros(16):value;
+//! VCVT from F16 still writes a full S32/U32 word. D16+ and every other bit
+//! pattern stay unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -61,8 +64,13 @@ pub fn mReg(instr: Instr, double: bool) u5 {
 }
 
 fn decode(instr: Instr) ?op.Exec {
-    if (instr.size != 4 or instr.hw2 & 0x0E10 != 0x0A00) return null;
+    if (instr.size != 4) return null;
+    const half = instr.hw2 & 0x0F10 == 0x0900;
+    if (!half and instr.hw2 & 0x0E10 != 0x0A00) return null;
     const kind = kindOf(instr) orelse return null;
+    if (half) return switch (kind) {
+        inline else => |k| execFor(k, fpu.format.half),
+    };
     const double = instr.hw2 >> 8 & 1 == 1;
     const d_double = double and kind != .cvt_rm;
     if (!fp_regs.exists(dReg(instr, d_double), d_double)) return null;
