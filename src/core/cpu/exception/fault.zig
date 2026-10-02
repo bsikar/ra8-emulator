@@ -5,7 +5,8 @@
 //! priority with the same rules the Unicorn backend uses
 //! (src/periph/fault_route.zig), owes HFSR.FORCED when it escalates to
 //! HardFault, and enters the handler with the faulting instruction stacked
-//! as the return address. A HardFault that cannot preempt either (FAULTMASK
+//! as the return address (or, for INVPC on a refused exception return,
+//! tail-chains it onto the frame the return left behind). A HardFault that cannot preempt either (FAULTMASK
 //! set, or already in HardFault) is lockup, which the caller reports as a
 //! stop instead.
 const std = @import("std");
@@ -22,6 +23,24 @@ pub const Cause = status.Cause;
 
 /// Raise UsageFault for `cause`, which the instruction at `pc` caused.
 pub fn usage(cpu: *Cpu, cause: status.Cause, pc: u32) Error!void {
+    const which = try latch(cpu, cause);
+    cpu.regs.pc = pc;
+    try dispatch.enter(cpu, which, pc);
+}
+
+/// INVPC for an exception return that refused `value`. As in the Armv7-M
+/// ExceptionReturn pseudocode, the handler that tried to return is no longer
+/// active, its frame stays on the stack, and the fault is tail-chained with
+/// LR set to 0xF000_0000 + EXC_RETURN, a value that cannot return again.
+pub fn invalidReturn(cpu: *Cpu, value: u32) Error!void {
+    try dispatch.left(cpu);
+    const which = try latch(cpu, .invpc);
+    try dispatch.chain(cpu, which, 0xF000_0000 +% value);
+}
+
+/// Route a UsageFault for `cause`, latch its CFSR bit and HFSR.FORCED when
+/// it escalates, and say which exception to enter.
+fn latch(cpu: *Cpu, cause: status.Cause) Error!active.Entry {
     std.debug.assert(cause.fault() == .usage_fault);
     const r = &cpu.regs;
     const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask);
@@ -34,8 +53,7 @@ pub fn usage(cpu: *Cpu, cause: status.Cause, pc: u32) Error!void {
     if (route.escalated and (level < 0 or inHardFaultOrNmi(cpu))) return error.Lockup;
     orInto(cpu.bus, memmap.scb.cfsr, cause.bit());
     if (route.escalated) orInto(cpu.bus, memmap.scb.hfsr, status.Hard.forced.bit());
-    r.pc = pc;
-    try dispatch.enter(cpu, .{ .number = @intCast(route.number), .priority = route.priority }, pc);
+    return .{ .number = @intCast(route.number), .priority = route.priority };
 }
 
 /// HardFault and NMI run at -1 and -2, below any priority an Entry can hold,
