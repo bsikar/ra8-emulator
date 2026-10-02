@@ -30,6 +30,9 @@ test "KERNEL_STRIDE decodes the low and extension bits as Vela writes them" {
     try std.testing.expectEqual(pool.Step{ .x = 2, .y = 2 }, pool.step(3));
     try std.testing.expectEqual(pool.Step{ .x = 3, .y = 1 }, pool.step(1 << 6));
     try std.testing.expectEqual(pool.Step{ .x = 1, .y = 3 }, pool.step(1 << 9));
+    // The TRM gives the extension field three bits; 1 to 3 is supported.
+    try std.testing.expectEqual(pool.Step{ .x = 5, .y = 1 }, pool.step(2 << 6));
+    try std.testing.expectEqual(pool.Step{ .x = 1, .y = 5 }, pool.step(2 << 9));
     // Block traversal (b2) changes the order of work, not the step.
     try std.testing.expectEqual(pool.Step{ .x = 2, .y = 1 }, pool.step(1 | 1 << 2));
 }
@@ -70,6 +73,9 @@ test "what the model cannot vouch for is refused, not guessed" {
     var dilated = inputs();
     dilated.kernel.stride = 1 << 3;
     try std.testing.expectError(error.OperatorNotModelled, pool.run(&memory, &regions, pool.mode_max, dilated));
+    var wide = inputs();
+    wide.kernel.stride = 2 << 6; // x stride 5, past the TRM's 3
+    try std.testing.expectError(error.OperatorNotModelled, pool.run(&memory, &regions, pool.mode_max, wide));
     var mixed = inputs();
     mixed.maps.ofm.zero_point = 5;
     try std.testing.expectError(error.OperatorNotModelled, pool.run(&memory, &regions, pool.mode_max, mixed));
