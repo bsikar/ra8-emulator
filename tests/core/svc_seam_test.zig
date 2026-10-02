@@ -41,6 +41,53 @@ fn bench() !engine.Engine {
     return core;
 }
 
+/// The SVCall handler a kernel dispatch boils down to: put a result in the
+/// stacked r0 and return. `movs r1, #0x77; str r1, [sp]; bx lr`.
+fn returning() !engine.Engine {
+    var core = try bench();
+    errdefer core.close();
+    try core.writeWord(handler, 0x9100_2177);
+    try core.writeWord(handler + 4, 0xE7FE_4770);
+    return core;
+}
+
+/// Where a thread stands after its SVC came back.
+const Back = struct {
+    pc: u32,
+    sp: u32,
+    ipsr: u32,
+    r0: u32,
+};
+
+fn unicornBack() !Back {
+    var core = try returning();
+    defer core.close();
+    try core.setRegister(.sp, stack);
+    var unit = Nvic{};
+    try std.testing.expect(try core.run(entry, 20, .{ .interrupts = &unit }) == null);
+    return .{
+        .pc = try core.register(.pc),
+        .sp = try core.register(.sp),
+        .ipsr = (try core.register(.xpsr)) & regs.xpsr_bits.ipsr,
+        .r0 = try core.register(.r0),
+    };
+}
+
+fn zigBack() !Back {
+    var core = try returning();
+    defer core.close();
+    var memory: EngineBus = .{ .core = &core };
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(table);
+    try std.testing.expect(cpu.run(8) == Stop.count);
+    return .{
+        .pc = cpu.regs.pc,
+        .sp = cpu.regs.msp,
+        .ipsr = cpu.regs.xpsr & regs.xpsr_bits.ipsr,
+        .r0 = cpu.regs.get(0),
+    };
+}
+
 const Landing = struct {
     pc: u32,
     sp: u32,
@@ -93,5 +140,15 @@ test "an SVC lands in SVCall with the same frame on both backends" {
     try std.testing.expectEqual(entry + 4, mine.stacked_pc);
     try std.testing.expectEqual(@as(u32, 0x5A), mine.stacked_r0);
     try std.testing.expectEqual(stack - 0x20, mine.sp);
+    try std.testing.expectEqualDeep(theirs, mine);
+}
+
+test "an SVC handler's result comes back in r0 the same way on both backends" {
+    const theirs = try unicornBack();
+    const mine = try zigBack();
+    try std.testing.expectEqual(entry + 4, mine.pc);
+    try std.testing.expectEqual(stack, mine.sp);
+    try std.testing.expectEqual(@as(u32, 0), mine.ipsr);
+    try std.testing.expectEqual(@as(u32, 0x77), mine.r0);
     try std.testing.expectEqualDeep(theirs, mine);
 }
