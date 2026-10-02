@@ -82,7 +82,7 @@ fn pinned(flags: u16, bit: u16, coordinate: u32) u32 {
 }
 
 /// The IFM2 operand at (y, x, c), after broadcasting.
-fn second(memory: anytype, regions: *const dma.Regions, inputs: Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!i32 {
+pub fn second(memory: anytype, regions: *const dma.Regions, inputs: Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!i32 {
     const maps = inputs.maps;
     const flags = maps.ifm2_broadcast;
     if (flags & broadcast_scalar != 0) {
