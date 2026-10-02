@@ -8,4 +8,5 @@ test {
     _ = @import("source_test.zig");
     _ = @import("dispatch_test.zig");
     _ = @import("nvic_source_test.zig");
+    _ = @import("fault_test.zig");
 }

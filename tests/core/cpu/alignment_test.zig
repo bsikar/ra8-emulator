@@ -32,11 +32,13 @@ test "an unaligned ldrex, ldrd and ldm are all refused" {
     try std.testing.expectError(error.Unaligned, exec(&cpu, 0xC806, 0, 2)); // ldm r0!, {r1, r2}
 }
 
-test "a step that makes an unaligned MemA access stops on it with the PC left there" {
+test "an unaligned MemA access that locks up stops on it with the PC left there" {
     var ram: fixture.Ram = .{};
     ram.putWord(fixture.code, 0x0000_C806); // ldm r0!, {r1, r2}; movs r0, r0
     var cpu = try fixture.boot(&ram);
     cpu.regs.low[0] = fixture.base + 0x201;
+    // FAULTMASK leaves the UsageFault nowhere to go (fault_test.zig covers taking it).
+    cpu.regs.faultmask = 1;
     try std.testing.expectEqual(fixture.code, cpu.step().?.unaligned);
     try std.testing.expectEqual(fixture.code, cpu.regs.pc);
     try std.testing.expectEqual(fixture.base + 0x201, cpu.regs.low[0]);
