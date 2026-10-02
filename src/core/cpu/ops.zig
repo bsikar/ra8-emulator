@@ -8,6 +8,7 @@ pub const ldst_imm = @import("ops/ldst_imm.zig");
 pub const ldst_reg = @import("ops/ldst_reg.zig");
 pub const ldm_stm = @import("ops/ldm_stm.zig");
 pub const ldrd_strd = @import("ops/ldrd_strd.zig");
+pub const ldm_stm_wide = @import("ops/ldm_stm_wide.zig");
 pub const ldst_wide = @import("ops/ldst_wide.zig");
 pub const shift_imm = @import("ops/shift_imm.zig");
 pub const add_sub = @import("ops/add_sub.zig");
