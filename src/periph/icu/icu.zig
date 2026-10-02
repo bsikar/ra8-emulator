@@ -71,6 +71,9 @@ pub const Icu = struct {
     /// them is a question about this table: a pin may only be rewritten
     /// while nothing routes its event.
     pins: irqcr.Irqcr = .{},
+    /// INTSELR, which core each event interrupts. Held here because the
+    /// router that will read it is this table's raise.
+    select: intsel.Intsel = .{},
 
     pub fn init() Icu {
         return .{};

@@ -284,3 +284,12 @@ test "an access outside the table is not served" {
     try std.testing.expectEqual(@as(u32, 0), unit.read(icu.win_base + icu.win_span, 1));
     try std.testing.expectEqual(@as(u32, 0), unit.links[icu.slots - 1]);
 }
+
+test "the unit carries an INTSELR bank that starts with every event on CPU0" {
+    var unit = icu.Icu.init();
+    try std.testing.expectEqual(icu.intsel.Core.cpu0, unit.select.coreFor(7));
+    const window = unit.select.block();
+    try std.testing.expectEqual(icu.intsel.base, window.base);
+    unit.select.write(icu.intsel.wordAddress(0), 4, 1 << 7);
+    try std.testing.expectEqual(icu.intsel.Core.cpu1, unit.select.coreFor(7));
+}
