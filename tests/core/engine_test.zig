@@ -132,3 +132,16 @@ test "without a time base the run is one stretch and the clocks stand still" {
     try std.testing.expect(try core.run(memmap.sram_base, 256, .{}) == null);
     try std.testing.expectEqual(@as(u32, 0), try core.readWord(memmap.dwt.cyccnt));
 }
+
+test "a reset takes SP and PC from the vector table and leaves LR all ones" {
+    var engine = try Engine.open();
+    defer engine.close();
+    try engine.mapBoardRam();
+    const table = memmap.sram_base;
+    try engine.write(table, &[_]u8{ 0x00, 0x10, 0x00, 0x22, 0x41, 0x02, 0x00, 0x22 });
+    try engine.setRegister(.lr, 0);
+    try engine.resetFromVectorTable(table);
+    try std.testing.expectEqual(@as(u32, 0x2200_1000), try engine.register(.sp));
+    try std.testing.expectEqual(@as(u32, 0x2200_0240), try engine.register(.pc));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), try engine.register(.lr));
+}
