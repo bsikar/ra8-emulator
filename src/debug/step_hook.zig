@@ -3,7 +3,8 @@
 //! src/debug/stop_machine.zig decides when a session stops and knows
 //! nothing about Unicorn. This file is the other half: a code hook over
 //! every instruction hands the machine an event, and a memory hook hands it
-//! the accesses the watches care about. When the machine says stop, the
+//! the accesses the watches care about, with the value each one moved (the
+//! hook runs after a load, so loads carry the value they read). When the machine says stop, the
 //! emulator is stopped before the instruction runs, so the program counter
 //! is left on the instruction that has not executed yet.
 //!
@@ -146,7 +147,9 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
     if (!watch_memory) return;
     if (driver.machine.halting) driver.machine.dcb.attachDebugger();
     if (handle) |live| syncUnits(live, driver.machine);
-    const kinds = c.uc.UC_HOOK_MEM_READ | c.uc.UC_HOOK_MEM_WRITE;
+    // READ_AFTER rather than READ, so a load hands over the value it read
+    // and Data Value comparators see loads as well as stores.
+    const kinds = c.uc.UC_HOOK_MEM_READ_AFTER | c.uc.UC_HOOK_MEM_WRITE;
     if (c.uc.uc_hook_add(handle, &hook, kinds, @constCast(@as(*const anyopaque, @ptrCast(&onMemory))), driver, 1, 0) != c.uc.UC_ERR_OK) {
         return Error.AttachFailed;
     }
@@ -191,12 +194,13 @@ fn onMemory(
     _ = uc;
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const access: @import("watch_table.zig").Access = if (kind == c.uc.UC_MEM_WRITE) .write else .read;
-    const written: u32 = @truncate(@as(u64, @bitCast(value)));
+    const width: u32 = @intCast(size);
+    const span: u64 = if (width >= 4) 0xFFFF_FFFF else (@as(u64, 1) << @intCast(width * 8)) - 1;
+    const moved: u32 = @truncate(@as(u64, @bitCast(value)) & span);
     if (access == .write) {
-        driver.stored(@truncate(address), written, @intCast(size));
+        driver.stored(@truncate(address), moved, @intCast(size));
     } else {
         driver.loaded(@truncate(address));
     }
-    const moved: ?u32 = if (access == .write) written else null;
-    driver.machine.onAccess(@truncate(address), @intCast(size), access, moved);
+    driver.machine.onAccess(@truncate(address), @intCast(width), access, moved);
 }

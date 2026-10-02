@@ -182,3 +182,11 @@ test "Linked Data Value matches nothing when the DATAVSIZEs differ" {
     arm(&unit, 3, 0x0000_0042, dwt.match.linked_data_value | halts | one_byte);
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x42));
 }
+
+test "a read Data Value comparator matches the value a load brings back" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 1, 0x0000_ABCD, dwt.match.data_value_read | halts | (1 << dwt.function_bits.size_shift));
+    try std.testing.expectEqual(@as(?usize, 1), unit.access(0x2000_0000, 2, .read, 0xABCD));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 2, .write, 0xABCD));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 2, .read, 0xABCE));
+}
