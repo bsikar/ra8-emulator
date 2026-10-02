@@ -4,7 +4,8 @@
 //! npu_vela.zig checks the stream's shape, npu_vela_regs.zig keeps what the
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
 //! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig,
-//! elementwise MUL through npu_vela_mul.zig, MAX pooling through
+//! elementwise MUL through npu_vela_mul.zig, ADD and SUB through
+//! npu_vela_addsub.zig, MAX pooling through
 //! npu_vela_pool.zig, unpadded AVERAGE pooling through
 //! npu_vela_avgpool.zig, and int8 convolution and depthwise convolution
 //! through npu_vela_convop.zig; any other block operation (other pool or
@@ -28,6 +29,7 @@ const pool = @import("npu_vela_pool.zig");
 const avgpool = @import("npu_vela_avgpool.zig");
 const convop = @import("npu_vela_convop.zig");
 const mul = @import("npu_vela_mul.zig");
+const addsub = @import("npu_vela_addsub.zig");
 
 pub const Error = vela.Error || dma.Error || minmax.Error || convop.Error;
 
@@ -87,7 +89,11 @@ fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: 
         .elementwise => {
             const inputs = minmax.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant };
             const mode = vela.param(word);
-            machine.elements += try if (mode == mul.mode_mul) mul.run(memory, regions, inputs) else minmax.run(memory, regions, mode, inputs);
+            machine.elements += try switch (mode) {
+                mul.mode_mul => mul.run(memory, regions, inputs),
+                addsub.mode_add, addsub.mode_sub => addsub.run(memory, regions, mode, inputs),
+                else => minmax.run(memory, regions, mode, inputs),
+            };
         },
         .dma_start => machine.moved += try dma.copy(memory, regions, machine.src, machine.dst, machine.state.dma0),
         .stop, .irq, .dma_wait, .kernel_wait, .pmu_mask => {},
