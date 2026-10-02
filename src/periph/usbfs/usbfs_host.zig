@@ -31,6 +31,8 @@ pub const Host = struct {
     step: Step = .waiting,
     /// Whether the current step's SETUP has gone out.
     sent: bool = false,
+    /// Whether the current step's status-stage token has gone out.
+    acked: bool = false,
     /// Boundaries spent on the current step, and how many it may take.
     waited: u32 = 0,
     patience: u32 = 20_000,
@@ -60,6 +62,7 @@ pub const Host = struct {
     fn advance(self: *Host, next: Step) void {
         self.step = next;
         self.sent = false;
+        self.acked = false;
         self.waited = 0;
         self.got = 0;
     }
@@ -72,7 +75,7 @@ pub const Host = struct {
     }
 
     /// A control read: SETUP, IN packets until the requested length is in,
-    /// then the driver's CCPL.
+    /// the OUT status token on the next boundary, then the driver's CCPL.
     fn read(self: *Host, device: *usbfs.Device, packet: [8]u8, into: []u8, next: Step) void {
         if (!self.send(device, packet)) return;
         if (!self.patient()) return;
@@ -82,7 +85,13 @@ pub const Host = struct {
             @memcpy(into[self.got..][0..n], chunk[0..n]);
             self.got += n;
         }
-        if (self.got >= into.len and idle(device)) self.advance(next);
+        if (self.got < into.len) return;
+        if (!self.acked) {
+            device.statusStage();
+            self.acked = true;
+            return;
+        }
+        if (idle(device)) self.advance(next);
     }
 
     /// A no-data request: SETUP, then the driver's CCPL.

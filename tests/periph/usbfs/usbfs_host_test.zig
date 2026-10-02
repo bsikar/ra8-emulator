@@ -85,3 +85,16 @@ test "the host does not move on until the driver ends the status stage" {
     host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.set_address, host.step);
 }
+
+test "once the data is in, the host sends the status token before waiting on CCPL" {
+    var device = attached();
+    var host = Host{};
+    host.tick(&device);
+    host.tick(&device);
+    send(&device, &device_descriptor);
+    host.tick(&device);
+    host.tick(&device);
+    const stage = device.interruptStatus() & usbfs.intsts0.ctsq_mask;
+    try std.testing.expectEqual(usbfs.intsts0.ctsq_read_status, stage);
+    try std.testing.expectEqual(usbfs.host.Step.device_descriptor, host.step);
+}
