@@ -167,6 +167,7 @@ test {
     _ = @import("periph/elc/elc_regs_test.zig");
     _ = @import("periph/elc/elc_route_test.zig");
     _ = @import("periph/elc/elc_test.zig");
+    _ = @import("periph/eth/eth_agent_test.zig");
     _ = @import("periph/eth/eth_desc_test.zig");
     _ = @import("periph/eth/eth_dma_test.zig");
     _ = @import("periph/eth/eth_gateway_test.zig");
