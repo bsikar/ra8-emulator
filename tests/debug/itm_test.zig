@@ -50,3 +50,32 @@ test "text past the capacity is counted as dropped" {
     try std.testing.expectEqual(itm.limits.capacity, unit.output().len);
     try std.testing.expectEqual(@as(usize, 3), unit.dropped);
 }
+
+fn sent(unit: *itm.Itm, text: []const u8) void {
+    for (text) |byte| _ = unit.write(itm.offsets.stim0, byte, 1);
+}
+
+test "flush writes complete lines and keeps the unfinished one" {
+    var unit = enabled();
+    sent(&unit, "boot ok\r\nticks=3\nhalf");
+    var buffer: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    try unit.flush(stream.writer(), false);
+    try std.testing.expectEqualStrings("itm: boot ok\nitm: ticks=3\n", stream.getWritten());
+    try std.testing.expectEqualStrings("half", unit.output());
+    sent(&unit, " done");
+    stream.reset();
+    try unit.flush(stream.writer(), true);
+    try std.testing.expectEqualStrings("itm: half done\n", stream.getWritten());
+    try std.testing.expectEqualStrings("", unit.output());
+}
+
+test "flush says how much was dropped and writes a full line out" {
+    var unit = enabled();
+    for (0..itm.limits.capacity + 2) |_| _ = unit.write(itm.offsets.stim0, 'a', 1);
+    var counter = std.io.countingWriter(std.io.null_writer);
+    try unit.flush(counter.writer(), false);
+    try std.testing.expectEqual(@as(u64, itm.limits.capacity + 6 + "itm: (2 characters dropped)\n".len), counter.bytes_written);
+    try std.testing.expectEqual(@as(usize, 0), unit.output().len);
+    try std.testing.expectEqual(@as(usize, 0), unit.dropped);
+}
