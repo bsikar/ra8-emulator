@@ -30,6 +30,8 @@ pub const addr = @import("npu_vela_addr.zig");
 pub const minmax = @import("npu_vela_minmax.zig");
 /// MAX pooling.
 pub const pool = @import("npu_vela_pool.zig");
+/// The per-channel scale-and-bias records a convolution reads.
+pub const bias = @import("npu_vela_bias.zig");
 
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
