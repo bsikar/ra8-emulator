@@ -9,4 +9,5 @@ const op = @import("../op.zig");
 
 pub const groups = [_]op.Group{
     @import("hint.zig").group,
+    @import("push_pop.zig").group,
 };
