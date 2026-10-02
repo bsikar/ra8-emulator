@@ -1,0 +1,80 @@
+//! Walking the call chain with .debug_frame: from one frame's registers to
+//! its caller's, and on until the information runs out.
+//!
+//! A caller's pc is the return address its callee was given, so it is
+//! looked up one byte back: a call that ends a function returns past its
+//! last byte, into whatever comes next. An EXC_RETURN in the return
+//! register ends the walk here; unwinding through an exception frame is a
+//! separate step.
+const std = @import("std");
+const engine = @import("../core/engine.zig");
+const dwarf_frame = @import("dwarf_frame.zig");
+
+pub const limits = struct {
+    /// The most frames one backtrace prints.
+    pub const frames: usize = 32;
+    /// A return address at or above this is an EXC_RETURN value, which
+    /// tells the core how to leave a handler rather than where to go.
+    pub const exc_return: u32 = 0xF000_0000;
+    pub const sp: usize = 13;
+    pub const pc: usize = 15;
+};
+
+/// r0 to r15, indexed the way DWARF numbers them.
+pub const Registers = [dwarf_frame.limits.registers]u32;
+
+const order = [_]engine.Cortex{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc };
+
+/// The core's registers, in DWARF order.
+pub fn registersOf(core: engine.Engine) engine.Error!Registers {
+    var registers: Registers = undefined;
+    for (order, 0..) |which, index| registers[index] = try core.register(which);
+    return registers;
+}
+
+/// The caller's registers, or null when no FDE covers this frame or the
+/// compiler kept no return address. `innermost` is the frame the core is
+/// stopped in, whose pc is the instruction itself rather than a return.
+pub fn caller(frame: []const u8, registers: Registers, innermost: bool, memory: anytype) !?Registers {
+    const pc = registers[limits.pc];
+    const lookup = if (innermost) pc else pc -% 1;
+    const fde = try dwarf_frame.find(frame, lookup) orelse return null;
+    const row = try dwarf_frame.rowAt(fde, lookup);
+    const returns = std.math.cast(u8, fde.cie.return_register) orelse return null;
+    if (returns >= dwarf_frame.limits.registers) return null;
+    const cfa = wrap(registers[row.cfa.register], row.cfa.offset);
+    var next = registers;
+    for (row.rules, 0..) |rule, index| switch (rule) {
+        .same => {},
+        .undefined => if (index == returns) return null,
+        .offset => |offset| next[index] = try memory.readWord(wrap(cfa, offset)),
+        .register => |from| next[index] = registers[from],
+    };
+    next[limits.sp] = cfa;
+    next[limits.pc] = next[returns];
+    return next;
+}
+
+fn wrap(base: u32, offset: i64) u32 {
+    return base +% @as(u32, @truncate(@as(u64, @bitCast(offset))));
+}
+
+/// The pcs of the call chain from `start`, innermost first, into `into`.
+/// How many it found; one means the frame has no usable CFI.
+pub fn walk(frame: []const u8, start: Registers, memory: anytype, into: []u32) usize {
+    if (into.len == 0) return 0;
+    into[0] = start[limits.pc];
+    var registers = start;
+    var count: usize = 1;
+    while (count < into.len) : (count += 1) {
+        const next = (caller(frame, registers, count == 1, memory) catch null) orelse break;
+        const returned = next[limits.pc];
+        if (returned == 0 or returned >= limits.exc_return) break;
+        const pc = returned & ~@as(u32, 1);
+        if (pc == registers[limits.pc] and next[limits.sp] == registers[limits.sp]) break;
+        registers = next;
+        registers[limits.pc] = pc;
+        into[count] = pc;
+    }
+    return count;
+}
