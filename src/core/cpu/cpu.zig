@@ -21,8 +21,8 @@ pub const Stop = union(enum) {
     /// No group in the decode table knows this encoding. The PC is left on
     /// it and nothing has changed.
     unknown: Instr,
-    /// EPSR.T is clear at this address, which is an INVSTATE UsageFault the
-    /// core does not take yet.
+    /// EPSR.T is clear at this address and the INVSTATE UsageFault it raises
+    /// locked up or could not be stacked.
     invalid_state: u32,
     /// The fetch at this address, or an access the instruction there made,
     /// reached memory nothing answers for. The PC is left on it.
@@ -31,8 +31,9 @@ pub const Stop = union(enum) {
     /// core cannot honour, or to one whose stacked frame contradicts it: an
     /// INVPC UsageFault the core does not take yet.
     invalid_return: u32,
-    /// The instruction at this address made an unaligned MemA access: an
-    /// UNALIGNED UsageFault the core does not take yet. The PC is left on it.
+    /// The instruction at this address made an unaligned access and the
+    /// UNALIGNED UsageFault it raises locked up or could not be stacked. The
+    /// PC is left on it.
     unaligned: u32,
 };
 
@@ -71,7 +72,7 @@ pub const Cpu = struct {
     /// One instruction, or the reason there was none.
     pub fn step(self: *Cpu) ?Stop {
         const address = self.regs.pc;
-        if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return .{ .invalid_state = address };
+        if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         const hit = decode.decode(instr) orelse return .{ .unknown = instr };
         self.regs.pc = address +% instr.size;
@@ -80,7 +81,7 @@ pub const Cpu = struct {
             hit.exec(self, instr) catch |err| {
                 self.regs.pc = address;
                 return switch (err) {
-                    error.Unaligned => .{ .unaligned = address },
+                    error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
                     else => .{ .bus_fault = address },
                 };
             };
@@ -107,6 +108,13 @@ pub const Cpu = struct {
             self.raised = null;
             exception.dispatch.supervisorCall(self, number, self.regs.pc) catch return .{ .bus_fault = address };
         }
+        return null;
+    }
+
+    /// Take a UsageFault the instruction at `address` caused, or stop with
+    /// `otherwise` when it locks up or the frame cannot be stacked.
+    fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
+        exception.fault.usage(self, cause, address) catch return otherwise;
         return null;
     }
 
