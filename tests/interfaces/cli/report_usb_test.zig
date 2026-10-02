@@ -50,3 +50,17 @@ test "a step short of configured prints no configuration value" {
     const text = try render(&host);
     try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "configuration value") == null);
 }
+
+test "the product string prints as text" {
+    var host = Host{ .step = .configured };
+    @memcpy(host.product[0..8], &[8]u8{ 8, 3, 'R', 0, 'A', 0, '8', 0 });
+    const text = try render(&host);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "USBFS host: product \"RA8\"\n") != null);
+}
+
+test "a character outside printable ASCII prints as a question mark" {
+    var host = Host{ .step = .configured };
+    @memcpy(host.product[0..6], &[6]u8{ 6, 3, 'A', 0, 0xE9, 0 });
+    const text = try render(&host);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "product \"A?\"") != null);
+}

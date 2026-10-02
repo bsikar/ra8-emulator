@@ -19,6 +19,8 @@ pub const Step = enum {
     set_configuration,
     get_configuration,
     get_status,
+    string_languages,
+    string_product,
     configured,
     failed,
 };
@@ -36,7 +38,15 @@ pub const requests = struct {
     pub const set_configuration = [8]u8{ 0x00, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 };
     pub const get_configuration = [8]u8{ 0x80, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00 };
     pub const get_status = [8]u8{ 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00 };
+    /// GET_DESCRIPTOR(String) `index` in `language`, for up to 255 bytes; the
+    /// device ends it early with a short packet. Index 0 is the language list.
+    pub fn stringDescriptor(index: u8, language: u16) [8]u8 {
+        return .{ 0x80, 0x06, index, 0x03, @truncate(language), @truncate(language >> 8), 0xFF, 0x00 };
+    }
 };
+
+/// The control endpoint's packet size: a packet shorter than this ends a read.
+pub const max_packet: usize = 64;
 
 pub const Host = struct {
     step: Step = .waiting,
@@ -56,7 +66,12 @@ pub const Host = struct {
     /// GET_CONFIGURATION's one byte and GET_STATUS's two, once configured.
     config_value: [1]u8 = .{0},
     status: [2]u8 = .{ 0, 0 },
+    /// String descriptor 0 (the language IDs) and the iProduct string, as sent.
+    languages: [255]u8 = .{0} ** 255,
+    product: [255]u8 = .{0} ** 255,
     got: u16 = 0,
+    /// Whether the current read ended on a short packet.
+    short: bool = false,
 
     pub fn tick(self: *Host, device: *usbfs.Device) void {
         switch (self.step) {
@@ -70,7 +85,9 @@ pub const Host = struct {
             .full_config => self.readAll(device),
             .set_configuration => self.write(device, requests.set_configuration, .get_configuration),
             .get_configuration => self.read(device, requests.get_configuration, &self.config_value, .get_status),
-            .get_status => self.read(device, requests.get_status, &self.status, .configured),
+            .get_status => self.read(device, requests.get_status, &self.status, .string_languages),
+            .string_languages => self.read(device, requests.stringDescriptor(0, 0), &self.languages, .string_product),
+            .string_product => self.readProduct(device),
             .configured, .failed => {},
         }
     }
@@ -95,6 +112,15 @@ pub const Host = struct {
         self.read(device, requests.configDescriptor(self.config_len), self.config[0..total], .set_configuration);
     }
 
+    /// The iProduct string in the device's first language; a device that
+    /// names no product, or lists no language, has nothing to read.
+    fn readProduct(self: *Host, device: *usbfs.Device) void {
+        const index = self.device[15];
+        if (index == 0 or self.languages[0] < 4) return self.advance(.configured);
+        const language = std.mem.readInt(u16, self.languages[2..4], .little);
+        self.read(device, requests.stringDescriptor(index, language), &self.product, .configured);
+    }
+
     pub fn done(self: *const Host) bool {
         return self.step == .configured;
     }
@@ -105,6 +131,7 @@ pub const Host = struct {
         self.acked = false;
         self.waited = 0;
         self.got = 0;
+        self.short = false;
     }
 
     fn patient(self: *Host) bool {
@@ -114,18 +141,20 @@ pub const Host = struct {
         return false;
     }
 
-    /// A control read: SETUP, IN packets until the requested length is in,
-    /// the OUT status token on the next boundary, then the driver's CCPL.
+    /// A control read: SETUP, IN packets until the requested length is in or
+    /// a short packet ends it, the OUT status token on the next boundary,
+    /// then the driver's CCPL.
     fn read(self: *Host, device: *usbfs.Device, packet: [8]u8, into: []u8, next: Step) void {
         if (!self.send(device, packet)) return;
         if (!self.patient()) return;
-        var chunk: [64]u8 = undefined;
+        var chunk: [max_packet]u8 = undefined;
         if (device.control.hostTake(&chunk)) |len| {
             const n = @min(len, into.len - self.got);
             @memcpy(into[self.got..][0..n], chunk[0..n]);
             self.got += n;
+            if (len < max_packet) self.short = true;
         }
-        if (self.got < into.len) return;
+        if (self.got < into.len and !self.short) return;
         if (!self.acked) {
             device.statusStage();
             self.acked = true;
