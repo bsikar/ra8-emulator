@@ -26,7 +26,7 @@ test "a lockstep run reports where it stopped and prints the class table" {
     try loadTiny(&theirs);
     var buffer: [512]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
-    const status = try mode.runLoaded(stream.writer(), &mine, theirs, memmap.sram_base, 100);
+    const status = try mode.runLoaded(stream.writer(), &mine, theirs, memmap.sram_base, 100, null);
     try std.testing.expectEqual(@as(u8, 1), status);
     const text = stream.getWritten();
     try std.testing.expect(std.mem.startsWith(u8, text, "lockstep: zig core stopped, unknown encoding at "));
@@ -41,5 +41,5 @@ test "with no vector table there is nothing to lockstep" {
     defer theirs.close();
     var buffer: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
-    try std.testing.expectEqual(@as(u8, 1), try mode.runLoaded(stream.writer(), &mine, theirs, memmap.sram_base, 10));
+    try std.testing.expectEqual(@as(u8, 1), try mode.runLoaded(stream.writer(), &mine, theirs, memmap.sram_base, 10, null));
 }

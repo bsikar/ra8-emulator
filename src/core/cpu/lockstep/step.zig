@@ -15,6 +15,7 @@ const diff = @import("diff.zig");
 const oracle = @import("oracle.zig");
 const writes = @import("writes.zig");
 const memory_diff = @import("memory_diff.zig");
+const fault_clear = @import("../../../periph/fault_clear.zig");
 const catch_up = @import("catch_up.zig");
 const periph_log = @import("periph_log.zig");
 const std = @import("std");
@@ -64,8 +65,10 @@ pub const Result = union(enum) {
 };
 
 /// `log` is the peripheral log Unicorn's tap writes into and the Zig core's
-/// bus replays from; the caller wires both ends.
-pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engine.Error!Result {
+/// bus replays from; the caller wires both ends. `settle` is the latch
+/// Unicorn's fault-clear hook records into, settled after its step so a
+/// write-one-to-clear lands within the instruction as it does on the Zig side.
+pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, settle: ?*fault_clear.Clears) engine.Error!Result {
     const address = ours.regs.pc;
     const instr = Instr.fetch(ours.bus, address) catch {
         return .{ .stopped = .{ .bus_fault = address } };
@@ -76,6 +79,7 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log) engi
     if (checked) {
         if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
         if (try retire(theirs, address)) |fault| return .{ .oracle_fault = fault };
+        if (settle) |latch| latch.apply(theirs) catch return engine.Error.WriteFailed;
     }
     var made: writes.Recorder = .{ .inner = ours.bus };
     ours.bus = made.view();
@@ -118,7 +122,7 @@ fn compare(class: []const u8, instr: Instr, ours: *cpu_mod.Cpu, theirs: engine.E
     const mine = snapshot.Snapshot.fromRegs(&ours.regs);
     const other = try oracle.read(theirs);
     if (diff.first(mine, other)) |found| return diverged(class, instr, .{ .register = found }, mine, other);
-    if (try memory_diff.first(made, theirs)) |found| return diverged(class, instr, .{ .memory = found }, mine, other);
+    if (try memory_diff.first(made, theirs, ours.bus)) |found| return diverged(class, instr, .{ .memory = found }, mine, other);
     if (log.verdict()) |found| return diverged(class, instr, .{ .periph = found }, mine, other);
     return .{ .matched = class };
 }

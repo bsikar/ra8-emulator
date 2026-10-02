@@ -5,6 +5,7 @@ const std = @import("std");
 const engine = @import("../../engine.zig");
 const cpu_mod = @import("../cpu.zig");
 const Instr = @import("../instr.zig").Instr;
+const fault_clear = @import("../../../periph/fault_clear.zig");
 const step = @import("step.zig");
 const tally = @import("tally.zig");
 const history = @import("history.zig");
@@ -23,6 +24,8 @@ pub const Run = struct {
     recent: history.History = .{},
     /// The address of the instruction the run ended on.
     at: u32 = 0,
+    /// Unicorn's fault-clear latch, when the board wired one (step.zig).
+    settle: ?*fault_clear.Clears = null,
 
     pub fn deinit(self: *Run, gpa: std.mem.Allocator) void {
         self.counts.deinit(gpa);
@@ -34,7 +37,7 @@ pub const Run = struct {
             const address = ours.regs.pc;
             self.at = address;
             const fetched = Instr.fetch(ours.bus, address) catch null;
-            switch (try step.one(ours, theirs, log)) {
+            switch (try step.one(ours, theirs, log, self.settle)) {
                 .matched => |class| try self.counts.record(gpa, class, .matched),
                 .skipped => |class| try self.counts.record(gpa, class, .skipped),
                 .diverged => |found| {
