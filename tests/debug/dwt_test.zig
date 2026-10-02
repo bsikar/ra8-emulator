@@ -69,13 +69,54 @@ test "with DEMCR.TRCENA clear nothing matches and MATCHED stays clear" {
     try std.testing.expectEqual(@as(?usize, 1), unit.matchesPc(0x200));
 }
 
-test "FUNCTION.ID is read-only: comparator 0 adds Cycle Counter, the rest do not" {
+test "FUNCTION.ID is read-only: comparator 0 adds Cycle Counter, the rest take limits" {
     var unit = dwt.Dwt{};
     const shift = dwt.function_bits.id_shift;
     try std.testing.expectEqual(@as(?u32, dwt.id.cycles_instruction_data << shift), unit.peek(function(0)));
     for (1..dwt.limits.comparators) |n| {
-        try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data << shift), unit.peek(function(@intCast(n))));
+        try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data_limits << shift), unit.peek(function(@intCast(n))));
     }
     _ = unit.write(function(1), 0);
-    try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data << shift), unit.peek(function(1)));
+    try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data_limits << shift), unit.peek(function(1)));
+}
+
+const one_byte: u32 = 0;
+const halfword: u32 = 1 << dwt.function_bits.size_shift;
+
+fn arm(unit: *dwt.Dwt, n: u32, comp: u32, function_value: u32) void {
+    _ = unit.write(dwt.offsets.comp0 + n * dwt.offsets.stride, comp);
+    _ = unit.write(function(n), function_value);
+}
+
+test "an Instruction Address Limit makes an inclusive range reported on the lower comparator" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 0, 0x100, dwt.match.instruction | halts | halfword);
+    arm(&unit, 1, 0x10E, dwt.match.instruction_limit | halfword);
+    try std.testing.expectEqual(@as(?usize, 0), unit.matchesPc(0x100));
+    try std.testing.expectEqual(@as(?usize, 0), unit.matchesPc(0x108));
+    try std.testing.expectEqual(@as(?usize, 0), unit.matchesPc(0x10F));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x110));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x0FE));
+    try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
+    try std.testing.expectEqual(@as(u32, 0), unit.peek(function(1)).? & dwt.function_bits.matched);
+}
+
+test "a Data Address Limit range keeps the lower comparator's read or write filter" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 2, 0x2000_0000, dwt.match.data_write | halts | one_byte);
+    arm(&unit, 3, 0x2000_00FF, dwt.match.data_limit | one_byte);
+    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_0080, 4, .write));
+    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_00FF, 1, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0080, 4, .read));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0100, 4, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x2000_0080));
+}
+
+test "a limit with nothing to pair with matches nothing" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 0, 0x2000_00FF, dwt.match.data_limit | halts);
+    arm(&unit, 2, 0x300, dwt.match.instruction_limit | halts | halfword);
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x200));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x300));
 }
