@@ -72,3 +72,18 @@ test "lines open every fourth word and close on the fourth or the last" {
     try std.testing.expect(!place.endsLine(1, 8));
     try std.testing.expect(place.endsLine(5, 6));
 }
+
+test "a leading star is gdb's address spelling and changes nothing" {
+    const literal = try place.parse("*0x2200005E");
+    try std.testing.expect(literal.name == null);
+    try std.testing.expectEqual(@as(u32, 0x2200005E), literal.address);
+    try std.testing.expect(!literal.deref);
+    const named = try place.parse("*main+4");
+    try std.testing.expectEqualStrings("main", named.name.?);
+    try std.testing.expectEqual(@as(i32, 4), named.offset);
+    try std.testing.expect(!named.deref);
+}
+
+test "a star with nothing after it is an empty place" {
+    try std.testing.expectError(error.EmptyPlace, place.parse("*"));
+}
