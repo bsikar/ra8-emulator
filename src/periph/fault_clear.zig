@@ -1,8 +1,8 @@
-//! Write-one-to-clear on CFSR and HFSR.
+//! Write-one-to-clear on CFSR, HFSR and SFSR.
 //!
-//! Every bit in CFSR (0xE000_ED28) and HFSR (0xE000_ED2C) is cleared by
-//! writing a one to it, and a zero leaves it alone (DDI0553 D1.2.11,
-//! D1.2.12). A fault handler acknowledges a fault with `CFSR = CFSR`: it
+//! Every bit in CFSR (0xE000_ED28), HFSR (0xE000_ED2C) and SFSR
+//! (0xE000_EDE4) is cleared by writing a one to it, and a zero leaves it
+//! alone (DDI0553 D1.2.11, D1.2.12, and SFSR in the Security Extension). A fault handler acknowledges a fault with `CFSR = CFSR`: it
 //! writes back exactly the bits it read, and they go down. The PPB here is
 //! plain RAM, so that store leaves the word exactly as it was, and the
 //! handler that checks the status went down reads the same fault forever.
@@ -24,6 +24,11 @@
 
 const memmap = @import("../core/memmap.zig");
 
+/// The Secure Fault Status Register. src/periph/secure_fault.zig raises
+/// into it; it lives here so the store hook can watch it without pulling
+/// the fault routing into the core.
+pub const sfsr: u32 = 0xE000_EDE4;
+
 /// One status word's owed clear.
 pub const Pending = struct {
     /// The word as it stood before the first store this stretch.
@@ -38,6 +43,7 @@ pub const Pending = struct {
 pub const Clears = struct {
     cfsr: Pending = .{},
     hfsr: Pending = .{},
+    sfsr: Pending = .{},
     /// How many stores were latched, for a report or a test to read.
     stores: u32 = 0,
 
@@ -46,11 +52,12 @@ pub const Clears = struct {
     }
 
     /// The pending clear a store at `address` belongs to, or null when the
-    /// address is not one of the two status words.
+    /// address is not one of the status words.
     pub fn slot(self: *Clears, address: u32) ?*Pending {
         return switch (address & ~@as(u32, 3)) {
             memmap.scb.cfsr => &self.cfsr,
             memmap.scb.hfsr => &self.hfsr,
+            sfsr => &self.sfsr,
             else => null,
         };
     }
@@ -75,6 +82,7 @@ pub const Clears = struct {
     pub fn apply(self: *Clears, core: anytype) !void {
         try settle(&self.cfsr, core, memmap.scb.cfsr);
         try settle(&self.hfsr, core, memmap.scb.hfsr);
+        try settle(&self.sfsr, core, sfsr);
     }
 };
 

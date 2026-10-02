@@ -1,4 +1,4 @@
-//! The store hook over CFSR and HFSR that feeds src/periph/fault_clear.zig.
+//! The store hooks over CFSR, HFSR and SFSR that feeds src/periph/fault_clear.zig.
 //!
 //! It only latches. The clear is applied at the chunk boundary, because a
 //! write hook runs before the store lands and anything it wrote to the word
@@ -11,6 +11,11 @@ const fault_clear = @import("../periph/fault_clear.zig");
 pub const Error = error{AttachFailed};
 
 pub fn attach(handle: ?*c.uc.uc_engine, clears: *fault_clear.Clears) Error!void {
+    try watch(handle, clears, memmap.scb.cfsr, memmap.scb.hfsr + 3);
+    try watch(handle, clears, fault_clear.sfsr, fault_clear.sfsr + 3);
+}
+
+fn watch(handle: ?*c.uc.uc_engine, clears: *fault_clear.Clears, begin: u32, end: u32) Error!void {
     var hook: c.uc.uc_hook = 0;
     if (c.uc.uc_hook_add(
         handle,
@@ -18,8 +23,8 @@ pub fn attach(handle: ?*c.uc.uc_engine, clears: *fault_clear.Clears) Error!void 
         c.uc.UC_HOOK_MEM_WRITE,
         @constCast(@as(*const anyopaque, @ptrCast(&onWrite))),
         clears,
-        memmap.scb.cfsr,
-        memmap.scb.hfsr + 3,
+        begin,
+        end,
     ) != c.uc.UC_ERR_OK) {
         return Error.AttachFailed;
     }
