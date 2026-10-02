@@ -11,6 +11,7 @@ test {
     _ = @import("ops/ldrd_strd_test.zig");
     _ = @import("ops/ldm_stm_wide_test.zig");
     _ = @import("ops/ldst_wide_test.zig");
+    _ = @import("ops/ldr_literal_wide_test.zig");
     _ = @import("ops/shift_imm_test.zig");
     _ = @import("ops/add_sub_test.zig");
     _ = @import("ops/dp_reg_test.zig");
