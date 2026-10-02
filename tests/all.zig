@@ -39,6 +39,8 @@ test {
     _ = @import("core/cpu/fpu/directed_vectors_test.zig");
     _ = @import("core/cpu/fpu/rint_test.zig");
     _ = @import("core/cpu/fpu/rint_vectors_test.zig");
+    _ = @import("core/cpu/fpu/minmax_test.zig");
+    _ = @import("core/cpu/fpu/minmax_vectors_test.zig");
     _ = @import("core/cpu/board_bus_test.zig");
     _ = @import("core/cpu/boot_test.zig");
     _ = @import("core/cpu/bus_test.zig");
