@@ -1,0 +1,5 @@
+//! The M85 MVE (Helium) semantics, one namespace so root.zig carries a
+//! single line for them: pure functions over Q registers and VPR, with
+//! their vectors (RA8EMU-25, RA8EMU-23).
+pub const qreg = @import("qreg.zig");
+pub const predicate = @import("predicate.zig");
