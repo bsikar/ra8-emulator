@@ -21,8 +21,7 @@
 # Exits 0 when every expected line showed, 1 when one is missing, and 77
 # (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
 # CPU=zig serves every session from the Zig core (--cpu zig, RA8EMU-118)
-# and leaves out the two-core session and the cycle watch, which that
-# core cannot debug yet (RA8EMU-172 for the cycle watch).
+# and leaves out the two-core session, which that core cannot debug yet.
 
 set -euo pipefail
 
@@ -163,7 +162,7 @@ expect one '<fw.counter>:' 'Breakpoint 1, ' 'fw.target (x=0) at fw.zig:' '<fw.ta
     'in fw.reset () at fw.zig:8' 'Hardware watchpoint 2' \
     'Old value = 100' 'New value = 101' '[Inferior 1 (Remote target) detached]'
 
-sessions="one stop itm"
+sessions="one cycle stop itm"
 if [ "$cpu" != zig ]; then
 sessions="one two cycle stop itm"
 serve two --cpu1 fw.elf -- 'info threads' 'thread 2' 'info registers pc' \
@@ -175,7 +174,6 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     '[Inferior 1 (Remote target) detached]'
 fi
 
-if [ "$cpu" != zig ]; then
 # RA8EMU-98: a Cycle Counter comparator armed from gdb stops the run with
 # DFSR.DWTTRAP (bit 2) set. RA8EMU-101: on the instruction that brings
 # CYCCNT to its value, not at the next clock charge.
@@ -184,7 +182,6 @@ serve cycle -- 'set *(unsigned*)0xE000EDFC = 0x01000000' 'set *(unsigned*)0xE000
     'p/x *(unsigned*)0xE000ED30' 'p *(unsigned*)0xE0001004 - 400 <= 1' detach
 expect cycle 'Program received signal SIGTRAP' '$1 = 0x4' '$2 = 1' \
     '[Inferior 1 (Remote target) detached]'
-fi
 
 interrupt stop
 expect stop 'Program received signal SIGINT, Interrupt.' 'in fw.reset () at fw.zig:' \

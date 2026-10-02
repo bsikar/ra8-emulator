@@ -9,6 +9,7 @@ const call_decode = @import("call_decode.zig");
 const cpu_mod = @import("../core/cpu/cpu.zig");
 const dispatch = @import("../core/cpu/exception/dispatch.zig");
 const watch_bus = @import("watch_bus.zig");
+const zig_cycles = @import("zig_cycles.zig");
 
 /// How a driven run ended.
 pub const Ended = union(enum) {
@@ -50,11 +51,21 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64) E
 /// on Unicorn. It listens only while the instruction runs, so neither the
 /// debugger's own reads nor the instruction's fetch count as an access.
 pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus) Ended {
+    return runClocked(core, machine, count, watch, null);
+}
+
+/// As `runWatched`, with `clock` counting DWT_CYCCNT for a Cycle Counter
+/// comparator and recording each halt in DFSR (RA8EMU-172).
+pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock) Ended {
     var left = count;
     while (left > 0) : (left -= 1) {
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
+        if (clock) |counting| counting.tick(core, machine);
         const now = event(core);
-        if (machine.onInstruction(now)) |why| return .{ .stop = why };
+        if (machine.onInstruction(now)) |why| {
+            if (clock) |counting| counting.halted(core, machine, why);
+            return .{ .stop = why };
+        }
         if (watch) |listening| listening.arm(now.pc, now.size);
         defer if (watch) |listening| listening.disarm();
         if (core.cpu.step()) |stopped| return .{ .core = stopped };
