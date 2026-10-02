@@ -167,10 +167,11 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     '[Inferior 1 (Remote target) detached]'
 
 # RA8EMU-98: a Cycle Counter comparator armed from gdb stops the run with
-# DFSR.DWTTRAP (bit 2) set, and CYCCNT has counted past its value.
+# DFSR.DWTTRAP (bit 2) set. RA8EMU-101: on the instruction that brings
+# CYCCNT to its value, not at the next clock charge.
 serve cycle -- 'set *(unsigned*)0xE000EDFC = 0x01000000' 'set *(unsigned*)0xE0001000 = 1' \
     'set *(unsigned*)0xE0001020 = 400' 'set *(unsigned*)0xE0001028 = 0x11' continue \
-    'p/x *(unsigned*)0xE000ED30' 'p *(unsigned*)0xE0001004 >= 400' detach
+    'p/x *(unsigned*)0xE000ED30' 'p *(unsigned*)0xE0001004 - 400 <= 1' detach
 expect cycle 'Program received signal SIGTRAP' '$1 = 0x4' '$2 = 1' \
     '[Inferior 1 (Remote target) detached]'
 

@@ -10,6 +10,7 @@ test {
     _ = @import("watch_table_test.zig");
     _ = @import("call_decode_test.zig");
     _ = @import("step_hook_test.zig");
+    _ = @import("cycle_count_test.zig");
     _ = @import("step_hook_image_test.zig");
     _ = @import("commands_test.zig");
     _ = @import("session_test.zig");
