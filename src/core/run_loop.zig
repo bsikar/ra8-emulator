@@ -22,8 +22,16 @@ const unmask = @import("unmask.zig");
 const pend_break = @import("pend_break.zig");
 const pend_resume = @import("pend_resume.zig");
 const bus_error = @import("bus_error.zig");
+const svc_trap = @import("svc_trap.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
+
+/// A stretch that stopped on something the part takes as an exception, a
+/// refused access or an SVC, resumes in its handler. Null leaves the stop.
+fn excepted(core: anytype, session: Session, taken: fault.Fault) !?u32 {
+    if (try bus_error.raised(core, session, taken)) |resumed| return resumed;
+    return svc_trap.raised(core, session, taken);
+}
 
 /// Run a bounded number of instructions. A fault is a result, not a
 /// crash: it comes back with the PC that took it.
@@ -54,7 +62,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         const pace = run_pace.forStretch(core, configured, session);
         const chunk = pace.chunk(remaining);
         if (try stretch(core, pc, chunk, session)) |taken| {
-            if (try bus_error.raised(core, session, taken)) |resumed| {
+            if (try excepted(core, session, taken)) |resumed| {
                 remaining -|= 1;
                 pc = resumed;
                 continue;
