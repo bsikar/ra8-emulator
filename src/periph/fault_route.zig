@@ -1,6 +1,6 @@
 //! Which exception a configurable fault is taken as, and at what priority.
 //!
-//! MemManage, BusFault and UsageFault are each a configurable fault with its
+//! MemManage, BusFault, UsageFault and SecureFault are each a configurable fault with its
 //! own enable in SHCSR and its own priority byte in SHPR1. A fault that is
 //! disabled, or that cannot preempt what is running because its priority is
 //! no more urgent than the current execution priority, escalates to
@@ -9,8 +9,9 @@
 //! can read what really happened.
 //!
 //!   SHCSR 0xE000_ED24  MEMFAULTENA [16]  BUSFAULTENA [17]  USGFAULTENA [18]
+//!                      SECUREFAULTENA [19]
 //!                      (DDI0553 D1.2.9)
-//!   SHPR1 0xE000_ED18  PRI_4 [7:0]  PRI_5 [15:8]  PRI_6 [23:16]
+//!   SHPR1 0xE000_ED18  PRI_4 [7:0]  PRI_5 [15:8]  PRI_6 [23:16]  PRI_7 [31:24]
 //!                      (DDI0553 D1.2.10)
 //!   HFSR  0xE000_ED2C  FORCED [30]  (DDI0553 D1.2.12)
 
@@ -31,6 +32,7 @@ pub fn exception(fault: Fault) u16 {
         .mem_manage => 4,
         .bus_fault => 5,
         .usage_fault => 6,
+        .secure_fault => 7,
     };
 }
 
