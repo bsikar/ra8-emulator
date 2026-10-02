@@ -19,6 +19,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const transfer = @import("../fpu/transfer.zig");
+const alignment = @import("../alignment.zig");
 
 pub const group: op.Group = .{ .name = "fp_mem", .decode = decode, .oracle = false };
 
@@ -64,6 +65,8 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const b = bits(instr);
     const base = if (b.rn == 15) instr.address +% 4 else cpu.regs.get(b.rn);
     const p = plan(b, base);
+    // Every word is MemA (RA8EMU-85); the transfer is contiguous from start.
+    try alignment.memA(p.start, 4);
     var words: [32]u32 = undefined;
     if (b.load) {
         for (words[0..p.words], 0..) |*word, k| word.* = try readWord(cpu, p.start +% @as(u32, @intCast(k)) * 4);
@@ -95,6 +98,7 @@ fn runHalf(cpu: *Cpu, instr: Instr) op.Error!void {
     const rn: u4 = @intCast(instr.hw1 & 0xF);
     const base = if (rn == 15) instr.address +% 4 else cpu.regs.get(rn);
     const address = halfAddress(instr, base);
+    try alignment.memA(address, 2);
     const d: u5 = @intCast((instr.hw2 >> 12) << 1 | (instr.hw1 >> 6 & 1));
     var bytes: [2]u8 = undefined;
     if (instr.hw1 >> 4 & 1 == 1) {
