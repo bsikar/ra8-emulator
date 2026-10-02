@@ -95,3 +95,11 @@ is stale or an encoding is missing. Regenerate with
 | VMINNM.F32 T1 | 9 |
 | VMAXNM.F64 T1 | 2 |
 | VMINNM.F64 T1 | 2 |
+| VSELEQ.F32 T1 | 4 |
+| VSELVS.F32 T1 | 2 |
+| VSELGE.F32 T1 | 4 |
+| VSELGT.F32 T1 | 4 |
+| VSELEQ.F64 T1 | 2 |
+| VSELVS.F64 T1 | 3 |
+| VSELGE.F64 T1 | 2 |
+| VSELGT.F64 T1 | 2 |
