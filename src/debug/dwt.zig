@@ -27,12 +27,10 @@
 //! a store writes with DWT_COMPn, masked by DWT_VMASKn, in the byte lanes
 //! DATAVSIZE picks (E2.1.109). Linked Data Value (0b1011) also needs
 //! comparator n-1 to match the access's address. Only the odd comparators
-//! take the value kinds (ID 0b11110); comparator 0 never links. Only
-//! stores carry their value to the DWT so far, so a load never makes a
-//! value match.
+//! take the value kinds (ID 0b11110); comparator 0 never links. Loads
+//! and stores both carry their value to the DWT.
 //!
-//! Not modelled yet: DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and
-//! value matches on loads.
+//! Not modelled yet: DWT_CTRL.NUMCOMP and the Cycle Counter match itself.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;

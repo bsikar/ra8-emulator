@@ -177,6 +177,28 @@ test "firmware that arms a DWT write comparator halts after the store and sees M
     try std.testing.expectEqual(id0 | function | dwt.function_bits.matched, seen);
 }
 
+// str r1,[r0,#0x30] (DWT_COMP1); str r2,[r0,#0x38] (DWT_FUNCTION1); ldr r5,[r3]; nop; nop.
+test "firmware that arms a DWT read Data Value comparator halts after the load that reads it" {
+    var fixture: Fixture = undefined;
+    fixture.machine = .{};
+    fixture.machine.dwt.trcena = true;
+    try fixture.open();
+    defer fixture.engine.close();
+    const dwt = ra8.core.dwt;
+    const function = dwt.match.data_value_read | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift);
+    try fixture.engine.write(layout.code, &[_]u8{ 0x01, 0x63, 0x82, 0x63, 0x1D, 0x68, 0x00, 0xBF, 0x00, 0xBF });
+    try fixture.engine.write(layout.data, &[_]u8{ 0x34, 0x12, 0x00, 0x00 });
+    try fixture.engine.setRegister(.r0, dwt.base);
+    try fixture.engine.setRegister(.r1, 0x1234);
+    try fixture.engine.setRegister(.r2, function);
+    try fixture.engine.setRegister(.r3, layout.data);
+    fixture.machine.begin();
+    const pc = try fixture.run(layout.code);
+    try std.testing.expectEqual(layout.code + 6, pc);
+    try std.testing.expectEqual(@as(usize, 1), fixture.driver.last.?.unit_watch);
+    try std.testing.expectEqual(@as(u32, 0x1234), try fixture.engine.register(.r5));
+}
+
 // str r5,[r6] (TER); str r5,[r7] (TCR); strb r1,[r0]; strb r2,[r0]; ldr r3,[r0]; nop.
 test "firmware printing through ITM port 0 leaves its text with the debug core" {
     var fixture: Fixture = undefined;
