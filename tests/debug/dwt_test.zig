@@ -190,3 +190,30 @@ test "a read Data Value comparator matches the value a load brings back" {
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 2, .write, 0xABCD));
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 2, .read, 0xABCE));
 }
+
+test "NUMCOMP is 8 on the Cortex-M85 and 4 on the Cortex-M33" {
+    const cpuid = ra8.periph.cpuid;
+    try std.testing.expectEqual(@as(u4, 8), dwt.numcompOf(cpuid.cpu0));
+    try std.testing.expectEqual(@as(u4, 4), dwt.numcompOf(cpuid.cpu1));
+    try std.testing.expectEqual(@as(u32, 0x8000_0000), dwt.ctrlReset(cpuid.cpu0));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), dwt.ctrlReset(cpuid.cpu1));
+}
+
+test "a DWT_CTRL store keeps NUMCOMP and the other bits it wrote" {
+    const unit = dwt.Dwt{ .numcomp = 4 };
+    try std.testing.expectEqual(@as(u32, 0x4000_0001), unit.ctrlWord(0x0000_0001));
+    try std.testing.expectEqual(@as(u32, 0x4FFF_FFFF), unit.ctrlWord(0xFFFF_FFFF));
+}
+
+test "comparators past NUMCOMP read zero, ignore writes and never match" {
+    var unit = dwt.Dwt{ .numcomp = 4, .trcena = true };
+    const comp4 = dwt.offsets.comp0 + 4 * dwt.offsets.stride;
+    try std.testing.expect(unit.write(comp4, 0x2000_1000));
+    try std.testing.expect(unit.write(function(4), dwt.match.data_write | halts | word_size));
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(comp4));
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(function(4)));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_1000, 4, .write, null));
+    _ = unit.write(dwt.offsets.comp0 + 3 * dwt.offsets.stride, 0x2000_1000);
+    _ = unit.write(function(3), dwt.match.data_write | halts | word_size);
+    try std.testing.expectEqual(@as(?usize, 3), unit.access(0x2000_1000, 4, .write, null));
+}

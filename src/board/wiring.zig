@@ -13,6 +13,7 @@ const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
+const dwt = @import("../debug/dwt.zig");
 const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 
@@ -223,6 +224,8 @@ pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
 fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
     // CPUID read as zero on both cores, so neither said what it was.
     try cpuid.prime(core.*, windows.identity);
+    // DWT_CTRL.NUMCOMP read as zero, so the core claimed no comparators.
+    try core.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
     // AIRCR: the first read of it is 0 rather than the key status.
     try windows.control.prime(core.*);
     // CTR read as zero, so the firmware computed a four-byte line and

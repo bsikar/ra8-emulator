@@ -30,8 +30,16 @@
 //! take the value kinds (ID 0b11110); comparator 0 never links. Loads
 //! and stores both carry their value to the DWT.
 //!
-//! Not modelled yet: DWT_CTRL.NUMCOMP and the Cycle Counter match itself.
+//! DWT_CTRL.NUMCOMP [31:28] says how many comparators the core has, and is
+//! read-only. The Cortex-M85 TRM (101924, DWT register summary) gives 8 in
+//! the full set and 4 in the reduced set; the Cortex-M33 TRM (100230) gives
+//! 4 and 2. Both cores are modelled with the full set and ITM trace, so
+//! DWT_CTRL resets to 0x8000_0000 on CPU0 and 0x4000_0000 on CPU1. The
+//! comparators past NUMCOMP read as zero and ignore writes.
+//!
+//! Not modelled yet: the Cycle Counter match itself.
 const watch_table = @import("watch_table.zig");
+const cpuid = @import("../periph/cpuid.zig");
 
 pub const Access = watch_table.Access;
 
@@ -50,6 +58,23 @@ pub const limits = struct {
     /// One past the last comparator register, from `base`.
     pub const end: u32 = offsets.comp0 + comparators * offsets.stride;
 };
+
+/// DWT_CTRL fields the debug model owns. The rest belongs to clocks.zig.
+pub const ctrl_bits = struct {
+    pub const numcomp_shift: u5 = 28;
+    pub const numcomp_mask: u32 = 0xF << numcomp_shift;
+};
+
+/// The comparators the core a CPUID word names has: 4 on a Cortex-M33,
+/// 8 on the Cortex-M85 and anything unrecognised.
+pub fn numcompOf(identity: u32) u4 {
+    return if (cpuid.part(identity) == cpuid.partno.cortex_m33) 4 else limits.comparators;
+}
+
+/// DWT_CTRL at reset for that core: NUMCOMP, with every other bit clear.
+pub fn ctrlReset(identity: u32) u32 {
+    return @as(u32, numcompOf(identity)) << ctrl_bits.numcomp_shift;
+}
 
 /// DWT_FUNCTION.MATCH values this model compares.
 pub const match = struct {
@@ -109,6 +134,9 @@ pub const Dwt = struct {
     comps: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
     functions: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
     vmasks: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
+    /// DWT_CTRL.NUMCOMP: the comparators this core has. Those past it are
+    /// absent, so they read as zero, ignore writes and never match.
+    numcomp: u4 = limits.comparators,
     /// A register changed since memory last showed the register file.
     changed: bool = false,
     /// DEMCR.TRCENA: with it clear the DWT is off and nothing matches.
@@ -118,6 +146,7 @@ pub const Dwt = struct {
     /// effects, or null when the offset is not a comparator register.
     pub fn peek(self: *const Dwt, offset: u32) ?u32 {
         const slot = Slot.of(offset) orelse return null;
+        if (slot.index >= self.numcomp) return 0;
         return switch (slot.register) {
             .comp => self.comps[slot.index],
             .function => self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift,
@@ -129,6 +158,7 @@ pub const Dwt = struct {
     /// comparator registers, so the caller can treat it as unclaimed.
     pub fn write(self: *Dwt, offset: u32, value: u32) bool {
         const slot = Slot.of(offset) orelse return false;
+        if (slot.index >= self.numcomp) return true;
         switch (slot.register) {
             .comp => self.comps[slot.index] = value,
             .function => {
@@ -139,6 +169,12 @@ pub const Dwt = struct {
         }
         self.changed = true;
         return true;
+    }
+
+    /// A DWT_CTRL word as a read sees it: NUMCOMP is read-only, so a store
+    /// keeps every other bit and NUMCOMP stays this core's count.
+    pub fn ctrlWord(self: *const Dwt, value: u32) u32 {
+        return (value & ~ctrl_bits.numcomp_mask) | @as(u32, self.numcomp) << ctrl_bits.numcomp_shift;
     }
 
     /// The firmware read the register at `offset`: a FUNCTION read clears
@@ -165,7 +201,7 @@ pub const Dwt = struct {
     fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access, value: ?u32) ?usize {
         if (!self.trcena) return null;
         var halting: ?usize = null;
-        for (0..limits.comparators) |index| {
+        for (0..self.numcomp) |index| {
             const owner = self.reporter(index, address, width, kind, value) orelse continue;
             self.functions[owner] |= function_bits.matched;
             self.changed = true;
@@ -186,7 +222,7 @@ pub const Dwt = struct {
         }
         const limit = if (kind == null) match.instruction_limit else match.data_limit;
         if (self.code(index) == limit) return self.rangeLower(index, address, width, kind);
-        if (index + 1 < limits.comparators and self.code(index + 1) == limit) return null;
+        if (index + 1 < self.numcomp and self.code(index + 1) == limit) return null;
         if (!covers(self.functions[index], kind)) return null;
         if (!overlaps(self.comps[index], self.functions[index], address, width)) return null;
         return index;
