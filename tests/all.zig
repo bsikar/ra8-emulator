@@ -35,6 +35,7 @@ test {
     _ = @import("core/cpu/lockstep/replay_bus_test.zig");
     _ = @import("core/cpu/lockstep/report_test.zig");
     _ = @import("core/cpu/lockstep/run_test.zig");
+    _ = @import("core/cpu/lockstep/seed_test.zig");
     _ = @import("core/cpu/lockstep/snapshot_test.zig");
     _ = @import("core/cpu/lockstep/states_test.zig");
     _ = @import("core/cpu/lockstep/step_test.zig");
