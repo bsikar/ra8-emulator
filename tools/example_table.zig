@@ -7,7 +7,10 @@
 //! An image passes when its console's last line says OK or PASS. It fails when
 //! the run stopped on a fault or the console says FAIL. Anything else, LED-only
 //! demos included, is unknown until a reader checks it against its README.
+//! A few images need more than one budget fits; example_budgets.zig lists
+//! them and the floor each runs at.
 const std = @import("std");
+pub const budgets = @import("example_budgets.zig");
 
 pub const Verdict = enum { pass, fail, unknown };
 
@@ -116,7 +119,7 @@ pub fn main() !void {
     try writeHeader(out);
     for (images) |image| {
         const path = try std.fs.path.join(allocator, &.{ args[2], image });
-        const report = try runImage(allocator, args[1], path, budget);
+        const report = try runImage(allocator, args[1], path, budgets.pick(image, budget));
         try writeRow(out, image, parse(report));
     }
 }
