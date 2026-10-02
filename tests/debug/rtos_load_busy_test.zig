@@ -106,6 +106,30 @@ test "the load table names the core and adds up to 100.0%" {
     try std.testing.expectEqual(@as(u64, 1000), tenths);
 }
 
+test "a load window charges only the instructions inside it" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    const bytes = program(90, 30);
+    try core.write(code, &bytes);
+    try core.setRegister(.r0, pointer);
+    try core.setRegister(.r1, thread_a);
+    try core.setRegister(.r2, thread_b);
+    const clock: u64 = 0;
+    const interrupts = nvic.Nvic{ .vector_base = memmap.sram_base };
+    var found: rtos_hook.Tracer = .{ .address = pointer };
+    found.trace.load.from = 245 * 10;
+    found.trace.load.to = 245 * 30;
+    const tracer = try rtos_hook.attach(core.handle, found, &clock, &interrupts);
+    defer std.heap.page_allocator.destroy(tracer);
+    _ = try core.runChunk(code, 245 * 40, null);
+    var load = tracer.trace.load;
+    load.finish(tracer.trace.loadNow(0));
+    try std.testing.expectEqual(@as(u64, 245 * 20), load.total(0));
+    try std.testing.expectApproxEqAbs(182.0 * 100.0 / 245.0, share(&load, 0, thread_a), tolerance);
+    try std.testing.expectApproxEqAbs(63.0 * 100.0 / 245.0, share(&load, 0, thread_b), tolerance);
+}
+
 /// Memory with no thread names in it.
 const NoNames = struct {
     pub fn read(_: NoNames, _: u32, _: []u8) bool {

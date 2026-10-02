@@ -36,8 +36,8 @@ test "each switch is stamped from the run's clock as it lands" {
 test "no flag traces nothing, and an image without ThreadX traces nothing" {
     var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
     const image = try bareImage(&buffer);
-    try std.testing.expect(rtos_hook.resolve(image, false) == null);
-    try std.testing.expect(rtos_hook.resolve(image, true) == null);
+    try std.testing.expect(rtos_hook.resolve(image, null) == null);
+    try std.testing.expect(rtos_hook.resolve(image, .{}) == null);
 }
 
 test "the report lists the opening switches of threadx_blink in order" {
@@ -149,8 +149,8 @@ test "a CPU1 tracer tags its events and its header cpu1" {
 test "a CPU1 image without ThreadX traces nothing, and no flag traces nothing" {
     var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
     const image = try bareImage(&buffer);
-    try std.testing.expect(rtos_hook.resolveOn(image, true, 1) == null);
-    try std.testing.expect(rtos_hook.resolveOn(image, false, 1) == null);
+    try std.testing.expect(rtos_hook.resolveOn(image, .{}, 1) == null);
+    try std.testing.expect(rtos_hook.resolveOn(image, null, 1) == null);
 }
 
 test "no CPU1 prints nothing for CPU1" {

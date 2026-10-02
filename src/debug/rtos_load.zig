@@ -85,6 +85,12 @@ pub const Core = struct {
     }
 };
 
+/// The stretch of virtual time a load is charged over, [from, to).
+pub const Window = struct {
+    from: u64 = 0,
+    to: u64 = std.math.maxInt(u64),
+};
+
 pub const Load = struct {
     from: u64 = 0,
     to: u64 = std.math.maxInt(u64),

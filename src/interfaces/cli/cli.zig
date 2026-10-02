@@ -8,6 +8,7 @@ const touch_spec = @import("touch_spec.zig");
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
+const rtos_load = @import("../../debug/rtos_load.zig");
 
 pub const usage = @import("cli_usage.zig").text;
 
@@ -108,6 +109,9 @@ pub const Options = struct {
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
     /// hook. src/debug/rtos_report.zig.
     cpu_load: bool = false,
+    /// `--cpu-load-from` / `--cpu-load-to`: the virtual instructions the
+    /// load is charged over. Either one turns `--cpu-load` on.
+    cpu_load_window: rtos_load.Window = .{},
     /// `--taken-in`: a function to catch every exception taken inside.
     /// src/debug/taken_in.zig says why a tally cannot answer that.
     taken_in_place: ?[]const u8 = null,
@@ -162,8 +166,10 @@ pub const Options = struct {
     /// asking for more milliseconds buys more instructions to spend them in
     /// rather than running into a number set for some other app.
     /// Whether the ThreadX hook is armed: either flag reads it.
-    pub fn rtosWanted(self: *const Options) bool {
-        return self.trace_rtos or self.cpu_load;
+    /// The load window when a flag asked for the RTOS trace, else null.
+    pub fn rtosWanted(self: *const Options) ?rtos_load.Window {
+        if (!self.trace_rtos and !self.cpu_load) return null;
+        return self.cpu_load_window;
     }
 
     pub fn budgetFor(self: *const Options, watching: bool) usize {
@@ -275,6 +281,12 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.trace_rtos = true;
     } else if (std.mem.eql(u8, flag, "--cpu-load")) {
         options.cpu_load = true;
+    } else if (std.mem.eql(u8, flag, "--cpu-load-from")) {
+        options.cpu_load = true;
+        options.cpu_load_window.from = try std.fmt.parseInt(u64, try next(argv, index), 0);
+    } else if (std.mem.eql(u8, flag, "--cpu-load-to")) {
+        options.cpu_load = true;
+        options.cpu_load_window.to = try std.fmt.parseInt(u64, try next(argv, index), 0);
     } else if (std.mem.eql(u8, flag, "--taken-in")) {
         options.taken_in_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--count-pc")) {
