@@ -263,6 +263,7 @@ test {
     _ = @import("periph/npu/npu_vela_quant_test.zig");
     _ = @import("periph/npu/npu_vela_addr_test.zig");
     _ = @import("periph/npu/npu_vela_minmax_test.zig");
+    _ = @import("periph/npu/npu_vela_pool_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/candidate_test.zig");
     _ = @import("periph/held_test.zig");

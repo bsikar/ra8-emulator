@@ -103,3 +103,37 @@ test "a Vela-compiled MAXIMUM runs to its STOP and writes the larger of each pai
         try std.testing.expectEqual(@max(x, y), @as(i8, @bitCast(memory.bytes[0x800 + i])));
     }
 }
+
+/// A real Vela 3.12.0 stream (ethos-u55-256): TFLite MAX_POOL_2D, 2x2 kernel,
+/// stride 2, VALID, int8 1x4x4x8 in and 1x2x2x8 out, scale 0.05 and zero
+/// point -3 on both. IFM at region 1 offset 0x00, OFM at 0x80. The 256
+/// bytes after the 32-byte driver header, as Vela emitted them.
+const vela_maxpool = [_]u32{
+    0x0001010F, 0x00004000, 0x00000000, 0x00004001, 0x00000000, 0x00004002,
+    0x00000000, 0x00004003, 0x00000000, 0x0003010B, 0x0003010C, 0x0003010A,
+    0x00070104, 0x00004006, 0x00000001, 0x00004005, 0x00000020, 0x00004004,
+    0x00000008, 0xFFFD0109, 0x00010105, 0x00000107, 0x00000100, 0x00000101,
+    0x00000103, 0x00000102, 0x0001011F, 0x00004010, 0x00000080, 0x00004011,
+    0x00000000, 0x00004012, 0x00000000, 0x00004013, 0x00000000, 0x0001011B,
+    0x0001011C, 0x0001011A, 0x00010112, 0x00010111, 0x00070113, 0x00004016,
+    0x00000001, 0x00004015, 0x00000010, 0x00004014, 0x00000008, 0xFFFD0118,
+    0x00010114, 0x00010121, 0x00010120, 0x00030122, 0x00000125, 0xFF800126,
+    0x007F0127, 0x00010116, 0x00010115, 0x00070117, 0x000A010D, 0x001E012D,
+    0x00000124, 0x0000012F, 0x00000005, 0xFFFF0000,
+};
+
+test "a Vela-compiled MAX_POOL_2D writes the largest of each 2x2 window" {
+    var memory = Memory{};
+    var x: [4][4][8]i8 = undefined;
+    for (0..4) |h| for (0..4) |w| for (0..8) |c| {
+        x[h][w][c] = @bitCast(@as(u8, @truncate(h * 71 + w * 29 + c * 13 + 5)));
+    };
+    @memcpy(memory.bytes[0x800..0x880], std.mem.asBytes(&x));
+    const result = try vela.runner.run(&memory, &regions, &vela_maxpool);
+    try std.testing.expectEqual(@as(u64, 32), result.elements);
+    for (0..2) |h| for (0..2) |w| for (0..8) |c| {
+        const want = @max(@max(x[2 * h][2 * w][c], x[2 * h][2 * w + 1][c]), @max(x[2 * h + 1][2 * w][c], x[2 * h + 1][2 * w + 1][c]));
+        const got: i8 = @bitCast(memory.bytes[0x880 + h * 16 + w * 8 + c]);
+        try std.testing.expectEqual(want, got);
+    };
+}

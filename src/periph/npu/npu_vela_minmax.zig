@@ -48,25 +48,25 @@ fn supported(inputs: Inputs) Error!addr.Format {
     return format(inputs);
 }
 
-fn signExtend(raw: u16, f: addr.Format) i32 {
+pub fn signExtend(raw: u16, f: addr.Format) i32 {
     if (!f.signed) return raw;
     return if (f.size == 1) @as(i8, @bitCast(@as(u8, @truncate(raw)))) else @as(i16, @bitCast(raw));
 }
 
-fn location(regions: *const dma.Regions, region: u16, offset: u64, size: u32) Error!u32 {
+pub fn location(regions: *const dma.Regions, region: u16, offset: u64, size: u32) Error!u32 {
     if (region >= regions.len) return error.RegionOutOfRange;
     const at = regions[region] +% offset;
     if (at < offset or at + size > @as(u64, std.math.maxInt(u32)) + 1) return error.AddressTooHigh;
     return @intCast(at);
 }
 
-fn load(memory: anytype, at: u32, f: addr.Format) Error!i32 {
+pub fn load(memory: anytype, at: u32, f: addr.Format) Error!i32 {
     var bytes: [2]u8 = .{ 0, 0 };
     memory.read(at, bytes[0..f.size]) catch return error.Refused;
     return signExtend(std.mem.readInt(u16, &bytes, .little), f);
 }
 
-fn store(memory: anytype, at: u32, value: i32, f: addr.Format) Error!void {
+pub fn store(memory: anytype, at: u32, value: i32, f: addr.Format) Error!void {
     var bytes: [2]u8 = undefined;
     std.mem.writeInt(u16, &bytes, @truncate(@as(u32, @bitCast(value))), .little);
     memory.write(at, bytes[0..f.size]) catch return error.Refused;

@@ -3,13 +3,14 @@
 //!
 //! npu_vela.zig checks the stream's shape, npu_vela_regs.zig keeps what the
 //! cmd1 commands set, and npu_vela_dma.zig does one copy. This file is the
-//! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig;
-//! any other block operation (conv, depthwise, pool, other elementwise
-//! modes) stops the run with error.OperatorNotModelled, so nothing that
+//! loop over them. Elementwise MIN and MAX run through npu_vela_minmax.zig
+//! and MAX pooling through npu_vela_pool.zig; any other block operation
+//! (conv, depthwise, other pool or elementwise modes) stops the run with error.OperatorNotModelled, so nothing that
 //! needs an unmodelled operator is reported as having run. DMA0_SRC_REGION and _DST_REGION
 //! (cmd0 0x130 and 0x131) pick the regions the next DMA_START copies
 //! between; the feature-map sets go to npu_vela_fm.zig, the scale, activation
-//! and stride sets to npu_vela_quant.zig, and any other
+//! and stride sets to npu_vela_quant.zig, the kernel sets to
+//! npu_vela_pool.zig, and any other
 //! register set is passed over for now.
 const std = @import("std");
 const vela = @import("npu_vela.zig");
@@ -18,6 +19,7 @@ const dma = @import("npu_vela_dma.zig");
 const fm = @import("npu_vela_fm.zig");
 const quant = @import("npu_vela_quant.zig");
 const minmax = @import("npu_vela_minmax.zig");
+const pool = @import("npu_vela_pool.zig");
 
 pub const Error = vela.Error || dma.Error || minmax.Error;
 
@@ -38,6 +40,7 @@ const Machine = struct {
     state: regs.State = .{},
     maps: fm.State = .{},
     quant: quant.State = .{},
+    kernel: pool.State = .{},
     src: dma.Region = .{},
     dst: dma.Region = .{},
     moved: u64 = 0,
@@ -48,15 +51,23 @@ fn setRegister(machine: *Machine, code: u10, word: u32) void {
     switch (code) {
         dma.set_dma0_src_region => machine.src = dma.Region.fromParam(vela.param(word)),
         dma.set_dma0_dst_region => machine.dst = dma.Region.fromParam(vela.param(word)),
-        else => if (fm.apply(&machine.maps, code, vela.param(word)) == .not_modelled) {
-            _ = quant.applyCmd0(&machine.quant, code, vela.param(word));
+        else => if (fm.apply(&machine.maps, code, vela.param(word)) == .not_modelled and
+            quant.applyCmd0(&machine.quant, code, vela.param(word)) == .not_modelled)
+        {
+            _ = pool.apply(&machine.kernel, code, vela.param(word));
         },
     }
 }
 
 fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: vela.Op, word: u32) Error!void {
     switch (op) {
-        .conv, .depthwise, .pool => return error.OperatorNotModelled,
+        .conv, .depthwise => return error.OperatorNotModelled,
+        .pool => machine.elements += try pool.run(memory, regions, vela.param(word), .{
+            .bases = machine.state,
+            .maps = machine.maps,
+            .quant = machine.quant,
+            .kernel = machine.kernel,
+        }),
         .elementwise => machine.elements += try minmax.run(memory, regions, vela.param(word), .{
             .bases = machine.state,
             .maps = machine.maps,
