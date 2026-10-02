@@ -62,6 +62,7 @@ test {
     _ = @import("core/cpu/ops/hint_test.zig");
     _ = @import("core/cpu/ops/ldr_literal_test.zig");
     _ = @import("core/cpu/ops/ldst_imm_test.zig");
+    _ = @import("core/cpu/ops/ldst_wide_test.zig");
     _ = @import("core/cpu/ops/shift_imm_test.zig");
     _ = @import("core/cpu/ops/add_sub_test.zig");
     _ = @import("core/cpu/ops/dp_reg_test.zig");
