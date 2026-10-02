@@ -214,7 +214,7 @@ pub const Guard = struct {
             .mem_manage,
             core.readWord(memmap.scb.shcsr) catch 0,
             core.readWord(memmap.scb.shpr1) catch 0,
-            null,
+            unit.running(),
         );
         const taken: nvic.Candidate = .{ .number = route.number, .priority = route.priority };
         if (route.escalated) {
