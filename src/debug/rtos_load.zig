@@ -6,6 +6,15 @@
 //! thread, else idle. Time before a core's first event goes to `before`,
 //! because nothing yet says what ran.
 //!
+//! One exception to "innermost exception first": ThreadX's Cortex-M
+//! scheduler waits for work inside PendSV_Handler, looping on WFI in
+//! `__tx_ts_wait` in Handler mode after storing 0 to the current-thread
+//! pointer (RA8EMU-303). Charged as PendSV, an idle board reads as 99%
+//! scheduler. So once an `idle` arrives while PendSV is the innermost
+//! exception, that PendSV's time goes to idle until a thread is switched
+//! in or the PendSV returns. An exception nested inside the wait (SysTick)
+//! still charges itself.
+//!
 //! Only time inside the window [from, to) is charged, and totals run as the
 //! events arrive, so the load does not depend on the trace's 256-event ring
 //! and costs fixed memory however long the run goes.
@@ -20,6 +29,9 @@ pub const limits = struct {
     pub const depth: usize = 8;
     pub const cores: usize = rtos_trace.limits.cores;
 };
+
+/// PendSV's exception number (DDI0553 B3.30).
+pub const pend_sv: u16 = 14;
 
 pub const Kind = enum { before, idle, thread, exception };
 
@@ -45,6 +57,8 @@ pub const Core = struct {
     thread: Owner = .{ .kind = .before },
     stack: [limits.depth]u16 = undefined,
     depth: usize = 0,
+    /// The depth of the PendSV a scheduler is idling in, or 0 for none.
+    waiting: usize = 0,
     slots: [limits.slots]Slot = undefined,
     len: usize = 0,
     /// Ticks owed to owners past `limits.slots`.
@@ -52,6 +66,7 @@ pub const Core = struct {
 
     fn running(self: *const Core) Owner {
         if (self.depth == 0) return self.thread;
+        if (self.waiting == self.depth) return .{ .kind = .idle };
         const top = @min(self.depth, limits.depth) - 1;
         return .{ .kind = .exception, .id = self.stack[top] };
     }
@@ -74,14 +89,29 @@ pub const Core = struct {
 
     fn take(self: *Core, one: rtos_trace.Event) void {
         switch (one.kind) {
-            .switch_to => self.thread = .{ .kind = .thread, .id = one.thread },
-            .idle => self.thread = .{ .kind = .idle },
+            .switch_to => {
+                self.thread = .{ .kind = .thread, .id = one.thread };
+                self.waiting = 0;
+            },
+            .idle => {
+                self.thread = .{ .kind = .idle };
+                if (self.innermost() == pend_sv) self.waiting = self.depth;
+            },
             .enter => {
                 if (self.depth < limits.depth) self.stack[self.depth] = one.exception;
                 self.depth += 1;
             },
-            .leave => self.depth -|= 1,
+            .leave => {
+                if (self.waiting == self.depth) self.waiting = 0;
+                self.depth -|= 1;
+            },
         }
+    }
+
+    /// The innermost active exception's number, or null in Thread mode.
+    fn innermost(self: *const Core) ?u16 {
+        if (self.depth == 0) return null;
+        return self.stack[@min(self.depth, limits.depth) - 1];
     }
 };
 
