@@ -23,6 +23,7 @@ const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
 const exc_return = @import("exc_return.zig");
 const nvic_clear = @import("nvic_clear.zig");
+pub const debug_monitor = @import("debug_monitor.zig");
 const standing_pends = @import("standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the
@@ -328,6 +329,7 @@ pub const Nvic = struct {
         if (icsr & icsr_pendsvset != 0) {
             best = consider(tally, best, .{ .number = pendsv, .priority = @truncate(shpr3 >> 16) });
         }
+        if (try debug_monitor.pending(core)) |monitor| best = consider(tally, best, monitor);
         var word: u16 = 0;
         while (word < irq_words) : (word += 1) {
             const offset = 4 * @as(u32, word);
@@ -365,6 +367,7 @@ fn masked(core: anytype) !bool {
 }
 
 fn clearPending(core: anytype, number: u16) !void {
+    if (number == debug_monitor.number) return debug_monitor.clear(core);
     if (number == systick or number == pendsv) {
         const bit: u32 = if (number == systick) icsr_pendstset else icsr_pendsvset;
         const icsr = try core.readWord(memmap.scb.icsr);
@@ -383,6 +386,7 @@ fn clearPending(core: anytype, number: u16) !void {
 
 /// NVIC_IABR: what a handler reads to ask whether a line is running.
 fn setActiveBit(core: anytype, number: u16, active: bool) !void {
+    if (number == debug_monitor.number) return debug_monitor.setActive(core, active);
     if (number < first_irq) return;
     const line = number - first_irq;
     const address = memmap.nvic.iabr + 4 * (@as(u32, line) / 32);
