@@ -48,7 +48,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
     return switch (choice) {
         .unicorn => unreachable,
         .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget),
-        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget),
+        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears),
     };
 }
 

@@ -16,9 +16,8 @@ const periph_log = @import("periph_log.zig");
 pub const ReplayBus = struct {
     memory: EngineBus,
     log: *periph_log.Log,
-    /// The Zig side's own SAU and MPU, banked as the oracle's hooks bank
-    /// its copy. Fault clears are left off: the oracle only settles them at
-    /// a board boundary, which a lockstep step never reaches.
+    /// The Zig side's own SAU, MPU and fault-clear latch, kept as the
+    /// oracle's hooks keep its copy (mode.zig settles the oracle per step).
     scs: board_bus.Scs = .{},
 
     pub fn view(self: *ReplayBus) bus.Bus {

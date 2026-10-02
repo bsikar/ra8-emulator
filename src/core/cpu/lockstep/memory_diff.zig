@@ -8,7 +8,10 @@
 const std = @import("std");
 const engine = @import("../../engine.zig");
 const writes = @import("writes.zig");
-const BoardBus = @import("../board_bus.zig").BoardBus;
+const bus = @import("../bus.zig");
+const board_bus = @import("../board_bus.zig");
+const BoardBus = board_bus.BoardBus;
+const memmap = @import("../../memmap.zig");
 
 pub const Mismatch = struct {
     address: u32,
@@ -26,14 +29,24 @@ pub const Mismatch = struct {
 };
 
 /// The first store, in the order the Zig core made them, that Unicorn's
-/// memory disagrees with.
-pub fn first(made: []const writes.Write, theirs: engine.Engine) engine.Error!?Mismatch {
+/// memory disagrees with. A store into a write-one-to-clear word is checked
+/// by what each side now holds (read back through `ours`), since the stored
+/// value is not what the register keeps.
+pub fn first(made: []const writes.Write, theirs: engine.Engine, ours: bus.Bus) engine.Error!?Mismatch {
     for (made) |*store| {
         if (BoardBus.inWindow(store.address, store.len)) continue;
         var held: [writes.widest]u8 = undefined;
         try theirs.read(store.address, held[0..store.len]);
-        if (std.mem.eql(u8, store.slice(), held[0..store.len])) continue;
-        return .{ .address = store.address, .len = store.len, .ours = store.bytes, .oracle = held };
+        var mine = store.bytes;
+        if (settles(store.address)) ours.read(store.address, mine[0..store.len]) catch return engine.Error.RunFailed;
+        if (std.mem.eql(u8, mine[0..store.len], held[0..store.len])) continue;
+        return .{ .address = store.address, .len = store.len, .ours = mine, .oracle = held };
     }
     return null;
+}
+
+/// CFSR, HFSR and SFSR: the words src/periph/fault_clear.zig settles.
+pub fn settles(address: u32) bool {
+    const word = address & ~@as(u32, 3);
+    return word == memmap.scb.cfsr or word == memmap.scb.hfsr or word == board_bus.fault_clear.sfsr;
 }
