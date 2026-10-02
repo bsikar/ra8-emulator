@@ -23,12 +23,15 @@ pub const points = @import("rsp_points.zig");
 pub const run_control = @import("rsp_run.zig");
 /// Debugger stores handed on to the debug unit models.
 pub const units = @import("rsp_units.zig");
+/// Run control on the Zig core (RA8EMU-118).
+pub const zig_run = @import("rsp_zig.zig");
 /// One connection served end to end.
 pub const server = @import("rsp_server.zig");
 pub const poll = @import("rsp_poll.zig");
 /// ITM text sent to gdb as `O` packets.
 pub const console = @import("rsp_console.zig");
 const debug_session = @import("session.zig");
+const core_view = @import("core_view.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]engine.Cortex{
@@ -53,12 +56,22 @@ pub const Dispatch = struct {
     /// With a debugger session attached, run control and threads go to it,
     /// and everything else is answered for the core it has selected.
     session: ?*debug_session.Session = null,
+    /// With a Zig session attached instead, run control goes to it and
+    /// registers and memory are the Zig core's.
+    zig: ?*zig_run.Target = null,
+    /// Where registers and memory are read; null reads `core`.
+    view: ?core_view.View = null,
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
         if (self.session) |live| {
             if (run_control.handles(request)) return run_control.answer(live, request, out);
             const selected = Dispatch{ .core = live.core, .machine = live.driver.machine };
+            return selected.answer(request, out);
+        }
+        if (self.zig) |live| {
+            if (run_control.handles(request)) return zig_run.answer(live, request, out);
+            const selected = Dispatch{ .core = self.core, .machine = live.session.machine, .view = live.session.view() };
             return selected.answer(request, out);
         }
         if (request.len == 0) return out[0..0];
@@ -80,10 +93,15 @@ pub const Dispatch = struct {
         };
     }
 
+    /// The core registers and memory are read from and written to.
+    fn target(self: Dispatch) core_view.View {
+        return self.view orelse .{ .unicorn = self.core };
+    }
+
     fn allRegisters(self: Dispatch, out: []u8) Error![]const u8 {
         var at: usize = 0;
         for (registers) |which| {
-            const value = self.core.register(which) catch return copy(out, request_error);
+            const value = self.target().register(which) catch return copy(out, request_error);
             try word(out, &at, value);
         }
         return out[0..at];
@@ -92,7 +110,7 @@ pub const Dispatch = struct {
     fn oneRegister(self: Dispatch, args: []const u8, out: []u8) Error![]const u8 {
         const index = std.fmt.parseInt(usize, args, 16) catch return copy(out, request_error);
         if (index >= registers.len) return copy(out, request_error);
-        const value = self.core.register(registers[index]) catch return copy(out, request_error);
+        const value = self.target().register(registers[index]) catch return copy(out, request_error);
         var at: usize = 0;
         try word(out, &at, value);
         return out[0..at];
@@ -109,7 +127,7 @@ pub const Dispatch = struct {
         while (done < length) {
             const take = @min(chunk.len, length - done);
             const where = address +% @as(u32, @intCast(done));
-            self.core.read(where, chunk[0..take]) catch return copy(out, memory_error);
+            self.target().read(where, chunk[0..take]) catch return copy(out, memory_error);
             for (chunk[0..take]) |byte| try hexByte(out, &at, byte);
             done += take;
         }
@@ -120,7 +138,7 @@ pub const Dispatch = struct {
         if (args.len != registers.len * 8) return copy(out, request_error);
         for (registers, 0..) |which, index| {
             const value = parseWord(args[index * 8 ..][0..8]) orelse return copy(out, request_error);
-            self.core.setRegister(which, value) catch return copy(out, request_error);
+            self.target().setRegister(which, value) catch return copy(out, request_error);
         }
         return copy(out, "OK");
     }
@@ -131,7 +149,7 @@ pub const Dispatch = struct {
         const text = args[equals + 1 ..];
         if (index >= registers.len or text.len != 8) return copy(out, request_error);
         const value = parseWord(text[0..8]) orelse return copy(out, request_error);
-        self.core.setRegister(registers[index], value) catch return copy(out, request_error);
+        self.target().setRegister(registers[index], value) catch return copy(out, request_error);
         return copy(out, "OK");
     }
 
@@ -155,7 +173,7 @@ pub const Dispatch = struct {
                 .hex => std.fmt.hexToBytes(chunk[0..take], data[done * 2 ..][0 .. take * 2]) catch return copy(out, request_error),
             };
             const where = address +% @as(u32, @intCast(done));
-            self.core.write(where, bytes) catch return copy(out, memory_error);
+            self.target().write(where, bytes) catch return copy(out, memory_error);
             done += take;
         }
         if (self.machine) |machine| units.forward(self.core, machine, address, length);

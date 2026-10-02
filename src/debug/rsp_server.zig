@@ -47,6 +47,8 @@ pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: anytype, writer: anytype) 
                     const reply = if (detach) "OK" else try dispatch.answer(request, &payload);
                     if (dispatch.session) |live| {
                         if (console.resumes(request)) try console.send(writer, &live.driver.machine.itm, &framed);
+                    } else if (dispatch.zig) |live| {
+                        if (console.resumes(request)) try console.send(writer, &live.session.machine.itm, &framed);
                     }
                     last = try packet.frame(&framed, reply);
                     try writer.writeAll(last);
