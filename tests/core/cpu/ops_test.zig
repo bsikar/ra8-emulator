@@ -40,5 +40,6 @@ test {
     _ = @import("ops/fp_regs_test.zig");
     _ = @import("ops/fp_system_test.zig");
     _ = @import("ops/fp_convert_test.zig");
+    _ = @import("ops/fp_directed_test.zig");
     _ = @import("ops/table_test.zig");
 }
