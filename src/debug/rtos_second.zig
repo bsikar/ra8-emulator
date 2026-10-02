@@ -26,6 +26,7 @@ pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Windo
     const image = elf.Image.init(bytes) catch return one;
     const found = rtos_hook.resolveOn(image, window, 1) orelse return one;
     traced = rtos_hook.attach(one.core.handle, found, &one.timebase.ticks, &one.interrupts) catch null;
+    if (traced) |tracer| tracer.elapsed = &one.timebase.elapsed;
     return one;
 }
 
