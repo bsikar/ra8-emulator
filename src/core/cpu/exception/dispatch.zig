@@ -16,7 +16,8 @@ pub fn poll(cpu: *Cpu) bus.Error!bool {
     const from = cpu.source orelse return false;
     const winner = (try from.winner(cpu.bus)) orelse return false;
     const r = &cpu.regs;
-    if (winner.priority >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask)) return false;
+    const split = prigroup(cpu.bus);
+    if (active.group(winner.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return false;
     if (cpu.active.full()) return false;
     // An image with no handler for what it pended keeps the pend, as the
     // NVIC model does, rather than branching to address zero.
@@ -24,6 +25,13 @@ pub fn poll(cpu: *Cpu) bus.Error!bool {
     if (handler == 0) return false;
     try enter(cpu, winner, r.pc);
     return true;
+}
+
+/// AIRCR.PRIGROUP. A bus with no SCS behind it reads as 0, every bit but
+/// bit 0 a group bit.
+pub fn prigroup(on: bus.Bus) u3 {
+    const aircr = on.readWord(memmap.scb.aircr) catch return 0;
+    return @truncate(aircr >> 8);
 }
 
 /// Enter `which` with `return_address` stacked, and record it active.
