@@ -75,3 +75,10 @@ test "a bad line says what was wrong with it" {
     try std.testing.expectError(error.BadNumber, commands.parse("break target 0"));
     try std.testing.expectError(error.BadNumber, commands.parse("delete one"));
 }
+
+test "halting takes on or off" {
+    try expectParsed(.{ .halting = false }, "halting off");
+    try expectParsed(.{ .halting = true }, "halting on");
+    try std.testing.expectError(error.BadSwitch, commands.parse("halting maybe"));
+    try std.testing.expectError(error.MissingArgument, commands.parse("halting"));
+}
