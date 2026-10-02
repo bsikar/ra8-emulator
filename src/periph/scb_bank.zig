@@ -27,8 +27,15 @@
 //! SCR (p1132 to p1133): SEVONPEND [4] and SLEEPONEXIT [1] are banked;
 //! SLEEPDEEPS [3] and SLEEPDEEP [2] are not. CCR (p874 to p877): BP [18],
 //! IC [17], DC [16], STKOFHFNMIGN [10], DIV_0_TRP [4], UNALIGN_TRP [3] and
-//! USERSETMPEND [1] are banked; BFHFNMIGN [8] is not. Reserved bits are
-//! left out of every mask.
+//! USERSETMPEND [1] are banked; BFHFNMIGN [8] is not. ICSR (p1025 to
+//! p1029): only PENDSVSET [28] and PENDSVCLR [27]. SHPR1 (p1145): PRI_6
+//! (UsageFault) and PRI_4 (MemManage). SHPR3 (p1148): PRI_14 (PendSV), and
+//! PRI_15 (SysTick) only when two SysTick timers are implemented. SHCSR
+//! (p1138 to p1144): the HardFault, UsageFault, MemManage, SVCall and PendSV
+//! bits, and SYSTICKACT [11] only with two SysTicks; the SecureFault,
+//! BusFault, NMI and DebugMonitor bits are not. CFSR (p880): UFSR [31:16]
+//! and MMFSR [7:0]; BFSR [15:8] is not. Reserved bits are left out of
+//! every mask.
 //!
 //! A bit-by-bit register is not given an address. Its shared bits have one
 //! home and its banked bits two, so a whole-word answer would be wrong for
@@ -73,25 +80,41 @@ pub fn banking(address: u32) ?Banking {
     return null;
 }
 
-const Split = struct { offset: u32, banked: u32 };
+/// How many SysTick timers the part has. With two, the SysTick fields of
+/// SHPR3 and SHCSR are banked as well.
+pub const SysTicks = enum { one, two };
+
+const Split = struct {
+    offset: u32,
+    banked: u32,
+    /// Banked only when two SysTick timers are implemented.
+    systick: u32 = 0,
+};
 
 /// The banked bits of the bit-by-bit registers read so far.
 const splits = [_]Split{
     .{ .offset = 0x0C, .banked = 0x0000_0700 }, // AIRCR.PRIGROUP
     .{ .offset = 0x10, .banked = 0x0000_0012 }, // SCR.SEVONPEND, SLEEPONEXIT
     .{ .offset = 0x14, .banked = 0x0007_041A }, // CCR, see the file comment
+    .{ .offset = 0x04, .banked = 0x1800_0000 }, // ICSR.PENDSVSET, PENDSVCLR
+    .{ .offset = 0x18, .banked = 0x00FF_00FF }, // SHPR1.PRI_6, PRI_4
+    .{ .offset = 0x20, .banked = 0x00FF_0000, .systick = 0xFF00_0000 }, // SHPR3
+    .{ .offset = 0x24, .banked = 0x0025_B48D, .systick = 0x0000_0800 }, // SHCSR
+    .{ .offset = 0x28, .banked = 0xFFFF_00FF }, // CFSR.UFSR, MMFSR
 };
 
 /// The bits of `address` that have a separate Non-secure copy: all of them
 /// for a banked register, none for an unbanked one, the read fields for a
 /// bit-by-bit one. Null when that has not been read yet.
-pub fn bankedBits(address: u32) ?u32 {
+pub fn bankedBits(address: u32, systicks: SysTicks) ?u32 {
     const kind = banking(address) orelse return null;
     return switch (kind) {
         .banked => 0xFFFF_FFFF,
         .not_banked => 0,
         .bit_by_bit => for (splits) |split| {
-            if (split.offset == address - alias.scb.first) break split.banked;
+            if (split.offset == address - alias.scb.first) {
+                break split.banked | if (systicks == .two) split.systick else 0;
+            }
         } else null,
     };
 }
