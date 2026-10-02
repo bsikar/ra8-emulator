@@ -121,3 +121,42 @@ test "RHST cannot be written; the rest of DVSTCTR0 reads back" {
     device.write(at(regs.reg.dvstctr0), 2, regs.port.rhst_high | regs.port.uact);
     try std.testing.expectEqual(@as(u32, regs.port.uact), device.read(at(regs.reg.dvstctr0), 2));
 }
+
+const get_descriptor = [8]u8{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 };
+const set_address = [8]u8{ 0x00, 0x05, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+test "a SETUP fills USBREQ, USBVAL, USBINDX and USBLENG" {
+    var device = pulledUp();
+    device.setup(get_descriptor);
+    try std.testing.expectEqual(@as(u32, 0x0680), device.read(at(regs.reg.usbreq), 2));
+    try std.testing.expectEqual(@as(u32, 0x0100), device.read(at(regs.reg.usbval), 2));
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.usbindx), 2));
+    try std.testing.expectEqual(@as(u32, 0x12), device.read(at(regs.reg.usbleng), 2));
+}
+
+test "a SETUP latches VALID and CTRT and picks the control stage" {
+    var device = pulledUp();
+    device.setup(get_descriptor);
+    var status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expect(status & usbfs.intsts0.valid != 0);
+    try std.testing.expect(status & usbfs.intsts0.ctrt != 0);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.ctsq_read_data), status & usbfs.intsts0.ctsq_mask);
+    device.setup(set_address);
+    status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.ctsq_no_data_status), status & usbfs.intsts0.ctsq_mask);
+    device.setup(.{ 0x21, 0x20, 0, 0, 0, 0, 7, 0 });
+    status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.ctsq_write_data), status & usbfs.intsts0.ctsq_mask);
+}
+
+test "clearing VALID keeps the stage; firmware cannot write the SETUP fields" {
+    var device = pulledUp();
+    device.setup(get_descriptor);
+    device.write(at(regs.reg.intsts0), 2, ~@as(u32, usbfs.intsts0.valid));
+    const status = device.read(at(regs.reg.intsts0), 2);
+    try std.testing.expectEqual(@as(u32, 0), status & usbfs.intsts0.valid);
+    try std.testing.expectEqual(@as(u32, usbfs.intsts0.ctsq_read_data), status & usbfs.intsts0.ctsq_mask);
+    device.write(at(regs.reg.usbreq), 2, 0);
+    try std.testing.expectEqual(@as(u32, 0x0680), device.read(at(regs.reg.usbreq), 2));
+    try std.testing.expectEqual(@as(u32, 1), device.refusals());
+}
