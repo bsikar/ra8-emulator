@@ -62,6 +62,8 @@ const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
 const hint_resume = @import("hint_resume.zig");
 const second_wait = @import("second_wait.zig");
+const unmask = @import("unmask.zig");
+const run_loop = @import("run_loop.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -124,6 +126,12 @@ pub const Second = struct {
     /// The board's SCKDIVCR2, read each round to size CPU1's turn against
     /// CPU0's (`rate.turn`). Null outside a board, where a turn is a round.
     dividers: ?*const u16 = null,
+    /// CPU1's own mask release: a pend held by PRIMASK at a boundary is
+    /// stepped to the instant the mask clears, as CPU0's is. Without it a
+    /// masked spin whose length divides the turn (the module port's
+    /// five-instruction `__tx_ts_wait`) meets every boundary masked and
+    /// never takes its SysTick. src/core/unmask.zig.
+    release: unmask.Release = .{},
     /// Parked in WFE, and what woke it: src/core/second_wait.zig.
     wait: second_wait.Wait = .{},
     /// Where its vectors were found, for the report.
@@ -183,13 +191,7 @@ pub const Second = struct {
         if (self.fault != null) return;
         self.turns += 1;
         if (self.wait.parked()) return self.idle(instructions);
-        const session: engine.Session = .{
-            .watch = &self.watch,
-            .interrupts = &self.interrupts,
-            .timebase = &self.timebase,
-            .park_on_wfe = true,
-        };
-        const outcome = self.core.run(self.pc, instructions, session) catch |err| {
+        const outcome = self.core.run(self.pc, instructions, self.session()) catch |err| {
             self.fault = .{ .pc = self.pc, .detail = @errorName(err), .access = null, .instruction = null };
             return;
         };
@@ -204,6 +206,16 @@ pub const Second = struct {
             _ = self.wait.arrive();
         }
         self.boundary();
+    }
+
+    fn session(self: *Second) engine.Session {
+        return .{
+            .watch = &self.watch,
+            .interrupts = &self.interrupts,
+            .timebase = &self.timebase,
+            .unmask = &self.release,
+            .park_on_wfe = true,
+        };
     }
 
     /// A parked turn: time passes and the boundary is offered, nothing runs.
@@ -222,6 +234,10 @@ pub const Second = struct {
     /// one; this is where CPU1's own pends are offered to its own NVIC.
     fn boundary(self: *Second) void {
         self.clears.apply(self.core) catch {};
+        // A turn ends on its budget, where the run loop never serves, so a
+        // pend held by PRIMASK is stepped out of the mask here, before the
+        // dispatch below, and the steps are charged as run.
+        self.ran += run_loop.liftMask(self.core, &self.interrupts, self.session(), unmask.limits.steps) catch 0;
         // Counted in `control.requests`; acting on one is RA8EMU-59.
         _ = self.control.poll(self.core) catch false;
         _ = self.interrupts.dispatch(self.core) catch null;
