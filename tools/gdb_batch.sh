@@ -13,7 +13,9 @@
 # detach; then the same image on both cores, with the second as thread 2
 # taking the break, a step, a memory read, a backtrace and a watchpoint;
 # then a continue into the endless loop, run past the old instruction
-# budget and stopped by a Ctrl-C (SIGINT to gdb, sent on as 0x03).
+# budget and stopped by a Ctrl-C (SIGINT to gdb, sent on as 0x03); then a
+# second image that prints a line through ITM port 0, which must show on
+# gdb's console (RA8EMU-77).
 # Exits 0 when every expected line showed, 1 when one is missing, and 77
 # (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
 
@@ -66,6 +68,26 @@ LD
 "$zig" build-obj fw.zig -target thumb-freestanding-eabi -mcpu cortex_m33 -O Debug -femit-bin=fw.o
 "$zig" ld.lld --gc-sections -T link.ld fw.o -o fw.elf
 
+cat >itm.zig <<'ZIG'
+const stim0: *volatile u8 = @ptrFromInt(0xE000_0000);
+const ter: *volatile u32 = @ptrFromInt(0xE000_0E00);
+const tcr: *volatile u32 = @ptrFromInt(0xE000_0E80);
+export fn done() callconv(.C) noreturn {
+    while (true) {}
+}
+export fn reset() callconv(.C) noreturn {
+    tcr.* = 1;
+    ter.* = 1;
+    for ("hello from itm\n") |c| stim0.* = c;
+    @call(.never_inline, done, .{});
+}
+extern const _stack_top: u32;
+export const vectors linksection(".vectors") = [_]?*const anyopaque{ @ptrCast(&_stack_top), @ptrCast(&reset) };
+ZIG
+"$zig" build-obj itm.zig -target thumb-freestanding-eabi -mcpu cortex_m33 -O Debug -femit-bin=itm.o
+"$zig" ld.lld --gc-sections -T link.ld itm.o -o itm.elf
+image=fw.elf
+
 port=$((20000 + RANDOM % 20000))
 failed=0
 
@@ -82,13 +104,13 @@ serve() {
     local commands=()
     for command in "$@"; do commands+=(-ex "$command"); done
     port=$((port + 1))
-    "$emulator" fw.elf "${args[@]}" --gdb "$port" 2>"$name.emu" &
+    "$emulator" "$image" "${args[@]}" --gdb "$port" 2>"$name.emu" &
     pid=$!
     for _ in $(seq 50); do
         grep -q listening "$name.emu" && break
         sleep 0.1
     done
-    "$gdb" -batch -nx fw.elf -ex "target remote :$port" "${commands[@]}" >"$name.out" 2>&1 || true
+    "$gdb" -batch -nx "$image" -ex "target remote :$port" "${commands[@]}" >"$name.out" 2>&1 || true
     wait "$pid" || true
     pid=
 }
@@ -146,11 +168,15 @@ interrupt stop
 expect stop 'Program received signal SIGINT, Interrupt.' 'in fw.reset () at fw.zig:' \
     '[Inferior 1 (Remote target) detached]'
 
+image=itm.elf
+serve itm -- 'break done' continue detach
+expect itm 'hello from itm' 'Breakpoint 1, ' '[Inferior 1 (Remote target) detached]'
+
 if [ "$failed" -ne 0 ]; then
-    for name in one two stop; do
+    for name in one two stop itm; do
         echo "--- $name"
         cat "$name.out" "$name.emu"
     done
     exit 1
 fi
-echo "gdb_batch: one core, two cores and an interrupt passed"
+echo "gdb_batch: one core, two cores, an interrupt and ITM output passed"
