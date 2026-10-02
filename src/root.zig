@@ -30,6 +30,7 @@ pub const core = struct {
     pub const svc_trap = @import("core/svc_trap.zig");
     pub const appimg = @import("core/appimg.zig");
     pub const module_place = @import("core/module_place.zig");
+    pub const core_event = @import("core/core_event.zig");
     pub const pend_resume = @import("core/pend_resume.zig");
     pub const pend_clear = @import("core/pend_clear.zig");
     pub const pend_ledger = @import("core/pend_ledger.zig");
