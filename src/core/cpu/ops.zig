@@ -12,6 +12,7 @@ pub const exclusive = @import("ops/exclusive.zig");
 pub const ldm_stm_wide = @import("ops/ldm_stm_wide.zig");
 pub const ldst_wide = @import("ops/ldst_wide.zig");
 pub const ldr_literal_wide = @import("ops/ldr_literal_wide.zig");
+pub const preload = @import("ops/preload.zig");
 pub const shift_imm = @import("ops/shift_imm.zig");
 pub const add_sub = @import("ops/add_sub.zig");
 pub const dp_reg = @import("ops/dp_reg.zig");

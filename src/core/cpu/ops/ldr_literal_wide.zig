@@ -2,8 +2,9 @@
 //! (T1/T2 literal forms, hw1 = 1111100 S U size 1 1111). The address is
 //! Align(PC, 4) +/- imm12, where PC reads as the instruction's address plus 4.
 //!
-//! LDR with Rt = PC branches with interworking. A byte or halfword form with
-//! Rt = PC is PLD or PLI, a hint, and stays unclaimed here.
+//! LDR with Rt = PC branches with interworking, and LDR with Rt = SP loads SP
+//! (RA8EMU-132). A byte or halfword form with Rt = PC is PLD or PLI, which
+//! ops/preload.zig claims; one with Rt = SP is UNPREDICTABLE and unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -36,7 +37,7 @@ pub fn form(instr: Instr) ?Form {
     if (signed and size == 4) return null;
     const rt: u4 = @intCast(instr.hw2 >> 12);
     if (rt == 15 and size != 4) return null;
-    if (rt == 13) return null;
+    if (rt == 13 and size != 4) return null;
     const base = (instr.address +% 4) & ~@as(u32, 3);
     const imm: u32 = instr.hw2 & 0x0FFF;
     const add = instr.hw1 & 0x0080 != 0;
