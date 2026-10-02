@@ -21,6 +21,8 @@ pub const Error = error{NoSpace};
 pub const points = @import("rsp_points.zig");
 /// Run control and threads, reached through here for the same reason.
 pub const run_control = @import("rsp_run.zig");
+/// One connection served end to end.
+pub const server = @import("rsp_server.zig");
 const debug_session = @import("session.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.

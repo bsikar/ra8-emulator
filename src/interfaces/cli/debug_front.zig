@@ -1,9 +1,14 @@
-//! The debugger's front end: `--debug-script FILE` and `--debug`.
+//! The debugger's front end: `--debug-script FILE`, `--debug` and
+//! `--gdb PORT`.
 //!
 //! ```
 //! ra8_emulator firmware.elf [--cpu1 IMAGE.elf] --debug-script session.gdb
 //! ra8_emulator firmware.elf [--cpu1 IMAGE.elf] --debug
+//! ra8_emulator firmware.elf [--cpu1 IMAGE.elf] --gdb 3333
 //! ```
+//!
+//! `--gdb` listens on 127.0.0.1 for one gdb connection and serves the same
+//! session over the remote protocol, each core a thread, until gdb detaches.
 //!
 //! The first plays a script and prints its transcript, each command echoed
 //! behind the prompt. The second reads commands from the terminal until
@@ -22,6 +27,7 @@
 const std = @import("std");
 const cli = @import("cli.zig");
 const elf = @import("../../core/elf.zig");
+const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
 const engine = @import("../../core/engine.zig");
 const Board = @import("../../board/board.zig").Board;
 const clocks = @import("../../periph/clocks.zig");
@@ -36,6 +42,7 @@ const stop_machine = @import("../../debug/stop_machine.zig");
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug-script FILE
     \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug
+    \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --gdb PORT
     \\
 ;
 
@@ -50,12 +57,15 @@ pub const limits = struct {
 pub const flags = struct {
     pub const script = "--debug-script";
     pub const interactive = "--debug";
+    pub const gdb = "--gdb";
     pub const cpu1 = "--cpu1";
 };
 
 pub const Mode = union(enum) {
     script: []const u8,
     interactive,
+    /// The local TCP port gdb connects to.
+    gdb: u16,
 };
 
 /// What the debugger command line asked for.
@@ -83,12 +93,17 @@ pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
         return if (argv.len == at + 1) request else error.BadUsage;
     }
     if (argv.len != at + 2) return error.BadUsage;
+    if (std.mem.eql(u8, argv[at], flags.gdb)) {
+        const port = std.fmt.parseInt(u16, argv[at + 1], 10) catch return error.BadUsage;
+        request.mode = .{ .gdb = port };
+        return request;
+    }
     request.mode = .{ .script = argv[at + 1] };
     return request;
 }
 
 fn isDebugFlag(arg: []const u8) bool {
-    return std.mem.eql(u8, arg, flags.script) or std.mem.eql(u8, arg, flags.interactive);
+    return std.mem.eql(u8, arg, flags.script) or std.mem.eql(u8, arg, flags.interactive) or std.mem.eql(u8, arg, flags.gdb);
 }
 
 /// A command line the run parser refused. The debugger flags are not run
@@ -179,7 +194,25 @@ fn drive(allocator: std.mem.Allocator, target: *session.Session, mode: Mode) !u8
             _ = try script.play(target, text, out, true);
         },
         .interactive => try converse(target, out),
+        .gdb => |port| return listen(target, port),
     }
+    return 0;
+}
+
+/// Wait for gdb on the loopback port, serve it, and stop when it leaves.
+fn listen(target: *session.Session, port: u16) !u8 {
+    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
+    var server = address.listen(.{ .reuse_address = true }) catch |err| {
+        std.debug.print("cannot listen on 127.0.0.1:{d}: {s}\n", .{ port, @errorName(err) });
+        return 1;
+    };
+    defer server.deinit();
+    std.debug.print("gdb: listening on 127.0.0.1:{d}\n", .{port});
+    const connection = try server.accept();
+    defer connection.stream.close();
+    const stub = rsp_dispatch.Dispatch{ .core = target.core, .session = target };
+    const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
+    std.debug.print("gdb: {s}\n", .{@tagName(end)});
     return 0;
 }
 
