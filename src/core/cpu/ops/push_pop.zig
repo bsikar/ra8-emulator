@@ -10,7 +10,6 @@ const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
-const regs = @import("../regs.zig");
 
 pub const encodings = struct {
     /// Bits [15:9] of the first halfword.
@@ -66,12 +65,5 @@ fn pop(cpu: *Cpu, instr: Instr) op.Error!void {
     for (0..15) |i| {
         if (registers & (@as(u16, 1) << @intCast(i)) != 0) cpu.regs.set(@intCast(i), values[i]);
     }
-    if (registers & (1 << 15) != 0) writePc(&cpu.regs, values[15]);
-}
-
-/// BXWritePC: bit 0 becomes EPSR.T, the rest the PC.
-fn writePc(file: *regs.Regs, value: u32) void {
-    const thumb = regs.xpsr_bits.thumb;
-    file.xpsr = if (value & 1 != 0) file.xpsr | thumb else file.xpsr & ~thumb;
-    file.pc = value & ~@as(u32, 1);
+    if (registers & (1 << 15) != 0) cpu.regs.bxWritePc(values[15]);
 }

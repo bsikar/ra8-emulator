@@ -111,6 +111,7 @@ pub const core = struct {
             pub const hint = @import("core/cpu/ops/hint.zig");
             pub const ldr_literal = @import("core/cpu/ops/ldr_literal.zig");
             pub const ldst_imm = @import("core/cpu/ops/ldst_imm.zig");
+            pub const ldst_wide = @import("core/cpu/ops/ldst_wide.zig");
             pub const shift_imm = @import("core/cpu/ops/shift_imm.zig");
             pub const add_sub = @import("core/cpu/ops/add_sub.zig");
             pub const dp_reg = @import("core/cpu/ops/dp_reg.zig");

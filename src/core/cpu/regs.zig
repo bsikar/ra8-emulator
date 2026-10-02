@@ -87,6 +87,14 @@ pub const Regs = struct {
         }
     }
 
+    /// BXWritePC: bit 0 becomes EPSR.T, the rest the PC. LDR and POP to the
+    /// PC write it this way.
+    pub fn bxWritePc(self: *Regs, value: u32) void {
+        const thumb = xpsr_bits.thumb;
+        self.xpsr = if (value & 1 != 0) self.xpsr | thumb else self.xpsr & ~thumb;
+        self.pc = value & ~@as(u32, 1);
+    }
+
     pub fn handlerMode(self: *const Regs) bool {
         return self.xpsr & xpsr_bits.ipsr != 0;
     }
