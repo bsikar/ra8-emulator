@@ -36,6 +36,7 @@ pub const sat_arith = @import("ops/sat_arith.zig");
 pub const extend_b16 = @import("ops/extend_b16.zig");
 pub const sat16 = @import("ops/sat16.zig");
 pub const usad8 = @import("ops/usad8.zig");
+pub const umaal = @import("ops/umaal.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
