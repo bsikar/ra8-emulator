@@ -10,6 +10,7 @@
 const std = @import("std");
 
 pub const map = @import("part_map.zig");
+pub const clock = @import("part_clock.zig");
 
 pub const Part = enum {
     ra8d2,
