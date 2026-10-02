@@ -26,6 +26,8 @@
 //! the next step for this front end.
 const std = @import("std");
 const cli = @import("cli.zig");
+const cpu_choice = @import("../../core/cpu/choice.zig");
+const zig_debug_front = @import("zig_debug_front.zig");
 const elf = @import("../../core/elf.zig");
 const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
 const rsp_poll = @import("../../debug/rsp_poll.zig");
@@ -44,6 +46,7 @@ pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug-script FILE
     \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug
     \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --gdb PORT
+    \\       --cpu unicorn|zig may go anywhere; zig takes the first two forms
     \\
 ;
 
@@ -60,6 +63,7 @@ pub const flags = struct {
     pub const interactive = "--debug";
     pub const gdb = "--gdb";
     pub const cpu1 = "--cpu1";
+    pub const cpu = "--cpu";
 };
 
 pub const Mode = union(enum) {
@@ -74,12 +78,38 @@ pub const Request = struct {
     mode: Mode,
     /// The image the second core runs, when one was named.
     cpu1: ?[]const u8 = null,
+    /// The image CPU0 runs.
+    image: []const u8 = "",
+    /// Which CPU the session drives (`--cpu`, anywhere on the line).
+    cpu: cpu_choice.Choice = .unicorn,
 };
+
+/// The most arguments a debugger command line carries.
+const max_args = 16;
 
 /// The debugger request the command line makes, or null when it asks for
 /// an ordinary run. A malformed debugger command line is reported as such
 /// rather than handed to the ordinary parser.
 pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
+    for (argv) |arg| {
+        if (isDebugFlag(arg)) break;
+    } else return null;
+    var rest = std.BoundedArray([]const u8, max_args){};
+    var cpu: ?cpu_choice.Choice = .unicorn;
+    var index: usize = 0;
+    while (index < argv.len) : (index += 1) {
+        if (std.mem.eql(u8, argv[index], flags.cpu) and index + 1 < argv.len) {
+            cpu = cpu_choice.Choice.parse(argv[index + 1]);
+            index += 1;
+        } else rest.append(argv[index]) catch return error.BadUsage;
+    }
+    var request = (plain(rest.constSlice()) orelse return null) catch |err| return err;
+    request.cpu = cpu orelse return error.BadUsage;
+    return request;
+}
+
+/// `wanted` with `--cpu` taken out.
+fn plain(argv: []const []const u8) ?error{BadUsage}!Request {
     const at = for (argv, 0..) |arg, index| {
         if (isDebugFlag(arg)) break index;
     } else return null;
@@ -90,6 +120,7 @@ pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
         index += 2;
     }
     if (index != at) return error.BadUsage;
+    request.image = argv[1];
     if (std.mem.eql(u8, argv[at], flags.interactive)) {
         return if (argv.len == at + 1) request else error.BadUsage;
     }
@@ -138,7 +169,9 @@ const Cpu = struct {
 /// Load the images, open a session on CPU0 with CPU1 parked beside it when
 /// one was named, and run the mode asked for.
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Request) !u8 {
-    const image = readImage(allocator, argv[1]) orelse return 1;
+    _ = argv;
+    const image = readImage(allocator, request.image) orelse return 1;
+    if (request.cpu != .unicorn) return zig_debug_front.run(allocator, image, request, std.io.getStdOut().writer());
     var core = try engine.Engine.open();
     defer core.close();
     try core.mapBoardRam();
@@ -235,7 +268,7 @@ fn readImage(allocator: std.mem.Allocator, path: []const u8) ?elf.Image {
 }
 
 /// Prompt, read a line, apply it, until `quit` or the end of input.
-fn converse(target: *session.Session, out: anytype) !void {
+pub fn converse(target: anytype, out: anytype) !void {
     const input = std.io.getStdIn().reader();
     var buffer: [limits.max_line]u8 = undefined;
     while (true) {

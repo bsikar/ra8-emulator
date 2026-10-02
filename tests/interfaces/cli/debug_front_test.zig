@@ -43,3 +43,8 @@ test "--gdb takes a port, after the second core's image when there is one" {
     try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb", "port" }).?);
     try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--gdb", "70000" }).?);
 }
+
+test {
+    // tests/all.zig is at its 400-line limit; the Zig front's tests ride here.
+    _ = @import("zig_debug_front_test.zig");
+}
