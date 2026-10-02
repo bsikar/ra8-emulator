@@ -13,7 +13,8 @@
 //! RA8EMU-224): before each instruction the NVIC model's counters are read.
 //! That costs a call per instruction, so it is only hooked with the flag.
 //!
-//! A `--cpu zig` run is traced through src/debug/rtos_zig.zig instead.
+//! A `--cpu zig` run is traced through src/debug/rtos_zig.zig instead, and
+//! CPU1 through src/debug/rtos_second.zig.
 //! Only CPU0 on Unicorn is hooked here. CPU1 and the Zig core are their own
 //! tickets under RA8EMU-211.
 const std = @import("std");
@@ -24,6 +25,7 @@ const rtos_trace = @import("rtos_trace.zig");
 pub const names = @import("rtos_names.zig");
 pub const isr = @import("rtos_isr.zig");
 pub const zig = @import("rtos_zig.zig");
+pub const second = @import("rtos_second.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -63,12 +65,18 @@ pub const Tracer = struct {
 /// Where the pointer is, when the flag asked for a trace. An image without
 /// ThreadX is reported and traced as nothing.
 pub fn resolve(image: elf.Image, wanted: bool) ?Tracer {
+    return resolveOn(image, wanted, 0);
+}
+
+/// As `resolve`, for the image one core runs; CPU1's miss says whose it is.
+pub fn resolveOn(image: elf.Image, wanted: bool, core: u1) ?Tracer {
     if (!wanted) return null;
     const at = symbols.addressOf(image, symbol) orelse {
-        std.debug.print("--trace-rtos: no symbol named {s}\n", .{symbol});
+        const whose = if (core == 1) "cpu1 image has " else "";
+        std.debug.print("--trace-rtos: {s}no symbol named {s}\n", .{ whose, symbol });
         return null;
     };
-    return .{ .address = at };
+    return .{ .address = at, .core = core };
 }
 
 /// Resolve and hook. The tracer has to outlive the engine, which keeps its
@@ -82,6 +90,17 @@ pub fn arm(
     controller: *const isr.Nvic,
 ) Error!?*Tracer {
     const found = resolve(image, wanted) orelse return null;
+    return try attach(handle, found, clock, controller);
+}
+
+/// Hook a resolved tracer onto one core's engine, stamped from that core's
+/// clock and watching that core's NVIC.
+pub fn attach(
+    handle: ?*c.uc.uc_engine,
+    found: Tracer,
+    clock: *const u64,
+    controller: *const isr.Nvic,
+) Error!*Tracer {
     const owned = std.heap.page_allocator.create(Tracer) catch return Error.AttachFailed;
     owned.* = found;
     owned.now = clock;
@@ -146,8 +165,8 @@ pub fn print(out: anytype, tracer: ?*const Tracer, memory: anytype) !void {
     const one = tracer orelse return;
     const events = one.trace.list();
     try out.print(
-        "  rtos trace    : {s} @0x{X:0>8}, {d} event(s)\n",
-        .{ symbol, one.address, events.len + one.trace.dropped },
+        "  {s}: {s} @0x{X:0>8}, {d} event(s)\n",
+        .{ if (one.core == 1) "rtos cpu1     " else "rtos trace    ", symbol, one.address, events.len + one.trace.dropped },
     );
     for (events) |event| try line(out, event, memory);
     if (one.trace.dropped > 0) {
