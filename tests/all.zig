@@ -34,6 +34,8 @@ test {
     _ = @import("core/cpu/op_test.zig");
     _ = @import("core/cpu/regs_test.zig");
     _ = @import("core/cpu/reset_test.zig");
+    _ = @import("core/cpu/flags_test.zig");
+    _ = @import("core/cpu/shift_test.zig");
     _ = @import("core/cpu/lockstep/catch_up_test.zig");
     _ = @import("core/cpu/lockstep/diff_test.zig");
     _ = @import("core/cpu/lockstep/history_test.zig");
@@ -50,6 +52,8 @@ test {
     _ = @import("core/cpu/ops/hint_test.zig");
     _ = @import("core/cpu/ops/ldr_literal_test.zig");
     _ = @import("core/cpu/ops/ldst_imm_test.zig");
+    _ = @import("core/cpu/ops/shift_imm_test.zig");
+    _ = @import("core/cpu/ops/add_sub_test.zig");
     _ = @import("core/cpu/ops/push_pop_test.zig");
     _ = @import("core/cpu/ops/sp_arith_test.zig");
     _ = @import("core/cpu/ops/table_test.zig");
