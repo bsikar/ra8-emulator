@@ -358,6 +358,7 @@ pub const periph = struct {
     pub const usbhs_pll = @import("periph/usbhs/usbhs_pll.zig");
     pub const usbhs_regs = @import("periph/usbhs/usbhs_regs.zig");
     pub const usbhs_setup = @import("periph/usbhs/usbhs_setup.zig");
+    pub const usbfs = @import("periph/usbfs/usbfs.zig");
     pub const usbhs_xfer = @import("periph/usbhs/usbhs_xfer.zig");
     pub const wdt = @import("periph/wdt/wdt.zig");
     pub const wdt_write_once = @import("periph/wdt/wdt_write_once.zig");

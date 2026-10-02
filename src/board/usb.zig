@@ -5,14 +5,19 @@
 //! other: this controller is the host half of that loop. Whether a device is
 //! on the other end is a board fact, so it is set here.
 const periph = @import("../periph/registry.zig");
+const usbfs = @import("../periph/usbfs/usbfs.zig");
 const usbhs = @import("../periph/usbhs/usbhs.zig");
 
 pub const Usb = struct {
     host: usbhs.Host = .{},
+    /// The device half of the loop, with VBUS from the host jack.
+    device: usbfs.Device = .{},
 
     pub fn attach(self: *Usb, bus: *periph.Bus) periph.Error!void {
         self.host.attachDevice();
         try bus.add(self.host.block());
+        self.device.connectVbus();
+        try bus.add(self.device.block());
     }
 
     pub fn quiet(self: *const Usb) bool {
