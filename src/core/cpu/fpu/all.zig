@@ -45,3 +45,4 @@ pub const bank = @import("bank.zig");
 pub const move_vectors = @import("move_vectors.zig");
 pub const transfer = @import("transfer.zig");
 pub const transfer_vectors = @import("transfer_vectors.zig");
+pub const state = @import("state.zig");

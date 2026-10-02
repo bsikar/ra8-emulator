@@ -33,4 +33,5 @@ pub const groups = [_]op.Group{
     @import("imm_arith.zig").group,
     @import("branch_wide.zig").group,
     @import("ldst_wide.zig").group,
+    @import("fp_arith.zig").group,
 };

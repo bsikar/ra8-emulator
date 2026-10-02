@@ -10,6 +10,7 @@ const decode = @import("decode.zig");
 const cond = @import("cond.zig");
 const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
+const fp_state = @import("fpu/state.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
@@ -29,6 +30,8 @@ pub const Stop = union(enum) {
 pub const Cpu = struct {
     regs: regs_mod.Regs = .{},
     bus: bus.Bus,
+    /// S0-S31/D0-D15 and FPSCR, for the FPU groups (RA8EMU-26).
+    fp: fp_state.State = .{},
     /// Instructions retired since reset.
     retired: u64 = 0,
 
