@@ -38,6 +38,7 @@ pub const groups = [_]op.Group{
     @import("mul_acc.zig").group,
     @import("saturate.zig").group,
     @import("misc_wide.zig").group,
+    @import("extend_wide.zig").group,
     @import("imm_logic.zig").group,
     @import("imm_arith.zig").group,
     @import("branch_wide.zig").group,
