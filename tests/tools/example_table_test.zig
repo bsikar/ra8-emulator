@@ -52,3 +52,27 @@ test "a row prints in table order" {
         stream.getWritten(),
     );
 }
+
+const dir = [_][]const u8{ "blink.elf", "cpu1_pingpong.elf", "cpu1_pingpong_cpu1.elf", "orphan_cpu1.elf" };
+
+test "a CPU0 image's CPU1 half is the same stem with _cpu1" {
+    const name = try table.cpu1Name(std.testing.allocator, "cpu1_pingpong.elf");
+    defer std.testing.allocator.free(name);
+    try std.testing.expectEqualStrings("cpu1_pingpong_cpu1.elf", name);
+}
+
+test "a CPU1 half with its CPU0 image beside it gets no row of its own" {
+    const a = std.testing.allocator;
+    try std.testing.expect(try table.isSecondHalf(a, "cpu1_pingpong_cpu1.elf", &dir));
+    try std.testing.expect(!try table.isSecondHalf(a, "cpu1_pingpong.elf", &dir));
+    try std.testing.expect(!try table.isSecondHalf(a, "orphan_cpu1.elf", &dir));
+}
+
+test "a CPU0 image runs with its CPU1 half, and a lone image runs alone" {
+    const a = std.testing.allocator;
+    const second = (try table.pairedWith(a, "cpu1_pingpong.elf", &dir)).?;
+    defer a.free(second);
+    try std.testing.expectEqualStrings("cpu1_pingpong_cpu1.elf", second);
+    try std.testing.expectEqual(@as(?[]const u8, null), try table.pairedWith(a, "blink.elf", &dir));
+    try std.testing.expectEqual(@as(?[]const u8, null), try table.pairedWith(a, "orphan_cpu1.elf", &dir));
+}

@@ -9,6 +9,11 @@
 //! demos included, is unknown until a reader checks it against its README.
 //! A few images need more than one budget fits; example_budgets.zig lists
 //! them and the floor each runs at.
+//!
+//! A dual-core example is two ELFs side by side, foo.elf for CPU0 and
+//! foo_cpu1.elf for CPU1 (RA8EMU-37). The pair runs as one row, foo.elf with
+//! --cpu1 foo_cpu1.elf, and the CPU1 half never gets a row of its own: run
+//! alone it boots from a vector table CPU0 was supposed to release.
 const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
 
@@ -118,8 +123,10 @@ pub fn main() !void {
     const out = std.io.getStdOut().writer();
     try writeHeader(out);
     for (images) |image| {
+        if (try isSecondHalf(allocator, image, images)) continue;
         const path = try std.fs.path.join(allocator, &.{ args[2], image });
-        const report = try runImage(allocator, args[1], path, budgets.pick(image, budget));
+        const second = try secondPath(allocator, args[2], image, images);
+        const report = try runImage(allocator, args[1], path, second, budgets.pick(image, budget));
         try writeRow(out, image, parse(report));
     }
 }
@@ -137,13 +144,53 @@ fn listImages(allocator: std.mem.Allocator, dir_path: []const u8) ![]const []con
     return names.items;
 }
 
+const elf = ".elf";
+const cpu1_suffix = "_cpu1.elf";
+
+/// foo.elf's CPU1 half, foo_cpu1.elf. Caller owns the name.
+pub fn cpu1Name(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
+    const stem = image[0 .. image.len - elf.len];
+    return std.mem.concat(allocator, u8, &.{ stem, cpu1_suffix });
+}
+
+/// True for foo_cpu1.elf when foo.elf sits beside it: that image is the
+/// second half of a pair, not an example of its own.
+pub fn isSecondHalf(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !bool {
+    if (!std.mem.endsWith(u8, image, cpu1_suffix)) return false;
+    const partner = try std.mem.concat(allocator, u8, &.{ image[0 .. image.len - cpu1_suffix.len], elf });
+    defer allocator.free(partner);
+    return contains(names, partner);
+}
+
+/// The CPU1 half of `image` in the directory, when the directory has one.
+pub fn pairedWith(allocator: std.mem.Allocator, image: []const u8, names: []const []const u8) !?[]const u8 {
+    if (std.mem.endsWith(u8, image, cpu1_suffix)) return null;
+    const name = try cpu1Name(allocator, image);
+    if (contains(names, name)) return name;
+    allocator.free(name);
+    return null;
+}
+
+fn contains(names: []const []const u8, wanted: []const u8) bool {
+    for (names) |name| {
+        if (std.mem.eql(u8, name, wanted)) return true;
+    }
+    return false;
+}
+
+fn secondPath(allocator: std.mem.Allocator, dir: []const u8, image: []const u8, names: []const []const u8) !?[]const u8 {
+    const name = try pairedWith(allocator, image, names) orelse return null;
+    return try std.fs.path.join(allocator, &.{ dir, name });
+}
+
 fn lessThan(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
 }
 
-fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, budget: ?[]const u8) ![]const u8 {
+fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, second: ?[]const u8, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
+    if (second) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{
         .allocator = allocator,
