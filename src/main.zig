@@ -113,10 +113,7 @@ pub fn main() !u8 {
     defer arena.deinit();
     const allocator = arena.allocator();
     const argv = try std.process.argsAlloc(allocator);
-    const options = cli.parse(argv) catch {
-        std.debug.print("{s}", .{cli.usage});
-        return 2;
-    };
+    const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
 
     const image = openImage(allocator, options.path) catch return 1;
 
