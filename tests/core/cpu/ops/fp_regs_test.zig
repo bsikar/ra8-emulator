@@ -25,3 +25,11 @@ test "read and write go through the bank by precision" {
     try std.testing.expectEqual(@as(u32, 0x1122_3344), fp_regs.read(format.single, &bank, 3));
     try std.testing.expectEqual(@as(u64, 0x1122_3344_5566_7788), fp_regs.read(format.double, &bank, 1));
 }
+
+test "half precision reads the low half and writes Zeros(16):value" {
+    var bank: Bank = .{};
+    bank.writeS(7, 0xABCD_1234);
+    try std.testing.expectEqual(@as(u16, 0x1234), fp_regs.read(format.half, &bank, 7));
+    fp_regs.write(format.half, &bank, 7, 0x5678);
+    try std.testing.expectEqual(@as(u32, 0x5678), bank.readS(7));
+}

@@ -30,12 +30,15 @@ pub const encodings = struct {
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4) return null;
     if (instr.hw2 & 0x0FFF == encodings.transfer_hw2) return decodeTransfer(instr);
-    if (instr.hw1 & 0xFFBE != 0xEEB4 or instr.hw2 & 0x0E50 != 0x0A40) return null;
+    if (instr.hw1 & 0xFFBE != 0xEEB4) return null;
+    const half = instr.hw2 & 0x0F50 == 0x0940;
+    if (!half and instr.hw2 & 0x0E50 != 0x0A40) return null;
     const zero = instr.hw1 & 1 == 1;
     if (zero and instr.hw2 & 0x002F != 0) return null;
-    const double = instr.hw2 >> 8 & 1 == 1;
+    const double = !half and instr.hw2 >> 8 & 1 == 1;
     if (!fp_regs.exists(dReg(instr, double), double)) return null;
     if (!zero and !fp_regs.exists(mReg(instr, double), double)) return null;
+    if (half) return if (zero) compareFor(fpu.format.half, true) else compareFor(fpu.format.half, false);
     if (double) return if (zero) compareFor(fpu.format.double, true) else compareFor(fpu.format.double, false);
     return if (zero) compareFor(fpu.format.single, true) else compareFor(fpu.format.single, false);
 }

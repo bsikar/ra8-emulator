@@ -89,3 +89,27 @@ test "unclaimed: VCMP space, SBZ bits of the immediate, D16+, bit 4, arith space
     try std.testing.expect(fp_unary.group.decode(wide(0xEE30, 0x0A81)) == null);
     try std.testing.expect(fp_unary.group.decode(.{ .address = 0, .hw1 = 0xEEB0, .hw2 = 0, .size = 2 }) == null);
 }
+
+test "vabs.f16, vneg.f16 and vsqrt.f16 read the low half and zero the top" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(1, 0xFFFF_BC00);
+    try run(&cpu, 0xEEB0, 0x09E0);
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(0));
+    cpu.fp.bank.writeS(3, 0x1234_3C00);
+    try run(&cpu, 0xEEB1, 0x1961);
+    try std.testing.expectEqual(@as(u32, 0xBC00), cpu.fp.bank.readS(2));
+    cpu.fp.bank.writeS(5, 0x4400);
+    try run(&cpu, 0xEEB1, 0x29E2);
+    try std.testing.expectEqual(@as(u32, 0x4000), cpu.fp.bank.readS(4));
+}
+
+test "vmov.f16 s6, #1.0 expands to 0x3C00" {
+    var cpu = fresh();
+    cpu.fp.bank.writeS(6, 0xFFFF_FFFF);
+    try run(&cpu, 0xEEB7, 0x3900);
+    try std.testing.expectEqual(@as(u32, 0x3C00), cpu.fp.bank.readS(6));
+}
+
+test "vmov (register) has no half form" {
+    try std.testing.expect(fp_unary.group.decode(wide(0xEEB0, 0x0960)) == null);
+}
