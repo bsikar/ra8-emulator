@@ -50,7 +50,7 @@ test "the report lists the opening switches of threadx_blink in order" {
     defer out.deinit();
     try rtos_hook.print(out.writer(), &tracer, rtos_hook.names.none);
     const want =
-        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 switch(es)
+        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 event(s)
         \\                  tick 0 cpu0 idle
         \\                  tick 0 cpu0 -> 0x220010F0
         \\                  tick 0 cpu0 idle
@@ -89,12 +89,40 @@ test "each switch carries the name its control block points at" {
     defer out.deinit();
     try rtos_hook.print(out.writer(), &tracer, Blink{});
     const want =
-        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 switch(es)
+        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 event(s)
         \\                  tick 0 cpu0 idle
         \\                  tick 0 cpu0 -> 0x220010F0 blink_a
         \\                  tick 0 cpu0 idle
         \\                  tick 0 cpu0 -> 0x220011A0 blink_b
         \\                  tick 0 cpu0 -> 0x22001234
+        \\
+    ;
+    try std.testing.expectEqualStrings(want, out.items);
+}
+
+test "exceptions print between the switches they bracket" {
+    // The opening of threadx_blink.elf with --trace-rtos: SysTick, then the
+    // PendSV that switches to the first thread.
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
+    tracer.trace.exception(0, 1, .enter, 15);
+    tracer.trace.exception(0, 1, .leave, 15);
+    tracer.trace.exception(0, 1, .enter, 14);
+    tracer.onStore(0x2200_1ABC, 4, 0x2200_10F0);
+    tracer.trace.exception(0, 1, .leave, 14);
+    tracer.trace.exception(0, 2, .enter, 16 + 7);
+    tracer.trace.exception(0, 2, .leave, 9);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    const want =
+        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 7 event(s)
+        \\                  tick 1 cpu0 enter SysTick
+        \\                  tick 1 cpu0 leave SysTick
+        \\                  tick 1 cpu0 enter PendSV
+        \\                  tick 0 cpu0 -> 0x220010F0 blink_a
+        \\                  tick 1 cpu0 leave PendSV
+        \\                  tick 2 cpu0 enter IRQ7
+        \\                  tick 2 cpu0 leave exception 9
         \\
     ;
     try std.testing.expectEqualStrings(want, out.items);

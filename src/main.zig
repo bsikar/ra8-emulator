@@ -146,7 +146,7 @@ pub fn main() !u8 {
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try armWatch(core, one, &parts.timebase.ticks);
-    const tracer = try rtos_hook.arm(core.handle, image, options.trace_rtos, &parts.timebase.ticks);
+    const tracer = try rtos_hook.arm(core.handle, image, options.trace_rtos, &parts.timebase.ticks, &interrupts);
     var window = taken_in.resolve(image, options.taken_in_place);
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();

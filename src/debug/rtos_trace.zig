@@ -7,6 +7,9 @@
 //! store of zero is idle, and a store of the value already there is no
 //! switch at all, so it is not recorded.
 //!
+//! Exception entry and return go in the same trace (RA8EMU-224), so a
+//! switch reads between the PendSV that made it and the return after.
+//!
 //! This file knows nothing about Unicorn or the Zig core. Whatever sees the
 //! store hands it the core, the virtual time and the value; the hook that
 //! does so is RA8EMU-221.
@@ -19,16 +22,19 @@ pub const limits = struct {
     pub const cores: usize = 2;
 };
 
-pub const Kind = enum { switch_to, idle };
+pub const Kind = enum { switch_to, idle, enter, leave };
 
-/// One change of the running thread on one core.
+/// One change of the running thread, or one exception entered or returned
+/// from, on one core.
 pub const Event = struct {
     /// Virtual time as the store landed, in the run's timebase.
     when: u64,
     core: u1,
     kind: Kind,
-    /// The control block now running; zero for idle.
-    thread: u32,
+    /// The control block now running; zero for idle and for exceptions.
+    thread: u32 = 0,
+    /// The exception entered or returned from; zero for thread events.
+    exception: u16 = 0,
 };
 
 pub const Trace = struct {
@@ -45,12 +51,20 @@ pub const Trace = struct {
             if (was == value) return;
         }
         self.current[core] = value;
-        const one = Event{
+        self.push(.{
             .when = when,
             .core = core,
             .kind = if (value == 0) .idle else .switch_to,
             .thread = value,
-        };
+        });
+    }
+
+    /// Take one exception entered (`.enter`) or returned from (`.leave`).
+    pub fn exception(self: *Trace, core: u1, when: u64, kind: Kind, number: u16) void {
+        self.push(.{ .when = when, .core = core, .kind = kind, .exception = number });
+    }
+
+    fn push(self: *Trace, one: Event) void {
         if (self.len == limits.kept) {
             self.dropped += 1;
             return;
