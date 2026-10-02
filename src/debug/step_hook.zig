@@ -22,6 +22,8 @@ pub const cycle_count = @import("cycle_count.zig");
 pub const zig_core = @import("zig_core.zig");
 /// Re-exported for tests/debug/zig_drive_test.zig, for the same reason.
 pub const zig_drive = @import("zig_drive.zig");
+/// Re-exported for tests/debug/core_view_test.zig, for the same reason.
+pub const core_view = @import("core_view.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");
