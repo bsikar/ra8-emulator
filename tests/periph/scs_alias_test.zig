@@ -33,9 +33,10 @@ test "Secure code reaches the Non-secure bank through the alias" {
     try std.testing.expectEqual(alias.View.non_secure, t.view);
 }
 
-test "Non-secure code on the alias is reported, not resolved" {
+test "Non-secure code on the alias window gets RES0" {
     const r = alias.route(vtor_ns, false);
-    try std.testing.expectEqual(vtor, r.alias_from_non_secure);
+    try std.testing.expectEqual(vtor, r.res0);
+    try std.testing.expect(alias.route(0xE002_E000, false) == .res0);
 }
 
 test "the window edges are inclusive and nothing past them routes" {
