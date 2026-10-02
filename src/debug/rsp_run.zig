@@ -3,7 +3,8 @@
 //!
 //! `c`, `s` and `vCont` resume the selected core and answer with a stop
 //! reply: `T05` for a break or a finished step, `T05watch:`, `rwatch:` or
-//! `awatch:` with the address for a watch, `T0b` (SIGSEGV) for a fault.
+//! `awatch:` with the address for a watch, `T02` (SIGINT) for a halt asked
+//! for, such as gdb's interrupt, and `T0b` (SIGSEGV) for a fault.
 //! Each core is a thread, numbered from one; `Hg`/`Hc` and a thread in a
 //! `vCont` action select it.
 const std = @import("std");
@@ -14,6 +15,7 @@ pub const Error = error{NoSpace};
 
 const request_error = "E00";
 const vcont_actions = "vCont;c;C;s;S";
+const sigint: u8 = 0x02;
 const sigtrap: u8 = 0x05;
 const sigsegv: u8 = 0x0b;
 
@@ -75,6 +77,7 @@ fn stopReply(session: *debug_session.Session, out: []u8) Error![]const u8 {
         .watchpoint => |hit| print(out, "T{x:0>2}{s}:{x:0>8};thread:{x};", .{
             sigtrap, watchName(session, hit), hit.address, thread(session),
         }),
+        .halt_requested => print(out, "T{x:0>2}thread:{x};", .{ sigint, thread(session) }),
         else => print(out, "T{x:0>2}thread:{x};", .{ sigtrap, thread(session) }),
     };
 }

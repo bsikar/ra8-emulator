@@ -3,8 +3,9 @@
 //! reply gdb asks for again (`-`) sent again.
 //!
 //! The connection ends on `D` (detach, answered OK), `k` (kill, which gets
-//! no reply) or the other end closing. Requests are answered one at a time,
-//! so an interrupt (0x03) sent while a resume runs is read after it stops.
+//! no reply) or the other end closing. Requests are answered one at a time.
+//! An interrupt (0x03) sent while a resume runs is picked up between run
+//! chunks by the session's poll (src/debug/rsp_poll.zig), not here.
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
 const rsp_dispatch = @import("rsp_dispatch.zig");
