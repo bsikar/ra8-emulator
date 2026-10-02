@@ -110,6 +110,53 @@ const add_simple_a = hexBytes("41822d384fd4046edd9aa12a4051b131");
 const add_simple_b = hexBytes("3d7f4d4428ca7bcdaa199421e5aec947");
 const add_simple_ofm = hexBytes("40013e3f3ccf401ec4da9b261300bd3d");
 
+/// SUB at equal scales: both inputs 0.05 (zp 3 and -2), OFM 0.1 (zp 1),
+/// simplified scaling as in the ADD above.
+const vela_sub_simple = [_]u32{
+    0x00004025, 0x00008000, 0x00004026, 0x00008000, 0x002E4024, 0x40000000,
+    0x0001010F, 0x00004000, 0x00000000, 0x00004001, 0x00000000, 0x00004002,
+    0x00000000, 0x00004003, 0x00000000, 0x0001010B, 0x0001010C, 0x0001010A,
+    0x00030104, 0x00004006, 0x00000001, 0x00004005, 0x00000008, 0x00004004,
+    0x00000004, 0x00030109, 0x00010105, 0x00000107, 0x0001011F, 0x00004010,
+    0x00000000, 0x00004011, 0x00000000, 0x00004012, 0x00000000, 0x00004013,
+    0x00000000, 0x0001011B, 0x0001011C, 0x0001011A, 0x00010112, 0x00010111,
+    0x00030113, 0x00004016, 0x00000001, 0x00004015, 0x00000008, 0x00004014,
+    0x00000004, 0x00010118, 0x01010114, 0x00000125, 0xFF800126, 0x007F0127,
+    0x00010116, 0x00010115, 0x00070117, 0x002E010D, 0x002E012D, 0x000A018D,
+    0x00000124, 0x0001018F, 0x00004080, 0x00000010, 0x00004081, 0x00000000,
+    0x00004082, 0x00000000, 0x00004083, 0x00000000, 0x0001018B, 0x0001018C,
+    0x0001018A, 0x00004086, 0x00000001, 0x00004085, 0x00000008, 0x00004084,
+    0x00000004, 0xFFFE0189, 0x00010185, 0x00000180, 0x0000012F, 0x00020006,
+    0xFFFF0000,
+};
+const sub_simple_a = hexBytes("cfb8cd0401945a1342961df4cd2ae3a0");
+const sub_simple_b = hexBytes("416d666e87f9c03653a4d1ac8144cfe2");
+const sub_simple_ofm = hexBytes("c5a4b2c93ccc4cedf6f7252325f109dd");
+
+/// SUB, IFM scale 0.02 (zp 10), IFM2 0.3 (zp -20), OFM 0.25 (zp 0): a 15x
+/// scale ratio. IFM_PRECISION 0x0101 scales the IFM by OPA_SCALE
+/// 0x444443FD shift 15; OFM_SCALE is 0x4CCCCD00 shift 49.
+const vela_sub_adv_a = [_]u32{
+    0x000F4025, 0x444443FD, 0x00004026, 0x00000000, 0x00314024, 0x4CCCCD00,
+    0x0001010F, 0x00004000, 0x00000000, 0x00004001, 0x00000000, 0x00004002,
+    0x00000000, 0x00004003, 0x00000000, 0x0001010B, 0x0001010C, 0x0001010A,
+    0x00030104, 0x00004006, 0x00000001, 0x00004005, 0x00000008, 0x00004004,
+    0x00000004, 0x000A0109, 0x01010105, 0x00000107, 0x0001011F, 0x00004010,
+    0x00000000, 0x00004011, 0x00000000, 0x00004012, 0x00000000, 0x00004013,
+    0x00000000, 0x0001011B, 0x0001011C, 0x0001011A, 0x00010112, 0x00010111,
+    0x00030113, 0x00004016, 0x00000001, 0x00004015, 0x00000008, 0x00004014,
+    0x00000004, 0x00000118, 0x01010114, 0x00000125, 0xFF800126, 0x007F0127,
+    0x00010116, 0x00010115, 0x00070117, 0x002E010D, 0x002E012D, 0x000A018D,
+    0x00000124, 0x0001018F, 0x00004080, 0x00000010, 0x00004081, 0x00000000,
+    0x00004082, 0x00000000, 0x00004083, 0x00000000, 0x0001018B, 0x0001018C,
+    0x0001018A, 0x00004086, 0x00000001, 0x00004085, 0x00000008, 0x00004084,
+    0x00000004, 0xFFEC0189, 0x00010185, 0x00000180, 0x0000012F, 0x00020006,
+    0xFFFF0000,
+};
+const sub_adv_a_a = hexBytes("76553a5eb8b747ba16fed64002349e72");
+const sub_adv_a_b = hexBytes("489130fddad6e61a838aead73194fd78");
+const sub_adv_a_ofm = hexBytes("9a73b2f20f140cc27f75fe1ead6de380");
+
 fn replay(words: []const u32, a: []const u8, b: []const u8) !Memory {
     var memory = Memory{};
     @memcpy(memory.bytes[0x800..][0..a.len], a);
@@ -153,6 +200,16 @@ test "a Vela-compiled advanced SUB scaling IFM2 writes TFLite Micro's output" {
 test "a Vela-compiled equal-scale ADD writes TFLite Micro's output" {
     const memory = try replay(&vela_add_simple, &add_simple_a, &add_simple_b);
     try std.testing.expectEqualSlices(u8, &add_simple_ofm, memory.bytes[0x800..][0..16]);
+}
+
+test "a Vela-compiled equal-scale SUB writes TFLite Micro's output" {
+    const memory = try replay(&vela_sub_simple, &sub_simple_a, &sub_simple_b);
+    try std.testing.expectEqualSlices(u8, &sub_simple_ofm, memory.bytes[0x800..][0..16]);
+}
+
+test "a Vela-compiled advanced SUB scaling the IFM writes TFLite Micro's output" {
+    const memory = try replay(&vela_sub_adv_a, &sub_adv_a_a, &sub_adv_a_b);
+    try std.testing.expectEqualSlices(u8, &sub_adv_a_ofm, memory.bytes[0x800..][0..16]);
 }
 
 test "an ADD with an activation function is not modelled" {
