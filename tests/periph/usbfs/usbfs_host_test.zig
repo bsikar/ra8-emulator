@@ -69,6 +69,8 @@ test "a device that answers is enumerated to Configured" {
     try std.testing.expectEqualSlices(u8, &languages, host.languages[0..4]);
     try std.testing.expectEqualSlices(u8, &product, host.product[0..8]);
     try std.testing.expectEqual(usbfs.host.Answer.ack, host.interface);
+    try std.testing.expectEqual(usbfs.host.Answer.ack, host.halt_set);
+    try std.testing.expectEqual(usbfs.host.Answer.ack, host.halt_clear);
     const status = device.read(at(regs.reg.intsts0), 2);
     try std.testing.expectEqual(@as(u32, usbfs.intsts0.dvsq_configured), status & usbfs.intsts0.dvsq_mask);
     try std.testing.expectEqual(@as(u32, usbfs.host.requests.address), device.read(at(regs.reg.usbaddr), 2));
@@ -223,4 +225,46 @@ test "a STALL on SET_CONFIGURATION ends the script in failed" {
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
     host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
+}
+
+test "the halt requests name the feature and the endpoint" {
+    try std.testing.expectEqualSlices(u8, &.{ 0x02, 0x03, 0, 0, 0x81, 0, 0, 0 }, &usbfs.host.requests.endpointHalt(true, 0x81));
+    try std.testing.expectEqualSlices(u8, &.{ 0x02, 0x01, 0, 0, 0x81, 0, 0, 0 }, &usbfs.host.requests.endpointHalt(false, 0x81));
+}
+
+test "the first endpoint is found by walking the descriptors" {
+    try std.testing.expectEqual(@as(?u8, 0x81), usbfs.host.firstEndpoint(&config_descriptor));
+    try std.testing.expectEqual(@as(?u8, null), usbfs.host.firstEndpoint(config_descriptor[0..18]));
+    try std.testing.expectEqual(@as(?u8, null), usbfs.host.firstEndpoint(&.{ 0, 2, 0 }));
+}
+
+test "the host halts the first endpoint, then clears it" {
+    var device = attached();
+    var host = Host{ .step = .set_halt };
+    @memcpy(host.config[0..config_descriptor.len], &config_descriptor);
+    host.config_len = config_descriptor.len;
+    host.tick(&device);
+    try std.testing.expectEqual(@as(u32, 0x0302), device.read(at(regs.reg.usbreq), 2));
+    try std.testing.expectEqual(@as(u32, 0x81), device.read(at(regs.reg.usbindx), 2));
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.clear_halt, host.step);
+    host.tick(&device);
+    try std.testing.expectEqual(@as(u32, 0x0102), device.read(at(regs.reg.usbreq), 2));
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
+    try std.testing.expectEqual(usbfs.host.Answer.ack, host.halt_set);
+    try std.testing.expectEqual(usbfs.host.Answer.stall, host.halt_clear);
+}
+
+test "a set with no endpoints skips the halt requests" {
+    var device = attached();
+    var host = Host{ .step = .set_interface };
+    @memcpy(host.config[0..18], config_descriptor[0..18]);
+    host.config_len = 18;
+    host.tick(&device);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
 }
