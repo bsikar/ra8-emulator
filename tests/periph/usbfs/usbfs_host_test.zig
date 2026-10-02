@@ -121,6 +121,21 @@ test "once the data is in, the host sends the status token before waiting on CCP
     try std.testing.expectEqual(usbfs.host.Step.device_descriptor, host.step);
 }
 
+test "the first read asks for the whole 18-byte device descriptor" {
+    const packet = usbfs.host.requests.device_descriptor;
+    try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x06, 0x00, 0x01, 0, 0, 18, 0 }, &packet);
+}
+
+test "SET_ADDRESS moves the device to the host's one address" {
+    const packet = usbfs.host.requests.set_address;
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x05, 1, 0, 0, 0, 0, 0 }, &packet);
+}
+
+test "SET_CONFIGURATION picks configuration value 1" {
+    const packet = usbfs.host.requests.set_configuration;
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x09, 1, 0, 0, 0, 0, 0 }, &packet);
+}
+
 test "the second configuration read asks for wTotalLength bytes" {
     const packet = usbfs.host.requests.configDescriptor(75);
     try std.testing.expectEqualSlices(u8, &.{ 0x80, 0x06, 0x00, 0x02, 0x00, 0x00, 75, 0 }, &packet);
