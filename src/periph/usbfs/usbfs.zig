@@ -33,13 +33,28 @@ pub const intsts0 = struct {
     pub const dvsq_mask: u16 = 0x0070;
     pub const dvsq_powered: u16 = 0x0000;
     pub const dvsq_default: u16 = 0x0010;
+    pub const dvsq_address: u16 = 0x0020;
+    pub const dvsq_configured: u16 = 0x0030;
     /// Status flags the driver clears by writing 0; a 1 leaves them alone.
     /// CTSQ[2:0]: the control-transfer stage the controller is in.
     pub const ctsq_mask: u16 = 0x0007;
+    pub const ctsq_idle: u16 = 0b000;
     pub const ctsq_read_data: u16 = 0b001;
     pub const ctsq_write_data: u16 = 0b011;
     pub const ctsq_no_data_status: u16 = 0b101;
     pub const write_zero_clears: u16 = vbint | resm | sofr | dvst | ctrt | valid;
+};
+
+/// The standard requests the SIE acts on by itself, and what it keeps of them.
+pub const request = struct {
+    pub const set_address: u8 = 0x05;
+    pub const set_configuration: u8 = 0x09;
+    pub const address_mask: u8 = 0x7F;
+
+    /// A standard host-to-device request addressed to the device itself.
+    pub fn standardOut(packet: [8]u8, code: u8) bool {
+        return packet[0] == 0x00 and packet[1] == code;
+    }
 };
 
 pub const Device = struct {
@@ -66,7 +81,12 @@ pub const Device = struct {
     /// A SETUP packet from the host on the other jack lands on the DCP:
     /// USBREQ, USBVAL, USBINDX and USBLENG take its four fields, VALID and
     /// CTRT latch, and CTSQ moves to the stage the request asks for.
+    /// SET_ADDRESS never reaches the driver: the SIE answers it, loads
+    /// USBADDR and moves to the Address state. SET_CONFIGURATION reaches the
+    /// driver like any request, and the SIE tracks the state it implies.
     pub fn setup(self: *Device, packet: [8]u8) void {
+        if (request.standardOut(packet, request.set_address)) return self.addressed(packet[2]);
+        if (request.standardOut(packet, request.set_configuration)) self.configured(packet[2]);
         const field = std.mem.readInt;
         self.shadow[regs.reg.usbreq / window.word] = field(u16, packet[0..2], .little);
         self.shadow[regs.reg.usbval / window.word] = field(u16, packet[2..4], .little);
@@ -82,6 +102,35 @@ pub const Device = struct {
         self.status = (self.status & ~intsts0.ctsq_mask) | stage | intsts0.valid | intsts0.ctrt;
     }
 
+    fn addressed(self: *Device, value: u8) void {
+        const address = value & request.address_mask;
+        self.shadow[regs.reg.usbaddr / window.word] = address;
+        self.moveTo(if (address != 0) intsts0.dvsq_address else intsts0.dvsq_default);
+    }
+
+    /// Only an addressed device can be configured; configuration 0 drops
+    /// back to Address.
+    fn configured(self: *Device, value: u8) void {
+        const state = self.status & intsts0.dvsq_mask;
+        if (state != intsts0.dvsq_address and state != intsts0.dvsq_configured) return;
+        self.moveTo(if (value != 0) intsts0.dvsq_configured else intsts0.dvsq_address);
+    }
+
+    /// DCPCTR: PID reads back, BSTS reads ready, and CCPL ends the control
+    /// transfer's status stage, so CTSQ goes back to idle with CTRT latched.
+    fn controlPipe(self: *Device, value: u16) void {
+        const stored = value & ~(regs.dcpctr.ccpl | regs.dcpctr.bsts);
+        self.shadow[regs.reg.dcpctr / window.word] = stored;
+        if (value & regs.dcpctr.ccpl == 0) return;
+        if (self.status & intsts0.ctsq_mask == intsts0.ctsq_idle) return;
+        const rest = self.status & ~intsts0.ctsq_mask;
+        self.status = rest | intsts0.ctsq_idle | intsts0.ctrt;
+    }
+
+    fn controlPipeStatus(self: *const Device) u16 {
+        return self.shadow[regs.reg.dcpctr / window.word] | regs.dcpctr.bsts;
+    }
+
     fn attached(self: *const Device) bool {
         return self.lineState() == regs.port.lnst_j and self.syscfg & regs.syscfg.usbe != 0;
     }
@@ -89,10 +138,15 @@ pub const Device = struct {
     /// The host on the other jack resets the bus as soon as it sees the
     /// pull-up, so an attach lands straight in the Default state at full
     /// speed with DVST latched. Dropping the pull-up goes back to Powered.
+    /// Rewriting SYSCFG while attached keeps the state the host got it to.
     fn settle(self: *Device) void {
-        const state = self.status & intsts0.dvsq_mask;
-        const want = if (self.attached()) intsts0.dvsq_default else intsts0.dvsq_powered;
-        if (state == want) return;
+        if (!self.attached()) return self.moveTo(intsts0.dvsq_powered);
+        if (self.status & intsts0.dvsq_mask == intsts0.dvsq_powered) self.moveTo(intsts0.dvsq_default);
+    }
+
+    /// DVSQ takes the new state and DVST latches the change.
+    fn moveTo(self: *Device, want: u16) void {
+        if (self.status & intsts0.dvsq_mask == want) return;
         self.status = (self.status & ~intsts0.dvsq_mask) | want | intsts0.dvst;
     }
 
@@ -134,6 +188,7 @@ pub const Device = struct {
             regs.reg.syssts0 => self.lineState(),
             regs.reg.intsts0 => self.interruptStatus(),
             regs.reg.dvstctr0 => self.portStatus(),
+            regs.reg.dcpctr => self.controlPipeStatus(),
             else => self.shadow[offset / window.word],
         };
     }
@@ -151,6 +206,7 @@ pub const Device = struct {
             regs.reg.syssts0 => self.read_only += 1,
             regs.reg.usbreq, regs.reg.usbval, regs.reg.usbindx, regs.reg.usbleng => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
+            regs.reg.dcpctr => self.controlPipe(v),
             else => self.shadow[offset / window.word] = v,
         }
     }
