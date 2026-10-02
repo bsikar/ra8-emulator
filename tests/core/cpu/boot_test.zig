@@ -114,3 +114,32 @@ test "a stretch the core stops inside is never closed" {
     try std.testing.expectEqual(@as(u8, 1), status);
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
 }
+
+/// A vector table at the base of SRAM pointing at an idle loop:
+/// bf30 wfi ; e7fd b back to the wfi.
+fn loadIdle(core: *Engine) !void {
+    const base = memmap.sram_base;
+    var image: [12]u8 = undefined;
+    std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
+    std.mem.writeInt(u32, image[4..8], (base + 8) | 1, .little);
+    @memcpy(image[8..12], &[_]u8{ 0x30, 0xBF, 0xFD, 0xE7 });
+    try core.write(base, &image);
+}
+
+test "a core asleep in wfi closes every stretch at once without retiring" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadIdle(&core);
+    var edges: Edges = .{ .width = 4 };
+    var ran: u64 = 0;
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 20, &ran, .{ .boundary = edges.boundary() });
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expectEqual(@as(u64, 1), ran);
+    try std.testing.expectEqual(@as(u32, 5), edges.closes);
+    try std.testing.expectEqual(@as(u64, 20), edges.charged);
+}
