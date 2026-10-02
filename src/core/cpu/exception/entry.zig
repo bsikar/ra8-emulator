@@ -10,6 +10,7 @@ const regs_mod = @import("../regs.zig");
 const memmap = @import("../../memmap.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const frame = @import("frame.zig");
+const fp_frame = @import("fp_frame.zig");
 const exc_return = @import("exc_return.zig");
 
 /// EPSR.ICI/IT, bits 26:25 and 15:10; entry clears them.
@@ -26,11 +27,24 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!void {
         r.low[0],  r.low[1], r.low[2],       r.low[3],
         r.low[12], r.lr,     return_address, r.xpsr,
     };
-    const from: exc_return.Target = .{ .thread = !r.handlerMode(), .psp = r.usesPsp() };
-    r.setSp(try frame.push(cpu.bus, r.sp(), stacked));
+    const fp = r.control & regs_mod.control_bits.fpca != 0;
+    const from: exc_return.Target = .{ .thread = !r.handlerMode(), .psp = r.usesPsp(), .fp = fp };
+    const at = if (fp)
+        try fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu))
+    else
+        try frame.push(cpu.bus, r.sp(), stacked);
+    r.setSp(at);
     r.lr = exc_return.forEntry(from);
-    r.control &= ~regs_mod.control_bits.spsel;
+    r.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
+}
+
+/// S0-S15 and FPSCR as the extended frame stacks them. Stacking is eager;
+/// lazy preservation is RA8EMU-163.
+fn fpContext(cpu: *const Cpu) fp_frame.Fp {
+    var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits() };
+    for (&fp.s, 0..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
+    return fp;
 }
 
 /// Take exception `number` without stacking a frame, with `lr` as the link

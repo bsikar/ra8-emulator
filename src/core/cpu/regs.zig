@@ -30,6 +30,8 @@ pub const xpsr_bits = struct {
 pub const control_bits = struct {
     pub const npriv: u32 = 1 << 0;
     pub const spsel: u32 = 1 << 1;
+    /// An FP context is active: the next exception stacks the extended frame.
+    pub const fpca: u32 = 1 << 2;
 };
 
 /// The registers by name. R0-R15 come first, in order, so a register number
