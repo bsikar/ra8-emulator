@@ -5,9 +5,10 @@
 //! The Arm ARM (DDI0553) runs MVE floating point under StandardFPSCRValue:
 //! round to nearest, default NaN and flush-to-zero for single precision,
 //! with FPSCR.FZ16 and AHP kept. The cumulative flags still land in FPSCR.
-//! A lane the predicate mask turns off keeps the destination's old bytes
-//! and raises no flags, matching QEMU's DO_2OP_FP, which computes such a
-//! lane on a scratch status.
+//! As in QEMU's DO_2OP_FP, a lane is computed when any of its bytes is
+//! predicated, its flags count only when its first byte is, and the result
+//! is merged under the mask, so an unpredicated byte keeps the
+//! destination's old value.
 const fpu = @import("../fpu/all.zig");
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
@@ -30,6 +31,14 @@ pub fn accumulate(fpscr: *Fpscr, work: Fpscr) void {
     fpscr.* = @bitCast(fpscr.bits() | (work.bits() & cumulative));
 }
 
+/// The mask bits of lane `e`'s bytes, shifted down to bit 0: zero means
+/// the lane is not computed, bit 0 clear means its flags are dropped.
+pub fn laneMask(mask: u16, size: Size, e: u8) u16 {
+    const bytes: u8 = if (size == .half) 2 else 4;
+    const all: u16 = (@as(u16, 1) << @intCast(bytes)) - 1;
+    return mask >> @intCast(bytes * e) & all;
+}
+
 pub fn qsize(size: Size) qreg.Size {
     return if (size == .half) .half else .word;
 }
@@ -40,7 +49,8 @@ pub fn binary(d: u128, a: u128, b: u128, size: Size, op: Op, mask: u16, fpscr: *
     var out = d;
     for (0..qreg.lanes(qs)) |i| {
         const e: u8 = @intCast(i);
-        if (!predicate.active(mask, qs, e)) continue;
+        const lane_mask = laneMask(mask, size, e);
+        if (lane_mask == 0) continue;
         var work = standard(fpscr.*);
         const x = qreg.elem(a, qs, e);
         const y = qreg.elem(b, qs, e);
@@ -49,7 +59,7 @@ pub fn binary(d: u128, a: u128, b: u128, size: Size, op: Op, mask: u16, fpscr: *
             .word => lane(format.single, op, x, y, &work),
         };
         out = qreg.setElem(out, qs, e, r);
-        accumulate(fpscr, work);
+        if (lane_mask & 1 == 1) accumulate(fpscr, work);
     }
     return predicate.merge(d, out, mask);
 }
@@ -98,7 +108,8 @@ pub fn fused(d: u128, n: u128, m: u128, size: Size, op: Fused, mask: u16, fpscr:
     var out = d;
     for (0..qreg.lanes(qs)) |i| {
         const e: u8 = @intCast(i);
-        if (!predicate.active(mask, qs, e)) continue;
+        const lane_mask = laneMask(mask, size, e);
+        if (lane_mask == 0) continue;
         var work = standard(fpscr.*);
         const x = qreg.elem(d, qs, e);
         const y = qreg.elem(n, qs, e);
@@ -108,7 +119,7 @@ pub fn fused(d: u128, n: u128, m: u128, size: Size, op: Fused, mask: u16, fpscr:
             .word => fusedLane(format.single, op, x, y, z, &work),
         };
         out = qreg.setElem(out, qs, e, r);
-        accumulate(fpscr, work);
+        if (lane_mask & 1 == 1) accumulate(fpscr, work);
     }
     return predicate.merge(d, out, mask);
 }

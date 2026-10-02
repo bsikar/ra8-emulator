@@ -50,3 +50,5 @@ pub const float_minmax_vectors = @import("float_minmax_vectors.zig");
 pub const float_minmaxv_vectors = @import("float_minmaxv_vectors.zig");
 pub const float_complex = @import("float_complex.zig");
 pub const float_complex_vectors = @import("float_complex_vectors.zig");
+pub const float_scalar = @import("float_scalar.zig");
+pub const float_scalar_vectors = @import("float_scalar_vectors.zig");
