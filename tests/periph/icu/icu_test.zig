@@ -293,3 +293,27 @@ test "the unit carries an INTSELR bank that starts with every event on CPU0" {
     unit.select.write(icu.intsel.wordAddress(0), 4, 1 << 7);
     try std.testing.expectEqual(icu.intsel.Core.cpu1, unit.select.coreFor(7));
 }
+
+test "the bus window serves each core its own event-link table" {
+    var unit = icu.Icu.init();
+    var issuer: ra8.periph.registry.Issuer = .cpu1;
+    unit.issuer = &issuer;
+    const window = unit.block();
+    window.writeFn(window.context, icu.slotAddress(5), 4, 0x42);
+    try std.testing.expectEqual(@as(u32, 0x42), unit.cpu1[5]);
+    try std.testing.expectEqual(@as(u32, 0), unit.links[5]);
+    try std.testing.expectEqual(@as(u32, 0x42), window.readFn(window.context, icu.slotAddress(5), 4));
+    issuer = .cpu0;
+    try std.testing.expectEqual(@as(u32, 0), window.readFn(window.context, icu.slotAddress(5), 4));
+    window.writeFn(window.context, icu.slotAddress(5), 4, 0x17);
+    try std.testing.expectEqual(@as(u32, 0x17), unit.links[5]);
+    try std.testing.expectEqual(@as(u32, 0x42), unit.cpu1[5]);
+}
+
+test "a unit with no issuer keeps every access on ICU0" {
+    var unit = icu.Icu.init();
+    const window = unit.block();
+    window.writeFn(window.context, icu.slotAddress(2), 4, 0x9);
+    try std.testing.expectEqual(@as(u32, 0x9), unit.links[2]);
+    try std.testing.expect(unit.tableFor(.cpu1)[2] == 0);
+}
