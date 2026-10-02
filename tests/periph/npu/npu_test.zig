@@ -182,18 +182,21 @@ test "an opcode this model does not run moves nothing, where dev copies" {
     try std.testing.expect(status & npu.field.status_cmd_end == 0);
 }
 
-test "a real Vela stream is somebody else's program, counted apart" {
+test "a stream with no stand-in marker runs as Vela, counted apart" {
     var bench: Bench = undefined;
     try bench.open();
     defer bench.close();
 
+    // NPU_OP_IRQ, then the stand-in's source word (region 0) reads as STOP.
     try bench.submit(.{ .op = .copy, .source = 0, .destination = 1, .count = 4, .addend = 0 });
     try bench.core.writeWord(stream_at, 0x0000_0001);
     bench.kick();
 
-    try std.testing.expectEqual(@as(u32, 1), bench.unit.malformed);
+    try std.testing.expectEqual(@as(u32, 1), bench.unit.vela.jobs);
+    try std.testing.expectEqual(@as(u32, 0), bench.unit.malformed);
     try std.testing.expectEqual(@as(u32, 0), bench.unit.unknown_ops);
     try std.testing.expectEqual(@as(u32, 0), bench.unit.jobs);
+    try std.testing.expect(peek(&bench.unit, npu.off.status) & npu.field.status_cmd_end != 0);
 }
 
 test "a region with no base programmed is not an address" {

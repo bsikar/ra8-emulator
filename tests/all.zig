@@ -254,6 +254,7 @@ test {
     _ = @import("periph/npu/npu_vela_regs_test.zig");
     _ = @import("periph/npu/npu_vela_dma_test.zig");
     _ = @import("periph/npu/npu_vela_run_test.zig");
+    _ = @import("periph/npu/npu_vela_hook_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/candidate_test.zig");
     _ = @import("periph/held_test.zig");
