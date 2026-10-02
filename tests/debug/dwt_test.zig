@@ -69,15 +69,16 @@ test "with DEMCR.TRCENA clear nothing matches and MATCHED stays clear" {
     try std.testing.expectEqual(@as(?usize, 1), unit.matchesPc(0x200));
 }
 
-test "FUNCTION.ID is read-only: comparator 0 adds Cycle Counter, the rest take limits" {
+test "FUNCTION.ID is read-only: comparator 0 adds Cycle Counter, odd comparators take values" {
     var unit = dwt.Dwt{};
     const shift = dwt.function_bits.id_shift;
     try std.testing.expectEqual(@as(?u32, dwt.id.cycles_instruction_data << shift), unit.peek(function(0)));
     for (1..dwt.limits.comparators) |n| {
-        try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data_limits << shift), unit.peek(function(@intCast(n))));
+        const expected = if (n % 2 == 1) dwt.id.instruction_data_values else dwt.id.instruction_data_limits;
+        try std.testing.expectEqual(@as(?u32, expected << shift), unit.peek(function(@intCast(n))));
     }
     _ = unit.write(function(1), 0);
-    try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data_limits << shift), unit.peek(function(1)));
+    try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data_values << shift), unit.peek(function(1)));
 }
 
 const one_byte: u32 = 0;
@@ -138,19 +139,46 @@ test "a Data Value comparator matches a store of its value, in the lanes DATAVSI
 
 test "a byte Data Value comparator matches any byte lane the access carries" {
     var unit = dwt.Dwt{ .trcena = true };
-    arm(&unit, 0, 0x5A5A_5A5A, dwt.match.data_value | halts | one_byte);
-    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_0000, 1, .write, 0x5A));
-    try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_0000, 4, .write, 0x0000_5A00));
+    arm(&unit, 3, 0x5A5A_5A5A, dwt.match.data_value | halts | one_byte);
+    try std.testing.expectEqual(@as(?usize, 3), unit.access(0x2000_0000, 1, .write, 0x5A));
+    try std.testing.expectEqual(@as(?usize, 3), unit.access(0x2000_0000, 4, .write, 0x0000_5A00));
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 1, .write, 0x5A00));
 }
 
 test "DWT_VMASK masks bits out of the value compare and reads zero for other MATCH kinds" {
     var unit = dwt.Dwt{ .trcena = true };
-    arm(&unit, 2, 0x0000_1200, dwt.match.data_value | halts | word_size);
-    try std.testing.expect(unit.write(vmask(2), 0x0000_00FF));
-    try std.testing.expectEqual(@as(?u32, 0xFF), unit.peek(vmask(2)));
-    try std.testing.expectEqual(@as(?usize, 2), unit.access(0x2000_0000, 4, .write, 0x0000_12AB));
+    arm(&unit, 5, 0x0000_1200, dwt.match.data_value | halts | word_size);
+    try std.testing.expect(unit.write(vmask(5), 0x0000_00FF));
+    try std.testing.expectEqual(@as(?u32, 0xFF), unit.peek(vmask(5)));
+    try std.testing.expectEqual(@as(?usize, 5), unit.access(0x2000_0000, 4, .write, 0x0000_12AB));
     try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x0000_13AB));
-    _ = unit.write(function(2), dwt.match.data | word_size);
+    _ = unit.write(function(5), dwt.match.data | word_size);
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(vmask(5)));
+}
+
+test "an even comparator does not take the value kinds" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 2, 0x0000_0042, dwt.match.data_value | halts | word_size);
+    _ = unit.write(vmask(2), 0xFF);
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x42));
     try std.testing.expectEqual(@as(?u32, 0), unit.peek(vmask(2)));
+}
+
+test "Linked Data Value needs comparator n-1's address and reads the lane it picks" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 0, 0x2000_0002, dwt.match.data_write | one_byte);
+    arm(&unit, 1, 0x7777_7777, dwt.match.linked_data_value | halts | one_byte);
+    try std.testing.expectEqual(@as(?usize, 1), unit.access(0x2000_0000, 4, .write, 0x0077_0000));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x0000_0077));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0004, 4, .write, 0x0077_0000));
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .read, 0x0077_0000));
+    try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
+    try std.testing.expect(unit.peek(function(1)).? & dwt.function_bits.matched != 0);
+}
+
+test "Linked Data Value matches nothing when the DATAVSIZEs differ" {
+    var unit = dwt.Dwt{ .trcena = true };
+    arm(&unit, 2, 0x2000_0000, dwt.match.data | word_size);
+    arm(&unit, 3, 0x0000_0042, dwt.match.linked_data_value | halts | one_byte);
+    try std.testing.expectEqual(@as(?usize, null), unit.access(0x2000_0000, 4, .write, 0x42));
 }
