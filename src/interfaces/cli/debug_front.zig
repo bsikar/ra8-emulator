@@ -9,7 +9,8 @@
 //! behind the prompt. The second reads commands from the terminal until
 //! `quit` or end of input. Both load the image onto the board, reset out of
 //! its vector table, and hand the core to a debugger session; `run` starts
-//! from the reset handler. With `--cpu1`, the second core comes up on the
+//! from the reset handler, under the run loop with the same time base,
+//! NVIC, board tick and reset handling an ordinary run has. With `--cpu1`, the second core comes up on the
 //! same board from its own image, the way an ordinary run brings it up,
 //! and `core 1` selects it. Either flag takes over the whole invocation, so
 //! neither mixes with the run-and-report flags.
@@ -23,6 +24,9 @@ const cli = @import("cli.zig");
 const elf = @import("../../core/elf.zig");
 const engine = @import("../../core/engine.zig");
 const Board = @import("../../board/board.zig").Board;
+const clocks = @import("../../periph/clocks.zig");
+const nvic = @import("../../periph/nvic.zig");
+const reboot = @import("../../core/reboot.zig");
 const script = @import("../../debug/script.zig");
 const session = @import("../../debug/session.zig");
 const second_core = @import("../../core/second_core.zig");
@@ -131,9 +135,20 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Requ
         return 1;
     };
     try core.resetFromVectorTable(vector_base);
+    var clock = clocks.Clocks{};
+    try core.attachTimebase(&clock);
+    var interrupts = nvic.Nvic{ .vector_base = vector_base };
+    var restart = reboot.Reboot{ .vector_base = vector_base };
+    board.reboot = &restart;
     var cpu0 = Cpu{};
     try cpu0.attach(&core);
-    var target = session.Session{ .core = &core, .driver = &cpu0.driver, .entry = try core.register(.pc), .image = image };
+    var target = session.Session{ .core = &core, .driver = &cpu0.driver, .entry = try core.register(.pc), .image = image, .loop = .{
+        .timebase = &clock,
+        .interrupts = &interrupts,
+        .board = board.ticker(),
+        .reboot = &restart,
+        .protection = &board.guard,
+    } };
     var second: second_core.Second = undefined;
     var cpu1 = Cpu{};
     if (request.cpu1) |path| {
@@ -143,7 +158,10 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Requ
             return 1;
         };
         try cpu1.attach(&second.core);
-        target.other = .{ .core = &second.core, .driver = &cpu1.driver, .entry = second.pc, .image = image1 };
+        target.other = .{ .core = &second.core, .driver = &cpu1.driver, .entry = second.pc, .image = image1, .loop = .{
+            .watch = &second.watch,
+            .interrupts = &second.interrupts,
+        } };
     }
     defer if (request.cpu1 != null) second.close();
     return drive(allocator, &target, request.mode);
