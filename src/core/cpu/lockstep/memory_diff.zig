@@ -3,10 +3,12 @@
 //!
 //! This catches a store the Zig core got wrong and one Unicorn did not make.
 //! A store only Unicorn made is not caught yet: that needs a write hook on
-//! the oracle's side.
+//! the oracle's side. Stores in the peripheral windows are skipped: reading
+//! them back would reach a peripheral, and periph_log.zig compares them.
 const std = @import("std");
 const engine = @import("../../engine.zig");
 const writes = @import("writes.zig");
+const BoardBus = @import("../board_bus.zig").BoardBus;
 
 pub const Mismatch = struct {
     address: u32,
@@ -27,6 +29,7 @@ pub const Mismatch = struct {
 /// memory disagrees with.
 pub fn first(made: []const writes.Write, theirs: engine.Engine) engine.Error!?Mismatch {
     for (made) |*store| {
+        if (BoardBus.inWindow(store.address, store.len)) continue;
         var held: [writes.widest]u8 = undefined;
         try theirs.read(store.address, held[0..store.len]);
         if (std.mem.eql(u8, store.slice(), held[0..store.len])) continue;

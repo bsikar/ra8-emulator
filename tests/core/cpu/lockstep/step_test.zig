@@ -9,10 +9,10 @@ test "a NOP on both backends matches under the hint class" {
     var pair: Pair = undefined;
     try pair.open(&.{ 0x00, 0xBF, 0x00, 0xBF });
     defer pair.close();
-    const result = try step.one(&pair.cpu, pair.theirs);
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
     try std.testing.expectEqualStrings("hint", result.matched);
     try std.testing.expectEqual(pair_mod.entry + 2, pair.cpu.regs.pc);
-    try std.testing.expectEqualStrings("hint", (try step.one(&pair.cpu, pair.theirs)).matched);
+    try std.testing.expectEqualStrings("hint", (try step.one(&pair.cpu, pair.theirs, &pair.log)).matched);
 }
 
 test "a register the backends disagree on is reported with both values" {
@@ -20,7 +20,7 @@ test "a register the backends disagree on is reported with both values" {
     try pair.open(&.{ 0x00, 0xBF });
     defer pair.close();
     try pair.theirs.setRegister(.r0, 1);
-    const result = try step.one(&pair.cpu, pair.theirs);
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
     const found = result.diverged;
     try std.testing.expectEqualStrings("hint", found.class);
     try std.testing.expectEqual(ra8.core.cpu.regs.Name.r0, found.what.register.name);
@@ -32,7 +32,7 @@ test "an encoding the Zig core does not know stops both, unstepped" {
     var pair: Pair = undefined;
     try pair.open(&.{ 0x00, 0xDE }); // udf #0
     defer pair.close();
-    const result = try step.one(&pair.cpu, pair.theirs);
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log);
     try std.testing.expectEqual(@as(u16, 0xDE00), result.stopped.unknown.hw1);
     try std.testing.expectEqual(pair_mod.entry, try pair.theirs.register(.pc));
 }

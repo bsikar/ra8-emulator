@@ -9,6 +9,7 @@ const Cpu = ra8.core.cpu.cpu.Cpu;
 const regs = ra8.core.cpu.regs;
 const snapshot = ra8.core.cpu.lockstep.snapshot;
 const oracle = ra8.core.cpu.lockstep.oracle;
+const periph_log = ra8.core.cpu.lockstep.periph_log;
 
 pub const entry: u32 = memmap.sram_base;
 
@@ -17,6 +18,8 @@ pub const Pair = struct {
     theirs: Engine,
     memory: EngineBus,
     cpu: Cpu,
+    /// Empty: these programs touch no peripheral.
+    log: periph_log.Log = .{},
 
     /// Fill `self` in place: the Zig core's bus points back into it.
     pub fn open(self: *Pair, program: []const u8) !void {
@@ -28,6 +31,7 @@ pub const Pair = struct {
             try core.mapBoardRam();
             try core.write(entry, program);
         }
+        self.log = .{};
         self.memory = .{ .core = &self.mine };
         self.cpu = .{ .bus = self.memory.view() };
         self.cpu.regs.pc = entry;
