@@ -57,4 +57,5 @@ test {
     _ = @import("dwarf_line_test.zig");
     _ = @import("session_source_test.zig");
     _ = @import("dwarf_line_find_test.zig");
+    _ = @import("dwarf_frame_test.zig");
 }
