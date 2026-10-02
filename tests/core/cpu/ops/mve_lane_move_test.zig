@@ -84,3 +84,17 @@ test "unclaimed: D16+, U with a word, opc 0x10, Rt of 13 and 15, VDUP" {
     try std.testing.expect(lane_move.group.decode(wide(0xEE30, 0xFB10)) == null);
     try std.testing.expect(lane_move.group.decode(wide(0xEEA0, 0x1B10)) == null);
 }
+
+test "a lane in a beat ECI marks done is not moved, and ECI moves on" {
+    const it_state = ra8.core.cpu.it_state;
+    var cpu: Cpu = .{ .bus = undefined };
+    cpu.regs.xpsr = it_state.put(0, 0x20);
+    cpu.regs.set(1, 0xDEAD_BEEF);
+    try run(&cpu, 0xEE20, 0x1B10);
+    try std.testing.expectEqual(@as(u128, 0), qreg.read(&cpu.fp.bank, 0));
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+    cpu.regs.xpsr = it_state.put(0, 0x50);
+    try run(&cpu, 0xEE2F, 0x1B10);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), qreg.elem(qreg.read(&cpu.fp.bank, 7), .word, 3));
+    try std.testing.expectEqual(@as(u8, 0x10), it_state.get(cpu.regs.xpsr));
+}

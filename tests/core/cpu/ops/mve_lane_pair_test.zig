@@ -79,3 +79,15 @@ test "unclaimed: Rt or Rt2 of 13 or 15, a repeated core register, stray bits" {
     try std.testing.expect(lane_pair.group.decode(wide(0xEC12, 0x0F21)) == null);
     try std.testing.expect(lane_pair.group.decode(wide(0xEC32, 0x0F01)) == null);
 }
+
+test "ECI skips the lane whose beat is done and still moves the other" {
+    const it_state = ra8.core.cpu.it_state;
+    var cpu: Cpu = .{ .bus = undefined };
+    qreg.write(&cpu.fp.bank, 0, lanes);
+    cpu.regs.xpsr = it_state.put(0, 0x10);
+    cpu.regs.set(1, 0xAAAA_AAAA);
+    cpu.regs.set(2, 0xBBBB_BBBB);
+    try run(&cpu, 0xEC12, 0x0F01);
+    try std.testing.expectEqual(@as(u128, 0x44444444_AAAAAAAA_22222222_11111111), qreg.read(&cpu.fp.bank, 0));
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+}
