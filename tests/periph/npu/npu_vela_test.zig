@@ -61,3 +61,21 @@ test "the stand-in program's first word is not a Vela command" {
     // opcode the stand-in defines, never a Vela cmd0.
     try std.testing.expectEqual(@as(u16, 0xABCD), vela.param(0xABCD_0001));
 }
+
+test "cmd0 register sets, such as the DMA region commands, are counted and passed over" {
+    // NPU_SET_DMA0_SRC_REGION (0x130) region 1, _DST_REGION (0x131) region 2,
+    // NPU_SET_IFM_PAD_TOP (0x100), then NPU_OP_DMA_START and STOP.
+    const words = [_]u32{ 0x0001_0130, 0x0002_0131, 0x0000_0100, 0x0000_0010, 0x0000_0000 };
+    const summary = try vela.walk(&words);
+    try std.testing.expectEqual(@as(usize, 3), summary.register_sets);
+    try std.testing.expectEqual(@as(usize, 1), summary.dma_starts);
+    try std.testing.expectEqual(@as(usize, 5), summary.words);
+}
+
+test "the cmd0 register-set range is 0x100 to 0x18F" {
+    try std.testing.expect(vela.isCmd0Set(0x100));
+    try std.testing.expect(vela.isCmd0Set(0x18F));
+    try std.testing.expect(!vela.isCmd0Set(0x0FF));
+    try std.testing.expect(!vela.isCmd0Set(0x190));
+    try std.testing.expectError(error.UnknownOpcode, vela.walk(&[_]u32{0x0000_0190}));
+}

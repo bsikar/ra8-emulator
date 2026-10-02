@@ -20,6 +20,10 @@ pub const dma = @import("npu_vela_dma.zig");
 pub const opcode_mask: u32 = 0x03FF;
 pub const mode_mask: u32 = 0xC000;
 pub const mode_payload32: u32 = 0x4000;
+/// cmd0 register sets (NPU_SET_IFM_PAD_TOP 0x100 up to 0x18F in Vela's
+/// `cmd0`): a register value in the parameter, no payload word.
+pub const first_cmd0_set: u10 = 0x100;
+pub const last_cmd0_set: u10 = 0x18F;
 
 /// The cmd0 opcodes the Ethos-U55 defines (ethos_u55_regs.py `cmd0`).
 pub const Op = enum(u10) {
@@ -41,6 +45,8 @@ pub const Summary = struct {
     words: usize = 0,
     /// cmd1 register writes, each with its payload.
     register_writes: usize = 0,
+    /// cmd0 register sets, the value in the parameter.
+    register_sets: usize = 0,
     conv: usize = 0,
     depthwise: usize = 0,
     pool: usize = 0,
@@ -78,6 +84,11 @@ fn count(summary: *Summary, op: Op, word: u32) void {
     }
 }
 
+/// Whether a cmd0 opcode sets a register rather than running something.
+pub fn isCmd0Set(code: u10) bool {
+    return code >= first_cmd0_set and code <= last_cmd0_set;
+}
+
 /// Walk `words` from the first command to the STOP.
 pub fn walk(words: []const u32) Error!Summary {
     var summary = Summary{};
@@ -93,9 +104,13 @@ pub fn walk(words: []const u32) Error!Summary {
         }
         if (mode != 0) return error.UnknownMode;
         const code: u10 = @truncate(word & opcode_mask);
+        index += 1;
+        if (isCmd0Set(code)) {
+            summary.register_sets += 1;
+            continue;
+        }
         const op = std.meta.intToEnum(Op, code) catch return error.UnknownOpcode;
         count(&summary, op, word);
-        index += 1;
         if (op == .stop) {
             summary.words = index;
             return summary;
