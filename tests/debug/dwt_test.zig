@@ -23,7 +23,8 @@ test "only the comparator registers are claimed, not CTRL or CYCCNT" {
 test "FUNCTION keeps MATCH, ACTION and DATAVSIZE and drops read-only bits" {
     var unit = dwt.Dwt{};
     try std.testing.expect(unit.write(function(0), 0xFFFF_FFFF));
-    try std.testing.expectEqual(@as(?u32, dwt.function_bits.writable), unit.peek(function(0)));
+    const id0 = dwt.id.cycles_instruction_data << dwt.function_bits.id_shift;
+    try std.testing.expectEqual(@as(?u32, id0 | dwt.function_bits.writable), unit.peek(function(0)));
 }
 
 test "a halting data write comparator matches a store and sets MATCHED" {
@@ -66,4 +67,15 @@ test "with DEMCR.TRCENA clear nothing matches and MATCHED stays clear" {
     unit.trcena = true;
     try std.testing.expectEqual(@as(?usize, 0), unit.access(0x2000_1000, 4, .write));
     try std.testing.expectEqual(@as(?usize, 1), unit.matchesPc(0x200));
+}
+
+test "FUNCTION.ID is read-only: comparator 0 adds Cycle Counter, the rest do not" {
+    var unit = dwt.Dwt{};
+    const shift = dwt.function_bits.id_shift;
+    try std.testing.expectEqual(@as(?u32, dwt.id.cycles_instruction_data << shift), unit.peek(function(0)));
+    for (1..dwt.limits.comparators) |n| {
+        try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data << shift), unit.peek(function(@intCast(n))));
+    }
+    _ = unit.write(function(1), 0);
+    try std.testing.expectEqual(@as(?u32, dwt.id.instruction_data << shift), unit.peek(function(1)));
 }

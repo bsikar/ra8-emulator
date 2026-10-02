@@ -12,9 +12,16 @@
 //! core sees when the firmware stores DEMCR.
 //!
 //! DWT_CTRL and DWT_CYCCNT at the bottom of the block belong to
-//! src/periph/clocks.zig and are not claimed here. Not modelled yet:
-//! DWT_CTRL.NUMCOMP, the read-only FUNCTION.ID field (reads zero), and
-//! the limit and data value match kinds.
+//! src/periph/clocks.zig and are not claimed here.
+//!
+//! FUNCTION.ID is read-only and says which MATCH kinds a comparator takes.
+//! DDI0553B.y D1.2.64 lists the legal encodings. Comparator 0 must take
+//! Cycle Counter when the cycle counter exists, which clocks.zig models, so
+//! it reads 0b01011; the others read 0b01010 (Instruction Address, Data
+//! Address and Data Address With Value). Those are the smallest legal
+//! encodings that cover what this model compares. Not modelled yet:
+//! DWT_CTRL.NUMCOMP, the Cycle Counter match itself, and the limit, data
+//! value and linked match kinds; ID grows as they land.
 const watch_table = @import("watch_table.zig");
 
 pub const Access = watch_table.Access;
@@ -54,6 +61,20 @@ pub const function_bits = struct {
     pub const matched: u32 = 1 << 24;
     /// MATCH, ACTION and DATAVSIZE; everything else is read-only.
     pub const writable: u32 = 0xC3F;
+    pub const id_shift: u5 = 27;
+};
+
+/// DWT_FUNCTION.ID values (DDI0553B.y D1.2.64).
+pub const id = struct {
+    /// Cycle Counter, Instruction Address, Data Address, Data Address With Value.
+    pub const cycles_instruction_data: u32 = 0b01011;
+    /// Instruction Address, Data Address, Data Address With Value.
+    pub const instruction_data: u32 = 0b01010;
+
+    /// The ID comparator `index` reads.
+    pub fn of(index: usize) u32 {
+        return if (index == 0) cycles_instruction_data else instruction_data;
+    }
 };
 
 pub const Dwt = struct {
@@ -68,7 +89,8 @@ pub const Dwt = struct {
     /// effects, or null when the offset is not a comparator register.
     pub fn peek(self: *const Dwt, offset: u32) ?u32 {
         const slot = Slot.of(offset) orelse return null;
-        return if (slot.function) self.functions[slot.index] else self.comps[slot.index];
+        if (!slot.function) return self.comps[slot.index];
+        return self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift;
     }
 
     /// Write the register at `offset`. False when it is not one of the
