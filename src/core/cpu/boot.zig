@@ -7,16 +7,20 @@
 //! line saying which, so a corpus sweep can tell how far each image gets.
 const engine = @import("../engine.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
+const BoardBus = @import("board_bus.zig").BoardBus;
+const registry = @import("../../periph/registry.zig");
 const cpu_mod = @import("cpu.zig");
 const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
 
 /// The hand-off from main for any CPU but Unicorn.
-pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
+/// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
+/// peripherals through it.
+pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
-        .zig => run(out, core, vector_base, budget),
+        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget) else run(out, core, vector_base, budget),
         .lockstep => lockstep_mode.run(out, image, core, vector_base, budget),
     };
 }
@@ -26,7 +30,17 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
     var memory: EngineBus = .{ .core = core };
-    var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
+    return runOn(out, memory.view(), vector_base, budget);
+}
+
+/// As `run`, with the peripheral windows answered by the board's bus.
+pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64) !u8 {
+    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph };
+    return runOn(out, board.view(), vector_base, budget);
+}
+
+fn runOn(out: anytype, memory: @import("bus.zig").Bus, vector_base: u32, budget: u64) !u8 {
+    var cpu: cpu_mod.Cpu = .{ .bus = memory };
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
