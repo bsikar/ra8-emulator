@@ -100,7 +100,7 @@ fn supported(inputs: Inputs) Error!addr.Format {
 
 /// The IFM's height and width, from the OFM shape, kernel, stride and
 /// padding.
-fn ifmExtent(inputs: Inputs) Step {
+pub fn ifmExtent(inputs: Inputs) Step {
     const k = inputs.kernel;
     const s = step(k.stride);
     const shape = inputs.maps.ofmShape();
