@@ -48,7 +48,9 @@ pub fn zeroInactive(loaded: u128, mask: u16, size: Size) u128 {
 pub const Element = struct { value: u32, msize: Size, signed: bool, store: bool };
 
 /// A store keeps the low msize bits; a load sign- or zero-extends them.
+/// A word in memory fills the lane as it is.
 pub fn element(c: Element) u32 {
+    if (c.msize == .word) return c.value;
     const width: u5 = @intCast(qreg.bits(c.msize));
     const low = c.value & ((@as(u32, 1) << width) - 1);
     if (c.store or !c.signed or low >> (width - 1) == 0) return low;

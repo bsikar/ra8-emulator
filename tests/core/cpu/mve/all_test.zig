@@ -25,4 +25,6 @@ test {
     _ = @import("contiguous_test.zig");
     _ = @import("contiguous_vectors_test.zig");
     _ = @import("contiguous_wide_vectors_test.zig");
+    _ = @import("gather_test.zig");
+    _ = @import("gather_vectors_test.zig");
 }
