@@ -32,6 +32,8 @@ pub const session_report = @import("session_report.zig");
 pub const zig_script = @import("zig_script.zig");
 /// Re-exported for tests/debug/watch_bus_test.zig, for the same reason.
 pub const watch_bus = @import("watch_bus.zig");
+/// `--watch` matched through the stop machine's watch table (RA8EMU-58).
+pub const watch_link = @import("watch_link.zig");
 /// Re-exported for tests/interfaces/cli/zig_debug_front_test.zig: src/root.zig is full.
 pub const zig_debug_front = @import("../interfaces/cli/zig_debug_front.zig");
 const dwt = @import("dwt.zig");

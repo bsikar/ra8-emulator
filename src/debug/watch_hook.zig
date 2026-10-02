@@ -1,28 +1,37 @@
 //! Unicorn's memory-write hook, narrowed to one watched word.
 //!
-//! src/core/watchpoint.zig knows what a store means and nothing about
-//! Unicorn. This file is the other half: it asks to be called for writes
-//! inside the watched window and nowhere else, reads the program counter
-//! out of the core, and hands both to the watch.
+//! src/debug/watch_link.zig matches a store against the stop machine's
+//! watch table and records it. This file is the other half: it asks to be
+//! called for writes inside the watched window and nowhere else, reads the
+//! program counter and link register out of the core, and hands all of it
+//! to the link.
 //!
 //! The range is four bytes, so the cost falls on the stores that reach
 //! them rather than on every store the run makes.
+const std = @import("std");
 const c = @import("../core/c.zig");
+const watch_link = @import("watch_link.zig");
 const watchpoint = @import("watchpoint.zig");
 
 pub const Error = error{AttachFailed};
 
+/// Install the hook. The link has to outlive the engine, which keeps its
+/// pointer for every later run, so it is allocated here and left for the
+/// process to reclaim; a run attaches at most one watch.
 pub fn attach(handle: ?*c.uc.uc_engine, watched: *watchpoint.Watched) Error!void {
+    const owned = std.heap.page_allocator.create(watch_link.Link) catch return Error.AttachFailed;
+    owned.* = watch_link.link(watched);
     var hook: c.uc.uc_hook = 0;
     if (c.uc.uc_hook_add(
         handle,
         &hook,
         c.uc.UC_HOOK_MEM_WRITE,
         @constCast(@as(*const anyopaque, @ptrCast(&onWrite))),
-        watched,
+        owned,
         watched.address,
         watched.end(),
     ) != c.uc.UC_ERR_OK) {
+        std.heap.page_allocator.destroy(owned);
         return Error.AttachFailed;
     }
 }
@@ -39,13 +48,13 @@ fn onWrite(
     user: ?*anyopaque,
 ) callconv(.C) void {
     _ = kind;
-    const watched: *watchpoint.Watched = @ptrCast(@alignCast(user orelse return));
+    const owned: *watch_link.Link = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
     var pc: u32 = 0;
     if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_PC, &pc) != c.uc.UC_ERR_OK) pc = 0;
     var lr: u32 = 0;
     if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_LR, &lr) != c.uc.UC_ERR_OK) lr = 0;
-    watched.record(
+    owned.store(
         pc,
         lr,
         @truncate(address),
