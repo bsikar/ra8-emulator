@@ -17,6 +17,7 @@ const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
+const dcb = @import("dcb.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -47,6 +48,9 @@ pub const Driver = struct {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             _ = self.machine.dwt.write(address - dwt.base, value);
+        } else if (inside(address, dcb.base, dcb.span)) {
+            _ = self.machine.dcb.write(address - dcb.base, value);
+            if (self.machine.dcb.takeHalt()) self.machine.requestHalt();
         }
     }
 
@@ -78,6 +82,15 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
         if (machine.itm.peek(register)) |word| put(handle, itm.base + register, word);
     }
     machine.itm.changed = false;
+    offset = 0;
+    while (offset < dcb.span) : (offset += 4) {
+        if (machine.dcb.peek(offset)) |word| put(handle, dcb.base + offset, word);
+    }
+    machine.dcb.changed = false;
+}
+
+fn unitsChanged(machine: *const stop_machine.Machine) bool {
+    return machine.dwt.changed or machine.itm.changed or machine.dcb.changed;
 }
 
 fn put(handle: *c.uc.uc_engine, address: u32, word: u32) void {
@@ -94,6 +107,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
         return Error.AttachFailed;
     }
     if (!watch_memory) return;
+    driver.machine.dcb.attachDebugger();
     if (handle) |live| syncUnits(live, driver.machine);
     const kinds = c.uc.UC_HOOK_MEM_READ | c.uc.UC_HOOK_MEM_WRITE;
     if (c.uc.uc_hook_add(handle, &hook, kinds, @constCast(@as(*const anyopaque, @ptrCast(&onMemory))), driver, 1, 0) != c.uc.UC_ERR_OK) {
@@ -104,7 +118,7 @@ pub fn attach(handle: ?*c.uc.uc_engine, driver: *Driver, watch_memory: bool) Err
 fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
     const driver: *Driver = @ptrCast(@alignCast(user orelse return));
     const handle = uc orelse return;
-    if (driver.unit_dirty or driver.machine.dwt.changed or driver.machine.itm.changed) {
+    if (driver.unit_dirty or unitsChanged(driver.machine)) {
         syncUnits(handle, driver.machine);
         driver.unit_dirty = false;
     }
