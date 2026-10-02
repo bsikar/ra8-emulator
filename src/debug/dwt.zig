@@ -48,6 +48,9 @@ pub const base: u32 = 0xE000_1000;
 pub const offsets = struct {
     pub const comp0: u32 = 0x020;
     pub const function0: u32 = 0x028;
+    /// DWT_CYCCNT, which clocks.zig counts; a Cycle Counter comparator
+    /// watches it.
+    pub const cyccnt: u32 = 0x004;
     pub const vmask0: u32 = 0x02C;
     pub const stride: u32 = 0x010;
 };
@@ -79,6 +82,7 @@ pub fn ctrlReset(identity: u32) u32 {
 /// DWT_FUNCTION.MATCH values this model compares.
 pub const match = struct {
     pub const disabled: u32 = 0b0000;
+    pub const cycle_counter: u32 = 0b0001;
     pub const instruction: u32 = 0b0010;
     pub const data: u32 = 0b0100;
     pub const data_write: u32 = 0b0101;
@@ -141,6 +145,11 @@ pub const Dwt = struct {
     changed: bool = false,
     /// DEMCR.TRCENA: with it clear the DWT is off and nothing matches.
     trcena: bool = false,
+    /// DWT_CYCCNT as the last cycle check saw it, and whether that sighting
+    /// is current. Every count between two sightings is checked, so a stale
+    /// one would sweep a range the counter never crossed.
+    cycles_seen: u32 = 0,
+    cycles_primed: bool = false,
 
     /// The register at `offset` from `base`, without a read's side
     /// effects, or null when the offset is not a comparator register.
@@ -189,6 +198,42 @@ pub const Dwt = struct {
     /// The halting comparator an instruction fetch at `pc` matches.
     pub fn matchesPc(self: *Dwt, pc: u32) ?usize {
         return self.firstMatch(pc & ~@as(u32, 1), 2, null, null);
+    }
+
+    /// Whether comparator 0 is a live Cycle Counter comparator. Only it can
+    /// be one (DDI0553B.y D1.2.64; M85 TRM 101924, DWT comparators).
+    pub fn watchesCycles(self: *const Dwt) bool {
+        return self.trcena and self.numcomp > 0 and self.code(0) == match.cycle_counter;
+    }
+
+    /// DWT_CYCCNT was written directly with `value`. MATCH 0b0001 checks
+    /// the comparator each time DWT_CYCCNT is written, directly or not.
+    pub fn cycleWritten(self: *Dwt, value: u32) ?usize {
+        self.cycles_seen = value;
+        self.cycles_primed = true;
+        if (!self.watchesCycles() or value != self.comps[0]) return null;
+        return self.cycleMatch();
+    }
+
+    /// DWT_CYCCNT reads `now` after counting on its own. Each increment is
+    /// checked, so a stretch that counted past the comparator value still
+    /// matches it. The first sighting only primes.
+    pub fn cycleCounted(self: *Dwt, now: u32) ?usize {
+        const before = self.cycles_seen;
+        const primed = self.cycles_primed;
+        self.cycles_seen = now;
+        self.cycles_primed = true;
+        if (!primed or !self.watchesCycles() or now == before) return null;
+        const reach = self.comps[0] -% before;
+        if (reach == 0 or reach > now -% before) return null;
+        return self.cycleMatch();
+    }
+
+    fn cycleMatch(self: *Dwt) ?usize {
+        self.functions[0] |= function_bits.matched;
+        self.changed = true;
+        const action = (self.functions[0] >> function_bits.action_shift) & function_bits.action_mask;
+        return if (action == function_bits.action_debug) 0 else null;
     }
 
     /// The halting comparator a data access matches. Every comparator it

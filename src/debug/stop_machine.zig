@@ -180,6 +180,14 @@ pub const Machine = struct {
         self.watch_pending = self.watches.hit(address, width, access);
     }
 
+    /// A comparator matched on something other than an address: the Cycle
+    /// Counter. The stop it may cause is reported on the next
+    /// `onInstruction`.
+    pub fn onUnitMatch(self: *Machine, index: usize) void {
+        if (self.mode == .halted) return;
+        if (self.unit_pending == null) self.unit_pending = index;
+    }
+
     /// The monitor event the last instruction raised, once.
     pub fn takeMonitor(self: *Machine) ?Monitor {
         defer self.monitor_pending = null;

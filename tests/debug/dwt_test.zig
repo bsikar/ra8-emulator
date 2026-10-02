@@ -217,3 +217,59 @@ test "comparators past NUMCOMP read zero, ignore writes and never match" {
     _ = unit.write(function(3), dwt.match.data_write | halts | word_size);
     try std.testing.expectEqual(@as(?usize, 3), unit.access(0x2000_1000, 4, .write, null));
 }
+
+const counts: u32 = dwt.match.cycle_counter | halts;
+
+fn cycleUnit(value: u32, function0: u32) dwt.Dwt {
+    var unit = dwt.Dwt{ .trcena = true };
+    _ = unit.write(dwt.offsets.comp0, value);
+    _ = unit.write(function(0), function0);
+    return unit;
+}
+
+test "a Cycle Counter comparator matches a count that steps over its value" {
+    var unit = cycleUnit(100, counts);
+    try std.testing.expect(unit.watchesCycles());
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(50));
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(99));
+    try std.testing.expectEqual(@as(?usize, 0), unit.cycleCounted(150));
+    try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(200));
+}
+
+test "the first sighting of CYCCNT only primes the Cycle Counter comparator" {
+    var unit = cycleUnit(100, counts);
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(500));
+    try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched == 0);
+}
+
+test "a Cycle Counter comparator matches across the counter wrapping" {
+    var unit = cycleUnit(5, counts);
+    _ = unit.cycleCounted(0xFFFF_FFF0);
+    try std.testing.expectEqual(@as(?usize, 0), unit.cycleCounted(0x10));
+}
+
+test "a direct CYCCNT write is checked, and is not counted again" {
+    var unit = cycleUnit(7, counts);
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleWritten(6));
+    try std.testing.expectEqual(@as(?usize, 0), unit.cycleWritten(7));
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(7));
+}
+
+test "a trigger-only Cycle Counter match sets MATCHED without halting" {
+    var unit = cycleUnit(10, dwt.match.cycle_counter);
+    _ = unit.cycleWritten(0);
+    try std.testing.expectEqual(@as(?usize, null), unit.cycleCounted(20));
+    try std.testing.expect(unit.peek(function(0)).? & dwt.function_bits.matched != 0);
+}
+
+test "only comparator 0 counts cycles, and only while TRCENA is set" {
+    var off = cycleUnit(10, counts);
+    off.trcena = false;
+    _ = off.cycleWritten(0);
+    try std.testing.expectEqual(@as(?usize, null), off.cycleCounted(20));
+    var unit = dwt.Dwt{ .trcena = true };
+    _ = unit.write(dwt.offsets.comp0 + dwt.offsets.stride, 10);
+    _ = unit.write(function(1), counts);
+    try std.testing.expect(!unit.watchesCycles());
+}
