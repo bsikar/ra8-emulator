@@ -42,6 +42,7 @@ pub const dsp_dual = @import("ops/dsp_dual.zig");
 pub const csel = @import("ops/csel.zig");
 pub const long_shift = @import("ops/long_shift.zig");
 pub const svc = @import("ops/svc.zig");
+pub const table_branch = @import("ops/table_branch.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
