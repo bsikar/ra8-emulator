@@ -34,6 +34,8 @@ const storage = @import("report_storage.zig");
 const time = @import("report_time.zig");
 const timers = @import("report_timers.zig");
 const watchdog = @import("report_watchdog.zig");
+/// Public so its tests can reach it; root.zig is at the gate's 400 lines.
+pub const usb = @import("report_usb.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const poeg = @import("../../periph/poeg.zig");
 const reset = @import("../../periph/reset.zig");
@@ -96,6 +98,7 @@ pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     try mipi.sections(board, out);
     try graphics.sections(board, out);
     try watchdog.section(board, out, timebase);
+    try usb.section(&board.usb.script, out);
     try causes(board, out);
     try masks(board, out);
     try control(board, out);
