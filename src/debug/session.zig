@@ -339,8 +339,16 @@ pub const Session = struct {
             count = 2;
         }
         const sections = session_source.of(self.image);
+        var number: usize = 0;
         for (frames[0..count], 0..) |found, index| {
-            try out.print("#{d} ", .{index});
+            // An exception sits between a handler and what it interrupted;
+            // gdb shows it as a frame of its own, so the numbers match.
+            if (index > 0 and found.exact) {
+                try out.print("#{d} <signal handler called>\n", .{number});
+                number += 1;
+            }
+            try out.print("#{d} ", .{number});
+            number += 1;
             try self.where(found.pc, out);
             try session_source.at(out, sections, if (found.exact) found.pc else found.pc -% 1);
             try out.print("\n", .{});
