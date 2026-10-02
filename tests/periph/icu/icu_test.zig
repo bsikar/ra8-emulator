@@ -333,3 +333,23 @@ test "an event raised on ICU1 latches there and pends the core it is given" {
     unit.clearLatches();
     try std.testing.expect(unit.cpu1[4] & icu.field.ir == 0);
 }
+
+test "each core's DTCE bits are looked up in that core's own table" {
+    var links = icu.Icu{};
+    const event: u16 = 0x55;
+    links.cpu1[3] = event | icu.field.dtce;
+    links.links[7] = event;
+    try std.testing.expectEqual(@as(?usize, 3), links.dtcSlotOn(.cpu1, event));
+    try std.testing.expectEqual(@as(?usize, null), links.dtcSlotOn(.cpu0, event));
+    try std.testing.expectEqual(@as(?usize, null), links.dtcSlotFor(event));
+}
+
+test "a descriptor running out takes DTCE down in its own core's table only" {
+    var links = icu.Icu{};
+    const event: u16 = 0x55;
+    links.cpu1[3] = event | icu.field.dtce;
+    links.links[3] = event | icu.field.dtce;
+    links.clearDtceOn(.cpu1, 3);
+    try std.testing.expectEqual(@as(u32, event), links.cpu1[3]);
+    try std.testing.expectEqual(@as(u32, event | icu.field.dtce), links.links[3]);
+}
