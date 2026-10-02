@@ -5,11 +5,11 @@
 //! counting, but none of its instructions run. It wakes when:
 //!
 //! - an exception is taken on it (exception entry is an event), or
+//! - the other core runs SEV, seen by src/core/sev_hook.zig, or
 //! - it has idled `limits.spurious_after` turns. Armv8-M lets a WFE
 //!   complete for no architectural reason at all, and firmware loops around
-//!   it for exactly that, so this is a legal wake. It stands in for SEV from
-//!   the other core, which the Unicorn backend runs as a NOP and so cannot
-//!   be seen yet.
+//!   it for exactly that, so this is a legal wake. It covers events the
+//!   model cannot see, such as a SEV CPU1 itself ran before its WFE.
 //!
 //! The run loop hands a WFE stop back instead of resuming it when the
 //! session asks it to (`Session.park_on_wfe`); src/core/second_core.zig
@@ -34,11 +34,19 @@ pub const Wait = struct {
 
     pub const Wakes = struct {
         interrupt: usize = 0,
+        event: usize = 0,
         spurious: usize = 0,
     };
 
     pub fn parked(self: *const Wait) bool {
         return self.events.parked(cpu1);
+    }
+
+    /// The other core ran SEV.
+    pub fn sev(self: *Wait) void {
+        const was = self.parked();
+        self.events.sev();
+        if (was and !self.parked()) self.wakes.event += 1;
     }
 
     /// The core ran a WFE. True when it parks, false when a standing event
