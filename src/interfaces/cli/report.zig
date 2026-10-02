@@ -41,6 +41,7 @@ const reboot = @import("../../core/reboot.zig");
 const scb = @import("../../periph/scb.zig");
 const engine = @import("../../core/engine.zig");
 const lob = @import("../../core/lob.zig");
+const unmodelled = @import("report_unmodelled.zig");
 
 pub const Writer = std.fs.File.Writer;
 
@@ -49,6 +50,7 @@ pub fn bus(board: *Board, out: Writer) !void {
         "peripheral accesses: {d} read, {d} written, {d} distinct unmodelled registers\n",
         .{ board.bus.counters.reads, board.bus.counters.writes, board.bus.unmodelledAddresses() },
     );
+    try unmodelled.section(&board.bus, out);
     try modules.section(board, out);
 }
 
