@@ -214,6 +214,7 @@ fn listen(target: *session.Session, port: u16) !u8 {
     defer connection.stream.close();
     var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
     target.poll = socket.poll();
+    target.console = true;
     target.budget = rsp_poll.chunk;
     const stub = rsp_dispatch.Dispatch{ .core = target.core, .session = target };
     const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
