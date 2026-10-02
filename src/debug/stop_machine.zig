@@ -22,6 +22,7 @@ const breakpoint = @import("breakpoint.zig");
 const watch_table = @import("watch_table.zig");
 const fpb = @import("fpb.zig");
 const dwt = @import("dwt.zig");
+const itm = @import("itm.zig");
 
 /// What the CPU is about to execute, as the driver sees it.
 pub const Event = struct {
@@ -74,6 +75,8 @@ pub const Machine = struct {
     fpb: fpb.Fpb = .{},
     /// The core's DWT comparators, as the firmware programmed them.
     dwt: dwt.Dwt = .{},
+    /// The core's ITM, and what the firmware printed through it.
+    itm: itm.Itm = .{},
     unit_pending: ?usize = null,
     mode: Mode = .halted,
     /// Set by `resume`; cleared once the instruction resumed on has run.

@@ -70,6 +70,7 @@ pub const core = struct {
     pub const rsp_dispatch = @import("debug/rsp_dispatch.zig");
     pub const fpb = @import("debug/fpb.zig");
     pub const dwt = @import("debug/dwt.zig");
+    pub const itm = @import("debug/itm.zig");
     pub const stop = @import("core/stop.zig");
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");
