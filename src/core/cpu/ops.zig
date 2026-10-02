@@ -38,6 +38,7 @@ pub const sat16 = @import("ops/sat16.zig");
 pub const usad8 = @import("ops/usad8.zig");
 pub const umaal = @import("ops/umaal.zig");
 pub const dsp_mul16 = @import("ops/dsp_mul16.zig");
+pub const dsp_dual = @import("ops/dsp_dual.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
