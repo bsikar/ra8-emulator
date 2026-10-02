@@ -68,6 +68,9 @@
 //! claimed here either: this window is the three the driver names.
 const periph = @import("registry.zig");
 
+/// The ECC controls, error status and MRPSC on the same window: mrms_ecc.zig.
+pub const ecc = @import("mrms_ecc.zig");
+
 /// Window geometry: the R_MRMS base and the three registers on it.
 pub const win_base: u32 = 0x4013_C000;
 pub const win_span: u32 = 0x0C;
