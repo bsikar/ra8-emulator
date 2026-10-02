@@ -5,6 +5,8 @@ const bus = @import("../bus.zig");
 const regs_mod = @import("../regs.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const frame = @import("frame.zig");
+const fp_frame = @import("fp_frame.zig");
+const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
 const exc_return = @import("exc_return.zig");
 
 pub const Error = bus.Error || error{InvalidReturn};
@@ -17,7 +19,14 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     const target = exc_return.decode(value) orelse return error.InvalidReturn;
     const r = &cpu.regs;
     cpu.exclusive = null;
-    const popped = try frame.pop(cpu.bus, if (target.psp) r.psp else r.msp);
+    const at = if (target.psp) r.psp else r.msp;
+    const popped: frame.Popped = if (target.fp) blk: {
+        const ext = try fp_frame.pop(cpu.bus, at);
+        if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
+        for (ext.fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
+        cpu.fp.fpscr = Fpscr.fromBits(ext.fp.fpscr);
+        break :blk .{ .frame = ext.frame, .sp = ext.sp };
+    } else try frame.pop(cpu.bus, at);
     const f = popped.frame;
     // Returning to Thread mode with an exception number stacked, or to
     // Handler mode with none, is an INVPC UsageFault.
@@ -25,6 +34,8 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     if (target.psp) r.psp = popped.sp else r.msp = popped.sp;
     const spsel = regs_mod.control_bits.spsel;
     r.control = if (target.psp) r.control | spsel else r.control & ~spsel;
+    const fpca = regs_mod.control_bits.fpca;
+    r.control = if (target.fp) r.control | fpca else r.control & ~fpca;
     for (0..4) |i| r.low[i] = f[i];
     r.low[12] = f[frame.slot.r12];
     r.lr = f[frame.slot.lr];

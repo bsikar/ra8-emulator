@@ -27,13 +27,16 @@ pub const bits = struct {
     pub const reserved: u32 = 1 << 1;
 };
 
-/// The bits every value `forEntry` makes carries.
-const fixed: u32 = res1 | bits.s | bits.dcrs | bits.ftype | bits.es;
+/// The bits every value `forEntry` makes carries; FType is set on top of
+/// them unless an FP context was stacked.
+const fixed: u32 = res1 | bits.s | bits.dcrs | bits.es;
 
 /// Where an exception return goes.
 pub const Target = struct {
     thread: bool,
     psp: bool,
+    /// The frame is the extended one, with S0-S15 and FPSCR (FType clear).
+    fp: bool = false,
 };
 
 /// Whether a value written to the PC in Handler mode is an exception return.
@@ -47,6 +50,7 @@ pub fn forEntry(from: Target) u32 {
     var value = fixed;
     if (from.thread) value |= bits.mode;
     if (from.psp) value |= bits.spsel;
+    if (!from.fp) value |= bits.ftype;
     return value;
 }
 
@@ -55,7 +59,11 @@ pub fn forEntry(from: Target) u32 {
 pub fn decode(value: u32) ?Target {
     if (value & fixed != fixed) return null;
     if (value & bits.reserved != 0) return null;
-    const target: Target = .{ .thread = value & bits.mode != 0, .psp = value & bits.spsel != 0 };
+    const target: Target = .{
+        .thread = value & bits.mode != 0,
+        .psp = value & bits.spsel != 0,
+        .fp = value & bits.ftype == 0,
+    };
     if (!target.thread and target.psp) return null;
     return target;
 }

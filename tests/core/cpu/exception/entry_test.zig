@@ -64,3 +64,32 @@ test "the table the core reset from stands in while nothing answers at VTOR" {
     const cpu = try fixture.boot(&ram);
     try std.testing.expectEqual(fixture.base, entry.vectorTable(&cpu));
 }
+
+test "entry with an FP context stacks the extended frame and clears FPCA" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= regs.control_bits.fpca;
+    for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
+    cpu.fp.bank.writeS(16, 0xDEAD_BEEF);
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0x0300_0000);
+    try entry.take(&cpu, 11, 0x2000_0102);
+    const sp = fixture.msp_top - 0x68;
+    try std.testing.expectEqual(sp, cpu.regs.msp);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFE9), cpu.regs.lr);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & regs.control_bits.fpca);
+    try std.testing.expectEqual(@as(u32, 0x2000_0102), ram.word(sp + 0x18));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), ram.word(sp + 0x20));
+    try std.testing.expectEqual(@as(u32, 0x4000_000F), ram.word(sp + 0x5C));
+    try std.testing.expectEqual(@as(u32, 0x0300_0000), ram.word(sp + 0x60));
+    // S16 is not part of this frame; the Secure extension is RA8EMU-165.
+    try std.testing.expectEqual(@as(u32, 0), ram.word(sp + 0x64));
+}
+
+test "entry without an FP context keeps the basic frame and FType set" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.fp.bank.writeS(0, 0x4000_0000);
+    try entry.take(&cpu, 11, 0x2000_0102);
+    try std.testing.expectEqual(fixture.msp_top - 0x20, cpu.regs.msp);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), cpu.regs.lr);
+}

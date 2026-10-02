@@ -96,7 +96,7 @@ fn expectInvpc(value: u32) !void {
 }
 
 test "an EXC_RETURN the core cannot honour tail-chains INVPC" {
-    try expectInvpc(0xFFFF_FFE9); // FP frame
+    try expectInvpc(0xFFFF_FFB9); // Non-secure stack, not banked yet
 }
 
 test "a frame whose IPSR contradicts the return mode tail-chains INVPC" {
@@ -109,7 +109,7 @@ test "a refused return with FAULTMASK set locks up and stops the core" {
     var cpu = try fixture.boot(&ram);
     _ = cpu.step();
     cpu.regs.faultmask = 1;
-    cpu.regs.lr = 0xFFFF_FFE9;
+    cpu.regs.lr = 0xFFFF_FFB9;
     try std.testing.expectEqual(fixture.handler, cpu.step().?.invalid_return);
 }
 
@@ -118,4 +118,33 @@ test "a branch to 0xFFxxxxxx in Thread mode is a plain branch" {
     regs_file.bxWritePc(0xFFFF_FFF9);
     try std.testing.expectEqual(@as(?u32, null), regs_file.exc_return);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF8), regs_file.pc);
+}
+
+test "an FP frame comes back with S0-S15, FPSCR and FPCA restored" {
+    var ram: fixture.Ram = .{};
+    program(&ram, bx_lr);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= regs.control_bits.fpca;
+    for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0x0300_0000);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.msp_top - 0x68, cpu.regs.msp);
+    // The handler clobbers the caller-saved FP registers.
+    for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
+    try std.testing.expectEqual(fixture.msp_top, cpu.regs.msp);
+    try std.testing.expect(cpu.regs.control & regs.control_bits.fpca != 0);
+    for (0..16) |i| try std.testing.expectEqual(0x4000_0000 + @as(u32, @intCast(i)), cpu.fp.bank.readS(@intCast(i)));
+    try std.testing.expectEqual(@as(u32, 0x0300_0000), cpu.fp.fpscr.bits());
+}
+
+test "a basic-frame return leaves FPCA clear" {
+    var ram: fixture.Ram = .{};
+    program(&ram, bx_lr);
+    var cpu = try fixture.boot(&ram);
+    _ = cpu.step();
+    _ = cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & regs.control_bits.fpca);
 }
