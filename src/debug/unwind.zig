@@ -4,11 +4,13 @@
 //! A caller's pc is the return address its callee was given, so it is
 //! looked up one byte back: a call that ends a function returns past its
 //! last byte, into whatever comes next. An EXC_RETURN in the return
-//! register ends the walk here; unwinding through an exception frame is a
-//! separate step.
+//! register means the frame is a handler: the walk steps out through the
+//! stacked exception frame (unwind_exception.zig) to the interrupted pc,
+//! which is looked up as it is, since nothing called from there.
 const std = @import("std");
 const engine = @import("../core/engine.zig");
 const dwarf_frame = @import("dwarf_frame.zig");
+pub const exception = @import("unwind_exception.zig");
 
 pub const limits = struct {
     /// The most frames one backtrace prints.
@@ -60,17 +62,20 @@ fn wrap(base: u32, offset: i64) u32 {
 }
 
 /// The pcs of the call chain from `start`, innermost first, into `into`.
-/// How many it found; one means the frame has no usable CFI.
-pub fn walk(frame: []const u8, start: Registers, memory: anytype, into: []u32) usize {
+/// How many it found; one means the frame has no usable CFI. `psp` is the
+/// live Process stack pointer, where a thread's exception frame sits.
+pub fn walk(frame: []const u8, start: Registers, psp: u32, memory: anytype, into: []u32) usize {
     if (into.len == 0) return 0;
     into[0] = start[limits.pc];
     var registers = start;
+    var exact = true;
     var count: usize = 1;
     while (count < into.len) : (count += 1) {
-        const next = (caller(frame, registers, count == 1, memory) catch null) orelse break;
-        const returned = next[limits.pc];
-        if (returned == 0 or returned >= limits.exc_return) break;
-        const pc = returned & ~@as(u32, 1);
+        var next = (caller(frame, registers, exact, memory) catch null) orelse break;
+        exact = next[limits.pc] >= limits.exc_return;
+        if (exact) next = exception.interrupted(next[limits.pc], next, psp, memory) catch break;
+        const pc = next[limits.pc] & ~@as(u32, 1);
+        if (pc == 0 or pc >= limits.exc_return) break;
         if (pc == registers[limits.pc] and next[limits.sp] == registers[limits.sp]) break;
         registers = next;
         registers[limits.pc] = pc;

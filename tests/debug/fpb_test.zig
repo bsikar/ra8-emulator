@@ -59,4 +59,5 @@ test {
     _ = @import("dwarf_line_find_test.zig");
     _ = @import("dwarf_frame_test.zig");
     _ = @import("unwind_test.zig");
+    _ = @import("unwind_exception_test.zig");
 }
