@@ -48,7 +48,7 @@ test "the report lists the opening switches of threadx_blink in order" {
     for ([_]u32{ 0, 0x2200_10F0, 0, 0x2200_11A0, 0 }) |value| tracer.onStore(0x2200_1ABC, 4, value);
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), &tracer);
+    try rtos_hook.print(out.writer(), &tracer, rtos_hook.names.none);
     const want =
         \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 switch(es)
         \\                  tick 0 cpu0 idle
@@ -61,9 +61,48 @@ test "the report lists the opening switches of threadx_blink in order" {
     try std.testing.expectEqualStrings(want, out.items);
 }
 
+/// threadx_blink's two TX_THREAD blocks, as far as their name pointers, and
+/// the names those point at.
+const Blink = struct {
+    pub fn read(_: Blink, address: u32, into: []u8) bool {
+        const word: ?u32 = switch (address) {
+            0x2200_10F0 + 40 => 0x0200_1000,
+            0x2200_11A0 + 40 => 0x0200_1008,
+            else => null,
+        };
+        if (word) |value| {
+            if (into.len != 4) return false;
+            std.mem.writeInt(u32, into[0..4], value, .little);
+            return true;
+        }
+        const text = "blink_a\x00blink_b\x00";
+        if (address < 0x0200_1000 or address + into.len > 0x0200_1000 + text.len) return false;
+        @memcpy(into, text[address - 0x0200_1000 ..][0..into.len]);
+        return true;
+    }
+};
+
+test "each switch carries the name its control block points at" {
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
+    for ([_]u32{ 0, 0x2200_10F0, 0, 0x2200_11A0, 0x2200_1234 }) |value| tracer.onStore(0x2200_1ABC, 4, value);
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    const want =
+        \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 switch(es)
+        \\                  tick 0 cpu0 idle
+        \\                  tick 0 cpu0 -> 0x220010F0 blink_a
+        \\                  tick 0 cpu0 idle
+        \\                  tick 0 cpu0 -> 0x220011A0 blink_b
+        \\                  tick 0 cpu0 -> 0x22001234
+        \\
+    ;
+    try std.testing.expectEqualStrings(want, out.items);
+}
+
 test "no trace asked for prints nothing" {
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), null);
+    try rtos_hook.print(out.writer(), null, rtos_hook.names.none);
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }

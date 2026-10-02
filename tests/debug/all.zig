@@ -45,4 +45,5 @@ test {
     _ = @import("watch_link_test.zig");
     _ = @import("rtos_trace_test.zig");
     _ = @import("rtos_hook_test.zig");
+    _ = @import("rtos_names_test.zig");
 }
