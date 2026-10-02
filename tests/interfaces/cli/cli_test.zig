@@ -66,3 +66,14 @@ test "--cpu picks the CPU, defaulting to Unicorn" {
     try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "arm" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu" }));
 }
+
+test "--ns names the Non-Secure companion image, and is off by default" {
+    try std.testing.expectEqual(@as(?[]const u8, null), (try parse(&[_][]const u8{ "emu", "a.elf" })).ns_path);
+    const options = try parse(&[_][]const u8{ "emu", "s.elf", "--ns", "s_ns.elf" });
+    try std.testing.expectEqualStrings("s_ns.elf", options.ns_path.?);
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "s.elf", "--ns" }));
+}
+
+test {
+    _ = @import("touch_spec_test.zig");
+}

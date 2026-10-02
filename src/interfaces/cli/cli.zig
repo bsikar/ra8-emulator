@@ -4,6 +4,7 @@ const part = @import("../../core/part.zig");
 const place = @import("../../debug/place.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
+const touch_spec = @import("touch_spec.zig");
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
@@ -18,6 +19,7 @@ pub const usage =
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR]
     \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
+    \\                    [--ns IMAGE.elf]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -43,6 +45,8 @@ pub const usage =
     \\                     same board: shared RAM, shared peripherals. The
     \\                     two cores take turns a chunk at a time. CPU0
     \\                     keeps the clocks and the interrupt controller.
+    \\  --ns IMAGE.elf     also load a TrustZone Non-Secure image at its
+    \\                     load addresses, where the Secure boot copies it from
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
@@ -200,6 +204,8 @@ pub const Options = struct {
     pace_masked: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
+    /// `--ns`: the Non-Secure companion image, loaded beside the main one.
+    ns_path: ?[]const u8 = null,
     /// `--cpu`: which CPU runs the image; src/core/cpu/choice.zig.
     cpu: cpu_choice.Choice = .unicorn,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
@@ -324,6 +330,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
         options.cpu1_path = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--ns")) {
+        options.ns_path = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--watch")) {
         options.watch_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--taken-in")) {
@@ -377,7 +385,7 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
     } else if (std.mem.eql(u8, flag, "--touch")) {
         const spec = try next(argv, index);
         if (options.touch_count >= options.touches.len) return error.TooManyTouches;
-        options.touches[options.touch_count] = try parseTouch(spec);
+        options.touches[options.touch_count] = try touch_spec.parse(spec);
         options.touch_count += 1;
     } else return false;
     return true;
@@ -388,13 +396,4 @@ fn next(argv: []const []const u8, index: *usize) ![]const u8 {
     index.* += 1;
     if (index.* >= argv.len) return error.MissingValue;
     return argv[index.*];
-}
-
-/// "X,Y" as a contact on the panel, in the panel's own coordinates.
-fn parseTouch(spec: []const u8) !gt911.Contact {
-    const split = std.mem.indexOfScalar(u8, spec, ',') orelse return error.BadTouch;
-    return .{
-        .x = try std.fmt.parseInt(u16, spec[0..split], 10),
-        .y = try std.fmt.parseInt(u16, spec[split + 1 ..], 10),
-    };
 }

@@ -48,6 +48,14 @@ fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
     };
 }
 
+/// A TrustZone build's Non-Secure half (`--ns`), loaded at its load
+/// addresses for the Secure boot to copy out. It goes in beside the main
+/// image, never instead of it, and its entry point is the Secure side's to
+/// find: nothing here resets into it.
+fn loadNonSecure(allocator: std.mem.Allocator, core: engine.Engine, path: []const u8) !void {
+    _ = try core.loadImage(try openImage(allocator, path));
+}
+
 /// Everything that has to be hooked onto the core before the image runs,
 /// and the image itself, which is loaded in the middle of it.
 ///
@@ -129,6 +137,7 @@ pub fn main() !u8 {
 
     var parts = Parts{};
     const written = try loadAll(&core, &board, image, &parts, options);
+    if (options.ns_path) |path| loadNonSecure(allocator, core, path) catch return 1;
 
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
