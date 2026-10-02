@@ -71,6 +71,8 @@ pub const Session = struct {
     image: ?elf.Image = null,
     budget: usize = limits.default_budget,
     started: bool = false,
+    /// Whether the last run ended on a CPU fault rather than a stop.
+    faulted: bool = false,
     /// Breaks set with `tbreak`, deleted when they stop the run.
     temporary: Temporary = .{},
     /// When set, runs go through the run loop with this session, so the
@@ -216,6 +218,7 @@ pub const Session = struct {
         self.started = true;
         self.driver.arm();
         const fault = if (self.loop) |loop| try self.looped(from, loop) else try self.core.runChunk(from, self.budget, null);
+        self.faulted = fault != null;
         const pc = try self.core.register(.pc);
         if (fault) |caught| {
             try out.print("Fault: {s} at ", .{caught.detail});
