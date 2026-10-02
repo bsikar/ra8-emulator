@@ -11,6 +11,7 @@ const session_source = @import("session_source.zig");
 const session_view = @import("session_view.zig");
 const symbols = @import("symbols.zig");
 const unwind = @import("unwind.zig");
+const stop_machine = @import("stop_machine.zig");
 
 /// An address as eight hex digits, with `<symbol+offset>` when the image
 /// has a function covering it.
@@ -55,5 +56,21 @@ pub fn backtrace(view: core_view.View, image: ?elf.Image, out: anytype) !void {
         try where(image, found.pc, out);
         try session_source.at(out, sections, if (found.exact) found.pc else found.pc -% 1);
         try out.print("\n", .{});
+    }
+}
+
+/// What a stop says before its line: nothing for a step, the break, watch
+/// or unit that stopped the core, or a halt. `temporary` names a break
+/// that was a `tbreak`.
+pub fn prefix(out: anytype, stop: stop_machine.Stop, temporary: bool) !void {
+    switch (stop) {
+        .stepped => {},
+        .breakpoint => |id| try out.print("{s} {d}, ", .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id }),
+        .watchpoint => |hit| try out.print("Watchpoint {d}: {s} of {d} at 0x{X:0>8}, ", .{
+            hit.id, @tagName(hit.access), hit.width, hit.address,
+        }),
+        .halt_requested => try out.print("Halted, ", .{}),
+        .unit_break => |index| try out.print("Hardware breakpoint FP_COMP{d}, ", .{index}),
+        .unit_watch => |index| try out.print("Hardware watchpoint DWT_COMP{d}, ", .{index}),
     }
 }
