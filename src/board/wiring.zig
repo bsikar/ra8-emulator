@@ -119,7 +119,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.events.issuer = &self.bus.issuer;
     try self.bus.add(self.events.block());
     try self.bus.add(self.events.pinsBlock());
-    try self.bus.add(self.events.select.block());
+    for (self.events.sideBlocks()) |block| try self.bus.add(block);
     try self.bus.add(self.links.block());
     try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
