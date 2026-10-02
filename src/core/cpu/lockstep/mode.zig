@@ -8,6 +8,7 @@
 //! log (periph_log.zig, replay_bus.zig).
 const std = @import("std");
 const engine = @import("../../engine.zig");
+const seed = @import("seed.zig");
 const elf = @import("../../elf.zig");
 const cpu_mod = @import("../cpu.zig");
 const ReplayBus = @import("replay_bus.zig").ReplayBus;
@@ -33,6 +34,9 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     var log: periph_log.Log = .{};
     var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log };
     var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
+    // The oracle's board wiring may have set PPB state (DWT_CTRL.NUMCOMP)
+    // the image alone does not carry.
+    _ = seed.ppb(mine.*, theirs);
     cpu.reset(vector_base) catch {
         try out.print("lockstep: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
