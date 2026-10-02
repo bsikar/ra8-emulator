@@ -29,6 +29,7 @@ const elf = @import("../core/elf.zig");
 const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
+const session_report = @import("session_report.zig");
 const core_view = @import("core_view.zig");
 const session_source = @import("session_source.zig");
 const dwarf_line = @import("dwarf_line.zig");
@@ -315,12 +316,8 @@ pub const Session = struct {
         return std.mem.indexOfScalar(break_table.Id, self.temporary.constSlice(), id) != null;
     }
 
-    /// An address, its symbol, and the instruction there.
     fn line(self: *Session, address: u32, out: anytype) !void {
-        try self.where(address, out);
-        try out.print(": ", .{});
-        _ = try session_view.instruction(out, self.view(), address);
-        try out.print("\n", .{});
+        try session_report.line(self.view(), self.image, address, out);
     }
 
     fn disassemble(self: *Session, want: commands.Disassemble, out: anytype) !void {
@@ -335,45 +332,13 @@ pub const Session = struct {
         }
     }
 
-    /// The frame the program counter is in and the one the link register
-    /// returns to. Walking further needs the unwind tables (RA8EMU-48).
-    /// The call chain, walked with the image's .debug_frame, each frame
-    /// with its source line when the image has one. Without CFI for the
-    /// stop it is the pc and lr, as it always was.
+    /// The call chain above the stop (session_report.zig).
     fn backtrace(self: *Session, out: anytype) !void {
-        var frames: [unwind.limits.frames]unwind.Frame = undefined;
-        const frame = if (self.image) |image| dwarf_line.section(image, ".debug_frame") else &.{};
-        const psp = try self.core.register(.psp);
-        var count = unwind.walk(frame, try unwind.registersOf(self.view()), psp, self.view(), &frames);
-        if (count < 2) {
-            frames[1] = .{ .pc = try self.core.register(.lr) & ~@as(u32, 1) };
-            count = 2;
-        }
-        const sections = session_source.of(self.image);
-        var number: usize = 0;
-        for (frames[0..count], 0..) |found, index| {
-            // An exception sits between a handler and what it interrupted;
-            // gdb shows it as a frame of its own, so the numbers match.
-            if (index > 0 and found.exact) {
-                try out.print("#{d} <signal handler called>\n", .{number});
-                number += 1;
-            }
-            try out.print("#{d} ", .{number});
-            number += 1;
-            try self.where(found.pc, out);
-            try session_source.at(out, sections, if (found.exact) found.pc else found.pc -% 1);
-            try out.print("\n", .{});
-        }
+        try session_report.backtrace(self.view(), self.image, out);
     }
 
-    /// An address as eight hex digits, with `<symbol+offset>` when the
-    /// image has a function covering it.
     fn where(self: *const Session, address: u32, out: anytype) !void {
-        try out.print("0x{X:0>8}", .{address});
-        const image = self.image orelse return;
-        const found = symbols.inside(image, address) orelse return;
-        if (found.offset == 0) return out.print(" <{s}>", .{found.name});
-        try out.print(" <{s}+{d}>", .{ found.name, found.offset });
+        try session_report.where(self.image, address, out);
     }
 
     /// The address a place names: a FILE:LINE from the line table, or its
