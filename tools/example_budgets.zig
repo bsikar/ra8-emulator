@@ -25,6 +25,9 @@ pub const overrides = [_]Override{
     // CPU1's ThreadX kernel needs 10 SysTick ticks (about 2.5M CPU1 cycles at
     // 250 MHz) before the M85 prints "10 ticks PASS" (RA8EMU-40).
     .{ .image = "threadx_cpu1.elf", .instructions = "40000000" },
+    // The module on CPU1 has to run ten times, each a tx_thread_sleep(1),
+    // before the M85 prints "module ran 10 times PASS" (RA8EMU-302).
+    .{ .image = "txm_manager_cpu1.elf", .instructions = "60000000" },
 };
 
 pub fn find(image: []const u8) ?Override {
