@@ -1,8 +1,9 @@
 //! What a remote-protocol packet asks of the machine, answered as the
 //! payload the stub sends back (framing is rsp_packet.zig's job).
 //!
-//! This is the read side: the halt reason, what the stub supports, the
-//! target description, all registers, one register and a span of memory.
+//! The halt reason, what the stub supports, the target description, and
+//! reads and writes of registers and memory: `g`/`G` all registers, `p`/`P`
+//! one, `m`/`M` memory as hex and `X` memory as binary.
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
@@ -42,6 +43,10 @@ pub const Dispatch = struct {
             'g' => self.allRegisters(out),
             'p' => self.oneRegister(request[1..], out),
             'm' => self.memory(request[1..], out),
+            'G' => self.setAll(request[1..], out),
+            'P' => self.setOne(request[1..], out),
+            'M' => self.store(request[1..], .hex, out),
+            'X' => self.store(request[1..], .binary, out),
             'H' => copy(out, "OK"),
             else => out[0..0],
         };
@@ -82,7 +87,62 @@ pub const Dispatch = struct {
         }
         return out[0..at];
     }
+
+    fn setAll(self: Dispatch, args: []const u8, out: []u8) Error![]const u8 {
+        if (args.len != registers.len * 8) return copy(out, request_error);
+        for (registers, 0..) |which, index| {
+            const value = parseWord(args[index * 8 ..][0..8]) orelse return copy(out, request_error);
+            self.core.setRegister(which, value) catch return copy(out, request_error);
+        }
+        return copy(out, "OK");
+    }
+
+    fn setOne(self: Dispatch, args: []const u8, out: []u8) Error![]const u8 {
+        const equals = std.mem.indexOfScalar(u8, args, '=') orelse return copy(out, request_error);
+        const index = std.fmt.parseInt(usize, args[0..equals], 16) catch return copy(out, request_error);
+        const text = args[equals + 1 ..];
+        if (index >= registers.len or text.len != 8) return copy(out, request_error);
+        const value = parseWord(text[0..8]) orelse return copy(out, request_error);
+        self.core.setRegister(registers[index], value) catch return copy(out, request_error);
+        return copy(out, "OK");
+    }
+
+    /// `M addr,length:hex` and `X addr,length:bytes`. An `X` of length zero
+    /// is gdb probing whether binary writes work, and is answered OK.
+    fn store(self: Dispatch, args: []const u8, form: Form, out: []u8) Error![]const u8 {
+        const colon = std.mem.indexOfScalar(u8, args, ':') orelse return copy(out, request_error);
+        const head = args[0..colon];
+        const data = args[colon + 1 ..];
+        const comma = std.mem.indexOfScalar(u8, head, ',') orelse return copy(out, request_error);
+        const address = std.fmt.parseInt(u32, head[0..comma], 16) catch return copy(out, request_error);
+        const length = std.fmt.parseInt(usize, head[comma + 1 ..], 16) catch return copy(out, request_error);
+        const sent = if (form == .hex) data.len / 2 else data.len;
+        if (sent != length or (form == .hex and data.len % 2 != 0)) return copy(out, request_error);
+        var chunk: [64]u8 = undefined;
+        var done: usize = 0;
+        while (done < length) {
+            const take = @min(chunk.len, length - done);
+            const bytes = switch (form) {
+                .binary => data[done..][0..take],
+                .hex => std.fmt.hexToBytes(chunk[0..take], data[done * 2 ..][0 .. take * 2]) catch return copy(out, request_error),
+            };
+            const where = address +% @as(u32, @intCast(done));
+            self.core.write(where, bytes) catch return copy(out, memory_error);
+            done += take;
+        }
+        return copy(out, "OK");
+    }
 };
+
+const Form = enum { hex, binary };
+
+/// Eight hex digits in target (little-endian) byte order, as `G` and `P`
+/// carry a register.
+fn parseWord(text: *const [8]u8) ?u32 {
+    var bytes: [4]u8 = undefined;
+    _ = std.fmt.hexToBytes(&bytes, text) catch return null;
+    return std.mem.readInt(u32, &bytes, .little);
+}
 
 /// A register as gdb wants it: the four bytes in target (little-endian)
 /// order, two hex digits each.

@@ -1,5 +1,5 @@
-//! The read side of the remote protocol, against a live engine: halt
-//! reason, qSupported, registers in target.xml order, and memory.
+//! The remote protocol's requests against a live engine: halt reason,
+//! qSupported, registers in target.xml order, and memory, read and written.
 const std = @import("std");
 const ra8 = @import("ra8");
 const dispatch = ra8.core.rsp_dispatch;
@@ -81,4 +81,56 @@ test "an m reply that would not fit says so" {
     const stub = dispatch.Dispatch{ .core = &core };
     var out: [8]u8 = undefined;
     try std.testing.expectError(error.NoSpace, stub.answer("m22000000,40", &out));
+}
+
+test "P writes one register, sent little-endian, and p reads it back" {
+    var core = try open();
+    defer core.close();
+    const stub = dispatch.Dispatch{ .core = &core };
+    var out: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("OK", try stub.answer("P3=78563412", &out));
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), try core.register(.r3));
+    try std.testing.expectEqualStrings("78563412", try stub.answer("p3", &out));
+    try std.testing.expectEqualStrings("E00", try stub.answer("P11=00000000", &out));
+    try std.testing.expectEqualStrings("E00", try stub.answer("P3=1234", &out));
+    try std.testing.expectEqualStrings("E00", try stub.answer("P3", &out));
+}
+
+test "G writes all seventeen registers from what g sent" {
+    var core = try open();
+    defer core.close();
+    const stub = dispatch.Dispatch{ .core = &core };
+    var read: [256]u8 = undefined;
+    var sent: [256]u8 = undefined;
+    const all = try stub.answer("g", &read);
+    sent[0] = 'G';
+    @memcpy(sent[1 .. all.len + 1], all);
+    @memcpy(sent[1 .. 1 + 8], "efbeadde");
+    var out: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("OK", try stub.answer(sent[0 .. all.len + 1], &out));
+    try std.testing.expectEqual(@as(u32, 0xdead_beef), try core.register(.r0));
+    try std.testing.expectEqual(base + 0x18, try core.register(.pc));
+    try std.testing.expectEqualStrings("E00", try stub.answer("G0011", &out));
+}
+
+test "M writes hex and X writes binary, and m reads both back" {
+    var core = try open();
+    defer core.close();
+    const stub = dispatch.Dispatch{ .core = &core };
+    var out: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("OK", try stub.answer("M22000000,2:cafe", &out));
+    try std.testing.expectEqualStrings("OK", try stub.answer("X22000002,4:\x23\x24\x7d\x2a", &out));
+    try std.testing.expectEqualStrings("cafe23247d2a", try stub.answer("m22000000,6", &out));
+    try std.testing.expectEqualStrings("OK", try stub.answer("X22000000,0:", &out));
+}
+
+test "a write that does not match its length, or lands nowhere, is refused" {
+    var core = try open();
+    defer core.close();
+    const stub = dispatch.Dispatch{ .core = &core };
+    var out: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,4:cafe", &out));
+    try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,2:caf", &out));
+    try std.testing.expectEqualStrings("E00", try stub.answer("X22000000,2", &out));
+    try std.testing.expectEqualStrings("E01", try stub.answer("M10,2:cafe", &out));
 }
