@@ -77,3 +77,17 @@ is stale or an encoding is missing. Regenerate with
 | VCVTP.U32.F64 T1 | 1 |
 | VCVTM.S32.F64 T1 | 2 |
 | VCVTM.U32.F64 T1 | 1 |
+| VRINTA.F32 T1 | 8 |
+| VRINTN.F32 T1 | 4 |
+| VRINTP.F32 T1 | 4 |
+| VRINTM.F32 T1 | 4 |
+| VRINTZ.F32 T1 | 3 |
+| VRINTR.F32 T1 | 2 |
+| VRINTX.F32 T1 | 4 |
+| VRINTA.F64 T1 | 1 |
+| VRINTN.F64 T1 | 2 |
+| VRINTP.F64 T1 | 1 |
+| VRINTM.F64 T1 | 1 |
+| VRINTZ.F64 T1 | 1 |
+| VRINTR.F64 T1 | 1 |
+| VRINTX.F64 T1 | 2 |

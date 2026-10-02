@@ -30,3 +30,5 @@ pub const from_int = @import("from_int.zig");
 pub const int_vectors = @import("int_vectors.zig");
 pub const rounding = @import("rounding.zig");
 pub const directed_vectors = @import("directed_vectors.zig");
+pub const rint = @import("rint.zig");
+pub const rint_vectors = @import("rint_vectors.zig");

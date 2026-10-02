@@ -101,6 +101,22 @@ pub fn Directed(comptime B: type) type {
     };
 }
 
+/// One operand for the VRINT forms: the rounding the form uses (FPSCR's
+/// for VRINTR and VRINTX), and whether it is VRINTX, which signals IXC.
+pub fn Integral(comptime B: type) type {
+    return struct {
+        a: B,
+        rounding: Rounding = .nearest,
+        exact: bool = false,
+        fz: u1 = 0,
+        dn: u1 = 0,
+
+        pub fn fpscr(self: @This()) Fpscr {
+            return .{ .fz = self.fz, .dn = self.dn };
+        }
+    };
+}
+
 pub fn Result(comptime B: type) type {
     return struct { bits: B, flags: u32 = 0 };
 }
