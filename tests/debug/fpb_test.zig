@@ -55,4 +55,5 @@ test {
     _ = @import("session_monitor_test.zig");
     _ = @import("session_poll_test.zig");
     _ = @import("dwarf_line_test.zig");
+    _ = @import("session_source_test.zig");
 }

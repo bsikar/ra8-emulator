@@ -22,6 +22,7 @@
 //! run | continue      r | c   start, or carry on
 //! step | next | finish s | n  one instruction, over a call, out of one
 //! info registers      i r     the core registers
+//! info line PLACE             the source line PLACE belongs to
 //! x PLACE [N]                 N words at PLACE
 //! print PLACE         p       the word at PLACE
 //! disassemble [PLACE [N]]     N instructions from PLACE, or the pc
@@ -81,6 +82,8 @@ pub const Command = union(enum) {
     next,
     finish,
     registers,
+    /// `info line PLACE`: the source line the place's address belongs to.
+    line: []const u8,
     examine: Examine,
     print: []const u8,
     disassemble: Disassemble,
@@ -190,6 +193,7 @@ fn at(words: *Words) Error!At {
 
 fn info(words: *Words) Error!Command {
     const what = try required(words);
+    if (std.mem.eql(u8, what, "line")) return .{ .line = try required(words) };
     if (info_registers.get(what) == null) return Error.UnknownCommand;
     return .registers;
 }

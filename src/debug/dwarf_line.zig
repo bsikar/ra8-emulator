@@ -22,11 +22,13 @@ pub const Sections = struct {
     strings: line_header.Strings = .{},
 };
 
-/// Where an address's source line is, and the address its row starts at.
+/// Where an address's source line is, and the addresses its row covers.
 pub const Place = struct {
     file: File,
     line: u32,
     address: u32,
+    /// The first address past the row: where the next row starts.
+    end: u32,
 };
 
 /// One row of the line table.
@@ -121,26 +123,39 @@ pub fn lookup(sections: Sections, address: u32) Error!?Place {
     while (offset < sections.line.len) {
         const unit = try line_header.read(sections.line, offset);
         offset = unit.end;
-        const row = try covering(unit.header, address) orelse continue;
+        const span = try covering(unit.header, address) orelse continue;
         return .{
-            .file = try line_header.file(unit.header, row.file, sections.strings),
-            .line = row.line,
-            .address = row.address,
+            .file = try line_header.file(unit.header, span.row.file, sections.strings),
+            .line = span.row.line,
+            .address = span.row.address,
+            .end = span.end,
         };
     }
     return null;
 }
 
-fn covering(header: Header, address: u32) Error!?Row {
+const Span = struct { row: Row, end: u32 };
+
+fn covering(header: Header, address: u32) Error!?Span {
     var rows = Rows.init(header);
     var previous: ?Row = null;
     while (try rows.next()) |row| {
         if (previous) |before| {
-            if (before.address <= address and address < row.address) return before;
+            if (before.address <= address and address < row.address) return .{ .row = before, .end = try lineEnd(&rows, before, row) };
         }
         previous = if (row.end_sequence) null else row;
     }
     return null;
+}
+
+/// Where `found`'s line ends: the first later row on another line or file,
+/// or the sequence's end, the way gdb's `info line` reports it.
+fn lineEnd(rows: *Rows, found: Row, after: Row) Error!u32 {
+    var row = after;
+    while (!row.end_sequence and row.line == found.line and row.file == found.file) {
+        row = try rows.next() orelse break;
+    }
+    return row.address;
 }
 
 /// The line sections of an image, by name. A stripped image gives empty
