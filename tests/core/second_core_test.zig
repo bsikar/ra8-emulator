@@ -300,3 +300,35 @@ test "CPU0's SysTick never ticks CPU1's time base" {
     try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
     try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(memmap.syst.csr));
 }
+
+/// Through a real file, because the SAU half of the report writes to a
+/// file writer rather than any writer.
+fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const file = try dir.dir.createFile("report.txt", .{ .read = true });
+    defer file.close();
+    try mod.report(file.writer(), second);
+    try file.seekTo(0);
+    return buffer[0..try file.readAll(buffer)];
+}
+
+test "the report says how often CPU1 parked in WFE and what woke it" {
+    var second: mod.Second = .{ .core = undefined };
+    second.wait.parks = 3;
+    second.wait.wakes = .{ .interrupt = 1, .event = 1, .spurious = 1 };
+    var buffer: [1024]u8 = undefined;
+    const text = try reported(&second, &buffer);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "CPU1: parked in WFE 3 time(s), woken 1 by an exception, 1 by SEV, 1 spuriously\n",
+    ) != null);
+}
+
+test "a CPU1 that never waited reports no parking line" {
+    const second: mod.Second = .{ .core = undefined };
+    var buffer: [1024]u8 = undefined;
+    const text = try reported(&second, &buffer);
+    try std.testing.expect(std.mem.indexOf(u8, text, "parked in WFE") == null);
+}
