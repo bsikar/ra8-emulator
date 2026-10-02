@@ -24,6 +24,7 @@ const clocks = @import("clocks.zig");
 const exc_return = @import("exc_return.zig");
 const nvic_clear = @import("nvic_clear.zig");
 pub const debug_monitor = @import("debug_monitor.zig");
+const dcb = @import("../debug/dcb.zig");
 const standing_pends = @import("standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the
@@ -322,16 +323,17 @@ pub const Nvic = struct {
         var best: ?Candidate = null;
         const icsr = try core.readWord(memmap.scb.icsr);
         const shpr3 = try core.readWord(memmap.scb.shpr3);
+        const quiet = dcb.masksInterrupts(try core.readWord(dcb.base));
         // SysTick and PendSV have no enable of their own: pending is enough.
-        if (icsr & icsr_pendstset != 0) {
+        if (!quiet and icsr & icsr_pendstset != 0) {
             best = consider(tally, best, .{ .number = systick, .priority = @truncate(shpr3 >> 24) });
         }
-        if (icsr & icsr_pendsvset != 0) {
+        if (!quiet and icsr & icsr_pendsvset != 0) {
             best = consider(tally, best, .{ .number = pendsv, .priority = @truncate(shpr3 >> 16) });
         }
         if (try debug_monitor.pending(core)) |monitor| best = consider(tally, best, monitor);
         var word: u16 = 0;
-        while (word < irq_words) : (word += 1) {
+        while (!quiet and word < irq_words) : (word += 1) {
             const offset = 4 * @as(u32, word);
             const ready = (try core.readWord(memmap.nvic.ispr + offset)) &
                 (try core.readWord(memmap.nvic.iser + offset));

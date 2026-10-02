@@ -49,3 +49,9 @@ test "DFSR latches debug events and a write of one clears each bit" {
     unit.clearStatus(dcb.dfsr_bits.bkpt);
     try std.testing.expectEqual(dcb.dfsr_bits.dwttrap, unit.dfsr);
 }
+
+test "C_MASKINTS masks interrupts only with C_DEBUGEN set" {
+    try std.testing.expect(dcb.masksInterrupts(bits.c_debugen | bits.c_maskints | bits.s_regrdy));
+    try std.testing.expect(!dcb.masksInterrupts(bits.c_maskints));
+    try std.testing.expect(!dcb.masksInterrupts(bits.c_debugen));
+}
