@@ -111,3 +111,68 @@ test "the same pair of images interleaves the same way every run" {
     const second = try Race.run();
     try std.testing.expect(std.meta.eql(first, second));
 }
+
+/// CPU0 sends 41 to CPU1 on IPC1 channel 2 and polls IPC0 channel 0 for the
+/// answer; CPU1 polls channel 2, adds one and sends the result back on
+/// channel 0. Both poll STA.RDY rather than take the receive interrupt,
+/// which needs CPU1's ICU routing (RA8EMU-35). Literals: ch2 0x4002_0100,
+/// ch0 0x4002_00C0.
+const Mailbox = struct {
+    const cpu0_entry: u32 = memmap.sram_base + 0x3000;
+    const cpu1_entry: u32 = memmap.sram_base + 0x4000;
+    // ldr r1,=ch2; ldr r2,=ch0; movs r0,#41; str r0,[r1,#8]
+    // 1: ldr r3,[r2]; lsls r3,#15; bpl 1b; ldr r0,[r2,#12]; b .
+    const cpu0_image = [_]u32{
+        0x4A05_4904, 0x6088_2029, 0x03DB_6813, 0x68D0_D5FC,
+        0xBF00_E7FE, 0x4002_0100, 0x4002_00C0,
+    };
+    // ldr r1,=ch2; ldr r2,=ch0; 1: ldr r3,[r1]; lsls r3,#15; bpl 1b
+    // ldr r0,[r1,#12]; adds r0,#1; str r0,[r2,#8]; b .
+    const cpu1_image = [_]u32{
+        0x4A05_4904, 0x03DB_680B, 0x68C8_D5FC, 0x6090_3001,
+        0xBF00_E7FE, 0x4002_0100, 0x4002_00C0,
+    };
+
+    fn load(core: Engine, base: u32, words: []const u32) !void {
+        for (words, 0..) |word, i| try core.writeWord(base + @as(u32, @intCast(i)) * 4, word);
+    }
+};
+
+test "a message CPU0 sends over IPC comes back from CPU1 answered" {
+    var cpu0 = try Engine.open();
+    defer cpu0.close();
+    try cpu0.mapBoardRam();
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.attach(&cpu0);
+
+    var cpu1: second_core.Second = .{ .core = try Engine.open() };
+    defer cpu1.close();
+    try cpu1.core.shareBoardRamWith(&cpu0);
+    try cpu1.core.attachWatch(&cpu1.watch);
+    try ra8.board.wiring.attachSecond(&board, &cpu1.core, .{
+        .partitions = &cpu1.partitions,
+        .regions = &cpu1.regions,
+        .guard = &cpu1.guard,
+        .identity = ra8.periph.cpuid.cpu1,
+        .control = &cpu1.control,
+    });
+
+    try Mailbox.load(cpu0, Mailbox.cpu0_entry, &Mailbox.cpu0_image);
+    try Mailbox.load(cpu1.core, Mailbox.cpu1_entry, &Mailbox.cpu1_image);
+    cpu1.pc = Mailbox.cpu1_entry;
+
+    const round = second_core.limits.round;
+    _ = try mod.interleave(cpu0, Mailbox.cpu0_entry, 3 * round, .{}, &cpu1);
+
+    try std.testing.expectEqual(@as(u32, 42), try cpu0.register(.r0));
+    try std.testing.expectEqual(@as(u32, 42), try cpu1.core.register(.r0));
+    try std.testing.expect(cpu1.fault == null);
+    const to_cpu1 = board.mailbox.channels[2];
+    const to_cpu0 = board.mailbox.channels[0];
+    try std.testing.expectEqual(@as(u32, 1), to_cpu1.pushes);
+    try std.testing.expectEqual(@as(u32, 1), to_cpu1.pops);
+    try std.testing.expectEqual(@as(u32, 1), to_cpu0.pushes);
+    try std.testing.expectEqual(@as(u32, 1), to_cpu0.pops);
+    try std.testing.expectEqual(@as(u32, 0), to_cpu0.lost + to_cpu1.lost);
+}

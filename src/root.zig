@@ -370,6 +370,7 @@ pub const periph = struct {
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const boundary = @import("board/boundary.zig");
+    pub const wiring = @import("board/wiring.zig");
     pub const option_memory = @import("board/option_memory.zig");
     pub const i2c = @import("board/i2c.zig");
     pub const net = @import("board/net.zig");
