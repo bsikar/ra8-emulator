@@ -4,10 +4,16 @@
 //! offset, pre-indexed and post-indexed addressing (STR T4, STRB T3,
 //! STRH T3, LDR T4, LDRB T3, LDRH T3, LDRSB T2, LDRSH T2).
 //!
+//! The imm8 encoding with P=1 U=1 W=0 is the unprivileged family LDRT,
+//! LDRBT, LDRHT, LDRSBT, LDRSHT, STRT, STRBT and STRHT (RA8EMU-133): a
+//! positive offset, no writeback, and `Form.unprivileged` set so the MPU can
+//! check the access as unprivileged. The Zig bus carries no privilege yet;
+//! RA8EMU-103 arms the MPU on it.
+//!
 //! Left unclaimed for their own slices or as UNPREDICTABLE: Rn = PC (the
-//! literal forms), the unprivileged LDRT/STRT forms (P=1 U=1 W=0), the
-//! register-offset forms, byte and halfword loads to the PC (PLD/PLI), a
-//! store of the PC, SP as a byte or halfword Rt, and writeback with Rn = Rt.
+//! literal forms), the register-offset forms, byte and halfword loads to the
+//! PC (PLD/PLI), a store of the PC, SP as a byte or halfword Rt, SP or PC as
+//! an unprivileged Rt, and writeback with Rn = Rt.
 //! An unaligned word or halfword goes through as bytes, the behaviour with
 //! CCR.UNALIGN_TRP clear; with it set the core stops (RA8EMU-85).
 const std = @import("std");
@@ -43,6 +49,8 @@ pub const Form = struct {
     /// Address with the offset applied (P); false is post-indexed.
     index: bool,
     writeback: bool,
+    /// LDRT/STRT family: the access is checked as unprivileged.
+    unprivileged: bool = false,
 };
 
 /// The form of an encoding this group claims, or null.
@@ -71,31 +79,25 @@ pub fn form(instr: Instr) ?Form {
 }
 
 /// Fill in the imm8 P/U/W addressing; false when it is not one this group
-/// runs (the register-offset space, LDRT/STRT, or P=0 W=0).
+/// runs (the register-offset space, or P=0 W=0). P=1 U=1 W=0 is LDRT/STRT.
 fn addressing(f: *Form, hw2: u16) bool {
     if (hw2 & encodings.imm8 == 0) return false;
     const p = hw2 & (1 << 10) != 0;
     const u = hw2 & (1 << 9) != 0;
     const w = hw2 & (1 << 8) != 0;
-    if (p and u and !w) return false;
     if (!p and !w) return false;
-    f.* = .{
-        .rt = f.rt,
-        .rn = f.rn,
-        .size = f.size,
-        .load = f.load,
-        .signed = f.signed,
-        .offset = hw2 & 0xFF,
-        .add = u,
-        .index = p,
-        .writeback = w,
-    };
+    f.offset = hw2 & 0xFF;
+    f.add = u;
+    f.index = p;
+    f.writeback = w;
+    f.unprivileged = p and u and !w;
     return true;
 }
 
 /// The register and opcode choices the Arm ARM leaves defined.
 fn allowed(f: Form) bool {
     if (f.rn == 15) return false;
+    if (f.unprivileged and (f.rt == 13 or f.rt == 15)) return false;
     if (f.signed and (!f.load or f.size == 4)) return false;
     const word_load = f.load and f.size == 4;
     if (f.rt == 15 and !word_load) return false;

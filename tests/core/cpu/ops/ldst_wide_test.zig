@@ -123,10 +123,39 @@ test "an unmapped address is a bus error and writes nothing back" {
     try std.testing.expectEqual(@as(u32, 0x1000_0000), cpu.regs.low[1]);
 }
 
-test "leaves literal, unprivileged, register and UNPREDICTABLE forms alone" {
+test "the LDRT/STRT family: positive imm8, no writeback, marked unprivileged" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.low[1] = Ram.base;
+    cpu.regs.low[2] = 0x8899_F0E1;
+    try run(&cpu, 0xF841, 0x2E08); // strt r2, [r1, #8]
+    try std.testing.expectEqual(@as(u32, 0x8899_F0E1), word(&ram, 8));
+    try run(&cpu, 0xF801, 0x2E10); // strbt r2, [r1, #16]
+    try run(&cpu, 0xF821, 0x2E14); // strht r2, [r1, #20]
+    try std.testing.expectEqual(@as(u32, 0xE1), word(&ram, 16));
+    try std.testing.expectEqual(@as(u32, 0xF0E1), word(&ram, 20));
+    const loads = [_][3]u32{
+        .{ 0xF851, 0x0E08, 0x8899_F0E1 }, // ldrt r0, [r1, #8]
+        .{ 0xF811, 0x0E08, 0xE1 }, // ldrbt
+        .{ 0xF911, 0x0E08, 0xFFFF_FFE1 }, // ldrsbt
+        .{ 0xF831, 0x0E08, 0xF0E1 }, // ldrht
+        .{ 0xF931, 0x0E08, 0xFFFF_F0E1 }, // ldrsht
+    };
+    for (loads) |l| {
+        try run(&cpu, @intCast(l[0]), @intCast(l[1]));
+        try std.testing.expectEqual(l[2], cpu.regs.low[0]);
+        const f = ldst_wide.form(instr(@intCast(l[0]), @intCast(l[1]))).?;
+        try std.testing.expect(f.unprivileged and !f.writeback and f.index and f.add);
+    }
+    try std.testing.expectEqual(Ram.base, cpu.regs.low[1]);
+    try std.testing.expect(!ldst_wide.form(instr(0xF851, 0x0C04)).?.unprivileged); // ldr r0, [r1, #-4]
+}
+
+test "leaves literal, register and UNPREDICTABLE forms alone" {
     const unclaimed = [_][2]u16{
         .{ 0xF8DF, 0x0004 }, // ldr.w r0, [pc, #4]
-        .{ 0xF851, 0x0E04 }, // ldrt r0, [r1, #4]
+        .{ 0xF851, 0xDE04 }, // ldrt sp, [r1, #4]
+        .{ 0xF851, 0xFE04 }, // ldrt pc, [r1, #4]
         .{ 0xF851, 0x0804 }, // P=0 W=0
         .{ 0xF851, 0x0002 }, // ldr.w r0, [r1, r2]
         .{ 0xF851, 0x1B04 }, // ldr r1, [r1], #4
