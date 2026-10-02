@@ -8,6 +8,7 @@ const stop_machine = @import("stop_machine.zig");
 const call_decode = @import("call_decode.zig");
 const cpu_mod = @import("../core/cpu/cpu.zig");
 const dispatch = @import("../core/cpu/exception/dispatch.zig");
+const watch_bus = @import("watch_bus.zig");
 
 /// How a driven run ended.
 pub const Ended = union(enum) {
@@ -41,10 +42,21 @@ fn wide(first: [2]u8) bool {
 /// pending exception is taken first, so the event describes the
 /// instruction that is really about to run.
 pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64) Ended {
+    return runWatched(core, machine, count, null);
+}
+
+/// As `run`, with `watch` listening to the loads and stores each
+/// instruction makes (RA8EMU-113), the way step_hook.zig's memory hook does
+/// on Unicorn. It listens only while the instruction runs, so neither the
+/// debugger's own reads nor the instruction's fetch count as an access.
+pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus) Ended {
     var left = count;
     while (left > 0) : (left -= 1) {
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
-        if (machine.onInstruction(event(core))) |why| return .{ .stop = why };
+        const now = event(core);
+        if (machine.onInstruction(now)) |why| return .{ .stop = why };
+        if (watch) |listening| listening.arm(now.pc, now.size);
+        defer if (watch) |listening| listening.disarm();
         if (core.cpu.step()) |stopped| return .{ .core = stopped };
     }
     return .count;

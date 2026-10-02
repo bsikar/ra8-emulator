@@ -16,6 +16,8 @@ const script = @import("../../debug/script.zig");
 const session = @import("../../debug/session.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
 const zig_script = @import("../../debug/zig_script.zig");
+const step_hook = @import("../../debug/step_hook.zig");
+const watch_bus = @import("../../debug/watch_bus.zig");
 const debug_front = @import("debug_front.zig");
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
@@ -45,15 +47,17 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
         return 1;
     };
     var memory: BoardBus = .{ .memory = .{ .core = &core }, .periph = &board.bus, .scs = .{ .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears } };
-    var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
+    var machine: stop_machine.Machine = .{};
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .inner = memory.view(), .driver = &driver };
+    var cpu: cpu_mod.Cpu = .{ .bus = watching.view() };
     var pending: NvicSource = .{};
     cpu.source = pending.source();
     cpu.reset(vector_base) catch {
         std.debug.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
-    var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .image = image, .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget } };
+    var target: zig_script.ZigScript = .{ .image = image, .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } };
     return drive(allocator, &target, request.mode, out);
 }
 
