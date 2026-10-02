@@ -186,7 +186,7 @@ pub const CoreWindows = struct {
 /// because they live inside the core rather than on the bus: see
 /// `primeCoreWindows`.
 pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
-    try core.attachPeriph(&self.bus);
+    try core.attachPeriphAs(&self.bus, .cpu1);
     try primeCoreWindows(self, core, windows);
     self.second_core.mapped = true;
 }

@@ -14,6 +14,8 @@ const registry = @import("../../periph/registry.zig");
 pub const BoardBus = struct {
     memory: EngineBus,
     periph: *registry.Bus,
+    /// The core this bus view belongs to, stamped on every peripheral access.
+    issuer: registry.Issuer = .cpu0,
 
     pub fn view(self: *BoardBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -38,6 +40,7 @@ pub const BoardBus = struct {
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (!inWindow(address, into.len)) return self.memory.view().read(address, into);
+        self.periph.issuer = self.issuer;
         const value = self.periph.read(address, try width(into.len));
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, value, .little);
@@ -50,6 +53,7 @@ pub const BoardBus = struct {
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
+        self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
     }
 };

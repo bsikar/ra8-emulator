@@ -24,6 +24,28 @@ pub const ns_base: u32 = base + ns_offset;
 
 pub const Access = enum { read, write };
 
+/// The core an access came from. The bus is one block list both cores
+/// reach, but a few RA8 blocks (the per-core ICU above all) answer the core
+/// in front of them, so each core goes on the bus through its own Port and
+/// the bus remembers whose access it is serving.
+pub const Issuer = enum { cpu0, cpu1 };
+
+/// One core's way onto the bus: what an engine's MMIO hook is handed.
+pub const Port = struct {
+    bus: *Bus,
+    issuer: Issuer,
+
+    pub fn read(self: *Port, address: u32, width: u3) u32 {
+        self.bus.issuer = self.issuer;
+        return self.bus.read(address, width);
+    }
+
+    pub fn write(self: *Port, address: u32, width: u3, value: u32) void {
+        self.bus.issuer = self.issuer;
+        self.bus.write(address, width, value);
+    }
+};
+
 /// A veto over the whole window, consulted before anything answers. The
 /// module-stop gate in src/mstp.zig is the one that exists: a peripheral whose
 /// module-stop bit is set is unclocked, so it does not answer the bus at all.
@@ -96,9 +118,21 @@ pub const Bus = struct {
     /// Set once the module-stop model is attached; null leaves every address
     /// clocked, which is what the smaller tests and the loader want.
     gate: ?Gate = null,
+    /// Whose access is being served. Set by the Port the access came
+    /// through; CPU0 when nothing has said otherwise.
+    issuer: Issuer = .cpu0,
+    ports: [2]Port = undefined,
 
     pub fn init(allocator: std.mem.Allocator) Bus {
         return .{ .cells = std.AutoHashMap(u32, Cell).init(allocator) };
+    }
+
+    /// The port `issuer` reaches the bus through. Its address is stable for
+    /// as long as the bus is, which is what an MMIO hook needs.
+    pub fn port(self: *Bus, issuer: Issuer) *Port {
+        const slot = &self.ports[@intFromEnum(issuer)];
+        slot.* = .{ .bus = self, .issuer = issuer };
+        return slot;
     }
 
     pub fn deinit(self: *Bus) void {

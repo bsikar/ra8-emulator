@@ -44,6 +44,27 @@ test "with the bus attached, a store into peripheral space is serviced" {
     try std.testing.expectEqual(@as(u32, 0x55), try engine.register(.r2));
 }
 
+test "an engine attached as CPU1 reaches the bus as CPU1" {
+    var engine = try Engine.open();
+    defer engine.close();
+    try engine.mapBoardRam();
+
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    try engine.attachPeriphAs(&bus, .cpu1);
+
+    const code = [_]u8{
+        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
+        0xC4, 0xF2, 0x00, 0x00, // movt r0, #0x4000
+        0x55, 0x21, //             movs r1, #0x55
+        0x01, 0x60, //             str  r1, [r0]
+    };
+    try engine.write(memmap.sram_base, &code);
+    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
+    try std.testing.expect((try engine.run(memmap.sram_base, 4, .{})) == null);
+    try std.testing.expectEqual(periph.Issuer.cpu1, bus.issuer);
+}
+
 test "a fault reports the address it reached for and the instruction that did it" {
     var engine = try Engine.open();
     defer engine.close();
