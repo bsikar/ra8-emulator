@@ -68,5 +68,6 @@ test {
     _ = @import("ops/mve_int_pair_test.zig");
     _ = @import("ops/mve_int_shift_test.zig");
     _ = @import("ops/mve_int_mulh_test.zig");
+    _ = @import("ops/mve_int_vmla_test.zig");
     _ = @import("ops/table_test.zig");
 }
