@@ -166,6 +166,8 @@ pub const Dispatch = struct {
     fn keepNumcomp(self: Dispatch, address: u32, length: usize) void {
         const machine = self.machine orelse return;
         const end = @as(u64, address) + length;
+        // A debugger store to DWT_CYCCNT is not a count: look again afresh.
+        if (address <= dwt.base + dwt.offsets.cyccnt + 3 and end > dwt.base + dwt.offsets.cyccnt) machine.dwt.cycles_primed = false;
         if (address > dwt.base + 3 or end <= dwt.base) return;
         var bytes: [4]u8 = undefined;
         self.core.read(dwt.base, &bytes) catch return;

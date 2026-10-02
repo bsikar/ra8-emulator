@@ -50,6 +50,8 @@ pub const Driver = struct {
             _ = self.machine.itm.write(address - itm.base, value, width);
         } else if (inside(address, fpb.base, fpb.limits.span)) {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
+        } else if (address == dwt.base + dwt.offsets.cyccnt and width == 4) {
+            if (self.machine.dwt.cycleWritten(value)) |index| self.machine.onUnitMatch(index);
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             // A DWT_CTRL store lands after this hook, so NUMCOMP is put
             // back over it before the next instruction reads it.
@@ -112,6 +114,16 @@ fn syncUnits(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
 }
 
 /// The DFSR bits a halt records.
+/// clocks.zig counts DWT_CYCCNT by writing it outside any hook, so a
+/// Cycle Counter comparator sees the count each instruction instead.
+fn watchCycles(handle: *c.uc.uc_engine, machine: *stop_machine.Machine) void {
+    if (!machine.dwt.watchesCycles()) {
+        machine.dwt.cycles_primed = false;
+        return;
+    }
+    if (machine.dwt.cycleCounted(get(handle, dwt.base + dwt.offsets.cyccnt))) |index| machine.onUnitMatch(index);
+}
+
 fn dfsrFor(stop: stop_machine.Stop) u32 {
     return switch (stop) {
         .breakpoint, .unit_break => dcb.dfsr_bits.bkpt,
@@ -180,6 +192,7 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
         syncUnits(handle, driver.machine);
         driver.unit_dirty = false;
     }
+    watchCycles(handle, driver.machine);
     var sp: u32 = 0;
     if (c.uc.uc_reg_read(handle, c.uc.UC_ARM_REG_SP, &sp) != c.uc.UC_ERR_OK) sp = 0;
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
