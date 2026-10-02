@@ -64,6 +64,7 @@ const hint_resume = @import("hint_resume.zig");
 const second_wait = @import("second_wait.zig");
 const unmask = @import("unmask.zig");
 const run_loop = @import("run_loop.zig");
+const pend_break = @import("pend_break.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -123,6 +124,10 @@ pub const Second = struct {
     /// CPU1's own time base: its SysTick counts down on CPU1's own PPB
     /// words and pends into CPU1's own ICSR, charged for CPU1's own turns.
     timebase: clocks.Clocks = .{},
+    /// A PendSV CPU1's own firmware writes ends CPU1's stretch, as CPU0's
+    /// does: a suspend that lost its PendSV returned to the thread and
+    /// `tx_thread_sleep` gave up with TX_CALLER_ERROR (RA8EMU-302).
+    pend: pend_break.Pend = .{},
     /// The board's SCKDIVCR2, read each round to size CPU1's turn against
     /// CPU0's (`rate.turn`). Null outside a board, where a turn is a round.
     dividers: ?*const u16 = null,
@@ -158,6 +163,7 @@ pub const Second = struct {
         try self.core.shareBoardRamWith(owner);
         try self.core.attachWatch(&self.watch);
         try self.core.attachTimebase(&self.timebase);
+        try self.core.attachPend(&self.pend);
         try wiring.attachSecond(board, &self.core, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
@@ -214,6 +220,7 @@ pub const Second = struct {
             .interrupts = &self.interrupts,
             .timebase = &self.timebase,
             .unmask = &self.release,
+            .pend = &self.pend,
             .park_on_wfe = true,
         };
     }

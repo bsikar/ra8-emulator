@@ -25,6 +25,7 @@ fn pair(cpu1: *mod.Second) !Engine {
     errdefer cpu1.close();
     try cpu1.core.shareBoardRamWith(&cpu0);
     try cpu1.core.attachWatch(&cpu1.watch);
+    try cpu1.core.attachPend(&cpu1.pend);
     return cpu0;
 }
 
@@ -249,6 +250,27 @@ test "a PendSV pended on CPU1 is taken by CPU1's own NVIC" {
     // CPU0 saw none of it: nothing is pended in its own ICSR.
     var cpu0_interrupts = nvic.Nvic{ .vector_base = Spins.table };
     try std.testing.expect(try cpu0_interrupts.dispatch(cpu0) == null);
+}
+
+test "a PendSV CPU1's own code stores ends CPU1's stretch" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    try Spins.boot(&cpu1);
+    // ldr r0, =ICSR; ldr r1, =PENDSVSET; str r1, [r0]; b .
+    try cpu1.core.writeWord(Spins.spin, 0x4902_4801);
+    try cpu1.core.writeWord(Spins.spin + 4, 0xE7FE_6001);
+    try cpu1.core.writeWord(Spins.spin + 8, memmap.scb.icsr);
+    try cpu1.core.writeWord(Spins.spin + 12, nvic.icsr_pendsvset);
+
+    cpu1.step(1000);
+    try std.testing.expect(cpu1.fault == null);
+    // The store cut the stretch, so PendSV landed where the architecture
+    // puts it rather than at the end of the turn.
+    try std.testing.expectEqual(@as(usize, 1), cpu1.pend.cuts);
+    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
 }
 
 test "a PendSV pended on CPU0 is never taken by CPU1" {
