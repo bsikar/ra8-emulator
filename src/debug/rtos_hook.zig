@@ -6,6 +6,9 @@
 //! be called for writes to that word and nowhere else, stamps each one with
 //! the run's own period counter, and prints the trace once the run is over.
 //!
+//! Each switch is printed with the thread's name, read from its TX_THREAD
+//! once the run is over (src/debug/rtos_names.zig, RA8EMU-223).
+//!
 //! Only CPU0 on Unicorn is hooked here. CPU1 and the Zig core are their own
 //! tickets under RA8EMU-211.
 const std = @import("std");
@@ -13,6 +16,7 @@ const c = @import("../core/c.zig");
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
+pub const names = @import("rtos_names.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -86,26 +90,41 @@ fn onWrite(
     owned.onStore(@truncate(address), @intCast(size), @truncate(@as(u64, @bitCast(value))));
 }
 
-/// The switches the run made, oldest first. Nothing when no trace was asked
+/// Target memory read through a Unicorn engine, for the thread names.
+pub const Memory = struct {
+    handle: ?*c.uc.uc_engine,
+
+    pub fn read(self: Memory, address: u32, into: []u8) bool {
+        return c.uc.uc_mem_read(self.handle, address, into.ptr, into.len) == c.uc.UC_ERR_OK;
+    }
+};
+
+/// The switches the run made, oldest first, each thread named through
+/// `memory` where its control block says. Nothing when no trace was asked
 /// for; a header with a count of zero when ThreadX never switched, because
 /// that is an answer too.
-pub fn print(out: anytype, tracer: ?*const Tracer) !void {
+pub fn print(out: anytype, tracer: ?*const Tracer, memory: anytype) !void {
     const one = tracer orelse return;
     const events = one.trace.list();
     try out.print(
         "  rtos trace    : {s} @0x{X:0>8}, {d} switch(es)\n",
         .{ symbol, one.address, events.len + one.trace.dropped },
     );
-    for (events) |event| try line(out, event);
+    for (events) |event| try line(out, event, memory);
     if (one.trace.dropped > 0) {
         try out.print("                  and {d} more, not kept\n", .{one.trace.dropped});
     }
 }
 
-fn line(out: anytype, event: rtos_trace.Event) !void {
+fn line(out: anytype, event: rtos_trace.Event, memory: anytype) !void {
     try out.print("                  tick {d} cpu{d} ", .{ event.when, event.core });
     switch (event.kind) {
         .idle => try out.print("idle\n", .{}),
-        .switch_to => try out.print("-> 0x{X:0>8}\n", .{event.thread}),
+        .switch_to => {
+            try out.print("-> 0x{X:0>8}", .{event.thread});
+            var buffer: [names.longest]u8 = undefined;
+            if (names.name(memory, event.thread, &buffer)) |text| try out.print(" {s}", .{text});
+            try out.print("\n", .{});
+        },
     }
 }

@@ -215,7 +215,7 @@ fn reportAll(
     try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, board, watched);
-    try rtos_hook.print(out, tracer);
+    try rtos_hook.print(out, tracer, rtos_hook.Memory{ .handle = core.handle });
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
