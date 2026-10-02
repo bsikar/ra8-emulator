@@ -247,6 +247,7 @@ test {
     _ = @import("periph/mstp/mstp_test.zig");
     _ = @import("periph/npu/npu_cmd_test.zig");
     _ = @import("periph/npu/npu_test.zig");
+    _ = @import("periph/npu/npu_vela_test.zig");
     _ = @import("periph/nvic_test.zig");
     _ = @import("periph/candidate_test.zig");
     _ = @import("periph/held_test.zig");
