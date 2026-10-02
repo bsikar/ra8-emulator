@@ -179,7 +179,7 @@ pub const Device = struct {
 
     pub fn interruptStatus(self: *const Device) u16 {
         const live: u16 = if (self.vbus) intsts0.vbsts else 0;
-        return (self.status & ~intsts0.vbsts) | live;
+        return (self.status & ~intsts0.vbsts) | live | self.control.summary();
     }
 
     pub fn read(self: *Device, address: u32, width: u3) u32 {
@@ -194,6 +194,8 @@ pub const Device = struct {
             regs.reg.cfifo => self.control.readData(width),
             regs.reg.cfifosel => self.control.sel,
             regs.reg.cfifoctr => self.control.status(),
+            regs.reg.brdysts => @intFromBool(self.control.brdy),
+            regs.reg.bempsts => @intFromBool(self.control.bemp),
             else => self.shadow[offset / window.word],
         };
     }
@@ -214,6 +216,8 @@ pub const Device = struct {
             regs.reg.cfifo => self.control.writeData(value, width),
             regs.reg.cfifosel => self.control.select(v),
             regs.reg.cfifoctr => self.control.control(v),
+            regs.reg.brdysts => self.control.brdy = self.control.brdy and v & 1 != 0,
+            regs.reg.bempsts => self.control.bemp = self.control.bemp and v & 1 != 0,
             else => self.shadow[offset / window.word] = v,
         }
     }

@@ -70,3 +70,29 @@ test "an IN packet past the DCP's packet size stops at it" {
     try std.testing.expectEqual(@as(u32, regs.fifo.frdy | 64), device.read(at(regs.reg.cfifoctr), 2));
     try std.testing.expectEqual(@as(u32, 1), device.control.oversize);
 }
+
+test "an OUT packet from the host raises BRDY until the driver clears it" {
+    var device = usbfs.Device{};
+    device.control.hostOut(&.{ 1, 2 });
+    try std.testing.expectEqual(@as(u32, regs.status.dcp), device.read(at(regs.reg.brdysts), 2));
+    try std.testing.expect(device.read(at(regs.reg.intsts0), 2) & regs.int0.brdy != 0);
+    device.write(at(regs.reg.brdysts), 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, regs.status.dcp), device.read(at(regs.reg.brdysts), 2));
+    device.write(at(regs.reg.brdysts), 2, ~@as(u32, regs.status.dcp));
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.brdysts), 2));
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.intsts0), 2) & regs.int0.brdy);
+}
+
+test "BEMP latches once the host takes the committed IN packet, not before" {
+    var device = usbfs.Device{};
+    device.write(at(regs.reg.cfifosel), 2, regs.fifo.isel);
+    device.write(at(regs.reg.cfifo), 2, 0x0112);
+    device.write(at(regs.reg.cfifoctr), 2, regs.fifo.bval);
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.bempsts), 2));
+    var into: [64]u8 = undefined;
+    _ = device.control.hostTake(&into) orelse return error.NothingSent;
+    try std.testing.expectEqual(@as(u32, regs.status.dcp), device.read(at(regs.reg.bempsts), 2));
+    try std.testing.expect(device.read(at(regs.reg.intsts0), 2) & regs.int0.bemp != 0);
+    device.write(at(regs.reg.bempsts), 2, 0);
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.intsts0), 2) & regs.int0.bemp);
+}
