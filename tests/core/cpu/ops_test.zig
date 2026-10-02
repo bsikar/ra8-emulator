@@ -20,6 +20,7 @@ test {
     _ = @import("ops/mov_wide_test.zig");
     _ = @import("ops/divide_test.zig");
     _ = @import("ops/dp_shifted_test.zig");
+    _ = @import("ops/shift_reg_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
