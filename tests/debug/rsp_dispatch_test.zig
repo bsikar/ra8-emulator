@@ -8,6 +8,11 @@ const Engine = ra8.core.engine.Engine;
 
 const base: u32 = memmap.sram_base;
 
+// The Z and z tests ride along here because tests/all.zig is at its limit.
+test {
+    _ = @import("rsp_points_test.zig");
+}
+
 fn open() !Engine {
     var core = try Engine.open();
     errdefer core.close();
@@ -133,4 +138,17 @@ test "a write that does not match its length, or lands nowhere, is refused" {
     try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,2:caf", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("X22000000,2", &out));
     try std.testing.expectEqualStrings("E01", try stub.answer("M10,2:cafe", &out));
+}
+
+// Without a stop machine Z is not supported; with one it reaches the tables.
+test "Z goes to the stop machine when one is attached" {
+    var core = try open();
+    defer core.close();
+    var out: [16]u8 = undefined;
+    const bare = dispatch.Dispatch{ .core = &core };
+    try std.testing.expectEqualStrings("", try bare.answer("Z0,22000008,2", &out));
+    var machine = ra8.core.stop_machine.Machine{};
+    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    try std.testing.expectEqualStrings("OK", try stub.answer("Z0,22000008,2", &out));
+    try std.testing.expect(machine.breaks.find(0x2200_0008) != null);
 }

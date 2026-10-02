@@ -3,14 +3,20 @@
 //!
 //! The halt reason, what the stub supports, the target description, and
 //! reads and writes of registers and memory: `g`/`G` all registers, `p`/`P`
-//! one, `m`/`M` memory as hex and `X` memory as binary.
+//! one, `m`/`M` memory as hex and `X` memory as binary. With a stop
+//! machine attached, `Z`/`z` set and clear breaks and watches
+//! (rsp_points.zig); without one they are not supported.
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
 const engine = @import("../core/engine.zig");
 const features = @import("rsp_features.zig");
+const stop_machine = @import("stop_machine.zig");
 
 pub const Error = error{NoSpace};
+
+/// The Z and z requests, reached through here so tests see them.
+pub const points = @import("rsp_points.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]engine.Cortex{
@@ -31,6 +37,7 @@ const request_error = "E00";
 
 pub const Dispatch = struct {
     core: *const engine.Engine,
+    machine: ?*stop_machine.Machine = null,
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
@@ -47,6 +54,7 @@ pub const Dispatch = struct {
             'P' => self.setOne(request[1..], out),
             'M' => self.store(request[1..], .hex, out),
             'X' => self.store(request[1..], .binary, out),
+            'Z', 'z' => if (self.machine) |machine| points.answer(machine, request, out) else out[0..0],
             'H' => copy(out, "OK"),
             else => out[0..0],
         };
