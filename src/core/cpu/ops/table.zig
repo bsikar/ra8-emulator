@@ -12,4 +12,5 @@ pub const groups = [_]op.Group{
     @import("push_pop.zig").group,
     @import("sp_arith.zig").group,
     @import("ldr_literal.zig").group,
+    @import("ldst_imm.zig").group,
 };
