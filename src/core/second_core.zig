@@ -57,6 +57,7 @@ const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const scb = @import("../periph/scb.zig");
+const nvic = @import("../periph/nvic.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -105,6 +106,9 @@ pub const Second = struct {
     /// CPU1's own AIRCR model: its PRIGROUP and its reset requests are its
     /// own, polled after each of its turns.
     control: scb.Scb = scb.Scb.init(),
+    /// CPU1's own NVIC: its own pends, priorities and active stack. CPU0's
+    /// is the one `main` builds; neither ever dispatches the other's.
+    interrupts: nvic.Nvic = .{},
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -138,6 +142,7 @@ pub const Second = struct {
         self.written = try self.core.loadImage(image);
         self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
         try primeVectorTable(self.core, self.vector_base);
+        self.interrupts.vector_base = self.vector_base;
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
     }
@@ -151,7 +156,8 @@ pub const Second = struct {
     pub fn step(self: *Second, instructions: usize) void {
         if (self.fault != null) return;
         self.turns += 1;
-        const outcome = self.core.run(self.pc, instructions, .{ .watch = &self.watch }) catch |err| {
+        const session: engine.Session = .{ .watch = &self.watch, .interrupts = &self.interrupts };
+        const outcome = self.core.run(self.pc, instructions, session) catch |err| {
             self.fault = .{ .pc = self.pc, .detail = @errorName(err), .access = null, .instruction = null };
             return;
         };
@@ -160,9 +166,17 @@ pub const Second = struct {
             return;
         }
         self.ran += instructions;
-        self.pc = self.core.register(.pc) catch self.pc;
+        self.boundary();
+    }
+
+    /// The boundary between two of CPU1's turns. A turn is exactly one
+    /// boundary wide, so the run loop spends it before it would service
+    /// one; this is where CPU1's own pends are offered to its own NVIC.
+    fn boundary(self: *Second) void {
         // Counted in `control.requests`; acting on one is RA8EMU-59.
         _ = self.control.poll(self.core) catch false;
+        _ = self.interrupts.dispatch(self.core) catch null;
+        self.pc = self.core.register(.pc) catch self.pc;
     }
 };
 
