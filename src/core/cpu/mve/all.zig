@@ -41,3 +41,5 @@ pub const float_cmp = @import("float_cmp.zig");
 pub const float_cmp_vectors = @import("float_cmp_vectors.zig");
 pub const float_cvt = @import("float_cvt.zig");
 pub const float_cvt_vectors = @import("float_cvt_vectors.zig");
+pub const float_int = @import("float_int.zig");
+pub const float_int_vectors = @import("float_int_vectors.zig");
