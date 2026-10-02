@@ -35,4 +35,5 @@ test {
     _ = @import("beats_test.zig");
     _ = @import("float_test.zig");
     _ = @import("float_vectors_test.zig");
+    _ = @import("float_fma_vectors_test.zig");
 }

@@ -263,3 +263,9 @@ is stale or an encoding is missing. Regenerate with
 | VSUB.F32 (MVE) T1 | 1 |
 | VMUL.F16 (MVE) T1 | 1 |
 | VMUL.F32 (MVE) T1 | 1 |
+| VFMA.F16 (MVE) T1 | 1 |
+| VFMA.F32 (MVE) T1 | 1 |
+| VFMS.F16 (MVE) T1 | 1 |
+| VFMS.F32 (MVE) T1 | 1 |
+| VFMAS.F16 (MVE) T1 | 1 |
+| VFMAS.F32 (MVE) T1 | 1 |

@@ -1,5 +1,6 @@
-//! MVE floating-point lane arithmetic (RA8EMU-23): VADD, VSUB and VMUL on
-//! F16 and F32 lanes, as pure functions over Q register values.
+//! MVE floating-point lane arithmetic (RA8EMU-23): VADD, VSUB and VMUL,
+//! and the fused VFMA, VFMS and VFMAS, on F16 and F32 lanes, as pure
+//! functions over Q register values.
 //!
 //! The Arm ARM (DDI0553) runs MVE floating point under StandardFPSCRValue:
 //! round to nearest, default NaN and flush-to-zero for single precision,
@@ -58,5 +59,40 @@ fn lane(comptime fmt: format.Format, op: Op, x: fmt.Bits(), y: fmt.Bits(), work:
         .add => fpu.add.add(fmt, x, y, work),
         .sub => fpu.add.sub(fmt, x, y, work),
         .mul => fpu.mul.mul(fmt, x, y, work),
+    };
+}
+
+/// The fused forms, each one FPMulAdd(addend, op1, op2) with one rounding:
+/// VFMA is d + n*m, VFMS is d + (-n)*m, and VFMAS is m + n*d. A by-scalar
+/// form passes the scalar broadcast across `m`.
+pub const Fused = enum { fma, fms, fmas };
+
+/// `op` on every active lane of `d`, `n` and `m`, merged into `d` under
+/// `mask`.
+pub fn fused(d: u128, n: u128, m: u128, size: Size, op: Fused, mask: u16, fpscr: *Fpscr) u128 {
+    const qs = qsize(size);
+    var out = d;
+    for (0..qreg.lanes(qs)) |i| {
+        const e: u8 = @intCast(i);
+        if (!predicate.active(mask, qs, e)) continue;
+        var work = standard(fpscr.*);
+        const x = qreg.elem(d, qs, e);
+        const y = qreg.elem(n, qs, e);
+        const z = qreg.elem(m, qs, e);
+        const r = switch (size) {
+            .half => @as(u32, fusedLane(format.half, op, @truncate(x), @truncate(y), @truncate(z), &work)),
+            .word => fusedLane(format.single, op, x, y, z, &work),
+        };
+        out = qreg.setElem(out, qs, e, r);
+        accumulate(fpscr, work);
+    }
+    return predicate.merge(d, out, mask);
+}
+
+fn fusedLane(comptime fmt: format.Format, op: Fused, d: fmt.Bits(), n: fmt.Bits(), m: fmt.Bits(), work: *Fpscr) fmt.Bits() {
+    return switch (op) {
+        .fma => fpu.fma.vfma(fmt, d, n, m, work),
+        .fms => fpu.fma.vfms(fmt, d, n, m, work),
+        .fmas => fpu.fma.mulAdd(fmt, m, n, d, work),
     };
 }
