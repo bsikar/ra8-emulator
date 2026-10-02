@@ -182,3 +182,9 @@ is stale or an encoding is missing. Regenerate with
 | VMLSDAV T1 | 2 |
 | VMLALDAV T1 | 3 |
 | VMLSLDAV T1 | 2 |
+| VMULH T1 | 3 |
+| VRMULH T1 | 3 |
+| VQDMULH T1 | 3 |
+| VQRDMULH T1 | 3 |
+| VMLA T1 | 3 |
+| VMLAS T1 | 3 |
