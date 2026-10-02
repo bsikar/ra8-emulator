@@ -191,8 +191,8 @@ pub const Transfer = struct {
         var index: u32 = 1;
         while (index < regs.pipe.count) : (index += 1) {
             if (!pipes.pipes[index].armed() or !pipes.pipes[index].in) continue;
-            if (!self.device.echo_ready or self.port.in[index].ready) continue;
-            const len = self.device.takeEcho(&self.port.in[index].data);
+            if (!self.device.bulkPending() or self.port.in[index].ready) continue;
+            const len = self.device.takeIn(&self.port.in[index].data);
             self.port.in[index].len = len;
             self.port.in[index].cursor = 0;
             self.port.in[index].ready = true;
