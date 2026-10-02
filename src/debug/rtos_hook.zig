@@ -9,6 +9,10 @@
 //! Each switch is printed with the thread's name, read from its TX_THREAD
 //! once the run is over (src/debug/rtos_names.zig, RA8EMU-223).
 //!
+//! Exception entry and return are traced with them (src/debug/rtos_isr.zig,
+//! RA8EMU-224): before each instruction the NVIC model's counters are read.
+//! That costs a call per instruction, so it is only hooked with the flag.
+//!
 //! Only CPU0 on Unicorn is hooked here. CPU1 and the Zig core are their own
 //! tickets under RA8EMU-211.
 const std = @import("std");
@@ -17,6 +21,7 @@ const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
 pub const names = @import("rtos_names.zig");
+pub const isr = @import("rtos_isr.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -31,13 +36,24 @@ pub const Tracer = struct {
     /// lands. Null stamps zero, which is every unit test.
     now: ?*const u64 = null,
     core: u1 = 0,
+    /// Exception entry and return, when a controller was handed over.
+    exceptions: ?isr.Watcher = null,
 
     /// One store that touched the pointer's word. Only a full word written
     /// to the word itself names a thread; a narrower store is a partial
     /// update no scheduler makes, and is not taken for a switch.
     pub fn onStore(self: *Tracer, address: u32, width: u8, value: u32) void {
         if (address != self.address or width != 4) return;
-        self.trace.store(self.core, if (self.now) |clock| clock.* else 0, value);
+        self.trace.store(self.core, self.stamp(), value);
+    }
+
+    /// Before each instruction: anything entered or returned from since.
+    pub fn onInstruction(self: *Tracer) void {
+        if (self.exceptions) |*watcher| watcher.observe(&self.trace, self.core, self.stamp());
+    }
+
+    fn stamp(self: *const Tracer) u64 {
+        return if (self.now) |clock| clock.* else 0;
     }
 };
 
@@ -55,11 +71,18 @@ pub fn resolve(image: elf.Image, wanted: bool) ?Tracer {
 /// Resolve and hook. The tracer has to outlive the engine, which keeps its
 /// pointer for every later run, so it is allocated here and left for the
 /// process to reclaim; a run attaches at most one.
-pub fn arm(handle: ?*c.uc.uc_engine, image: elf.Image, wanted: bool, clock: *const u64) Error!?*Tracer {
+pub fn arm(
+    handle: ?*c.uc.uc_engine,
+    image: elf.Image,
+    wanted: bool,
+    clock: *const u64,
+    controller: *const isr.Nvic,
+) Error!?*Tracer {
     const found = resolve(image, wanted) orelse return null;
     const owned = std.heap.page_allocator.create(Tracer) catch return Error.AttachFailed;
     owned.* = found;
     owned.now = clock;
+    owned.exceptions = isr.Watcher.start(controller);
     var hook: c.uc.uc_hook = 0;
     if (c.uc.uc_hook_add(
         handle,
@@ -73,7 +96,20 @@ pub fn arm(handle: ?*c.uc.uc_engine, image: elf.Image, wanted: bool, clock: *con
         std.heap.page_allocator.destroy(owned);
         return Error.AttachFailed;
     }
+    var every: c.uc.uc_hook = 0;
+    const code = @constCast(@as(*const anyopaque, @ptrCast(&onCode)));
+    if (c.uc.uc_hook_add(handle, &every, c.uc.UC_HOOK_CODE, code, owned, 1, 0) != c.uc.UC_ERR_OK) {
+        return Error.AttachFailed;
+    }
     return owned;
+}
+
+fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
+    _ = uc;
+    _ = address;
+    _ = size;
+    const owned: *Tracer = @ptrCast(@alignCast(user orelse return));
+    owned.onInstruction();
 }
 
 fn onWrite(
@@ -107,7 +143,7 @@ pub fn print(out: anytype, tracer: ?*const Tracer, memory: anytype) !void {
     const one = tracer orelse return;
     const events = one.trace.list();
     try out.print(
-        "  rtos trace    : {s} @0x{X:0>8}, {d} switch(es)\n",
+        "  rtos trace    : {s} @0x{X:0>8}, {d} event(s)\n",
         .{ symbol, one.address, events.len + one.trace.dropped },
     );
     for (events) |event| try line(out, event, memory);
@@ -120,6 +156,7 @@ fn line(out: anytype, event: rtos_trace.Event, memory: anytype) !void {
     try out.print("                  tick {d} cpu{d} ", .{ event.when, event.core });
     switch (event.kind) {
         .idle => try out.print("idle\n", .{}),
+        .enter, .leave => try exceptionLine(out, event),
         .switch_to => {
             try out.print("-> 0x{X:0>8}", .{event.thread});
             var buffer: [names.longest]u8 = undefined;
@@ -127,4 +164,11 @@ fn line(out: anytype, event: rtos_trace.Event, memory: anytype) !void {
             try out.print("\n", .{});
         },
     }
+}
+
+fn exceptionLine(out: anytype, event: rtos_trace.Event) !void {
+    const verb = if (event.kind == .enter) "enter" else "leave";
+    if (isr.label(event.exception)) |text| return out.print("{s} {s}\n", .{ verb, text });
+    if (event.exception >= 16) return out.print("{s} IRQ{d}\n", .{ verb, event.exception - 16 });
+    try out.print("{s} exception {d}\n", .{ verb, event.exception });
 }
