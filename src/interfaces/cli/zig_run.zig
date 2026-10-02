@@ -55,10 +55,11 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
-    var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.trace_rtos) else null;
+    var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
     if (tracer) |*found| {
         found.now = &timebase.ticks;
+        found.trace.fine = &timebase.elapsed;
         listener = .{ .tracer = found };
     }
     const wrap = if (tracer != null) listener.wrap() else null;
@@ -68,7 +69,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
         try report_dumps.dumpSymbols(out, core.*, image, options);
-        if (tracer) |*found| try rtos_hook.print(out, found, rtos_hook.Memory{ .handle = core.handle });
+        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
     }
     return status;
 }

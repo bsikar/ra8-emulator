@@ -105,6 +105,9 @@ pub const Options = struct {
     watch_place: ?[]const u8 = null,
     /// `--trace-rtos`: record ThreadX thread switches. src/debug/rtos_hook.zig.
     trace_rtos: bool = false,
+    /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
+    /// hook. src/debug/rtos_report.zig.
+    cpu_load: bool = false,
     /// `--taken-in`: a function to catch every exception taken inside.
     /// src/debug/taken_in.zig says why a tally cannot answer that.
     taken_in_place: ?[]const u8 = null,
@@ -158,6 +161,11 @@ pub const Options = struct {
     /// A timed run sizes its own ceiling from the deadline it was given, so
     /// asking for more milliseconds buys more instructions to spend them in
     /// rather than running into a number set for some other app.
+    /// Whether the ThreadX hook is armed: either flag reads it.
+    pub fn rtosWanted(self: *const Options) bool {
+        return self.trace_rtos or self.cpu_load;
+    }
+
     pub fn budgetFor(self: *const Options, watching: bool) usize {
         if (self.instructions) |asked| return asked;
         if (self.ms) |milliseconds| return ceilingFor(milliseconds);
@@ -265,6 +273,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.watch_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--trace-rtos")) {
         options.trace_rtos = true;
+    } else if (std.mem.eql(u8, flag, "--cpu-load")) {
+        options.cpu_load = true;
     } else if (std.mem.eql(u8, flag, "--taken-in")) {
         options.taken_in_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--count-pc")) {

@@ -146,14 +146,14 @@ pub fn main() !u8 {
     if (point) |*one| try core.attachBreak(one);
     var watched = watchpoint.resolve(image, options.watch_place);
     if (watched) |*one| try armWatch(core, one, &parts.timebase.ticks);
-    const tracer = try rtos_hook.arm(core.handle, image, options.trace_rtos, &parts.timebase.ticks, &interrupts);
+    const tracer = try rtos_hook.arm(core.handle, image, options.rtosWanted(), &parts.timebase.ticks, &interrupts);
     var window = taken_in.resolve(image, options.taken_in_place);
     var undefined_found = undefined_ops.sweep(image);
     if (options.stop_on_undefined) undefined_found.stopOnRun();
     try core.attachUndefined(&undefined_found);
     var storage: second_core.Second = undefined;
     var timed = resolveDeadline(options);
-    const second = rtos_hook.second.arm(second_core.start(allocator, &core, &board, options.cpu1_path, &storage), options.trace_rtos, options.cpu1_path) catch |err| {
+    const second = rtos_hook.second.arm(second_core.start(allocator, &core, &board, options.cpu1_path, &storage), options.rtosWanted(), options.cpu1_path) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ options.cpu1_path orelse "?", @errorName(err) });
         return 1;
     };
@@ -215,8 +215,8 @@ fn reportAll(
     try report_timing.takenIn(out, image, options.taken_in_place, window);
     try second_core.report(out, second);
     try report_dumps.dumps(out, core, image, options, board, watched);
-    try rtos_hook.print(out, tracer, rtos_hook.Memory{ .handle = core.handle });
-    try rtos_hook.second.print(out, second);
+    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = core.handle });
+    try rtos_hook.second.print(out, options, second);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
