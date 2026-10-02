@@ -38,6 +38,8 @@ const pdctr = @import("../pdctr.zig");
 /// The perfect-match address, reached as `eth.mac_address` by a caller that
 /// already has the port.
 pub const mac_address = eth_mac;
+/// EATDQDC and the error-interrupt groups: eth_agent.zig.
+pub const agent = @import("eth_agent.zig");
 
 pub const Port = struct {
     /// Where this port's two agents answer. A board fact, so it is set when

@@ -16,6 +16,11 @@ pub const Rswitch = struct {
         eth.Port.init(regs.cluster.etha0, regs.cluster.rmac0),
         eth.Port.init(regs.cluster.etha1, regs.cluster.rmac1),
     },
+    /// Each port's queue depth and error-interrupt words.
+    agents: [regs.cluster.port_count]eth.agent.Agent = .{
+        eth.agent.Agent.init(regs.cluster.etha0),
+        eth.agent.Agent.init(regs.cluster.etha1),
+    },
     gateway: gateway.Gateway = .{},
     pool: gateway.Pool = .{},
     /// The gateway's descriptor side: the rings in RAM and the frames that
@@ -40,6 +45,9 @@ pub const Rswitch = struct {
             try bus.add(port.rmacBlock());
             try bus.add(port.macBlock());
         }
+        for (&self.agents) |*agent| {
+            for (agent.blocks()) |block| try bus.add(block);
+        }
         try bus.add(self.gateway.modeBlock());
         try bus.add(self.gateway.arirmBlock());
         try bus.add(self.pool.block());
@@ -59,6 +67,9 @@ pub const Rswitch = struct {
     pub fn quiet(self: *const Rswitch) bool {
         for (&self.ports) |*port| {
             if (!port.quiet()) return false;
+        }
+        for (&self.agents) |*agent| {
+            if (!agent.quiet()) return false;
         }
         return self.gateway.quiet() and self.pool.quiet() and self.queues.quiet();
     }
