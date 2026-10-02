@@ -22,6 +22,14 @@ pub const limits = struct {
     pub const pc: usize = 15;
 };
 
+/// One frame of a backtrace. `exact` says the pc is the instruction the
+/// frame stopped on (the innermost, or one an exception interrupted)
+/// rather than a return address, which belongs to the call before it.
+pub const Frame = struct {
+    pc: u32,
+    exact: bool = false,
+};
+
 /// r0 to r15, indexed the way DWARF numbers them.
 pub const Registers = [dwarf_frame.limits.registers]u32;
 
@@ -61,25 +69,24 @@ fn wrap(base: u32, offset: i64) u32 {
     return base +% @as(u32, @truncate(@as(u64, @bitCast(offset))));
 }
 
-/// The pcs of the call chain from `start`, innermost first, into `into`.
-/// How many it found; one means the frame has no usable CFI. `psp` is the
+/// The call chain from `start`, innermost first, into `into`. How many
+/// frames it found; one means the frame has no usable CFI. `psp` is the
 /// live Process stack pointer, where a thread's exception frame sits.
-pub fn walk(frame: []const u8, start: Registers, psp: u32, memory: anytype, into: []u32) usize {
+pub fn walk(frame: []const u8, start: Registers, psp: u32, memory: anytype, into: []Frame) usize {
     if (into.len == 0) return 0;
-    into[0] = start[limits.pc];
+    into[0] = .{ .pc = start[limits.pc], .exact = true };
     var registers = start;
-    var exact = true;
     var count: usize = 1;
     while (count < into.len) : (count += 1) {
-        var next = (caller(frame, registers, exact, memory) catch null) orelse break;
-        exact = next[limits.pc] >= limits.exc_return;
+        var next = (caller(frame, registers, into[count - 1].exact, memory) catch null) orelse break;
+        const exact = next[limits.pc] >= limits.exc_return;
         if (exact) next = exception.interrupted(next[limits.pc], next, psp, memory) catch break;
         const pc = next[limits.pc] & ~@as(u32, 1);
         if (pc == 0 or pc >= limits.exc_return) break;
         if (pc == registers[limits.pc] and next[limits.sp] == registers[limits.sp]) break;
         registers = next;
         registers[limits.pc] = pc;
-        into[count] = pc;
+        into[count] = .{ .pc = pc, .exact = exact };
     }
     return count;
 }

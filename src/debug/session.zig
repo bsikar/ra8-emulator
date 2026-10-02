@@ -326,20 +326,23 @@ pub const Session = struct {
 
     /// The frame the program counter is in and the one the link register
     /// returns to. Walking further needs the unwind tables (RA8EMU-48).
-    /// The call chain, walked with the image's .debug_frame. Without CFI
-    /// for the stop it is the pc and lr, as it always was.
+    /// The call chain, walked with the image's .debug_frame, each frame
+    /// with its source line when the image has one. Without CFI for the
+    /// stop it is the pc and lr, as it always was.
     fn backtrace(self: *Session, out: anytype) !void {
-        var pcs: [unwind.limits.frames]u32 = undefined;
+        var frames: [unwind.limits.frames]unwind.Frame = undefined;
         const frame = if (self.image) |image| dwarf_line.section(image, ".debug_frame") else &.{};
         const psp = try self.core.register(.psp);
-        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), psp, self.core.*, &pcs);
+        var count = unwind.walk(frame, try unwind.registersOf(self.core.*), psp, self.core.*, &frames);
         if (count < 2) {
-            pcs[1] = try self.core.register(.lr) & ~@as(u32, 1);
+            frames[1] = .{ .pc = try self.core.register(.lr) & ~@as(u32, 1) };
             count = 2;
         }
-        for (pcs[0..count], 0..) |pc, index| {
+        const sections = session_source.of(self.image);
+        for (frames[0..count], 0..) |found, index| {
             try out.print("#{d} ", .{index});
-            try self.where(pc, out);
+            try self.where(found.pc, out);
+            try session_source.at(out, sections, if (found.exact) found.pc else found.pc -% 1);
             try out.print("\n", .{});
         }
     }

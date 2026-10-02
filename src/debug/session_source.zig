@@ -34,6 +34,16 @@ pub fn line(out: anytype, sections: dwarf_line.Sections, address: u32) !void {
     try out.print("\" starts at address 0x{X:0>8} and ends at 0x{X:0>8}.\n", .{ place.address, place.end });
 }
 
+/// ` at FILE:LINE` for a backtrace frame, or nothing when the line table
+/// does not cover `address`.
+pub fn at(out: anytype, sections: dwarf_line.Sections, address: u32) !void {
+    const found = dwarf_line.lookup(sections, address) catch null;
+    const place = found orelse return;
+    try out.print(" at ", .{});
+    try path(out, place.file);
+    try out.print(":{d}", .{place.line});
+}
+
 /// A file's name, under its directory unless the name is already absolute.
 pub fn path(out: anytype, file: dwarf_line.File) !void {
     const absolute = std.mem.startsWith(u8, file.name, "/");

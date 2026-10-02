@@ -26,6 +26,11 @@ fn pushed(lr: u32) Memory {
     return .{ .base = 0x100, .words = words };
 }
 
+fn expectFrames(expected: []const unwind.Frame, actual: []const unwind.Frame) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |want, got| try std.testing.expectEqual(want, got);
+}
+
 fn entry(list: *std.ArrayList(u8), head: []const u8, program: []const u8) !void {
     try list.writer().writeInt(u32, @intCast(head.len + program.len), .little);
     try list.appendSlice(head);
@@ -79,18 +84,18 @@ test "the walk looks a return address up one byte back and stops when nothing mo
     var list = std.ArrayList(u8).init(std.testing.allocator);
     defer list.deinit();
     try build(&list);
-    var pcs: [unwind.limits.frames]u32 = undefined;
+    var pcs: [unwind.limits.frames]unwind.Frame = undefined;
     const memory = pushed(0x1035);
     defer std.testing.allocator.free(memory.words);
     const count = unwind.walk(list.items, stopped(0x1004), 0, memory, &pcs);
-    try std.testing.expectEqualSlices(u32, &.{ 0x1004, 0x1020, 0x1034 }, pcs[0..count]);
+    try expectFrames(&.{ .{ .pc = 0x1004, .exact = true }, .{ .pc = 0x1020 }, .{ .pc = 0x1034 } }, pcs[0..count]);
 }
 
 test "a frame that cannot be unwound ends the walk" {
     var list = std.ArrayList(u8).init(std.testing.allocator);
     defer list.deinit();
     try build(&list);
-    var pcs: [unwind.limits.frames]u32 = undefined;
+    var pcs: [unwind.limits.frames]unwind.Frame = undefined;
     const lost = pushed(0);
     defer std.testing.allocator.free(lost.words);
     try std.testing.expectEqual(@as(usize, 2), unwind.walk(list.items, stopped(0x1004), 0, lost, &pcs));
@@ -108,7 +113,8 @@ test "the walk steps out of a handler to the interrupted pc and on up its caller
     var registers = stopped(0x1044);
     registers[13] = 0x200;
     registers[14] = 0xFFFF_FFF9;
-    var pcs: [unwind.limits.frames]u32 = undefined;
+    var pcs: [unwind.limits.frames]unwind.Frame = undefined;
     const count = unwind.walk(list.items, registers, 0, Memory{ .base = 0x200, .words = &words }, &pcs);
-    try std.testing.expectEqualSlices(u32, &.{ 0x1044, 0x1004, 0x1020, 0x1034 }, pcs[0..count]);
+    const exact = true;
+    try expectFrames(&.{ .{ .pc = 0x1044, .exact = exact }, .{ .pc = 0x1004, .exact = exact }, .{ .pc = 0x1020 }, .{ .pc = 0x1034 } }, pcs[0..count]);
 }

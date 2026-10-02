@@ -108,3 +108,17 @@ test "list takes an optional place" {
     try std.testing.expectEqualStrings("reset", (try commands.parse("l reset")).?.list.?);
     try std.testing.expectError(error.ExtraArgument, commands.parse("list a b"));
 }
+
+test "a backtrace frame gets at FILE:LINE, and nothing without a line" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    try unit(&list, 4, 2, tables, &program);
+    const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try session_source.at(out.writer(), sections, 0x1002);
+    try session_source.at(out.writer(), sections, 0x1005);
+    try session_source.at(out.writer(), sections, 0x1006);
+    try session_source.at(out.writer(), .{}, 0x1002);
+    try std.testing.expectEqualStrings(" at src/main.c:1 at /abs/boot.s:7", out.items);
+}
