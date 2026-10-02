@@ -32,5 +32,6 @@ test {
     _ = @import("ops/push_pop_test.zig");
     _ = @import("ops/sp_arith_test.zig");
     _ = @import("ops/fp_arith_test.zig");
+    _ = @import("ops/fp_unary_test.zig");
     _ = @import("ops/table_test.zig");
 }
