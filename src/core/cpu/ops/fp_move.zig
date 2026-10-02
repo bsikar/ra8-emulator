@@ -9,7 +9,8 @@
 //! o set moves into the core registers. Sn is Vn:N, Sm is Vm:M and Dm is
 //! M:Vm. SP or PC as a core register, the pair starting at S31, D16+ and
 //! two equal destination core registers are UNPREDICTABLE and stay
-//! unclaimed. The half-precision form (hw2 1001) is not decoded here.
+//! unclaimed. VMOV.F16 (the Sn <-> Rt form with hw2 bits 11:8 = 1001)
+//! moves only the low halfword: Rt or Sn gets Zeros(16):value.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -44,9 +45,13 @@ fn unpredictable(r: u4) bool {
 
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4) return null;
-    if (instr.hw1 & 0xFFE0 == 0xEE00 and instr.hw2 & 0x0F7F == 0x0A10) {
+    if (instr.hw1 & 0xFFE0 == 0xEE00 and instr.hw2 & 0x0C7F == 0x0810) {
         if (unpredictable(single(instr).rt)) return null;
-        return &moveSingle;
+        return switch (instr.hw2 >> 8 & 0xF) {
+            0b1010 => &moveSingle,
+            0b1001 => &moveHalf,
+            else => null,
+        };
     }
     if (instr.hw1 & 0xFFE0 != 0xEC40 or instr.hw2 & 0x0ED0 != 0x0A10) return null;
     const f = pair(instr);
@@ -64,6 +69,12 @@ fn moveSingle(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = single(instr);
     if (f.to_core) return cpu.regs.set(f.rt, cpu.fp.bank.readS(f.fp));
     cpu.fp.bank.writeS(f.fp, cpu.regs.get(f.rt));
+}
+
+fn moveHalf(cpu: *Cpu, instr: Instr) op.Error!void {
+    const f = single(instr);
+    if (f.to_core) return cpu.regs.set(f.rt, cpu.fp.bank.readS(f.fp) & 0xFFFF);
+    cpu.fp.bank.writeS(f.fp, cpu.regs.get(f.rt) & 0xFFFF);
 }
 
 fn movePair(cpu: *Cpu, instr: Instr) op.Error!void {
