@@ -18,6 +18,9 @@
 //! On a dual-core run the second CPU is parked in `other`, and `core N`
 //! swaps it in. Only the selected core runs; the other holds where it
 //! stopped, which is gdb's all-stop with the scheduler locked.
+//!
+//! The front end gives each core a run-loop session, so while debugging
+//! the board still ticks and interrupts are still taken.
 const std = @import("std");
 const break_table = @import("break_table.zig");
 const commands = @import("commands.zig");
@@ -26,6 +29,7 @@ const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const session_view = @import("session_view.zig");
 const step_hook = @import("step_hook.zig");
+const breakpoint = @import("breakpoint.zig");
 const symbols = @import("symbols.zig");
 const watch_table = @import("watch_table.zig");
 
@@ -55,6 +59,7 @@ pub const Slot = struct {
     image: ?elf.Image = null,
     started: bool = false,
     temporary: Temporary = .{},
+    loop: ?engine.Session = null,
 };
 
 pub const Session = struct {
@@ -68,6 +73,10 @@ pub const Session = struct {
     started: bool = false,
     /// Breaks set with `tbreak`, deleted when they stop the run.
     temporary: Temporary = .{},
+    /// When set, runs go through the run loop with this session, so the
+    /// board ticks and the NVIC dispatches at each boundary the way an
+    /// ordinary run does. Null runs the bare engine.
+    loop: ?engine.Session = null,
     /// Which CPU the fields above describe.
     index: u8 = 0,
     /// The other CPU, parked while this one has the session. Null on a
@@ -143,6 +152,7 @@ pub const Session = struct {
             .image = self.image,
             .started = self.started,
             .temporary = self.temporary,
+            .loop = self.loop,
         };
     }
 
@@ -153,6 +163,7 @@ pub const Session = struct {
         self.image = slot.image;
         self.started = slot.started;
         self.temporary = slot.temporary;
+        self.loop = slot.loop;
     }
 
     fn setBreak(self: *Session, at: commands.At, temporary: bool, out: anytype) !void {
@@ -187,13 +198,24 @@ pub const Session = struct {
         try out.print("Watchpoint {d} ({s}) at 0x{X:0>8}\n", .{ id, @tagName(want.kind), address });
     }
 
+    /// One run under the run loop. The loop only ends early on a break it
+    /// can see, so the step hook latches one when the stop machine stops.
+    fn looped(self: *Session, from: u32, loop: engine.Session) !?engine.Fault {
+        var latch = breakpoint.Break{ .address = 0 };
+        self.driver.latch = &latch;
+        defer self.driver.latch = null;
+        var bounded = loop;
+        bounded.brk = &latch;
+        return self.core.run(from, self.budget, bounded);
+    }
+
     /// Run from where the session stands until the machine stops it, a
     /// fault ends it, or the budget runs out, and say which.
     fn go(self: *Session, out: anytype) !void {
         const from = if (self.started) try self.core.register(.pc) else self.entry;
         self.started = true;
         self.driver.arm();
-        const fault = try self.core.runChunk(from, self.budget, null);
+        const fault = if (self.loop) |loop| try self.looped(from, loop) else try self.core.runChunk(from, self.budget, null);
         const pc = try self.core.register(.pc);
         if (fault) |caught| {
             try out.print("Fault: {s} at ", .{caught.detail});

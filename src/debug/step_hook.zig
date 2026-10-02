@@ -12,6 +12,7 @@
 const c = @import("../core/c.zig");
 const call_decode = @import("call_decode.zig");
 const stop_machine = @import("stop_machine.zig");
+const breakpoint = @import("breakpoint.zig");
 
 pub const Error = error{AttachFailed};
 
@@ -20,6 +21,10 @@ pub const Driver = struct {
     machine: *stop_machine.Machine,
     /// Why the last run stopped, or null when it spent its budget.
     last: ?stop_machine.Stop = null,
+    /// Set as reached when the machine stops, so a run loop driving the
+    /// core ends at the stop instead of starting its next stretch. Null on
+    /// a bare run, where stopping the engine is enough.
+    latch: ?*breakpoint.Break = null,
 
     /// Clear the previous verdict before a run is started.
     pub fn arm(self: *Driver) void {
@@ -57,6 +62,7 @@ fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) call
     };
     if (driver.machine.onInstruction(event)) |stop| {
         driver.last = stop;
+        if (driver.latch) |latch| latch.reached = true;
         _ = c.uc.uc_emu_stop(handle);
     }
 }
