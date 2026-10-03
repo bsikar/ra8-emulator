@@ -9,6 +9,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const cli = ra8.core.cli;
+const card_setup = cli.card_setup;
 const parts_mod = ra8.board.parts;
 const Parts = parts_mod.Parts;
 const elf = ra8.core.elf;
@@ -21,15 +22,12 @@ const second_core = ra8.core.second_core;
 const rtos_hook = ra8.core.step_hook.rtos_hook;
 const lob = ra8.core.lob;
 const clocks = ra8.periph.clocks;
-const sd_format = ra8.periph.sd_format;
-const sd_advice = ra8.periph.sd_format_advice;
 const breakpoint = ra8.core.breakpoint;
 const watchpoint = ra8.core.watchpoint;
 const taken_in = ra8.core.taken_in;
 const mem_dump = ra8.core.mem_dump;
 const registers = ra8.core.registers;
 const sd_dump = ra8.periph.sd_dump;
-const sd_image = ra8.periph.sd_image;
 const nvic = ra8.periph.nvic;
 const Board = ra8.board.Board;
 const report = ra8.board.report;
@@ -345,29 +343,9 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
 fn fitBoard(board: *Board, options: cli.Options) !void {
     board.part = options.part;
     board.wire.click = options.click;
-    try prepareCard(board, options);
+    try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     try setBattery(board, options);
-}
-
-/// Size and format the card on the SPI line, when the command line asked for
-/// it. A card that cannot carry the volume it was asked for is refused here
-/// rather than stamped with a BPB that contradicts it.
-fn prepareCard(board: *Board, options: cli.Options) !void {
-    board.sd.trace = options.trace_sd;
-    if (options.sd_size_mb) |megabytes| {
-        const blocks = megabytes *| (1024 * 1024 / sd_image.geometry.block_bytes);
-        if (!board.sd.img.resize(blocks)) {
-            std.debug.print("--sd-size {d}: not a card size this model can state exactly\n", .{megabytes});
-            return error.BadCardSize;
-        }
-    }
-    const kind = options.sd_new orelse return;
-    board.sd_volume = sd_format.apply(&board.sd.img, kind, options.sd_label) catch |err| {
-        std.debug.print("--sd-new {s}: {s}\n", .{ kind.text(), @errorName(err) });
-        sd_advice.printRemedy(kind, err);
-        return err;
-    };
 }
 
 /// Put the contacts the command line asked for on the touch panel. The queue

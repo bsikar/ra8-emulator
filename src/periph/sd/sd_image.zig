@@ -5,8 +5,8 @@
 //! nobody has written reads back as zeros, which is what a freshly formatted
 //! card gives, and a run that only reads holds nothing at all. dev backs its
 //! card with a real host file through a sparse `--sd` image; there is no
-//! host-file seam in this tree yet, so the image here is RAM-backed and its
-//! capacity is the model's own choice, stated below rather than implied.
+//! `--sd` imports a raw host file into the sparse RAM-backed image, so its
+//! capacity is stated by the file and checked against the CSD field.
 const std = @import("std");
 
 pub const geometry = struct {
@@ -24,6 +24,8 @@ pub const geometry = struct {
 
 /// One block, the unit everything here moves.
 pub const Block = [geometry.block_bytes]u8;
+
+pub const LoadError = error{ BadImageSize, CardNotBlank, OutOfMemory };
 
 pub const Image = struct {
     allocator: std.mem.Allocator,
@@ -61,6 +63,35 @@ pub const Image = struct {
         if (self.held() != 0) return false;
         self.capacity_blocks = blocks;
         return true;
+    }
+
+    /// Attach a raw SDHC image whose byte length is representable by this
+    /// card's CSD. Zero blocks stay sparse in the host model.
+    pub fn loadBytes(self: *Image, bytes: []const u8) LoadError!void {
+        const block_bytes: usize = geometry.block_bytes;
+        const capacity_unit: usize = geometry.csize_unit;
+        if (bytes.len == 0 or bytes.len % (block_bytes * capacity_unit) != 0 or
+            bytes.len / block_bytes > std.math.maxInt(u32))
+        {
+            return error.BadImageSize;
+        }
+        if (self.held() != 0) return error.CardNotBlank;
+        const blocks: u32 = @intCast(bytes.len / block_bytes);
+        if (!self.resize(blocks)) return error.CardNotBlank;
+        var index: u32 = 0;
+        while (index < blocks) : (index += 1) {
+            const start: usize = @as(usize, index) * block_bytes;
+            const source = bytes[start .. start + block_bytes];
+            if (!allZero(source)) {
+                var block: Block = undefined;
+                @memcpy(&block, source);
+                if (!self.write(index, &block)) {
+                    self.release();
+                    self.capacity_blocks = geometry.default_capacity_blocks;
+                    return error.OutOfMemory;
+                }
+            }
+        }
     }
 
     /// Blocks currently holding data.
@@ -124,3 +155,8 @@ pub const Image = struct {
         return self.capacity_blocks / geometry.csize_unit - 1;
     }
 };
+
+fn allZero(bytes: []const u8) bool {
+    for (bytes) |byte| if (byte != 0) return false;
+    return true;
+}
