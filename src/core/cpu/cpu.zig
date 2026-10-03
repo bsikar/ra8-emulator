@@ -19,6 +19,7 @@ const sysreg = @import("sysreg.zig");
 pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
 pub const sau_source = @import("sau_source.zig");
+pub const data_gate = @import("data_gate.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
@@ -120,7 +121,7 @@ pub const Cpu = struct {
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
-            return self.secureFault(.invep, address, .{ .invalid_state = address });
+            return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
         if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))
@@ -136,7 +137,9 @@ pub const Cpu = struct {
         if (runs) {
             const before = StackPointers.read(self);
             if (self.mpu) |m| m.arm(sysreg.privileged(&self.regs), self.boosted());
+            self.armGate(true);
             const ran = found.?.exec(self, instr);
+            self.armGate(false);
             if (self.mpu) |m| m.disarm();
             ran catch |err| {
                 self.regs.pc = address;
@@ -146,7 +149,8 @@ pub const Cpu = struct {
                     error.Breakpoint => self.breakpoint(address),
                     error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
                     error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
-                    error.InvalidEntry => self.secureFault(.invep, address, .{ .invalid_state = address }),
+                    error.InvalidEntry => self.secureFault(.invep, address, 0, .{ .invalid_state = address }),
+                    error.SecurityViolation => self.secureFault(.auviol, address, self.bus.gate.?.refused, .{ .bus_fault = address }),
                     else => self.refusedOr(address),
                 };
             };
@@ -208,9 +212,15 @@ pub const Cpu = struct {
 
     /// Take a SecureFault the instruction at `address` caused, or stop with
     /// `otherwise` when it locks up or the frame cannot be stacked.
-    fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, otherwise: Stop) ?Stop {
-        exception.secure.raise(self, cause, address, 0) catch return otherwise;
+    /// `sfar` is the address AUVIOL reports; the other causes ignore it.
+    fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, sfar: u32, otherwise: Stop) ?Stop {
+        exception.secure.raise(self, cause, address, sfar) catch return otherwise;
         return null;
+    }
+
+    /// Arm the data gate for the instruction executing, or disarm it after.
+    fn armGate(self: *Cpu, on: bool) void {
+        if (self.bus.gate) |gate| gate.armed = on;
     }
 
     /// Take the debug event a BKPT at `address` raises, or stop on it for an
