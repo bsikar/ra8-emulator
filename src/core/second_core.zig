@@ -214,10 +214,14 @@ pub const Second = struct {
         self.boundary();
     }
 
-    fn session(self: *Second) engine.Session {
+    /// What CPU1's run loop works from. `protection` is CPU1's own guard: the
+    /// loop takes a trapped access as MemManage only through it, and without
+    /// it a refused store on CPU1 was counted and dropped (RA8EMU-313).
+    pub fn session(self: *Second) engine.Session {
         return .{
             .watch = &self.watch,
             .interrupts = &self.interrupts,
+            .protection = &self.guard,
             .timebase = &self.timebase,
             .unmask = &self.release,
             .pend = &self.pend,

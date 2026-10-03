@@ -28,6 +28,8 @@ pub const overrides = [_]Override{
     // The module on CPU1 has to run ten times, each a tx_thread_sleep(1),
     // before the M85 prints "module ran 10 times PASS" (RA8EMU-302).
     .{ .image = "txm_manager_cpu1.elf", .instructions = "60000000" },
+    // The fault, the kill and ten manager ticks after it (RA8EMU-313).
+    .{ .image = "txm_fault_cpu1.elf", .instructions = "60000000" },
 };
 
 pub fn find(image: []const u8) ?Override {

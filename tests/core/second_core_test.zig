@@ -112,6 +112,15 @@ test "a second core carries an MPU and guard of its own, not the board's" {
     try std.testing.expect(board.guard.unit == null);
 }
 
+test "CPU1's run session carries CPU1's own guard, so a refused access becomes MemManage" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    cpu1.guard = ra8.core.mpu_guard.Guard.init();
+    try std.testing.expect(cpu1.session().protection.? == &cpu1.guard);
+}
+
 test "programming one core's MPU leaves the other's table alone" {
     var cpu0_regions = mpu.Mpu.init();
     const cpu1_regions = mpu.Mpu.init();
