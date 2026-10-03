@@ -5,9 +5,12 @@
 const Bank = @import("bank.zig").Bank;
 const Fpscr = @import("fpscr.zig").Fpscr;
 const Vpr = @import("../mve/predicate.zig").Vpr;
+const Context = @import("context.zig").Context;
 
 pub const State = struct {
     bank: Bank = .{},
     fpscr: Fpscr = .{},
     vpr: Vpr = .{},
+    /// FPCCR, FPCAR and FPDSCR.
+    context: Context = .{},
 };
