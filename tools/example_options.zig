@@ -52,6 +52,8 @@
 //! per 5 ms of target time, so it gets 200 ms. ereader_m33's mailbox shows
 //! all three page turns done by 200 ms too. lcd_draw_x and
 //! display_pal_animation get a second so their probes read a painted frame.
+//! lcd_color_cycle gets two: its backdrop is red near 1.0 s, green by 1.6 s
+//! and blue by 2.0 s (RA8EMU-489).
 const std = @import("std");
 
 pub const Extra = struct {
@@ -72,6 +74,7 @@ const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
 const one_second = [_][]const u8{ "--ms", "1000" };
 const fifth_second = [_][]const u8{ "--ms", "200" };
+const two_seconds = [_][]const u8{ "--ms", "2000" };
 
 pub const card_images = [_]CardImage{
     .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
@@ -90,6 +93,7 @@ pub const extras = [_]Extra{
     .{ .image = "gpt_edge_capture_count.elf", .flags = &fifth_second },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
     .{ .image = "lcd_draw_x.elf", .flags = &one_second },
+    .{ .image = "lcd_color_cycle.elf", .flags = &two_seconds },
     .{ .image = "lowpower_holdpage.elf", .flags = &one_second },
     .{ .image = "pagecache.elf", .flags = &fat32_card },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },

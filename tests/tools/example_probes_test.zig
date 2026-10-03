@@ -209,3 +209,19 @@ test "display_pal_animation is judged on its scroll offset" {
     try std.testing.expectEqualStrings("s_scroll_offset", probe.symbol);
     try std.testing.expectEqual(@as(u32, 2), probe.min);
 }
+
+test "lcd_color_cycle passes once its backdrop register reads blue" {
+    const probe = probes.find("lcd_color_cycle.elf").?;
+    const blue =
+        \\  dump-mem      : 0x40343014 @0x40343014
+        \\                  +0x0000 0x000000FF 0x00000000
+        \\
+    ;
+    const red =
+        \\  dump-mem      : 0x40343014 @0x40343014
+        \\                  +0x0000 0x00FF0000 0x00000000
+        \\
+    ;
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(probe, blue));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, red));
+}

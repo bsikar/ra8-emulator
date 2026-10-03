@@ -94,3 +94,10 @@ test "gpt_edge_capture_count and ereader_m33 run 200 ms" {
         try std.testing.expectEqualStrings("200", got[1]);
     }
 }
+
+test "lcd_color_cycle runs two seconds of target time" {
+    const flags = options.flags("lcd_color_cycle.elf");
+    try std.testing.expectEqual(@as(usize, 2), flags.len);
+    try std.testing.expectEqualStrings("--ms", flags[0]);
+    try std.testing.expectEqualStrings("2000", flags[1]);
+}
