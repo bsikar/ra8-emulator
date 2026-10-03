@@ -9,6 +9,7 @@
 //! The source answers for a Non-secure fetch: an exempt address takes the
 //! accessing state, so it should answer non_secure.
 const sau_attr = @import("../../periph/sau_attr.zig");
+const tt = @import("../tt.zig");
 const Instr = @import("instr.zig").Instr;
 const sg = @import("ops/sg.zig");
 
@@ -17,6 +18,9 @@ pub const State = sau_attr.State;
 pub const Attribution = struct {
     context: *anyopaque,
     stateFn: *const fn (context: *anyopaque, address: u32) State,
+    /// The TT_RESP word for `target` (RA8EMU-352). A source without one
+    /// answers every address as Secure, the way the core did before.
+    respondFn: ?*const fn (context: *anyopaque, target: u32, secure: bool) u32 = null,
 
     pub fn of(self: Attribution, address: u32) State {
         return self.stateFn(self.context, address);
@@ -26,6 +30,14 @@ pub const Attribution = struct {
 /// The state `address` belongs to, or Secure when there is no source.
 pub fn state(source: ?Attribution, address: u32) State {
     return if (source) |s| s.of(address) else .secure;
+}
+
+/// What TT answers for `target`. With no source every address is Secure;
+/// the MPU half is the disabled-MPU answer, R and RW set, as in src/core/tt.zig.
+pub fn respond(source: ?Attribution, target: u32, secure: bool) u32 {
+    if (source) |s| if (s.respondFn) |answer| return answer(s.context, target, secure);
+    const word = tt.field.r | tt.field.rw;
+    return if (secure) word | tt.field.s else word;
 }
 
 /// Whether Non-secure code may not run what it fetched (RA8EMU-359): Secure

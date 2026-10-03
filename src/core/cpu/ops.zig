@@ -63,6 +63,7 @@ pub const table_branch = @import("ops/table_branch.zig");
 pub const blxns = @import("ops/blxns.zig");
 pub const bxns = @import("ops/bxns.zig");
 pub const sg = @import("ops/sg.zig");
+pub const tt = @import("ops/tt.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
