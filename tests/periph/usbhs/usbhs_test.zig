@@ -240,4 +240,5 @@ test "the PLL locks for a driver that never writes SCKE, as the HS driver does" 
 test {
     _ = @import("usbhs_loop_test.zig");
     _ = @import("usbhs_loop_bulk_test.zig");
+    _ = @import("usbhs_xfer_loop_test.zig");
 }

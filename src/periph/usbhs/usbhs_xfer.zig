@@ -63,13 +63,17 @@ const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
 const usbhs_int = @import("usbhs_int.zig");
+const usbhs_loop = @import("usbhs_loop.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_setup = @import("usbhs_setup.zig");
+const xfer_loop = @import("usbhs_xfer_loop.zig");
 
 pub const Transfer = struct {
     port: usbhs_fifo.Port = .{},
     data: usbhs_dfifo.Ports = .{},
     device: usbhs_device.Device = .{},
+    /// The self-loop cable. When set it is the far end instead of `device`.
+    loop: ?*usbhs_loop.Loop = null,
 
     /// The SETUP staging registers, as the host wrote them.
     usbreq: u16 = 0,
@@ -125,6 +129,7 @@ pub const Transfer = struct {
         // the bus does at the token level. Whether the request itself can be
         // honoured is a later question and a later stage.
         self.intsts1 |= regs.int1.sack;
+        if (self.loop) |cable| return cable.setup(xfer_loop.bytes(self.packet));
         if (!self.device.handle(self.packet)) {
             self.stalls += 1;
             self.in_flight = false;
@@ -137,7 +142,7 @@ pub const Transfer = struct {
     /// A pipe has an answer standing: raise its BRDYSTS bit and the INTSTS0
     /// summary above it together, so a dispatcher and a poller see the same
     /// packet.
-    fn raiseReady(self: *Transfer, bits: u16) void {
+    pub fn raiseReady(self: *Transfer, bits: u16) void {
         self.brdy |= bits;
         self.intsts0.ready();
     }
@@ -170,6 +175,7 @@ pub const Transfer = struct {
             return;
         }
         self.in_flight = false;
+        if (self.loop) |cable| cable.statusStage();
         if (self.control_read) {
             self.raiseEmpty(regs.status.dcp);
             return;
@@ -183,6 +189,7 @@ pub const Transfer = struct {
     /// device's answers become visible: a control-read reply, and a bulk-IN
     /// packet on any pipe the host has armed.
     pub fn readyStatus(self: *Transfer, pipes: *usbhs_pipe.Table) u16 {
+        if (self.loop) |cable| return xfer_loop.ready(self, cable, pipes);
         if (self.device.reply_ready and !self.port.in[0].ready) {
             const len = self.device.takeReply(&self.port.in[0].data);
             self.port.in[0].len = len;
@@ -242,7 +249,11 @@ pub const Transfer = struct {
             self.raiseEmpty(regs.status.dcp);
             return;
         }
-        if (!self.device.bulkOut(staging.staged())) {
+        const sent = if (self.loop) |cable|
+            cable.bulkOut(@truncate(pipes.pipes[index].endpoint), staging.staged())
+        else
+            self.device.bulkOut(staging.staged());
+        if (!sent) {
             self.refused_out += 1;
             self.refused_bytes +%= staging.len;
             return;
