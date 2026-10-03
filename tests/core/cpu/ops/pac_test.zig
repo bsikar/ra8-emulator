@@ -105,14 +105,21 @@ test "PACG and AUTG use selected GPRs, BXAUT branches after authentication" {
     try std.testing.expectEqual(@as(u32, 0x0800_4566), cpu.regs.pc);
 }
 
-test "PAC instructions are inert when disabled; BXAUT still branches" {
+test "disabled PAC instructions are inert, including BXAUT" {
     var cpu: Cpu = .{ .bus = undefined };
     cpu.regs.lr = 0x0800_1235;
     cpu.regs.low[1] = 0x0800_1235;
     try execute(&cpu, 0xF3AF, 0x801D);
     try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[12]);
+    cpu.regs.lr ^= 4;
+    try execute(&cpu, 0xF3AF, 0x802D); // AUT is inert when disabled
+    cpu.regs.low[0] = 0xDEAD_BEEF;
+    cpu.regs.low[2] = 0x2000_0010;
+    try execute(&cpu, 0xFB61, 0xF002); // PACG leaves its destination untouched
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), cpu.regs.low[0]);
+    try execute(&cpu, 0xFB51, 0x0F02); // AUTG is inert when disabled
     try execute(&cpu, 0xFB51, 0x0F12);
-    try std.testing.expectEqual(@as(u32, 0x0800_1234), cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.pc);
 }
 
 test "the instruction group claims PAC, PACBTI, AUT, PACG, AUTG and BXAUT" {
@@ -121,4 +128,22 @@ test "the instruction group claims PAC, PACBTI, AUT, PACG, AUTG and BXAUT" {
         instr(0xFB61, 0xF002), instr(0xFB51, 0x0F02), instr(0xFB51, 0x0F12),
     }) |i| try std.testing.expect(pac.group.decode(i) != null);
     try std.testing.expect(pac.group.decode(instr(0xFB51, 0x0F32)) == null);
+}
+
+test "PAC enable is selected from the active security and privilege CONTROL bank" {
+    const State = ra8.core.banked.State;
+    const states = [_]State{ .secure, .non_secure };
+    for (states) |state| {
+        for ([_]bool{ true, false }) |privileged| {
+            var cpu = enabledCpu();
+            cpu.regs.control = 0;
+            if (state == .non_secure) cpu.banked.switchTo(&cpu.regs, state);
+            const bit = if (privileged) ra8.core.cpu.regs.control_bits.pac_en else ra8.core.cpu.regs.control_bits.upac_en;
+            cpu.regs.control = bit | (if (privileged) 0 else ra8.core.cpu.regs.control_bits.npriv);
+            cpu.regs.low[12] = 0xA5A5_5A5A;
+            try execute(&cpu, 0xF3AF, 0x801D);
+            const key = if (privileged) cpu.regs.pac_key_p else cpu.regs.pac_key_u;
+            try std.testing.expectEqual(qarma.pac(cpu.regs.lr, cpu.regs.sp(), key), cpu.regs.low[12]);
+        }
+    }
 }

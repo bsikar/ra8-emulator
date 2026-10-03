@@ -128,7 +128,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     if (f.writeback) cpu.regs.set(f.rn, offset_address);
     if (f.rt == 15) {
         cpu.regs.bxWritePc(value);
-        if ((f.rn != 13 or !f.writeback) and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+        if ((f.rn != 13 or !f.writeback) and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
     } else cpu.regs.set(f.rt, value);
 }
 

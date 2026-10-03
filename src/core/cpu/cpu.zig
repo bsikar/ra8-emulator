@@ -112,7 +112,7 @@ pub const Cpu = struct {
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
-        if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and !bti.allowed(instr))
+        if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))
             return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const found = if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr);
         // An encoding whose IT condition failed never runs, so it is skipped

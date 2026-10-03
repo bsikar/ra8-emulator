@@ -89,3 +89,37 @@ test "BTI runs as a NOP on the M33 profile" {
     try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
 }
+
+test "BTI enable is selected from the active security and privilege CONTROL bank" {
+    const State = ra8.core.banked.State;
+    const states = [_]State{ .secure, .non_secure };
+    for (states) |state| {
+        for ([_]bool{ true, false }) |privileged| {
+            var ram: fixture.Ram = .{};
+            const target = fixture.code + 8;
+            ram.putHalf(target, 0xBF00);
+            var cpu = try branchToTarget(&ram, target);
+            cpu.regs.control = 0;
+            if (state == .non_secure) cpu.banked.switchTo(&cpu.regs, state);
+            const bit = if (privileged) regs.control_bits.bti_en else regs.control_bits.ubti_en;
+            cpu.regs.control = bit | (if (privileged) 0 else regs.control_bits.npriv);
+
+            try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+            try std.testing.expect(cpu.regs.xpsr & regs.xpsr_bits.bti != 0);
+        }
+    }
+}
+
+test "M33 profile ignores BTI CONTROL enables and never checks EPSR.B" {
+    var ram: fixture.Ram = .{};
+    const target = fixture.code + 8;
+    ram.putHalf(target, 0xBF00);
+    var cpu = try branchToTarget(&ram, target);
+    cpu.profile = ra8.core.cpu.decode.profile.Profile.m33;
+    cpu.regs.control = regs.control_bits.bti_en;
+    cpu.regs.xpsr |= regs.xpsr_bits.bti;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr) & invstate);
+    try std.testing.expectEqual(regs.xpsr_bits.bti, cpu.regs.xpsr & regs.xpsr_bits.bti);
+}

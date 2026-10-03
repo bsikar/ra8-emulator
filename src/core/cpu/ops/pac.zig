@@ -61,6 +61,7 @@ fn source(n: u4) bool {
 }
 
 fn enabled(cpu: *const Cpu) bool {
+    if (!cpu.profile.v8_1m) return false;
     const bit = if (sysreg.privileged(&cpu.regs)) regs.control_bits.pac_en else regs.control_bits.upac_en;
     return cpu.regs.control & bit != 0;
 }
@@ -109,6 +110,7 @@ fn autg(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn bxaut(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (!enabled(cpu)) return;
     const ra: u4 = @truncate(instr.hw2 >> 12);
     const rn: u4 = @truncate(instr.hw1);
     const rm: u4 = @truncate(instr.hw2);

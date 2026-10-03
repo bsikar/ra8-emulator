@@ -113,6 +113,6 @@ fn ldm(cpu: *Cpu, instr: Instr) op.Error!void {
     }
     if (form.list & (1 << 15) != 0) {
         cpu.regs.bxWritePc(values[15]);
-        if (form.rn != 13 and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+        if (form.rn != 13 and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
     }
 }
