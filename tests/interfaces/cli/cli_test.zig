@@ -158,3 +158,10 @@ test "--sd-save attaches the image and asks for the write-back; --sd does not" {
     const bare = try parse(&.{ "ra8_emulator", "fw.elf", "--sd-new", "fat16" });
     try std.testing.expectEqualStrings("RA8", bare.sd_label);
 }
+
+test "--touch @PATH names a live touch source; --touch X,Y still queues" {
+    const live = try parse(&.{ "emu", "a.elf", "--touch", "@/tmp/touches", "--touch", "3,4" });
+    try std.testing.expectEqualStrings("/tmp/touches", live.touch_in.?);
+    try std.testing.expectEqual(@as(usize, 1), live.touch_count);
+    try std.testing.expectEqual(@as(u16, 3), live.touches[0].x);
+}

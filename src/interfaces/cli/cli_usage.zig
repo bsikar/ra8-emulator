@@ -3,7 +3,7 @@
 pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
-    \\                    [--dump-sd BLOCK] [--touch X,Y]
+    \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
     \\                    [--usb-loop]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
@@ -86,6 +86,10 @@ pub const text =
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
+    \\  --touch @PATH      read live touches from PATH (a file or FIFO)
+    \\                     while the run goes: one "X,Y" per line, with
+    \\                     an optional "down "/"move " in front; "up"
+    \\                     and blank lines add nothing
     \\  --battery PCT      state-of-charge the fuel gauge reports (default 72)
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
