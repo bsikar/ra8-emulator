@@ -16,6 +16,7 @@ test {
     _ = @import("dp_reg_vectors_test.zig");
     _ = @import("dp_shifted_vectors_test.zig");
     _ = @import("dsp_mul16_vectors_test.zig");
+    _ = @import("dsp_mulhi_vectors_test.zig");
     _ = @import("extend_b16_vectors_test.zig");
     _ = @import("extend_vectors_test.zig");
     _ = @import("extend_wide_vectors_test.zig");
