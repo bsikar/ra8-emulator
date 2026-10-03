@@ -58,6 +58,7 @@ pub const entries = [_]Entry{
     .{ .group = "ldrd_strd", .print = @import("ldrd_strd.zig").print },
     .{ .group = "ldm_stm_wide", .print = @import("ldm_stm_wide.zig").print },
     .{ .group = "exclusive", .print = @import("exclusive.zig").print },
+    .{ .group = "acq_rel", .print = @import("acq_rel.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
