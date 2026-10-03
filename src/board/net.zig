@@ -60,7 +60,7 @@ pub const Rswitch = struct {
         try bus.add(self.gateway.arirmBlock());
         try bus.add(self.pool.block());
         self.queues.mode = &self.gateway.mode;
-        self.queues.rings.memory = memory;
+        self.queues.rings.memory = .{ .engine = memory };
         try bus.add(self.queues.baseBlock());
         try bus.add(self.queues.requestBlock());
         try bus.add(self.queues.configBlock());

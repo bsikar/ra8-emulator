@@ -58,7 +58,7 @@
 //! for the same reason.
 const std = @import("std");
 
-const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const periph = @import("registry.zig");
 
 pub const win_base: u32 = 0x4034_8000;
@@ -148,7 +148,7 @@ pub const Landed = struct {
 pub const Ceu = struct {
     /// Where the frame goes. A board built by a test that never captures
     /// leaves it null and the arm is declined as unbacked.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     shadow: [win_span / 4]u32 = [_]u32{0} ** (win_span / 4),
 
     arms: u32 = 0,
