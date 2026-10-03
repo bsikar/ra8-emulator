@@ -36,7 +36,7 @@ test "the mode graph permits driver paths and rejects skipped states" {
     try std.testing.expect(eth_mode.reachable(.operation, .disable));
     try std.testing.expect(!eth_mode.reachable(.reset, .config));
     try std.testing.expect(!eth_mode.reachable(.reset, .operation));
-    try std.testing.expect(!eth_mode.reachable(.config, .operation));
+    try std.testing.expect(eth_mode.reachable(.config, .operation));
     try std.testing.expect(eth_mode.reachable(.operation, .config));
     try std.testing.expect(!eth_mode.reachable(.operation, .reset));
 }
@@ -62,6 +62,15 @@ test "operation is the mode in which the rings live" {
     var machine = eth_mode.Machine{};
     machine.command(@intFromEnum(eth_mode.Mode.operation));
     try std.testing.expect(machine.operational());
+}
+
+test "GWCA default open re-enters operation after configuring queues" {
+    var machine = eth_mode.Machine{};
+    for ([_]eth_mode.Mode{ .operation, .config, .operation }) |mode| {
+        machine.command(@intFromEnum(mode));
+    }
+    try std.testing.expectEqual(@as(u32, 0), machine.refused);
+    try std.testing.expectEqual(eth_mode.Mode.operation, machine.mode);
 }
 
 test "GWCA default open steps from operation back to config, as the bench does" {

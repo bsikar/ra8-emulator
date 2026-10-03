@@ -16,6 +16,7 @@ const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
+const eth_forward = @import("eth_forward.zig");
 
 /// GWCA: the mode pair and the AXI-init handshake, two windows apart.
 pub const Gateway = struct {
@@ -24,6 +25,7 @@ pub const Gateway = struct {
     /// AXI initialisations asked for through GWARIRM.ARIOG.
     inits: u32 = 0,
     arirm: u32 = 0,
+    fwpc: ?*const [3]u32 = null,
 
     pub fn modeRead(self: *Gateway, address: u32, width: u3) u32 {
         const offset = address -% self.base;
@@ -50,8 +52,10 @@ pub const Gateway = struct {
     pub fn arirmRead(self: *Gateway, address: u32, width: u3) u32 {
         const whole = if (self.arirm & regs.gwca.ariog == 0)
             self.arirm
+        else if (self.extendedDescriptors())
+            self.arirm | regs.gwca.arr
         else
-            self.arirm | regs.gwca.arr;
+            self.arirm;
         return lanes.part(whole, lanes.lane(address -% self.arirmBase()), width);
     }
 
@@ -60,6 +64,12 @@ pub const Gateway = struct {
         const asked = lanes.merge(self.arirm, at, width, value);
         if (asked & regs.gwca.ariog != 0 and self.arirm & regs.gwca.ariog == 0) self.inits += 1;
         self.arirm = asked;
+    }
+
+    fn extendedDescriptors(self: *const Gateway) bool {
+        const fwpc = self.fwpc orelse return false;
+        for (fwpc) |word| if (word & eth_forward.off.dde == 0) return false;
+        return true;
     }
 
     fn arirmBase(self: *const Gateway) u32 {
