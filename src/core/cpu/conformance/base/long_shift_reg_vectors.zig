@@ -78,6 +78,8 @@ pub const all = [_]V{
     bad("Rm equal to RdaLo is unclaimed", lo0, 0x010D),
     bad("Rm equal to RdaHi is unclaimed", lo0, 0x110D),
     bad("RdaHi of 1111 belongs to the saturating shifts", lo0, 0x2F0D),
+    bad("RdaHi SP is constrained unpredictable for LSLL", lo0, 0x2D0D),
+    bad("RdaHi SP is constrained unpredictable for ASRL", lo0, 0x2D2D),
     bad("hw1 bit 0 set belongs to the 64-bit saturating shifts", 0xEA51, lsll),
     bad("type 01 is unclaimed", lo0, 0x211D),
     bad("type 11 is unclaimed", lo0, 0x213D),
