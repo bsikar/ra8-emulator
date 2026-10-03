@@ -154,6 +154,8 @@ pub const Cpu = struct {
         const instr = fetched.instr;
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
             return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
+        if (self.banked.current == .secure and attribution.refusesTransition(self.attribution, address))
+            return self.secureFault(.invtran, address, 0, .{ .invalid_state = address });
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
         if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))

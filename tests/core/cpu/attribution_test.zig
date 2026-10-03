@@ -109,6 +109,29 @@ test "a Secure core is never checked" {
     try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
 }
 
+const invtran: u32 = 1 << 4;
+
+test "a Secure core fetching Non-secure memory takes INVTRAN instead of running it" {
+    var ram: fixture.Ram = .{};
+    var fixed: Fixed = .{ .state = .non_secure };
+    var cpu = try nonSecure(&ram, &fixed);
+    cpu.banked.switchTo(&cpu.regs, .secure);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(secure_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(invtran, ram.word(sfsr));
+    try std.testing.expectEqual(@as(u64, 0), cpu.retired);
+}
+
+test "INVTRAN never fires without a source, on exempt ranges, or from NSC" {
+    var fixed: Fixed = .{ .state = .non_secure };
+    try std.testing.expect(!attribution.refusesTransition(null, fixture.code));
+    try std.testing.expect(!attribution.refusesTransition(fixed.source(), 0xE000_E000));
+    try std.testing.expect(attribution.refusesTransition(fixed.source(), fixture.code));
+    fixed.state = .callable;
+    try std.testing.expect(!attribution.refusesTransition(fixed.source(), fixture.code));
+}
+
 test {
     _ = @import("sau_source_test.zig");
 }

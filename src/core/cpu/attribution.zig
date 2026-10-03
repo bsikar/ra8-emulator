@@ -52,6 +52,17 @@ pub fn refusesEntry(source: ?Attribution, instr: Instr) bool {
     };
 }
 
+/// Whether Secure code may not run what it fetched (RA8EMU-473): a fetch
+/// from Non-secure memory while the core is still Secure means a branch
+/// reached it without BXNS, BLXNS or an exception return switching state,
+/// so the core takes SecureFault INVTRAN instead (DDI0553A.k, SFSR.INVTRAN).
+/// Exempt ranges take the accessing state, so they never count.
+pub fn refusesTransition(source: ?Attribution, address: u32) bool {
+    const s = source orelse return false;
+    if (sau_attr.isExempt(address)) return false;
+    return s.of(address) == .non_secure;
+}
+
 fn isSg(instr: Instr) bool {
     return instr.size == 4 and instr.hw1 == sg.encoding and instr.hw2 == sg.encoding;
 }
