@@ -12,7 +12,7 @@ const std = @import("std");
 pub fn Vector(comptime In: type, comptime Out: type) type {
     return struct {
         /// The encoding this vector exercises, spelled the way the coverage
-        /// table lists it, for example "VADD.F32 T1".
+        /// table lists it, for example "VADD (floating-point)".
         encoding: []const u8,
         /// What the vector checks, quoted when it fails.
         name: []const u8,
