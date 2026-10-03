@@ -14,12 +14,10 @@ pub const geometry = struct {
     pub const block_bytes: u32 = 512;
     /// CSD v2.0 counts capacity in 512 KiB units, which is 1024 blocks.
     pub const csize_unit: u32 = 1024;
-    /// The capacity a card comes up with, 32 MiB. Nothing in this tree fixes
-    /// it; it is a whole number of C_SIZE units so the CSD comes out exact,
-    /// and it is the same capacity sdhi_card.zig gives the card on the other
-    /// host. A blank card can be given another size before anything is
-    /// written to it; see Image.resize.
-    pub const default_capacity_blocks: u32 = 64 * 1024;
+    /// The capacity a card comes up with, 64 MiB, enough for the firmware's
+    /// exFAT formatter and a whole number of C_SIZE units. A blank card can
+    /// be given another size before anything is written to it; see resize.
+    pub const default_capacity_blocks: u32 = 128 * 1024;
 };
 
 /// One block, the unit everything here moves.
