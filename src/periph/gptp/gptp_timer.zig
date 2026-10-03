@@ -18,7 +18,7 @@
 //! and the seconds it belonged to are in the seconds field.
 const std = @import("std");
 
-/// The clock, the fixed-point scale, and what one boundary is worth.
+/// The GPTP clock, fixed-point scale, and the board's CPU clock.
 pub const scale = struct {
     /// ESWCLK = PLL1P / 4 on this part.
     pub const eswclk_hz: u64 = 250_000_000;
@@ -26,16 +26,8 @@ pub const scale = struct {
     pub const subns_shift: u6 = 27;
     pub const ns_per_sec: u64 = 1_000_000_000;
     pub const one_second_fixed: u64 = ns_per_sec << subns_shift;
-    /// ESWCLK cycles per chunk boundary. dev gears a tick to one SysTick
-    /// millisecond, which is right for a run loop that ticks thousands of
-    /// times a second; this board's boundary is half a million instructions
-    /// and a default run reaches it about four times, so a millisecond
-    /// gearing would report four milliseconds of PTP time and nothing an
-    /// app could assert against. One modelled second per boundary is the
-    /// same choice rtc.zig makes, and the rate still comes from the
-    /// firmware's own PTPTIVCt, so a mis-programmed increment drifts here
-    /// exactly as it would on silicon.
-    pub const clk_per_tick: u64 = eswclk_hz;
+    /// The emulated core runs at one instruction per 1 GHz clock cycle.
+    pub const cpu_hz: u64 = 1_000_000_000;
 };
 
 /// Field widths of the 78-bit GPTP time: nanoseconds in [29:0], seconds
@@ -94,12 +86,12 @@ pub const Unit = struct {
         self.fixed = 0;
     }
 
-    /// One chunk boundary at the increment firmware programmed. A stopped
-    /// unit and a zero increment both stand still.
-    pub fn advance(self: *Unit, increment: u32) void {
+    /// Count ESWCLK edges at the programmed increment. A stopped unit and a
+    /// zero increment both stand still.
+    pub fn advance(self: *Unit, increment: u32, esw_cycles: u64) void {
         if (!self.enabled or increment == 0) return;
         self.ticks +%= 1;
-        self.fixed += @as(u64, increment) * scale.clk_per_tick;
+        self.fixed += @as(u64, increment) * esw_cycles;
         const whole = self.fixed / scale.one_second_fixed;
         self.acc_sec +%= whole;
         self.fixed -= whole * scale.one_second_fixed;

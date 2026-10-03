@@ -357,8 +357,8 @@ pub const Board = struct {
     /// next door in boundary.zig: the order the blocks are stepped in and
     /// where an event goes is its own subject, and this file is the list of
     /// what the board is made of.
-    pub fn tick(self: *Board, core: engine.Engine) !void {
-        return boundary.tick(self, core);
+    pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
+        return boundary.tick(self, core, instructions);
     }
 
     /// One event, offered to the links, the transfer controller and the core.
@@ -383,7 +383,7 @@ pub const Board = struct {
     }
 };
 
-fn tickThunk(context: *anyopaque, core: engine.Engine) anyerror!void {
+fn tickThunk(context: *anyopaque, core: engine.Engine, instructions: u32) anyerror!void {
     const board: *Board = @ptrCast(@alignCast(context));
-    return board.tick(core);
+    return board.tick(core, instructions);
 }

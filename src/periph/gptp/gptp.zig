@@ -96,6 +96,7 @@ pub const Spot = struct {
 pub const Gptp = struct {
     reg: [win_span]u8 = .{0} ** win_span,
     units: [unit_count]gptp_timer.Unit = .{gptp_timer.Unit{}} ** unit_count,
+    cpu_cycle_remainder: u64 = 0,
     /// Units started, and units stopped, over the run.
     starts: u32 = 0,
     stops: u32 = 0,
@@ -122,11 +123,18 @@ pub const Gptp = struct {
         return true;
     }
 
-    /// One chunk boundary: every running unit advances at its own
-    /// programmed increment.
-    pub fn tick(self: *Gptp) void {
+    /// Advance each enabled timer for the ESWCLK cycles charged to a CPU
+    /// instruction chunk. Fractional cycles carry into the next chunk.
+    pub fn tick(self: *Gptp, cpu_cycles: u32) void {
+        const scaled = self.cpu_cycle_remainder +
+            @as(u64, cpu_cycles) * gptp_timer.scale.eswclk_hz;
+        const esw_cycles = scaled / gptp_timer.scale.cpu_hz;
+        self.cpu_cycle_remainder = scaled % gptp_timer.scale.cpu_hz;
         for (&self.units, 0..) |*unit, index| {
-            unit.advance(self.shadowWord(unitOffset(index) + unit_off.ptptivc));
+            unit.advance(
+                self.shadowWord(unitOffset(index) + unit_off.ptptivc),
+                esw_cycles,
+            );
         }
     }
 
