@@ -20,6 +20,7 @@ pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
 pub const sau_source = @import("sau_source.zig");
 pub const data_gate = @import("data_gate.zig");
+pub const tt_mpu = @import("tt_mpu.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
