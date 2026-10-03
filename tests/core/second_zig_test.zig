@@ -89,3 +89,25 @@ test "an MVE op on CPU1's Zig core takes UsageFault, not a step" {
     try std.testing.expectEqual(usage_handler, core.cpu.regs.pc);
     try std.testing.expectEqual(code, try cpu1.core.readWord(core.cpu.regs.sp() + 24));
 }
+
+test "CPU1's Zig core polls through its own quiet source (RA8EMU-440)" {
+    var cpu1: second_core.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    // B . with nothing pending: the poll settles and stays settled.
+    try halves(cpu1.core, code, &.{0xE7FE});
+
+    var core: SecondZig = undefined;
+    try core.open(&cpu1, &board.bus);
+    try std.testing.expectEqual(&core.quiet, core.cpu.quiet.?);
+    try std.testing.expectEqual(ra8.core.cpu.cpu.Stop.count, core.turn(4));
+    try std.testing.expect(core.quiet.settled);
+    // A RAM store leaves the answer standing; a peripheral store stirs it.
+    try core.cpu.bus.write(code + 0x100, &.{ 1, 2, 3, 4 });
+    try std.testing.expect(core.quiet.settled);
+    core.cpu.bus.write(0x4000_0000, &.{ 0, 0, 0, 0 }) catch {};
+    try std.testing.expect(!core.quiet.settled);
+}
