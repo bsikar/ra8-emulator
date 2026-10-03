@@ -256,8 +256,8 @@ table above. A group listed as missing does not fail the build yet.
 | special_data | missing |
 | cps | missing |
 | cbz | missing |
-| extend | missing |
-| reverse | missing |
+| extend | 7 |
+| reverse | 6 |
 | it | missing |
 | branch | missing |
 | mov_wide | missing |
