@@ -10,6 +10,7 @@
 const rtos_report = @import("../../../debug/rtos_report.zig");
 const rtos_load = @import("../../../debug/rtos_load.zig");
 const names = @import("../../../debug/rtos_names.zig");
+const json = @import("json.zig");
 
 /// The traced cores the load is read from.
 pub const Load = struct {
@@ -21,9 +22,22 @@ pub const Load = struct {
 pub fn section(j: anytype, found: ?*const Load) !void {
     const of = found orelse return j.field("cpu_load", null);
     try j.open("cpu_load", '{');
-    try core(j, "cpu0", of.cpu0);
-    try core(j, "cpu1", of.cpu1);
+    try contents(j, of);
     try j.close('}');
+}
+
+/// The same per-core object as the report field, without its outer key.
+pub fn document(out: anytype, found: *const Load) !void {
+    var j = json.over(out);
+    try j.open(null, '{');
+    try contents(&j, found);
+    try j.close('}');
+    try out.writeByte('\n');
+}
+
+fn contents(j: anytype, found: *const Load) !void {
+    try core(j, "cpu0", found.cpu0);
+    try core(j, "cpu1", found.cpu1);
 }
 
 fn core(j: anytype, key: []const u8, side: ?rtos_report.Side) !void {

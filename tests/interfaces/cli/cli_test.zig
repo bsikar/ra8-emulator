@@ -90,6 +90,7 @@ test {
     _ = @import("touch_spec_test.zig");
     _ = @import("png_test.zig");
     _ = @import("frame_out_test.zig");
+    _ = @import("ctl_args_test.zig");
 }
 
 test "--cpu-load-from and --cpu-load-to set the load window and turn --cpu-load on" {
@@ -225,4 +226,15 @@ test "--attach queues catalog models in the order asked" {
     try std.testing.expectEqualStrings("lsm6dso", two.attaches[1].name);
     try std.testing.expectError(error.UnknownModel, parse(&[_][]const u8{ "emu", "a.elf", "--attach", "nope@i2c:riic@0x40" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--attach" }));
+}
+
+test "ctl cpu-load selects an image, a load window and the requested CPU" {
+    const options = try parse(&.{ "emu", "ctl", "cpu-load", "blink.elf", "--from", "0x10", "--to", "32", "--instructions", "128", "--cpu", "unicorn" });
+    try std.testing.expectEqualStrings("blink.elf", options.path);
+    try std.testing.expect(options.ctl_cpu_load);
+    try std.testing.expect(options.cpu_load);
+    try std.testing.expectEqual(@as(u64, 16), options.cpu_load_window.from);
+    try std.testing.expectEqual(@as(u64, 32), options.cpu_load_window.to);
+    try std.testing.expectEqual(@as(?usize, 128), options.instructions);
+    try std.testing.expectEqual(ra8.core.cpu.choice.Choice.unicorn, options.cpu);
 }

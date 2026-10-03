@@ -111,3 +111,53 @@ fn expectOwner(value: Value, kind: []const u8, id: ?i64, instructions: i64, perm
     try std.testing.expectEqual(instructions, one.get("instructions").?.integer);
     try std.testing.expectEqual(permille, one.get("permille").?.integer);
 }
+
+test "ctl cpu-load emits the same per-core object as the report field" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var clock: u64 = 0;
+    const tracer = run(&clock);
+    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .handle = fix.core.handle } } };
+    var report_buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer report_buf.deinit();
+    const report_doc = try render(&fix.board, &load, &report_buf);
+    defer report_doc.deinit();
+    var ctl_buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer ctl_buf.deinit();
+    try json_load.document(ctl_buf.writer(), &load);
+    const ctl_doc = try std.json.parseFromSlice(Value, std.testing.allocator, ctl_buf.items, .{});
+    defer ctl_doc.deinit();
+
+    const report_load = report_doc.value.object.get("cpu_load").?.object;
+    try std.testing.expectEqual(@as(usize, 2), ctl_doc.value.object.count());
+    try std.testing.expectEqual(@as(i64, 100), ctl_doc.value.object.get("cpu0").?.object.get("instructions").?.integer);
+    try std.testing.expect(ctl_doc.value.object.get("cpu1").? == .null);
+    try expectOwnerArraysEqual(
+        report_load.get("cpu0").?.object.get("owners").?.array.items,
+        ctl_doc.value.object.get("cpu0").?.object.get("owners").?.array.items,
+    );
+    try std.testing.expectEqual(
+        report_load.get("cpu0").?.object.get("other").?.object.get("instructions").?.integer,
+        ctl_doc.value.object.get("cpu0").?.object.get("other").?.object.get("instructions").?.integer,
+    );
+}
+
+fn expectOwnerArraysEqual(expected: []const Value, actual: []const Value) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |want, got| {
+        const a = want.object;
+        const b = got.object;
+        try std.testing.expectEqualStrings(a.get("kind").?.string, b.get("kind").?.string);
+        try expectNullableValue(a.get("id").?, b.get("id").?);
+        try expectNullableValue(a.get("name").?, b.get("name").?);
+        try std.testing.expectEqual(a.get("instructions").?.integer, b.get("instructions").?.integer);
+        try std.testing.expectEqual(a.get("permille").?.integer, b.get("permille").?.integer);
+    }
+}
+
+fn expectNullableValue(expected: Value, actual: Value) !void {
+    if (expected == .null) return std.testing.expect(actual == .null);
+    if (expected == .integer) return std.testing.expectEqual(expected.integer, actual.integer);
+    return std.testing.expectEqualStrings(expected.string, actual.string);
+}
