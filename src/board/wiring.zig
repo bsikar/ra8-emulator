@@ -332,5 +332,6 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.chip_attribution.block());
     for (self.sram_attribution.blocks()) |window| try self.bus.add(window);
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.part == .ra8p1);
-    if (self.code_secure_area) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
+    for (self.memory_monitors.blocks()) |window| try self.bus.add(window);
+    if (self.memory_monitors.cms) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
 }

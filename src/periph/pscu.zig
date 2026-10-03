@@ -34,6 +34,9 @@
 const std = @import("std");
 const periph = @import("registry.zig");
 
+/// CMSAMON/SFSAMON, the memory split monitors in this block (RA8EMU-420).
+pub const samon = @import("samon.zig");
+
 /// R_PSCU geometry. The Non-secure alias is folded onto this base by the bus
 /// before it ever gets here, the same way the MSTP window is.
 pub const win_base: u32 = 0x4020_4000;
