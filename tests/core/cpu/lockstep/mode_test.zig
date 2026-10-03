@@ -45,6 +45,7 @@ test "with no vector table there is nothing to lockstep" {
 }
 
 test {
+    _ = @import("attribution_test.zig");
     _ = @import("second_test.zig");
     _ = @import("dual_test.zig");
 }

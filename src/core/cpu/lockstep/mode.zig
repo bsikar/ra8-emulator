@@ -17,6 +17,7 @@ const tap_hook = @import("tap_hook.zig");
 const snapshot = @import("snapshot.zig");
 const oracle = @import("oracle.zig");
 const run_mod = @import("run.zig");
+const lockstep_attribution = @import("attribution.zig");
 const sau = @import("../../../periph/sau.zig");
 const mpu = @import("../../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../../periph/fault_clear.zig");
@@ -54,6 +55,9 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     const own_clears: ?*fault_clear.Clears = if (settle != null) &clears else null;
     var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log, .scs = .{ .partitions = &partitions, .regions = &regions, .clears = own_clears } };
     var cpu: cpu_mod.Cpu = .{ .bus = memory.view(), .retire_listener = retire_listener };
+    // SG, BXNS and TT need the SAU the firmware programs (RA8EMU-388).
+    var guard = lockstep_attribution.over(&partitions);
+    cpu.attribution = guard.source();
     // The oracle's board wiring may have set PPB state (DWT_CTRL.NUMCOMP)
     // the image alone does not carry.
     _ = seed.ppb(mine.*, theirs);
