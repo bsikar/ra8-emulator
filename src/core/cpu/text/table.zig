@@ -81,6 +81,9 @@ pub const entries = [_]Entry{
     .{ .group = "long_shift_reg", .print = @import("long_shift_reg.zig").print },
     .{ .group = "long_shift_sat", .print = @import("long_shift_sat.zig").print },
     .{ .group = "long_shift_sat64", .print = @import("long_shift_sat64.zig").print },
+    .{ .group = "lob", .print = @import("lob.zig").print },
+    .{ .group = "mve_lob_tp", .print = @import("mve_lob_tp.zig").print },
+    .{ .group = "branch_future", .print = @import("branch_future.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
