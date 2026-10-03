@@ -12,6 +12,7 @@ test {
     _ = @import("mve_int_pair_test.zig");
     _ = @import("mve_float_test.zig");
     _ = @import("mve_int_mulh_test.zig");
+    _ = @import("mve_int_shift_test.zig");
     _ = @import("mve_vpst_test.zig");
     _ = @import("shift_imm_test.zig");
     _ = @import("add_sub_test.zig");
