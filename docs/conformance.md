@@ -270,7 +270,7 @@ table above. A group listed as missing does not fail the build yet.
 | ldst_reg_wide | missing |
 | bitfield | 27 |
 | mul_acc | 23 |
-| saturate | missing |
+| saturate | 31 |
 | misc_wide | missing |
 | extend_wide | missing |
 | pkh | missing |
