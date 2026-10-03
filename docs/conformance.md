@@ -282,7 +282,7 @@ table above. A group listed as missing does not fail the build yet.
 | usad8 | 22 |
 | umaal | 20 |
 | dsp_mul16 | 27 |
-| dsp_dual | missing |
+| dsp_dual | 30 |
 | dsp_mulhi | 33 |
 | dsp_long_mul | missing |
 | csel | missing |
