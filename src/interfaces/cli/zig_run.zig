@@ -100,6 +100,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .regions = &board.regions,
         .clears = &board.clears,
         .fast_memory = options.watch_place == null and wrap == null,
+        .blocks = options.blocks,
         .wrap = wrap,
         .cpu1 = if (checked_path != null) &checked else null,
         .retire_listener = retire_listener,

@@ -103,5 +103,6 @@ pub const text =
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is
     \\                     still accepted
+    \\  --blocks           the Zig core runs from formed instruction blocks
     \\
 ;
