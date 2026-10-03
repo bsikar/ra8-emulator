@@ -101,3 +101,12 @@ test "lcd_color_cycle runs two seconds of target time" {
     try std.testing.expectEqualStrings("--ms", flags[0]);
     try std.testing.expectEqualStrings("2000", flags[1]);
 }
+
+test "usb_host_file_ops gets a blank stick on the host jack" {
+    const flags = options.flags("usb_host_file_ops.elf");
+    try std.testing.expectEqual(@as(usize, 4), flags.len);
+    try std.testing.expectEqualStrings("--usb-disk", flags[0]);
+    try std.testing.expectEqualStrings("blank", flags[1]);
+    try std.testing.expectEqualStrings("--ms", flags[2]);
+    try std.testing.expectEqualStrings("2000", flags[3]);
+}
