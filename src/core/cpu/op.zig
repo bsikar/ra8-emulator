@@ -8,7 +8,10 @@ const Instr = @import("instr.zig").Instr;
 const bus = @import("bus.zig");
 const alignment = @import("alignment.zig");
 
-pub const Error = bus.Error || alignment.Error;
+/// An encoding that decodes but must not run: UDF, taken as UNDEFINSTR.
+pub const Undefined = error{Undefined};
+
+pub const Error = bus.Error || alignment.Error || Undefined;
 
 /// Runs one decoded instruction. The PC already points past it when this is
 /// called; a branch writes the PC, everything else leaves it alone.

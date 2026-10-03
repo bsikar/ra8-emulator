@@ -4,7 +4,7 @@ const ra8 = @import("ra8");
 const run = ra8.core.cpu.lockstep.run;
 const Pair = @import("pair.zig").Pair;
 
-const nop_nop_udf = [_]u8{ 0x00, 0xBF, 0x00, 0xBF, 0x00, 0xDE };
+const nop_nop_udf = [_]u8{ 0x00, 0xBF, 0x00, 0xBF, 0x80, 0xBA };
 
 test "a run counts what matched and ends where the Zig core stops" {
     const gpa = std.testing.allocator;
@@ -14,7 +14,7 @@ test "a run counts what matched and ends where the Zig core stops" {
     var lock: run.Run = .{};
     defer lock.deinit(gpa);
     const ended = try lock.go(gpa, &pair.cpu, pair.theirs, &pair.log, 10);
-    try std.testing.expectEqual(@as(u16, 0xDE00), ended.stopped.unknown.hw1);
+    try std.testing.expectEqual(@as(u16, 0xBA80), ended.stopped.unknown.hw1);
     try std.testing.expectEqual(@as(u64, 2), lock.counts.find("hint").?.matched);
     try std.testing.expectEqual(@as(usize, 2), lock.recent.len);
 }

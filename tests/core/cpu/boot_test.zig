@@ -6,13 +6,13 @@ const boot = ra8.core.cpu.boot;
 const Engine = ra8.core.engine.Engine;
 
 /// A vector table at the base of SRAM pointing at code right after it:
-/// bf00 nop ; f3af 8000 nop.w ; de00 udf #0.
+/// bf00 nop ; f3af 8000 nop.w ; ba80, unallocated on Armv8-M.
 fn loadTiny(core: *Engine) !void {
     const base = memmap.sram_base;
     var image: [16]u8 = undefined;
     std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
     std.mem.writeInt(u32, image[4..8], (base + 8) | 1, .little);
-    @memcpy(image[8..16], &[_]u8{ 0x00, 0xBF, 0xAF, 0xF3, 0x00, 0x80, 0x00, 0xDE });
+    @memcpy(image[8..16], &[_]u8{ 0x00, 0xBF, 0xAF, 0xF3, 0x00, 0x80, 0x80, 0xBA });
     try core.write(base, &image);
 }
 
@@ -26,7 +26,7 @@ test "a zig run stops on the first unknown encoding and says where" {
     const status = try boot.run(stream.writer(), &core, memmap.sram_base, 100);
     try std.testing.expectEqual(@as(u8, 1), status);
     var want: [128]u8 = undefined;
-    const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xde00 after 2 instructions\n", .{memmap.sram_base + 0xE});
+    const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xba80 after 2 instructions\n", .{memmap.sram_base + 0xE});
     try std.testing.expectEqualStrings(line, stream.getWritten());
 }
 
