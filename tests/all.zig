@@ -265,6 +265,7 @@ test {
     _ = @import("periph/sysclk/sysclk_test.zig");
     _ = @import("periph/systick_arm_test.zig");
     _ = @import("periph/subclock_test.zig");
+    _ = @import("periph/lococr_test.zig");
     _ = @import("periph/lpm/lpm_test.zig");
     _ = @import("periph/lpm/lpm_dps_test.zig");
     _ = @import("periph/pll/pll_test.zig");

@@ -271,6 +271,8 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.oscillators.block());
     self.subclk = subclock.Unit.init(&self.protection);
     try self.bus.add(self.subclk.block());
+    self.loco = subclock.loco.Unit.init(&self.protection);
+    try self.bus.add(self.loco.block());
     // The tree asks the oscillators whether the source it was told to select
     // had stabilised, so it goes on after them.
     // The core voltage range is step 2 of the same protected bring-up, and it
