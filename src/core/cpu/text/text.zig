@@ -40,6 +40,14 @@ pub const Text = struct {
         if (value < decimal_below) self.put("#{d}", .{value}) else self.put("#0x{x}", .{value});
     }
 
+    /// An immediate Capstone reads as signed: one with bit 31 set prints as
+    /// its negative, `#-1` or `#-0x7b000000`.
+    pub fn signedImm(self: *Text, value: u32) void {
+        if (value >> 31 == 0) return self.imm(value);
+        const magnitude = 0 -% value;
+        if (magnitude < decimal_below) self.put("#-{d}", .{magnitude}) else self.put("#-0x{x}", .{magnitude});
+    }
+
     /// `{r0, r3, lr}`: the registers whose bits are set in `bits`, low first.
     pub fn list(self: *Text, bits: u16) void {
         self.put("{{", .{});
