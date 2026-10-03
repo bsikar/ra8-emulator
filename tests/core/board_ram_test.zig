@@ -189,3 +189,16 @@ test "a core cannot be mapped onto a board nobody has mapped yet" {
     defer cpu1.close();
     try std.testing.expectError(error.MapFailed, cpu1.shareBoardRamWith(&cpu0));
 }
+
+test "the Non-secure MRAM view is the engine's own code MRAM (RA8EMU-412)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+
+    // Where a relinked Non-secure image's vector table sits (RA8FW-510).
+    try core.writeWord(memmap.mram_base + 0x8_0000, 0x1208_00F1);
+    try std.testing.expectEqual(@as(u32, 0x1208_00F1), try core.readWord(memmap.ns_mram_base + 0x8_0000));
+    try core.writeWord(memmap.ns_mram_base + 0x8_0004, 0xC0DE_0001);
+    try std.testing.expectEqual(@as(u32, 0xC0DE_0001), try core.readWord(memmap.mram_base + 0x8_0004));
+    try std.testing.expectEqual(core.ram.region(memmap.mram_base).?.ptr, core.ram.region(memmap.ns_mram_base).?.ptr);
+}

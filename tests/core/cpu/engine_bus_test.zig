@@ -38,3 +38,15 @@ test "memory Unicorn has not mapped is unmapped to the Zig core too" {
     var memory: EngineBus = .{ .core = &core };
     try std.testing.expectError(bus.Error.Unmapped, memory.view().readHalf(memmap.sram_base));
 }
+
+test "the direct view folds the Non-secure MRAM alias onto flash (RA8EMU-412)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var memory: EngineBus = .{ .core = &core, .fast_enabled = true };
+    const view = memory.view();
+    try view.write(memmap.ns_mram_base + 0x8_0010, &.{ 0x78, 0x56, 0x34, 0x12 });
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), try core.readWord(memmap.mram_base + 0x8_0010));
+    try core.writeWord(memmap.mram_base + 0x8_0020, 0xFEED_F00D);
+    try std.testing.expectEqual(@as(u32, 0xFEED_F00D), try view.readWord(memmap.ns_mram_base + 0x8_0020));
+}

@@ -145,3 +145,9 @@ test "the code MRAM region is the part map's 1 MB at its base" {
     try std.testing.expectEqual(geometry.mram_bytes, mod.mram_end - mod.mram_base);
     try std.testing.expectEqualStrings("MRAM", ram[0].name);
 }
+
+test "the Non-secure MRAM view is code MRAM one IDAU bit up (RA8EMU-412)" {
+    try std.testing.expectEqual(@as(u32, 0x1200_0000), mod.ns_mram_base);
+    try std.testing.expectEqual(mod.mram_end - mod.mram_base, mod.ns_mram_end - mod.ns_mram_base);
+    try std.testing.expect(mod.ns_mram_end <= mod.dtcm_base);
+}

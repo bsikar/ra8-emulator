@@ -116,7 +116,7 @@ pub const Store = struct {
 
     /// Host bytes for a whole direct-mapped region, including either alias.
     pub fn region(self: *const Store, base: u32) ?[]u8 {
-        if (base == memmap.mram_base) return self.mram;
+        if (base == memmap.mram_base or base == memmap.ns_mram_base) return self.mram;
         if (secureIndex(base)) |index| return self.backing[index];
         if (viewedRegion(base)) |secure| return self.backing[secureIndex(secure).?];
         return null;
@@ -165,6 +165,12 @@ pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store, shared: ?*Store) Error!
                 store.mram = fresh;
                 break :blk fresh;
             };
+            try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
+            continue;
+        }
+        if (region.base == memmap.ns_mram_base) {
+            // This engine's own MRAM, mapped just above in address order.
+            const bytes = store.mram orelse return Error.MapFailed;
             try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
             continue;
         }

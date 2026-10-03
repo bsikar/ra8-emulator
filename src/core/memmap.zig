@@ -92,6 +92,12 @@ pub const ns_sram_base: u32 = sram_base + ns_offset;
 pub const ns_sram_end: u32 = ns_sram_base + (sram_end - sram_base);
 pub const ns_sdram_base: u32 = sdram_base + ns_offset;
 pub const ns_sdram_end: u32 = ns_sdram_base + (sdram_end - sdram_base);
+/// The Non-secure view of code MRAM, where the firmware links its Non-secure
+/// image: the IDAU keeps every bit-28-clear address Secure (RA8FW-510). Code
+/// MRAM is per engine rather than shared, so this view is not in `alias_of`;
+/// board_ram.zig maps it onto the engine's own MRAM pages (RA8EMU-412).
+pub const ns_mram_base: u32 = mram_base + ns_offset;
+pub const ns_mram_end: u32 = ns_mram_base + (mram_end - mram_base);
 
 /// A Non-secure view and the Secure region whose bytes it is. Both entries
 /// of a pair appear in `ram` as regions in their own right, because the CPU
@@ -119,6 +125,7 @@ pub const ppb_size: u32 = 0x0010_0000;
 /// RAM and flash-like regions the loader maps before an image is streamed in.
 pub const ram = [_]Region{
     .{ .name = "MRAM", .base = mram_base, .size = mram_end - mram_base, .perms = .{} },
+    .{ .name = "NS MRAM", .base = ns_mram_base, .size = ns_mram_end - ns_mram_base, .perms = .{} },
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
     .{ .name = "SRAM", .base = sram_base, .size = sram_end - sram_base, .perms = .{} },
     .{ .name = "NS SRAM", .base = ns_sram_base, .size = ns_sram_end - ns_sram_base, .perms = .{} },

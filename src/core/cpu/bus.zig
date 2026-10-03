@@ -38,6 +38,12 @@ pub const DirectMemory = struct {
             const bytes = self.flash orelse return null;
             return bytes[offset..][0..len];
         }
+        if (address >= memmap.ns_mram_base and address < memmap.ns_mram_end) {
+            const offset = address - memmap.ns_mram_base;
+            if (len > memmap.ns_mram_end - memmap.ns_mram_base - offset) return null;
+            const bytes = self.flash orelse return null;
+            return bytes[offset..][0..len];
+        }
         if (address >= memmap.sram_base and address < memmap.sram_end) {
             const offset = address - memmap.sram_base;
             if (len > memmap.sram_end - memmap.sram_base - offset) return null;
