@@ -279,6 +279,8 @@ pub const Board = struct {
     /// The PWM timers: fourteen saw up-counters. No output pin in the model,
     /// so the observable is the count itself and the wrap past the period.
     pwm: gpt.Gpt,
+    /// The PDG delay lines in front of GPT channels 0..3.
+    pwm_delay: gpt.pdg.Pdg,
 
     /// The Ethernet PTP timers: two free-running counters an image puts on
     /// network time and then reads back through a latched view.
