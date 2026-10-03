@@ -115,3 +115,27 @@ test "a bulk OUT packet with no pipe opened on the device stays staged" {
     try std.testing.expectEqual(@as(u32, 1), transfer.refused_out);
     try std.testing.expectEqual(@as(u16, 1), transfer.port.out[2].len);
 }
+
+test "a NAKed bulk OUT packet goes again on BEMPSTS once the driver opens its pipe" {
+    var device = attached();
+    var loop = Loop{ .device = &device };
+    var transfer = xfer.Transfer{ .loop = &loop };
+    var pipes = usbhs_pipe.Table{};
+    pipes.pipes[2] = .{ .endpoint = 2, .in = false, .pid = regs.pipe.pid_buf };
+    transfer.port.select(2);
+    transfer.port.writeData(0x41, 1, 64);
+    transfer.commit(&pipes);
+    try std.testing.expectEqual(@as(u16, 0), transfer.emptyStatus(&pipes) & (1 << 2));
+    open(&device, 1, 2, false);
+    try std.testing.expect(transfer.emptyStatus(&pipes) & (1 << 2) != 0);
+    try std.testing.expectEqual(@as(u16, 0), transfer.port.out[2].len);
+    try std.testing.expectEqual(@as(u32, 0), transfer.refused_bytes);
+    try std.testing.expectEqual(@as(u32, 1), loop.bulk_outs);
+}
+
+test "BEMPSTS without a cable is the latched status alone" {
+    var transfer = xfer.Transfer{};
+    var pipes = usbhs_pipe.Table{};
+    transfer.bemp = 1 << 3;
+    try std.testing.expectEqual(@as(u16, 1 << 3), transfer.emptyStatus(&pipes));
+}
