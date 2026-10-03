@@ -25,7 +25,8 @@ pub const BoardBus = struct {
     scs: Scs = .{},
 
     pub fn view(self: *BoardBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+        const memory = self.memory.view();
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = memory.direct };
     }
 
     /// Whether the whole access sits in either peripheral window.

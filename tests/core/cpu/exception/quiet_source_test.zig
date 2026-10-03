@@ -4,6 +4,7 @@ const ra8 = @import("ra8");
 const fixture = @import("ram.zig");
 const Fake = @import("fake_source.zig").Fake;
 const QuietSource = ra8.core.cpu.exception.quiet_source.QuietSource;
+const bus = ra8.core.cpu.bus;
 
 const systick: ra8.core.cpu.exception.active.Entry = .{ .number = 15, .priority = 0x80 };
 
@@ -56,6 +57,18 @@ test "the bus it hands out reaches the run's memory" {
     try quiet.bus().write(fixture.scs + 0xD04, &.{ 0, 0, 0, 0x10 });
     try std.testing.expectEqual(@as(u32, 0x1000_0000), ram.word(fixture.scs + 0xD04));
     try std.testing.expectEqual(@as(u32, 0x1000_0000), try quiet.bus().readWord(fixture.scs + 0xD04));
+}
+
+test "the bus it hands out preserves the direct-memory view" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{};
+    var quiet = settled(&ram, &fake);
+    var flash = [_]u8{ 1, 2, 3, 4 };
+    var direct: bus.DirectMemory = .{ .flash = &flash, .enabled = true };
+    quiet.memory.direct = &direct;
+
+    try std.testing.expect(quiet.bus().direct == &direct);
+    try std.testing.expectEqual(@as(u32, 0x0403_0201), try quiet.bus().readWord(ra8.core.memmap.mram_base));
 }
 
 test "taking or leaving an exception stirs and forwards" {

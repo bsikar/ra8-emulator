@@ -18,6 +18,20 @@ test "the Zig core reads and writes the bytes Unicorn holds" {
     try std.testing.expectEqual(@as(u32, 0x0BAD_F00D), try core.readWord(memmap.sram_base + 8));
 }
 
+test "the optional direct view shares flash and both SRAM aliases with Unicorn" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var memory: EngineBus = .{ .core = &core, .fast_enabled = true };
+    const view = memory.view();
+    try std.testing.expect(view.direct.?.enabled);
+
+    try view.write(memmap.mram_base + 0x20, &.{ 0x12, 0x34, 0x56, 0x78 });
+    try std.testing.expectEqual(@as(u32, 0x7856_3412), try core.readWord(memmap.mram_base + 0x20));
+    try view.write(memmap.ns_sram_base + 0x24, &.{ 0xEF, 0xBE, 0xAD, 0xDE });
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), try core.readWord(memmap.sram_base + 0x24));
+}
+
 test "memory Unicorn has not mapped is unmapped to the Zig core too" {
     var core = try Engine.open();
     defer core.close();

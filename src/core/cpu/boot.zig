@@ -59,6 +59,9 @@ pub const Wiring = struct {
     partitions: ?*sau.Sau = null,
     regions: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
+    /// Direct MRAM/SRAM access is enabled only when the run has no memory
+    /// watch or fault instrumentation that must observe each access.
+    fast_memory: bool = false,
     /// CPU1 under `--cpu lockstep --cpu1` (RA8EMU-235).
     cpu1: ?*lockstep_dual.Cpu1 = null,
 };
@@ -85,7 +88,7 @@ pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
+    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
     return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener);
 }
 

@@ -90,7 +90,16 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     }
     const wrap = if (tracer != null) listener.wrap() else null;
     const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap, .cpu1 = if (checked_path != null) &checked else null, .retire_listener = retire_listener });
+    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{
+        .boundary = clock.boundary(),
+        .partitions = &board.partitions,
+        .regions = &board.regions,
+        .clears = &board.clears,
+        .fast_memory = options.watch_place == null and wrap == null,
+        .wrap = wrap,
+        .cpu1 = if (checked_path != null) &checked else null,
+        .retire_listener = retire_listener,
+    });
     if (options.cpu == .zig) {
         try report_run.zigCore(out, board, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);

@@ -83,6 +83,16 @@ test "every aliased region is allocated once and released on close" {
     }
 }
 
+test "the code MRAM has a pointer backing for a direct core view" {
+    var core = try Engine.open();
+    try core.mapBoardRam();
+    const flash = core.ram.region(memmap.mram_base).?;
+    try std.testing.expectEqual(@as(usize, memmap.mram_end - memmap.mram_base), flash.len);
+    try std.testing.expectEqual(@as(usize, 0), @intFromPtr(flash.ptr) % mod.page);
+    core.close();
+    try std.testing.expect(core.ram.mram == null);
+}
+
 test "the pages behind an aliased region are aligned for the CPU model" {
     var core = try Engine.open();
     defer core.close();
@@ -153,7 +163,7 @@ test "the sharing runs both directions across cores" {
     try std.testing.expectEqual(@as(u32, 0x3333_3333), try cpu0.readWord(memmap.sdram_base + 0x44));
 }
 
-test "a borrower allocates nothing of its own" {
+test "a borrower owns its code but shares aliased RAM backing" {
     var cpu0 = try Engine.open();
     defer cpu0.close();
     try cpu0.mapBoardRam();
@@ -163,8 +173,13 @@ test "a borrower allocates nothing of its own" {
     for (cpu1.ram.backing) |held| {
         try std.testing.expect(held == null);
     }
+    try std.testing.expect(cpu1.ram.mram != null);
     try std.testing.expect(cpu0.ram.mapped());
     try std.testing.expect(!cpu1.ram.mapped());
+
+    // Each core keeps its own loaded code even though both see shared SRAM.
+    try cpu0.writeWord(memmap.mram_base + 0x100, 0xC0DE_DEAD);
+    try std.testing.expectEqual(@as(u32, 0), try cpu1.readWord(memmap.mram_base + 0x100));
 }
 
 test "a core cannot be mapped onto a board nobody has mapped yet" {

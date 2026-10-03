@@ -5,23 +5,73 @@
 //! array in a test. Unicorn keeps its own view of the same bytes, which is
 //! what lets a lockstep run compare the two.
 const std = @import("std");
+const memmap = @import("../memmap.zig");
 
 pub const Error = error{Unmapped};
+
+/// Fixed host-backed ranges. Separate fields avoid a per-access region loop;
+/// peripheral addresses and cross-range accesses continue through the vtable.
+pub const DirectMemory = struct {
+    flash: ?[]u8 = null,
+    sram: ?[]u8 = null,
+    enabled: bool = false,
+
+    inline fn read(self: *const DirectMemory, address: u32, into: []u8) bool {
+        const data = self.span(address, into.len) orelse return false;
+        @memcpy(into, data);
+        return true;
+    }
+
+    inline fn write(self: *const DirectMemory, address: u32, bytes: []const u8) bool {
+        const data = self.span(address, bytes.len) orelse return false;
+        @memcpy(data, bytes);
+        return true;
+    }
+
+    inline fn span(self: *const DirectMemory, address: u32, len: usize) ?[]u8 {
+        if (address >= memmap.mram_base and address < memmap.mram_end) {
+            const offset = address - memmap.mram_base;
+            if (len > memmap.mram_end - memmap.mram_base - offset) return null;
+            const bytes = self.flash orelse return null;
+            return bytes[offset..][0..len];
+        }
+        if (address >= memmap.sram_base and address < memmap.sram_end) {
+            const offset = address - memmap.sram_base;
+            if (len > memmap.sram_end - memmap.sram_base - offset) return null;
+            const bytes = self.sram orelse return null;
+            return bytes[offset..][0..len];
+        }
+        if (address >= memmap.ns_sram_base and address < memmap.ns_sram_end) {
+            const offset = address - memmap.ns_sram_base;
+            if (len > memmap.ns_sram_end - memmap.ns_sram_base - offset) return null;
+            const bytes = self.sram orelse return null;
+            return bytes[offset..][0..len];
+        }
+        return null;
+    }
+};
 
 pub const Bus = struct {
     ctx: *anyopaque,
     vtable: *const VTable,
+    direct: ?*const DirectMemory = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
         write: *const fn (ctx: *anyopaque, address: u32, bytes: []const u8) Error!void,
     };
 
-    pub fn read(self: Bus, address: u32, into: []u8) Error!void {
+    pub inline fn read(self: Bus, address: u32, into: []u8) Error!void {
+        if (into.len != 0) if (self.direct) |memory| {
+            if (memory.enabled and memory.read(address, into)) return;
+        };
         return self.vtable.read(self.ctx, address, into);
     }
 
-    pub fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
+    pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
+        if (bytes.len != 0) if (self.direct) |memory| {
+            if (memory.enabled and memory.write(address, bytes)) return;
+        };
         return self.vtable.write(self.ctx, address, bytes);
     }
 
