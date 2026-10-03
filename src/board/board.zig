@@ -150,9 +150,9 @@ pub const Board = struct {
     chip_attribution: cpscu.Unit,
     /// SRAMSAR, SRAMSABAR0..3 and SRAMESAR (RA8EMU-230).
     sram_attribution: cpscu.sram.Unit = .{},
-    /// CMSAMON.CMS, the code MRAM Secure area the OEM programmed. Null keeps
-    /// the IDAU's bit-28 answer for code (RA8EMU-389).
-    code_secure_area: ?u9 = null,
+    /// CMSAMON/SFSAMON, the code MRAM and SiP flash split the OEM programmed.
+    /// An unset CMS keeps the IDAU's bit-28 answer for code (RA8EMU-389/420).
+    memory_monitors: pscu.samon.Unit = .{},
     /// The IDAU over those words and address bit 28 (RA8EMU-277). Pointed
     /// at sram_attribution in attach(), where the board's address is final.
     idau: sau.idau.Map = .{},

@@ -68,3 +68,43 @@ test "a board with no attribution block delegates nothing" {
     try std.testing.expectEqual(@as(u32, 0), modules.readReg(mstpcre, 4));
     try std.testing.expectEqual(@as(u32, 0), modules.masked_writes);
 }
+
+const samon = pscu.samon;
+
+test "an unprogrammed CMSAMON and SFSAMON read the blank part's area" {
+    const unit = samon.Unit{};
+    try std.testing.expectEqual(@as(u32, 0x1FF) << 15, unit.read(samon.cms_address, 4));
+    try std.testing.expectEqual(@as(u32, 0x1FF) << 15, unit.read(samon.sfs_address, 4));
+}
+
+test "each monitor reads its own programmed area in bits 23:15" {
+    const unit = samon.Unit{ .cms = 2, .sfs = 5 };
+    try std.testing.expectEqual(@as(u32, 2) << 15, unit.read(samon.cms_address, 4));
+    try std.testing.expectEqual(@as(u32, 5) << 15, unit.read(samon.sfs_address, 4));
+}
+
+test "the monitors drop stores and count them" {
+    var unit = samon.Unit{ .cms = 2 };
+    unit.write(samon.cms_address, 4, 0);
+    unit.write(samon.sfs_address, 4, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 2) << 15, unit.read(samon.cms_address, 4));
+    try std.testing.expectEqual(@as(u32, 2), unit.ignored_stores);
+}
+
+test "the CMS area a monitor reads is the one the IDAU narrows code by" {
+    const unit = samon.Unit{ .cms = 2 };
+    const area: u9 = @intCast(unit.read(samon.cms_address, 4) >> samon.area_shift);
+    const map = ra8.periph.sau.idau.Map{ .code_secure = ra8.periph.sau.idau.cmsBytes(area) };
+    const State = ra8.periph.sau.attribution.State;
+    try std.testing.expectEqual(State.secure, map.answer(0x1200_FFFF).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x1201_0000).state);
+}
+
+test "the two monitor windows sit at PSCU +0x30 and +0x3C, four bytes each" {
+    var unit = samon.Unit{};
+    const windows = unit.blocks();
+    try std.testing.expectEqual(@as(u32, 0x4020_4030), windows[0].base);
+    try std.testing.expectEqual(@as(u32, 0x4020_403C), windows[1].base);
+    try std.testing.expectEqual(@as(u32, 4), windows[0].size);
+    try std.testing.expect(windows[0].base >= pscu.win_base + pscu.win_span);
+}
