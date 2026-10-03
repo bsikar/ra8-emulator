@@ -63,4 +63,5 @@ test {
     _ = @import("csel_test.zig");
     _ = @import("clrm_test.zig");
     _ = @import("vscclrm_test.zig");
+    _ = @import("long_shift_test.zig");
 }
