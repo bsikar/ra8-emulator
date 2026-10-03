@@ -4,8 +4,8 @@
 //! pair and writes it back to the same pair. They sit in what Armv8-M left
 //! as ORRS with the PC as the shifted operand (hw2[3:0] = 0b1111), so a core
 //! without MVE, Unicorn included, reads them as that UNPREDICTABLE ORRS.
-//! That is why this group is not checked against Unicorn: lockstep runs it
-//! on the Zig core alone and brings Unicorn to the result.
+//! src/core/long_shift_hook.zig runs this arithmetic on the Unicorn path
+//! instead, so lockstep checks the group like any other (RA8EMU-138).
 //!
 //! The fields, from the encoding:
 //!   hw1 = 1110 1010 0101 RdaLo[3:1] 0
@@ -29,7 +29,7 @@ pub const Fields = struct {
     kind: Kind,
 };
 
-pub const group: op.Group = .{ .name = "long_shift", .decode = decode, .oracle = false };
+pub const group: op.Group = .{ .name = "long_shift", .decode = decode, .oracle = true };
 
 pub fn fields(instr: Instr) ?Fields {
     if (instr.size != 4) return null;

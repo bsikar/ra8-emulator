@@ -33,6 +33,7 @@
 const std = @import("std");
 const elf = @import("elf.zig");
 const symbols = @import("../debug/symbols.zig");
+const long_shift = @import("long_shift.zig");
 
 pub const limits = struct {
     /// How many sites the report names before it stops listing them. The
@@ -143,7 +144,14 @@ pub fn isWide(halfword: u16) bool {
 /// halfword, and Rm = 15 is UNPREDICTABLE across the whole class: ORR, AND,
 /// EOR, ADD, SUB, the lot. Bit 15 of the second halfword is zero on every
 /// member, which is what keeps a coprocessor or branch encoding out.
+///
+/// Armv8.1-M takes part of that space back: the long shifts (LSLL, LSRL,
+/// ASRL and the saturating forms) are ORRS-with-PC encodings to Armv7-M, and
+/// the `orrs.w r3, r2, pc, lsl #2` that started this file was really
+/// `lsll r2, r3, #2`. They are defined, src/core/long_shift_hook.zig runs
+/// them on the Unicorn path, and they are not reported here.
 pub fn shiftedPc(first: u16, second: u16) bool {
+    if (long_shift.decode(first, second) != null) return false;
     if (first >> 9 != 0b1110101) return false;
     if (second & 0x8000 != 0) return false;
     return (second & 0xF) == 0xF;

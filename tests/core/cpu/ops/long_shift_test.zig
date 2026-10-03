@@ -54,6 +54,6 @@ test "the forms this slice leaves alone" {
     for (left) |pair| try std.testing.expect(long_shift.group.decode(wide(pair[0], pair[1])) == null);
 }
 
-test "the group is not checked against Unicorn" {
-    try std.testing.expect(!long_shift.group.oracle);
+test "the group is checked against Unicorn" {
+    try std.testing.expect(long_shift.group.oracle);
 }

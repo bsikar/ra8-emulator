@@ -41,6 +41,7 @@ const fault_clear = @import("../periph/fault_clear.zig");
 const pend_break = @import("pend_break.zig");
 const cpu_reset = @import("cpu/reset.zig");
 const undefined_hook = @import("undefined_hook.zig");
+pub const long_shift_hook = @import("long_shift_hook.zig");
 const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("../debug/breakpoint.zig");
@@ -345,6 +346,7 @@ pub const Engine = struct {
             written += @intCast(segment.bytes.len);
         }
         if (written == 0) return Error.WriteFailed;
+        _ = long_shift_hook.attach(self.handle, image) catch return Error.AttachFailed;
         return written;
     }
 

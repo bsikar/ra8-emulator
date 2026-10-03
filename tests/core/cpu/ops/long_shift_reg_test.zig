@@ -86,6 +86,6 @@ test "no earlier group claims the register forms" {
     }
 }
 
-test "the group is not checked against Unicorn" {
-    try std.testing.expect(!long_shift_reg.group.oracle);
+test "the group is checked against Unicorn" {
+    try std.testing.expect(long_shift_reg.group.oracle);
 }

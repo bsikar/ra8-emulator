@@ -4,8 +4,8 @@ const ra8 = @import("ra8");
 const undefined_ops = ra8.core.undefined_ops;
 const elf = ra8.core.elf;
 
-/// The instruction that cost four sessions: orrs.w r3, r2, pc, lsl #2.
-const orrs_pc = [2]u16{ 0xEA52, 0x038F };
+/// The program counter shifted into an AND: and.w r3, r2, pc, lsl #2.
+const orrs_pc = [2]u16{ 0xEA02, 0x038F };
 
 /// The same shape the compiler should have emitted: orr.w r3, r3, r2, lsr #30.
 const orr_clean = [2]u16{ 0xEA43, 0x7392 };
@@ -19,8 +19,15 @@ test "the same instruction on a real register is not" {
 }
 
 test "a wider shift of the program counter is undefined too" {
-    // orrs.w r3, r2, pc, lsl #3, the sibling site in the same image.
-    try std.testing.expect(undefined_ops.shiftedPc(0xEA52, 0x03CF));
+    // and.w r3, r2, pc, lsl #3.
+    try std.testing.expect(undefined_ops.shiftedPc(0xEA02, 0x03CF));
+}
+
+test "an Armv8.1-M long shift in the same space is defined" {
+    // The encoding that cost four sessions: lsll r2, r3, #2, which Armv7-M
+    // reads as orrs.w r3, r2, pc, lsl #2. Then lsll r2, r3, r4.
+    try std.testing.expect(!undefined_ops.shiftedPc(0xEA52, 0x038F));
+    try std.testing.expect(!undefined_ops.shiftedPc(0xEA52, 0x430D));
 }
 
 test "a branch that happens to end in fifteen is not this class" {
@@ -74,13 +81,13 @@ fn imageWith(buffer: []u8, code: []const u8, vaddr: u32) elf.Image {
 }
 
 test "a sweep names the site at its own address" {
-    // mov r0, r2 ; orrs.w r3, r2, pc, lsl #2 ; mov r1, r3
-    const code = [_]u8{ 0x10, 0x46, 0x52, 0xEA, 0x8F, 0x03, 0x19, 0x46 };
+    // mov r0, r2 ; and.w r3, r2, pc, lsl #2 ; mov r1, r3
+    const code = [_]u8{ 0x10, 0x46, 0x02, 0xEA, 0x8F, 0x03, 0x19, 0x46 };
     var buffer: [256]u8 = undefined;
     const found = undefined_ops.sweep(imageWith(&buffer, &code, 0x02007000));
     try std.testing.expectEqual(@as(usize, 1), found.count);
     try std.testing.expectEqual(@as(u32, 0x02007002), found.listed()[0].address);
-    try std.testing.expectEqual(@as(u32, 0xEA52038F), found.listed()[0].encoding);
+    try std.testing.expectEqual(@as(u32, 0xEA02038F), found.listed()[0].encoding);
 }
 
 test "a clean image sweeps to nothing" {
@@ -91,7 +98,7 @@ test "a clean image sweeps to nothing" {
 }
 
 test "a non executable segment is not swept" {
-    const code = [_]u8{ 0x52, 0xEA, 0x8F, 0x03 };
+    const code = [_]u8{ 0x02, 0xEA, 0x8F, 0x03 };
     var buffer: [256]u8 = undefined;
     var image = imageWith(&buffer, &code, 0x02007000);
     const at = @as(usize, image.header().e_phoff);
@@ -112,7 +119,7 @@ test "nothing found prints nothing" {
 
 test "a site prints its address and its encoding" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F };
+    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F };
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
@@ -120,12 +127,12 @@ test "a site prints its address and its encoding" {
     defer out.deinit();
     try undefined_ops.print(out.writer(), image, found);
     try std.testing.expect(std.mem.indexOf(u8, out.items, "1 site(s)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x02007498 EA52038F") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x02007498 EA02038F") != null);
 }
 
 test "an image with no symbol table prints the address alone" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007002, .encoding = 0xEA52038F };
+    found.sites[0] = .{ .address = 0x02007002, .encoding = 0xEA02038F };
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
@@ -137,7 +144,7 @@ test "an image with no symbol table prints the address alone" {
 
 test "a site starts with no arrivals" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA52038F };
+    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA02038F };
     found.count = 1;
     try std.testing.expectEqual(@as(usize, 0), found.sitesRun());
     try std.testing.expectEqual(@as(u64, 0), found.arrivals());
@@ -145,8 +152,8 @@ test "a site starts with no arrivals" {
 
 test "an arrival is counted against its own site" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA52038F };
-    found.sites[1] = .{ .address = 0x0200_8984, .encoding = 0xEA52038F };
+    found.sites[0] = .{ .address = 0x0200_7498, .encoding = 0xEA02038F };
+    found.sites[1] = .{ .address = 0x0200_8984, .encoding = 0xEA02038F };
     found.count = 2;
     found.kept()[1].runs += 3;
     try std.testing.expectEqual(@as(usize, 1), found.sitesRun());
@@ -158,7 +165,7 @@ test "kept holds every site the report does not list" {
     var found = undefined_ops.Found{};
     var index: usize = 0;
     while (index < 10) : (index += 1) {
-        found.sites[index] = .{ .address = @intCast(0x0200_0000 + index * 4), .encoding = 0xEA52038F };
+        found.sites[index] = .{ .address = @intCast(0x0200_0000 + index * 4), .encoding = 0xEA02038F };
     }
     found.count = 10;
     try std.testing.expectEqual(@as(usize, 10), found.kept().len);
@@ -167,7 +174,7 @@ test "kept holds every site the report does not list" {
 
 test "an executed site is marked and counted in the summary" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F, .runs = 2 };
+    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F, .runs = 2 };
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
@@ -180,7 +187,7 @@ test "an executed site is marked and counted in the summary" {
 
 test "a swept but unexecuted site reports none executed" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA52038F };
+    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F };
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
@@ -193,7 +200,7 @@ test "a swept but unexecuted site reports none executed" {
 
 test "a kept site does not stop the run by default" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA02_038F };
     found.count = 1;
     try std.testing.expect(!found.sites[0].stop);
     found.sites[0].runs = 1;
@@ -202,8 +209,8 @@ test "a kept site does not stop the run by default" {
 
 test "stopOnRun arms every kept site" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
-    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA52_03CF };
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA02_038F };
+    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA02_03CF };
     found.count = 2;
     found.stopOnRun();
     for (found.kept()) |site| try std.testing.expect(site.stop);
@@ -211,7 +218,7 @@ test "stopOnRun arms every kept site" {
 
 test "an armed site that never ran stopped nothing" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA02_038F };
     found.count = 1;
     found.stopOnRun();
     try std.testing.expect(found.stoppedAt() == null);
@@ -219,8 +226,8 @@ test "an armed site that never ran stopped nothing" {
 
 test "the first armed site that ran is the one that stopped the run" {
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA52_038F };
-    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA52_03CF };
+    found.sites[0] = .{ .address = 0x0200_0100, .encoding = 0xEA02_038F };
+    found.sites[1] = .{ .address = 0x0200_0200, .encoding = 0xEA02_03CF };
     found.count = 2;
     found.stopOnRun();
     found.sites[1].runs = 1;
@@ -233,7 +240,7 @@ test "a site past the watch limit can neither be armed nor stop anything" {
     for (0..undefined_ops.limits.watched) |index| {
         found.sites[index] = .{
             .address = @intCast(0x0200_0000 + index * 4),
-            .encoding = 0xEA52_038F,
+            .encoding = 0xEA02_038F,
         };
     }
     found.count = undefined_ops.limits.watched + 3;
@@ -245,10 +252,10 @@ test "a site past the watch limit can neither be armed nor stop anything" {
 test "the report names the site the run stopped on" {
     var buffer: [4096]u8 = undefined;
     var image_bytes: [512]u8 = undefined;
-    const image = imageWith(&image_bytes, &[_]u8{ 0x52, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
+    const image = imageWith(&image_bytes, &[_]u8{ 0x02, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
 
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA52_038F };
+    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA02_038F };
     found.count = 1;
     found.stopOnRun();
     found.sites[0].runs = 1;
@@ -263,10 +270,10 @@ test "the report names the site the run stopped on" {
 test "a run that was not stopped says nothing about stopping" {
     var buffer: [4096]u8 = undefined;
     var image_bytes: [512]u8 = undefined;
-    const image = imageWith(&image_bytes, &[_]u8{ 0x52, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
+    const image = imageWith(&image_bytes, &[_]u8{ 0x02, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
 
     var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA52_038F };
+    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA02_038F };
     found.count = 1;
     found.sites[0].runs = 1;
 

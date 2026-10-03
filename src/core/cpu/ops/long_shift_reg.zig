@@ -12,8 +12,8 @@
 //!   hw2 = Rm RdaHi[3:1] 1 00 type 1101, type 00 LSLL, 10 ASRL
 //!
 //! Like the immediate forms these sit in ORRS-with-SP space that Unicorn
-//! reads the Armv8.0-M way, so the group is not checked against Unicorn
-//! (RA8EMU-138). Left unclaimed: RdaHi = 0b1111 (UQRSHL and SQRSHR,
+//! reads the Armv8.0-M way; src/core/long_shift_hook.zig runs them there,
+//! so lockstep checks the group (RA8EMU-138). Left unclaimed: RdaHi = 0b1111 (UQRSHL and SQRSHR,
 //! RA8EMU-137), hw1 bit 0 set (UQRSHLL and SQRSHRL, RA8EMU-139), type 01
 //! and 11, hw2 bits 7:6 set, and the UNPREDICTABLE Rm of SP, PC, RdaLo or
 //! RdaHi.
@@ -30,7 +30,7 @@ pub const Fields = struct {
     kind: Kind,
 };
 
-pub const group: op.Group = .{ .name = "long_shift_reg", .decode = decode, .oracle = false };
+pub const group: op.Group = .{ .name = "long_shift_reg", .decode = decode, .oracle = true };
 
 pub fn fields(instr: Instr) ?Fields {
     if (instr.size != 4) return null;

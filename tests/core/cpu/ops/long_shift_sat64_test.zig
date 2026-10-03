@@ -149,6 +149,6 @@ test "no earlier group claims these encodings" {
     }
 }
 
-test "the group is not checked against Unicorn" {
-    try std.testing.expect(!sat.group.oracle);
+test "the group is checked against Unicorn" {
+    try std.testing.expect(sat.group.oracle);
 }
