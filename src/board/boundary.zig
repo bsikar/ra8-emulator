@@ -10,6 +10,7 @@ const engine = @import("../core/engine.zig");
 
 const Board = @import("board.zig").Board;
 const reset = @import("../periph/reset.zig");
+const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
@@ -31,6 +32,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     try takeResetRequests(self, core);
     self.console_input.poll(&self.serial);
     self.touch_input.poll(&self.wire.panel, &self.pins);
+    try raisePinEdges(self, core);
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());
     try drain(self, core, self.mailbox.dueEvents());
@@ -45,6 +47,14 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     try drain(self, core, self.links.takeEvents());
     try self.events.repend(core);
     if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
+}
+
+/// Host switch edges reach the event path only through a pin whose PFS ISEL
+/// is set, and only in the sense its IRQCR picked (RA8EMU-375).
+fn raisePinEdges(self: *Board, core: engine.Engine) !void {
+    for (self.touch_input.edges.take()) |edge| {
+        if (pin_irq.fires(&self.pinfunc, &self.events.pins, edge)) try raise(self, core, pin_irq.eventOf(edge));
+    }
 }
 
 /// Every event one block has due this boundary, offered one at a time.
