@@ -248,7 +248,7 @@ table above. A group listed as missing does not fail the build yet.
 | sp_arith | 23 |
 | ldr_literal | 10 |
 | ldst_imm | 28 |
-| ldst_reg | missing |
+| ldst_reg | 25 |
 | ldm_stm | missing |
 | shift_imm | 16 |
 | add_sub | 18 |
