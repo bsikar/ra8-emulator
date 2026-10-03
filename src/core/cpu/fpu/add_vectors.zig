@@ -58,7 +58,10 @@ pub const sub64 = [_]V64{
     .{ .encoding = "VSUB (floating-point)", .name = "2 - 0.5", .input = .{ .a = 0x4000_0000_0000_0000, .b = 0x3FE0_0000_0000_0000 }, .expect = .{ .bits = 0x3FF8_0000_0000_0000 } },
 };
 
-pub const claimed = [_][]const u8{ "VADD (floating-point)", "VSUB (floating-point)" };
+pub const claimed = [_][]const u8{
+    "VADD (floating-point)",
+    "VSUB (floating-point)",
+};
 
 pub const covered = vector.encodingsOf(case.Binary(u32), case.Result(u32), &add32) ++
     vector.encodingsOf(case.Binary(u32), case.Result(u32), &sub32) ++

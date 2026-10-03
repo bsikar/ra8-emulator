@@ -6,19 +6,9 @@ const case = fpu.case;
 const vectors = fpu.select_vectors;
 const Cond = fpu.select.Cond;
 
-/// The condition a vector exercises, read from its encoding name
-/// ("VSELEQ.F32 T1" -> .eq).
-fn condOf(encoding: []const u8) Cond {
-    const cc = encoding[4..6];
-    if (std.mem.eql(u8, cc, "EQ")) return .eq;
-    if (std.mem.eql(u8, cc, "VS")) return .vs;
-    if (std.mem.eql(u8, cc, "GE")) return .ge;
-    return .gt;
-}
-
 fn expectAll(comptime B: type, list: []const vector.Vector(case.Select(B), case.Result(B))) !void {
     for (list) |v| {
-        const got = fpu.select.select(B, condOf(v.encoding), v.input.nzcv, v.input.a, v.input.b);
+        const got = fpu.select.select(B, v.input.condition, v.input.nzcv, v.input.a, v.input.b);
         std.testing.expectEqual(v.expect.bits, got) catch |err| {
             std.debug.print("conformance: {s} ({s})\n", .{ v.encoding, v.name });
             return err;

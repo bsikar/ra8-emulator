@@ -9,44 +9,35 @@ pub const V32 = vector.Vector(case.Select(u32), case.Result(u32));
 pub const V64 = vector.Vector(case.Select(u64), case.Result(u64));
 
 pub const select32 = [_]V32{
-    .{ .encoding = "VSELEQ.F32 T1", .name = "Z set takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELEQ.F32 T1", .name = "Z clear takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELEQ.F32 T1", .name = "only Z matters", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1011 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELVS.F32 T1", .name = "V set takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELVS.F32 T1", .name = "V clear takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1110 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELGE.F32 T1", .name = "N=V=0 takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELGE.F32 T1", .name = "N=V=1 takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELGE.F32 T1", .name = "N set, V clear takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1000 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELGE.F32 T1", .name = "N clear, V set takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELGT.F32 T1", .name = "N=V, Z clear takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELGT.F32 T1", .name = "Z set takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELGT.F32 T1", .name = "N=V=1, Z clear takes Sn", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VSELGT.F32 T1", .name = "N!=V takes Sm", .input = .{ .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1000 }, .expect = .{ .bits = 0x4000_0000 } },
-    .{ .encoding = "VSELEQ.F32 T1", .name = "an sNaN moves untouched, no IOC", .input = .{ .a = 0x7F80_0001, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x7F80_0001 } },
+    .{ .encoding = "VSEL", .name = "Z set takes Sn", .input = .{ .condition = .eq, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "Z clear takes Sm", .input = .{ .condition = .eq, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "only Z matters", .input = .{ .condition = .eq, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1011 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "V set takes Sn", .input = .{ .condition = .vs, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "V clear takes Sm", .input = .{ .condition = .vs, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1110 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V=0 takes Sn", .input = .{ .condition = .ge, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V=1 takes Sn", .input = .{ .condition = .ge, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "N set, V clear takes Sm", .input = .{ .condition = .ge, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1000 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "N clear, V set takes Sm", .input = .{ .condition = .ge, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V, Z clear takes Sn", .input = .{ .condition = .gt, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "Z set takes Sm", .input = .{ .condition = .gt, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V=1, Z clear takes Sn", .input = .{ .condition = .gt, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VSEL", .name = "N!=V takes Sm", .input = .{ .condition = .gt, .a = 0x3F80_0000, .b = 0x4000_0000, .nzcv = 0b1000 }, .expect = .{ .bits = 0x4000_0000 } },
+    .{ .encoding = "VSEL", .name = "an sNaN moves untouched, no IOC", .input = .{ .condition = .eq, .a = 0x7F80_0001, .b = 0x4000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x7F80_0001 } },
 };
 
 pub const select64 = [_]V64{
-    .{ .encoding = "VSELEQ.F64 T1", .name = "Z set takes Dn", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VSELEQ.F64 T1", .name = "Z clear takes Dm", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
-    .{ .encoding = "VSELVS.F64 T1", .name = "V set takes Dn", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VSELVS.F64 T1", .name = "V clear takes Dm", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b1110 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
-    .{ .encoding = "VSELGE.F64 T1", .name = "N=V=0 takes Dn", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VSELGE.F64 T1", .name = "N=V=1 takes Dn", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VSELGT.F64 T1", .name = "N=V, Z clear takes Dn", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VSELGT.F64 T1", .name = "Z set takes Dm", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
-    .{ .encoding = "VSELVS.F64 T1", .name = "an sNaN moves untouched, no IOC", .input = .{ .a = 0x3FF0_0000_0000_0000, .b = 0x7FF0_0000_0000_0001, .nzcv = 0b0000 }, .expect = .{ .bits = 0x7FF0_0000_0000_0001 } },
+    .{ .encoding = "VSEL", .name = "Z set takes Dn", .input = .{ .condition = .eq, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "Z clear takes Dm", .input = .{ .condition = .eq, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "V set takes Dn", .input = .{ .condition = .vs, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0001 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "V clear takes Dm", .input = .{ .condition = .vs, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b1110 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V=0 takes Dn", .input = .{ .condition = .ge, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V=1 takes Dn", .input = .{ .condition = .ge, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b1001 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "N=V, Z clear takes Dn", .input = .{ .condition = .gt, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "Z set takes Dm", .input = .{ .condition = .gt, .a = 0x3FF0_0000_0000_0000, .b = 0x4000_0000_0000_0000, .nzcv = 0b0100 }, .expect = .{ .bits = 0x4000_0000_0000_0000 } },
+    .{ .encoding = "VSEL", .name = "an sNaN moves untouched, no IOC", .input = .{ .condition = .vs, .a = 0x3FF0_0000_0000_0000, .b = 0x7FF0_0000_0000_0001, .nzcv = 0b0000 }, .expect = .{ .bits = 0x7FF0_0000_0000_0001 } },
 };
 
-pub const claimed = [_][]const u8{
-    "VSELEQ.F32 T1",
-    "VSELVS.F32 T1",
-    "VSELGE.F32 T1",
-    "VSELGT.F32 T1",
-    "VSELEQ.F64 T1",
-    "VSELVS.F64 T1",
-    "VSELGE.F64 T1",
-    "VSELGT.F64 T1",
-};
+pub const claimed = [_][]const u8{"VSEL"};
 
 pub const covered = vector.encodingsOf(case.Select(u32), case.Result(u32), &select32) ++
     vector.encodingsOf(case.Select(u64), case.Result(u64), &select64);

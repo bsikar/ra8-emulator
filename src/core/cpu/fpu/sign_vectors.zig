@@ -40,7 +40,10 @@ pub const abs64 = [_]V64{
     .{ .encoding = "VABS (floating-point)", .name = "negative sNaN", .input = 0xFFF0_0000_0000_0001, .expect = 0x7FF0_0000_0000_0001 },
 };
 
-pub const claimed = [_][]const u8{ "VNEG (floating-point)", "VABS (floating-point)" };
+pub const claimed = [_][]const u8{
+    "VNEG (floating-point)",
+    "VABS (floating-point)",
+};
 
 pub const covered = vector.encodingsOf(u32, u32, &neg32) ++
     vector.encodingsOf(u32, u32, &abs32) ++
