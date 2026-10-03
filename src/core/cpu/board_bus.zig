@@ -17,6 +17,9 @@ const mpu = @import("../../periph/mpu/mpu.zig");
 pub const fault_clear = @import("../../periph/fault_clear.zig");
 const fp_state = @import("fpu/state.zig");
 const fp_scb = @import("fpu/scb.zig");
+const banked = @import("../banked.zig");
+/// Public so its tests reach it without a root export.
+pub const scs_route = @import("scs_route.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
@@ -25,6 +28,9 @@ pub const BoardBus = struct {
     issuer: registry.Issuer = .cpu0,
     /// The core's own SCS models its stores reach.
     scs: Scs = .{},
+    /// The core's Security state, which picks the bank an SCS access lands
+    /// on (scs_route.zig). Null is a core that only runs Secure.
+    security: ?*const banked.Banked = null,
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
@@ -47,8 +53,12 @@ pub const BoardBus = struct {
         };
     }
 
-    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+    fn read(ctx: *anyopaque, given: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        const address = switch (scs_route.land(self.security, given)) {
+            .at => |at| at,
+            .res0 => return @memset(into, 0),
+        };
         if (!inWindow(address, into.len)) {
             if (self.scs.load(address, into)) return;
             return self.memory.view().read(address, into);
@@ -60,8 +70,12 @@ pub const BoardBus = struct {
         @memcpy(into, bytes[0..into.len]);
     }
 
-    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
+    fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        const address = switch (scs_route.land(self.security, given)) {
+            .at => |at| at,
+            .res0 => return,
+        };
         if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);

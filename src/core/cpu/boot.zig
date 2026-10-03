@@ -97,10 +97,10 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
         partitions = .{ .unit = unit };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board.scs.fp, source);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, fp_slot: ?*?*FpState, source: ?Attribution) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -112,7 +112,10 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     cpu.decoded = &decoded;
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;
-    if (fp_slot) |slot| slot.* = &cpu.fp;
+    if (board) |b| {
+        b.scs.fp = &cpu.fp;
+        b.security = &cpu.banked;
+    }
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
