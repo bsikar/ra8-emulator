@@ -6,6 +6,8 @@ test {
     _ = @import("mve_vpred_test.zig");
     _ = @import("mve_vctp_test.zig");
     _ = @import("mve_vdup_test.zig");
+    _ = @import("mve_lane_pair_test.zig");
+    _ = @import("mve_lane_move_test.zig");
     _ = @import("mve_vpst_test.zig");
     _ = @import("shift_imm_test.zig");
     _ = @import("add_sub_test.zig");
