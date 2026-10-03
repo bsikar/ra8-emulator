@@ -66,3 +66,8 @@ test "the LED-only blinks run long enough to toggle twice" {
     try std.testing.expectEqualStrings("10000000", budgets.pick("blink_hal.elf", null).?);
     try std.testing.expectEqualStrings("10000000", budgets.pick("blink_ra8p1.elf", null).?);
 }
+
+test "threadx_blink runs long enough for thread A's second toggle" {
+    try std.testing.expectEqualStrings("600000000", budgets.pick("threadx_blink.elf", null).?);
+    try std.testing.expectEqualStrings("600000000", budgets.pick("threadx_blink.elf", "2000000").?);
+}

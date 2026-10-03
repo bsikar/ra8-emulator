@@ -26,6 +26,10 @@ pub const overrides = [_]Override{
     // each has only switched its LEDs on once, at 10M they read x3.
     .{ .image = "blink_hal.elf", .instructions = "10000000" },
     .{ .image = "blink_ra8p1.elf", .instructions = "10000000" },
+    // Thread A toggles LED1 every 500 ThreadX ticks of 1 ms at 1 GHz, so its
+    // second edge lands near 500M; at 600M LED1 reads x2 on both backends
+    // (RA8EMU-401).
+    .{ .image = "threadx_blink.elf", .instructions = "600000000" },
     // CPU1's ThreadX kernel needs 10 SysTick ticks (about 2.5M CPU1 cycles at
     // 250 MHz) before the M85 prints "10 ticks PASS" (RA8EMU-40).
     .{ .image = "threadx_cpu1.elf", .instructions = "40000000" },
