@@ -294,7 +294,7 @@ table above. A group listed as missing does not fail the build yet.
 | udf | 6 |
 | bkpt | 3 |
 | svc | 3 |
-| table_branch | missing |
+| table_branch | 23 |
 | blxns | 11 |
 | bxns | 14 |
 | sg | missing |
