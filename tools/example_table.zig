@@ -9,6 +9,9 @@
 //! no console and no probe, passes when one of its LEDs toggled at least
 //! twice: it blinks rather than sticking (RA8EMU-398). Anything else is
 //! unknown until a reader checks it against its README.
+//! An image with its bench conf beside it (foo.hil.conf) runs with --console
+//! and is judged first by that conf's HIL_EXPECT and HIL_EXPECT_NEGATIVE over
+//! every console line, as the bench judges it (RA8EMU-400).
 //! A few images need more than one budget fits; example_budgets.zig lists
 //! them and the floor each runs at. A few need hardware the default board
 //! does not fit; example_options.zig lists the flags that fit it.
@@ -44,6 +47,8 @@ pub const Row = struct {
     blinking: bool = false,
     /// The memory-probe verdict for an image example_probes.zig lists.
     probe: ?probes.Judgement = null,
+    /// The verdict the example's own hil.conf gives, when it has one.
+    hil: ?hil_conf.Judgement = null,
 
     pub fn leds(row: *const Row) []const []const u8 {
         return row.leds_on[0..row.led_count];
@@ -55,6 +60,10 @@ pub const Row = struct {
             .pass => .pass,
             .fail => .fail,
             .unknown => .unknown,
+        };
+        if (row.hil) |judged| return switch (judged) {
+            .pass => .pass,
+            .fail => .fail,
         };
         const line = row.console orelse return if (row.blinking) .pass else .unknown;
         if (std.mem.indexOf(u8, line, "FAIL") != null) return .fail;
@@ -159,9 +168,11 @@ pub fn main() !void {
             .ns = try halfPath(allocator, args[2], try nsPairedWith(allocator, image, images)),
         };
         const probe = probes.find(image);
-        const report = try runImage(allocator, args[1], path, halves, probe, budgets.pick(image, budget));
+        const conf = try readConf(allocator, path);
+        const report = try runImage(allocator, args[1], path, halves, probe, conf != null, budgets.pick(image, budget));
         var row = parse(report);
         if (probe) |wanted| row.probe = probes.judge(wanted, report);
+        if (conf) |found| row.hil = hil_conf.judge(found, report);
         try writeRow(out, image, row);
     }
 }
@@ -251,13 +262,27 @@ fn lessThan(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
 }
 
-fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, probe: ?probes.Probe, budget: ?[]const u8) ![]const u8 {
+/// foo.elf's bench conf, copied beside it as foo.hil.conf (RA8EMU-400).
+pub fn confName(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    return std.mem.concat(allocator, u8, &.{ path[0 .. path.len - elf.len], ".hil.conf" });
+}
+
+fn readConf(allocator: std.mem.Allocator, path: []const u8) !?hil_conf.Conf {
+    const text = std.fs.cwd().readFileAlloc(allocator, try confName(allocator, path), 64 * 1024) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        else => return err,
+    };
+    return hil_conf.parse(text);
+}
+
+fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, probe: ?probes.Probe, console: bool, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
     try argv.appendSlice(options.flags(std.fs.path.basename(path)));
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
     if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol, "--dump-sym", wanted.failure });
+    if (console) try argv.append("--console");
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{
         .allocator = allocator,
