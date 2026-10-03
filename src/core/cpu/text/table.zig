@@ -70,6 +70,8 @@ pub const entries = [_]Entry{
     .{ .group = "bxns", .print = @import("bxns.zig").print },
     .{ .group = "sel", .print = @import("sel.zig").print },
     .{ .group = "pkh", .print = @import("pkh.zig").print },
+    .{ .group = "umaal", .print = @import("umaal.zig").print },
+    .{ .group = "usad8", .print = @import("usad8.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
