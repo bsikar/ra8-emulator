@@ -9,7 +9,7 @@
 //! background image, which is the whole reason there are two layers, has
 //! never been in a witness from that tree at all.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const clut = @import("glcdc_clut.zig");
 const scan = @import("glcdc_scan.zig");
 const blend = @import("glcdc_blend.zig");
@@ -60,7 +60,7 @@ pub const Mixer = struct {
 
     /// Composite the panel. Planes are bottom first, so graphics 1 then
     /// graphics 2, which is the order the block stacks them in.
-    pub fn run(self: *Mixer, memory: engine.Engine, panel: Panel, planes: []const Plane) Result {
+    pub fn run(self: *Mixer, memory: Guest, panel: Panel, planes: []const Plane) Result {
         for (planes) |plane| {
             if (scan.validate(plane.shape, plane.palette)) |why| return .{ .refused = why };
         }
@@ -112,7 +112,7 @@ pub const Mixer = struct {
 /// The bytes of the framebuffer line under one panel row, or null when the
 /// layer's rectangle does not reach that row.
 fn readRow(
-    memory: engine.Engine,
+    memory: Guest,
     plane: Plane,
     at: u32,
     into: []u8,

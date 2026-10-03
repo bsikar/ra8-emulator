@@ -15,7 +15,7 @@
 //! layer's palette, hashes the decoded colours, and refuses the cases that
 //! are not a picture.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const clut = @import("glcdc_clut.zig");
 
 /// FNV-1a-32, the same basis and prime dev's framebuffer hash uses, so a
@@ -142,7 +142,7 @@ pub const Scanner = struct {
     /// guest memory, `decode` turns a fetched pixel into ARGB8888.
     pub fn run(
         self: *Scanner,
-        memory: engine.Engine,
+        memory: Guest,
         shape: Shape,
         palette: *const clut.Palette,
     ) ?Picture {

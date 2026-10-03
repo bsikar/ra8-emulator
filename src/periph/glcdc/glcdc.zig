@@ -29,7 +29,7 @@
 //! its domain is dark is the shape of the C tree's issue #247.
 const periph = @import("../registry.zig");
 const pdctr = @import("../pdctr.zig");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const clut = @import("glcdc_clut.zig");
 const lanes = @import("../lanes.zig");
 const pixel = @import("glcdc_pixel.zig");
@@ -105,7 +105,7 @@ pub const Glcdc = struct {
     /// The machine whose RAM the panel is scanned out of. Null on a board
     /// built without an engine, which is every unit test that only cares
     /// about the register window.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     registers: [words]u32 = [_]u32{0} ** words,
     /// One palette pair per graphics layer, layer 1 first.
     palettes: [2]clut.Palette = [_]clut.Palette{.{}} ** 2,
@@ -371,7 +371,7 @@ pub const Glcdc = struct {
     /// Put the controller on the bus with the machine its panel is scanned
     /// out of. The block owns this the way the Ethernet and I2C sides own
     /// theirs, so the board wires a display in one line.
-    pub fn attach(self: *Glcdc, bus: *periph.Bus, domain: *const pdctr.Pdctr, core: engine.Engine) !void {
+    pub fn attach(self: *Glcdc, bus: *periph.Bus, domain: *const pdctr.Pdctr, core: Guest) !void {
         self.* = Glcdc.init(domain);
         self.memory = core;
         try bus.add(self.block());

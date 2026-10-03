@@ -73,7 +73,7 @@ test "scanning an RGB565 framebuffer hashes the colours that are in it" {
 
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
-    const picture = scanner.run(core, shape(4, 1, 8, .rgb565), &palette).?;
+    const picture = scanner.run(.{ .engine = core }, shape(4, 1, 8, .rgb565), &palette).?;
     try std.testing.expectEqual(@as(u32, 4), picture.pixels);
     try std.testing.expectEqual(@as(u32, 2), picture.colours);
     try std.testing.expectEqual(@as(u32, 0), picture.blank);
@@ -89,12 +89,12 @@ test "the stride's padding is not hashed" {
     // and junk in the padding, hash the same.
     var palette = clut.Palette{};
     var tight = scan.Scanner{};
-    const packed_picture = tight.run(core, shape(2, 1, 4, .rgb565), &palette).?;
+    const packed_picture = tight.run(.{ .engine = core }, shape(2, 1, 4, .rgb565), &palette).?;
 
     try core.write(fb_base, &[_]u8{ 0x00, 0xF8, 0x1F, 0x00, 0xAA, 0xBB, 0xCC, 0xDD });
     try core.write(fb_base + 8, &[_]u8{ 0x00, 0xF8, 0x1F, 0x00, 0xEE, 0xFF, 0x11, 0x22 });
     var padded = scan.Scanner{};
-    const two_rows = padded.run(core, shape(2, 2, 8, .rgb565), &palette).?;
+    const two_rows = padded.run(.{ .engine = core }, shape(2, 2, 8, .rgb565), &palette).?;
 
     try std.testing.expectEqual(@as(u32, 4), two_rows.pixels);
     try std.testing.expectEqual(@as(u32, 2), two_rows.colours);
@@ -112,7 +112,7 @@ test "a CLUT framebuffer scans out the palette's colours, not its indices" {
     palette.store(0, 2, 0xFF00_FF00);
 
     var scanner = scan.Scanner{};
-    const picture = scanner.run(core, shape(4, 1, 2, .clut4), &palette).?;
+    const picture = scanner.run(.{ .engine = core }, shape(4, 1, 2, .clut4), &palette).?;
     try std.testing.expectEqual(@as(u32, 4), picture.pixels);
     try std.testing.expectEqual(@as(u32, 2), picture.colours);
     try std.testing.expectEqual(@as(u32, 0), picture.blank);
@@ -131,8 +131,8 @@ test "the same indices through a different palette are a different picture" {
     second.store(0, 2, 0xFF00_FF00);
 
     var scanner = scan.Scanner{};
-    const one = scanner.run(core, shape(4, 1, 2, .clut4), &first).?.hash;
-    const other = scanner.run(core, shape(4, 1, 2, .clut4), &second).?.hash;
+    const one = scanner.run(.{ .engine = core }, shape(4, 1, 2, .clut4), &first).?.hash;
+    const other = scanner.run(.{ .engine = core }, shape(4, 1, 2, .clut4), &second).?.hash;
     // dev hashes the index bytes, so both of these come out identical there.
     try std.testing.expect(one != other);
 }
@@ -144,7 +144,7 @@ test "a CLUT layer over an empty palette is refused, not hashed" {
 
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
-    try std.testing.expect(scanner.run(core, shape(4, 1, 2, .clut4), &palette) == null);
+    try std.testing.expect(scanner.run(.{ .engine = core }, shape(4, 1, 2, .clut4), &palette) == null);
     try std.testing.expectEqual(@as(u32, 1), scanner.count(.no_palette));
     try std.testing.expectEqual(scan.Refusal.no_palette, scanner.last_refusal.?);
 }
@@ -157,7 +157,7 @@ test "a framebuffer whose last line runs off the end of RAM is refused" {
     var running = shape(4, 8, 2048, .rgb565);
     running.base = sram_end - 4096;
     running.window_end = sram_end;
-    try std.testing.expect(scanner.run(core, running, &palette) == null);
+    try std.testing.expect(scanner.run(.{ .engine = core }, running, &palette) == null);
     try std.testing.expectEqual(@as(u32, 1), scanner.count(.off_ram));
 }
 
@@ -168,7 +168,7 @@ test "a base in no RAM window at all is refused the same way" {
     var scanner = scan.Scanner{};
     var nowhere = shape(4, 1, 8, .rgb565);
     nowhere.window_end = null;
-    try std.testing.expect(scanner.run(core, nowhere, &palette) == null);
+    try std.testing.expect(scanner.run(.{ .engine = core }, nowhere, &palette) == null);
     try std.testing.expectEqual(@as(u32, 1), scanner.count(.off_ram));
 }
 
@@ -177,7 +177,7 @@ test "a panel larger than the scan will walk is refused" {
     defer core.close();
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
-    try std.testing.expect(scanner.run(core, shape(4096, 4096, 16384, .argb8888), &palette) == null);
+    try std.testing.expect(scanner.run(.{ .engine = core }, shape(4096, 4096, 16384, .argb8888), &palette) == null);
     try std.testing.expectEqual(@as(u32, 1), scanner.count(.too_big));
 }
 
@@ -187,7 +187,7 @@ test "a line wider than the read buffer is refused rather than cut down" {
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
     // 2048 ARGB8888 pixels is 8 KiB of line, past the 4 KiB chunk.
-    try std.testing.expect(scanner.run(core, shape(2048, 1, 8192, .argb8888), &palette) == null);
+    try std.testing.expect(scanner.run(.{ .engine = core }, shape(2048, 1, 8192, .argb8888), &palette) == null);
     try std.testing.expectEqual(@as(u32, 1), scanner.count(.too_big));
 }
 
@@ -197,7 +197,7 @@ test "a cleared framebuffer reads as blank pixels, not as no picture" {
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
     // ARGB8888 zeroes: decoded alpha is zero, so every pixel is transparent.
-    const picture = scanner.run(core, shape(8, 2, 32, .argb8888), &palette).?;
+    const picture = scanner.run(.{ .engine = core }, shape(8, 2, 32, .argb8888), &palette).?;
     try std.testing.expectEqual(@as(u32, 16), picture.pixels);
     try std.testing.expectEqual(@as(u32, 16), picture.blank);
     try std.testing.expectEqual(@as(u32, 1), picture.colours);
@@ -208,7 +208,7 @@ test "an RGB888 framebuffer of zeroes is opaque black, not blank" {
     defer core.close();
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
-    const picture = scanner.run(core, shape(4, 1, 16, .rgb888), &palette).?;
+    const picture = scanner.run(.{ .engine = core }, shape(4, 1, 16, .rgb888), &palette).?;
     try std.testing.expectEqual(@as(u32, 0), picture.blank);
 }
 
@@ -234,7 +234,7 @@ test "colour counting stops at the sample bound instead of growing" {
     for (0..256) |index| palette.store(0, @intCast(index), 0xFF00_0000 | @as(u32, @intCast(index)));
 
     var scanner = scan.Scanner{};
-    const picture = scanner.run(core, shape(256, 1, 256, .clut8), &palette).?;
+    const picture = scanner.run(.{ .engine = core }, shape(256, 1, 256, .clut8), &palette).?;
     try std.testing.expectEqual(@as(u32, 256), picture.pixels);
     try std.testing.expectEqual(scan.colour_sample, picture.colours);
 }
@@ -244,8 +244,8 @@ test "pixels accumulate across scans and the last picture is kept" {
     defer core.close();
     var palette = clut.Palette{};
     var scanner = scan.Scanner{};
-    _ = scanner.run(core, shape(4, 1, 8, .rgb565), &palette);
-    _ = scanner.run(core, shape(4, 2, 8, .rgb565), &palette);
+    _ = scanner.run(.{ .engine = core }, shape(4, 1, 8, .rgb565), &palette);
+    _ = scanner.run(.{ .engine = core }, shape(4, 2, 8, .rgb565), &palette);
     try std.testing.expectEqual(@as(u32, 2), scanner.scans);
     try std.testing.expectEqual(@as(u32, 12), scanner.pixels);
     try std.testing.expectEqual(@as(u32, 8), scanner.last.?.pixels);
