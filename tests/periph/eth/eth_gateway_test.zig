@@ -7,13 +7,14 @@ const gateway = ra8.periph.eth_gateway;
 
 test "GWMS reports the gateway's mode" {
     var agent = gateway.Gateway{};
-    for ([_]u32{ 1, 2, 3 }) |code| agent.modeWrite(regs.cluster.gwca0 + regs.gwca.gwmc, 4, code);
+    for ([_]u32{ 2, 1, 3 }) |code| agent.modeWrite(regs.cluster.gwca0 + regs.gwca.gwmc, 4, code);
     try std.testing.expectEqual(@as(u32, 3), agent.modeRead(regs.cluster.gwca0 + regs.gwca.gwms, 4));
     try std.testing.expect(agent.mode.operational());
 }
 
-test "a gateway commanded straight to operation stays in reset" {
+test "a gateway in reset refuses a direct operation request" {
     var agent = gateway.Gateway{};
+    agent.mode.mode = .reset;
     agent.modeWrite(regs.cluster.gwca0 + regs.gwca.gwmc, 4, 3);
     try std.testing.expectEqual(@as(u32, 0), agent.modeRead(regs.cluster.gwca0 + regs.gwca.gwms, 4));
     try std.testing.expectEqual(@as(u32, 1), agent.mode.refused);

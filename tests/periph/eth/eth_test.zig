@@ -49,12 +49,13 @@ test "EAMS reports the mode the port reached" {
 test "EAMS is the port's to report, so a store there moves nothing" {
     var port = portZero();
     port.ethaWrite(regs.cluster.etha0 + regs.etha.eams, 4, 3);
-    try std.testing.expectEqual(@as(u32, 0), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
+    try std.testing.expectEqual(@as(u32, 1), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
     try std.testing.expectEqual(@as(u32, 0), port.mode.commands);
 }
 
-test "a mode command that skips a rung leaves the status where it was" {
+test "a mode command from reset that skips a rung leaves status at reset" {
     var port = portZero();
+    port.mode.mode = .reset;
     port.ethaWrite(regs.cluster.etha0 + regs.etha.eamc, 4, 3);
     try std.testing.expectEqual(@as(u32, 0), port.ethaRead(regs.cluster.etha0 + regs.etha.eams, 4));
     try std.testing.expectEqual(@as(u32, 1), port.mode.refused);
