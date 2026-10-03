@@ -41,3 +41,32 @@ test "a disagreement ends the run and is counted as diverged" {
     try std.testing.expectEqual(ra8.core.cpu.regs.Name.r7, ended.diverged.what.register.name);
     try std.testing.expectEqual(@as(u64, 1), lock.counts.find("hint").?.diverged);
 }
+
+const Rounds = struct {
+    calls: u32 = 0,
+    total: u32 = 0,
+
+    fn hook(self: *Rounds) run.Between {
+        return .{ .context = self, .roundFn = count };
+    }
+
+    fn count(context: *anyopaque, instructions: u32) anyerror!void {
+        const self: *Rounds = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        self.total += instructions;
+    }
+};
+
+test "a run hands a second core its turn after every full round" {
+    const gpa = std.testing.allocator;
+    var pair: Pair = undefined;
+    // B . : runs as long as the budget lasts.
+    try pair.open(&[_]u8{ 0xFE, 0xE7 });
+    defer pair.close();
+    var rounds: Rounds = .{};
+    var lock: run.Run = .{ .between = rounds.hook(), .round = 10 };
+    defer lock.deinit(gpa);
+    try std.testing.expect((try lock.go(gpa, &pair.cpu, pair.theirs, &pair.log, 25)) == .budget);
+    try std.testing.expectEqual(@as(u32, 2), rounds.calls);
+    try std.testing.expectEqual(@as(u32, 20), rounds.total);
+}

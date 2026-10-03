@@ -18,8 +18,17 @@ pub const End = union(enum) {
     oracle_fault: engine.Fault,
 };
 
+/// Called every `Run.round` instructions, so a second core can take its
+/// turn between CPU0's (RA8EMU-235).
+pub const Between = struct {
+    context: *anyopaque,
+    roundFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
+};
+
 pub const Run = struct {
     counts: tally.Tally = .{},
+    between: ?Between = null,
+    round: u32 = 1000,
     /// The instructions both backends agreed on, latest last.
     recent: history.History = .{},
     /// The address of the instruction the run ended on.
@@ -33,7 +42,15 @@ pub const Run = struct {
 
     pub fn go(self: *Run, gpa: std.mem.Allocator, ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, budget: u64) !End {
         var left = budget;
+        var since: u32 = 0;
         while (left > 0) : (left -= 1) {
+            if (self.between) |hook| {
+                since += 1;
+                if (since > self.round) {
+                    try hook.roundFn(hook.context, self.round);
+                    since = 1;
+                }
+            }
             const address = ours.regs.pc;
             self.at = address;
             const fetched = Instr.fetch(ours.bus, address) catch null;

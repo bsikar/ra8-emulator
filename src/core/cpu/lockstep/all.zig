@@ -2,6 +2,7 @@
 //! carries a single line for it. Every name matches the file it imports.
 pub const catch_up = @import("catch_up.zig");
 pub const diff = @import("diff.zig");
+pub const dual = @import("dual.zig");
 pub const history = @import("history.zig");
 pub const memory_diff = @import("memory_diff.zig");
 pub const mode = @import("mode.zig");

@@ -14,6 +14,7 @@ const cpu_mod = @import("cpu.zig");
 const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
+const lockstep_dual = @import("lockstep/dual.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("decode_cache.zig").DecodeCache;
@@ -56,6 +57,8 @@ pub const Wiring = struct {
     partitions: ?*sau.Sau = null,
     regions: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
+    /// CPU1 under `--cpu lockstep --cpu1` (RA8EMU-235).
+    cpu1: ?*lockstep_dual.Cpu1 = null,
 };
 
 /// The hand-off from main for any CPU but Unicorn.
@@ -66,7 +69,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
     return switch (choice) {
         .unicorn => unreachable,
         .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget),
-        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears),
+        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears, wiring.cpu1),
     };
 }
 
