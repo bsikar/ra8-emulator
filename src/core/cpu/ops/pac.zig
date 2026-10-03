@@ -111,8 +111,9 @@ fn autg(cpu: *Cpu, instr: Instr) op.Error!void {
     if (!authenticate(cpu, ra, cpu.regs.get(rn), cpu.regs.get(rm))) return error.InvalidState;
 }
 
+/// BXAUT is AUT then BX: with PAC disabled the authentication passes and
+/// the branch still happens, as Arm's AUT + BX substitution implies.
 fn bxaut(cpu: *Cpu, instr: Instr) op.Error!void {
-    if (!enabled(cpu)) return;
     const ra: u4 = @truncate(instr.hw2 >> 12);
     const rn: u4 = @truncate(instr.hw1);
     const rm: u4 = @truncate(instr.hw2);
