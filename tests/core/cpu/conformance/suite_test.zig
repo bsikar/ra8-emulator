@@ -82,3 +82,7 @@ test "every decode-table vector names a registered group" {
         return error.UnclaimedConformanceVector;
     }
 }
+
+test {
+    _ = @import("base/all_test.zig");
+}
