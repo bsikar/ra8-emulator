@@ -10,6 +10,7 @@ test {
     _ = @import("cps_vectors_test.zig");
     _ = @import("dp_reg_vectors_test.zig");
     _ = @import("extend_vectors_test.zig");
+    _ = @import("hint_vectors_test.zig");
     _ = @import("it_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
     _ = @import("shift_imm_vectors_test.zig");
