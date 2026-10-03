@@ -3,6 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const memmap = ra8.core.memmap;
 const boot = ra8.core.cpu.boot;
+const elf = ra8.core.elf;
 const Engine = ra8.core.engine.Engine;
 
 /// A vector table at the base of SRAM pointing at code right after it:
@@ -142,4 +143,34 @@ test "a core asleep in wfi closes every stretch at once without retiring" {
     try std.testing.expectEqual(@as(u64, 1), ran);
     try std.testing.expectEqual(@as(u32, 5), edges.closes);
     try std.testing.expectEqual(@as(u64, 20), edges.charged);
+}
+
+const pacbti_image = @embedFile("../../fixtures/pacbti/pacbti_smoke.elf");
+
+test "a PACBTI-built firmware image runs through the Zig core" {
+    try std.testing.expect(std.mem.indexOf(u8, pacbti_image, &.{ 0xAF, 0xF3, 0x0D, 0x80 }) != null);
+    try std.testing.expect(std.mem.indexOf(u8, pacbti_image, &.{ 0xAF, 0xF3, 0x0F, 0x80 }) != null);
+    try std.testing.expect(std.mem.indexOf(u8, pacbti_image, &.{ 0xAF, 0xF3, 0x2D, 0x80 }) != null);
+
+    const image = try elf.Image.init(pacbti_image);
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var segment_index: u16 = 0;
+    while (segment_index < image.segmentCount()) : (segment_index += 1) {
+        const segment = image.loadSegment(segment_index) orelse continue;
+        try core.write(segment.paddr, segment.bytes);
+    }
+
+    var output: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&output);
+    var retired: u64 = 0;
+    const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.start(stream.writer(), .zig, image, &core, &periph, vector_base, 100, &retired, .{});
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expectEqual(@as(u64, 100), retired);
+    try std.testing.expectEqual(@as(u32, 0x247), try core.readWord(memmap.sram_base));
+    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 100 instructions clean"));
 }
