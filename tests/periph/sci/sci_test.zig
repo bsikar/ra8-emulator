@@ -1,9 +1,10 @@
-//! Covers src/periph/sci.zig: the SCI_B channels, the data port at RDAT/TDAT
-//! and the transmit-enable gate. The console line buffer itself is
-//! tests/periph/sci_line_test.zig.
+//! Covers SCI_B registers and transmit gate; line capture is tested separately.
 const std = @import("std");
 const ra8 = @import("ra8");
 const sci = ra8.periph.sci;
+comptime {
+    _ = @import("sci_input_test.zig");
+}
 
 /// Open a channel the way ra8_sci_open does: receiver and transmitter on.
 fn open(unit: *sci.Sci, channel: usize) void {
@@ -175,8 +176,7 @@ test "only the console channel raises events" {
     try std.testing.expectEqual(@as(usize, 0), unit.dueEvents().len);
 }
 
-/// A device that answers a fixed burst on one byte, so the seam can be
-/// checked without the modem's own rules riding along.
+/// A device that answers a fixed burst without the modem's own rules.
 const Echo = struct {
     reply: []const u8 = "ok",
     on: u8 = '!',
@@ -381,8 +381,7 @@ fn flood(unit: *sci.Sci, channel: usize) void {
     unit.feed(channel, &block);
 }
 
-// The sequence ra8_sci_get_errors / ra8_sci_clear_errors walks. ORER is bit
-// 24, so the only byte store that clears it is the one at CFCLR+3.
+// The clear-errors sequence clears ORER bit 24 only at CFCLR+3.
 test "an overrun shows up in CSR and only ORERC's lane clears it" {
     var unit = sci.Sci.init();
     open(&unit, sci.console_channel);

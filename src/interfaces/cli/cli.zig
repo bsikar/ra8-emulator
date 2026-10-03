@@ -13,6 +13,7 @@ const rtos_load = @import("../../debug/rtos_load.zig");
 pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
 pub const console_output = @import("console_output.zig");
+pub const console_input = @import("../../periph/sci/sci_input.zig");
 
 /// How many `--dump-sym` names one run will carry. The suite that drives
 /// this asks for at most two, a progress counter and a failure counter; the
