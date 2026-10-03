@@ -9,6 +9,7 @@
 //! part, is in src/core/part_map.zig.
 const std = @import("std");
 
+const profile = @import("cpu/profile.zig");
 pub const map = @import("part_map.zig");
 pub const clock = @import("part_clock.zig");
 
@@ -28,6 +29,12 @@ pub const cpu0_systicks: u2 = 2;
 /// Extension" and "Embeds two Systick timers: Secure instance (SysTick_S)
 /// and Non-secure instance (SysTick_NS)".
 pub const cpu1_systicks: u2 = 2;
+
+/// The instruction set each CPU decodes on the Zig core (RA8EMU-233): CPU0
+/// is the Cortex-M85 (Armv8.1-M, MVE, LOB), CPU1 the Cortex-M33 (Armv8.0-M
+/// Mainline, DSP, FPv5-SP), on both parts.
+pub const cpu0_profile = profile.Profile.m85;
+pub const cpu1_profile = profile.Profile.m33;
 
 pub const Part = enum {
     ra8d2,

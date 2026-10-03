@@ -14,3 +14,7 @@ test "an encoding no group claims is refused" {
     // decodes and is taken as UNDEFINSTR, RA8EMU-282.)
     try std.testing.expect(decode.decode(.{ .address = 0, .hw1 = 0xBA80, .size = 2 }) == null);
 }
+
+test {
+    _ = @import("profile_test.zig");
+}

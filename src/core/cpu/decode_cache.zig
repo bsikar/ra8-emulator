@@ -30,6 +30,12 @@ pub const DecodeCache = struct {
     /// decoded at the same address last time, else from the decoder. An
     /// encoding no group knows is not cached.
     pub fn find(self: *DecodeCache, instr: Instr) ?decode.Hit {
+        return self.findFor(decode.profile.Profile.m85, instr);
+    }
+
+    /// `find` for a core with profile `core`. One cache serves one core, so
+    /// the slots need not remember the profile they were filled under.
+    pub fn findFor(self: *DecodeCache, core: decode.profile.Profile, instr: Instr) ?decode.Hit {
         const slot = &self.table[(instr.address >> 1) & (slots - 1)];
         if (slot.hit) |hit| {
             if (slot.address == instr.address and slot.hw1 == instr.hw1 and slot.hw2 == instr.hw2) {
@@ -38,7 +44,7 @@ pub const DecodeCache = struct {
             }
         }
         self.misses += 1;
-        const hit = decode.decode(instr) orelse return null;
+        const hit = decode.decodeFor(core, instr) orelse return null;
         slot.* = .{ .address = instr.address, .hw1 = instr.hw1, .hw2 = instr.hw2, .hit = hit };
         return hit;
     }

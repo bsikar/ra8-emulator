@@ -7,6 +7,7 @@ const Cpu = @import("cpu.zig").Cpu;
 const Instr = @import("instr.zig").Instr;
 const bus = @import("bus.zig");
 const alignment = @import("alignment.zig");
+const profile = @import("profile.zig");
 
 /// An encoding that decodes but must not run: UDF, taken as UNDEFINSTR.
 pub const Undefined = error{Undefined};
@@ -24,4 +25,7 @@ pub const Group = struct {
     /// not implement. A lockstep run steps only the Zig core for these and
     /// counts them as skipped.
     oracle: bool = true,
+    /// The core feature the group's encodings belong to: a core whose
+    /// profile lacks it does not ask the group (RA8EMU-233).
+    needs: profile.Feature = .base,
 };
