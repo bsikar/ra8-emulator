@@ -58,4 +58,5 @@ test {
     _ = @import("rtos_file_test.zig");
     _ = @import("../interfaces/cli/report/json_test.zig");
     _ = @import("../interfaces/cli/report/json_run_test.zig");
+    _ = @import("../interfaces/cli/report/json_protect_test.zig");
 }
