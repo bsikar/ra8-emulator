@@ -141,6 +141,26 @@ test "the instruction group claims PAC, PACBTI, AUT, PACG, AUTG and BXAUT" {
     try std.testing.expect(pac.group.decode(instr(0xFB51, 0x0F32)) == null);
 }
 
+test "LR is a legal Rd, Ra and BXAUT Rn; SP and PC are refused" {
+    for ([_]Instr{
+        instr(0xFB5E, 0xCF1D), instr(0xFB61, 0xFE02), instr(0xFB51, 0xEF02),
+    }) |i| try std.testing.expect(pac.group.decode(i) != null);
+    for ([_]Instr{
+        instr(0xFB5D, 0xCF1E), instr(0xFB61, 0xFD02), instr(0xFB51, 0xDF02), instr(0xFB51, 0xFF02),
+    }) |i| try std.testing.expect(pac.group.decode(i) == null);
+}
+
+test "bxaut ip, lr, sp returns through an authenticated LR and faults on a bad code" {
+    var cpu = enabledCpu();
+    cpu.regs.low[12] = qarma.pac(cpu.regs.lr, cpu.regs.sp(), cpu.regs.pac_key_p);
+    try execute(&cpu, 0xFB5E, 0xCF1D);
+    try std.testing.expectEqual(@as(u32, 0x0800_1234), cpu.regs.pc);
+    cpu.regs.pc = 0x0800_0100;
+    cpu.regs.low[12] ^= 1;
+    try std.testing.expectError(error.InvalidState, execute(&cpu, 0xFB5E, 0xCF1D));
+    try std.testing.expectEqual(@as(u32, 0x0800_0100), cpu.regs.pc);
+}
+
 test "PAC enable is selected from the active security and privilege CONTROL bank" {
     const State = ra8.core.banked.State;
     const states = [_]State{ .secure, .non_secure };

@@ -35,7 +35,7 @@ fn decode(instr: Instr) ?op.Exec {
         const rd: u4 = @truncate(instr.hw2 >> 8);
         const rn: u4 = @truncate(instr.hw1);
         const rm: u4 = @truncate(instr.hw2);
-        return if (destination(rd) and source(rn) and source(rm)) pacg else null;
+        return if (general(rd) and source(rn) and source(rm)) pacg else null;
     }
     if (instr.hw1 & encodings.autg_mask == encodings.autg) {
         const form = instr.hw2 & 0x0FF0;
@@ -44,16 +44,18 @@ fn decode(instr: Instr) ?op.Exec {
         const rn: u4 = @truncate(instr.hw1);
         const rm: u4 = @truncate(instr.hw2);
         const valid = if (form == 0x0F00)
-            destination(ra) and source(rn) and source(rm)
+            general(ra) and source(rn) and source(rm)
         else
-            destination(ra) and destination(rn) and source(rm);
+            general(ra) and general(rn) and source(rm);
         return if (valid) (if (form == 0x0F00) autg else bxaut) else null;
     }
     return null;
 }
 
-fn destination(n: u4) bool {
-    return n < 13;
+/// R0-R12 or LR: the Arm ARM refuses SP and PC as Rd, Ra and BXAUT's Rn
+/// (LLVM's rGPR), so `bxaut ip, lr, sp`, the PACBTI return, decodes.
+fn general(n: u4) bool {
+    return n != 13 and n != 15;
 }
 
 fn source(n: u4) bool {
