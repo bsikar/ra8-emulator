@@ -310,6 +310,8 @@ table above. A group listed as missing does not fail the build yet.
 | fp_directed | missing |
 | fp_move | missing |
 | vscclrm | missing |
+| vlldm_vlstm | missing |
+| vlldm_vlstm_t2 | missing |
 | fp_mem | missing |
 | mve_vpst | missing |
 | mve_int | missing |
