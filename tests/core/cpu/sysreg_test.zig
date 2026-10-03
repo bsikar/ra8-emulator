@@ -65,11 +65,23 @@ test "FAULTMASK cannot be set from HardFault but can be cleared" {
 test "CONTROL: SPSEL changes from thread mode only, and switches SP" {
     var r: Regs = .{ .msp = 0x2000_1000, .psp = 0x2000_2000 };
     sysreg.write(&r, sysreg.sysm.control, 0b10, 0xFFFF_FFF2);
-    try std.testing.expectEqual(@as(u32, 0x2), r.control);
+    try std.testing.expectEqual(@as(u32, 0xF2), r.control);
     try std.testing.expectEqual(@as(u32, 0x2000_2000), r.sp());
     r.xpsr = 0x0F; // SysTick handler
     sysreg.write(&r, sysreg.sysm.control, 0b10, 0x5);
     try std.testing.expectEqual(@as(u32, 0x7), r.control);
+}
+
+test "CONTROL PACBTI enables are writable only by privileged code" {
+    const pacbti = regs.control_bits.pac_en | regs.control_bits.bti_en |
+        regs.control_bits.upac_en | regs.control_bits.ubti_en;
+    var r: Regs = .{};
+    sysreg.write(&r, sysreg.sysm.control, 0b10, pacbti);
+    try std.testing.expectEqual(pacbti, sysreg.read(&r, sysreg.sysm.control));
+
+    r.control |= regs.control_bits.npriv;
+    sysreg.write(&r, sysreg.sysm.control, 0b10, 0);
+    try std.testing.expectEqual(pacbti | regs.control_bits.npriv, r.control);
 }
 
 test "MSPLIM and PSPLIM keep bits 31:3 and are privileged only" {

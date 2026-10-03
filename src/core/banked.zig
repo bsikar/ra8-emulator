@@ -3,8 +3,8 @@
 //! banks to this lane).
 //!
 //! Armv8-M banks MSP, PSP, MSPLIM, PSPLIM, PRIMASK, BASEPRI, FAULTMASK and
-//! CONTROL.nPRIV/SPSEL by Security state. R0-R12, LR, PC and xPSR are
-//! shared, and so are the CONTROL bits above SPSEL (FPCA, SFPA). `Regs`
+//! CONTROL.nPRIV/SPSEL and PACBTI enables by Security state. R0-R12, LR, PC and xPSR are
+//! shared, and so are CONTROL.FPCA/SFPA. `Regs`
 //! always holds the running state's copy; this keeps the other state's copy
 //! and both stack limits, and swaps the two on a change of state.
 //!
@@ -19,7 +19,9 @@ const regs = @import("cpu/regs.zig");
 pub const State = enum(u1) { secure, non_secure };
 
 /// The CONTROL bits each state has its own copy of.
-pub const control_banked: u32 = regs.control_bits.npriv | regs.control_bits.spsel;
+pub const control_banked: u32 = regs.control_bits.npriv | regs.control_bits.spsel |
+    regs.control_bits.pac_en | regs.control_bits.bti_en |
+    regs.control_bits.upac_en | regs.control_bits.ubti_en;
 
 /// One state's banked registers.
 pub const Bank = struct {

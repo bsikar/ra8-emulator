@@ -33,8 +33,8 @@ pub const psr_bits = struct {
 /// The bits MSPLIM and PSPLIM keep: the limit is 8-byte aligned.
 pub const limit_bits: u32 = 0xFFFF_FFF8;
 
-/// CONTROL bits MSR may change: nPRIV, SPSEL and FPCA.
-pub const control_writable: u32 = 0x7;
+/// CONTROL bits MSR may change: nPRIV, SPSEL, FPCA and PACBTI enables.
+pub const control_writable: u32 = 0xF7;
 
 /// Whether SYSm names a register this file models.
 pub fn known(n: u8) bool {
