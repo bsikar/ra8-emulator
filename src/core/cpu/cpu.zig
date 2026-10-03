@@ -152,6 +152,8 @@ pub const Cpu = struct {
                     error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
                     error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
                     error.InvalidEntry => self.secureFault(.invep, address, 0, .{ .invalid_state = address }),
+                    error.NoCoprocessor => self.usageFault(.nocp, address, .{ .unknown = instr }),
+                    error.LazyStateError => self.secureFault(.lserr, address, 0, .{ .invalid_state = address }),
                     error.SecurityViolation => self.secureFault(.auviol, address, self.bus.gate.?.refused, .{ .bus_fault = address }),
                     else => self.refusedOr(address),
                 };

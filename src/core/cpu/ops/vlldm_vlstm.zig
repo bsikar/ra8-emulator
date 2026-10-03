@@ -18,14 +18,20 @@
 //! - VLLDM with LSPACT set just clears it (nothing was stored); otherwise
 //!   it loads the context back. Either way it sets CONTROL.FPCA.
 //!
-//! Not modelled yet (RA8EMU-351): the CPACR/NSACR NOCP check and the
-//! LSERR SecureFault VLSTM takes when LSPACT is already set.
+//! The checks run in QEMU's v7m_vlstm/v7m_vlldm order (RA8EMU-351), all
+//! before any memory access or state change: SFPA clear is a NOP, then a
+//! CPACR refusal is a NOCP UsageFault, then VLSTM with LSPACT already set is
+//! a SecureFault with LSERR, then a misaligned Rn is an UNALIGNED fault.
+//! VLLDM with LSPACT set only clears it, so it never checks alignment.
+//! NSACR is not read: both forms are UNDEFINED from Non-secure state.
 const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
 const control_bits = @import("../regs.zig").control_bits;
+const cpacr = @import("../fpu/cpacr.zig");
+const sysreg = @import("../sysreg.zig");
 
 pub const encodings = struct {
     pub const mask: u16 = 0xFFE0;
@@ -73,9 +79,12 @@ fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr).?;
     if (cpu.banked.current != .secure) return error.Undefined;
     if (cpu.regs.control & control_bits.sfpa == 0) return;
+    const verdict = cpacr.check(.{ .cpacr = cpu.fp.cpacr, .privileged = sysreg.privileged(&cpu.regs) });
+    if (!verdict.enabled) return error.NoCoprocessor;
     const at = cpu.regs.get(f.rn);
-    if (at & 7 != 0) return error.Unaligned;
     if (f.load) return load(cpu, at);
+    if (cpu.fp.context.fpccr.lspact == 1) return error.LazyStateError;
+    if (at & 7 != 0) return error.Unaligned;
     return store(cpu, at);
 }
 
@@ -107,6 +116,7 @@ fn load(cpu: *Cpu, at: u32) op.Error!void {
     if (fp.context.fpccr.lspact == 1) {
         fp.context.fpccr.lspact = 0;
     } else {
+        if (at & 7 != 0) return error.Unaligned;
         const ts = fp.context.fpccr.ts == 1;
         for (0..words(ts)) |i| fp.bank.writeS(@intCast(i), try get(cpu, at +% slot(i)));
         fp.fpscr = Fpscr.fromBits(try get(cpu, at +% offset.fpscr));
