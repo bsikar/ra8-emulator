@@ -56,6 +56,8 @@ pub const Split = struct {
     /// The banked bits, as src/periph/scb_bank.zig bankedBits gives them.
     mask: u32,
     view: alias.View,
+    /// Write-one-to-clear (CFSR): a write names the bits to clear.
+    clears: bool = false,
 
     /// What a word read returns, given what the two words hold.
     pub fn read(self: Split, shared_word: u32, ns_word: u32) u32 {
@@ -66,7 +68,13 @@ pub const Split = struct {
     /// What each word holds after a word write of `value`.
     pub const Words = struct { shared: u32, non_secure: u32 };
 
+    /// For a write-one-to-clear split, `shared` is the value to store
+    /// through the clear model (its banked bits zero, so the Secure copy
+    /// stays) and `non_secure` is the copy with the written bits cleared.
     pub fn write(self: Split, shared_word: u32, ns_word: u32, value: u32) Words {
+        if (self.clears and self.view == .non_secure) {
+            return .{ .shared = value & ~self.mask, .non_secure = ns_word & ~(value & self.mask) };
+        }
         return switch (self.view) {
             .secure => .{ .shared = value, .non_secure = ns_word },
             .non_secure => .{
@@ -93,13 +101,14 @@ pub fn split(target: alias.Target, systicks: scb_bank.SysTicks) ?Split {
 }
 
 /// AIRCR, SCR, CCR and SHPR1 (RA8EMU-419), ICSR and SHPR3 (RA8EMU-439), then
-/// SHCSR (RA8EMU-441): the bit-by-bit registers wired through the split so
-/// far. CFSR waits on the write-one-to-clear model (RA8EMU-365).
-const wired_words = [_]u32{ 0xE000_ED0C, 0xE000_ED10, 0xE000_ED14, 0xE000_ED18, icsr, shpr3, shcsr };
+/// SHCSR (RA8EMU-441), then CFSR (RA8EMU-444): the bit-by-bit registers
+/// wired through the split.
+const wired_words = [_]u32{ 0xE000_ED0C, 0xE000_ED10, 0xE000_ED14, 0xE000_ED18, icsr, shpr3, shcsr, cfsr };
 
 const icsr: u32 = 0xE000_ED04;
 const shpr3: u32 = 0xE000_ED20;
 const shcsr: u32 = 0xE000_ED24;
+const cfsr: u32 = 0xE000_ED28;
 
 /// How many SysTicks a wired word splits for. One timer still pends SysTick
 /// in the shared ICSR, so ICSR, SHPR3 and SHCSR leave SysTick's bits shared
@@ -120,7 +129,10 @@ pub fn wired(state: ?*const banked.Banked, address: u32) ?Split {
     if (target.view == .secure) return null;
     const word = target.address & ~@as(u32, 3);
     for (wired_words) |candidate| {
-        if (candidate == word) return split(target, systicksOf(word));
+        if (candidate != word) continue;
+        var halves = split(target, systicksOf(word)) orelse return null;
+        halves.clears = word == cfsr;
+        return halves;
     }
     return null;
 }

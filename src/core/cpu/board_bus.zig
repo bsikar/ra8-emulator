@@ -24,6 +24,9 @@ const fault_status = @import("../../periph/fault_status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
 
+/// CFSR's banked bits, UFSR and MMFSR (src/periph/scb_bank.zig).
+const cfsr_banked: u32 = 0xFFFF_00FF;
+
 pub const BoardBus = struct {
     memory: EngineBus,
     periph: *registry.Bus,
@@ -113,8 +116,9 @@ pub const BoardBus = struct {
         const memory = self.memory.view();
         const shared = try memory.readWord(halves.shared);
         const copy = try memory.readWord(halves.non_secure);
+        // A write-one-to-clear lane left unwritten clears nothing.
         var word: [4]u8 = undefined;
-        std.mem.writeInt(u32, &word, halves.read(shared, copy), .little);
+        std.mem.writeInt(u32, &word, if (halves.clears) 0 else halves.read(shared, copy), .little);
         @memcpy(word[within..][0..bytes.len], bytes);
         const words = halves.write(shared, copy, std.mem.readInt(u32, &word, .little));
         try putWord(memory, halves.non_secure, words.non_secure);
@@ -125,7 +129,10 @@ pub const BoardBus = struct {
     /// CFSR, HFSR and SFSR as the Secure bank holds them, read past the
     /// write-one-to-clear model for the run report (RA8EMU-394).
     pub fn faults(self: *BoardBus) fault_status.Words {
-        return .{ .cfsr = self.peek(memmap.scb.cfsr), .hfsr = self.peek(memmap.scb.hfsr), .sfsr = self.peek(0xE000_EDE4) };
+        // A Non-secure fault's UFSR and MMFSR bits sit in the Non-secure
+        // copy; folded in, the report matches Unicorn's one word (RA8EMU-444).
+        const ns_bits = self.peek(memmap.scb.cfsr + 0x2_0000) & cfsr_banked;
+        return .{ .cfsr = self.peek(memmap.scb.cfsr) | ns_bits, .hfsr = self.peek(memmap.scb.hfsr), .sfsr = self.peek(0xE000_EDE4) };
     }
 
     fn peek(self: *BoardBus, given: u32) u32 {
@@ -142,14 +149,21 @@ pub const BoardBus = struct {
     /// clears the bit it was asked to raise (RA8EMU-394).
     fn latch(ctx: *anyopaque, given: u32, bits: u32) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (scs_route.wired(self.security, given)) |halves| {
+            try self.raise(halves.non_secure, bits & halves.mask);
+            return self.raise(halves.shared, bits & ~halves.mask);
+        }
         const address = switch (scs_route.land(self.security, given)) {
             .at => |at| at,
             .res0 => return,
         };
+        return self.raise(address, bits);
+    }
+
+    fn raise(self: *BoardBus, address: u32, bits: u32) bus.Error!void {
+        if (bits == 0) return;
         const memory = self.memory.view();
-        var bytes: [4]u8 = undefined;
-        std.mem.writeInt(u32, &bytes, try memory.readWord(address) | bits, .little);
-        try memory.write(address, &bytes);
+        try putWord(memory, address, try memory.readWord(address) | bits);
     }
 };
 
