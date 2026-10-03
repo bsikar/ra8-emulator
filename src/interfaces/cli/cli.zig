@@ -96,8 +96,8 @@ pub const Options = struct {
     /// instead of ending the run; src/core/bus_error.zig. On by default;
     /// `--no-bus-errors` brings back the old end-of-run fault report.
     bus_errors: bool = true,
-    /// `--blocks`: the Zig core runs from formed blocks (RA8EMU-405).
-    blocks: bool = false,
+    /// The Zig core runs from formed blocks (RA8EMU-408); `--no-blocks` steps.
+    blocks: bool = true,
     /// Globals to read out of RAM once the run is over, in the order asked.
     dump: [dump_limit][]const u8 = .{""} ** dump_limit,
     dump_count: usize = 0,
@@ -362,8 +362,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.click = true;
     } else if (std.mem.eql(u8, flag, "--bus-errors") or std.mem.eql(u8, flag, "--no-bus-errors")) {
         options.bus_errors = flag[2] == 'b';
-    } else if (std.mem.eql(u8, flag, "--blocks")) {
-        options.blocks = true;
+    } else if (std.mem.eql(u8, flag, "--blocks") or std.mem.eql(u8, flag, "--no-blocks")) {
+        options.blocks = flag[2] == 'b';
     } else if (std.mem.eql(u8, flag, "--sd-size")) {
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd") or std.mem.eql(u8, flag, "--sd-save")) {

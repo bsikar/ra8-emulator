@@ -30,6 +30,7 @@ pub const Driver = struct {
     }
 
     pub fn close(self: *Driver) void {
+        self.core.dropBlocks();
         self.second.close();
     }
 

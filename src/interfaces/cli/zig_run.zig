@@ -71,6 +71,11 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
             std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
             return 1;
         };
+        if (options.blocks) pair.core.useBlocks() catch |err| {
+            pair.close();
+            std.debug.print("cannot give the second core its block cache: {s}\n", .{@errorName(err)});
+            return 1;
+        };
         clock.cpu1 = &pair;
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }

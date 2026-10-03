@@ -113,6 +113,15 @@ test "precise BusFaults are on unless --no-bus-errors turns them off" {
     try std.testing.expect(!off.bus_errors);
 }
 
+test "the Zig core runs formed blocks unless --no-blocks turns them off" {
+    const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(defaults.blocks);
+    const asked = try parse(&[_][]const u8{ "emu", "a.elf", "--blocks" });
+    try std.testing.expect(asked.blocks);
+    const off = try parse(&[_][]const u8{ "emu", "a.elf", "--no-blocks" });
+    try std.testing.expect(!off.blocks);
+}
+
 test "profile prints counts and folded profile takes an output path" {
     const cli = @import("ra8").core.cli;
     const asked = try parse(&[_][]const u8{ "emu", "a.elf", "--profile" });
