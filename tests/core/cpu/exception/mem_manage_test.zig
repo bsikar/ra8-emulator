@@ -46,17 +46,25 @@ fn unitOf(ctrl: u32) mpu.Mpu {
     var unit = mpu.Mpu{};
     unit.table[0] = mpu.Region.fromPair(fixture.base | mpu.field.rbar_ap_unprivileged, ((fixture.base + 0x3FF) & mpu.field.address) | mpu.field.rlar_enable);
     unit.table[1] = mpu.Region.fromPair(window | mpu.field.rbar_ap_ro, ((window + 0x3F) & mpu.field.address) | mpu.field.rlar_enable);
+    unit.table[2] = mpu.Region.fromPair(no_access, ((no_access + 0x3F) & mpu.field.address) | mpu.field.rlar_enable);
     unit.ctrl = ctrl;
     return unit;
 }
 
+const Profile = ra8.core.cpu.decode.profile.Profile;
+/// CPU0's profile and CPU1's: every case runs on both.
+const profiles = [_]Profile{ Profile.m85, Profile.m33 };
+/// A privileged-only read-write region, no access to unprivileged code.
+const no_access: u32 = fixture.base + 0x280;
+
 /// `instr` at the reset PC with r0 = `address`, r1 = 0xCAFE_F00D.
-fn bootWith(ram: *fixture.Ram, guarded: *Guarded, instr: u16, address: u32) !Cpu {
+fn bootWith(ram: *fixture.Ram, guarded: *Guarded, profile: Profile, instr: u16, address: u32) !Cpu {
     ram.putWord(fixture.base + 3 * 4, hard_handler | 1);
     ram.putWord(fixture.base + 4 * 4, mem_handler | 1);
     ram.putHalf(fixture.code, instr);
     ram.putWord(window, before);
     var cpu = try fixture.boot(ram);
+    cpu.profile = profile;
     cpu.bus = guarded.view();
     cpu.mpu = guarded.check;
     cpu.regs.low[0] = address;
@@ -81,98 +89,148 @@ fn expectMemManage(ram: *fixture.Ram, cpu: *Cpu, at: u32) !void {
     try std.testing.expectEqual(fixture.code, ram.word(fixture.msp_top - 8));
 }
 
+/// A fresh RAM, MPU and check for one case, MEMFAULTENA set when `enabled`.
+const Rig = struct {
+    ram: fixture.Ram = .{},
+    unit: mpu.Mpu = undefined,
+    check: mpu_check.Check = undefined,
+    guarded: Guarded = undefined,
+
+    fn init(self: *Rig, ctrl: u32, enabled: bool) void {
+        self.* = .{};
+        if (enabled) self.ram.putWord(memmap.scb.shcsr, memfaultena);
+        self.unit = unitOf(ctrl);
+        self.check = .{ .unit = &self.unit };
+        self.guarded = .{ .ram = &self.ram, .check = &self.check };
+    }
+    fn boot(self: *Rig, profile: Profile, instr: u16, address: u32, unprivileged: bool) !Cpu {
+        var cpu = try bootWith(&self.ram, &self.guarded, profile, instr, address);
+        if (unprivileged) cpu.regs.control |= ra8.core.cpu.regs.control_bits.npriv;
+        return cpu;
+    }
+};
+
+/// One store or load that the MPU refuses, taken as MemManage, on both cores.
+fn expectRefused(ctrl: u32, instr: u16, address: u32, unprivileged: bool) !void {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(ctrl, true);
+        rig.ram.putWord(address, before);
+        var cpu = try rig.boot(profile, instr, address, unprivileged);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try expectMemManage(&rig.ram, &cpu, address);
+        try std.testing.expectEqual(before, rig.ram.word(address));
+        if (instr == ldr_r1_r0) try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), cpu.regs.low[1]);
+    }
+}
+
+/// One store the MPU lets through, on both cores.
+fn expectAllowed(ctrl: u32, address: u32, unprivileged: bool) !void {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(ctrl, true);
+        var cpu = try rig.boot(profile, str_r1_r0, address, unprivileged);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), rig.ram.word(address));
+        try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.cfsr));
+    }
+}
+
+const on = mpu.field.ctrl_enable;
+const privdef = mpu.field.ctrl_enable | mpu.field.ctrl_privdefena;
+const uncovered: u32 = fixture.base + 0x3C0;
+
 test "a privileged store to a read-only region is MemManage and never lands" {
-    var ram: fixture.Ram = .{};
-    ram.putWord(memmap.scb.shcsr, memfaultena);
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, window);
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try expectMemManage(&ram, &cpu, window);
-    try std.testing.expectEqual(before, ram.word(window));
+    try expectRefused(on, str_r1_r0, window, false);
+}
+
+test "an unprivileged store to a read-only region is MemManage" {
+    try expectRefused(on, str_r1_r0, window, true);
+}
+
+test "an unprivileged store to a no-access region is MemManage" {
+    try expectRefused(on, str_r1_r0, no_access, true);
+}
+
+test "privileged code may store to that region" {
+    try expectAllowed(on, no_access, false);
 }
 
 test "the same store to the read-write region beside it goes ahead" {
-    var ram: fixture.Ram = .{};
-    ram.putWord(memmap.scb.shcsr, memfaultena);
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, window + 0x40);
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
-    try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), ram.word(window + 0x40));
-    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+    try expectAllowed(on, window + 0x40, true);
 }
 
 test "an unprivileged load from a privileged-only region is MemManage" {
-    var ram: fixture.Ram = .{};
-    ram.putWord(memmap.scb.shcsr, memfaultena);
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, ldr_r1_r0, window);
-    cpu.regs.control |= ra8.core.cpu.regs.control_bits.npriv;
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try expectMemManage(&ram, &cpu, window);
-    try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), cpu.regs.low[1]);
+    try expectRefused(on, ldr_r1_r0, window, true);
 }
 
-test "the background: PRIVDEFENA lets privileged code through, not unprivileged" {
-    var ram: fixture.Ram = .{};
-    ram.putWord(memmap.scb.shcsr, memfaultena);
-    var unit = unitOf(mpu.field.ctrl_enable | mpu.field.ctrl_privdefena);
+test "the background with PRIVDEFENA lets privileged code through, not unprivileged" {
+    try expectAllowedUncovered(privdef, false);
+    try expectRefusedUncovered(privdef, true);
+}
+
+test "the background without PRIVDEFENA refuses privileged code too" {
+    try expectRefusedUncovered(on, false);
+    try expectRefusedUncovered(on, true);
+}
+
+/// Region 0 dropped, so `uncovered` falls to the background.
+fn backgroundOnly(ctrl: u32) mpu.Mpu {
+    var unit = unitOf(ctrl);
     unit.table[0] = .{};
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, fixture.base + 0x100 + 0x80);
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
-    unit.ctrl = mpu.field.ctrl_enable;
-    var again = try bootWith(&ram, &guarded, str_r1_r0, fixture.base + 0x100 + 0x80);
-    _ = &again;
-    try std.testing.expectEqual(@as(?Stop, null), again.step());
-    try std.testing.expectEqual(mem_handler, again.regs.pc);
+    return unit;
+}
+
+fn expectAllowedUncovered(ctrl: u32, unprivileged: bool) !void {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(ctrl, true);
+        rig.unit = backgroundOnly(ctrl);
+        var cpu = try rig.boot(profile, str_r1_r0, uncovered, unprivileged);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), rig.ram.word(uncovered));
+    }
+}
+
+fn expectRefusedUncovered(ctrl: u32, unprivileged: bool) !void {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(ctrl, true);
+        rig.unit = backgroundOnly(ctrl);
+        var cpu = try rig.boot(profile, str_r1_r0, uncovered, unprivileged);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try expectMemManage(&rig.ram, &cpu, uncovered);
+        try std.testing.expectEqual(@as(u32, 0), rig.ram.word(uncovered));
+    }
 }
 
 test "with MEMFAULTENA clear the fault escalates to HardFault with FORCED" {
-    var ram: fixture.Ram = .{};
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, window);
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try std.testing.expectEqual(hard_handler, cpu.regs.pc);
-    try std.testing.expectEqual(@as(u32, 3), ipsr(&cpu));
-    try std.testing.expectEqual(forced, ram.word(memmap.scb.hfsr));
-    try std.testing.expectEqual(daccviol | mmarvalid, ram.word(memmap.scb.cfsr));
-    try std.testing.expectEqual(before, ram.word(window));
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(on, false);
+        var cpu = try rig.boot(profile, str_r1_r0, window, false);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(hard_handler, cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 3), ipsr(&cpu));
+        try std.testing.expectEqual(forced, rig.ram.word(memmap.scb.hfsr));
+        try std.testing.expectEqual(daccviol | mmarvalid, rig.ram.word(memmap.scb.cfsr));
+        try std.testing.expectEqual(before, rig.ram.word(window));
+    }
 }
 
 test "under FAULTMASK the MPU is off, unless HFNMIENA, which locks up" {
-    var ram: fixture.Ram = .{};
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, window);
-    cpu.regs.faultmask = 1;
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), ram.word(window));
-    unit.ctrl |= mpu.field.ctrl_hfnmiena;
-    var locked = try bootWith(&ram, &guarded, str_r1_r0, window);
-    locked.regs.faultmask = 1;
-    try std.testing.expectEqual(@as(?Stop, .{ .bus_fault = fixture.code }), locked.step());
-}
-
-test "an M33 core (CPU1's profile) takes the same MemManage" {
-    var ram: fixture.Ram = .{};
-    ram.putWord(memmap.scb.shcsr, memfaultena);
-    var unit = unitOf(mpu.field.ctrl_enable);
-    var check: mpu_check.Check = .{ .unit = &unit };
-    var guarded: Guarded = .{ .ram = &ram, .check = &check };
-    var cpu = try bootWith(&ram, &guarded, str_r1_r0, window);
-    cpu.profile = ra8.core.cpu.decode.profile.Profile.m33;
-    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
-    try expectMemManage(&ram, &cpu, window);
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(on, false);
+        var cpu = try rig.boot(profile, str_r1_r0, window, false);
+        cpu.regs.faultmask = 1;
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), rig.ram.word(window));
+        rig.unit.ctrl |= mpu.field.ctrl_hfnmiena;
+        var locked = try rig.boot(profile, str_r1_r0, window, false);
+        locked.regs.faultmask = 1;
+        try std.testing.expectEqual(@as(?Stop, .{ .bus_fault = fixture.code }), locked.step());
+    }
 }
