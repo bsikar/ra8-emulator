@@ -288,7 +288,7 @@ table above. A group listed as missing does not fail the build yet.
 | csel | 37 |
 | lob | missing |
 | long_shift | 20 |
-| long_shift_reg | missing |
+| long_shift_reg | 32 |
 | long_shift_sat | missing |
 | long_shift_sat64 | missing |
 | udf | 6 |
