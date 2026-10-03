@@ -203,3 +203,17 @@ test "every pixel through the stage is counted" {
     _ = stage.apply(grey, 1, 0);
     try std.testing.expectEqual(@as(u32, 2), stage.pixels);
 }
+
+test "an armed capture keeps exactly what leaves the stage and drops what falls outside it" {
+    var stage = out.Stage{};
+    var pixels = [_]u32{0} ** 4;
+    stage.capture = .{ .pixels = &pixels, .width = 2, .height = 2 };
+    const shown = stage.apply(grey, 1, 1);
+    try std.testing.expectEqual(shown, pixels[3]);
+    _ = stage.apply(white, 2, 0);
+    _ = stage.apply(white, 0, 2);
+    try std.testing.expectEqualSlices(u32, &[_]u32{ 0, 0, 0, shown }, &pixels);
+    stage.capture = null;
+    _ = stage.apply(white, 0, 0);
+    try std.testing.expectEqual(@as(u32, 0), pixels[0]);
+}

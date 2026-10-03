@@ -220,6 +220,7 @@ fn reportAll(
     try report_dumps.dumps(out, core, image, options, board, watched);
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = core.handle });
     try rtos_hook.second.print(out, options, second);
+    try report.frame_out.report(out, board, options.frame_out);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.

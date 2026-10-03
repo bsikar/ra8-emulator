@@ -70,6 +70,8 @@ pub const Options = struct {
     sd_path: ?[]const u8 = null,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
+    /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
+    frame_out: ?[]const u8 = null,
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.
@@ -282,14 +284,9 @@ pub fn parse(argv: []const []const u8) !Options {
 ///
 /// Returns whether the argument was one of them. False leaves the index
 /// where it found it, so the caller can carry on looking.
-/// The flags that inspect a run rather than shape the board: which image
-/// the second core runs, what to watch, what to print at the end.
-///
-/// Split out of `parse` for the same reason `parseWorld` was: one chain of
-/// else-ifs per concern keeps each function inside the length gate, and
-/// these five have nothing to say to the timing and memory flags above.
-/// Returns true when the flag was one of these and `index` has been walked
-/// past any value it took.
+/// The flags that inspect a run rather than shape the board, split out of
+/// `parse` to keep each chain inside the length gate. True when the flag was
+/// one of these and `index` has been walked past any value it took.
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
@@ -298,6 +295,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.ns_path = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--watch")) {
         options.watch_place = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--frame-out")) {
+        options.frame_out = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--trace-rtos")) {
         options.trace_rtos = true;
     } else if (std.mem.eql(u8, flag, "--trace-rtos-out")) {
