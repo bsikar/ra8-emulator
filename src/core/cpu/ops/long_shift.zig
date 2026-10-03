@@ -13,9 +13,10 @@
 //! so RdaLo is always even and RdaHi always odd. None of the three writes
 //! the flags.
 //!
-//! Left unclaimed for now (RA8EMU-96): a shift of zero, RdaHi = 0b1111 (the
-//! single-register saturating shifts), type 0b11, hw1 bit 0 set, and the
-//! register-shift forms.
+//! imm3:imm2 = 0 is a shift by 32 for LSRL and ASRL (DecodeImmShift reads
+//! imm5 0 as 32 for LSR and ASR, RA8EMU-312); for LSLL it stays unclaimed.
+//! Also left to other groups: RdaHi = 0b1111 (the single-register
+//! saturating shifts), type 0b11, hw1 bit 0 set, and the register forms.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -41,9 +42,16 @@ pub fn fields(instr: Instr) ?Fields {
     if (kind_bits == 0x3) return null;
     const imm3: u6 = @intCast((instr.hw2 >> 12) & 0x7);
     const imm2: u6 = @intCast((instr.hw2 >> 6) & 0x3);
-    const amount = (imm3 << 2) | imm2;
-    if (amount == 0) return null;
-    return .{ .lo = @intCast(instr.hw1 & 0xE), .hi = hi, .amount = amount, .kind = @enumFromInt(kind_bits) };
+    const kind: Kind = @enumFromInt(kind_bits);
+    const amount = shiftAmount(kind, (imm3 << 2) | imm2) orelse return null;
+    return .{ .lo = @intCast(instr.hw1 & 0xE), .hi = hi, .amount = amount, .kind = kind };
+}
+
+/// The encoded amount as a shift count: 0 means 32 for the right shifts
+/// and is no instruction for LSLL.
+fn shiftAmount(kind: Kind, encoded: u6) ?u6 {
+    if (encoded != 0) return encoded;
+    return if (kind == .lsll) null else 32;
 }
 
 fn decode(instr: Instr) ?op.Exec {
@@ -52,7 +60,7 @@ fn decode(instr: Instr) ?op.Exec {
 }
 
 /// The 64-bit result of shifting `value` the way `kind` says by `amount`,
-/// 1 to 31.
+/// 1 to 32.
 pub fn shift(kind: Kind, value: u64, amount: u6) u64 {
     const n: u6 = amount;
     return switch (kind) {
