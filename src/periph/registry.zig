@@ -15,6 +15,10 @@
 //! through instead of hanging.
 const std = @import("std");
 
+/// Pluggable device models, reached through here because src/root.zig is at
+/// its line limit (RA8EMU-63 splits it).
+pub const model = @import("model/model.zig");
+
 /// The Secure peripheral window. These are silicon facts, not options.
 pub const base: u32 = 0x4000_0000;
 pub const size: u32 = 0x1000_0000;

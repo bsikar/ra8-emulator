@@ -284,6 +284,8 @@ test {
     _ = @import("periph/prcr_test.zig");
     _ = @import("periph/registry_test.zig");
     _ = @import("periph/reset_test.zig");
+    _ = @import("periph/model/endpoint_test.zig");
+    _ = @import("periph/model/catalog_test.zig");
     _ = @import("periph/riic/riic_ack_test.zig");
     _ = @import("periph/riic/riic_reset_test.zig");
     _ = @import("periph/riic/riic_bus_test.zig");
