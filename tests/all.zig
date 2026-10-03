@@ -264,6 +264,7 @@ test {
     _ = @import("periph/systick_arm_test.zig");
     _ = @import("periph/subclock_test.zig");
     _ = @import("periph/lpm/lpm_test.zig");
+    _ = @import("periph/lpm/lpm_dps_test.zig");
     _ = @import("periph/pll/pll_test.zig");
     _ = @import("periph/vscr_test.zig");
     _ = @import("periph/voltage_hazard_test.zig");
