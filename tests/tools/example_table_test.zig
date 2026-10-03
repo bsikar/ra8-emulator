@@ -134,3 +134,16 @@ test {
     _ = @import("hil_conf_test.zig");
     _ = @import("hil_alive_test.zig");
 }
+
+test "untilFor stops a uart_scrape run on its expected line" {
+    const conf = table.hil_conf.parse("HIL_MODE=uart_scrape\nHIL_EXPECT=\"sbns: verify+enter NS\"\n");
+    try std.testing.expectEqualStrings("sbns: verify+enter NS", table.untilFor(conf, null).?);
+    try std.testing.expect(table.untilFor(null, null) == null);
+}
+
+test "untilFor keeps the budget when a probe has to watch past the line" {
+    const conf = table.hil_conf.parse("HIL_MODE=uart_scrape\nHIL_EXPECT=\"sbns: verify+enter NS\"\n");
+    const probe = table.probes.fromConf("secure_boot_ns_hil.elf", "g_sbns_ns_alive", 50, "g_sbns_denied", 0);
+    try std.testing.expect(probe != null);
+    try std.testing.expect(table.untilFor(conf, probe) == null);
+}
