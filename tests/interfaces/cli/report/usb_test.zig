@@ -76,3 +76,7 @@ test "no halt line when the device listed no endpoint" {
     const text = try render(&host);
     try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "ENDPOINT_HALT") == null);
 }
+
+test {
+    _ = @import("usb_cable_test.zig");
+}
