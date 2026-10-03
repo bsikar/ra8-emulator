@@ -12,7 +12,10 @@ const profile = @import("profile.zig");
 /// An encoding that decodes but must not run: UDF, taken as UNDEFINSTR.
 pub const Undefined = error{Undefined};
 
-pub const Error = bus.Error || alignment.Error || Undefined;
+/// BKPT: a debug event the core takes once the instruction has decoded.
+pub const Debug = error{Breakpoint};
+
+pub const Error = bus.Error || alignment.Error || Undefined || Debug;
 
 /// Runs one decoded instruction. The PC already points past it when this is
 /// called; a branch writes the PC, everything else leaves it alone.

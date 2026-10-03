@@ -61,6 +61,7 @@ pub const groups = [_]op.Group{
     needs(.mve, @import("long_shift_sat.zig").group),
     needs(.mve, @import("long_shift_sat64.zig").group),
     @import("udf.zig").group,
+    @import("bkpt.zig").group,
     @import("svc.zig").group,
     @import("table_branch.zig").group,
     @import("blxns.zig").group,
