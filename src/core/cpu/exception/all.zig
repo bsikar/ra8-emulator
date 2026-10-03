@@ -10,3 +10,4 @@ pub const dispatch = @import("dispatch.zig");
 pub const fault = @import("fault.zig");
 pub const nvic_source = @import("nvic_source.zig");
 pub const sleep = @import("sleep.zig");
+pub const quiet_source = @import("quiet_source.zig");

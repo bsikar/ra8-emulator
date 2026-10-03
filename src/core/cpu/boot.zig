@@ -15,6 +15,7 @@ const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
+const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
@@ -83,9 +84,13 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
 }
 
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap) !u8 {
-    var cpu: cpu_mod.Cpu = .{ .bus = if (wrap) |w| w.busFn(w.context, memory) else memory };
     var pending: NvicSource = .{};
-    cpu.source = if (wrap) |w| w.sourceFn(w.context, pending.source()) else pending.source();
+    // A wrapped run listens to every poll, so it keeps the plain one.
+    var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
+    var cpu: cpu_mod.Cpu = if (wrap) |w|
+        .{ .bus = w.busFn(w.context, memory), .source = w.sourceFn(w.context, pending.source()) }
+    else
+        .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});

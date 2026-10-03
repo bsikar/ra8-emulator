@@ -55,6 +55,9 @@ pub const Cpu = struct {
     /// What is pending, asked before each instruction `run` executes. Null
     /// runs with no asynchronous exceptions, as a lockstep step does.
     source: ?exception.source.Source = null,
+    /// The poll shortcut `source` and `bus` go through on the board, stirred
+    /// as each `run` starts because the board moves between stretches.
+    quiet: ?*exception.quiet_source.QuietSource = null,
     /// The local exclusive monitor: the address a load-exclusive tagged.
     exclusive: ?u32 = null,
     /// The other Security state's banked registers, which Secure code reaches
@@ -129,6 +132,7 @@ pub const Cpu = struct {
     }
 
     pub fn run(self: *Cpu, count: u64) Stop {
+        if (self.quiet) |q| q.stir();
         var left = count;
         while (left > 0) : (left -= 1) {
             const taken = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
