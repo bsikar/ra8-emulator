@@ -66,9 +66,14 @@ pub fn executingSecure(unit: *const sau.Sau, pc: u32) bool {
 /// The response word for `target`. From the Non-secure state only the MPU
 /// half is reported; the security half reads as zero.
 pub fn respond(unit: *const sau.Sau, target: u32, secure: bool) u32 {
+    return respondWith(unit, .{}, target, secure);
+}
+
+/// As `respond`, with the IDAU's answer for `target` (RA8EMU-277).
+pub fn respondWith(unit: *const sau.Sau, idau: sau_attr.Idau, target: u32, secure: bool) u32 {
     var word: u32 = field.r | field.rw;
     if (!secure) return word;
-    const answer = sau_attr.attribute(unit, .{}, target);
+    const answer = sau_attr.attribute(unit, idau, target);
     if (answer.region) |region| {
         word |= field.srvalid | @as(u32, region) << field.sregion_shift;
     }

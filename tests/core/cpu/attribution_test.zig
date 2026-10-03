@@ -108,3 +108,7 @@ test "a Secure core is never checked" {
     try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
     try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
 }
+
+test {
+    _ = @import("sau_source_test.zig");
+}
