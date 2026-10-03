@@ -16,8 +16,13 @@ const fault = @import("fault.zig");
 pub const Error = fault.Error;
 
 pub fn poll(cpu: *Cpu) Error!bool {
+    if (cpu.quiet) |q| if (q.hushed) return false;
     const external = if (cpu.source) |from| try from.winner(cpu.bus) else null;
     const pending_fault = fault.pendingUsage(cpu.bus);
+    if (external == null and pending_fault == null) {
+        if (cpu.quiet) |q| q.hush();
+        return false;
+    }
     const split = prigroup(cpu.bus);
     const fault_first = if (pending_fault) |pending|
         external == null or active.group(pending.priority, split) < active.group(external.?.priority, split)

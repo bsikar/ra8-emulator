@@ -114,3 +114,20 @@ test "each run of the core starts by stirring" {
     _ = cpu.run(0);
     try std.testing.expect(!quiet.settled);
 }
+
+test "hush only takes once settled, and a stir lifts it (RA8EMU-429)" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{};
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = ram.view() };
+    quiet.hush();
+    try std.testing.expect(!quiet.hushed);
+    _ = try quiet.source().winner(quiet.bus());
+    quiet.hush();
+    try std.testing.expect(quiet.hushed);
+    try quiet.bus().write(fixture.scs + 0x200, &.{ 0, 0, 0, 0 });
+    try std.testing.expect(!quiet.hushed);
+    _ = try quiet.source().winner(quiet.bus());
+    quiet.hush();
+    quiet.stir();
+    try std.testing.expect(!quiet.hushed);
+}

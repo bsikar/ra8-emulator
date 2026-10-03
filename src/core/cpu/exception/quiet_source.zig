@@ -30,6 +30,8 @@ pub const QuietSource = struct {
     memory: bus_mod.Bus,
     /// The last answer was "nothing pending" and nothing has stirred since.
     settled: bool = false,
+    /// Set by `hush`: the last poll found no winner and no pending fault.
+    hushed: bool = false,
 
     pub fn source(self: *QuietSource) Source {
         return .{ .ctx = self, .vtable = &.{ .winner = winner, .taken = taken, .returned = returned } };
@@ -43,6 +45,14 @@ pub const QuietSource = struct {
     /// Forget the last answer: the next poll asks the inner source again.
     pub fn stir(self: *QuietSource) void {
         self.settled = false;
+        self.hushed = false;
+    }
+
+    /// The poll found nothing at all pending, a UsageFault included: until
+    /// the next stir it need not look again (RA8EMU-429). Only a settled
+    /// source hushes, so a pend found since the last stir is never held.
+    pub fn hush(self: *QuietSource) void {
+        if (self.settled) self.hushed = true;
     }
 
     fn winner(ctx: *anyopaque, through: bus_mod.Bus) bus_mod.Error!?Entry {
