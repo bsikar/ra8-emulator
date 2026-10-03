@@ -32,6 +32,8 @@ const elf = @import("../../../core/elf.zig");
 const undefined_ops = @import("../../../core/undefined_ops.zig");
 const bus_fault = @import("../../../periph/bus_fault.zig");
 const json_run = @import("json_run.zig");
+const hotspots = @import("../../../debug/hotspots.zig");
+const functions = @import("../../../debug/functions.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -57,6 +59,11 @@ pub const Tally = struct {
     /// BusFaults raised for refused accesses; only a `--bus-errors` run
     /// raises any, so every other run prints exactly what it did before.
     bus_errors: bus_fault.Tally = .{},
+    /// Where the run spent itself, read only by `--report json`; the text
+    /// report prints these from main.zig after this block.
+    pcs: hotspots.Table = .{},
+    fns: ?functions.Table = null,
+    profile: ?functions.profile.Table = null,
 };
 
 /// Say what the board and the image have to say, in reading order: the bus,
@@ -79,7 +86,13 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
 /// stays the default and goes through `all` untouched.
 pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bool) !void {
     if (!as_json) return all(out, board, image, of);
-    try json_run.document(out, board, .{ .engine = "unicorn", .elapsed = of.timebase.elapsed, .bus_errors = of.bus_errors });
+    try json_run.document(out, board, .{ .engine = "unicorn", .elapsed = of.timebase.elapsed, .bus_errors = of.bus_errors, .where = .{
+        .image = image,
+        .steps = .{ .loops = of.loops, .selects = of.selects, .worlds = of.worlds },
+        .pcs = &of.pcs,
+        .fns = if (of.fns) |*table| table else null,
+        .profile = if (of.profile) |*table| table else null,
+    } });
 }
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.

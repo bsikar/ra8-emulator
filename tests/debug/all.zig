@@ -69,4 +69,5 @@ test {
     _ = @import("../interfaces/cli/report/json_media_test.zig");
     _ = @import("../interfaces/cli/report/json_system_test.zig");
     _ = @import("../interfaces/cli/report/json_compute_test.zig");
+    _ = @import("../interfaces/cli/report/json_where_test.zig");
 }
