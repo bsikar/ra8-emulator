@@ -37,6 +37,17 @@ test "the example that formats its own FAT32 volume gets a 4 GB card" {
     try std.testing.expectEqualStrings("4096", got[1]);
 }
 
+test "import_reader receives its fixture card from the emulator harness" {
+    var env = std.process.EnvMap.init(std.testing.allocator);
+    defer env.deinit();
+    try env.put("RA8_EMU_IMPORT_READER_IMG", "/tmp/import_reader.img");
+    try std.testing.expectEqualStrings(
+        "/tmp/import_reader.img",
+        options.cardImage("import_reader.elf", &env).?,
+    );
+    try std.testing.expectEqual(@as(?[]const u8, null), options.cardImage("epub_open.elf", &env));
+}
+
 test "the TrustZone USB pair runs with the loop cable for two seconds" {
     const got = options.flags("tz_nsc_cgc_usb.elf");
     try std.testing.expectEqual(@as(usize, 3), got.len);
