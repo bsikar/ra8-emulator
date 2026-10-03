@@ -51,6 +51,11 @@ pub const Divergence = struct {
     oracle: snapshot.Snapshot,
 };
 
+/// A SecureFault the Zig core took on the instruction at `address`
+/// (RA8EMU-396). Unicorn models no security state, so the two cannot be
+/// compared from here on, and the run ends instead of counting a divergence.
+pub const SecureFault = struct { address: u32 };
+
 pub const Result = union(enum) {
     /// Both agree after the instruction; the payload is its class.
     matched: []const u8,
@@ -63,6 +68,8 @@ pub const Result = union(enum) {
     skipped: []const u8,
     /// Unicorn faulted on it; the Zig core was not stepped.
     oracle_fault: engine.Fault,
+    /// The Zig core took a SecureFault on it, which Unicorn cannot model.
+    secure_fault: SecureFault,
 };
 
 /// `log` is the peripheral log Unicorn's tap writes into and the Zig core's
@@ -87,6 +94,7 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, sett
         if (try retire(theirs, address)) |fault| return .{ .oracle_fault = fault };
         if (settle) |latch| latch.apply(theirs) catch return engine.Error.WriteFailed;
     }
+    const faults = ours.secure_faults;
     var made: writes.Recorder = .{ .inner = ours.bus };
     ours.bus = made.view();
     var stopped = ours.step();
@@ -94,6 +102,7 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, sett
     ours.bus = made.inner;
     log.armed = false;
     if (stopped) |why| return .{ .stopped = why };
+    if (ours.secure_faults != faults) return .{ .secure_fault = .{ .address = address } };
     const class = hit.?.group;
     if (!checked) {
         try catch_up.toZig(theirs, &ours.regs, made.items());
