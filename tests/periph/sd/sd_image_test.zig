@@ -130,3 +130,69 @@ test "a raw image must fit the exact SDHC capacity field" {
     defer std.testing.allocator.free(bytes);
     try std.testing.expectError(error.BadImageSize, img.loadBytes(bytes));
 }
+
+/// A one-unit (512 KiB) raw image whose block n starts with byte n + 1 for
+/// the first few blocks, the rest zeros.
+fn patterned(allocator: std.mem.Allocator) ![]u8 {
+    const bytes = try allocator.alloc(u8, image.geometry.csize_unit * image.geometry.block_bytes);
+    @memset(bytes, 0);
+    for (0..4) |n| bytes[n * image.geometry.block_bytes] = @intCast(n + 1);
+    return bytes;
+}
+
+test "saveTo: a written block round-trips through the image file" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const bytes = try patterned(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try tmp.dir.writeFile(.{ .sub_path = "card.img", .data = bytes });
+    var img = unit();
+    defer img.deinit();
+    try img.loadBytes(bytes);
+    const written: image.Block = .{0xA5} ** image.geometry.block_bytes;
+    try std.testing.expect(img.write(9, &written));
+    try img.saveTo(tmp.dir, "card.img");
+    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", bytes.len + 1);
+    defer std.testing.allocator.free(back);
+    try std.testing.expectEqual(bytes.len, back.len);
+    try std.testing.expectEqualSlices(u8, &written, back[9 * 512 .. 10 * 512]);
+    try std.testing.expectEqualSlices(u8, bytes[0 .. 9 * 512], back[0 .. 9 * 512]);
+}
+
+test "saveTo: an unchanged card leaves the image byte-identical" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const bytes = try patterned(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try tmp.dir.writeFile(.{ .sub_path = "card.img", .data = bytes });
+    var img = unit();
+    defer img.deinit();
+    try img.loadBytes(bytes);
+    try img.saveTo(tmp.dir, "card.img");
+    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", bytes.len + 1);
+    defer std.testing.allocator.free(back);
+    try std.testing.expectEqualSlices(u8, bytes, back);
+}
+
+test "saveTo: a write that fails leaves the original image intact" {
+    if (@import("builtin").os.tag == .linux and std.os.linux.geteuid() == 0) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const bytes = try patterned(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try tmp.dir.makeDir("ro");
+    try tmp.dir.writeFile(.{ .sub_path = "ro/card.img", .data = bytes });
+    var img = unit();
+    defer img.deinit();
+    try img.loadBytes(bytes);
+    const written: image.Block = .{0x5A} ** image.geometry.block_bytes;
+    try std.testing.expect(img.write(3, &written));
+    var ro = try tmp.dir.openDir("ro", .{ .iterate = true });
+    defer ro.close();
+    try ro.chmod(0o555);
+    defer ro.chmod(0o755) catch {};
+    try std.testing.expectError(error.AccessDenied, img.saveTo(tmp.dir, "ro/card.img"));
+    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "ro/card.img", bytes.len + 1);
+    defer std.testing.allocator.free(back);
+    try std.testing.expectEqualSlices(u8, bytes, back);
+}

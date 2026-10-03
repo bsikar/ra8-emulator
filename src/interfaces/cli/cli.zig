@@ -63,11 +63,13 @@ pub const Options = struct {
     /// way it has always come up: blank, with no volume on it at all.
     sd_new: ?sd_format.Kind = null,
     /// The volume label that format gives the card.
-    sd_label: []const u8 = "RA8",
+    sd_label: []const u8 = card_setup.default_label,
     /// The card's size in MiB. Null keeps the image's own default.
     sd_size_mb: ?u32 = null,
     /// Raw SDHC image file to attach to the SPI card.
     sd_path: ?[]const u8 = null,
+    /// `--sd-save`: write the card back over sd_path when the run ends.
+    sd_save: bool = false,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
     /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
@@ -360,8 +362,9 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.bus_errors = false;
     } else if (std.mem.eql(u8, flag, "--sd-size")) {
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
-    } else if (std.mem.eql(u8, flag, "--sd")) {
+    } else if (std.mem.eql(u8, flag, "--sd") or std.mem.eql(u8, flag, "--sd-save")) {
         options.sd_path = try next(argv, index);
+        options.sd_save = flag.len > "--sd".len;
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {
         options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
     } else if (std.mem.eql(u8, flag, "--usb-loop")) {
@@ -371,10 +374,7 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
     } else if (std.mem.eql(u8, flag, "--battery")) {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
-        const spec = try next(argv, index);
-        const split = std.mem.indexOfScalar(u8, spec, ':') orelse spec.len;
-        options.sd_new = sd_format.Kind.parse(spec[0..split]) orelse return error.UnknownFormat;
-        if (split < spec.len) options.sd_label = spec[split + 1 ..];
+        options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--touch")) {
         const spec = try next(argv, index);
         if (options.touch_count >= options.touches.len) return error.TooManyTouches;

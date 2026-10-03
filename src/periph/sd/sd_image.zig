@@ -154,6 +154,26 @@ pub const Image = struct {
     pub fn csize(self: *const Image) u32 {
         return self.capacity_blocks / geometry.csize_unit - 1;
     }
+
+    /// Write every block of this card over `path` (RA8EMU-334). The bytes go
+    /// to a sibling temp file, which is fsynced and then renamed over the
+    /// image, so a write that fails anywhere leaves the old file as it was.
+    /// The image keeps its permissions.
+    pub fn saveTo(self: *const Image, dir: std.fs.Dir, path: []const u8) !void {
+        const mode = if (dir.statFile(path)) |stat| stat.mode else |_| std.fs.File.default_mode;
+        var atomic = try dir.atomicFile(path, .{ .mode = mode });
+        defer atomic.deinit();
+        var buffered = std.io.bufferedWriter(atomic.file.writer());
+        var block: Block = undefined;
+        var index: u32 = 0;
+        while (index < self.capacity_blocks) : (index += 1) {
+            _ = self.read(index, &block);
+            try buffered.writer().writeAll(&block);
+        }
+        try buffered.flush();
+        try atomic.file.sync();
+        try atomic.finish();
+    }
 };
 
 fn allZero(bytes: []const u8) bool {
