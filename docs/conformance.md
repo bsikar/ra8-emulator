@@ -283,7 +283,7 @@ table above. A group listed as missing does not fail the build yet.
 | umaal | 20 |
 | dsp_mul16 | 27 |
 | dsp_dual | missing |
-| dsp_mulhi | missing |
+| dsp_mulhi | 33 |
 | dsp_long_mul | missing |
 | csel | missing |
 | lob | missing |
