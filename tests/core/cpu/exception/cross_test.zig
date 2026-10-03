@@ -53,6 +53,8 @@ test "a Non-secure exception over Non-secure code stays Non-secure" {
     var ram: fixture.Ram = .{};
     var cpu = try nonSecureCpu(&ram);
     ram.putWord(fixture.base + 14 * 4, fixture.handler | 1);
+    // PendSV pended in the Non-secure copy, as the pick tags it (RA8EMU-439).
+    cpu.entering_non_secure = true;
     _ = try exception.entry.take(&cpu, 14, fixture.code);
     try std.testing.expectEqual(.non_secure, cpu.banked.current);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFB8), cpu.regs.lr & ~@as(u32, 0x10) | 0x10 & cpu.regs.lr);

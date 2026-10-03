@@ -77,6 +77,7 @@ pub const NvicSource = struct {
         // Fold the write-to-clear registers first, as the model's own
         // dispatch does: on this bus they are plain memory.
         try nvic_clear.registers(&port, nvic.irq_words, nvic.clear_bits);
+        try nvic_banked.fold(&port);
         const found = (try self.model.pick(&port, null)) orelse return null;
         self.last_non_secure = if (found.non_secure) @intCast(found.number) else null;
         return .{ .number = @intCast(found.number), .priority = found.priority, .non_secure = found.non_secure };

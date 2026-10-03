@@ -51,14 +51,28 @@ test "a Non-secure PendSV is offered with its own priority and tagged" {
     try std.testing.expect(offered.non_secure);
 }
 
-test "both copies of SysTick are offered, Secure first" {
+test "SysTick comes only from the shared word while one timer pends it" {
     var core: Banked = .{};
     core.secure = .{ pendstset, 0x2000_0000 };
-    core.non_secure = .{ pendstset, 0x8000_0000 };
+    core.non_secure = .{ pendstset | pendsvset, 0x8000_0000 };
     const pends = try nvic_banked.read(&core);
     try std.testing.expectEqual(@as(usize, 2), pends.slice().len);
+    try std.testing.expectEqual(@as(u16, 15), pends.slice()[0].number);
     try std.testing.expect(!nvic_banked.candidate(pends.slice()[0]).non_secure);
+    try std.testing.expectEqual(@as(u16, 14), pends.slice()[1].number);
     try std.testing.expect(nvic_banked.candidate(pends.slice()[1]).non_secure);
+}
+
+test "a Non-secure PENDSVCLR clears itself and PENDSVSET in that copy only" {
+    var core: Banked = .{};
+    core.secure = .{ pendsvset, 0 };
+    core.non_secure = .{ pendsvset | (1 << 27), 0 };
+    try nvic_banked.fold(&core);
+    try std.testing.expectEqual(@as(u32, 0), core.non_secure[0]);
+    try std.testing.expectEqual(pendsvset, core.secure[0]);
+    core.non_secure[0] = pendsvset;
+    try nvic_banked.fold(&core);
+    try std.testing.expectEqual(pendsvset, core.non_secure[0]);
 }
 
 test "a core without the Non-secure copy offers only the Secure one" {

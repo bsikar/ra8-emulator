@@ -48,7 +48,9 @@ test "a bit-by-bit register and anything outside the SCS keep their address" {
     try expectAt(aircr, scs_route.land(&ns, aircr));
     try std.testing.expect(scs_route.wired(&ns, aircr) != null);
     try std.testing.expect(scs_route.wired(null, aircr) == null);
-    try std.testing.expect(scs_route.wired(&ns, icsr) == null);
+    // ICSR and SHPR3 bank only PendSV while one timer pends SysTick (RA8EMU-439).
+    try std.testing.expectEqual(@as(u32, 0x1800_0000), scs_route.wired(&ns, icsr).?.mask);
+    try std.testing.expectEqual(@as(u32, 0x00FF_0000), scs_route.wired(&ns, 0xE000_ED20).?.mask);
     try expectAt(0x2000_0000, scs_route.land(&ns, 0x2000_0000));
 }
 
