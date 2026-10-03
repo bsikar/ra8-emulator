@@ -31,9 +31,10 @@ pub const overrides = [_]Override{
     // The fault, the kill and ten manager ticks after it (RA8EMU-313).
     .{ .image = "txm_fault_cpu1.elf", .instructions = "60000000" },
     // The SD examples provision, mount and read back a FAT card (RA8EMU-82).
-    // Each budget is the first doubling from 5M seen to reach the PASS line.
+    // Each budget is the first doubling from 5M seen to reach the PASS line on
+    // both backends; epub_toc needs 80M on --cpu zig (RA8EMU-123).
     .{ .image = "epub_open.elf", .instructions = "20000000" },
-    .{ .image = "epub_toc.elf", .instructions = "40000000" },
+    .{ .image = "epub_toc.elf", .instructions = "80000000" },
     .{ .image = "ra8_io_sd_demo.elf", .instructions = "10000000" },
     .{ .image = "tz_secure_only_sd.elf", .instructions = "20000000" },
 };

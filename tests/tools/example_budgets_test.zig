@@ -49,7 +49,7 @@ test "txm_fault_cpu1 runs long enough for the fault and ten manager ticks after 
 
 test "the SD examples run long enough to read back their card" {
     try std.testing.expectEqualStrings("20000000", budgets.pick("epub_open.elf", null).?);
-    try std.testing.expectEqualStrings("40000000", budgets.pick("epub_toc.elf", "2000000").?);
+    try std.testing.expectEqualStrings("80000000", budgets.pick("epub_toc.elf", "2000000").?);
     try std.testing.expectEqualStrings("10000000", budgets.pick("ra8_io_sd_demo.elf", null).?);
     try std.testing.expectEqualStrings("20000000", budgets.pick("tz_secure_only_sd.elf", null).?);
 }
