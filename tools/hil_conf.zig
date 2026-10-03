@@ -10,6 +10,7 @@
 //! the value. Keys this file does not name are ignored. Every slice points
 //! into the text it was parsed from.
 const std = @import("std");
+pub const alive = @import("hil_alive.zig");
 
 pub const Conf = struct {
     mode: ?[]const u8 = null,
@@ -52,6 +53,11 @@ pub const Conf = struct {
         if (std.mem.eql(u8, mode, "jlink_memprobe")) return bench_probe_s + boot;
         if (std.mem.eql(u8, mode, "uart_scrape")) return bench_scrape_s;
         return null;
+    }
+
+    /// HIL_MODE=alive: the run passes unless its console says otherwise.
+    pub fn isAlive(conf: Conf) bool {
+        return std.mem.eql(u8, conf.mode orelse return false, "alive");
     }
 
     /// Whether `console` carries any HIL_EXPECT_NEGATIVE alternative.
@@ -114,7 +120,8 @@ pub const Judgement = enum { pass, fail };
 pub const console_prefix = "console> ";
 
 /// A negative anywhere in the console fails the run, the bench's rule; else
-/// the expected text anywhere passes it. Null when the conf decides nothing.
+/// the expected text anywhere passes it, and an alive conf passes a run its
+/// console does not refuse. Null when the conf decides nothing.
 pub fn judge(conf: Conf, report: []const u8) ?Judgement {
     var passed = false;
     var lines = std.mem.splitScalar(u8, report, '\n');
@@ -122,7 +129,8 @@ pub fn judge(conf: Conf, report: []const u8) ?Judgement {
         if (!std.mem.startsWith(u8, line, console_prefix)) continue;
         const text = line[console_prefix.len..];
         if (conf.refused(text)) return .fail;
+        if (conf.isAlive() and alive.refused(text)) return .fail;
         if (conf.expected(text)) passed = true;
     }
-    return if (passed) .pass else null;
+    return if (passed or conf.isAlive()) .pass else null;
 }
