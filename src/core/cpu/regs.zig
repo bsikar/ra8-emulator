@@ -83,6 +83,10 @@ pub const Regs = struct {
     /// The stack limits MSR and MRS reach. Bits 2:0 are RES0.
     msplim: u32 = 0,
     psplim: u32 = 0,
+    /// The privileged and unprivileged 128-bit PAC keys for this Security
+    /// state. Word 3 is the most significant key word (DDI0553 SYSm 0x20-27).
+    pac_key_p: [4]u32 = .{ 0, 0, 0, 0 },
+    pac_key_u: [4]u32 = .{ 0, 0, 0, 0 },
     /// An EXC_RETURN value a PC write in Handler mode left for the core to
     /// act on once the instruction retires (src/core/cpu/exception/ret.zig).
     exc_return: ?u32 = null,

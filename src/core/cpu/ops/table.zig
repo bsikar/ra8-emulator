@@ -121,9 +121,9 @@ pub const groups = [_]op.Group{
     @import("acq_rel.zig").group,
     needs(.v8_1m, @import("clrm.zig").group),
     @import("ldm_stm_wide.zig").group,
+    needs(.v8_1m, @import("pac.zig").group),
 };
 
-/// `group`, claimed only on a core whose profile has `feature`.
 fn needs(comptime feature: Feature, comptime group: op.Group) op.Group {
     var tagged = group;
     tagged.needs = feature;

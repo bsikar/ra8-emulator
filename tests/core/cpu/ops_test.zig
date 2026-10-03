@@ -119,4 +119,6 @@ test {
     _ = @import("ops/mve_float_maxnmv_test.zig");
     _ = @import("ops/mve_float_complex_ops_test.zig");
     _ = @import("ops/table_test.zig");
+    _ = @import("ops/pac_test.zig");
+    _ = @import("qarma_test.zig");
 }

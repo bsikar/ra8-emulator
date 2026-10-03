@@ -116,6 +116,7 @@ pub const Cpu = struct {
                     error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
                     error.Breakpoint => self.breakpoint(address),
                     error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
+                    error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
                     else => .{ .bus_fault = address },
                 };
             };

@@ -5,7 +5,7 @@
 //! way (RA8EMU-125).
 //!
 //! Left unclaimed: the PACBTI hint numbers (PACBTI 0x0D, BTI 0x0F, PAC
-//! 0x1D, AUT 0x2D), which the PACBTI work under RA8EMU-8 decodes, and the
+//! 0x1D, AUT 0x2D), which the PACBTI instruction group decodes, and the
 //! narrow encodings with a nonzero mask field, which are IT.
 //!
 //! SEV sets the core's event register and WFE consumes it when it is set
