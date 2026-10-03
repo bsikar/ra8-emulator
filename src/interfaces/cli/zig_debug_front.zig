@@ -4,8 +4,9 @@
 //! the Zig core then resets out of the same vector table on the board's bus,
 //! as src/core/cpu/boot.zig runOnBoard does, and src/debug/zig_script.zig
 //! carries the commands out. `--gdb` serves gdb from the same Zig session
-//! (RA8EMU-118). `--cpu1` beside it and `--cpu lockstep` are not debugger
-//! targets yet and say so.
+//! (RA8EMU-118). `--cpu1` beside it brings CPU1 up on its own Zig core,
+//! and `core 0|1` switches between them (RA8EMU-337); gdb does not serve
+//! CPU1 here yet, and `--cpu lockstep` is not a debugger target. Both say so.
 const std = @import("std");
 const engine = @import("../../core/engine.zig");
 const elf = @import("../../core/elf.zig");
@@ -23,11 +24,12 @@ const watch_bus = @import("../../debug/watch_bus.zig");
 const debug_front = @import("debug_front.zig");
 const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
 const rsp_poll = @import("../../debug/rsp_poll.zig");
+const second_core = @import("../../core/second_core.zig");
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {
     if (request.cpu != .zig) return "the debugger runs on --cpu unicorn or --cpu zig";
-    if (request.cpu1 != null) return "--cpu1 beside --cpu zig is not in the debugger yet";
+    if (request.cpu1 != null and request.mode == .gdb) return "--gdb with --cpu1 beside --cpu zig serves one core yet; use --debug-script or --debug";
     return null;
 }
 
@@ -62,8 +64,36 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
     };
     var target: zig_script.ZigScript = .{ .image = image, .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } };
     if (request.mode == .gdb) return listen(&core, &target.session, request.mode.gdb);
+    var pair: second_core.zig_run.Driver = undefined;
+    var other: Other = .{};
+    const named = request.cpu1 orelse return drive(allocator, &target, request.mode, out);
+    other.open(allocator, &pair, &core, &board, named, &target) catch |err| {
+        std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
+        return 1;
+    };
+    defer other.close(allocator, &pair);
     return drive(allocator, &target, request.mode, out);
 }
+
+/// CPU1 under the debugger: its Zig core, its own stop machine, and its
+/// image kept for symbols, parked in the session until `core 1`.
+const Other = struct {
+    machine: stop_machine.Machine = .{},
+    bytes: []u8 = &.{},
+
+    fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, core: *engine.Engine, board: *Board, path: []const u8, target: *zig_script.ZigScript) !void {
+        self.bytes = try std.fs.cwd().readFileAlloc(allocator, path, second_core.limits.image_bytes);
+        errdefer allocator.free(self.bytes);
+        try pair.open(allocator, core, board, path);
+        target.other_image = try elf.Image.init(self.bytes);
+        target.session.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine };
+    }
+
+    fn close(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver) void {
+        pair.close();
+        allocator.free(self.bytes);
+    }
+};
 
 /// Play the script or talk to the terminal, as the Unicorn front does.
 fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {

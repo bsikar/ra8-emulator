@@ -2,7 +2,8 @@
 //! words (RA8EMU-114). src/debug/session.zig carries a command out on the
 //! Unicorn engine; this carries the same commands out on a ZigSession, and
 //! prints through session_report and session_view, so one script gives one
-//! transcript on either CPU. Core switching is not here yet.
+//! transcript on either CPU. `core 0|1` hands the session to the other
+//! core (RA8EMU-337), its image and temporary breaks with it.
 const std = @import("std");
 const break_table = @import("break_table.zig");
 const commands = @import("commands.zig");
@@ -22,6 +23,9 @@ pub const ZigScript = struct {
     session: zig_session.ZigSession,
     image: ?elf.Image = null,
     temporary: Temporary = .{},
+    /// The parked core's image and temporary breaks, swapped in by `core`.
+    other_image: ?elf.Image = null,
+    other_temporary: Temporary = .{},
 
     /// Carry out one command. A command that fails prints why and the
     /// script carries on, as on Unicorn.
@@ -52,8 +56,22 @@ pub const ZigScript = struct {
             .print => |text| try session_view.word(out, view, text, try self.resolve(text)),
             .backtrace => try session_report.backtrace(view, self.image, out),
             .watch => |want| try self.setWatch(want, out),
+            .core => |index| try self.switchTo(index, out),
             else => return Error.Unsupported,
         }
+    }
+
+    /// As session.zig's switchTo: say which core has the session and where
+    /// it stands.
+    fn switchTo(self: *ZigScript, index: u8, out: anytype) !void {
+        if (index != self.session.index) {
+            try self.session.switchTo(index);
+            std.mem.swap(?elf.Image, &self.image, &self.other_image);
+            std.mem.swap(Temporary, &self.temporary, &self.other_temporary);
+        }
+        const view = self.session.view();
+        try out.print("Core {d}, ", .{self.session.index});
+        try session_report.line(view, self.image, try view.register(.pc), out);
     }
 
     fn resolve(self: *const ZigScript, text: []const u8) !u32 {

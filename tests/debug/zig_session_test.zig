@@ -87,3 +87,39 @@ test "the register dump reads the Zig core" {
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc  0x00000008") != null);
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "sp  0x00000040") != null);
 }
+
+test "switchTo with no second core is refused" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 };
+    try session.switchTo(0);
+    try std.testing.expectError(zig_session.Error.CoreNotAttached, session.switchTo(1));
+}
+
+test "only the selected core runs, and each keeps its own breaks" {
+    var memory0 = ram();
+    var memory1 = ram();
+    var cpu0: Cpu = .{ .bus = memory0.view() };
+    var cpu1: Cpu = .{ .bus = memory1.view() };
+    try cpu0.reset(0);
+    try cpu1.reset(0);
+    var machine0 = Machine{};
+    var machine1 = Machine{};
+    _ = try machine1.addBreak(.{ .address = 0x0E });
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100 };
+    session.other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1 };
+    try std.testing.expect((try session.go(.step)).stop == .stepped);
+    try std.testing.expectEqual(@as(u32, 0x0A), cpu0.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x08), cpu1.regs.pc);
+    try session.switchTo(1);
+    try std.testing.expectEqual(@as(u8, 1), session.index);
+    try std.testing.expect((try session.go(.run)).stop == .breakpoint);
+    try std.testing.expectEqual(@as(u32, 0x0E), cpu1.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x0A), cpu0.regs.pc);
+    try session.switchTo(0);
+    try std.testing.expect((try session.go(.cont)) == .core);
+    try std.testing.expectEqual(@as(u32, 0x10), cpu0.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x0E), cpu1.regs.pc);
+}
