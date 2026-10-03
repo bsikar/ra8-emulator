@@ -73,6 +73,20 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| table.addArgs(args);
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
+    // tools/disasm_parity.zig compares our disassembler with Capstone over
+    // ELFs (RA8EMU-325); the tests drive its walker through the same module.
+    const parity_mod = b.createModule(.{
+        .root_source_file = b.path("tools/disasm_parity.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    parity_mod.addImport("ra8", emu);
+    const parity_exe = b.addExecutable(.{ .name = "disasm_parity", .root_module = parity_mod });
+    link(b, parity_exe, prefix);
+    const parity = b.addRunArtifact(parity_exe);
+    if (b.args) |args| parity.addArgs(args);
+    b.step("parity", "Compare our disassembler with Capstone: -- ELF...").dependOn(&parity.step);
+
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/all.zig"),
         .target = target,
@@ -81,6 +95,7 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("ra8", emu);
     tests.root_module.addImport("gate", gate_mod);
     tests.root_module.addImport("example_table", table_mod);
+    tests.root_module.addImport("disasm_parity", parity_mod);
     link(b, tests, prefix);
     b.step("test", "Run the unit tests").dependOn(&b.addRunArtifact(tests).step);
 
