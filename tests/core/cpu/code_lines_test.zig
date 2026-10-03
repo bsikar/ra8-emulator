@@ -48,3 +48,11 @@ test "a store spanning two marked lines dirties both" {
     try std.testing.expectEqual(code_lines.line(memmap.dtcm_base).?, lines.low);
     try std.testing.expectEqual(code_lines.line(memmap.dtcm_base + 0x40).?, lines.high);
 }
+
+test "the Non-secure MRAM alias lands on the same line (RA8EMU-412)" {
+    try std.testing.expectEqual(code_lines.line(memmap.mram_base + 0x8_0040).?, code_lines.line(memmap.ns_mram_base + 0x8_0040).?);
+    var lines = fresh();
+    lines.mark(memmap.mram_base + 0x8_0000, memmap.mram_base + 0x8_0010);
+    lines.stored(memmap.ns_mram_base + 0x8_0004, 4);
+    try std.testing.expect(lines.dirty);
+}

@@ -5,7 +5,7 @@
 //! marks and widens a dirty range of lines; BlockCache drops every block
 //! overlapping that range before it hands out the next entry. Only the
 //! ranges code runs from are tracked: DTCM, MRAM and SRAM, with the
-//! Non-secure SRAM alias folded onto the same lines.
+//! Non-secure SRAM and MRAM aliases folded onto the same lines.
 const memmap = @import("../memmap.zig");
 
 pub const line_shift: u5 = 6;
@@ -23,6 +23,7 @@ const Range = struct { base: u32, end: u32, first: usize };
 const ranges = [_]Range{
     .{ .base = memmap.dtcm_base, .end = memmap.dtcm_end, .first = 0 },
     .{ .base = memmap.mram_base, .end = memmap.mram_end, .first = dtcm_lines },
+    .{ .base = memmap.ns_mram_base, .end = memmap.ns_mram_end, .first = dtcm_lines },
     .{ .base = memmap.sram_base, .end = memmap.sram_end, .first = dtcm_lines + mram_lines },
     .{ .base = memmap.ns_sram_base, .end = memmap.ns_sram_end, .first = dtcm_lines + mram_lines },
 };
