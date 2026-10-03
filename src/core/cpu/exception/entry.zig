@@ -13,6 +13,7 @@ const frame = @import("frame.zig");
 const fp_frame = @import("fp_frame.zig");
 const exc_return = @import("exc_return.zig");
 const target = @import("target.zig");
+const callee = @import("callee.zig");
 const State = @import("../../banked.zig").State;
 
 /// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
@@ -54,12 +55,24 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         else
             try frame.push(cpu.bus, r.sp(), stacked);
         r.setSp(pushed);
+        if (from_secure and !to_secure) try hideSecure(cpu, fp);
     }
     r.lr = exc_return.forEntry(from);
-    if (to_secure) cpu.banked.switchTo(r, .secure);
+    cpu.banked.switchTo(r, if (to_secure) .secure else .non_secure);
     r.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
     return overflow;
+}
+
+/// A Non-secure exception over Secure code: stack R4-R11 under the
+/// integrity signature on the Secure stack, then clear R0-R12 so the
+/// Non-secure handler sees none of them (DDI0553 B3.19).
+fn hideSecure(cpu: *Cpu, fp: bool) bus.Error!void {
+    const r = &cpu.regs;
+    var saved: callee.Callee = undefined;
+    for (&saved, 4..) |*word, i| word.* = r.low[i];
+    r.setSp(try callee.push(cpu.bus, r.sp(), saved, fp));
+    for (0..13) |i| r.low[i] = 0;
 }
 
 fn frameAddress(sp: u32, size: u32) u32 {

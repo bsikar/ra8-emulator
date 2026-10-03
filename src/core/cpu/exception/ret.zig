@@ -9,8 +9,9 @@ const fp_frame = @import("fp_frame.zig");
 const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
 const Vpr = @import("../mve/predicate.zig").Vpr;
 const exc_return = @import("exc_return.zig");
+const callee = @import("callee.zig");
 
-pub const Error = bus.Error || error{InvalidReturn};
+pub const Error = bus.Error || error{ InvalidReturn, Integrity };
 
 /// The xPSR bits a return restores: the flags, ICI/IT, T, GE and IPSR.
 /// Bit 9 is the frame's realignment marker, not state.
@@ -18,14 +19,18 @@ pub const restored: u32 = 0xFF0F_FDFF;
 
 pub fn from(cpu: *Cpu, value: u32) Error!void {
     const target = exc_return.decode(value) orelse return error.InvalidReturn;
-    // The return is made in the state the exception was taken to; a Secure
-    // exception that preempted Non-secure code goes back to Non-secure and
-    // takes its frame off that state's stack.
+    // The return is made in the state the exception was taken to, then
+    // switches to the state whose stack holds the frame (S).
     if (target.secure != (cpu.banked.current == .secure)) return error.InvalidReturn;
-    if (!target.secure_stack) cpu.banked.switchTo(&cpu.regs, .non_secure);
+    cpu.banked.switchTo(&cpu.regs, if (target.secure_stack) .secure else .non_secure);
     const r = &cpu.regs;
     cpu.exclusive = null;
-    const at = if (target.psp) r.psp else r.msp;
+    var at = if (target.psp) r.psp else r.msp;
+    if (target.secure_stack and !target.secure) {
+        const hidden = try callee.pop(cpu.bus, at, target.fp);
+        for (hidden.callee, 4..) |word, i| r.low[i] = word;
+        at = hidden.sp;
+    }
     const popped: frame.Popped = if (target.fp) blk: {
         const ext = try fp_frame.pop(cpu.bus, at);
         if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;

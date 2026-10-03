@@ -6,9 +6,9 @@
 //! The core makes the default-stacking forms. ES names the state the
 //! exception was taken to and S the stack the frame is on: both set or both
 //! clear for an exception in the running state, S clear and ES set for a
-//! Secure exception that preempted Non-secure code. A Non-secure exception
-//! preempting Secure code (S set, ES clear) needs the callee frame and its
-//! integrity signature (RA8EMU-168), so `decode` turns it away.
+//! Secure exception that preempted Non-secure code, and S set with ES clear
+//! for a Non-secure exception that preempted Secure code, whose frame
+//! carries the callee registers and integrity signature (callee.zig).
 
 /// Bits 31:7, always set in a valid EXC_RETURN.
 pub const res1: u32 = 0xFFFF_FF80;
@@ -71,7 +71,6 @@ pub fn decode(value: u32) ?Target {
     if (value & bits.reserved != 0) return null;
     const es = value & bits.es != 0;
     const s = value & bits.s != 0;
-    if (s and !es) return null;
     const target: Target = .{
         .thread = value & bits.mode != 0,
         .psp = value & bits.spsel != 0,
