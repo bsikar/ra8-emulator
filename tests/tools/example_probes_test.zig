@@ -152,3 +152,10 @@ test "a hil.conf probe keeps its failure word and ceiling, and needs a symbol" {
     try std.testing.expectEqual(@as(u32, 2), probe.max_failure);
     try std.testing.expectEqual(@as(?probes.Probe, null), probes.fromConf("x.elf", null, 3, "g_bad", null));
 }
+
+test "gpt_edge_capture_count is judged on its GPT free-run tick" {
+    const probe = probes.find("gpt_edge_capture_count.elf").?;
+    try std.testing.expectEqualStrings("g_gpt_ecc_tick", probe.symbol);
+    try std.testing.expectEqual(@as(u32, 5), probe.min);
+    try std.testing.expect(probe.failure == null);
+}
