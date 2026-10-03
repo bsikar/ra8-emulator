@@ -13,6 +13,9 @@
 //! status byte first was handed a tap that never happened.
 const bus = @import("../riic/riic_bus.zig");
 
+/// Live host touches for this panel: src/periph/i3c/i3c_touch_input.zig.
+pub const host = @import("i3c_touch_input.zig");
+
 pub const address: u7 = 0x5D;
 
 /// The registers the driver names (GT911 programming guide Rev 0.1).
@@ -91,7 +94,13 @@ pub const Panel = struct {
 
     /// Queue a contact for a later frame. The head is armed on the next
     /// status read, so a multi-tap flow drains one per frame.
+    /// Once every queued contact has been drained the queue starts over, so
+    /// a live source can keep feeding it for the whole run.
     pub fn queue(self: *Panel, contact: Contact) Error!void {
+        if (self.queued_pos == self.queued_len) {
+            self.queued_pos = 0;
+            self.queued_len = 0;
+        }
         if (self.queued_len >= queue_depth) return Error.QueueFull;
         self.queued[self.queued_len] = contact;
         self.queued_len += 1;

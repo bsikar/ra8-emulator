@@ -86,6 +86,8 @@ pub const Options = struct {
     /// firmware reads.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,
+    /// `--touch @PATH`: a file or FIFO of live host touches, one per line.
+    touch_in: ?[]const u8 = null,
     /// What the fuel gauge says is in the battery; the gauge range-checks it.
     battery: max17048.Battery = .{},
     /// Fit the Click module, so the IMU and the fuel gauge answer at all.
@@ -376,10 +378,7 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--touch")) {
-        const spec = try next(argv, index);
-        if (options.touch_count >= options.touches.len) return error.TooManyTouches;
-        options.touches[options.touch_count] = try touch_spec.parse(spec);
-        options.touch_count += 1;
+        try touch_spec.take(options, try next(argv, index));
     } else return false;
     return true;
 }

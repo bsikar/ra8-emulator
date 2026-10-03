@@ -182,3 +182,72 @@ test "a panel nothing touched is quiet" {
     _ = panel.read(buffer[0..]);
     try std.testing.expect(!panel.quiet());
 }
+
+/// Read status then the point record the way a driver frame does, and ack.
+fn frame(panel: *gt911.Panel) ?gt911.Contact {
+    panel.stop();
+    panel.write(0x81);
+    panel.write(0x4E);
+    var state: [1]u8 = undefined;
+    _ = panel.read(state[0..]);
+    panel.stop();
+    if (state[0] & gt911.status.ready == 0) return null;
+    panel.write(0x81);
+    panel.write(0x4F);
+    const record = point(panel);
+    panel.stop();
+    return .{
+        .x = @as(u16, record[gt911.record.x_msb]) << 8 | record[gt911.record.x_lsb],
+        .y = @as(u16, record[gt911.record.y_msb]) << 8 | record[gt911.record.y_lsb],
+    };
+}
+
+test "host touches on a pipe reach the panel's point reads during a run" {
+    const ends = try std.posix.pipe2(.{ .NONBLOCK = true });
+    defer std.posix.close(ends[1]);
+    var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
+    defer std.posix.close(ends[0]);
+    var panel = gt911.Panel{};
+    _ = try std.posix.write(ends[1], "down 120,340\nmove 130,3");
+    input.poll(&panel);
+    try std.testing.expectEqual(gt911.Contact{ .x = 120, .y = 340 }, frame(&panel).?);
+    try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
+    _ = try std.posix.write(ends[1], "50\nup\n\n");
+    input.poll(&panel);
+    try std.testing.expectEqual(gt911.Contact{ .x = 130, .y = 350 }, frame(&panel).?);
+    try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
+    try std.testing.expectEqual(@as(u32, 2), input.taken);
+    try std.testing.expectEqual(@as(u32, 0), input.refused);
+    try std.testing.expect(input.enabled);
+}
+
+test "host touch lines that are not a contact are refused and counted" {
+    var input = gt911.host.Input{};
+    var panel = gt911.Panel{};
+    input.feedLine(&panel, "tap");
+    input.feedLine(&panel, "12,");
+    input.feedLine(&panel, " 7 , 9 \r");
+    try std.testing.expectEqual(@as(u32, 2), input.refused);
+    try std.testing.expectEqual(gt911.Contact{ .x = 7, .y = 9 }, frame(&panel).?);
+}
+
+test "a drained queue starts over, so a live source never fills it" {
+    var panel = gt911.Panel{};
+    var n: u16 = 0;
+    while (n < 3 * gt911.queue_depth) : (n += 1) {
+        try panel.queue(.{ .x = n, .y = n });
+        try std.testing.expectEqual(gt911.Contact{ .x = n, .y = n }, frame(&panel).?);
+    }
+}
+
+test "the end of a host touch file stops the polling" {
+    const ends = try std.posix.pipe2(.{ .NONBLOCK = true });
+    var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
+    defer std.posix.close(ends[0]);
+    var panel = gt911.Panel{};
+    _ = try std.posix.write(ends[1], "1,2\n");
+    std.posix.close(ends[1]);
+    input.poll(&panel);
+    try std.testing.expect(!input.enabled);
+    try std.testing.expectEqual(gt911.Contact{ .x = 1, .y = 2 }, frame(&panel).?);
+}
