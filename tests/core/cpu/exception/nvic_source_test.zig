@@ -101,3 +101,48 @@ test "a Non-secure PendSV wins from its own copy and taking it clears only that 
     const next = (try source.winner(ram.view())).?;
     try std.testing.expect(!next.non_secure);
 }
+
+/// The fixture RAM behind a bus that banks the normal SCS window by the
+/// running state, as the board's SCS routing does: Non-secure code there
+/// lands on the Non-secure copy.
+const Routed = struct {
+    ram: *fixture.Ram,
+    state: *ra8.core.banked.Banked,
+
+    fn view(self: *Routed) ra8.core.cpu.bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+    }
+
+    fn land(self: *Routed, address: u32) u32 {
+        const normal = address >= fixture.scs and address < fixture.scs + 0x1000;
+        return if (normal and self.state.current == .non_secure) address + 0x2_0000 else address;
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) ra8.core.cpu.bus.Error!void {
+        const self: *Routed = @ptrCast(@alignCast(ctx));
+        return self.ram.view().read(self.land(address), into);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, from: []const u8) ra8.core.cpu.bus.Error!void {
+        const self: *Routed = @ptrCast(@alignCast(ctx));
+        return self.ram.view().write(self.land(address), from);
+    }
+};
+
+test "a Non-secure SysTick pended while Non-secure runs is taken Non-secure only" {
+    var ram: fixture.Ram = .{};
+    var state: ra8.core.banked.Banked = .{};
+    state.current = .non_secure;
+    var routed: Routed = .{ .ram = &ram, .state = &state };
+    var nvic: NvicSource = .{ .banked = &state };
+    ram.putWord(icsr + 0x2_0000, 1 << 26);
+    ram.putWord(shpr3 + 0x2_0000, 0x4000_0000);
+    const source = nvic.source();
+    const found = (try source.winner(routed.view())).?;
+    try std.testing.expectEqual(@as(u9, 15), found.number);
+    try std.testing.expect(found.non_secure);
+    try std.testing.expectEqual(ra8.core.banked.State.non_secure, state.current);
+    try source.taken(routed.view(), 15);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(icsr + 0x2_0000));
+    try std.testing.expect((try source.winner(routed.view())) == null);
+}
