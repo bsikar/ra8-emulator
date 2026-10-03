@@ -8,9 +8,12 @@ fn itOf(cpu: *const Cpu) u8 {
     return it_state.get(cpu.regs.xpsr);
 }
 
-/// The byte lanes this instruction writes: VPT and ECI together.
+/// The byte lanes this instruction writes: VPT, ECI and, on the last
+/// iteration of a tail-predicated loop, the elements LR has left
+/// (RA8EMU-236).
 pub fn mask(cpu: *const Cpu) u16 {
-    return mve.beats.mask(cpu.fp.vpr, itOf(cpu));
+    const tail = mve.tail.mask(cpu.fp.fpscr.ltpsize, cpu.regs.lr);
+    return mve.beats.mask(cpu.fp.vpr, itOf(cpu)) & tail;
 }
 
 /// The byte lanes of the beats ECI leaves to run.
