@@ -105,6 +105,17 @@ test "PACG and AUTG use selected GPRs, BXAUT branches after authentication" {
     try std.testing.expectEqual(@as(u32, 0x0800_4566), cpu.regs.pc);
 }
 
+test "BXAUT with a wrong code in Ra faults and does not branch" {
+    var cpu = enabledCpu();
+    cpu.regs.pc = 0x0800_0100;
+    cpu.regs.low[1] = 0x0800_4567;
+    cpu.regs.low[2] = 0x2000_0020;
+    cpu.regs.low[0] = qarma.pac(cpu.regs.low[1], cpu.regs.low[2], cpu.regs.pac_key_p) ^ 1;
+    try std.testing.expectError(error.InvalidState, execute(&cpu, 0xFB51, 0x0F12)); // bxaut r0, r1, r2
+    try std.testing.expectEqual(@as(u32, 0x0800_0100), cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x0800_4567), cpu.regs.low[1]);
+}
+
 test "disabled PAC instructions are inert, including BXAUT" {
     var cpu: Cpu = .{ .bus = undefined };
     cpu.regs.lr = 0x0800_1235;
