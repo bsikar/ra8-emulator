@@ -94,6 +94,9 @@ pub const Cpu = struct {
     banked: banked_mod.Banked = .{},
     /// Which security state an address belongs to; null means all Secure.
     attribution: ?attribution.Attribution = null,
+    /// How many SecureFaults this core has taken. Lockstep reads it around a
+    /// step, since Unicorn models no security state to compare one against.
+    secure_faults: u32 = 0,
     /// The MPU check the board bus asks during an instruction's own accesses;
     /// null checks nothing.
     mpu: ?*mpu_check.Check = null,
@@ -227,6 +230,7 @@ pub const Cpu = struct {
     /// `sfar` is the address AUVIOL reports; the other causes ignore it.
     fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, sfar: u32, otherwise: Stop) ?Stop {
         exception.secure.raise(self, cause, address, sfar) catch return otherwise;
+        self.secure_faults +%= 1;
         return null;
     }
 

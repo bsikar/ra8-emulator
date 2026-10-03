@@ -38,3 +38,14 @@ test "a divergence prints both register states after the mismatch" {
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "register   zig        unicorn\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "  r0         0x00000000 0x00000001  <-\n") != null);
 }
+
+test "a SecureFault on the Zig core ends the run with its own reason" {
+    var lock: run.Run = .{ .at = 0x0208_00F0 };
+    var buffer: [160]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    try report.write(stream.writer(), &lock, .{ .secure_fault = .{ .address = 0x0208_00F0 } });
+    try std.testing.expectEqualStrings(
+        "lockstep: zig core took a SecureFault at 0x020800F0; unicorn models no security state, so the run ends here\n",
+        stream.getWritten(),
+    );
+}

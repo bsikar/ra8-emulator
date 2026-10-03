@@ -16,6 +16,7 @@ pub const End = union(enum) {
     diverged: step.Divergence,
     stopped: cpu_mod.Stop,
     oracle_fault: engine.Fault,
+    secure_fault: step.SecureFault,
 };
 
 /// Called every `Run.round` instructions, so a second core can take its
@@ -63,6 +64,7 @@ pub const Run = struct {
                 },
                 .stopped => |why| return .{ .stopped = why },
                 .oracle_fault => |fault| return .{ .oracle_fault = fault },
+                .secure_fault => |found| return .{ .secure_fault = found },
             }
             if (fetched) |instr| self.recent.push(.{ .address = address, .instr = instr });
         }

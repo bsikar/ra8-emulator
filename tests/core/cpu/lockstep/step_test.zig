@@ -147,3 +147,31 @@ test "a store of ones to CFSR clears the same bits on both sides within the step
     try std.testing.expectEqual(@as(u32, 0x100), try pair.mine.readWord(memmap.scb.cfsr));
     try std.testing.expectEqual(@as(u32, 0x100), try pair.theirs.readWord(memmap.scb.cfsr));
 }
+
+/// Answers every address as Secure, so Non-secure code can fetch nothing.
+fn allSecure(context: *anyopaque, address: u32) ra8.core.cpu.cpu.attribution.State {
+    _ = context;
+    _ = address;
+    return .secure;
+}
+
+test "a SecureFault the Zig core takes ends the step instead of diverging" {
+    // A NOP, then a vector table at +0x100 whose HardFault and SecureFault
+    // entries point at +0x40: with SHCSR unreadable here the fault escalates.
+    var program = [_]u8{0} ** 0x120;
+    program[0] = 0x00;
+    program[1] = 0xBF;
+    const handler = (pair_mod.entry + 0x40) | 1;
+    std.mem.writeInt(u32, program[0x10C..0x110], handler, .little);
+    std.mem.writeInt(u32, program[0x11C..0x120], handler, .little);
+    var pair: Pair = undefined;
+    try pair.open(&program);
+    defer pair.close();
+    pair.cpu.vtor = pair_mod.entry + 0x100;
+    var unused: u8 = 0;
+    pair.cpu.attribution = .{ .context = &unused, .stateFn = allSecure };
+    pair.cpu.banked.current = .non_secure;
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log, null);
+    try std.testing.expectEqual(pair_mod.entry, result.secure_fault.address);
+    try std.testing.expectEqual(@as(u32, 1), pair.cpu.secure_faults);
+}

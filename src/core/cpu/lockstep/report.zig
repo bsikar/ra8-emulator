@@ -20,6 +20,10 @@ pub fn write(out: anytype, lock: *const run_mod.Run, ended: run_mod.End) !void {
             "lockstep: unicorn faulted at 0x{X:0>8}: {s}\n",
             .{ fault.pc, fault.detail },
         ),
+        .secure_fault => |found| try out.print(
+            "lockstep: zig core took a SecureFault at 0x{X:0>8}; unicorn models no security state, so the run ends here\n",
+            .{found.address},
+        ),
     }
     var i: usize = 0;
     while (i < lock.recent.len) : (i += 1) {
