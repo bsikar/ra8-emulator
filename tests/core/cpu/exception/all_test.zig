@@ -8,6 +8,7 @@ test {
     _ = @import("active_test.zig");
     _ = @import("source_test.zig");
     _ = @import("dispatch_test.zig");
+    _ = @import("fp_handler_test.zig");
     _ = @import("nvic_source_test.zig");
     _ = @import("fault_test.zig");
     _ = @import("sleep_test.zig");
