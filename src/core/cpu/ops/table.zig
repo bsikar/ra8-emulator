@@ -79,6 +79,8 @@ pub const groups = [_]op.Group{
     gate.gated(@import("fp_directed.zig").group),
     gate.gated(@import("fp_move.zig").group),
     needs(.v8_1m, @import("vscclrm.zig").group),
+    @import("vlldm_vlstm.zig").group,
+    needs(.v8_1m, @import("vlldm_vlstm.zig").group_t2),
     gate.gatedFpMemory(@import("fp_mem.zig").group),
     needs(.mve, gate.gated(@import("mve_vpst.zig").group)),
     needs(.mve, gate.gated(@import("mve_int.zig").group)),

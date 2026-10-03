@@ -12,6 +12,7 @@ pub const exclusive = @import("ops/exclusive.zig");
 pub const acq_rel = @import("ops/acq_rel.zig");
 pub const clrm = @import("ops/clrm.zig");
 pub const vscclrm = @import("ops/vscclrm.zig");
+pub const vlldm_vlstm = @import("ops/vlldm_vlstm.zig");
 pub const ldm_stm_wide = @import("ops/ldm_stm_wide.zig");
 pub const pac = @import("ops/pac.zig");
 pub const qarma = @import("qarma.zig");
