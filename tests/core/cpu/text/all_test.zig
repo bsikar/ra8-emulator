@@ -60,4 +60,7 @@ test {
     _ = @import("usad8_test.zig");
     _ = @import("parallel_test.zig");
     _ = @import("dsp_dual_test.zig");
+    _ = @import("csel_test.zig");
+    _ = @import("clrm_test.zig");
+    _ = @import("vscclrm_test.zig");
 }
