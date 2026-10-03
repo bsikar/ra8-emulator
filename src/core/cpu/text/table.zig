@@ -34,6 +34,8 @@ pub const entries = [_]Entry{
     .{ .group = "cps", .print = @import("cps.zig").print },
     .{ .group = "imm_arith", .print = @import("imm_arith.zig").print },
     .{ .group = "imm_logic", .print = @import("imm_logic.zig").print },
+    .{ .group = "mov_wide", .print = @import("mov_wide.zig").print },
+    .{ .group = "add_sub_wide", .print = @import("add_sub_wide.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
