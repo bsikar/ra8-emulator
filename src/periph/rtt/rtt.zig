@@ -47,7 +47,7 @@
 //! fills the ring faster than the probe empties it.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const memmap = @import("../../core/memmap.zig");
 const block = @import("rtt_block.zig");
 const text = @import("rtt_line.zig");
@@ -88,7 +88,7 @@ pub const cadence = struct {
 pub const Rtt = struct {
     /// The machine whose RAM is scanned. A board built by a test without one
     /// finds nothing, which is the only way this is ever null.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     line: text.Line = .{},
     /// The control block, once a scan has validated one.
     found: ?u32 = null,
@@ -127,7 +127,7 @@ pub const Rtt = struct {
     /// holds candidate starts: the overlap is there to complete a block that
     /// begins inside this step, and the next step owns anything beginning in
     /// it, so no candidate is examined twice.
-    fn scan(self: *Rtt, memory: engine.Engine) void {
+    fn scan(self: *Rtt, memory: Guest) void {
         self.scans += 1;
         const size = searchSize();
         var offset: u32 = 0;
@@ -143,7 +143,7 @@ pub const Rtt = struct {
     }
 
     /// The first validated block in one staged window, latched.
-    fn match(self: *Rtt, memory: engine.Engine, at: u32, staged: []const u8, starts: u32) bool {
+    fn match(self: *Rtt, memory: Guest, at: u32, staged: []const u8, starts: u32) bool {
         var index: usize = 0;
         while (index < starts and index + block.id.len <= staged.len) : (index += 1) {
             if (!block.idAt(staged, index)) continue;
@@ -162,7 +162,7 @@ pub const Rtt = struct {
 
     /// Take what the firmware has written since the last tick, and tell it so
     /// by storing the advanced read offset back.
-    fn drain(self: *Rtt, memory: engine.Engine) void {
+    fn drain(self: *Rtt, memory: Guest) void {
         const at = self.found.?;
         if (!self.stillThere(memory, at)) return;
         const count = readWord(memory, at + block.layout.max_up) orelse return;
@@ -191,7 +191,7 @@ pub const Rtt = struct {
     }
 
     /// The ring, in at most two runs around the wrap.
-    fn take(self: *Rtt, memory: engine.Engine, up: block.Up, want: u32) u32 {
+    fn take(self: *Rtt, memory: Guest, up: block.Up, want: u32) u32 {
         const first = up.firstRun(want);
         memory.read(up.buf + up.read, self.segment[0..first]) catch return 0;
         if (want == first) return first;
@@ -200,7 +200,7 @@ pub const Rtt = struct {
     }
 
     /// Up-buffer zero's descriptor as it stands right now.
-    fn readUp(self: *Rtt, memory: engine.Engine, at: u32) ?block.Up {
+    fn readUp(self: *Rtt, memory: Guest, at: u32) ?block.Up {
         _ = self;
         const up0 = at + block.layout.up0;
         return .{
@@ -213,7 +213,7 @@ pub const Rtt = struct {
 
     /// A warm reboot or a clobber takes the block away; the scan finds the
     /// next one.
-    fn stillThere(self: *Rtt, memory: engine.Engine, at: u32) bool {
+    fn stillThere(self: *Rtt, memory: Guest, at: u32) bool {
         var head: [block.id.len]u8 = undefined;
         memory.read(at, &head) catch {
             self.forget();
@@ -242,6 +242,6 @@ pub const Rtt = struct {
     }
 };
 
-fn readWord(memory: engine.Engine, at: u32) ?u32 {
+fn readWord(memory: Guest, at: u32) ?u32 {
     return memory.readWord(at) catch null;
 }

@@ -102,7 +102,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.wire.attach(&self.bus);
     try self.rswitch.attach(&self.bus, core.*, &self.domains.eswm);
     try self.usb.attach(&self.bus);
-    self.trace.memory = core.*;
+    self.trace.memory = .{ .engine = core.* };
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
     try self.options.attach(&self.bus, core.*);
