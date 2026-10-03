@@ -38,6 +38,12 @@ pub const overrides = [_]Override{
     .{ .image = "txm_manager_cpu1.elf", .instructions = "60000000" },
     // The fault, the kill and ten manager ticks after it (RA8EMU-313).
     .{ .image = "txm_fault_cpu1.elf", .instructions = "60000000" },
+    // A ThreadX module rebases its own data pointers before it runs
+    // (RA8FW-539, RA8FW-544). txm_table_cpu1 reads its table at 10M, not 5M;
+    // txm_rpc_cpu1 answers ten ra8_rpc calls at 30M, not 20M. Each budget is
+    // double the first seen to pass on both backends (RA8EMU-494).
+    .{ .image = "txm_table_cpu1.elf", .instructions = "20000000" },
+    .{ .image = "txm_rpc_cpu1.elf", .instructions = "60000000" },
     // The SD examples provision, mount and read back a FAT card (RA8EMU-82).
     // Each budget is the first doubling from 5M seen to reach the PASS line on
     // both backends; epub_toc needs 80M on --cpu zig (RA8EMU-123).

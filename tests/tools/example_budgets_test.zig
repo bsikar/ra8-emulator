@@ -47,6 +47,13 @@ test "txm_fault_cpu1 runs long enough for the fault and ten manager ticks after 
     try std.testing.expectEqualStrings("60000000", budgets.pick("txm_fault_cpu1.elf", "2000000").?);
 }
 
+test "the rebasing ThreadX modules run long enough for their verdict" {
+    try std.testing.expectEqualStrings("20000000", budgets.pick("txm_table_cpu1.elf", null).?);
+    try std.testing.expectEqualStrings("20000000", budgets.pick("txm_table_cpu1.elf", "2000000").?);
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_rpc_cpu1.elf", null).?);
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_rpc_cpu1.elf", "2000000").?);
+}
+
 test "the SD examples run long enough to read back their card" {
     try std.testing.expectEqualStrings("20000000", budgets.pick("epub_open.elf", null).?);
     try std.testing.expectEqualStrings("80000000", budgets.pick("epub_toc.elf", "2000000").?);
