@@ -15,6 +15,7 @@ const diff = @import("diff.zig");
 const oracle = @import("oracle.zig");
 const writes = @import("writes.zig");
 const memory_diff = @import("memory_diff.zig");
+const oracle_writes = @import("oracle_writes.zig");
 const fault_clear = @import("../../../periph/fault_clear.zig");
 const catch_up = @import("catch_up.zig");
 const periph_log = @import("periph_log.zig");
@@ -76,6 +77,11 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, sett
     const hit = decode.decode(instr);
     const checked = if (hit) |h| h.oracle else false;
     log.begin(checked);
+    var oracle_hook: oracle_writes.Hook = .{ .handle = theirs.handle, .hook = 0, .recorder = .{ .inner = undefined } };
+    if (checked) {
+        oracle_hook.attach() catch return engine.Error.AttachFailed;
+    }
+    defer oracle_hook.detach();
     if (checked) {
         if (try theirs.runChunk(address, 1, null)) |fault| return .{ .oracle_fault = fault };
         if (try retire(theirs, address)) |fault| return .{ .oracle_fault = fault };
@@ -93,7 +99,7 @@ pub fn one(ours: *cpu_mod.Cpu, theirs: engine.Engine, log: *periph_log.Log, sett
         try catch_up.toZig(theirs, &ours.regs, made.items());
         return .{ .skipped = class };
     }
-    return compare(class, instr, ours, theirs, made.items(), log);
+    return compare(class, instr, ours, theirs, made.items(), if (checked) oracle_hook.recorder.items() else &.{}, log);
 }
 
 /// A Unicorn hook that ends the run inside an instruction leaves it landed
@@ -118,11 +124,11 @@ fn finishBlock(ours: *cpu_mod.Cpu) ?cpu_mod.Stop {
     return null;
 }
 
-fn compare(class: []const u8, instr: Instr, ours: *cpu_mod.Cpu, theirs: engine.Engine, made: []const writes.Write, log: *const periph_log.Log) engine.Error!Result {
+fn compare(class: []const u8, instr: Instr, ours: *cpu_mod.Cpu, theirs: engine.Engine, made: []const writes.Write, oracle_made: []const writes.Write, log: *const periph_log.Log) engine.Error!Result {
     const mine = snapshot.Snapshot.fromRegs(&ours.regs);
     const other = try oracle.read(theirs);
     if (diff.first(mine, other)) |found| return diverged(class, instr, .{ .register = found }, mine, other);
-    if (try memory_diff.first(made, theirs, ours.bus)) |found| return diverged(class, instr, .{ .memory = found }, mine, other);
+    if (try memory_diff.first(made, oracle_made, theirs, ours.bus)) |found| return diverged(class, instr, .{ .memory = found }, mine, other);
     if (log.verdict()) |found| return diverged(class, instr, .{ .periph = found }, mine, other);
     return .{ .matched = class };
 }

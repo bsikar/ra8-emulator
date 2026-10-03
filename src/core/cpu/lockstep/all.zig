@@ -6,6 +6,7 @@ pub const history = @import("history.zig");
 pub const memory_diff = @import("memory_diff.zig");
 pub const mode = @import("mode.zig");
 pub const oracle = @import("oracle.zig");
+pub const oracle_writes = @import("oracle_writes.zig");
 pub const periph_log = @import("periph_log.zig");
 pub const replay_bus = @import("replay_bus.zig");
 pub const report = @import("report.zig");

@@ -1,10 +1,5 @@
-//! A store the Zig core made whose bytes Unicorn's memory does not hold
-//! after the same instruction.
-//!
-//! This catches a store the Zig core got wrong and one Unicorn did not make.
-//! A store only Unicorn made is not caught yet: that needs a write hook on
-//! the oracle's side. Stores in the peripheral windows are skipped: reading
-//! them back would reach a peripheral, and periph_log.zig compares them.
+//! Stores either backend made whose bytes the other backend does not hold.
+//! Stores in peripheral windows are compared by periph_log.zig.
 const std = @import("std");
 const engine = @import("../../engine.zig");
 const writes = @import("writes.zig");
@@ -32,15 +27,22 @@ pub const Mismatch = struct {
 /// memory disagrees with. A store into a write-one-to-clear word is checked
 /// by what each side now holds (read back through `ours`), since the stored
 /// value is not what the register keeps.
-pub fn first(made: []const writes.Write, theirs: engine.Engine, ours: bus.Bus) engine.Error!?Mismatch {
+pub fn first(made: []const writes.Write, oracle_made: []const writes.Write, theirs: engine.Engine, ours: bus.Bus) engine.Error!?Mismatch {
     for (made) |*store| {
         if (BoardBus.inWindow(store.address, store.len)) continue;
         var held: [writes.widest]u8 = undefined;
         try theirs.read(store.address, held[0..store.len]);
         var mine = store.bytes;
         if (settles(store.address)) ours.read(store.address, mine[0..store.len]) catch return engine.Error.RunFailed;
-        if (std.mem.eql(u8, mine[0..store.len], held[0..store.len])) continue;
-        return .{ .address = store.address, .len = store.len, .ours = mine, .oracle = held };
+        if (!std.mem.eql(u8, mine[0..store.len], held[0..store.len])) return .{ .address = store.address, .len = store.len, .ours = mine, .oracle = held };
+    }
+    for (oracle_made) |*store| {
+        if (BoardBus.inWindow(store.address, store.len)) continue;
+        var mine: [writes.widest]u8 = undefined;
+        ours.read(store.address, mine[0..store.len]) catch return engine.Error.RunFailed;
+        var held = store.bytes;
+        if (settles(store.address)) theirs.read(store.address, held[0..store.len]) catch return engine.Error.RunFailed;
+        if (!std.mem.eql(u8, mine[0..store.len], held[0..store.len])) return .{ .address = store.address, .len = store.len, .ours = mine, .oracle = held };
     }
     return null;
 }
