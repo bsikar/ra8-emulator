@@ -18,7 +18,12 @@ test "each word reads back what the context holds, through its mask" {
 test "an FPDSCR write sets the FPSCR the next new context starts with" {
     var state: State = .{};
     _ = scb.write(&state, scb.address.fpdscr, 0x0340_0000);
-    const control = state.context.touch(0, &state.fpscr);
+    const control = state.context.touch(
+        0,
+        .secure,
+        &state.fpscr,
+        &state.vpr,
+    );
     try std.testing.expect(control & control_bits.fpca != 0);
     try std.testing.expectEqual(state.context.fpdscr, state.fpscr.bits());
     try std.testing.expect(state.fpscr.bits() & 0x0340_0000 != 0);

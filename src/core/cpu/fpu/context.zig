@@ -10,6 +10,8 @@
 //! written.
 const Fpscr = @import("fpscr.zig").Fpscr;
 const control_bits = @import("../regs.zig").control_bits;
+const banked = @import("../../banked.zig");
+const Vpr = @import("../mve/predicate.zig").Vpr;
 
 /// FPCCR, least significant bit first.
 pub const Fpccr = packed struct(u32) {
@@ -77,9 +79,21 @@ pub const Context = struct {
     /// ExecuteFPCheck() opening a new context: returns CONTROL as it
     /// stands after an FP instruction, loading `fpscr` from FPDSCR when
     /// this instruction is the one that sets FPCA.
-    pub fn touch(self: Context, control: u32, fpscr: *Fpscr) u32 {
-        if (self.fpccr.aspen == 0 or control & control_bits.fpca != 0) return control;
+    pub fn touch(
+        self: *Context,
+        control: u32,
+        security: banked.State,
+        fpscr: *Fpscr,
+        vpr: *Vpr,
+    ) u32 {
+        self.fpccr.s = @intFromBool(security == .secure);
+        const secure = security == .secure;
+        const fresh = self.fpccr.aspen == 1 and
+            (control & control_bits.fpca == 0 or
+                (secure and control & control_bits.sfpa == 0));
+        if (!fresh) return control;
         fpscr.* = self.defaultFpscr();
-        return control | control_bits.fpca;
+        vpr.* = .{};
+        return control | control_bits.fpca | if (secure) control_bits.sfpa else 0;
     }
 };

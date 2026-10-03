@@ -52,5 +52,10 @@ pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
 /// The checks an FP or MVE instruction makes before it touches FP state.
 pub fn check(cpu: *Cpu) op.Error!void {
     if (lazy.pending(&cpu.fp)) try lazy.preserve(cpu.bus, &cpu.fp);
-    cpu.regs.control = cpu.fp.context.touch(cpu.regs.control, &cpu.fp.fpscr);
+    cpu.regs.control = cpu.fp.context.touch(
+        cpu.regs.control,
+        cpu.banked.current,
+        &cpu.fp.fpscr,
+        &cpu.fp.vpr,
+    );
 }

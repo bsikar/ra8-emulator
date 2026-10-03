@@ -72,8 +72,10 @@ test "with MVE, VPR is stacked at +0x64 and the return restores it" {
     var ram: fixture.Ram = .{};
     var cpu = try setup(&ram);
     cpu.fp.context.fpccr.lspen = 0;
+    _ = cpu.run(1); // open the Secure FP context before seeding VPR
     cpu.fp.vpr = @bitCast(vpr_word);
-    try enter(&cpu);
+    _ = cpu.run(1); // SVC stacks the active Secure context
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
     try std.testing.expectEqual(vpr_word, ram.word(cpu.regs.sp() + 0x64));
     cpu.fp.vpr = .{}; // the handler's own predication
     ram.putWord(cpu.regs.sp() + 0x64, vpr_word | 0xFF00_0000);
@@ -86,8 +88,10 @@ test "without MVE the VPR word is stacked as 0 and ignored on return" {
     var cpu = try setup(&ram);
     cpu.profile = .m33;
     cpu.fp.context.fpccr.lspen = 0;
+    _ = cpu.run(1); // open the Secure FP context before seeding VPR
     cpu.fp.vpr = @bitCast(vpr_word);
-    try enter(&cpu);
+    _ = cpu.run(1); // SVC stacks the active Secure context
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 0), ram.word(cpu.regs.sp() + 0x64));
     cpu.fp.vpr = .{};
     ram.putWord(cpu.regs.sp() + 0x64, vpr_word);
