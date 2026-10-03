@@ -18,6 +18,7 @@ test {
     _ = @import("core/cpu/cpu_test.zig");
     _ = @import("core/cpu/decode_test.zig");
     _ = @import("core/cpu/decode_cache_test.zig");
+    _ = @import("core/cpu/text/all_test.zig");
     _ = @import("core/cpu/instr_test.zig");
     _ = @import("core/cpu/op_test.zig");
     _ = @import("core/cpu/alignment_test.zig");

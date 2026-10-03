@@ -21,3 +21,6 @@ pub fn decode(instr: Instr) ?Hit {
 
 /// The decoded-instruction cache in front of `decode` (RA8EMU-317).
 pub const cache = @import("decode_cache.zig");
+
+/// The disassembler built on this table (RA8EMU-17).
+pub const text = @import("text/all.zig");
