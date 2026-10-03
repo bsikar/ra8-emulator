@@ -19,7 +19,18 @@ pub fn read(core: anytype) !systick_bank.Pends {
         .icsr = try core.readNonSecure(memmap.scb.icsr),
         .shpr3 = try core.readNonSecure(memmap.scb.shpr3),
     } else .{ .icsr = 0, .shpr3 = 0 };
-    return systick_bank.pends(secure, non_secure, true);
+    // One timer still pends SysTick in the shared word (RA8EMU-439), so only
+    // PendSV is offered from the Non-secure copy until RA8EMU-154.
+    return systick_bank.pends(secure, non_secure, false);
+}
+
+/// Fold a Non-secure PENDSVCLR: it clears itself and PENDSVSET in that copy,
+/// as nvic_clear does for the shared word.
+pub fn fold(core: anytype) !void {
+    if (comptime !reaches(@TypeOf(core))) return;
+    const icsr = try core.readNonSecure(memmap.scb.icsr);
+    if (icsr & icsr_pendsvclr == 0) return;
+    try core.writeNonSecure(memmap.scb.icsr, icsr & ~(icsr_pendsvclr | icsr_pendsvset));
 }
 
 /// One pend as the NVIC pick weighs it.
@@ -37,6 +48,7 @@ pub fn clear(core: anytype, number: u16) !void {
 
 const icsr_pendstset: u32 = 1 << 26;
 const icsr_pendsvset: u32 = 1 << 28;
+const icsr_pendsvclr: u32 = 1 << 27;
 
 /// Whether `Core`, or what it points at, can reach the Non-secure copy.
 pub fn reaches(comptime Core: type) bool {
