@@ -11,6 +11,7 @@ test {
     _ = @import("fp_handler_test.zig");
     _ = @import("nvic_source_test.zig");
     _ = @import("fault_test.zig");
+    _ = @import("mem_manage_test.zig");
     _ = @import("secure_test.zig");
     _ = @import("debug_event_test.zig");
     _ = @import("sleep_test.zig");
