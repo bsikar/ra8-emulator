@@ -258,8 +258,8 @@ table above. A group listed as missing does not fail the build yet.
 | cbz | 7 |
 | extend | 7 |
 | reverse | 6 |
-| it | missing |
-| branch | missing |
+| it | 8 |
+| branch | 18 |
 | mov_wide | missing |
 | divide | missing |
 | dp_shifted | missing |
