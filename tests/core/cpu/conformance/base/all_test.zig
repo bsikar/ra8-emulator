@@ -13,6 +13,7 @@ test {
     _ = @import("extend_vectors_test.zig");
     _ = @import("hint_vectors_test.zig");
     _ = @import("it_vectors_test.zig");
+    _ = @import("ldm_stm_vectors_test.zig");
     _ = @import("ldr_literal_vectors_test.zig");
     _ = @import("ldst_imm_vectors_test.zig");
     _ = @import("ldst_reg_vectors_test.zig");

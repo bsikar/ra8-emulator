@@ -249,7 +249,7 @@ table above. A group listed as missing does not fail the build yet.
 | ldr_literal | 10 |
 | ldst_imm | 28 |
 | ldst_reg | 25 |
-| ldm_stm | missing |
+| ldm_stm | 20 |
 | shift_imm | 16 |
 | add_sub | 18 |
 | dp_reg | 29 |
