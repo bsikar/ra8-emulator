@@ -14,6 +14,7 @@ test {
     _ = @import("cps_vectors_test.zig");
     _ = @import("divide_vectors_test.zig");
     _ = @import("dp_reg_vectors_test.zig");
+    _ = @import("dp_shifted_vectors_test.zig");
     _ = @import("extend_vectors_test.zig");
     _ = @import("hint_vectors_test.zig");
     _ = @import("imm_arith_vectors_test.zig");
