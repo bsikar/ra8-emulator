@@ -46,6 +46,8 @@ pub const Rswitch = struct {
             // asks the same one before it answers.
             port.domain = domain;
             try bus.add(port.ethaBlock());
+            try bus.add(port.cbsBlock());
+            try bus.add(port.tasBlock());
             try bus.add(port.rmacBlock());
             try bus.add(port.macBlock());
         }

@@ -33,6 +33,8 @@ const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
 const eth_phy = @import("eth_phy.zig");
 const eth_mac = @import("eth_mac.zig");
+const eth_tas = @import("eth_tas.zig");
+const eth_cbs = @import("eth_cbs.zig");
 const pdctr = @import("../pdctr.zig");
 
 /// The perfect-match address, reached as `eth.mac_address` by a caller that
@@ -44,6 +46,10 @@ pub const agent = @import("eth_agent.zig");
 pub const forward = @import("eth_forward.zig");
 /// COMA RIC, RRC and RCEC: eth_coma.zig.
 pub const coma = @import("eth_coma.zig");
+/// TAS gate-list RAM and indirect access registers.
+pub const tas = eth_tas;
+/// CBS admin and operational registers.
+pub const cbs = eth_cbs;
 
 pub const Port = struct {
     /// Where this port's two agents answer. A board fact, so it is set when
@@ -56,6 +62,8 @@ pub const Port = struct {
     mpsm: u32 = 0,
     /// MRMAC0/MRMAC1, which only take a store while this port is in CONFIG.
     mac: eth_mac.Address = .{},
+    tas_ram: eth_tas.Tas = .{ .base = 0 },
+    cbs_regs: eth_cbs.Cbs = .{ .base = 0 },
     /// The ESWM power domain, or null for a port nothing gated.
     domain: ?*const pdctr.Pdctr = null,
     /// Stores dropped, and reads served as zero, with the domain gated off.
@@ -63,7 +71,12 @@ pub const Port = struct {
     dark_reads: u32 = 0,
 
     pub fn init(etha_base: u32, rmac_base: u32) Port {
-        return .{ .etha_base = etha_base, .rmac_base = rmac_base };
+        return .{
+            .etha_base = etha_base,
+            .rmac_base = rmac_base,
+            .tas_ram = eth_tas.Tas.init(etha_base),
+            .cbs_regs = eth_cbs.Cbs.init(etha_base),
+        };
     }
 
     /// Whether this port's windows answer at all. A port with no domain model
@@ -106,6 +119,32 @@ pub const Port = struct {
         if (lanes.named(at, width) & regs.etha.opc_mask == 0) return;
         const asked = lanes.merge(self.mode.status(), at, width, value);
         self.mode.command(asked & regs.etha.opc_mask);
+    }
+
+    pub fn tasRead(self: *Port, address: u32, width: u3) u32 {
+        if (!self.powered()) return self.dark();
+        return self.tas_ram.read(address, width);
+    }
+
+    pub fn tasWrite(self: *Port, address: u32, width: u3, value: u32) void {
+        if (!self.powered()) {
+            self.dropped_unpowered +%= 1;
+            return;
+        }
+        self.tas_ram.write(address, width, value);
+    }
+
+    pub fn cbsRead(self: *Port, address: u32, width: u3) u32 {
+        if (!self.powered()) return self.dark();
+        return self.cbs_regs.read(address, width);
+    }
+
+    pub fn cbsWrite(self: *Port, address: u32, width: u3, value: u32) void {
+        if (!self.powered()) {
+            self.dropped_unpowered +%= 1;
+            return;
+        }
+        self.cbs_regs.write(address, width, value);
     }
 
     pub fn rmacRead(self: *Port, address: u32, width: u3) u32 {
@@ -154,6 +193,7 @@ pub const Port = struct {
 
     pub fn quiet(self: *const Port) bool {
         return self.mode.quiet() and self.phy.quiet() and self.mac.quiet() and
+            self.tas_ram.quiet() and self.cbs_regs.quiet() and
             self.dropped_unpowered == 0 and self.dark_reads == 0;
     }
 
@@ -165,6 +205,28 @@ pub const Port = struct {
             .context = self,
             .readFn = ethaReadThunk,
             .writeFn = ethaWriteThunk,
+        };
+    }
+
+    pub fn tasBlock(self: *Port) periph.Block {
+        return .{
+            .name = "ETHA-TAS",
+            .base = self.etha_base + eth_tas.reg.start,
+            .size = eth_tas.reg.span,
+            .context = self,
+            .readFn = tasReadThunk,
+            .writeFn = tasWriteThunk,
+        };
+    }
+
+    pub fn cbsBlock(self: *Port) periph.Block {
+        return .{
+            .name = "ETHA-CBS",
+            .base = self.etha_base + eth_cbs.off.admin_enable,
+            .size = eth_cbs.off.span,
+            .context = self,
+            .readFn = cbsReadThunk,
+            .writeFn = cbsWriteThunk,
         };
     }
 
@@ -199,6 +261,26 @@ fn ethaReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
 fn ethaWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Port = @ptrCast(@alignCast(context));
     self.ethaWrite(address, width, value);
+}
+
+fn tasReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    const self: *Port = @ptrCast(@alignCast(context));
+    return self.tasRead(address, width);
+}
+
+fn tasWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *Port = @ptrCast(@alignCast(context));
+    self.tasWrite(address, width, value);
+}
+
+fn cbsReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    const self: *Port = @ptrCast(@alignCast(context));
+    return self.cbsRead(address, width);
+}
+
+fn cbsWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *Port = @ptrCast(@alignCast(context));
+    self.cbsWrite(address, width, value);
 }
 
 fn rmacReadThunk(context: *anyopaque, address: u32, width: u3) u32 {
