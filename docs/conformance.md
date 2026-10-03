@@ -279,7 +279,7 @@ table above. A group listed as missing does not fail the build yet.
 | sat_arith | missing |
 | extend_b16 | missing |
 | sat16 | missing |
-| usad8 | missing |
+| usad8 | 22 |
 | umaal | 20 |
 | dsp_mul16 | missing |
 | dsp_dual | missing |
