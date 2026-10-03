@@ -111,3 +111,14 @@ test "the regions come from BASEP0..7" {
     poke(&unit, npu.off.basep0 + 3 * npu.geometry.basep_stride, 0x2200_0000);
     try std.testing.expectEqual(@as(u64, 0x2200_0000), ra8.periph.npu_vela.hook.regions(&unit)[3]);
 }
+
+test "the report counts a Vela kick whether it reached STOP or faulted" {
+    const Counters = @TypeOf(npu.Npu.init().vela);
+    try std.testing.expectEqual(@as(u32, 0), (Counters{}).kicks());
+    const ran: Counters = .{ .jobs = 1, .moved = 64 };
+    try std.testing.expectEqual(@as(u32, 1), ran.kicks());
+    try std.testing.expectEqual(@as(u32, 0), ran.faults());
+    const refused: Counters = .{ .unmodelled = 1, .malformed = 2, .refused = 4 };
+    try std.testing.expectEqual(@as(u32, 7), refused.faults());
+    try std.testing.expectEqual(@as(u32, 7), refused.kicks());
+}

@@ -28,6 +28,16 @@ pub const Counters = struct {
     malformed: u32 = 0,
     /// Kicks where the stream or a DMA could not reach memory.
     refused: u32 = 0,
+
+    /// Every kick this path took, whether it ran to STOP or faulted.
+    pub fn kicks(self: Counters) u32 {
+        return self.jobs + self.faults();
+    }
+
+    /// The kicks that ended in a fault rather than a STOP.
+    pub fn faults(self: Counters) u32 {
+        return self.unmodelled + self.malformed + self.refused;
+    }
 };
 
 fn reg64(unit: *const npu.Npu, low: u32) u64 {
