@@ -275,7 +275,7 @@ table above. A group listed as missing does not fail the build yet.
 | extend_wide | 30 |
 | pkh | 22 |
 | parallel | missing |
-| sel | missing |
+| sel | 23 |
 | sat_arith | missing |
 | extend_b16 | missing |
 | sat16 | missing |
