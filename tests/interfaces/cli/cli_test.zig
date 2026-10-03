@@ -110,3 +110,8 @@ test "precise BusFaults are on unless --no-bus-errors turns them off" {
     const off = try parse(&[_][]const u8{ "emu", "a.elf", "--no-bus-errors" });
     try std.testing.expect(!off.bus_errors);
 }
+
+test "--usb-loop cables the two USB jacks together when requested" {
+    try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).usb_loop);
+    try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--usb-loop" })).usb_loop);
+}

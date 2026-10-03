@@ -23,6 +23,10 @@ pub const Usb = struct {
     device: usbfs.Device = .{},
     /// The host on the device jack.
     script: usbfs.host.Host = .{},
+    /// The cable between the two jacks, once `loopBack` laid it. With it in,
+    /// the HS host talks to the firmware's own USBFS device, and the
+    /// scripted host is unplugged: one jack carries one host.
+    cable: ?usbhs.loop.Loop = null,
 
     pub fn attach(self: *Usb, bus: *periph.Bus) periph.Error!void {
         self.host.attachDevice();
@@ -31,7 +35,15 @@ pub const Usb = struct {
         try bus.add(self.device.block());
     }
 
+    /// Cable the HS host jack to the board's own FS device jack. The board
+    /// has to be at its final address: both ends keep pointers into it.
+    pub fn loopBack(self: *Usb) void {
+        self.cable = .{ .device = &self.device };
+        self.host.xfer.loop = &self.cable.?;
+    }
+
     pub fn tick(self: *Usb) void {
+        if (self.cable != null) return;
         self.script.tick(&self.device);
     }
 
