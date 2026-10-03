@@ -261,7 +261,7 @@ table above. A group listed as missing does not fail the build yet.
 | it | 8 |
 | branch | 18 |
 | mov_wide | 18 |
-| divide | missing |
+| divide | 22 |
 | dp_shifted | missing |
 | shift_reg | missing |
 | add_sub_wide | missing |
