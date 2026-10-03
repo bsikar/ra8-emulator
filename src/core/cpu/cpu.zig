@@ -283,12 +283,14 @@ pub const Cpu = struct {
 const Fetched = struct { instr: Instr, found: ?decode.Hit };
 
 /// The four stack pointers an instruction may move, taken before it runs so
-/// a write that crosses MSPLIM or PSPLIM can be undone.
+/// a write that crosses MSPLIM or PSPLIM can be undone. SG and BXNS swap the
+/// banks without moving a pointer, so each is compared in its own bank.
 const StackPointers = struct {
     msp: u32,
     psp: u32,
     other_msp: u32,
     other_psp: u32,
+    state: @TypeOf(@as(Cpu, undefined).banked.current),
 
     fn read(cpu: *const Cpu) StackPointers {
         return .{
@@ -296,6 +298,7 @@ const StackPointers = struct {
             .psp = cpu.regs.psp,
             .other_msp = cpu.banked.other.msp,
             .other_psp = cpu.banked.other.psp,
+            .state = cpu.banked.current,
         };
     }
 
@@ -303,16 +306,24 @@ const StackPointers = struct {
     fn overrun(self: StackPointers, cpu: *const Cpu) bool {
         const r = &cpu.regs;
         const o = &cpu.banked.other;
-        return (r.msp != self.msp and r.msp < r.msplim) or
-            (r.psp != self.psp and r.psp < r.psplim) or
-            (o.msp != self.other_msp and o.msp < o.msplim) or
-            (o.psp != self.other_psp and o.psp < o.psplim);
+        const was = self.inBanks(cpu);
+        return (r.msp != was.msp and r.msp < r.msplim) or
+            (r.psp != was.psp and r.psp < r.psplim) or
+            (o.msp != was.other_msp and o.msp < o.msplim) or
+            (o.psp != was.other_psp and o.psp < o.psplim);
     }
 
     fn restore(self: StackPointers, cpu: *Cpu) void {
-        cpu.regs.msp = self.msp;
-        cpu.regs.psp = self.psp;
-        cpu.banked.other.msp = self.other_msp;
-        cpu.banked.other.psp = self.other_psp;
+        const was = self.inBanks(cpu);
+        cpu.regs.msp = was.msp;
+        cpu.regs.psp = was.psp;
+        cpu.banked.other.msp = was.other_msp;
+        cpu.banked.other.psp = was.other_psp;
+    }
+
+    /// The snapshot laid out the way the banks sit now.
+    fn inBanks(self: StackPointers, cpu: *const Cpu) StackPointers {
+        if (cpu.banked.current == self.state) return self;
+        return .{ .msp = self.other_msp, .psp = self.other_psp, .other_msp = self.msp, .other_psp = self.psp, .state = cpu.banked.current };
     }
 };

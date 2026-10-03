@@ -113,3 +113,19 @@ test "stepping SG outside NSC takes SecureFault INVEP on the SG itself" {
     // Non-secure stack, parked in the other bank.
     try std.testing.expectEqual(fixture.code, ram.word(cpu.banked.other.msp + 24));
 }
+
+test "SG leaves a Secure stack below its own limit alone (RA8EMU-395)" {
+    var ram: fixture.Ram = .{};
+    ram.putHalf(fixture.code, sg.encoding);
+    ram.putHalf(fixture.code + 2, sg.encoding);
+    var fixed: Fixed = .{ .state = .callable };
+    var cpu = try nonSecure(&ram, &fixed);
+    // A Secure PSP the gateway never touches, under a PSPLIM_S above it.
+    cpu.banked.other.psp = fixture.base + 0x40;
+    cpu.banked.other.psplim = fixture.base + 0x100;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(ra8.core.banked.State.secure, cpu.banked.current);
+    try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(ns_sp, cpu.banked.other.msp);
+}
