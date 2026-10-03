@@ -379,8 +379,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
-    } else if (std.mem.eql(u8, flag, "--touch")) {
-        try touch_spec.take(options, try next(argv, index));
+    } else if (touch_spec.claims(flag)) {
+        try touch_spec.take(options, flag, try next(argv, index));
     } else return false;
     return true;
 }
