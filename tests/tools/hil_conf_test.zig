@@ -92,3 +92,13 @@ test "foo.elf's conf sits beside it as foo.hil.conf" {
     defer std.testing.allocator.free(name);
     try std.testing.expectEqualStrings("/c/touch_demo.hil.conf", name);
 }
+
+test "floorMs is the probe's boot dwell plus window, else the scrape timeout, capped" {
+    try std.testing.expectEqual(@as(?u32, 15_000), hil_conf.parse(uart).floorMs());
+    try std.testing.expectEqual(@as(?u32, 4_000), hil_conf.parse(probe).floorMs());
+    const epub = hil_conf.parse("HIL_PROBE_SECONDS=5\nHIL_PROBE_BOOT_S=12\nHIL_TIMEOUT_S=60\n");
+    try std.testing.expectEqual(@as(?u32, 17_000), epub.floorMs());
+    const long = hil_conf.parse("HIL_TIMEOUT_S=90\n");
+    try std.testing.expectEqual(@as(?u32, hil_conf.Conf.max_floor_ms), long.floorMs());
+    try std.testing.expectEqual(@as(?u32, null), hil_conf.parse("HIL_MODE=alive\n").floorMs());
+}
