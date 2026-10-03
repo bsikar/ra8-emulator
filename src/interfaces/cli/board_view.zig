@@ -20,6 +20,10 @@ pub const strip: u32 = 32;
 /// Side of one LED square, and the gap between squares.
 pub const led_side: u32 = 12;
 pub const led_gap: u32 = 12;
+/// The EK-RA8D2 panel's size, used for the view when the run left no
+/// frame: the board is still drawn, with its LEDs, round a dark panel.
+pub const panel_width: u32 = 1024;
+pub const panel_height: u32 = 600;
 
 pub const Led = struct { rgb565: u16, on: bool };
 

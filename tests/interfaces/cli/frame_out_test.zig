@@ -25,6 +25,24 @@ test "no path means no line and no file" {
     try std.testing.expectEqual(@as(usize, 0), buffer.items.len);
 }
 
+test "a run with no panel frame still writes the board view with its LEDs" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "view.png" });
+    defer std.testing.allocator.free(path);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+    try frame_out.report(buffer.writer(), &board, path);
+    try std.testing.expect(std.mem.startsWith(u8, buffer.items, "frame-out: no panel frame, the LEDs on a 1056x664 board view"));
+    var magic: [8]u8 = undefined;
+    _ = try (try dir.dir.openFile("view.png", .{})).readAll(&magic);
+    try std.testing.expectEqualSlices(u8, "\x89PNG\r\n\x1a\n", &magic);
+}
+
 test {
     _ = @import("board_view_test.zig");
 }
