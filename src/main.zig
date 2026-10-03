@@ -58,8 +58,7 @@ fn loadNonSecure(allocator: std.mem.Allocator, core: engine.Engine, path: []cons
 /// Hand the watched place the run's own period counter, then hook it.
 ///
 /// The stamp has to be wired before the first store lands, and the clock it
-/// reads is the one the run advances, so the two are set together here
-/// rather than left to the caller to remember.
+/// reads is the one the run advances, so the two are set together here.
 fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !void {
     one.now = clock;
     try core.attachWatchpoint(one);
@@ -68,6 +67,7 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
 /// Load the image, then read its option-setting memory the way the boot ROM
 /// does before the first instruction: src/board/option_memory.zig.
 fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
+    if (options.console) cli.console_output.configure(&board.serial.line);
     const written = try attachAll(core, image, parts, options);
     ra8.board.option_memory.apply(board, core.*);
     return written;

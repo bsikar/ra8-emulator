@@ -19,6 +19,11 @@ test "the command line takes an image and an optional instruction budget" {
     try std.testing.expectError(error.UnknownFlag, parse(&[_][]const u8{ "emu", "a.elf", "--nope" }));
 }
 
+test "--console streams finished SCI lines when requested" {
+    try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).console);
+    try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--console" })).console);
+}
+
 test "the part defaults to the RA8D2 and is named, never guessed" {
     const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
     try std.testing.expectEqual(Part.ra8d2, defaults.part);

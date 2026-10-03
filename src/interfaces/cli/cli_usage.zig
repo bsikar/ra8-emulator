@@ -4,7 +4,7 @@ pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\                    [--sd IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y]
-    \\                    [--battery PCT] [--charge] [--click]
+    \\                    [--battery PCT] [--charge] [--click] [--console]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
@@ -77,6 +77,7 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
+    \\  --console          print each finished SCI console line as it arrives
     \\  --no-bus-errors    end the run with a fault report on an access
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is

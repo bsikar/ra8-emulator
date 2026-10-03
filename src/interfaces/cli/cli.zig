@@ -12,6 +12,7 @@ const rtos_load = @import("../../debug/rtos_load.zig");
 
 pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
+pub const console_output = @import("console_output.zig");
 
 /// How many `--dump-sym` names one run will carry. The suite that drives
 /// this asks for at most two, a progress counter and a failure counter; the
@@ -70,6 +71,8 @@ pub const Options = struct {
     usb_disk: ?[]const u8 = null,
     /// Write one line per SD command to stderr.
     trace_sd: bool = false,
+    /// Stream completed SCI console lines to stdout as they arrive.
+    console: bool = false,
     /// Print this card block back as hex once the run is over.
     dump_sd: ?u32 = null,
     /// Contacts to queue on the touch panel, one drained per frame the
@@ -323,7 +326,9 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
 
 fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
-    if (std.mem.eql(u8, flag, "--trace-sd")) {
+    if (std.mem.eql(u8, flag, "--console")) {
+        options.console = true;
+    } else if (std.mem.eql(u8, flag, "--trace-sd")) {
         options.trace_sd = true;
     } else if (std.mem.eql(u8, flag, "--charge")) {
         options.battery.charging = true;
