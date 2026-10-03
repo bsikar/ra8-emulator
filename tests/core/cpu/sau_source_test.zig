@@ -51,3 +51,25 @@ test "TT on SRAM below a bank's boundary reports Secure" {
     try std.testing.expect(word & tt_s != 0);
     try std.testing.expect(before & tt_s == 0);
 }
+
+/// The four regions the EK-RA8D2 ns_usb_handoff boot programs
+/// (trustzone_init.c tz_partition_apply), plus the RA8 IDAU.
+fn handoffSau() sau.Sau {
+    var unit = sau.Sau{ .ctrl = enable };
+    unit.table[0] = sau.Region.fromPair(0x0200_7E00, 0x0200_7F20 | 2 | 1);
+    unit.table[1] = sau.Region.fromPair(0x1000_0000, 0x1FFF_FFE0 | 1);
+    unit.table[2] = sau.Region.fromPair(0x3000_0000, 0x3FFF_FFE0 | 1);
+    unit.table[3] = sau.Region.fromPair(0x5000_0000, 0xDFFF_FFE0 | 1);
+    return unit;
+}
+
+test "the handoff boot's veneers are callable, the code around them Secure (RA8EMU-395)" {
+    var unit = handoffSau();
+    const map = sau.idau.Map{};
+    var source = SauSource{ .unit = &unit, .idau = &map };
+    try std.testing.expectEqual(State.callable, source.source().of(0x0200_7EC0));
+    try std.testing.expectEqual(State.callable, source.source().of(0x0200_7F3E));
+    try std.testing.expectEqual(State.secure, source.source().of(0x0200_7F40));
+    try std.testing.expectEqual(State.secure, source.source().of(0x0200_585C));
+    try std.testing.expectEqual(State.non_secure, source.source().of(0x3210_00D8));
+}
