@@ -32,6 +32,7 @@ test {
     _ = @import("pkh_vectors_test.zig");
     _ = @import("push_pop_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
+    _ = @import("sat16_vectors_test.zig");
     _ = @import("sat_arith_vectors_test.zig");
     _ = @import("saturate_vectors_test.zig");
     _ = @import("sel_vectors_test.zig");
