@@ -9,6 +9,12 @@ pub const names = [16][]const u8{
     "r8", "sb", "sl", "fp", "ip", "sp", "lr", "pc",
 };
 
+/// Condition codes by their four-bit value; 14 is AL.
+pub const conds = [15][]const u8{
+    "eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc",
+    "hi", "ls", "ge", "lt", "gt", "le", "al",
+};
+
 /// Capstone prints immediates below this in decimal.
 pub const decimal_below: u32 = 10;
 
@@ -32,6 +38,23 @@ pub const Text = struct {
 
     pub fn imm(self: *Text, value: u32) void {
         if (value < decimal_below) self.put("#{d}", .{value}) else self.put("#0x{x}", .{value});
+    }
+
+    /// `{r0, r3, lr}`: the registers whose bits are set in `bits`, low first.
+    pub fn list(self: *Text, bits: u16) void {
+        self.put("{{", .{});
+        var first = true;
+        for (names, 0..) |name, r| {
+            if (bits & (@as(u16, 1) << @intCast(r)) == 0) continue;
+            self.put("{s}{s}", .{ if (first) "" else ", ", name });
+            first = false;
+        }
+        self.put("}}", .{});
+    }
+
+    /// A branch target: the instruction's address plus 4 plus `offset`.
+    pub fn target(self: *Text, address: u32, offset: i32) void {
+        self.imm(address +% 4 +% @as(u32, @bitCast(offset)));
     }
 
     /// `mnemonic rd, rm`.

@@ -9,4 +9,17 @@ test {
     _ = @import("special_data_test.zig");
     _ = @import("extend_test.zig");
     _ = @import("reverse_test.zig");
+    _ = @import("cps_test.zig");
+    _ = @import("blxns_test.zig");
+    _ = @import("hint_test.zig");
+    _ = @import("it_test.zig");
+    _ = @import("svc_test.zig");
+    _ = @import("branch_test.zig");
+    _ = @import("cbz_test.zig");
+    _ = @import("push_pop_test.zig");
+    _ = @import("ldm_stm_test.zig");
+    _ = @import("ldr_literal_test.zig");
+    _ = @import("sp_arith_test.zig");
+    _ = @import("ldst_reg_test.zig");
+    _ = @import("ldst_imm_test.zig");
 }
