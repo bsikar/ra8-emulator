@@ -65,7 +65,7 @@ fn compare(tally: *Tally, instr: Instr, raw: []const u8, log: anytype) !void {
         tally.unclaimed += 1;
         return;
     };
-    if (decode.decodeFor(decode.profile.Profile.m33, instr) == null) {
+    if (isArmV8_1mBti(instr) or decode.decodeFor(decode.profile.Profile.m33, instr) == null) {
         tally.v8_1m += 1;
         return;
     }
@@ -86,6 +86,10 @@ fn compare(tally: *Tally, instr: Instr, raw: []const u8, log: anytype) !void {
     tally.shown += 1;
     const their_text = if (theirs) |t| t.slice() else "<invalid>";
     try log.print("0x{x:0>8} {x:0>4} {x:0>4} [{s}]: ours \"{s}\", capstone \"{s}\"\n", .{ instr.address, instr.hw1, instr.hw2, hit.group, ours.slice(), their_text });
+}
+
+fn isArmV8_1mBti(instr: Instr) bool {
+    return instr.size == 4 and instr.hw1 == 0xF3AF and instr.hw2 == 0x800F;
 }
 
 /// The match table as Markdown, one row per group in first-seen order.
