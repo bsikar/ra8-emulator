@@ -30,6 +30,7 @@ test {
     _ = @import("misc_wide_vectors_test.zig");
     _ = @import("mov_wide_vectors_test.zig");
     _ = @import("mul_acc_vectors_test.zig");
+    _ = @import("parallel_vectors_test.zig");
     _ = @import("pkh_vectors_test.zig");
     _ = @import("push_pop_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
