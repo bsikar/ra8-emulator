@@ -21,6 +21,9 @@ pub const Probe = struct {
     /// A conf probe's floor is a bench window of seconds the table's budget
     /// may not reach, so a short count says the run was short, not wrong.
     short_is_unknown: bool = false,
+    /// Set when the word must equal a value (a pixel colour) rather than
+    /// reach `min`; any other value fails.
+    want: ?u32 = null,
 };
 
 pub const probes = [_]Probe{
@@ -38,6 +41,13 @@ pub const probes = [_]Probe{
     // re-render per turn (RA8EMU-400). The CLI keeps one --dump-mem, so the
     // status word is not read alongside it.
     .{ .image = "ereader_m33.elf", .symbol = "0x22100034", .min = 3 },
+    // Display examples verified by eye on the bench (hw_validated/manual).
+    // lcd_draw_x: a yellow X on a blue 512x512 square; the RGB565 word at
+    // the X's centre, pixels (256,256) and (257,256) of s_framebuffer
+    // 0x22001540, is two yellow pixels 0xFFE0FFE0 (RA8EMU-400).
+    .{ .image = "lcd_draw_x.elf", .symbol = "0x22041740", .min = 0, .want = 0xFFE0FFE0 },
+    // display_pal_animation scrolls its colour bars one row per frame.
+    .{ .image = "display_pal_animation.elf", .symbol = "s_scroll_offset", .min = 2 },
     .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
     // No console and no hil.conf: its NSC log veneer only copies into a
     // secure scratch buffer. The README's verdict is that the Non-Secure
@@ -127,6 +137,7 @@ fn dumpedPlace(report: []const u8, name: []const u8) ?u32 {
 /// does not carry both words.
 pub fn judge(probe: Probe, report: []const u8) Judgement {
     const matched = dumped(report, probe.symbol) orelse return .unknown;
+    if (probe.want) |value| return if (matched == value) .pass else .fail;
     const failed = if (probe.failure) |name| dumped(report, name) orelse return .unknown else 0;
     if (failed > probe.max_failure) return .fail;
     if (matched >= probe.min) return .pass;

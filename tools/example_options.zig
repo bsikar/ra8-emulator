@@ -50,7 +50,8 @@
 //! LED1 (RA8EMU-400). gpt_edge_capture_count's liveness word, the GPT
 //! free-run tick its README names, reads 0 at the 2M default and about one
 //! per 5 ms of target time, so it gets 200 ms. ereader_m33's mailbox shows
-//! all three page turns done by 200 ms too.
+//! all three page turns done by 200 ms too. lcd_draw_x and
+//! display_pal_animation get a second so their probes read a painted frame.
 const std = @import("std");
 
 pub const Extra = struct {
@@ -83,10 +84,12 @@ pub const extras = [_]Extra{
     .{ .image = "blink_m33_hal.elf", .flags = &one_second },
     .{ .image = "cpu1_pingpong_ra8p1.elf", .flags = &ra8p1 },
     .{ .image = "epub_open.elf", .flags = &formatted },
+    .{ .image = "display_pal_animation.elf", .flags = &one_second },
     .{ .image = "epub_toc.elf", .flags = &formatted },
     .{ .image = "ereader_m33.elf", .flags = &fifth_second },
     .{ .image = "gpt_edge_capture_count.elf", .flags = &fifth_second },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
+    .{ .image = "lcd_draw_x.elf", .flags = &one_second },
     .{ .image = "lowpower_holdpage.elf", .flags = &one_second },
     .{ .image = "pagecache.elf", .flags = &fat32_card },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
