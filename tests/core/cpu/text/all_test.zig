@@ -14,6 +14,7 @@ test {
     _ = @import("imm_logic_test.zig");
     _ = @import("mov_wide_test.zig");
     _ = @import("add_sub_wide_test.zig");
+    _ = @import("dp_shifted_test.zig");
     _ = @import("blxns_test.zig");
     _ = @import("hint_test.zig");
     _ = @import("it_test.zig");
