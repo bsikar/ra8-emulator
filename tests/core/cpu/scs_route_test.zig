@@ -48,11 +48,11 @@ test "a bit-by-bit register and anything outside the SCS keep their address" {
     try expectAt(aircr, scs_route.land(&ns, aircr));
     try std.testing.expect(scs_route.wired(&ns, aircr) != null);
     try std.testing.expect(scs_route.wired(null, aircr) == null);
-    // ICSR and SHPR3 bank only PendSV while one timer pends SysTick (RA8EMU-439).
-    try std.testing.expectEqual(@as(u32, 0x1800_0000), scs_route.wired(&ns, icsr).?.mask);
-    try std.testing.expectEqual(@as(u32, 0x00FF_0000), scs_route.wired(&ns, 0xE000_ED20).?.mask);
-    // SHCSR's banked bits without SYSTICKACT (RA8EMU-441).
-    try std.testing.expectEqual(@as(u32, 0x0025_B48D), scs_route.wired(&ns, 0xE000_ED24).?.mask);
+    // With a SysTick per Security state, ICSR, SHPR3 and SHCSR bank its bits
+    // too (RA8EMU-154).
+    try std.testing.expectEqual(@as(u32, 0x1E00_0000), scs_route.wired(&ns, icsr).?.mask);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_0000), scs_route.wired(&ns, 0xE000_ED20).?.mask);
+    try std.testing.expectEqual(@as(u32, 0x0025_BC8D), scs_route.wired(&ns, 0xE000_ED24).?.mask);
     try expectAt(0x2000_0000, scs_route.land(&ns, 0x2000_0000));
 }
 
@@ -247,4 +247,15 @@ test "CFSR keeps a Non-secure copy of UFSR and MMFSR on CPU0" {
 
 test "CFSR keeps a Non-secure copy of UFSR and MMFSR on CPU1" {
     try cfsrRoundTrip(.cpu1);
+}
+
+test "Non-secure code on the normal SysTick window reaches its own timer" {
+    const ns: Banked = .{ .current = .non_secure };
+    const secure: Banked = .{};
+    for ([_]u32{ 0xE000_E010, 0xE000_E014, 0xE000_E018, 0xE000_E01C }) |word| {
+        try expectAt(word + 0x2_0000, scs_route.land(&ns, word));
+        try expectAt(word, scs_route.land(&secure, word));
+        try expectAt(word + 0x2_0000, scs_route.land(&secure, word + 0x2_0000));
+    }
+    try std.testing.expect(scs_route.land(&ns, 0xE002_E010) == .res0);
 }

@@ -6,9 +6,8 @@
 //! AIRCR.BFHFNMINS hands them to Non-secure; interrupts stay Non-secure
 //! (ITNS clear on an interrupt pended from Non-secure is not modelled).
 //! PendSV is banked: the copy it was pended in decides (RA8EMU-439).
-//! SysTick from the Non-secure copy goes Non-secure (RA8EMU-438); from the
-//! shared word it keeps the rule above while one timer pends it there
-//! (RA8EMU-154).
+//! SysTick is banked the same way now that each Security state has its own
+//! timer (RA8EMU-438, RA8EMU-154).
 const memmap = @import("../../memmap.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 
@@ -21,7 +20,7 @@ pub const itns: u32 = 0xE000_E380;
 
 pub fn secure(cpu: *const Cpu, number: u9) bool {
     if (number == 14) return !cpu.entering_non_secure;
-    if (cpu.entering_non_secure and number == 15) return false;
+    if (number == 15) return !cpu.entering_non_secure;
     if (cpu.banked.current == .secure) return number < 16 or !nonSecureIrq(cpu, number - 16);
     return switch (number) {
         7 => true,

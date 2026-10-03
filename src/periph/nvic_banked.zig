@@ -19,9 +19,9 @@ pub fn read(core: anytype) !systick_bank.Pends {
         .icsr = try core.readNonSecure(memmap.scb.icsr),
         .shpr3 = try core.readNonSecure(memmap.scb.shpr3),
     } else .{ .icsr = 0, .shpr3 = 0 };
-    // One timer still pends SysTick in the shared word (RA8EMU-439), so only
-    // PendSV is offered from the Non-secure copy until RA8EMU-154.
-    return systick_bank.pends(secure, non_secure, false);
+    // A core that reaches the Non-secure copy runs a Non-secure SysTick of
+    // its own (RA8EMU-154), so SysTick is offered from both copies.
+    return systick_bank.pends(secure, non_secure, true);
 }
 
 /// Fold a Non-secure PENDSVCLR: it clears itself and PENDSVSET in that copy,

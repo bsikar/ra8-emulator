@@ -18,6 +18,7 @@
 const alias = @import("../../periph/scs_alias.zig");
 const scb_bank = @import("../../periph/scb_bank.zig");
 const banked = @import("../banked.zig");
+const systick_bank = @import("../systick_bank.zig");
 
 pub const Landing = union(enum) {
     /// The access goes to this address.
@@ -38,6 +39,10 @@ pub fn land(state: ?*const banked.Banked, address: u32) Landing {
 }
 
 fn copy(target: alias.Target, address: u32) u32 {
+    // Each core has a Non-secure SysTick of its own at the alias (RA8EMU-154).
+    if (target.view == .non_secure and systick_bank.window.normal.covers(target.address)) {
+        return target.address + alias.offset;
+    }
     const word = target.address & ~@as(u32, 3);
     const within = target.address - word;
     return switch (scb_bank.backing(.{ .address = word, .view = target.view })) {
@@ -110,12 +115,9 @@ const shpr3: u32 = 0xE000_ED20;
 const shcsr: u32 = 0xE000_ED24;
 const cfsr: u32 = 0xE000_ED28;
 
-/// How many SysTicks a wired word splits for. One timer still pends SysTick
-/// in the shared ICSR, so ICSR, SHPR3 and SHCSR leave SysTick's bits shared
-/// until the Non-secure SysTick has its own clock (RA8EMU-154).
-fn systicksOf(word: u32) scb_bank.SysTicks {
-    return if (word == icsr or word == shpr3 or word == shcsr) .one else .two;
-}
+/// Both RA8 cores implement a SysTick per Security state, and the Zig core
+/// runs both (RA8EMU-154), so ICSR, SHPR3 and SHCSR bank SysTick's bits too.
+const two_systicks: scb_bank.SysTicks = .two;
 
 /// The split an access by a core in `state` to `address` goes through, or
 /// null when it takes the plain path: Secure code on the normal window, a
@@ -130,7 +132,7 @@ pub fn wired(state: ?*const banked.Banked, address: u32) ?Split {
     const word = target.address & ~@as(u32, 3);
     for (wired_words) |candidate| {
         if (candidate != word) continue;
-        var halves = split(target, systicksOf(word)) orelse return null;
+        var halves = split(target, two_systicks) orelse return null;
         halves.clears = word == cfsr;
         return halves;
     }
