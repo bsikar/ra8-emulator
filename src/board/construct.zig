@@ -87,6 +87,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .backup = undefined,
         .oscillators = undefined,
         .subclk = undefined,
+        .loco = undefined,
         .tree = undefined,
         .low_power = undefined,
         .plls = undefined,

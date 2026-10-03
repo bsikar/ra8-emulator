@@ -166,6 +166,8 @@ pub const Board = struct {
     /// pointer to this board's own protection model rather than a copy.
     oscillators: oscsf.Oscillators,
     subclk: subclock.Unit,
+    /// LOCOCR: the low-speed oscillator's stop bit.
+    loco: subclock.loco.Unit,
     /// The system clock tree: the source CKSEL picks and the dividers under
     /// it. Built in attach(): every store is PRC0-gated and a select is
     /// checked against the stabilisation flags, so it needs pointers to this
