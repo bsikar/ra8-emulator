@@ -59,4 +59,5 @@ test {
     _ = @import("umaal_test.zig");
     _ = @import("usad8_test.zig");
     _ = @import("parallel_test.zig");
+    _ = @import("dsp_dual_test.zig");
 }
