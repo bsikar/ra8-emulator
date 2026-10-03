@@ -95,6 +95,9 @@ const wdt = @import("../periph/wdt/wdt.zig");
 const xspi = @import("../periph/xspi/xspi.zig");
 
 pub const Board = struct {
+    /// Where a catalog model's device goes on this board (RA8EMU-490).
+    pub const plug = @import("plug.zig");
+
     bus: periph.Bus,
     modules: mstp.Mstp = .{},
     attribution: pscu.Unit = .{},
@@ -211,6 +214,8 @@ pub const Board = struct {
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
+    /// The run's `--attach` asks, plugged by wiring after the fitted parts.
+    asks: plug.Asks = .{},
     rswitch: net.Rswitch = .{},
     usb: usb.Usb = .{},
     /// The two SPI_B channels. No pin here, so the observable is the frames

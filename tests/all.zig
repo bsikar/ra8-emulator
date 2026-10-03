@@ -50,6 +50,7 @@ test {
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/i2c_test.zig");
+    _ = @import("board/plug_test.zig");
     _ = @import("board/usb_test.zig");
     _ = @import("board/usb_disk_test.zig");
     _ = @import("board/usb_plug_test.zig");

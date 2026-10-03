@@ -102,8 +102,9 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
-    \\  --attach M@E       attach catalog model M (lsm6dso, max17048) at endpoint
-    \\                     E, e.g. max17048@i2c:touch@0x37 (up to 4 times)
+    \\  --attach M@E       attach model M (lsm6dso, max17048, eink, modem) at
+    \\                     endpoint E: i2c:riic@0x37, spi:spi1@ssl0, uart:sci3
+    \\                     (up to 4 times)
     \\  --cms N            Secure code MRAM, 32 KB units (CMSAMON.CMS, 0..0x1FF)
     \\  --sfs N            Secure SiP flash, 32 KB units (SFSAMON.SFS, 0..0x1FF)
     \\  --console          stream SCI lines and read host input as console RX

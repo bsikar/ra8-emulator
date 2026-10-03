@@ -20,6 +20,7 @@ const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 
 const Board = @import("board.zig").Board;
+const plug = @import("plug.zig");
 
 const bkup = @import("../periph/bkup/bkup.zig");
 const dmac = @import("../periph/dmac/dmac.zig");
@@ -64,6 +65,13 @@ fn attachAdc(self: *Board, core: engine.Engine) !void {
     _ = tsn_cal.map(.{ .engine = core }) catch false;
 }
 
+/// The I2C lines with their fitted parts, then the run's `--attach` asks,
+/// so a clash with a fitted part is reported against the ask.
+fn attachWire(self: *Board) !void {
+    try self.wire.attach(&self.bus);
+    try plug.all(self);
+}
+
 /// Put every block on the bus, in the order that works.
 pub fn attach(self: *Board, core: *engine.Engine) !void {
     try attachGate(self);
@@ -99,7 +107,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.spi.attachDevice(eink.line_channel, self.panel.device());
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());
-    try self.wire.attach(&self.bus);
+    try attachWire(self);
     try self.rswitch.attach(&self.bus, core.*, &self.domains.eswm);
     try self.usb.attach(&self.bus);
     self.trace.memory = .{ .engine = core.* };
