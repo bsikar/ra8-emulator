@@ -1,6 +1,5 @@
-//! The emulator as one module, so the build and the tests reach every file
-//! through one name instead of a relative path apiece. `zig build test`
-//! imports this as "ra8"; so does src/main.zig.
+//! The emulator as one module, imported as "ra8" by `zig build test` and
+//! src/main.zig, so every file is reached through one name, not a path.
 pub const core = struct {
     pub const c = @import("core/c.zig");
     pub const board_ram = @import("core/board_ram.zig");
@@ -102,6 +101,7 @@ pub const core = struct {
         pub const choice = @import("core/cpu/choice.zig");
         pub const board_bus = @import("core/cpu/board_bus.zig");
         pub const engine_bus = @import("core/cpu/engine_bus.zig");
+        pub const memory = @import("core/cpu/memory/all.zig");
         pub const cpu = @import("core/cpu/cpu.zig");
         pub const decode = @import("core/cpu/decode.zig");
         pub const cond = @import("core/cpu/cond.zig");

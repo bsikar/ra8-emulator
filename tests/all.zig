@@ -1,7 +1,6 @@
 //! The test root. `zig build test` compiles this file, so every test file
-//! under tests/ has to be listed here, and every test file mirrors the path
-//! of the source file it covers (tests/periph/crc_test.zig covers
-//! src/periph/crc.zig, tests/tools/gate_test.zig covers tools/gate.zig).
+//! under tests/ is listed here, on the path of the source file it covers
+//! (tests/periph/crc_test.zig covers src/periph/crc.zig).
 const std = @import("std");
 test {
     _ = @import("core/systick_bank_test.zig");
@@ -15,6 +14,7 @@ test {
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
     _ = @import("core/cpu/engine_bus_test.zig");
+    _ = @import("core/cpu/memory/all_test.zig");
     _ = @import("core/cpu/cpu_test.zig");
     _ = @import("core/cpu/decode_test.zig");
     _ = @import("core/cpu/decode_cache_test.zig");
