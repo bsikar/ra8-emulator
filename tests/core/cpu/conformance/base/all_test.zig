@@ -3,6 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 test {
+    _ = @import("acq_rel_vectors_test.zig");
     _ = @import("add_sub_vectors_test.zig");
     _ = @import("add_sub_wide_vectors_test.zig");
     _ = @import("barrier_vectors_test.zig");
