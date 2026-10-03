@@ -11,7 +11,9 @@
 //! unknown until a reader checks it against its README.
 //! An image with its bench conf beside it (foo.hil.conf) runs with --console
 //! and is judged first by that conf's HIL_EXPECT and HIL_EXPECT_NEGATIVE over
-//! every console line, as the bench judges it (RA8EMU-400).
+//! every console line, as the bench judges it (RA8EMU-400). An image with no
+//! conf whose README names its pass and fail lines is judged on its last line
+//! by example_expect.zig.
 //! A few images need more than one budget fits; example_budgets.zig lists
 //! them and the floor each runs at. A few need hardware the default board
 //! does not fit; example_options.zig lists the flags that fit it.
@@ -29,6 +31,7 @@ const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
 pub const probes = @import("example_probes.zig");
 pub const options = @import("example_options.zig");
+pub const expect = @import("example_expect.zig");
 pub const hil_conf = @import("hil_conf.zig");
 
 pub const Verdict = enum { pass, fail, unknown };
@@ -315,6 +318,10 @@ fn measure(allocator: std.mem.Allocator, job: Job) !Row {
     // An undecided conf probe leaves the row to the console and LEDs.
     if (row.probe == .unknown and probes.find(job.image) == null) row.probe = null;
     if (job.conf) |found| row.hil = hil_conf.judge(found, report);
+    // No conf: the README's own pass and fail lines, when it names them.
+    if (job.conf == null) if (expect.find(job.image)) |found| {
+        row.hil = expect.judge(found, row.console);
+    };
     return row;
 }
 
