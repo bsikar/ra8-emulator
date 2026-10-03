@@ -17,9 +17,10 @@ test "from Non-secure SecureFault, HardFault, NMI and BusFault go Secure" {
     var cpu = try fixture.boot(&ram);
     cpu.banked.switchTo(&cpu.regs, .non_secure);
     for ([_]u9{ 2, 3, 5, 7 }) |number| try std.testing.expect(target.secure(&cpu, number));
-    for ([_]u9{ 4, 6, 11, 12, 15, 16, 60 }) |number| try std.testing.expect(!target.secure(&cpu, number));
-    // PendSV from the Secure copy stays Secure (RA8EMU-439).
-    try std.testing.expect(target.secure(&cpu, 14));
+    for ([_]u9{ 4, 6, 11, 12, 16, 60 }) |number| try std.testing.expect(!target.secure(&cpu, number));
+    // PendSV and SysTick from the Secure copy stay Secure (RA8EMU-439,
+    // RA8EMU-154).
+    for ([_]u9{ 14, 15 }) |number| try std.testing.expect(target.secure(&cpu, number));
 }
 
 test "BFHFNMINS hands HardFault, NMI and BusFault to Non-secure" {
