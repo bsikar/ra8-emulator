@@ -5,6 +5,25 @@ const step = ra8.core.cpu.lockstep.step;
 const pair_mod = @import("pair.zig");
 const Pair = pair_mod.Pair;
 
+const IgnoreWrites = struct {
+    inner: ra8.core.cpu.bus.Bus,
+
+    fn view(self: *IgnoreWrites) ra8.core.cpu.bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) ra8.core.cpu.bus.Error!void {
+        const self: *IgnoreWrites = @ptrCast(@alignCast(ctx));
+        return self.inner.read(address, into);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) ra8.core.cpu.bus.Error!void {
+        _ = ctx;
+        _ = address;
+        _ = bytes;
+    }
+};
+
 test "a NOP on both backends matches under the hint class" {
     var pair: Pair = undefined;
     try pair.open(&.{ 0x00, 0xBF, 0x00, 0xBF });
@@ -26,6 +45,27 @@ test "a register the backends disagree on is reported with both values" {
     try std.testing.expectEqual(ra8.core.cpu.regs.Name.r0, found.what.register.name);
     try std.testing.expectEqual(@as(u32, 0), found.what.register.ours);
     try std.testing.expectEqual(@as(u32, 1), found.what.register.oracle);
+}
+
+test "an oracle-only store is reported as a memory divergence" {
+    var pair: Pair = undefined;
+    try pair.open(&.{ 0x0A, 0x60 }); // str r2, [r1]
+    defer pair.close();
+    var ignored: IgnoreWrites = .{ .inner = pair.cpu.bus };
+    pair.cpu.bus = ignored.view();
+    pair.cpu.regs.low[1] = pair_mod.entry + 0x100;
+    pair.cpu.regs.low[2] = 0x1234;
+    try ra8.core.cpu.lockstep.oracle.load(pair.theirs, ra8.core.cpu.lockstep.snapshot.Snapshot.fromRegs(&pair.cpu.regs));
+    const result = try step.one(&pair.cpu, pair.theirs, &pair.log, null);
+    const found = result.diverged;
+    try std.testing.expect(found.what == .memory);
+    try std.testing.expectEqual(pair_mod.entry + 0x100, found.what.memory.address);
+    var buffer: [96]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    try found.what.write(stream.writer());
+    var want: [96]u8 = undefined;
+    const line = try std.fmt.bufPrint(&want, "memory at 0x{X:0>8}: zig 00000000, unicorn 34120000", .{pair_mod.entry + 0x100});
+    try std.testing.expectEqualStrings(line, stream.getWritten());
 }
 
 test "an encoding the Zig core does not know stops both, unstepped" {

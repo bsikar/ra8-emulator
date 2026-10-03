@@ -34,7 +34,7 @@ pub const Recorder = struct {
         return self.held[0..self.count];
     }
 
-    fn keep(self: *Recorder, address: u32, bytes: []const u8) void {
+    pub fn record(self: *Recorder, address: u32, bytes: []const u8) void {
         if (self.count == capacity) {
             self.dropped = true;
             return;
@@ -56,7 +56,7 @@ pub const Recorder = struct {
         var done: usize = 0;
         while (done < bytes.len) {
             const len = @min(widest, bytes.len - done);
-            self.keep(address +% @as(u32, @intCast(done)), bytes[done .. done + len]);
+            self.record(address +% @as(u32, @intCast(done)), bytes[done .. done + len]);
             done += len;
         }
     }
