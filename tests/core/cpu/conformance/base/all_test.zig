@@ -39,6 +39,7 @@ test {
     _ = @import("long_shift_vectors_test.zig");
     _ = @import("misc_wide_vectors_test.zig");
     _ = @import("mov_wide_vectors_test.zig");
+    _ = @import("mrs_msr_vectors_test.zig");
     _ = @import("mul_acc_vectors_test.zig");
     _ = @import("parallel_vectors_test.zig");
     _ = @import("pkh_vectors_test.zig");
