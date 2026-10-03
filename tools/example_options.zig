@@ -24,6 +24,10 @@
 //! Unicorn (RA8EMU-289). A caller budget passes --instructions, which wins
 //! over --ms, so that row only reaches its verdict at the table's own budget.
 //!
+//! pagecache mounts with format-if-blank and its README asks for a blank
+//! 64 MB FAT32 card; on the default blank card the mount fails (g_pc_err 3)
+//! and the heartbeat never moves, so it gets that card (RA8EMU-400).
+//!
 //! cpu1_pingpong_ra8p1 is built for the RA8P1, whose map and CPU1 window the
 //! default RA8D2 part does not carry, so it runs on `--device ra8p1`
 //! (RA8EMU-135).
@@ -37,6 +41,7 @@ pub const Extra = struct {
 const click = [_][]const u8{"--click"};
 const formatted = [_][]const u8{ "--sd-new", "fat16" };
 const large_card = [_][]const u8{ "--sd-size", "4096" };
+const fat32_card = [_][]const u8{ "--sd-size", "64", "--sd-new", "fat32" };
 const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
 
@@ -48,6 +53,7 @@ pub const extras = [_]Extra{
     .{ .image = "epub_open.elf", .flags = &formatted },
     .{ .image = "epub_toc.elf", .flags = &formatted },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
+    .{ .image = "pagecache.elf", .flags = &fat32_card },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
     .{ .image = "smbus_demo.elf", .flags = &click },
     .{ .image = "tz_nsc_cgc_usb.elf", .flags = &usb_loop },

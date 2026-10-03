@@ -52,3 +52,10 @@ test "the RA8P1 dual-core pair runs on the RA8P1 part" {
     try std.testing.expectEqualStrings("ra8p1", extra[1]);
     try std.testing.expectEqual(@as(usize, 0), options.flags("cpu1_pingpong.elf").len);
 }
+
+test "pagecache gets the blank 64 MB FAT32 card its README asks for" {
+    const got = options.flags("pagecache.elf");
+    const want = [_][]const u8{ "--sd-size", "64", "--sd-new", "fat32" };
+    try std.testing.expectEqual(want.len, got.len);
+    for (want, got) |w, g| try std.testing.expectEqualStrings(w, g);
+}
