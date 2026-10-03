@@ -1,0 +1,78 @@
+//! Covers src/interfaces/cli/report/json_dumps.zig: the `dumps` object of
+//! `--report json`, read off a real engine and parsed back with std.json.
+const std = @import("std");
+const ra8 = @import("ra8");
+
+const json_run = ra8.board.report.json_run;
+const json_dumps = json_run.json_dumps;
+const Engine = ra8.core.engine.Engine;
+const Options = ra8.core.cli.Options;
+const Value = std.json.Value;
+const Fixture = @import("json_board.zig").Fixture;
+
+const base: u32 = ra8.core.memmap.sram_base;
+
+fn render(board: *ra8.board.Board, dumps: ?*const json_dumps.Dumps, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
+    try json_run.document(buf.writer(), board, .{ .engine = "unicorn", .elapsed = 1, .dumps = dumps });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+}
+
+test "a run with no core handed over writes null" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+    const doc = try render(&fix.board, null, &buf);
+    defer doc.deinit();
+    try std.testing.expect(doc.value.object.get("dumps").? == .null);
+}
+
+test "nothing asked writes an empty list and nulls" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var core = try Engine.open();
+    defer core.close();
+    const options = Options{ .path = "unused.elf" };
+    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+    const doc = try render(&fix.board, &of, &buf);
+    defer doc.deinit();
+    const dumps = doc.value.object.get("dumps").?.object;
+    try std.testing.expectEqual(@as(usize, 0), dumps.get("symbols").?.array.items.len);
+    try std.testing.expect(dumps.get("registers").? == .null);
+    try std.testing.expect(dumps.get("memory").? == .null);
+}
+
+test "registers and memory words read off the core" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try core.writeWord(base, 0x11223344);
+    try core.writeWord(base + 4, 0x55667788);
+    try core.setRegister(.r0, 42);
+    try core.setRegister(.sp, base);
+    var spec_buf: [16]u8 = undefined;
+    const spec = try std.fmt.bufPrint(&spec_buf, "0x{X}", .{base});
+    const options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem = spec, .dump_mem_words = 2 };
+    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+    const doc = try render(&fix.board, &of, &buf);
+    defer doc.deinit();
+    const dumps = doc.value.object.get("dumps").?.object;
+    const regs = dumps.get("registers").?.object;
+    try std.testing.expectEqual(@as(i64, 42), regs.get("r0").?.integer);
+    try std.testing.expectEqual(@as(i64, 0x11223344), regs.get("stack").?.array.items[0].integer);
+    const memory = dumps.get("memory").?.object;
+    try std.testing.expectEqual(@as(i64, base), memory.get("address").?.integer);
+    try std.testing.expect(memory.get("error").? == .null);
+    const words = memory.get("words").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), words.len);
+    try std.testing.expectEqual(@as(i64, 0x55667788), words[1].integer);
+}
