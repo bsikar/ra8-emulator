@@ -23,11 +23,40 @@ test "yield, wfe, wfi and sev decode in both widths" {
     for ([_]u16{ 0x8001, 0x8002, 0x8003, 0x8004 }) |hw2| try std.testing.expect(wide(hw2) != null);
 }
 
-test "an IT and the unallocated hints are left alone" {
-    // bf08 it eq-shaped, bf50 and bff0 unallocated hint numbers
-    for ([_]u16{ 0xBF08, 0xBF50, 0xBFF0, 0xBF18 }) |hw1| try std.testing.expect(narrow(hw1) == null);
-    // f3af 8005 unallocated, 80f0 dbg, 8014 csdb-shaped
-    for ([_]u16{ 0x8005, 0x80F0, 0x8014 }) |hw2| try std.testing.expect(wide(hw2) == null);
+test "an IT and the PACBTI hints are left alone" {
+    // bf08 and bf18 are IT (nonzero mask)
+    for ([_]u16{ 0xBF08, 0xBF18 }) |hw1| try std.testing.expect(narrow(hw1) == null);
+    // f3af 800d pacbti, 800f bti, 801d pac, 802d aut (arm-none-eabi-as 13.3)
+    for ([_]u16{ 0x800D, 0x800F, 0x801D, 0x802D }) |hw2| try std.testing.expect(wide(hw2) == null);
+    // hw2[15:8] not 0x80 is not the hint space
+    try std.testing.expect(wide(0x8105) == null);
+}
+
+/// Runs a wide hint and checks it changed nothing the hints can touch.
+fn expectWideNop(hw2: u16) !void {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined, .source = null };
+    cpu.regs.pc = 0x100;
+    cpu.regs.xpsr = 0x0100_0000;
+    const exec = wide(hw2) orelse return error.NotClaimed;
+    try exec(&cpu, .{ .address = 0xFC, .hw1 = 0xF3AF, .hw2 = hw2, .size = 4 });
+    try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x0100_0000), cpu.regs.xpsr);
+    try std.testing.expect(!cpu.event);
+}
+
+test "dbg, esb, csdb and the reserved wide hints run as NOP" {
+    // f3af 80f5 dbg #5, 8010 esb, 8014 csdb, 8005 and 80ef reserved
+    for ([_]u16{ 0x80F5, 0x80F0, 0x80FF, 0x8010, 0x8014, 0x8005, 0x80EF }) |hw2| try expectWideNop(hw2);
+}
+
+test "the reserved narrow hints run as NOP" {
+    // bf50 to bff0: hint numbers 5 to 15
+    var n: u16 = 5;
+    while (n <= 15) : (n += 1) {
+        var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+        try runHint(&cpu, 0xBF00 | (n << 4));
+        try std.testing.expect(!cpu.event);
+    }
 }
 
 test "wfi falls straight through" {

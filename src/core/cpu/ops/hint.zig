@@ -1,4 +1,12 @@
-//! Hints: NOP, YIELD, WFE, WFI and SEV, in both widths.
+//! Hints: NOP, YIELD, WFE, WFI and SEV, in both widths, and every other
+//! hint number as a NOP. The Arm ARM has the reserved hints (narrow 5 to 15,
+//! wide 5 to 255) execute as NOPs, and DBG (wide 0xF0-0xFF), ESB (0x10) and
+//! CSDB (0x14) change no state the core models, so they complete the same
+//! way (RA8EMU-125).
+//!
+//! Left unclaimed: the PACBTI hint numbers (PACBTI 0x0D, BTI 0x0F, PAC
+//! 0x1D, AUT 0x2D), which the PACBTI work under RA8EMU-8 decodes, and the
+//! narrow encodings with a nonzero mask field, which are IT.
 //!
 //! SEV sets the core's event register and WFE consumes it when it is set
 //! (RA8EMU-129). WFI, and WFE with the event clear, leave the core waiting
@@ -14,10 +22,12 @@ pub const encodings = struct {
     pub const nop_t2_hw1: u16 = 0xF3AF;
     pub const nop_t2_hw2: u16 = 0x8000;
     /// hint number 0 NOP, 1 YIELD, 2 WFE, 3 WFI, 4 SEV
-    pub const last_hint: u16 = 4;
     pub const wfe: u16 = 2;
     pub const wfi: u16 = 3;
     pub const sev: u16 = 4;
+    /// Wide PACBTI, BTI, PAC and AUT: decoded by the PACBTI group, not here.
+    /// The narrow encodings of those numbers are plain reserved hints.
+    pub const pacbti_hints = [_]u16{ 0x0D, 0x0F, 0x1D, 0x2D };
 };
 
 pub const group: op.Group = .{ .name = "hint", .decode = decode };
@@ -32,12 +42,13 @@ fn decode(instr: Instr) ?op.Exec {
     }
     if (instr.hw1 != e.nop_t2_hw1) return null;
     if (instr.hw2 & 0xFF00 != e.nop_t2_hw2) return null;
-    return byNumber(instr.hw2 & 0xFF);
+    const number = instr.hw2 & 0xFF;
+    for (e.pacbti_hints) |h| if (number == h) return null;
+    return byNumber(number);
 }
 
 fn byNumber(number: u16) ?op.Exec {
     const e = encodings;
-    if (number > e.last_hint) return null;
     return switch (number) {
         e.wfe => waitForEvent,
         e.wfi => waitForInterrupt,
