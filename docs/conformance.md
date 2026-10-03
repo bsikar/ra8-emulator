@@ -253,9 +253,9 @@ table above. A group listed as missing does not fail the build yet.
 | shift_imm | 16 |
 | add_sub | 18 |
 | dp_reg | 29 |
-| special_data | missing |
+| special_data | 18 |
 | cps | missing |
-| cbz | missing |
+| cbz | 7 |
 | extend | 7 |
 | reverse | 6 |
 | it | missing |
