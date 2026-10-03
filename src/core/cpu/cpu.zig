@@ -139,7 +139,7 @@ pub const Cpu = struct {
         self.regs.pc = address +% instr.size;
         if (runs) {
             const before = StackPointers.read(self);
-            if (self.mpu) |m| m.arm(sysreg.privileged(&self.regs), self.boosted());
+            if (self.mpu) |m| if (m.unit.on()) m.arm(sysreg.privileged(&self.regs), self.boosted());
             self.armGate(true);
             const ran = found.?.exec(self, instr);
             self.armGate(false);
