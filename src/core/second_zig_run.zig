@@ -45,6 +45,13 @@ pub const Driver = struct {
     pub fn round(self: *Driver, round_size: u32) void {
         const second = &self.second;
         if (second.fault != null or second.heldInReset()) return;
+        if (second.unvectored) {
+            second.unvectored = false;
+            self.core.cpu.reset(second.vector_base) catch |err| {
+                second.fault = .{ .pc = second.vector_base, .detail = @errorName(err) };
+                return;
+            };
+        }
         const share = second.turn(round_size);
         second.turns += 1;
         const before = self.core.cpu.retired;

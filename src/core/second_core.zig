@@ -145,6 +145,11 @@ pub const Second = struct {
     /// held in reset and retires nothing (RA8EMU-467).
     resets_seen: u32 = 0,
     held: bool = false,
+    /// Releases out of a held reset (RA8EMU-468).
+    restarts: u32 = 0,
+    /// Set by a release, cleared by the Zig backend once it has reset its
+    /// own core onto the new table.
+    unvectored: bool = false,
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -268,7 +273,27 @@ pub const Second = struct {
             self.resets_seen = pending.performed;
             self.held = true;
         }
+        if (self.held and board.second_core.running()) self.leaveReset(board.second_core.initvtor);
         return self.held;
+    }
+
+    /// CPU0 ran the release sequence again: CPU1 comes up out of
+    /// CPU1INITVTOR, or its image's table when that was never written, with
+    /// a fresh NVIC and no WFE park, the way a core leaving reset does.
+    fn leaveReset(self: *Second, initvtor: u32) void {
+        const base = if (initvtor != 0) initvtor else self.vector_base;
+        self.held = false;
+        self.restarts +%= 1;
+        self.unvectored = true;
+        self.vector_base = base;
+        self.interrupts = .{ .vector_base = base };
+        self.wait = .{};
+        primeVectorTable(self.core, base) catch {};
+        self.core.resetFromVectorTable(base) catch |err| {
+            self.fault = .{ .pc = base, .detail = @errorName(err), .access = null, .instruction = null };
+            return;
+        };
+        self.pc = self.core.register(.pc) catch base;
     }
 
     /// The boundary between two of CPU1's turns. A turn is exactly one

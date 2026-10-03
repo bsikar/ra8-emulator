@@ -6,6 +6,7 @@ const memmap = ra8.core.memmap;
 const Engine = ra8.core.engine.Engine;
 const Board = ra8.board.Board;
 const scb = ra8.periph.scb;
+const cpu_ctrl = ra8.periph.cpu_ctrl;
 
 /// CPU1 beside CPU0 on shared RAM, built into storage the caller holds.
 fn pair(cpu1: *mod.Second) !Engine {
@@ -67,4 +68,40 @@ test "a core with no board is never held" {
     defer cpu0.close();
     defer cpu1.close();
     try std.testing.expect(!cpu1.heldInReset());
+}
+
+test "a fresh release after a reset brings CPU1 up out of CPU1INITVTOR" {
+    var cpu1: mod.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var pending: ra8.core.reboot.Reboot = .{};
+    board.reboot = &pending;
+    cpu1.board = &board;
+    const table: u32 = memmap.sram_base + 0x400;
+    try cpu0.writeWord(table, memmap.sram_base + 0x8000);
+    try cpu0.writeWord(table + 4, memmap.sram_base + 0x101);
+
+    board.requestReset(.software);
+    pending.performed = 1;
+    try std.testing.expect(cpu1.heldInReset());
+    const page = &board.second_core;
+    page.write(cpu_ctrl.win_base + cpu_ctrl.regs.initvtor, 4, table);
+    page.write(cpu_ctrl.win_base + cpu_ctrl.regs.actcsr, 2, cpu_ctrl.key.value | cpu_ctrl.bits.actreq);
+    try std.testing.expect(!cpu1.heldInReset());
+    try std.testing.expectEqual(@as(u32, 1), cpu1.restarts);
+    try std.testing.expectEqual(table, cpu1.vector_base);
+    try std.testing.expectEqual(memmap.sram_base + 0x100, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expectEqual(table, try cpu1.core.readWord(memmap.scb.vtor));
+}
+
+test "a reset clears the release, so CPU1 stays held until CPU0 asks again" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    const page = &board.second_core;
+    page.write(cpu_ctrl.win_base + cpu_ctrl.regs.actcsr, 2, cpu_ctrl.key.value | cpu_ctrl.bits.actreq);
+    board.requestReset(.software);
+    try std.testing.expect(!page.running());
 }
