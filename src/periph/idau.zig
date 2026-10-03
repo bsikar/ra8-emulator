@@ -15,9 +15,14 @@
 //! bank it falls in.
 //!
 //! The code MRAM split comes from option-setting memory and is not
-//! modelled; the bit-28 rule alone answers for code. IREGION numbering was
-//! not read from the HUM, so no answer names a region (TT's IRVALID stays
-//! clear).
+//! modelled; the bit-28 rule alone answers for code.
+//!
+//! EVERY ANSWER NAMES ITS REGION (RA8EMU-392), so TT sets IRVALID and
+//! IREGION. RA8D2 HUM 51.3.3.4 "Region Number", Figure 51.5 p3268 (RA8P1
+//! HUM Figure 52.5 is the same): code 1 (Secure alias) and 2 (Non-secure),
+//! SRAM 3 and 4, peripherals 5 (Secure) and 6, where 6 runs on through
+//! external RAM and device space to 0xDFFF_FFFF; the exempt space from
+//! 0xE000_0000 is region 0.
 
 const sau = @import("sau.zig");
 const sau_attr = @import("sau_attr.zig");
@@ -51,6 +56,16 @@ pub const ra8p1_banks = [cpscu_sram.bank_count]Bank{
     .{ .first = 0x1A_0000, .size = 0 },
 };
 
+/// The IDAU region number of `address`, HUM Figure 51.5.
+pub fn regionOf(address: u32) u8 {
+    if (address >= exempt_base) return 0;
+    if (address >= last_region_base) return 6;
+    return @as(u8, @intCast(address >> 28)) + 1;
+}
+
+pub const exempt_base: u32 = 0xE000_0000;
+const last_region_base: u32 = 0x5000_0000;
+
 pub const Map = struct {
     /// The SRAMSABARn words. With none, SRAM follows the bit-28 rule alone.
     sram: ?*const cpscu_sram.Unit = null,
@@ -63,8 +78,9 @@ pub const Map = struct {
 
     /// The IDAU's answer for `address`.
     pub fn answer(self: Map, address: u32) sau_attr.Idau {
-        if (address & alias_bit == 0) return .{ .state = .callable };
-        return .{ .state = self.sramState(address) };
+        const region = regionOf(address);
+        if (address & alias_bit == 0) return .{ .state = .callable, .region = region };
+        return .{ .state = self.sramState(address), .region = region };
     }
 
     /// The SAU and this IDAU together, as sau_attr.attribute combines them.
