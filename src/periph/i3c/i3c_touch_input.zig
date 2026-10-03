@@ -11,15 +11,20 @@
 //! The same stream carries the two user switches (RA8EMU-344): "sw1 down",
 //! "sw1 up", "sw2 down" and "sw2 up" drive P009 and P008 through the GPIO
 //! model, active-low as the board wires them, so the firmware's PIDR reads
-//! see the press for as long as it is held.
+//! see the press for as long as it is held. Each real level change is also
+//! queued as an edge on the switch's IRQ channel (SW1 IRQ13, SW2 IRQ12, as
+//! the board code wires them), and the boundary raises it when PFS ISEL and
+//! IRQCR say the part would (RA8EMU-375).
 const std = @import("std");
 const gt911 = @import("i3c_gt911.zig");
 const gpio = @import("../gpio/gpio.zig");
+const pin_irq = @import("../icu/icu_pin_irq.zig");
 
-/// The host-side name of each user switch and the pin it drives.
-pub const switches = [_]struct { name: []const u8, pin: u4 }{
-    .{ .name = "sw1", .pin = gpio.sw1_pin },
-    .{ .name = "sw2", .pin = gpio.sw2_pin },
+/// The host-side name of each user switch, the pin it drives and the IRQ
+/// channel that pin feeds.
+pub const switches = [_]struct { name: []const u8, pin: u4, irq: u8 }{
+    .{ .name = "sw1", .pin = gpio.sw1_pin, .irq = 13 },
+    .{ .name = "sw2", .pin = gpio.sw2_pin, .irq = 12 },
 };
 
 /// Longest line kept. A longer one is dropped whole and counted.
@@ -38,6 +43,8 @@ pub const Input = struct {
     taken: u32 = 0,
     /// Switch presses and releases driven onto their pins.
     switched: u32 = 0,
+    /// Level changes waiting for the boundary to offer them to the ICU.
+    edges: pin_irq.Queue = .{},
     /// Lines that were not a contact, or a contact the full queue refused.
     refused: u32 = 0,
 
@@ -116,8 +123,15 @@ pub const Input = struct {
                 return true;
             }
             // Active-low with a pull-up: a held button reads low.
+            const was_low = !pins.pinLevel(gpio.sw_port, one.pin);
             pins.setInput(gpio.sw_port, one.pin, !pressed);
             self.switched += 1;
+            if (was_low != pressed) self.edges.push(.{
+                .channel = one.irq,
+                .port = gpio.sw_port,
+                .pin = one.pin,
+                .falling = pressed,
+            });
             return true;
         }
         return false;

@@ -131,3 +131,7 @@ test "configured counts the pins a run actually programmed" {
     try std.testing.expectEqual(@as(usize, 2), self.pins.configured());
     try std.testing.expect(!self.pins.quiet());
 }
+
+test {
+    _ = @import("icu_pin_irq_test.zig");
+}

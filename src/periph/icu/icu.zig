@@ -29,6 +29,8 @@ const memmap = @import("../../core/memmap.zig");
 const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const irqcr = @import("icu_irqcr.zig");
+/// Host-driven pin edges and the ISEL/IRQMD test they pass (RA8EMU-375).
+pub const pin_irq = @import("icu_pin_irq.zig");
 
 /// INTSELR: which core each event interrupts (src/periph/icu/icu_intsel.zig).
 pub const intsel = @import("icu_intsel.zig");
