@@ -65,6 +65,7 @@ pub const groups = [_]op.Group{
     @import("svc.zig").group,
     @import("table_branch.zig").group,
     @import("blxns.zig").group,
+    @import("sg.zig").group,
     @import("imm_logic.zig").group,
     @import("imm_arith.zig").group,
     @import("branch_wide.zig").group,
