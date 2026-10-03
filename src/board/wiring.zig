@@ -81,7 +81,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.protection.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
-    try self.display.attach(&self.bus, &self.domains.graphics, core.*);
+    try self.display.attach(&self.bus, &self.domains.graphics, .{ .engine = core.* });
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
     self.raster.memory = .{ .engine = core.* };

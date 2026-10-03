@@ -56,7 +56,7 @@ test "with no layer on it the panel is the background colour" {
     var core = try machine();
     defer core.close();
     var mixer = mix.Mixer{};
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &.{});
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &.{});
     const picture = out.picture;
     try std.testing.expectEqual(@as(u32, 4), picture.pixels);
     try std.testing.expectEqual(@as(u32, 1), picture.colours);
@@ -74,7 +74,7 @@ test "one displayed layer covers the background it sits on" {
     const planes = [_]mix.Plane{
         .{ .shape = shape(lower_base, 2, 2), .palette = &palette, .stage = &lower },
     };
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &planes);
     try std.testing.expectEqual(@as(u32, 1), out.picture.colours);
     try std.testing.expectEqual(@as(u32, 0), mixer.bare);
     try std.testing.expectEqual(@as(u32, 4), lower.shown);
@@ -93,7 +93,7 @@ test "an upper layer in its own rectangle covers only what it reaches" {
         .{ .shape = shape(lower_base, 2, 2), .palette = &palette, .stage = &lower },
         .{ .shape = shape(upper_base, 1, 1), .palette = &palette, .stage = &upper },
     };
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0 }, &planes);
     // Two colours on the panel: the overlay in one corner, the lower layer
     // in the other three. dev would have reported one framebuffer or the
     // other, never both.
@@ -116,7 +116,7 @@ test "a transparent upper layer lets the lower one through" {
         .{ .shape = shape(lower_base, 2, 2), .palette = &palette, .stage = &lower },
         .{ .shape = shape(upper_base, 2, 2), .palette = &palette, .stage = &upper },
     };
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0 }, &planes);
     try std.testing.expectEqual(@as(u32, 1), out.picture.colours);
     try std.testing.expectEqual(@as(u32, 0), mixer.overlapped);
     try std.testing.expectEqual(@as(u32, 4), upper.hidden);
@@ -135,7 +135,7 @@ test "a half-transparent blended layer mixes with what is under it" {
         .{ .shape = shape(lower_base, 1, 1), .palette = &palette, .stage = &lower },
         .{ .shape = shape(upper_base, 1, 1), .palette = &palette, .stage = &upper },
     };
-    const out = mixer.run(core, .{ .width = 1, .height = 1, .background = 0 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 1, .height = 1, .background = 0 }, &planes);
     try std.testing.expectEqual(@as(u32, 1), out.picture.pixels);
     try std.testing.expectEqual(@as(u32, 1), mixer.overlapped);
     // Mid grey, not either source colour.
@@ -153,7 +153,7 @@ test "a panel row past the end of a layer's rectangle shows the background" {
     const planes = [_]mix.Plane{
         .{ .shape = shape(lower_base, 2, 1), .palette = &palette, .stage = &lower },
     };
-    _ = mixer.run(core, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &planes);
+    _ = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0x0000_FF00 }, &planes);
     try std.testing.expectEqual(@as(u32, 2), mixer.bare);
     try std.testing.expectEqual(@as(u32, 2), lower.shown);
 }
@@ -170,7 +170,7 @@ test "a CLUT layer over an empty palette refuses the whole panel" {
         .{ .shape = indexed, .palette = &palette, .stage = &lower },
     };
     var mixer = mix.Mixer{};
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0 }, &planes);
     try std.testing.expectEqual(scan.Refusal.no_palette, out.refused);
     try std.testing.expect(mixer.quiet());
 }
@@ -186,6 +186,6 @@ test "a framebuffer running off the end of its RAM window refuses the panel" {
         .{ .shape = past, .palette = &palette, .stage = &lower },
     };
     var mixer = mix.Mixer{};
-    const out = mixer.run(core, .{ .width = 2, .height = 2, .background = 0 }, &planes);
+    const out = mixer.run(.{ .engine = core }, .{ .width = 2, .height = 2, .background = 0 }, &planes);
     try std.testing.expectEqual(scan.Refusal.off_ram, out.refused);
 }
