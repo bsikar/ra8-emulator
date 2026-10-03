@@ -301,7 +301,7 @@ table above. A group listed as missing does not fail the build yet.
 | tt | missing |
 | imm_logic | 30 |
 | imm_arith | 35 |
-| branch_wide | missing |
+| branch_wide | 45 |
 | branch_future | missing |
 | ldst_wide | missing |
 | ldr_literal_wide | missing |
