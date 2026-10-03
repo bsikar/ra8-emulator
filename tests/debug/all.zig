@@ -62,4 +62,5 @@ test {
     _ = @import("../interfaces/cli/report/json_mem_test.zig");
     _ = @import("../interfaces/cli/report/json_clock_test.zig");
     _ = @import("../interfaces/cli/report/json_timers_test.zig");
+    _ = @import("../interfaces/cli/report/json_serial_test.zig");
 }
