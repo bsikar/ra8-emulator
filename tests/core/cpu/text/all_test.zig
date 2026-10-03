@@ -17,6 +17,8 @@ test {
     _ = @import("dp_shifted_test.zig");
     _ = @import("shift_reg_test.zig");
     _ = @import("bitfield_test.zig");
+    _ = @import("saturate_test.zig");
+    _ = @import("sat16_test.zig");
     _ = @import("blxns_test.zig");
     _ = @import("hint_test.zig");
     _ = @import("it_test.zig");
