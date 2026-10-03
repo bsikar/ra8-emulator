@@ -61,3 +61,38 @@ test "a bank hands out the timer for each view" {
     try std.testing.expectEqual(@as(u32, 7), b.non_secure.rvr);
     try std.testing.expectEqual(@as(u32, 0), b.of(.secure).rvr);
 }
+
+const pendsv_set: u32 = 1 << 28;
+const pendst_set: u32 = 1 << 26;
+const idle = bank.Words{ .icsr = 0, .shpr3 = 0 };
+
+test "pends: nothing pending gives no pends" {
+    try std.testing.expectEqual(@as(usize, 0), bank.pends(idle, idle, true).slice().len);
+}
+
+test "pends: each state's PendSV and SysTick carry that state's priority" {
+    const secure = bank.Words{ .icsr = pendsv_set, .shpr3 = 0x4020_0000 };
+    const ns = bank.Words{ .icsr = pendst_set, .shpr3 = 0xC0E0_0000 };
+    const got = bank.pends(secure, ns, true);
+    try std.testing.expectEqualSlices(bank.Pend, &.{
+        .{ .number = bank.pendsv, .priority = 0x20, .view = .secure },
+        .{ .number = bank.systick, .priority = 0xC0, .view = .non_secure },
+    }, got.slice());
+}
+
+test "pends: both states pending at once give four pends" {
+    const both = pendsv_set | pendst_set;
+    const got = bank.pends(.{ .icsr = both, .shpr3 = 0x1011_0000 }, .{ .icsr = both, .shpr3 = 0x2022_0000 }, true);
+    try std.testing.expectEqual(@as(usize, 4), got.slice().len);
+    try std.testing.expectEqual(bank.Pend{ .number = bank.pendsv, .priority = 0x22, .view = .non_secure }, got.slice()[2]);
+    try std.testing.expectEqual(bank.Pend{ .number = bank.systick, .priority = 0x20, .view = .non_secure }, got.slice()[3]);
+}
+
+test "pends: with one timer SysTick is only ever Secure" {
+    const ns = bank.Words{ .icsr = pendsv_set | pendst_set, .shpr3 = 0x8080_0000 };
+    const got = bank.pends(.{ .icsr = pendst_set, .shpr3 = 0x4000_0000 }, ns, false);
+    try std.testing.expectEqualSlices(bank.Pend, &.{
+        .{ .number = bank.systick, .priority = 0x40, .view = .secure },
+        .{ .number = bank.pendsv, .priority = 0x80, .view = .non_secure },
+    }, got.slice());
+}
