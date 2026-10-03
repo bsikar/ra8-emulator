@@ -1,8 +1,8 @@
 //! The Zig core: a register file, the bus it fetches through, and the
 //! fetch-decode-execute step.
 //!
-//! RA8EMU-15 brings it up beside Unicorn. Until the lockstep harness reports
-//! no divergence, Unicorn stays the default CPU and this one is opt-in.
+//! RA8EMU-15 brought it up beside Unicorn; since RA8EMU-471 it is the
+//! default CPU and Unicorn is the opt-in one (`--cpu unicorn`).
 const bus = @import("bus.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");

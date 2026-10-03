@@ -1,5 +1,6 @@
-//! Which CPU runs the image. Unicorn stays the default until the lockstep
-//! harness (RA8EMU-19) shows the Zig core matching it across the corpus.
+//! Which CPU runs the image. The Zig core is the default (RA8EMU-471): its
+//! example table, dual-core corpus and gdb corpus match Unicorn's. Unicorn
+//! stays selectable until RA8EMU-255 removes it.
 const std = @import("std");
 
 pub const Choice = enum {

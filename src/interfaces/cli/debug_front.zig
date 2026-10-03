@@ -81,7 +81,7 @@ pub const Request = struct {
     /// The image CPU0 runs.
     image: []const u8 = "",
     /// Which CPU the session drives (`--cpu`, anywhere on the line).
-    cpu: cpu_choice.Choice = .unicorn,
+    cpu: cpu_choice.Choice = .zig,
 };
 
 /// The most arguments a debugger command line carries.
@@ -95,7 +95,7 @@ pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
         if (isDebugFlag(arg)) break;
     } else return null;
     var rest = std.BoundedArray([]const u8, max_args){};
-    var cpu: ?cpu_choice.Choice = .unicorn;
+    var cpu: ?cpu_choice.Choice = .zig;
     var index: usize = 0;
     while (index < argv.len) : (index += 1) {
         if (std.mem.eql(u8, argv[index], flags.cpu) and index + 1 < argv.len) {
