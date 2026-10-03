@@ -18,6 +18,11 @@ const Source = @import("source.zig").Source;
 /// RAM, which never decides what is pending.
 pub const peripheral_base: u32 = 0x4000_0000;
 
+/// The first address of the PPB. Reading the SCB or NVIC never changes what
+/// is pending, so a read from here on leaves the answer standing; the poll
+/// itself reads AIRCR and SHCSR every instruction (RA8EMU-418).
+pub const ppb_base: u32 = 0xE000_0000;
+
 pub const QuietSource = struct {
     /// The source that actually knows: the NVIC model on the board.
     inner: Source,
@@ -64,7 +69,7 @@ pub const QuietSource = struct {
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus_mod.Error!void {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
-        if (address >= peripheral_base) self.stir();
+        if (address >= peripheral_base and address < ppb_base) self.stir();
         return self.memory.read(address, into);
     }
 
