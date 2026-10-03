@@ -36,6 +36,11 @@
 //! memory of the manual.
 const std = @import("std");
 
+/// CLRM, the other Armv8.1-M gap the CMSE entry stub hits. Reached from here
+/// because src/root.zig is at its 400-line limit (RA8EMU-63).
+pub const clrm = @import("clrm.zig");
+pub const clrm_hook = @import("clrm_hook.zig");
+
 /// Which tail runs when the condition fails.
 pub const Kind = enum { sel, inc, inv, neg };
 

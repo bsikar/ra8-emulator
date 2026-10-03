@@ -32,6 +32,7 @@ pub const Parts = struct {
     watch: engine.Watch = .{},
     loops: lob.Loops = .{},
     selects: csel.Selects = .{},
+    clears: csel.clrm.Clears = .{},
     worlds: tz.Worlds = .{},
     idle: idle.Seam = .{},
     release: unmask.Release = .{},

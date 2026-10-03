@@ -81,6 +81,7 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli
     try core.attachWatch(&parts.watch);
     try core.attachLoops(&parts.loops);
     try core.attachSelects(&parts.selects);
+    try ra8.core.csel.clrm_hook.attach(core.handle, &parts.clears);
     try core.attachIdle(&parts.idle);
     try core.attachTimebase(&parts.timebase);
     // Set before the hook is attached, since it is read as a store

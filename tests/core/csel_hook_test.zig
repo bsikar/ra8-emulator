@@ -150,3 +150,7 @@ test "an encoding no hook owns is still the fault it should be" {
     try std.testing.expect(fault != null);
     try std.testing.expectEqual(@as(usize, 0), selects.stepped);
 }
+
+test {
+    _ = @import("clrm_test.zig");
+}
