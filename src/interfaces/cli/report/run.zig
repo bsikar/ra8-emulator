@@ -37,6 +37,8 @@ const functions = @import("../../../debug/functions.zig");
 const pc_hits = @import("../../../debug/pc_hits.zig");
 const tally_mod = @import("../../../debug/tally.zig");
 const taken_in = @import("../../../debug/taken_in.zig");
+const engine = @import("../../../core/engine.zig");
+const cli = @import("../cli.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -73,12 +75,16 @@ pub const Tally = struct {
     taken: tally_mod.Tally = .{},
     taken_in_spec: ?[]const u8 = null,
     taken_in: ?taken_in.Window = null,
+    /// What the dump flags read from (RA8EMU-381), `--report json` only.
+    dumps: ?json_run.json_dumps.Dumps = null,
 
-    /// This tally with what `--taken-in` named and the window it resolved.
-    pub fn within(self: Tally, spec: ?[]const u8, window: ?taken_in.Window) Tally {
+    /// This tally with the `--taken-in` window it resolved and the core the
+    /// dump flags read from.
+    pub fn within(self: Tally, core: engine.Engine, image: elf.Image, options: *const cli.Options, window: ?taken_in.Window) Tally {
         var with = self;
-        with.taken_in_spec = spec;
+        with.taken_in_spec = options.taken_in_place;
         with.taken_in = window;
+        with.dumps = .{ .core = core, .image = image, .options = options };
         return with;
     }
 };
@@ -125,7 +131,7 @@ pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bo
         .taken = &of.taken,
         .taken_in_spec = of.taken_in_spec,
         .taken_in = if (of.taken_in) |*one| one else null,
-    } });
+    }, .dumps = if (of.dumps) |*one| one else null });
 }
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.
