@@ -159,3 +159,31 @@ test "gpt_edge_capture_count is judged on its GPT free-run tick" {
     try std.testing.expectEqual(@as(u32, 5), probe.min);
     try std.testing.expect(probe.failure == null);
 }
+
+const mailbox =
+    \\  dump-mem      : 0x22100034 @0x22100034
+    \\                  +0x0000 0x00000003 0x00000000 0x00000000 0x00000000
+    \\  dump-mem      : 0x22100008 @0x22100008
+    \\                  +0x0000 0x00000001 0x68000000 0x00000100 0x00000040
+    \\
+;
+
+test "a probe named by address reads the first word under its dump-mem line" {
+    try std.testing.expect(probes.isPlace("0x22100034"));
+    try std.testing.expectEqualStrings("--dump-mem", probes.flag("0x22100034"));
+    try std.testing.expectEqualStrings("--dump-sym", probes.flag("g_gpt_ecc_tick"));
+    try std.testing.expectEqual(@as(?u32, 3), probes.dumped(mailbox, "0x22100034"));
+    try std.testing.expectEqual(@as(?u32, 1), probes.dumped(mailbox, "0x22100008"));
+    try std.testing.expectEqual(@as(?u32, null), probes.dumped(mailbox, "0x22100000"));
+}
+
+test "ereader_m33 passes on three turns and fails short of them" {
+    const probe = probes.find("ereader_m33.elf").?;
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(probe, mailbox));
+    const short =
+        \\  dump-mem      : 0x22100034 @0x22100034
+        \\                  +0x0000 0x00000001
+        \\
+    ;
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, short));
+}

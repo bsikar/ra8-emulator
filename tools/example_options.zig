@@ -49,7 +49,8 @@
 //! instructions no LED has moved. A second of target time shows the M33's
 //! LED1 (RA8EMU-400). gpt_edge_capture_count's liveness word, the GPT
 //! free-run tick its README names, reads 0 at the 2M default and about one
-//! per 5 ms of target time, so it gets 200 ms.
+//! per 5 ms of target time, so it gets 200 ms. ereader_m33's mailbox shows
+//! all three page turns done by 200 ms too.
 const std = @import("std");
 
 pub const Extra = struct {
@@ -83,6 +84,7 @@ pub const extras = [_]Extra{
     .{ .image = "cpu1_pingpong_ra8p1.elf", .flags = &ra8p1 },
     .{ .image = "epub_open.elf", .flags = &formatted },
     .{ .image = "epub_toc.elf", .flags = &formatted },
+    .{ .image = "ereader_m33.elf", .flags = &fifth_second },
     .{ .image = "gpt_edge_capture_count.elf", .flags = &fifth_second },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
     .{ .image = "lowpower_holdpage.elf", .flags = &one_second },

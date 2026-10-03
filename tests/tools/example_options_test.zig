@@ -87,8 +87,10 @@ test "the M33 LED examples run a second of target time" {
     }
 }
 
-test "gpt_edge_capture_count runs 200 ms for its free-run tick" {
-    const got = options.flags("gpt_edge_capture_count.elf");
-    try std.testing.expectEqual(@as(usize, 2), got.len);
-    try std.testing.expectEqualStrings("200", got[1]);
+test "gpt_edge_capture_count and ereader_m33 run 200 ms" {
+    for ([_][]const u8{ "gpt_edge_capture_count.elf", "ereader_m33.elf" }) |image| {
+        const got = options.flags(image);
+        try std.testing.expectEqual(@as(usize, 2), got.len);
+        try std.testing.expectEqualStrings("200", got[1]);
+    }
 }
