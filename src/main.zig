@@ -205,7 +205,7 @@ fn reportAll(
     window: ?taken_in.Window,
     tracer: ?*const rtos_hook.Tracer,
 ) !void {
-    try report_run.all(out, board, image, run);
+    try report_run.pick(out, board, image, run, options.report_json);
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
     if (parts.profile) |table| try ra8.board.report.profile.write(out, image, table, options.profile_folded);

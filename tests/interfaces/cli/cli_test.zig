@@ -133,3 +133,14 @@ test "--trace-rtos-out takes a path and turns the trace on" {
     try std.testing.expectEqualStrings("run.trace", options.trace_rtos_out.?);
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--trace-rtos-out" }));
 }
+
+test "--report takes text or json and refuses anything else" {
+    const plain = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(!plain.report_json);
+    const as_json = try parse(&[_][]const u8{ "emu", "a.elf", "--report", "json" });
+    try std.testing.expect(as_json.report_json);
+    const as_text = try parse(&[_][]const u8{ "emu", "a.elf", "--report", "json", "--report", "text" });
+    try std.testing.expect(!as_text.report_json);
+    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--report", "yaml" }));
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--report" }));
+}

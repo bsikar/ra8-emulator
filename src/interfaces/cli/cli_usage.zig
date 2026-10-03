@@ -59,6 +59,7 @@ pub const text =
     \\  --trace-rtos-out FILE
     \\                     --trace-rtos, and write the trace to FILE (CPU1's
     \\                     to FILE.cpu1) as text a reader can take back
+    \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run
     \\  --profile          count retired instructions and modelled cycles

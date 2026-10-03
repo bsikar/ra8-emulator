@@ -11,6 +11,7 @@ const clocks = @import("../../periph/clocks.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
+const json_run = @import("report/json_run.zig");
 const report_dumps = @import("report/dumps.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
@@ -101,7 +102,9 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .retire_listener = retire_listener,
     });
     if (options.cpu == .zig) {
-        try report_run.zigCore(out, board, ran);
+        if (options.report_json) {
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran });
+        } else try report_run.zigCore(out, board, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
