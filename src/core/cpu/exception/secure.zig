@@ -39,8 +39,21 @@ pub fn raise(cpu: *Cpu, cause: Cause, pc: u32, address: u32) Error!void {
 /// on the stack, and the SecureFault is tail-chained in the state it is taken to with LR set to
 /// 0xF000_0000 + EXC_RETURN.
 pub fn invalidReturn(cpu: *Cpu, value: u32) Error!void {
+    return chainReturn(cpu, .inver, value);
+}
+
+/// INVIS for a return that found the integrity signature corrupted
+/// (RA8EMU-411). Nothing came off the stack, so the callee frame stays
+/// where the return found it and the fault is chained the same way.
+pub fn invalidIntegrity(cpu: *Cpu, value: u32) Error!void {
+    return chainReturn(cpu, .invis, value);
+}
+
+/// Deactivate the returning handler, latch `cause`, and tail-chain the
+/// SecureFault over the frame the return left in place.
+fn chainReturn(cpu: *Cpu, cause: Cause, value: u32) Error!void {
     try dispatch.left(cpu);
-    const which = try latch(cpu, .inver, 0);
+    const which = try latch(cpu, cause, 0);
     // A tail-chain keeps the frame where it is but not the state: the fault
     // runs in the state it is taken to, so VTOR and the stacks are its own.
     const to_secure = target.secure(cpu, which.number);

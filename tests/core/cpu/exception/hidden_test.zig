@@ -2,8 +2,8 @@
 //! src/core/cpu/exception/entry.zig, ret.zig and target.zig: an interrupt
 //! NVIC_ITNS hands to Non-secure preempts Secure Thread code, the callee
 //! registers are stacked under the integrity signature and cleared, and the
-//! return gives them back, or raises SecureFault INVIS when the signature
-//! was corrupted.
+//! return gives them back, or chains SecureFault INVIS over the frame it
+//! left when the signature was corrupted (RA8EMU-411).
 const std = @import("std");
 const ra8 = @import("ra8");
 const exception = ra8.core.cpu.exception;
@@ -65,6 +65,22 @@ test "a corrupted signature raises SecureFault INVIS" {
     try std.testing.expectEqual(@as(u32, 1), cpu.secure_faults);
     try std.testing.expect(ram.word(sfsr) & 2 != 0);
     try std.testing.expectEqual(.secure, cpu.banked.current);
+}
+
+test "INVIS chains over the callee frame instead of stacking a new one" {
+    var ram: fixture.Ram = .{};
+    var cpu = try preempted(&ram);
+    ram.putWord(ra8.core.memmap.scb.shcsr, 1 << 19);
+    ram.putWord(signature_at, 0);
+    const below = ram.word(signature_at - 4);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(.secure, cpu.banked.current);
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(signature_at, cpu.regs.msp);
+    try std.testing.expectEqual(@as(u32, 0xF000_0000) +% 0xFFFF_FFF8, cpu.regs.lr);
+    try std.testing.expectEqual(below, ram.word(signature_at - 4));
+    try std.testing.expectEqual(ns_msp, cpu.banked.other.msp);
 }
 
 test "without ITNS the interrupt stays Secure and nothing is hidden" {
