@@ -98,7 +98,9 @@ test "floorMs is the probe's boot dwell plus window, else the scrape timeout, ca
     try std.testing.expectEqual(@as(?u32, 4_000), hil_conf.parse(probe).floorMs());
     const epub = hil_conf.parse("HIL_PROBE_SECONDS=5\nHIL_PROBE_BOOT_S=12\nHIL_TIMEOUT_S=60\n");
     try std.testing.expectEqual(@as(?u32, 17_000), epub.floorMs());
-    const long = hil_conf.parse("HIL_TIMEOUT_S=90\n");
+    const wdt = hil_conf.parse("HIL_MODE=uart_scrape\nHIL_TIMEOUT_S=60\n");
+    try std.testing.expectEqual(@as(?u32, 60_000), wdt.floorMs());
+    const long = hil_conf.parse("HIL_TIMEOUT_S=240\n");
     try std.testing.expectEqual(@as(?u32, hil_conf.Conf.max_floor_ms), long.floorMs());
     try std.testing.expectEqual(@as(?u32, null), hil_conf.parse("HIL_MODE=alive\n").floorMs());
 }
