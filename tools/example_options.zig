@@ -43,6 +43,13 @@
 //! the 2M default never reaches: at 200M instructions it still reads only
 //! "boot". A second of target time prints "keyboard widget PASS" on the
 //! README's console-only run (500 ms was the shortest seen to, RA8EMU-400).
+//!
+//! blink_m33_hal and lowpower_holdpage hand LED1 to the M33,
+//! which the M85 releases only after its own low-power set-up; at 10M
+//! instructions no LED has moved. A second of target time shows the M33's
+//! LED1 (RA8EMU-400). gpt_edge_capture_count's liveness word, the GPT
+//! free-run tick its README names, reads 0 at the 2M default and about one
+//! per 5 ms of target time, so it gets 200 ms.
 const std = @import("std");
 
 pub const Extra = struct {
@@ -62,6 +69,7 @@ const fat32_card = [_][]const u8{ "--sd-size", "64", "--sd-new", "fat32" };
 const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
 const one_second = [_][]const u8{ "--ms", "1000" };
+const fifth_second = [_][]const u8{ "--ms", "200" };
 
 pub const card_images = [_]CardImage{
     .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
@@ -71,10 +79,13 @@ pub const card_images = [_]CardImage{
 /// that fit it.
 pub const extras = [_]Extra{
     .{ .image = "battery_monitor_demo.elf", .flags = &click },
+    .{ .image = "blink_m33_hal.elf", .flags = &one_second },
     .{ .image = "cpu1_pingpong_ra8p1.elf", .flags = &ra8p1 },
     .{ .image = "epub_open.elf", .flags = &formatted },
     .{ .image = "epub_toc.elf", .flags = &formatted },
+    .{ .image = "gpt_edge_capture_count.elf", .flags = &fifth_second },
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
+    .{ .image = "lowpower_holdpage.elf", .flags = &one_second },
     .{ .image = "pagecache.elf", .flags = &fat32_card },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
     .{ .image = "sd_font_render.elf", .flags = &formatted },

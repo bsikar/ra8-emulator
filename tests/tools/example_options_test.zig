@@ -77,3 +77,18 @@ test "widget_keyboard_demo runs a second of target time for its panel bring-up" 
     try std.testing.expectEqual(want.len, got.len);
     for (want, got) |w, g| try std.testing.expectEqualStrings(w, g);
 }
+
+test "the M33 LED examples run a second of target time" {
+    for ([_][]const u8{ "blink_m33_hal.elf", "lowpower_holdpage.elf" }) |image| {
+        const got = options.flags(image);
+        try std.testing.expectEqual(@as(usize, 2), got.len);
+        try std.testing.expectEqualStrings("--ms", got[0]);
+        try std.testing.expectEqualStrings("1000", got[1]);
+    }
+}
+
+test "gpt_edge_capture_count runs 200 ms for its free-run tick" {
+    const got = options.flags("gpt_edge_capture_count.elf");
+    try std.testing.expectEqual(@as(usize, 2), got.len);
+    try std.testing.expectEqualStrings("200", got[1]);
+}

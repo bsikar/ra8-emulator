@@ -29,6 +29,9 @@ pub const probes = [_]Probe{
     // The README's bench verdict: the Non-Secure heartbeat advances and the
     // secure side never records a denied handover. The heartbeat lives in
     // the _ns image; --dump-sym looks there when the secure image lacks it.
+    // No console: the README's pin-independent liveness word is the GPT
+    // free-run tick (RA8EMU-400); the capture counters need an edge source.
+    .{ .image = "gpt_edge_capture_count.elf", .symbol = "g_gpt_ecc_tick", .min = 5 },
     .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
     // No console and no hil.conf: its NSC log veneer only copies into a
     // secure scratch buffer. The README's verdict is that the Non-Secure
