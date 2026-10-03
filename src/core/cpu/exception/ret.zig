@@ -11,7 +11,9 @@ const Vpr = @import("../mve/predicate.zig").Vpr;
 const exc_return = @import("exc_return.zig");
 const callee = @import("callee.zig");
 
-pub const Error = bus.Error || error{ InvalidReturn, Integrity };
+/// SecureReturn: a Non-secure handler named a Secure exception (EXC_RETURN.ES
+/// set), which the core takes as SecureFault INVER (RA8EMU-472).
+pub const Error = bus.Error || error{ InvalidReturn, Integrity, SecureReturn };
 
 /// The xPSR bits a return restores: the flags, ICI/IT, T, GE and IPSR.
 /// Bit 9 is the frame's realignment marker, not state.
@@ -19,6 +21,7 @@ pub const restored: u32 = 0xFF0F_FDFF;
 
 pub fn from(cpu: *Cpu, value: u32) Error!void {
     const target = exc_return.decode(value) orelse return error.InvalidReturn;
+    if (target.secure and cpu.banked.current == .non_secure) return error.SecureReturn;
     // The return is made in the state the exception was taken to, then
     // switches to the state whose stack holds the frame (S).
     if (target.secure != (cpu.banked.current == .secure)) return error.InvalidReturn;
