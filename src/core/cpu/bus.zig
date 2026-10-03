@@ -7,6 +7,7 @@
 const std = @import("std");
 const memmap = @import("../memmap.zig");
 const Gate = @import("data_gate.zig").Gate;
+const CodeLines = @import("code_lines.zig").CodeLines;
 
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
 pub const Error = error{ Unmapped, SecurityViolation };
@@ -59,6 +60,8 @@ pub const Bus = struct {
     direct: ?*const DirectMemory = null,
     /// Attribution on data accesses; null checks nothing (RA8EMU-274).
     gate: ?*Gate = null,
+    /// Lines holding formed blocks; a store over one drops them (RA8EMU-407).
+    code: ?*CodeLines = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
@@ -78,6 +81,7 @@ pub const Bus = struct {
 
     pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
         if (self.gate) |gate| if (gate.refuses(address, bytes.len)) return error.SecurityViolation;
+        if (self.code) |lines| lines.stored(address, bytes.len);
         if (bytes.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.write(address, bytes)) return;
         };

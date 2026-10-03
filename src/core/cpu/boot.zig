@@ -123,7 +123,10 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     cpu.decoded = &decoded;
     const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
     defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
-    if (formed) |cache| cache.init();
+    if (formed) |cache| {
+        cache.init();
+        cpu.bus.code = &cache.lines;
+    }
     cpu.blocks = formed;
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;

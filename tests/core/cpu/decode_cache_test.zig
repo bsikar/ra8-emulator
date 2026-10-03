@@ -64,4 +64,5 @@ test {
     _ = @import("block_test.zig");
     _ = @import("block_end_test.zig");
     _ = @import("block_cache_test.zig");
+    _ = @import("code_lines_test.zig");
 }
