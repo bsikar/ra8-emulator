@@ -272,7 +272,7 @@ table above. A group listed as missing does not fail the build yet.
 | mul_acc | 23 |
 | saturate | 31 |
 | misc_wide | 21 |
-| extend_wide | missing |
+| extend_wide | 30 |
 | pkh | missing |
 | parallel | missing |
 | sel | missing |
