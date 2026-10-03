@@ -67,3 +67,33 @@ test "the decode table routes FP encodings through the gate" {
     try hit.exec(&cpu, wide(0xEE30, 0x0A81));
     try std.testing.expectEqual(fpca, cpu.regs.control & fpca);
 }
+
+const fixture = @import("../exception/ram.zig");
+
+test "a pending lazy preservation is written before the FP op runs" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    const at = fixture.msp_top - 0x48;
+    cpu.fp.context.writeFpcar(at);
+    cpu.fp.context.fpccr.lspact = 1;
+    cpu.fp.bank.writeS(0, 0x1111_1111);
+    cpu.fp.bank.writeS(1, 0x3F80_0000);
+    cpu.fp.bank.writeS(2, 0x3F80_0000);
+    cpu.fp.fpscr = @bitCast(@as(u32, 0x2004_0000));
+    try run(&cpu, 0xEE30, 0x0A81); // vadd.f32 s0, s1, s2
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+    // The old S0 and FPSCR went to the frame; the add then ran on fresh state.
+    try std.testing.expectEqual(@as(u32, 0x1111_1111), ram.word(at));
+    try std.testing.expectEqual(@as(u32, 0x2004_0000), ram.word(at + 0x40));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), cpu.fp.bank.readS(0));
+}
+
+test "no lazy preservation pending leaves memory alone" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    const at = fixture.msp_top - 0x48;
+    cpu.fp.context.writeFpcar(at);
+    cpu.fp.bank.writeS(0, 0x1111_1111);
+    try run(&cpu, 0xEE30, 0x0A81);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(at));
+}
