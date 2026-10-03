@@ -75,6 +75,8 @@ test {
     _ = @import("ops/reverse_test.zig");
     _ = @import("ops/it_test.zig");
     _ = @import("it_state_test.zig");
+    _ = @import("eci_gate_test.zig");
+    _ = @import("ops/eci_use_test.zig");
     _ = @import("ops/push_pop_test.zig");
     _ = @import("ops/sp_arith_test.zig");
     _ = @import("ops/fp_arith_test.zig");

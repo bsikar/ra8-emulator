@@ -11,6 +11,8 @@ const decode_cache = @import("decode_cache.zig");
 const block_cache = @import("block_cache.zig");
 const cond = @import("cond.zig");
 const it_state = @import("it_state.zig");
+/// What step() does with a nonzero EPSR.ECI (RA8EMU-453).
+pub const eci_gate = @import("eci_gate.zig");
 const Instr = @import("instr.zig").Instr;
 const fp_state = @import("fpu/state.zig");
 const exception = @import("exception/all.zig");
@@ -158,6 +160,11 @@ pub const Cpu = struct {
             if (decode.refused(self.profile, instr)) return self.usageFault(.undefinstr, address, .{ .unknown = instr });
             return .{ .unknown = instr };
         }
+        if (found) |hit| switch (eci_gate.action(it, hit.eci)) {
+            .run => {},
+            .fault => return self.usageFault(.invstate, address, .{ .invalid_state = address }),
+            .restart => self.regs.xpsr = it_state.put(self.regs.xpsr, 0),
+        };
         self.regs.pc = address +% instr.size;
         if (runs) {
             const before = StackPointers.read(self);
