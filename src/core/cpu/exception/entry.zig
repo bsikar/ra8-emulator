@@ -28,7 +28,12 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         r.low[12], r.lr,     return_address, r.xpsr,
     };
     const fp = r.control & regs_mod.control_bits.fpca != 0;
-    const from: exc_return.Target = .{ .thread = !r.handlerMode(), .psp = r.usesPsp(), .fp = fp };
+    const from: exc_return.Target = .{
+        .thread = !r.handlerMode(),
+        .psp = r.usesPsp(),
+        .fp = fp,
+        .secure = cpu.banked.current == .secure,
+    };
     const size = if (fp) fp_frame.size else frame.size;
     const at = frameAddress(r.sp(), size);
     const limit = r.spLimit();

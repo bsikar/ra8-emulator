@@ -18,6 +18,8 @@ pub const restored: u32 = 0xFF0F_FDFF;
 
 pub fn from(cpu: *Cpu, value: u32) Error!void {
     const target = exc_return.decode(value) orelse return error.InvalidReturn;
+    // Same-state returns only: crossing needs the callee frame (RA8EMU-168).
+    if (target.secure != (cpu.banked.current == .secure)) return error.InvalidReturn;
     const r = &cpu.regs;
     cpu.exclusive = null;
     const at = if (target.psp) r.psp else r.msp;

@@ -43,3 +43,12 @@ test "an FP context clears FType" {
     try std.testing.expect(exc_return.decode(0xFFFF_FFE9).?.fp);
     try std.testing.expect(!exc_return.decode(0xFFFF_FFF9).?.fp);
 }
+
+test "a Non-secure exception clears S and ES and decodes back" {
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB8), exc_return.forEntry(.{ .thread = true, .psp = false, .secure = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFBC), exc_return.forEntry(.{ .thread = true, .psp = true, .secure = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB0), exc_return.forEntry(.{ .thread = false, .psp = false, .secure = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFAC), exc_return.forEntry(.{ .thread = true, .psp = true, .fp = true, .secure = false }));
+    const target = exc_return.decode(0xFFFF_FFBC).?;
+    try std.testing.expect(!target.secure and target.thread and target.psp and !target.fp);
+}
