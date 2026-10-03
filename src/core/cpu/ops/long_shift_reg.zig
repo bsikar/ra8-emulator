@@ -37,7 +37,7 @@ pub fn fields(instr: Instr) ?Fields {
     if (instr.hw1 & 0xFFF1 != 0xEA50) return null;
     if (instr.hw2 & 0x01CF != 0x010D) return null;
     const hi: u4 = @intCast((instr.hw2 >> 8) & 0xF);
-    if (hi == 0xF) return null;
+    if (hi == 0xF or hi == 0xD) return null;
     const kind: Kind = switch ((instr.hw2 >> 4) & 0x3) {
         0b00 => .lsll,
         0b10 => .asrl,
