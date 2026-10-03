@@ -37,7 +37,7 @@ const Bench = struct {
         self.core = try engine.Engine.open();
         try self.core.map(arena_base, arena_size);
         self.unit = npu.Npu.init();
-        self.unit.memory = self.core;
+        self.unit.memory = .{ .engine = self.core };
     }
 
     fn close(self: *Bench) void {

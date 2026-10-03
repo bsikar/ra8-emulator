@@ -9,7 +9,7 @@
 //! needs an operator this model does not run yet, is a parse fault. Every
 //! fault raises the interrupt too, and cmd_end stays clear.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const npu = @import("npu.zig");
 const vela = @import("npu_vela.zig");
 
@@ -62,14 +62,14 @@ fn fault(unit: *npu.Npu, bit: u32, counter: *u32) void {
 }
 
 /// Read QSIZE bytes at QBASE into `into`, or null if memory refused them.
-fn readStream(memory: engine.Engine, base: u32, into: []u32) ?void {
+fn readStream(memory: Guest, base: u32, into: []u32) ?void {
     for (into, 0..) |*word, index| {
         word.* = memory.readWord(base + @as(u32, @intCast(index)) * 4) catch return null;
     }
 }
 
 /// Run the stream at QBASE as a Vela program.
-pub fn kick(unit: *npu.Npu, memory: engine.Engine) void {
+pub fn kick(unit: *npu.Npu, memory: Guest) void {
     const counters = &unit.vela;
     const base = reg64(unit, npu.off.qbase);
     const size = unit.reg[npu.off.qsize / 4];
