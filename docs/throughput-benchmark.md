@@ -31,3 +31,18 @@ tools/bench_releasefast.sh IMAGE 2000000 /path/to/deps
 `tools/bench_core.sh` remains available for a prebuilt emulator and either a
 single ELF or a directory of ELFs. The ReleaseFast entry point above is the
 reproducible single-image benchmark for this ticket.
+
+It runs each image the way the corpus does: an ELF named `NAME_cpu1.elf` next
+to `NAME.elf` is passed as `--cpu1`, and `NAME_ns.elf` as `--ns`, so the
+dual-core and TrustZone images time both cores. Each figure is the minimum of
+several interleaved runs (three by default) because a short image's single run
+varies by about a third:
+
+```sh
+tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
+```
+
+The RA8EMU-12 speed budget (no slower than 2x Unicorn) is read from the total
+row of that table over a directory holding the corpus images and their
+companions.
+
