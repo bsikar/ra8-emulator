@@ -20,6 +20,7 @@ const usbhs_phy = @import("usbhs_phy.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_pll = @import("usbhs_pll.zig");
 const usbhs_xfer = @import("usbhs_xfer.zig");
+pub const loop = @import("usbhs_loop.zig");
 
 pub const Host = struct {
     base: u32 = regs.window.base,
