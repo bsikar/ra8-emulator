@@ -1,13 +1,11 @@
-//! The R-Switch mode machine: the four modes an ETHA port or the GWCA agent
-//! moves through, and the steps between them that exist.
+//! The R-Switch mode machine shared by ETHA and GWCA. Both agents reset
+//! into DISABLE and follow the transition graphs in HUM chapters 32.4.1.1
+//! and 34.4.1.1. This records accepted transitions immediately; timing and
+//! transition prerequisites are handled by the peripherals that own them.
 //!
-//! dev reads the mode status straight out of the mode command, so the machine
-//! converges inside the store instruction and converges from anywhere: an
-//! image that jumped RESET straight to OPERATION got an operational agent in
-//! the emulator and a stuck one on the bench, because the silicon only takes
-//! the step in front of it. The reachable table below is this model's reading
-//! of that four-mode machine, and a step that is not on it is refused and
-//! counted rather than quietly taken.
+//! OPERATION also steps straight back to CONFIG: ra8_eth_gwca_default_open
+//! brings GWCA up to OPERATION and then asks for CONFIG without passing
+//! DISABLE, and eth_open_probe passes that path on the EK-RA8D2 bench.
 const std = @import("std");
 
 pub const Mode = enum(u2) {
@@ -17,23 +15,21 @@ pub const Mode = enum(u2) {
     operation = 3,
 };
 
-/// Whether the machine can go straight from `from` to `to`. Reset is the way
-/// out of anywhere; everything else is one rung at a time.
+/// Whether the request follows the ETHA/GWCA transition graph in the manual.
 pub fn reachable(from: Mode, to: Mode) bool {
     if (from == to) return true;
-    if (to == .reset) return true;
     return switch (from) {
         .reset => to == .disable,
-        .disable => to == .config,
-        .config => to == .operation or to == .disable,
-        .operation => to == .config,
+        .disable => to == .reset or to == .config or to == .operation,
+        .config => to == .disable,
+        .operation => to == .disable or to == .config,
     };
 }
 
 /// One mode machine: what it was commanded, where it is, and the steps it
 /// would not take.
 pub const Machine = struct {
-    mode: Mode = .reset,
+    mode: Mode = .disable,
     /// Mode commands the firmware wrote.
     commands: u32 = 0,
     /// Commands that moved the machine.
