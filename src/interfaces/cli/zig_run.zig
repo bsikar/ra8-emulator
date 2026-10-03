@@ -21,6 +21,7 @@ const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
 const profile = @import("../../debug/profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
+const systick_cut = cpu.systick_cut;
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -69,6 +70,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
+    var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
     if (path) |named| {
@@ -110,6 +112,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .regions = &board.regions,
         .regions_ns = &board.regions_ns,
         .clears = &board.clears,
+        .cut = &cut,
         .fast_memory = options.watch_place == null and wrap == null,
         .blocks = options.blocks,
         .wrap = wrap,

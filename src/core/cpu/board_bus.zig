@@ -24,6 +24,7 @@ pub const scs_route = @import("scs_route.zig");
 const fault_status = @import("../../periph/fault_status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
+const systick_cut = @import("systick_cut.zig");
 
 /// CFSR's banked bits, UFSR and MMFSR (src/periph/scb_bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;
@@ -192,6 +193,9 @@ pub const Scs = struct {
     clears: ?*fault_clear.Clears = null,
     /// FPCCR, FPCAR and FPDSCR, read and written in the core's FP state.
     fp: ?*fp_state.State = null,
+    /// The SysTick timers a store can arm, and the stretch cut it latches
+    /// (RA8EMU-464). Null leaves every SysTick store to RAM alone.
+    cut: ?*systick_cut.Cut = null,
 
     /// A word read of FPCCR, FPCAR or FPDSCR answered from the FP state;
     /// false leaves the read to RAM.
@@ -210,6 +214,7 @@ pub const Scs = struct {
         const memory = reach.view();
         const owed = if (self.clears) |unit| (if (unit.slot(address) != null) unit else null) else null;
         const standing = if (owed != null) try memory.readWord(address & ~@as(u32, 3)) else 0;
+        if (self.cut) |edge| try edge.see(memory, address, bytes);
         try memory.write(address, bytes);
         if (owed) |unit| {
             var padded = [_]u8{0} ** 4;

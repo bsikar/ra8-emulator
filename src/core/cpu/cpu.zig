@@ -20,6 +20,8 @@ const banked_mod = @import("../banked.zig");
 const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
 const park = @import("park.zig");
+/// Public so its tests reach it without a root export.
+pub const systick_cut = @import("systick_cut.zig");
 pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
 pub const sau_source = @import("sau_source.zig");
@@ -89,6 +91,9 @@ pub const Cpu = struct {
     /// The poll shortcut `source` and `bus` go through on the board, stirred
     /// as each `run` starts because the board moves between stretches.
     quiet: ?*exception.quiet_source.QuietSource = null,
+    /// Latched by a store that arms SysTick; `run` ends the stretch after
+    /// the instruction that made it (RA8EMU-464). Null never cuts.
+    cut: ?*systick_cut.Cut = null,
     /// Decodes kept per address on the board; null decodes every step.
     decoded: ?*decode_cache.DecodeCache = null,
     /// Formed blocks, under `--blocks` (RA8EMU-405); null fetches and
@@ -294,6 +299,7 @@ pub const Cpu = struct {
                 continue;
             }
             if (self.step()) |stopped| return stopped;
+            if (self.cut) |edge| if (edge.fired) return .count;
         }
         return .count;
     }
