@@ -21,6 +21,25 @@ pub const Conf = struct {
     probe_failure_symbol: ?[]const u8 = null,
     probe_max_failure: ?u32 = null,
     emu_args: ?[]const u8 = null,
+    probe_seconds: ?u32 = null,
+    probe_boot_s: ?u32 = null,
+
+    /// The longest modelled time the table gives a conf row: long enough for
+    /// every bench window the firmware tree uses today (epub_open's 12 s boot
+    /// plus 5 s), short enough that an image spinning in a busy loop does not
+    /// stall the whole table.
+    pub const max_floor_ms: u32 = 20_000;
+
+    /// How much modelled time the bench gives this example: a memory probe's
+    /// boot dwell plus its window, else the console scrape's timeout. Null
+    /// when the conf names neither.
+    pub fn floorMs(conf: Conf) ?u32 {
+        const seconds = if (conf.probe_seconds) |window|
+            window + (conf.probe_boot_s orelse 0)
+        else
+            conf.timeout_s orelse return null;
+        return @min(seconds * 1000, max_floor_ms);
+    }
 
     /// Whether `console` carries any HIL_EXPECT_NEGATIVE alternative.
     pub fn refused(conf: Conf, console: []const u8) bool {
@@ -62,6 +81,8 @@ fn put(conf: *Conf, key: []const u8, value: []const u8) void {
     if (eql(u8, key, "HIL_PROBE_FAILURE_SYMBOL")) conf.probe_failure_symbol = value;
     if (eql(u8, key, "HIL_PROBE_MAX_FAILURE")) conf.probe_max_failure = number(value);
     if (eql(u8, key, "HIL_EMU_ARGS")) conf.emu_args = value;
+    if (eql(u8, key, "HIL_PROBE_SECONDS")) conf.probe_seconds = number(value);
+    if (eql(u8, key, "HIL_PROBE_BOOT_S")) conf.probe_boot_s = number(value);
 }
 
 fn unquote(value: []const u8) []const u8 {

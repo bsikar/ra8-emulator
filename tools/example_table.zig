@@ -170,12 +170,15 @@ pub fn main() !void {
         };
         const conf = try readConf(allocator, path);
         const probe = probes.find(image) orelse confProbe(image, conf);
-        const report = try runImage(allocator, args[1], path, halves, probe, conf != null, budgets.pick(image, budget));
-        var row = parse(report);
-        if (probe) |wanted| row.probe = probes.judge(wanted, report);
-        // An undecided conf probe leaves the row to the console and LEDs.
-        if (row.probe == .unknown and probes.find(image) == null) row.probe = null;
-        if (conf) |found| row.hil = hil_conf.judge(found, report);
+        var job = Job{ .emulator = args[1], .path = path, .image = image, .halves = halves, .conf = conf, .budget = budget };
+        job.run = .{ .probe = probe, .console = conf != null };
+        var row = try measure(allocator, job);
+        // Undecided at the default budget: give a conf row the bench's own
+        // modelled time once. Rows already decided keep their fast run.
+        if (row.verdict() == .unknown) if (confMs(image, conf, budget)) |ms| {
+            job.run.ms = ms;
+            row = try measure(allocator, job);
+        };
         try writeRow(out, image, row);
     }
 }
@@ -283,15 +286,59 @@ fn readConf(allocator: std.mem.Allocator, path: []const u8) !?hil_conf.Conf {
     return hil_conf.parse(text);
 }
 
-fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, probe: ?probes.Probe, console: bool, budget: ?[]const u8) ![]const u8 {
+/// One row's run: the images, its conf and the caller's budget.
+const Job = struct {
+    emulator: []const u8,
+    path: []const u8,
+    image: []const u8,
+    halves: Halves,
+    conf: ?hil_conf.Conf,
+    budget: ?[]const u8,
+    run: Run = .{},
+};
+
+/// Runs a job and judges the report into a row.
+fn measure(allocator: std.mem.Allocator, job: Job) !Row {
+    const budget = budgets.pick(job.image, job.budget);
+    const report = try runImage(allocator, job.emulator, job.path, job.halves, job.run, budget);
+    var row = parse(report);
+    if (job.run.probe) |wanted| row.probe = probes.judge(wanted, report);
+    // An undecided conf probe leaves the row to the console and LEDs.
+    if (row.probe == .unknown and probes.find(job.image) == null) row.probe = null;
+    if (job.conf) |found| row.hil = hil_conf.judge(found, report);
+    return row;
+}
+
+/// What a row asks of the emulator besides its images and budget.
+const Run = struct {
+    probe: ?probes.Probe = null,
+    console: bool = false,
+    ms: ?u32 = null,
+};
+
+/// The bench's modelled time for a conf row (RA8EMU-400), used to retry a
+/// row the default budget left unknown. Only when no
+/// instruction budget applies and the row's own flags set no --ms: a caller
+/// budget or an example_budgets.zig floor passes --instructions, which the
+/// emulator lets win over --ms.
+fn confMs(image: []const u8, conf: ?hil_conf.Conf, budget: ?[]const u8) ?u32 {
+    if (budgets.pick(image, budget) != null) return null;
+    for (options.flags(image)) |flag| {
+        if (std.mem.eql(u8, flag, "--ms")) return null;
+    }
+    return (conf orelse return null).floorMs();
+}
+
+fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, run: Run, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
     try argv.appendSlice(options.flags(std.fs.path.basename(path)));
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
-    if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
-    if (probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ "--dump-sym", name });
-    if (console) try argv.append("--console");
+    if (run.probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
+    if (run.probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ "--dump-sym", name });
+    if (run.console) try argv.append("--console");
+    if (run.ms) |ms| try argv.appendSlice(&.{ "--ms", try std.fmt.allocPrint(allocator, "{d}", .{ms}) });
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{
         .allocator = allocator,
