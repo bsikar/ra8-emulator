@@ -48,8 +48,10 @@ pub const all64 = [_]V64{
 };
 
 pub const claimed = [_][]const u8{
-    "VMLA (floating-point)",  "VMLS (floating-point)",
-    "VNMLA (floating-point)", "VNMLS (floating-point)",
+    "VMLA (floating-point)",
+    "VMLS (floating-point)",
+    "VNMLA (floating-point)",
+    "VNMLS (floating-point)",
 };
 
 const T32 = case.Ternary(u32);

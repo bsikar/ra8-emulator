@@ -52,7 +52,10 @@ pub const nmul64 = [_]V64{
     .{ .encoding = "VNMUL (floating-point)", .name = "qNaN sign flips", .input = .{ .a = 0x7FF8_0000_0000_0001, .b = 0x3FF0_0000_0000_0000 }, .expect = .{ .bits = 0xFFF8_0000_0000_0001 } },
 };
 
-pub const claimed = [_][]const u8{ "VMUL (floating-point)", "VNMUL (floating-point)" };
+pub const claimed = [_][]const u8{
+    "VMUL (floating-point)",
+    "VNMUL (floating-point)",
+};
 
 pub const covered = vector.encodingsOf(case.Binary(u32), case.Result(u32), &mul32) ++
     vector.encodingsOf(case.Binary(u32), case.Result(u32), &nmul32) ++

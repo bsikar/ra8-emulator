@@ -36,8 +36,11 @@ pub fn Binary(comptime B: type) type {
 
 /// Three operands, as the accumulating forms read them: d is the
 /// accumulator, n and m the factors.
+pub const FusedOp = enum { vfma, vfms, vfnma, vfnms };
+
 pub fn Ternary(comptime B: type) type {
     return struct {
+        op: FusedOp = .vfma,
         d: B,
         n: B,
         m: B,
@@ -162,7 +165,12 @@ pub fn Integral(comptime B: type) type {
 
 /// Two operands and the APSR flags for VSEL, with N in bit 3 of nzcv.
 pub fn Select(comptime B: type) type {
-    return struct { a: B, b: B, nzcv: u4 };
+    return struct {
+        a: B,
+        b: B,
+        nzcv: u4,
+        condition: @import("select.zig").Cond,
+    };
 }
 
 pub fn Result(comptime B: type) type {
