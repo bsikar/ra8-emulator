@@ -24,3 +24,7 @@ test "no path means no line and no file" {
     try frame_out.report(buffer.writer(), undefined, null);
     try std.testing.expectEqual(@as(usize, 0), buffer.items.len);
 }
+
+test {
+    _ = @import("board_view_test.zig");
+}
