@@ -122,6 +122,13 @@ test "a faulting load leaves Rn unwritten" {
     try std.testing.expectEqual(ram_base + 0x38, cpu.regs.get(1));
 }
 
+test "word elements fault when the contiguous base is not word aligned" {
+    var ram = counting();
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(1, ram_base + 2);
+    try std.testing.expectError(error.Unaligned, step(&cpu, 0xECB1, 0xFF02));
+}
+
 test "an SP ram_base without writeback is claimed" {
     try std.testing.expect(vldr.group.decode(wide(0xED9D, 0x1F01)) != null);
 }

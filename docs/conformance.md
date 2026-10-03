@@ -201,19 +201,19 @@ is stale or an encoding is missing. Regenerate with
 | VBRSR T1 | 9 |
 | VLDRB.8 | 2 |
 | VLDRH.16 | 2 |
-| VLDRW.32 | 2 |
+| VLDRW.32 | 4 |
 | VSTRB.8 | 1 |
 | VSTRH.16 | 1 |
-| VSTRW.32 | 2 |
+| VSTRW.32 | 4 |
 | VLDRB.S16 | 2 |
 | VLDRB.U16 | 1 |
 | VLDRB.S32 | 1 |
 | VLDRB.U32 | 1 |
-| VLDRH.S32 | 1 |
+| VLDRH.S32 | 3 |
 | VLDRH.U32 | 1 |
 | VSTRB.16 | 1 |
 | VSTRB.32 | 1 |
-| VSTRH.32 | 1 |
+| VSTRH.32 | 3 |
 | VLDRB.U8 gather | 1 |
 | VLDRB.S16 gather | 1 |
 | VLDRB.U16 gather | 1 |
@@ -222,26 +222,26 @@ is stale or an encoding is missing. Regenerate with
 | VLDRH.U16 gather | 2 |
 | VLDRH.S32 gather | 2 |
 | VLDRH.U32 gather | 1 |
-| VLDRW.U32 gather | 1 |
+| VLDRW.U32 gather | 3 |
 | VSTRB.8 scatter | 1 |
 | VSTRB.16 scatter | 1 |
 | VSTRB.32 scatter | 1 |
 | VSTRH.16 scatter | 1 |
 | VSTRH.32 scatter | 1 |
-| VSTRW.32 scatter | 2 |
-| VLDRD.U64 gather | 4 |
-| VSTRD.64 scatter | 3 |
-| VLDRW.U32 vector base | 3 |
+| VSTRW.32 scatter | 4 |
+| VLDRD.U64 gather | 6 |
+| VSTRD.64 scatter | 5 |
+| VLDRW.U32 vector base | 5 |
 | VLDRD.U64 vector base | 2 |
-| VSTRW.32 vector base | 2 |
+| VSTRW.32 vector base | 4 |
 | VSTRD.64 vector base | 2 |
-| VLD20 | 2 |
+| VLD20 | 4 |
 | VLD21 | 2 |
 | VLD40 | 2 |
 | VLD41 | 2 |
 | VLD42 | 2 |
 | VLD43 | 2 |
-| VST20 | 2 |
+| VST20 | 4 |
 | VST21 | 2 |
 | VST40 | 2 |
 | VST41 | 2 |

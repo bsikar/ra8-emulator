@@ -98,6 +98,13 @@ test "vldrh.s32 q4, [r1, #4] sign-extends halfwords" {
     try std.testing.expectEqual(@as(u32, 0xFFFF_8006), qreg.elem(q, .word, 1));
 }
 
+test "halfword memory elements fault when the base is misaligned" {
+    var ram = counting();
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(1, ram_base + 1);
+    try std.testing.expectError(error.Unaligned, step(&cpu, 0xED99, 0x8F02));
+}
+
 test "vstrb.32 q1, [r1, #-1]! keeps each word's low byte" {
     var ram: Ram = .{};
     var cpu: Cpu = .{ .bus = ram.view() };

@@ -39,6 +39,20 @@ test "an unaligned access is taken as UsageFault when USGFAULTENA is set" {
     try std.testing.expectEqual(fixture.base + 0x201, cpu.regs.low[0]);
 }
 
+test "an unaligned MVE load sets CFSR.UNALIGNED on the Zig core" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, usgfaultena);
+    ram.putHalf(fixture.code, 0xECB1); // vldrw.u32 q7, [r1], #8
+    ram.putHalf(fixture.code + 2, 0xFF02);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[1] = fixture.base + 0x202;
+
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(unaligned_bit, ram.word(memmap.scb.cfsr));
+}
+
 test "with USGFAULTENA clear it escalates to HardFault and sets HFSR.FORCED" {
     var ram: fixture.Ram = .{};
     var cpu = try faulting(&ram);

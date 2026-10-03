@@ -10,11 +10,12 @@
 //! (01 half, 10 word). Rn and Qd are three bits, so neither PC, SP nor Q8+
 //! can be named. H with a halfword element, sizes 00 and 11, P and W both
 //! clear (other encodings) and a store with U set stay unclaimed.
-//! Alignment checks wait on the core lane's MemA support (RA8EMU-85).
+//! Active elements are MemA accesses and fault before reaching the bus.
 const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const contiguous = mve.contiguous;
@@ -83,6 +84,7 @@ fn load(cpu: *Cpu, start: u32, s: Sizes, mask: u16, signed: bool) op.Error!u128 
     for (0..mve.qreg.lanes(s.element)) |k| {
         const e: u8 = @intCast(k);
         if (!mve.predicate.active(mask, s.element, e)) continue;
+        try alignment.memA(contiguous.address(start, s.memory, e), contiguous.bytes(s.memory));
         var buf: [4]u8 = .{ 0, 0, 0, 0 };
         try cpu.bus.read(contiguous.address(start, s.memory, e), buf[0..contiguous.bytes(s.memory)]);
         const raw = std.mem.readInt(u32, &buf, .little);
@@ -96,6 +98,7 @@ fn store(cpu: *Cpu, start: u32, s: Sizes, mask: u16, value: u128) op.Error!void 
     for (0..mve.qreg.lanes(s.element)) |k| {
         const e: u8 = @intCast(k);
         if (!mve.predicate.active(mask, s.element, e)) continue;
+        try alignment.memA(contiguous.address(start, s.memory, e), contiguous.bytes(s.memory));
         const raw = mve.qreg.elem(value, s.element, e);
         var buf: [4]u8 = undefined;
         std.mem.writeInt(u32, &buf, contiguous.element(.{ .value = raw, .msize = s.memory, .signed = false, .store = true }), .little);
