@@ -14,6 +14,7 @@ const periph = @import("../registry.zig");
 const regs = @import("../usbhs/usbhs_regs.zig");
 pub const dcp = @import("usbfs_dcp.zig");
 pub const host = @import("usbfs_host.zig");
+pub const pipe = @import("usbfs_pipe.zig");
 
 pub const window = struct {
     pub const base: u32 = 0x4025_0000;
@@ -71,6 +72,8 @@ pub const Device = struct {
     shadow: [window.words]u16 = .{0} ** window.words,
     /// The control FIFO port, aimed at the DCP.
     control: dcp.Dcp = .{},
+    /// PIPE1 through PIPE9.
+    pipes: pipe.Pipes = .{},
 
     /// Accesses refused, each for its own reason.
     misaligned: u32 = 0,
@@ -212,6 +215,7 @@ pub const Device = struct {
     pub fn read(self: *Device, address: u32, width: u3) u32 {
         const offset = address -% self.base;
         if (!self.aligned(offset)) return 0;
+        if (pipe.Pipes.owns(offset)) return self.pipes.read(offset);
         return switch (offset) {
             regs.reg.syscfg => self.syscfg,
             regs.reg.syssts0 => self.lineState(),
@@ -231,6 +235,7 @@ pub const Device = struct {
         const offset = address -% self.base;
         if (!self.aligned(offset)) return;
         const v: u16 = @truncate(value);
+        if (pipe.Pipes.owns(offset)) return self.pipes.write(offset, v);
         switch (offset) {
             regs.reg.syscfg => {
                 self.syscfg = v;
@@ -250,7 +255,7 @@ pub const Device = struct {
     }
 
     pub fn refusals(self: *const Device) u32 {
-        return self.misaligned + self.read_only + self.control.refusals();
+        return self.misaligned + self.read_only + self.control.refusals() + self.pipes.unselected;
     }
 
     pub fn block(self: *Device) periph.Block {

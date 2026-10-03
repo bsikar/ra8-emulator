@@ -265,3 +265,7 @@ test "a SETUP sets the DCP PID back to NAK, clearing a STALL" {
     device.setup(.{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 });
     try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.dcpctr), 2) & regs.dcpctr.pid_mask);
 }
+
+test {
+    _ = @import("usbfs_pipe_test.zig");
+}
