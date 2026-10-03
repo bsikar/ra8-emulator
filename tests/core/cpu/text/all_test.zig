@@ -19,6 +19,8 @@ test {
     _ = @import("bitfield_test.zig");
     _ = @import("saturate_test.zig");
     _ = @import("sat16_test.zig");
+    _ = @import("extend_wide_test.zig");
+    _ = @import("extend_b16_test.zig");
     _ = @import("blxns_test.zig");
     _ = @import("hint_test.zig");
     _ = @import("it_test.zig");

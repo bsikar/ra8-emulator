@@ -41,6 +41,8 @@ pub const entries = [_]Entry{
     .{ .group = "bitfield", .print = @import("bitfield.zig").print },
     .{ .group = "saturate", .print = @import("saturate.zig").print },
     .{ .group = "sat16", .print = @import("sat16.zig").print },
+    .{ .group = "extend_wide", .print = @import("extend_wide.zig").print },
+    .{ .group = "extend_b16", .print = @import("extend_b16.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
