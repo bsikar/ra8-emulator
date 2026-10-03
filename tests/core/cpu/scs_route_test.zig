@@ -51,6 +51,8 @@ test "a bit-by-bit register and anything outside the SCS keep their address" {
     // ICSR and SHPR3 bank only PendSV while one timer pends SysTick (RA8EMU-439).
     try std.testing.expectEqual(@as(u32, 0x1800_0000), scs_route.wired(&ns, icsr).?.mask);
     try std.testing.expectEqual(@as(u32, 0x00FF_0000), scs_route.wired(&ns, 0xE000_ED20).?.mask);
+    // SHCSR's banked bits without SYSTICKACT (RA8EMU-441).
+    try std.testing.expectEqual(@as(u32, 0x0025_B48D), scs_route.wired(&ns, 0xE000_ED24).?.mask);
     try expectAt(0x2000_0000, scs_route.land(&ns, 0x2000_0000));
 }
 
@@ -170,4 +172,35 @@ test "SCR, CCR and AIRCR keep a Non-secure copy of their banked bits on CPU0" {
 
 test "SCR, CCR and AIRCR keep a Non-secure copy of their banked bits on CPU1" {
     try splitRoundTrip(.cpu1);
+}
+
+fn shcsrRoundTrip(issuer: registry.Issuer) !void {
+    const shcsr: u32 = 0xE000_ED24;
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var state: Banked = .{};
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state };
+    const bus = board.view();
+    // Secure: MEMFAULTENA (banked) and BUSFAULTENA (shared).
+    try put(bus, shcsr, 0x0003_0000);
+    state.current = .non_secure;
+    try std.testing.expectEqual(@as(u32, 0x0002_0000), try bus.readWord(shcsr));
+    // Non-secure: USGFAULTENA and BUSFAULTENA, MEMFAULTENA left clear.
+    try put(bus, shcsr, 0x0006_0000);
+    try std.testing.expectEqual(@as(u32, 0x0006_0000), try bus.readWord(shcsr));
+    state.current = .secure;
+    try std.testing.expectEqual(@as(u32, 0x0003_0000), try bus.readWord(shcsr));
+    // The alias is the Non-secure view: shared BUSFAULTENA plus its own copy.
+    try std.testing.expectEqual(@as(u32, 0x0006_0000), try bus.readWord(shcsr + 0x2_0000));
+}
+
+test "SHCSR keeps a Non-secure copy of its enables on CPU0" {
+    try shcsrRoundTrip(.cpu0);
+}
+
+test "SHCSR keeps a Non-secure copy of its enables on CPU1" {
+    try shcsrRoundTrip(.cpu1);
 }

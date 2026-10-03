@@ -92,19 +92,20 @@ pub fn split(target: alias.Target, systicks: scb_bank.SysTicks) ?Split {
     };
 }
 
-/// AIRCR, SCR, CCR and SHPR1 (RA8EMU-419), then ICSR and SHPR3 (RA8EMU-439):
-/// the bit-by-bit registers wired through the split so far. SHCSR and CFSR
-/// wait on the write-one-to-clear model (RA8EMU-365).
-const wired_words = [_]u32{ 0xE000_ED0C, 0xE000_ED10, 0xE000_ED14, 0xE000_ED18, icsr, shpr3 };
+/// AIRCR, SCR, CCR and SHPR1 (RA8EMU-419), ICSR and SHPR3 (RA8EMU-439), then
+/// SHCSR (RA8EMU-441): the bit-by-bit registers wired through the split so
+/// far. CFSR waits on the write-one-to-clear model (RA8EMU-365).
+const wired_words = [_]u32{ 0xE000_ED0C, 0xE000_ED10, 0xE000_ED14, 0xE000_ED18, icsr, shpr3, shcsr };
 
 const icsr: u32 = 0xE000_ED04;
 const shpr3: u32 = 0xE000_ED20;
+const shcsr: u32 = 0xE000_ED24;
 
 /// How many SysTicks a wired word splits for. One timer still pends SysTick
-/// in the shared ICSR, so ICSR and SHPR3 bank only PendSV's bits until the
-/// Non-secure SysTick has its own clock (RA8EMU-154).
+/// in the shared ICSR, so ICSR, SHPR3 and SHCSR leave SysTick's bits shared
+/// until the Non-secure SysTick has its own clock (RA8EMU-154).
 fn systicksOf(word: u32) scb_bank.SysTicks {
-    return if (word == icsr or word == shpr3) .one else .two;
+    return if (word == icsr or word == shpr3 or word == shcsr) .one else .two;
 }
 
 /// The split an access by a core in `state` to `address` goes through, or
