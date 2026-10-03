@@ -54,6 +54,11 @@ pub const Region = struct {
     }
 };
 
+/// M85 instruction tightly coupled memory (HUM 2.1.1). Firmware linker scripts
+/// place ITCM at zero, so the startup copy used by dfu_copy_to_run reads here.
+pub const itcm_base: u32 = 0x0000_0000;
+pub const itcm_end: u32 = itcm_base + 0x0001_0000;
+
 /// The 1 MB of code MRAM. src/core/part_map.zig gives its size for both
 /// parts. The board maps the whole array, so a read anywhere in it lands,
 /// as it does on silicon. A Secure boot that copies a fixed-size window out
@@ -124,6 +129,7 @@ pub const ppb_size: u32 = 0x0010_0000;
 
 /// RAM and flash-like regions the loader maps before an image is streamed in.
 pub const ram = [_]Region{
+    .{ .name = "ITCM", .base = itcm_base, .size = itcm_end - itcm_base, .perms = .{} },
     .{ .name = "MRAM", .base = mram_base, .size = mram_end - mram_base, .perms = .{} },
     .{ .name = "NS MRAM", .base = ns_mram_base, .size = ns_mram_end - ns_mram_base, .perms = .{} },
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
@@ -268,11 +274,12 @@ pub const master_ram = [_]Window{
 };
 
 /// The RAM a debug probe can read and write over the debug port: every
-/// region the loader maps as RAM, the core's own DTCM included. The probe
+/// region the loader maps as RAM, the core's own TCM included. The probe
 /// is not a bus master on the fabric, it reaches memory through the core,
 /// so the `master_ram` exclusions do not apply to it. The peripheral window
 /// is still not here: registers are not somewhere a log ring lives.
 pub const debug_ram = [_]Window{
+    .{ .base = itcm_base, .end = itcm_end },
     .{ .base = dtcm_base, .end = dtcm_end },
     .{ .base = sram_base, .end = sram_end },
     .{ .base = ns_sram_base, .end = ns_sram_end },

@@ -26,9 +26,9 @@ test "rejects a file that is not a little-endian 32-bit ARM ELF" {
     try std.testing.expectError(Error.NotArm, Image.init(&buffer));
 }
 
-test "walks one PT_LOAD segment and finds the vector base" {
+test "finds a non-executable vector segment before the code it points into" {
     const page = 0x1000;
-    var file = [_]u8{0} ** (page * 2);
+    var file = [_]u8{0} ** (page * 3);
     const head: *Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
         .magic = .{ 0x7f, 'E', 'L', 'F' },
@@ -41,13 +41,13 @@ test "walks one PT_LOAD segment and finds the vector base" {
         .e_type = 2,
         .e_machine = em_arm,
         .e_version = 1,
-        .e_entry = 0x0200_0001,
+        .e_entry = 0x0200_0489,
         .e_phoff = @sizeOf(Header),
         .e_shoff = 0,
         .e_flags = 0,
         .e_ehsize = @sizeOf(Header),
         .e_phentsize = @sizeOf(ProgramHeader),
-        .e_phnum = 1,
+        .e_phnum = 2,
         .e_shentsize = 0,
         .e_shnum = 0,
         .e_shstrndx = 0,
@@ -60,14 +60,27 @@ test "walks one PT_LOAD segment and finds the vector base" {
         .p_paddr = 0x0200_0000,
         .p_filesz = 16,
         .p_memsz = 32,
+        .p_flags = 4,
+        .p_align = 4,
+    };
+    const code_ph: *ProgramHeader = @ptrCast(@alignCast(&file[@sizeOf(Header) + @sizeOf(ProgramHeader)]));
+    code_ph.* = .{
+        .p_type = pt_load,
+        .p_offset = page * 2,
+        .p_vaddr = 0x0200_0488,
+        .p_paddr = 0x0200_0488,
+        .p_filesz = 16,
+        .p_memsz = 32,
         .p_flags = pf_x | 4,
         .p_align = 4,
     };
+    std.mem.writeInt(u32, file[page..][0..4], 0x2201_0000, .little);
+    std.mem.writeInt(u32, file[page + 4 ..][0..4], 0x0200_0489, .little);
     const image = try Image.init(&file);
     const segment = image.loadSegment(0).?;
     try std.testing.expectEqual(@as(u32, 0x0200_0000), segment.paddr);
     try std.testing.expectEqual(@as(usize, 16), segment.bytes.len);
-    try std.testing.expect(segment.executable());
+    try std.testing.expect(!segment.executable());
     try std.testing.expectEqual(@as(u32, 0x0200_0000), image.vectorBase().?);
 }
 

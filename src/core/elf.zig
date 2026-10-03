@@ -107,16 +107,45 @@ pub const Image = struct {
         };
     }
 
-    /// The vector table sits at the lowest executable segment's VMA, exactly
-    /// as elf_vector_base() derived it.
+    /// Find the load segment that contains the initial stack and Thumb reset
+    /// vectors. Linkers commonly keep this read-only table in a separate
+    /// segment from the executable code it points to.
     pub fn vectorBase(self: Image) ?u32 {
-        var lowest: ?u32 = null;
+        var index: u16 = 0;
+        while (index < self.segmentCount()) : (index += 1) {
+            const segment = self.loadSegment(index) orelse continue;
+            if (segment.bytes.len < 8 or segment.memsz < 8) continue;
+            const stack_pointer = std.mem.readInt(u32, segment.bytes[0..4], .little);
+            const reset_vector = std.mem.readInt(u32, segment.bytes[4..8], .little);
+            if (!validStackPointer(stack_pointer)) continue;
+            if (!self.executableAddress(reset_vector)) continue;
+            return segment.vaddr;
+        }
+        return null;
+    }
+
+    fn executableAddress(self: Image, reset_vector: u32) bool {
+        if (reset_vector & 1 == 0) return false;
+        const address = reset_vector & ~@as(u32, 1);
         var index: u16 = 0;
         while (index < self.segmentCount()) : (index += 1) {
             const segment = self.loadSegment(index) orelse continue;
             if (!segment.executable()) continue;
-            if (lowest == null or segment.vaddr < lowest.?) lowest = segment.vaddr;
+            const start: u64 = segment.vaddr;
+            const end = start + segment.memsz;
+            if (address >= start and @as(u64, address) < end) return true;
         }
-        return lowest;
+        return false;
     }
 };
+
+fn validStackPointer(stack_pointer: u32) bool {
+    if (stack_pointer & 7 != 0) return false;
+    for (memmap.ram) |region| {
+        // A stack never lives in instruction TCM or the PPB.
+        if (region.base == memmap.itcm_base or region.base == memmap.ppb_base) continue;
+        if (!region.perms.write) continue;
+        if (stack_pointer > region.base and @as(u64, stack_pointer) <= region.end()) return true;
+    }
+    return false;
+}

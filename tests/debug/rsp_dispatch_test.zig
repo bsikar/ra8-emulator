@@ -81,7 +81,7 @@ test "m reads memory as hex, and an unmapped span is E01" {
     const stub = dispatch.Dispatch{ .core = &core };
     var out: [256]u8 = undefined;
     try std.testing.expectEqualStrings("deadbeef0102", try stub.answer("m22000000,6", &out));
-    try std.testing.expectEqualStrings("E01", try stub.answer("m10,4", &out));
+    try std.testing.expectEqualStrings("E01", try stub.answer("m90000000,4", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("m22000000", &out));
 }
 
@@ -142,7 +142,7 @@ test "a write that does not match its length, or lands nowhere, is refused" {
     try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,4:cafe", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,2:caf", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("X22000000,2", &out));
-    try std.testing.expectEqualStrings("E01", try stub.answer("M10,2:cafe", &out));
+    try std.testing.expectEqualStrings("E01", try stub.answer("M90000000,2:cafe", &out));
 }
 
 // Without a stop machine Z is not supported; with one it reaches the tables.
