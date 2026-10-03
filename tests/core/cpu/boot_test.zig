@@ -23,7 +23,7 @@ test "a zig run stops on the first unknown encoding and says where" {
     try loadTiny(&core);
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    const status = try boot.run(stream.writer(), &core, memmap.sram_base, 100);
+    const status = try boot.run(stream.writer(), &core, memmap.sram_base, 100, null);
     try std.testing.expectEqual(@as(u8, 1), status);
     var want: [128]u8 = undefined;
     const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xba80 after 2 instructions\n", .{memmap.sram_base + 0xE});
@@ -37,7 +37,7 @@ test "a zig run that spends its budget is clean" {
     try loadTiny(&core);
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), &core, memmap.sram_base, 1));
+    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), &core, memmap.sram_base, 1, null));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 1 instructions clean"));
 }
 
@@ -46,7 +46,7 @@ test "no vector table is said plainly" {
     defer core.close();
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), &core, memmap.sram_base, 1));
+    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), &core, memmap.sram_base, 1, null));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: no vector table"));
 }
 

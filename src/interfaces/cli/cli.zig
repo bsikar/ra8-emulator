@@ -119,6 +119,10 @@ pub const Options = struct {
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
     /// hook. src/debug/rtos_report.zig.
     cpu_load: bool = false,
+    /// Count instructions and modelled cycles by ELF function.
+    profile: bool = false,
+    /// Write folded function counts to this path as well as printing them.
+    profile_folded: ?[]const u8 = null,
     /// `--cpu-load-from` / `--cpu-load-to`: the virtual instructions the
     /// load is charged over. Either one turns `--cpu-load` on.
     cpu_load_window: rtos_load.Window = .{},
@@ -291,6 +295,11 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.trace_rtos = true;
     } else if (std.mem.eql(u8, flag, "--cpu-load")) {
         options.cpu_load = true;
+    } else if (std.mem.eql(u8, flag, "--profile")) {
+        options.profile = true;
+    } else if (std.mem.eql(u8, flag, "--profile-folded")) {
+        options.profile = true;
+        options.profile_folded = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--cpu-load-from")) {
         options.cpu_load = true;
         options.cpu_load_window.from = try std.fmt.parseInt(u64, try next(argv, index), 0);

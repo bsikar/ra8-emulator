@@ -54,6 +54,8 @@ pub const Wiring = struct {
     boundary: ?Boundary = null,
     /// A listener put in front of the core's bus and exception source.
     wrap: ?Wrap = null,
+    /// A listener called with the address of each retired instruction.
+    retire_listener: ?cpu_mod.RetireListener = null,
     partitions: ?*sau.Sau = null,
     regions: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
@@ -68,26 +70,26 @@ pub const Wiring = struct {
 pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
-        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget),
-        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears, wiring.cpu1),
+        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget, wiring.retire_listener),
+        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener),
     };
 }
 
 /// Run the image already loaded into `core` on the Zig core, print how it
 /// ended, and return the exit status: 0 when the budget was spent, 1 when
 /// the core stopped short of it.
-pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64) !u8 {
+pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null, null);
+    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
     var board: BoardBus = .{ .memory = .{ .core = core }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -97,6 +99,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
+    cpu.retire_listener = retire_listener;
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});

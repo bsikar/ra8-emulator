@@ -171,6 +171,21 @@ pub fn extentOf(image: elf.Image, wanted: []const u8) ?Extent {
     return null;
 }
 
+/// Copy sized function ranges into caller storage, in symbol table order.
+/// Returns the number copied; excess symbols are deliberately omitted.
+pub fn functionExtents(image: elf.Image, into: []Extent) usize {
+    const found = tables(image) orelse return 0;
+    var written: usize = 0;
+    var offset: usize = 0;
+    while (offset + @sizeOf(Symbol) <= found.symbols.len and written < into.len) : (offset += found.entry_size) {
+        const entry: *align(1) const Symbol = std.mem.bytesAsValue(Symbol, found.symbols[offset..][0..@sizeOf(Symbol)]);
+        if (entry.st_info & 0xF != symbol_type.func or entry.st_size == 0) continue;
+        into[written] = .{ .address = entry.st_value & ~@as(u32, 1), .size = entry.st_size };
+        written += 1;
+    }
+    return written;
+}
+
 /// How many symbols the image carries, for a report that wants to say the
 /// table was read rather than guessed at.
 pub fn count(image: elf.Image) usize {

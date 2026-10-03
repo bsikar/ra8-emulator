@@ -2,6 +2,7 @@
 //! it. Kept apart from board.zig so the models and the words about them do
 //! not share a file, and apart from main.zig so main stays wiring.
 const std = @import("std");
+pub const profile = @import("report/profile.zig");
 
 const Board = @import("../../board/board.zig").Board;
 const elc = @import("../../periph/elc/elc.zig");
