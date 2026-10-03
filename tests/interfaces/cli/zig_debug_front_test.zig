@@ -69,7 +69,8 @@ test "an unknown --cpu is bad usage for the debugger and left alone for a run" {
 test "--gdb runs on the Zig core; what its debugger does not take yet says so" {
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .zig }));
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig }));
-    try std.testing.expect(zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .zig, .cpu1 = "c.elf" }) != null);
+    try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .zig, .cpu1 = "c.elf" }));
+    try std.testing.expect(zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig, .cpu1 = "c.elf" }) != null);
     try std.testing.expect(zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .lockstep }) != null);
 }
 

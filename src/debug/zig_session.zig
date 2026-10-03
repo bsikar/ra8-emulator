@@ -4,6 +4,11 @@
 //! running the core through src/debug/zig_drive.zig. Its view() hands the
 //! printers and the unwinder the Zig core, so `registers`, `x`, `print`
 //! and `bt` read the same as on Unicorn.
+//!
+//! With CPU1 attached (RA8EMU-337) the other core is parked in `other`,
+//! and switchTo swaps it in. As in session.zig, only the selected core
+//! runs; the other holds where it stopped: gdb's all-stop with the
+//! scheduler locked.
 const zig_core = @import("zig_core.zig");
 const zig_cycles = @import("zig_cycles.zig");
 const zig_drive = @import("zig_drive.zig");
@@ -11,10 +16,19 @@ const core_view = @import("core_view.zig");
 const stop_machine = @import("stop_machine.zig");
 const watch_bus = @import("watch_bus.zig");
 
-pub const Error = error{AlreadyRunning};
+pub const Error = error{ AlreadyRunning, CoreNotAttached };
 
 /// The commands that run the core.
 pub const Command = enum { run, cont, step, next, finish };
+
+/// One core's half of the session, held while the other core has it.
+pub const Slot = struct {
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    started: bool = false,
+    watch: ?*watch_bus.WatchBus = null,
+    clock: zig_cycles.Clock = .{},
+};
 
 pub const ZigSession = struct {
     core: zig_core.ZigCore,
@@ -27,6 +41,25 @@ pub const ZigSession = struct {
     watch: ?*watch_bus.WatchBus = null,
     /// DWT_CYCCNT and DFSR kept the way the Unicorn path keeps them.
     clock: zig_cycles.Clock = .{},
+    /// Which CPU the fields above describe.
+    index: u8 = 0,
+    /// The other CPU, parked while this one has the session. Null on a
+    /// single-core session.
+    other: ?Slot = null,
+
+    /// Give the session to CPU `index`. The core left behind holds where
+    /// it stopped, with its own breaks, watches and clock.
+    pub fn switchTo(self: *ZigSession, index: u8) Error!void {
+        if (index == self.index) return;
+        const parked = self.other orelse return Error.CoreNotAttached;
+        self.other = .{ .core = self.core, .machine = self.machine, .started = self.started, .watch = self.watch, .clock = self.clock };
+        self.core = parked.core;
+        self.machine = parked.machine;
+        self.started = parked.started;
+        self.watch = parked.watch;
+        self.clock = parked.clock;
+        self.index = index;
+    }
 
     /// Arm the machine for `command` as the Unicorn session does, then run.
     pub fn go(self: *ZigSession, command: Command) Error!zig_drive.Ended {

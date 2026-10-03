@@ -124,6 +124,17 @@ test "a command the Zig core does not carry out yet says so" {
     var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    _ = try target.apply(.{ .core = 1 }, out.writer());
+    _ = try target.apply(.{ .halting = true }, out.writer());
     try std.testing.expectEqualStrings("error: Unsupported\n", out.items);
+}
+
+test "core 1 with no second core says so and the session carries on" {
+    var memory: Sram = .{};
+    var cpu: Cpu = .{ .bus = memory.view() };
+    var machine: stop_machine.Machine = .{};
+    var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, out.writer()));
+    try std.testing.expectEqualStrings("error: CoreNotAttached\n", out.items);
 }
