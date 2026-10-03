@@ -90,3 +90,19 @@ test "an address that cannot be fetched is left to the step" {
     defer std.testing.allocator.destroy(cache);
     try std.testing.expect(cache.next(ram.view(), m85, 64) == null);
 }
+
+test "an exception mid-block leaves it and resumes at the interrupted instruction" {
+    var ram: Ram = .{};
+    straightRun(&ram);
+    ram.put(32, 0x4770); // the handler: bx lr
+    const cache = try freshCache();
+    defer std.testing.allocator.destroy(cache);
+    _ = cache.next(ram.view(), m85, 0).?;
+    // Taken before the instruction at 2: the handler runs, then 2 resumes.
+    try std.testing.expectEqual(@as(u16, 0x4770), cache.next(ram.view(), m85, 32).?.instr.hw1);
+    const resumed = cache.next(ram.view(), m85, 2).?;
+    try std.testing.expectEqual(@as(u32, 2), resumed.instr.address);
+    try std.testing.expectEqual(@as(u16, 0x2102), resumed.instr.hw1);
+    try std.testing.expectEqual(@as(u32, 4), cache.next(ram.view(), m85, 4).?.instr.address);
+    try std.testing.expectEqual(@as(u64, 0), cache.stale);
+}
