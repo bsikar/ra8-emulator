@@ -25,17 +25,21 @@ const Latch = struct {
 
     fn stop(_: *anyopaque) void {}
 
-    fn make(allocator: std.mem.Allocator, at: endpoint.Endpoint) catalog.Error!catalog.Made {
+    fn create(allocator: std.mem.Allocator) catalog.Error!*anyopaque {
         const self = try allocator.create(Latch);
         self.* = .{};
+        return self;
+    }
+
+    fn bind(state: *anyopaque, at: endpoint.Endpoint) catalog.Device {
         const device: riic_bus.Device = .{
             .address = at.i2c.address,
-            .context = self,
+            .context = state,
             .writeFn = write,
             .readFn = read,
             .stopFn = stop,
         };
-        return .{ .device = .{ .i2c = device }, .state = self };
+        return .{ .i2c = device };
     }
 
     fn destroy(allocator: std.mem.Allocator, state: *anyopaque) void {
@@ -44,7 +48,7 @@ const Latch = struct {
 };
 
 const models = [_]catalog.Model{
-    .{ .name = "latch", .kind = .i2c, .makeFn = Latch.make, .destroyFn = Latch.destroy },
+    .{ .name = "latch", .kind = .i2c, .createFn = Latch.create, .destroyFn = Latch.destroy, .bindFn = Latch.bind },
 };
 const parts: catalog.Catalog = .{ .models = &models };
 
@@ -87,4 +91,15 @@ test "an instance attaches to the RIIC registry like any compiled-in part" {
     var registry: riic_bus.Registry = .{};
     try registry.attach(made.device.i2c);
     try std.testing.expect(registry.find(0x50) != null);
+}
+
+test "binding puts a model on state the caller holds" {
+    var held: Latch = .{};
+    const at = try endpoint.parse("i2c:riic@0x51");
+    const device = try parts.bind("latch", &held, at);
+    device.i2c.write(0x3C);
+    try std.testing.expectEqual(@as(u8, 0x3C), held.value);
+    try std.testing.expectEqual(@as(u7, 0x51), device.i2c.address);
+    try std.testing.expectError(error.WrongEndpoint, parts.bind("latch", &held, try endpoint.parse("uart:sci0")));
+    try std.testing.expectError(error.UnknownModel, parts.bind("gauge", &held, at));
 }
