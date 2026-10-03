@@ -4,6 +4,7 @@
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
 const Host = @import("../../../periph/usbhs/usbhs.zig").Host;
+const usb_cable = @import("usb_cable.zig");
 
 /// One line per SCI channel that moved bytes, plus the last console line the
 /// firmware printed. A TDR write made with CCR0.TE clear never leaves the
@@ -215,7 +216,7 @@ pub fn usb(board: *Board, out: Writer) !void {
             .{ host.pll.locks, host.pll.stalled },
         );
     }
-    if (host.xfer.setups != 0) {
+    if (host.xfer.setups != 0 and host.xfer.loop == null) {
         try out.print(
             "  {d} SETUP(s), device {s} at address {d}, {d} stalled\n",
             .{
@@ -239,6 +240,7 @@ pub fn usb(board: *Board, out: Writer) !void {
 /// the window's own refusals, then the two data ports, then the transfers.
 /// Split out of usb() above, which was at the function-length limit.
 fn usbRefused(host: *const Host, out: Writer) !void {
+    try usb_cable.section(host, out);
     if (host.refusals() == 0) return;
     try out.print(
         "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++
