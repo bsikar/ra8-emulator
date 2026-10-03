@@ -117,6 +117,7 @@ test {
     _ = @import("periph/agt/agt_compare_test.zig");
     _ = @import("periph/bkup/bkup_test.zig");
     _ = @import("periph/bkup/bkup_ctrl_test.zig");
+    _ = @import("periph/bkup/bkup_pcr1_test.zig");
     _ = @import("periph/cac_test.zig");
     _ = @import("periph/cache/cache_geometry_test.zig");
     _ = @import("periph/cache/cache_test.zig");

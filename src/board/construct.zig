@@ -85,6 +85,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         // Patched in attach(): the backup file has to point at this
         // board's own protection model, not a copy of it.
         .backup = undefined,
+        .battery_switch = undefined,
         .oscillators = undefined,
         .subclk = undefined,
         .loco = undefined,
