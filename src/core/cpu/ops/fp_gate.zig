@@ -13,6 +13,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const lazy = @import("../fpu/lazy.zig");
+const fp_mem = @import("fp_mem.zig");
 
 /// The same group, with ExecuteFPCheck() ahead of every instruction it runs.
 pub fn gated(comptime inner: op.Group) op.Group {
@@ -25,6 +26,24 @@ pub fn gated(comptime inner: op.Group) op.Group {
             try check(cpu);
             const run = inner.decode(instr).?;
             return run(cpu, instr);
+        }
+    };
+    return .{ .name = inner.name, .decode = &Wrap.decode, .oracle = inner.oracle };
+}
+
+/// VLDR FPCXT_NS on an inactive context is the one memory-system-register
+/// form that deliberately avoids ExecuteFPCheck and FP context creation.
+pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
+    const Wrap = struct {
+        fn decode(instr: Instr) ?op.Exec {
+            return if (inner.decode(instr) != null) &exec else null;
+        }
+
+        fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
+            const inactive = cpu.fp.context.fpccr.aspen == 1 and
+                cpu.regs.control & @import("../regs.zig").control_bits.fpca == 0;
+            if (!(fp_mem.isInactiveFpcxtNs(instr) and inactive)) try check(cpu);
+            return inner.decode(instr).?(cpu, instr);
         }
     };
     return .{ .name = inner.name, .decode = &Wrap.decode, .oracle = inner.oracle };
