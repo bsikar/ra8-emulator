@@ -16,3 +16,4 @@ pub const nvic_source = @import("nvic_source.zig");
 pub const sleep = @import("sleep.zig");
 pub const target = @import("target.zig");
 pub const quiet_source = @import("quiet_source.zig");
+pub const fnc_return = @import("fnc_return.zig");
