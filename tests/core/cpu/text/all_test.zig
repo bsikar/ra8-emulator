@@ -69,4 +69,5 @@ test {
     _ = @import("branch_future_test.zig");
     _ = @import("pac_test.zig");
     _ = @import("vlldm_vlstm_test.zig");
+    _ = @import("fp_test.zig");
 }
