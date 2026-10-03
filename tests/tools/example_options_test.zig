@@ -70,3 +70,10 @@ test "pagecache gets the blank 64 MB FAT32 card its README asks for" {
     try std.testing.expectEqual(want.len, got.len);
     for (want, got) |w, g| try std.testing.expectEqualStrings(w, g);
 }
+
+test "widget_keyboard_demo runs a second of target time for its panel bring-up" {
+    const got = options.flags("widget_keyboard_demo.elf");
+    const want = [_][]const u8{ "--ms", "1000" };
+    try std.testing.expectEqual(want.len, got.len);
+    for (want, got) |w, g| try std.testing.expectEqualStrings(w, g);
+}
