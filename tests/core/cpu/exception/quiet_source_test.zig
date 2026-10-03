@@ -4,6 +4,7 @@ const ra8 = @import("ra8");
 const fixture = @import("ram.zig");
 const Fake = @import("fake_source.zig").Fake;
 const QuietSource = ra8.core.cpu.exception.quiet_source.QuietSource;
+const Key = ra8.core.cpu.exception.quiet_source.Key;
 const bus = ra8.core.cpu.bus;
 
 const systick: ra8.core.cpu.exception.active.Entry = .{ .number = 15, .priority = 0x80 };
@@ -115,19 +116,44 @@ test "each run of the core starts by stirring" {
     try std.testing.expect(!quiet.settled);
 }
 
-test "hush only takes once settled, and a stir lifts it (RA8EMU-429)" {
+const unmasked: Key = .{ .primask = 0, .basepri = 0, .faultmask = 0, .depth = 0, .running = 0xFFFF };
+
+test "hush only takes once answered, and a stir lifts it (RA8EMU-429)" {
     var ram: fixture.Ram = .{};
     var fake: Fake = .{};
     var quiet: QuietSource = .{ .inner = fake.source(), .memory = ram.view() };
-    quiet.hush();
-    try std.testing.expect(!quiet.hushed);
+    quiet.hush(unmasked, true);
+    try std.testing.expect(!quiet.holds(unmasked));
     _ = try quiet.source().winner(quiet.bus());
-    quiet.hush();
-    try std.testing.expect(quiet.hushed);
+    quiet.hush(unmasked, true);
+    try std.testing.expect(quiet.holds(unmasked));
+    var masked = unmasked;
+    masked.primask = 1;
+    try std.testing.expect(quiet.holds(masked));
     try quiet.bus().write(fixture.scs + 0x200, &.{ 0, 0, 0, 0 });
-    try std.testing.expect(!quiet.hushed);
+    try std.testing.expect(!quiet.holds(unmasked));
     _ = try quiet.source().winner(quiet.bus());
-    quiet.hush();
+    quiet.hush(unmasked, true);
     quiet.stir();
-    try std.testing.expect(!quiet.hushed);
+    try std.testing.expect(!quiet.holds(unmasked));
+}
+
+test "a masked pend hushes for its key only (RA8EMU-437)" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{ .pending = systick };
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = ram.view() };
+    var masked = unmasked;
+    masked.primask = 1;
+    try std.testing.expect((try quiet.source().winner(quiet.bus())) != null);
+    quiet.hush(masked, false);
+    try std.testing.expect(quiet.holds(masked));
+    try std.testing.expect(!quiet.holds(unmasked));
+    var deeper = masked;
+    deeper.depth = 1;
+    deeper.running = 3;
+    try std.testing.expect(!quiet.holds(deeper));
+    _ = try quiet.bus().readWord(fixture.scs + 0xD0C);
+    try std.testing.expect(quiet.holds(masked));
+    quiet.stir();
+    try std.testing.expect(!quiet.holds(masked));
 }

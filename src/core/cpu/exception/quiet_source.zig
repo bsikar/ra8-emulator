@@ -23,6 +23,22 @@ pub const peripheral_base: u32 = 0x4000_0000;
 /// itself reads AIRCR and SHCSR every instruction (RA8EMU-418).
 pub const ppb_base: u32 = 0xE000_0000;
 
+/// What a poll's decision read outside the bus. A hush holds only while
+/// this is unchanged: CPSIE, MSR BASEPRI or an exception entry or return
+/// the source never heard about all move it (RA8EMU-437).
+pub const Key = struct {
+    primask: u32,
+    basepri: u32,
+    faultmask: u32,
+    depth: usize,
+    running: u16,
+
+    fn same(self: Key, other: Key) bool {
+        return self.primask == other.primask and self.basepri == other.basepri and
+            self.faultmask == other.faultmask and self.depth == other.depth and self.running == other.running;
+    }
+};
+
 pub const QuietSource = struct {
     /// The source that actually knows: the NVIC model on the board.
     inner: Source,
@@ -30,8 +46,13 @@ pub const QuietSource = struct {
     memory: bus_mod.Bus,
     /// The last answer was "nothing pending" and nothing has stirred since.
     settled: bool = false,
-    /// Set by `hush`: the last poll found no winner and no pending fault.
+    /// The source has answered and nothing has stirred since.
+    answered: bool = false,
+    /// Set by `hush`: the last poll could take nothing, under `key`.
     hushed: bool = false,
+    /// The hush found nothing pending at all, so it holds whatever the key.
+    clear: bool = false,
+    key: Key = .{ .primask = 0, .basepri = 0, .faultmask = 0, .depth = 0, .running = 0 },
 
     pub fn source(self: *QuietSource) Source {
         return .{ .ctx = self, .vtable = &.{ .winner = winner, .taken = taken, .returned = returned } };
@@ -45,14 +66,25 @@ pub const QuietSource = struct {
     /// Forget the last answer: the next poll asks the inner source again.
     pub fn stir(self: *QuietSource) void {
         self.settled = false;
+        self.answered = false;
         self.hushed = false;
     }
 
-    /// The poll found nothing at all pending, a UsageFault included: until
-    /// the next stir it need not look again (RA8EMU-429). Only a settled
+    /// The poll could take nothing: nothing pending (RA8EMU-429), or a
+    /// pend that cannot preempt under `key` (RA8EMU-437). Until the next
+    /// stir or a changed key it need not look again. Only an answered
     /// source hushes, so a pend found since the last stir is never held.
-    pub fn hush(self: *QuietSource) void {
-        if (self.settled) self.hushed = true;
+    pub fn hush(self: *QuietSource, key: Key, clear: bool) void {
+        if (!self.answered) return;
+        self.hushed = true;
+        self.clear = clear;
+        self.key = key;
+    }
+
+    /// True while the last hush stands for `key`. A clear hush stands for
+    /// any key, so the caller may skip building it.
+    pub fn holds(self: *const QuietSource, key: Key) bool {
+        return self.hushed and (self.clear or self.key.same(key));
     }
 
     fn winner(ctx: *anyopaque, through: bus_mod.Bus) bus_mod.Error!?Entry {
@@ -62,6 +94,7 @@ pub const QuietSource = struct {
         // The inner source's own reads went through `through` and stirred;
         // its answer is what settles.
         self.settled = found == null;
+        self.answered = true;
         return found;
     }
 
