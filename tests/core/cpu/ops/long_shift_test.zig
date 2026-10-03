@@ -75,3 +75,24 @@ test "the forms this slice leaves alone" {
 test "the group is checked against Unicorn" {
     try std.testing.expect(long_shift.group.oracle);
 }
+
+// Ported from tests/core/long_shift_test.zig (the Unicorn seam), run
+// against the core's groups (RA8EMU-252). The register, single-register
+// saturating and pair saturating cases sit in long_shift_reg_test.zig,
+// long_shift_sat_test.zig and long_shift_sat64_test.zig.
+
+test "seam port: lsll r2, r3, #2 shifts the pair" {
+    try std.testing.expectEqual(@as(u64, 0x0000_0007_0000_0004), try run(0xEA52, 0x038F, 0xC000_0001, 1));
+}
+
+test "seam port: ordinary shifted-register encodings are no long shift" {
+    const ops = ra8.core.cpu.ops;
+    // orr.w r3, r3, r2, lsr #30 and and.w r3, r2, pc, lsl #2
+    for ([_][2]u16{ .{ 0xEA43, 0x7392 }, .{ 0xEA02, 0x038F } }) |pair| {
+        const instr = wide(pair[0], pair[1]);
+        try std.testing.expect(long_shift.group.decode(instr) == null);
+        try std.testing.expect(ops.long_shift_reg.group.decode(instr) == null);
+        try std.testing.expect(ops.long_shift_sat.group.decode(instr) == null);
+        try std.testing.expect(ops.long_shift_sat64.group.decode(instr) == null);
+    }
+}

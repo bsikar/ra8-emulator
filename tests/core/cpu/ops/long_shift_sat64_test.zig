@@ -152,3 +152,14 @@ test "no earlier group claims these encodings" {
 test "the group is checked against Unicorn" {
     try std.testing.expect(sat.group.oracle);
 }
+
+test "seam port: uqshll r2, r3, #5 clamps the pair and sets Q" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+    cpu.regs.low[3] = 0x0800_0000;
+    const instr: ra8.core.cpu.instr.Instr = .{ .address = 0, .hw1 = 0xEA53, .hw2 = 0x134F, .size = 4 };
+    const exec = ra8.core.cpu.ops.long_shift_sat64.group.decode(instr) orelse return error.NotClaimed;
+    try exec(&cpu, instr);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), cpu.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), cpu.regs.low[3]);
+    try std.testing.expect(cpu.regs.xpsr & (1 << 27) != 0);
+}
