@@ -215,3 +215,14 @@ test "the console tap hands a finished line to the --until wait" {
     try std.testing.expect(tap.waiting().?.met());
     try std.testing.expect(!(mod.console_output.Tap{}).wanted());
 }
+
+test "--attach queues catalog models in the order asked" {
+    const none = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expectEqual(@as(usize, 0), none.attach_count);
+    const two = try parse(&[_][]const u8{ "emu", "a.elf", "--attach", "max17048@i2c:touch@0x37", "--attach", "lsm6dso@i2c:riic@0x6A" });
+    try std.testing.expectEqual(@as(usize, 2), two.attach_count);
+    try std.testing.expectEqualStrings("max17048", two.attaches[0].name);
+    try std.testing.expectEqualStrings("lsm6dso", two.attaches[1].name);
+    try std.testing.expectError(error.UnknownModel, parse(&[_][]const u8{ "emu", "a.elf", "--attach", "nope@i2c:riic@0x40" }));
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--attach" }));
+}
