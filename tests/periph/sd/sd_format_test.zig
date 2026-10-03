@@ -146,10 +146,10 @@ test "a refused width writes nothing at all" {
     try std.testing.expectEqual(@as(usize, 0), img.held());
 }
 
-test "the smallest FAT32 card is bigger than the card this model comes up with" {
+test "the default card is big enough for FAT32" {
     const mib = format.smallestCardMib(.fat32) orelse return error.TestExpectedSize;
     const default_mib = image.geometry.default_capacity_blocks / megabyte_blocks;
-    try std.testing.expect(mib > default_mib);
+    try std.testing.expect(default_mib >= mib);
 }
 
 test "the smallest card the search names really does format" {
@@ -180,8 +180,8 @@ test "a FAT16 card has a ceiling and the card above it is refused" {
     );
 }
 
-test "the default card is too small for FAT32 and fine for FAT16" {
+test "the default card formats as FAT16 and FAT32" {
     const blocks = image.geometry.default_capacity_blocks;
-    try std.testing.expectError(error.TooFewClusters, format.solve(.fat32, blocks));
+    _ = try format.solve(.fat32, blocks);
     _ = try format.solve(.fat16, blocks);
 }

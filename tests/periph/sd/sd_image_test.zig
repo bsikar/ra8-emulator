@@ -73,9 +73,11 @@ test "a blank card takes another size, and a card holding data does not" {
     try std.testing.expectEqual(@as(u32, 128 * 1024), img.capacity_blocks);
 }
 
-test "the CSD capacity field matches the card's own size" {
+test "a fresh card is 64 MiB and its CSD reports that capacity" {
     var blank = unit();
     defer blank.deinit();
+    try std.testing.expectEqual(@as(u32, 128 * 1024), blank.capacity_blocks);
+    try std.testing.expectEqual(@as(u32, 127), blank.csize());
     try std.testing.expectEqual(
         image.geometry.default_capacity_blocks / image.geometry.csize_unit - 1,
         blank.csize(),
