@@ -359,7 +359,7 @@ fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !
     board.part = options.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
-    board.wire.ask(allocator, options.attaches[0..options.attach_count]);
+    board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);

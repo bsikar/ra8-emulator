@@ -1,5 +1,5 @@
 //! The parts the catalog knows: the Click module's LSM6DSO IMU and MAX17048
-//! fuel gauge, each wrapped as a model that plugs into an I2C endpoint.
+//! fuel gauge on I2C, the e-paper panel on SPI and the AT modem on a UART.
 //!
 //! The part files stay about the part. This file only says how one is made,
 //! freed, and put on a line at an address, so a second gauge at 0x37 is the
@@ -7,11 +7,15 @@
 const std = @import("std");
 const catalog = @import("catalog.zig");
 const endpoint = @import("endpoint.zig");
+const eink = @import("../eink/eink.zig");
 const lsm6dso = @import("../i3c/i3c_lsm6dso.zig");
 const max17048 = @import("../i3c/i3c_max17048.zig");
+const modem = @import("../modem/modem.zig");
 
 pub const imu_name = "lsm6dso";
 pub const gauge_name = "max17048";
+pub const panel_name = "eink";
+pub const modem_name = "modem";
 
 /// Every model a run can name.
 pub const all: catalog.Catalog = .{ .models = &models };
@@ -19,7 +23,39 @@ pub const all: catalog.Catalog = .{ .models = &models };
 const models = [_]catalog.Model{
     I2cPart(lsm6dso.Imu).model(imu_name),
     I2cPart(max17048.Gauge).model(gauge_name),
+    ChannelPart(eink.Panel, .spi).model(panel_name),
+    ChannelPart(modem.Modem, .uart).model(modem_name),
 };
+
+/// A part with a default state and a `device()` on the SPI or SCI seam. The
+/// channel is the board's business (src/board/plug.zig), so bind only wraps.
+fn ChannelPart(comptime State: type, comptime kind: endpoint.Kind) type {
+    return struct {
+        fn model(comptime name: []const u8) catalog.Model {
+            return .{ .name = name, .kind = kind, .createFn = Owned(State).create, .destroyFn = Owned(State).destroy, .bindFn = bind };
+        }
+
+        fn bind(state: *anyopaque, _: endpoint.Endpoint) catalog.Device {
+            const part: *State = @ptrCast(@alignCast(state));
+            return @unionInit(catalog.Device, @tagName(kind), part.device());
+        }
+    };
+}
+
+/// Make and free one default-initialised `State`.
+fn Owned(comptime State: type) type {
+    return struct {
+        fn create(allocator: std.mem.Allocator) catalog.Error!*anyopaque {
+            const state = try allocator.create(State);
+            state.* = .{};
+            return state;
+        }
+
+        fn destroy(allocator: std.mem.Allocator, state: *anyopaque) void {
+            allocator.destroy(@as(*State, @ptrCast(@alignCast(state))));
+        }
+    };
+}
 
 /// A part with a default state and a `device()` on the I2C seam, moved to
 /// the endpoint's address.
