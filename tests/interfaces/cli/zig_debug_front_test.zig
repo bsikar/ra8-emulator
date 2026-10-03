@@ -58,7 +58,9 @@ test "--cpu zig is taken anywhere on a debugger command line" {
     try std.testing.expectEqual(.zig, last.cpu);
     try std.testing.expectEqual(@as(u16, 3333), last.mode.gdb);
     const plain = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug" }).?;
-    try std.testing.expectEqual(.unicorn, plain.cpu);
+    try std.testing.expectEqual(.zig, plain.cpu);
+    const old = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug", "--cpu", "unicorn" }).?;
+    try std.testing.expectEqual(.unicorn, old.cpu);
 }
 
 test "an unknown --cpu is bad usage for the debugger and left alone for a run" {

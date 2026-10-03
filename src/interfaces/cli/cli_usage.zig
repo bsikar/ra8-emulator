@@ -11,7 +11,7 @@ pub const text =
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
     \\                    [--profile] [--profile-folded FILE]
-    \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
+    \\                    [--cpu1 IMAGE.elf] [--cpu zig|unicorn|lockstep]
     \\                    [--ns IMAGE.elf] [--no-bus-errors]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,

@@ -34,12 +34,12 @@ expected=$here/dualcore_expected.md
 
 pairs=$(mktemp -d)
 trap 'rm -rf "$pairs"' EXIT
-if [ "$cpu" != unicorn ]; then
-    expected=$here/dualcore_expected_$cpu.md
-    printf '#!/bin/bash\nexec "%s" "$@" --cpu %s\n' "$emulator" "$cpu" >"$pairs/emulator.sh"
-    chmod +x "$pairs/emulator.sh"
-    emulator=$pairs/emulator.sh
-fi
+[ "$cpu" != unicorn ] && expected=$here/dualcore_expected_$cpu.md
+# Always name the backend: the emulator's own default moved to zig
+# (RA8EMU-471), so an unwrapped run would no longer be the Unicorn one.
+printf '#!/bin/bash\nexec "%s" "$@" --cpu %s\n' "$emulator" "$cpu" >"$pairs/emulator.sh"
+chmod +x "$pairs/emulator.sh"
+emulator=$pairs/emulator.sh
 for cpu1 in "$dir"/*_cpu1.elf; do
     [ -e "$cpu1" ] || continue
     cpu0=${cpu1%_cpu1.elf}.elf

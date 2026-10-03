@@ -180,7 +180,7 @@ pub const Options = struct {
     /// `--ns`: the Non-Secure companion image, loaded beside the main one.
     ns_path: ?[]const u8 = null,
     /// `--cpu`: which CPU runs the image; src/core/cpu/choice.zig.
-    cpu: cpu_choice.Choice = .unicorn,
+    cpu: cpu_choice.Choice = .zig,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
