@@ -1,6 +1,7 @@
 //! `--frame-out PATH`: what the panel shows when the run ends, as a PNG
 //! (RA8EMU-73). It scans the GLCDC once more with a capture armed on the
 //! output stage, after the report has printed, so the report is unchanged.
+//! A run that left no frame still gets the board view, round a dark panel.
 //! The PNG is the board view: the panel inside the EK-RA8D2 outline with
 //! the user LEDs as the pins left them (board_view.zig).
 const std = @import("std");
@@ -9,10 +10,9 @@ const gpio = @import("../../periph/gpio/gpio.zig");
 const png = @import("png.zig");
 pub const board_view = @import("board_view.zig");
 
-pub const Error = error{NoFrame};
-
-/// The panel's size and the size of the view that was written.
-pub const Saved = struct { width: u32, height: u32, view: board_view.Size };
+/// The panel's size, the size of the view that was written, and whether
+/// the GLCDC gave a frame (when it did not, the panel is drawn dark).
+pub const Saved = struct { width: u32, height: u32, view: board_view.Size, frame: bool };
 
 /// A panel has no transparency: what reaches the glass is the colour, so
 /// every pixel goes out opaque. `rgba` holds four bytes per pixel.
@@ -22,24 +22,32 @@ pub fn opaqueRgba(pixels: []const u32, rgba: []u8) png.Error!void {
     while (at < rgba.len) : (at += png.bytes_per_pixel) rgba[at] = 0xFF;
 }
 
-/// Scan the panel into a buffer and write it to `path` as a PNG.
+/// Scan the panel into a buffer and write the board view to `path` as a
+/// PNG. A run with no frame (an LED-only example) still gets the view,
+/// with the LEDs as the pins left them round a dark panel.
 pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8) !Saved {
     const unit = &board.display;
-    const width = unit.panelWidth();
-    const height = unit.panelHeight();
-    if (width == 0 or height == 0) return Error.NoFrame;
+    const scanned = unit.panelWidth() != 0 and unit.panelHeight() != 0;
+    const width = if (scanned) unit.panelWidth() else board_view.panel_width;
+    const height = if (scanned) unit.panelHeight() else board_view.panel_height;
     const pixels = try allocator.alloc(u32, @as(usize, width) * height);
     defer allocator.free(pixels);
     @memset(pixels, 0);
-    unit.output.capture = .{ .pixels = pixels, .width = width, .height = height };
-    defer unit.output.capture = null;
-    _ = unit.scanOut() orelse return Error.NoFrame;
+    const frame = scanned and scan(board, pixels, width, height);
+    if (!frame) @memset(pixels, 0);
     const view = board_view.size(width, height);
     const canvas = try allocator.alloc(u32, @as(usize, view.width) * view.height);
     defer allocator.free(canvas);
     board_view.compose(canvas, pixels, width, height, &ledsOf(board));
     try write(allocator, canvas, view, path);
-    return .{ .width = width, .height = height, .view = view };
+    return .{ .width = width, .height = height, .view = view, .frame = frame };
+}
+
+fn scan(board: *Board, pixels: []u32, width: u32, height: u32) bool {
+    const unit = &board.display;
+    unit.output.capture = .{ .pixels = pixels, .width = width, .height = height };
+    defer unit.output.capture = null;
+    return unit.scanOut() != null;
 }
 
 /// The user LEDs as the pins left them at the end of the run.
@@ -60,13 +68,13 @@ fn write(allocator: std.mem.Allocator, canvas: []const u32, view: board_view.Siz
     try buffered.flush();
 }
 
-/// One line for the end of the run: where the frame went, or why none did.
+/// One line for the end of the run: what went into the view, and where.
 pub fn report(out: anytype, board: *Board, path: ?[]const u8) !void {
     const target = path orelse return;
-    const saved = save(std.heap.page_allocator, board, target) catch |err| switch (err) {
-        Error.NoFrame => return out.print("frame-out: the panel showed no frame, {s} not written\n", .{target}),
-        else => return err,
-    };
+    const saved = try save(std.heap.page_allocator, board, target);
+    if (!saved.frame) return out.print("frame-out: no panel frame, the LEDs on a {d}x{d} board view written to {s}\n", .{
+        saved.view.width, saved.view.height, target,
+    });
     try out.print("frame-out: {d}x{d} panel on a {d}x{d} board view written to {s}\n", .{
         saved.width, saved.height, saved.view.width, saved.view.height, target,
     });
