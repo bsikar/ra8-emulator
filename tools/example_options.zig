@@ -54,6 +54,8 @@
 //! display_pal_animation get a second so their probes read a painted frame.
 //! lcd_color_cycle gets two: its backdrop is red near 1.0 s, green by 1.6 s
 //! and blue by 2.0 s (RA8EMU-489).
+//! usb_host_file_ops mounts a drive on the HS host jack: a blank FAT12
+//! stick there and two seconds let it finish all nine file steps.
 const std = @import("std");
 
 pub const Extra = struct {
@@ -75,6 +77,7 @@ const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
 const one_second = [_][]const u8{ "--ms", "1000" };
 const fifth_second = [_][]const u8{ "--ms", "200" };
 const two_seconds = [_][]const u8{ "--ms", "2000" };
+const usb_stick = [_][]const u8{ "--usb-disk", "blank", "--ms", "2000" };
 
 pub const card_images = [_]CardImage{
     .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
@@ -101,6 +104,7 @@ pub const extras = [_]Extra{
     .{ .image = "smbus_demo.elf", .flags = &click },
     .{ .image = "tz_nsc_cgc_usb.elf", .flags = &usb_loop },
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
+    .{ .image = "usb_host_file_ops.elf", .flags = &usb_stick },
     .{ .image = "widget_keyboard_demo.elf", .flags = &one_second },
 };
 

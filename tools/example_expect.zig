@@ -13,6 +13,9 @@
 //! says a real exchange needs a transceiver and a responder, so a sent frame
 //! is the whole of what it can show. main.c prints "frame sent" after each
 //! frame and "LIN TX error" when the driver refuses one.
+//!
+//! usb_host_file_ops: main.c prints "ALL FILE OPS PASSED" after the ninth
+//! step, and the step runner prints "fileops: FAIL" when one goes wrong.
 const std = @import("std");
 const hil_conf = @import("hil_conf.zig");
 
@@ -29,6 +32,11 @@ const table = [_]Expect{
         .image = "lin_commander_hil.elf",
         .pass = "lin_commander_hil: frame sent",
         .fail = "lin_commander_hil: LIN TX error",
+    },
+    .{
+        .image = "usb_host_file_ops.elf",
+        .pass = "ra8d2 fileops: ALL FILE OPS PASSED",
+        .fail = "ra8d2 fileops: FAIL",
     },
 };
 

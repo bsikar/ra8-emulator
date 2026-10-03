@@ -36,3 +36,10 @@ test "a README verdict decides a row the console alone leaves unknown" {
     row.hil = expect.judge(found, row.console);
     try std.testing.expectEqual(table.Verdict.pass, row.verdict());
 }
+
+test "usb_host_file_ops passes on the ninth step and fails on a refused one" {
+    const found = expect.find("usb_host_file_ops.elf").?;
+    try std.testing.expectEqual(.pass, expect.judge(found, "ra8d2 fileops: ALL FILE OPS PASSED").?);
+    try std.testing.expectEqual(.fail, expect.judge(found, "ra8d2 fileops: FAIL write").?);
+    try std.testing.expect(expect.judge(found, "ra8d2 fileops: [9/9] unlink USBDONE.TXT") == null);
+}
