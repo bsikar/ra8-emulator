@@ -88,6 +88,8 @@ pub const entries = [_]Entry{
     .{ .group = "mve_vpred", .print = @import("mve_vpred.zig").print, .predicated = @import("mve_vpred.zig").printPredicated },
     .{ .group = "mve_vctp", .print = @import("mve_vctp.zig").print },
     .{ .group = "mve_vdup", .print = @import("mve_vdup.zig").print, .predicated = @import("mve_vdup.zig").printPredicated },
+    .{ .group = "mve_lane_pair", .print = @import("mve_lane_pair.zig").print },
+    .{ .group = "mve_lane_move", .print = @import("mve_lane_move.zig").print },
     .{ .group = "mve_vpst", .print = @import("mve_vpst.zig").print },
     .{ .group = "mve_vcmp", .print = @import("mve_vcmp.zig").print, .predicated = @import("mve_vcmp.zig").printPredicated },
     .{ .group = "mve_vcmp_fp", .print = @import("mve_vcmp_fp.zig").print, .predicated = @import("mve_vcmp_fp.zig").printPredicated },
