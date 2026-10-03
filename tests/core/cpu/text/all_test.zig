@@ -22,6 +22,8 @@ test {
     _ = @import("extend_wide_test.zig");
     _ = @import("extend_b16_test.zig");
     _ = @import("divide_test.zig");
+    _ = @import("mul_acc_test.zig");
+    _ = @import("long_mul_test.zig");
     _ = @import("blxns_test.zig");
     _ = @import("hint_test.zig");
     _ = @import("it_test.zig");

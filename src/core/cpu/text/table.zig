@@ -44,6 +44,8 @@ pub const entries = [_]Entry{
     .{ .group = "extend_wide", .print = @import("extend_wide.zig").print },
     .{ .group = "extend_b16", .print = @import("extend_b16.zig").print },
     .{ .group = "divide", .print = @import("divide.zig").print },
+    .{ .group = "mul_acc", .print = @import("mul_acc.zig").print },
+    .{ .group = "long_mul", .print = @import("long_mul.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
