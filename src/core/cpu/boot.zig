@@ -6,6 +6,7 @@
 //! encoding no group in src/core/cpu/ops/table.zig claims. This file prints
 //! one line saying which, so a corpus sweep can tell how far each image
 //! gets; main then prints the board's own report (report/run.zig, zigCore).
+const std = @import("std");
 const engine = @import("../engine.zig");
 const EngineBus = @import("engine_bus.zig").EngineBus;
 const BoardBus = @import("board_bus.zig").BoardBus;
@@ -18,6 +19,7 @@ const lockstep_dual = @import("lockstep/dual.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("decode_cache.zig").DecodeCache;
+const BlockCache = @import("block_cache.zig").BlockCache;
 const sau = @import("../../periph/sau.zig");
 const SauSource = @import("sau_source.zig").SauSource;
 const DataGate = @import("data_gate.zig").Gate;
@@ -69,6 +71,8 @@ pub const Wiring = struct {
     /// Direct MRAM/SRAM access is enabled only when the run has no memory
     /// watch or fault instrumentation that must observe each access.
     fast_memory: bool = false,
+    /// `--blocks`: run from formed blocks (RA8EMU-405).
+    blocks: bool = false,
     /// CPU1 under `--cpu lockstep --cpu1` (RA8EMU-235).
     cpu1: ?*lockstep_dual.Cpu1 = null,
     /// The `--ns` half, loaded into lockstep's own engine beside the main
@@ -93,7 +97,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null);
+    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null, false);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
@@ -104,10 +108,10 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -117,6 +121,10 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
+    const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
+    defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
+    if (formed) |cache| cache.init();
+    cpu.blocks = formed;
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;
     var check: mpu_check.Check = undefined;

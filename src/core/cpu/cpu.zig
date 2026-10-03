@@ -8,6 +8,7 @@ const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
 const decode = @import("decode.zig");
 const decode_cache = @import("decode_cache.zig");
+const block_cache = @import("block_cache.zig");
 const cond = @import("cond.zig");
 const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
@@ -87,6 +88,9 @@ pub const Cpu = struct {
     quiet: ?*exception.quiet_source.QuietSource = null,
     /// Decodes kept per address on the board; null decodes every step.
     decoded: ?*decode_cache.DecodeCache = null,
+    /// Formed blocks, under `--blocks` (RA8EMU-405); null fetches and
+    /// decodes every step.
+    blocks: ?*block_cache.BlockCache = null,
     /// The local exclusive monitor: the address a load-exclusive tagged.
     exclusive: ?u32 = null,
     /// The other Security state's banked registers, which Secure code reaches
@@ -119,20 +123,31 @@ pub const Cpu = struct {
         self.waiting = null;
     }
 
+    /// The instruction at `address` and its decode: from the block cache
+    /// when there is one and it answers, else fetched and decoded here.
+    fn fetchDecoded(self: *Cpu, address: u32) bus.Error!Fetched {
+        if (self.blocks) |cache| if (cache.next(self.bus, self.profile, address)) |kept|
+            return .{ .instr = kept.instr, .found = kept.hit };
+        const instr = try Instr.fetch(self.bus, address);
+        const found = if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr);
+        return .{ .instr = instr, .found = found };
+    }
+
     /// One instruction, or the reason there was none.
     pub fn step(self: *Cpu) ?Stop {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
             return self.fetchRefused(address);
-        const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
+        const fetched = self.fetchDecoded(address) catch return .{ .bus_fault = address };
+        const instr = fetched.instr;
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
             return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
         if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))
             return self.usageFault(.invstate, address, .{ .invalid_state = address });
-        const found = if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr);
+        const found = fetched.found;
         // An encoding whose IT condition failed never runs, so it is skipped
         // whether or not any group knows it.
         if (found == null and runs) {
@@ -264,6 +279,8 @@ pub const Cpu = struct {
         return .count;
     }
 };
+
+const Fetched = struct { instr: Instr, found: ?decode.Hit };
 
 /// The four stack pointers an instruction may move, taken before it runs so
 /// a write that crosses MSPLIM or PSPLIM can be undone.

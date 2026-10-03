@@ -63,4 +63,5 @@ test "an encoding no group knows is not cached" {
 test {
     _ = @import("block_test.zig");
     _ = @import("block_end_test.zig");
+    _ = @import("block_cache_test.zig");
 }
