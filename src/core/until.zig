@@ -5,12 +5,11 @@
 //! window, and a firmware that idles in a busy-wait delay after printing
 //! its verdict (reflow_webp_demo spins on DWT_CYCCNT every frame) burns
 //! that window an instruction at a time. `--until` ends it the way the bench
-//! does: the first finished console line that contains TEXT ends the run at
-//! the next chunk boundary.
+//! does: the first finished console line that contains TEXT ends the run
+//! immediately after the instruction that completed that line.
 //!
-//! A line is matched when it finishes, from the console sink, and the run
-//! is ended from the boundary, the same place `--stop-sym` is honoured, so
-//! the stop lands between instructions. The text is a plain substring, as
+//! A line is matched when it finishes, from the console sink. The stop
+//! lands between instructions. The text is a plain substring, as
 //! the confs' HIL_EXPECT is (it carries `+` and `.` literally).
 const std = @import("std");
 
