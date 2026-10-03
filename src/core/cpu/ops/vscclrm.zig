@@ -4,6 +4,12 @@
 //! registers; clear, singles: d = Vd:D and imm8 registers. An empty run
 //! clears VPR alone.
 //!
+//! With FPCCR.ASPEN set and CONTROL_S.SFPA clear there is no Secure FP
+//! context to scrub, so the instruction is a NOP: no ExecuteFPCheck, no
+//! context creation, nothing cleared. Otherwise ExecuteFPCheck runs first.
+//! A veneer whose Secure callee used no FP reaches its VSCCLRM this way, and
+//! CONTROL has to come out unchanged (RA8EMU-372).
+//!
 //! Not modelled yet: the UNDEFINED check in Non-secure state (the Zig core
 //! carries no current Security state, RA8EMU-41) and the CPACR NOCP check
 //! (RA8EMU-145), the same gap the other FP groups have.
@@ -13,6 +19,8 @@
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const control_bits = @import("../regs.zig").control_bits;
+const fp_gate = @import("fp_gate.zig");
 
 pub const encodings = struct {
     /// hw1 with D ([6]) masked out.
@@ -53,7 +61,14 @@ fn decode(instr: Instr) ?op.Exec {
     return if (run(instr) != null) exec else null;
 }
 
+/// True when VSCCLRM has no Secure FP context to clear and does nothing.
+pub fn idle(cpu: *const Cpu) bool {
+    return cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & control_bits.sfpa == 0;
+}
+
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (idle(cpu)) return;
+    try fp_gate.check(cpu);
     const r = run(instr).?;
     var i: u6 = 0;
     while (i < r.count) : (i += 1) cpu.fp.bank.writeS(@intCast(r.first + i), 0);

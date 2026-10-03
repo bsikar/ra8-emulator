@@ -157,4 +157,5 @@ test {
     _ = @import("fpcxt_resume_test.zig");
     _ = @import("tt_test.zig");
     _ = @import("tt_hook_test.zig");
+    _ = @import("vscclrm_hook_test.zig");
 }
