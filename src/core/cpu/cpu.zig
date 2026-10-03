@@ -120,7 +120,7 @@ pub const Cpu = struct {
     pub fn step(self: *Cpu) ?Stop {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
-        if (self.mpu) |m| if (m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
+        if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
             return self.fetchRefused(address);
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
