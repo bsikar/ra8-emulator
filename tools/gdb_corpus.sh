@@ -13,8 +13,8 @@
 # FUNCTION defaults to main and must be one CPU0 reaches. On CPU1 the
 # session breaks a few instructions past where it stopped and steps from
 # there, so it needs no symbol of the second image's.
-# CPU=zig serves CPU0 from the Zig core (--cpu zig, RA8EMU-110); the Zig
-# debugger takes no second core yet, so CPU1_ELF is refused there.
+# CPU=zig serves both cores from the Zig core (--cpu zig, RA8EMU-110), CPU1
+# as thread 2 (RA8EMU-338).
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
@@ -27,10 +27,6 @@ second=${3:-}
 function=${4:-main}
 gdb=${5:-gdb-multiarch}
 cpu=${CPU:-unicorn}
-if [ "$cpu" = zig ] && [ -n "$second" ]; then
-    echo "gdb_corpus: CPU=zig takes CPU0 only, leave out CPU1_ELF" >&2
-    exit 2
-fi
 port=$((4500 + RANDOM % 400))
 work=$(mktemp -d)
 trap 'kill "$pid" 2>/dev/null || true; rm -rf "$work"' EXIT

@@ -81,8 +81,12 @@ fn serve(allocator: std.mem.Allocator, core: *const engine.Engine, target: *zig_
 
 /// CPU1 under the debugger: its Zig core, its own stop machine, and its
 /// image kept for symbols, parked in the session until `core 1`.
+/// Its loads and stores go through a watch bus of its own, so a watch set
+/// on thread 2 stops CPU1.
 const Other = struct {
     machine: stop_machine.Machine = .{},
+    driver: step_hook.Driver = undefined,
+    watching: watch_bus.WatchBus = undefined,
     bytes: []u8 = &.{},
 
     fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, core: *engine.Engine, board: *Board, path: []const u8, target: *zig_script.ZigScript) !void {
@@ -90,7 +94,10 @@ const Other = struct {
         errdefer allocator.free(self.bytes);
         try pair.open(allocator, core, board, path);
         target.other_image = try elf.Image.init(self.bytes);
-        target.session.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine };
+        self.driver = .{ .machine = &self.machine };
+        self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };
+        pair.core.cpu.bus = self.watching.view();
+        target.session.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine, .watch = &self.watching };
     }
 
     fn close(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver) void {

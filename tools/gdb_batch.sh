@@ -20,8 +20,8 @@
 # gdb's console (RA8EMU-77).
 # Exits 0 when every expected line showed, 1 when one is missing, and 77
 # (skipped) when gdb or zig is not installed. ZIG overrides the zig binary.
-# CPU=zig serves every session from the Zig core (--cpu zig, RA8EMU-118)
-# and leaves out the two-core session, which that core cannot debug yet.
+# CPU=zig serves every session from the Zig core (--cpu zig, RA8EMU-118),
+# the two-core one included (RA8EMU-338).
 
 set -euo pipefail
 
@@ -162,8 +162,6 @@ expect one '<fw.counter>:' 'Breakpoint 1, ' 'fw.target (x=0) at fw.zig:' '<fw.ta
     'in fw.reset () at fw.zig:8' 'Hardware watchpoint 2' \
     'Old value = 100' 'New value = 101' '[Inferior 1 (Remote target) detached]'
 
-sessions="one cycle stop itm"
-if [ "$cpu" != zig ]; then
 sessions="one two cycle stop itm"
 serve two --cpu1 fw.elf -- 'info threads' 'thread 2' 'info registers pc' \
     'break target' continue stepi bt "x/1xw &'fw.counter'" delete \
@@ -172,7 +170,6 @@ expect two '[Switching to thread 2 (Thread 2)]' '<fw.reset>' \
     'Thread 2 hit Breakpoint 1, ' 'in fw.reset () at fw.zig:8' \
     '<fw.counter>:' 'Thread 2 hit Hardware watchpoint 2' 'New value = ' \
     '[Inferior 1 (Remote target) detached]'
-fi
 
 # RA8EMU-98: a Cycle Counter comparator armed from gdb stops the run with
 # DFSR.DWTTRAP (bit 2) set. RA8EMU-101: on the instruction that brings
