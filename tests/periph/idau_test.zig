@@ -92,3 +92,31 @@ test "no answer names an IDAU region" {
     const map = idau.Map{};
     try std.testing.expectEqual(@as(?u8, null), map.answer(0x2200_0000).region);
 }
+
+test "RA8P1 SRAM0 and SRAM1 each follow their own boundary" {
+    var sram = SramUnit{};
+    sram.sabar = .{ 0x000C_0000, 0x0014_0000, 0x001F_E000, 0x001F_E000 };
+    const map = idau.Map.forPart(&sram, true);
+    try std.testing.expectEqual(State.secure, map.answer(0x320B_FFFC).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x320C_0000).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x320F_FFFC).state);
+    try std.testing.expectEqual(State.secure, map.answer(0x3210_0000).state);
+    try std.testing.expectEqual(State.secure, map.answer(0x3213_FFFC).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x3214_0000).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x3219_FFFC).state);
+}
+
+test "RA8P1 words 2 and 3 guard nothing past SRAM1" {
+    var sram = SramUnit{};
+    sram.sabar = .{ 0, 0, 0x001F_E000, 0x001F_E000 };
+    const map = idau.Map.forPart(&sram, true);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x321A_0000).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x3218_0000).state);
+}
+
+test "the RA8D2 map reads the same address through a different bank" {
+    var sram = SramUnit{};
+    sram.sabar = .{ 0x0008_0000, 0x0014_0000, 0x0010_0000, 0x0018_0000 };
+    try std.testing.expectEqual(State.non_secure, idau.Map.forPart(&sram, false).answer(0x3210_0000).state);
+    try std.testing.expectEqual(State.secure, idau.Map.forPart(&sram, true).answer(0x3210_0000).state);
+}

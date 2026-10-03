@@ -38,10 +38,28 @@ pub const ra8d2_banks = [cpscu_sram.bank_count]Bank{
     .{ .first = 0x18_0000, .size = 0x2_0000 },
 };
 
+/// RA8P1 (RA8EMU-390): SRAM0 1024 KiB and SRAM1 640 KiB, 0x2200_0000..
+/// 0x221A_0000, the datasheet's 1664 KB (ra8_board_ra8p1 linker_script.ld
+/// and ra8_board_memmap.h). SRAMSABARn guards SRAMn, as the RA8D2 HUM 58.2.1
+/// names each word after its bank; the RA8P1 HUM is not in hand, so that
+/// pairing is carried over. With no SRAM2 or SRAM3, words 2 and 3 guard
+/// nothing (an empty span never matches).
+pub const ra8p1_banks = [cpscu_sram.bank_count]Bank{
+    .{ .first = 0x00_0000, .size = 0x10_0000 },
+    .{ .first = 0x10_0000, .size = 0xA_0000 },
+    .{ .first = 0x1A_0000, .size = 0 },
+    .{ .first = 0x1A_0000, .size = 0 },
+};
+
 pub const Map = struct {
     /// The SRAMSABARn words. With none, SRAM follows the bit-28 rule alone.
     sram: ?*const cpscu_sram.Unit = null,
     banks: *const [cpscu_sram.bank_count]Bank = &ra8d2_banks,
+
+    /// The map for one part: RA8P1 banks when `ra8p1`, RA8D2 otherwise.
+    pub fn forPart(sram: *const cpscu_sram.Unit, ra8p1: bool) Map {
+        return .{ .sram = sram, .banks = if (ra8p1) &ra8p1_banks else &ra8d2_banks };
+    }
 
     /// The IDAU's answer for `address`.
     pub fn answer(self: Map, address: u32) sau_attr.Idau {

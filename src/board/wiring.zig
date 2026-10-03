@@ -331,5 +331,5 @@ fn attachProtected(self: *Board) !void {
     self.chip_attribution = cpscu.Unit.init(&self.protection);
     try self.bus.add(self.chip_attribution.block());
     for (self.sram_attribution.blocks()) |window| try self.bus.add(window);
-    self.idau = .{ .sram = &self.sram_attribution };
+    self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.part == .ra8p1);
 }
