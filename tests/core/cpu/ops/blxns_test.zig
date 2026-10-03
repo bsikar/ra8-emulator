@@ -19,7 +19,7 @@ test "BLXNS claims every low and high Rm but SP and PC, and leaves BXNS and BLX"
     try std.testing.expect(blxns.group.decode(.{ .address = 0, .hw1 = 0x4784, .hw2 = 0, .size = 4 }) == null);
 }
 
-test "BLXNS r0 branches to the target, stays Secure and leaves the return in LR" {
+test "BLXNS r0 branches to the target, becomes Non-secure and leaves the return in LR" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
     const sp = cpu.regs.sp();
@@ -29,8 +29,20 @@ test "BLXNS r0 branches to the target, stays Secure and leaves the return in LR"
     try blxns.group.decode(instr).?(&cpu, instr);
     try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
     try std.testing.expectEqual(at + 2 | 1, cpu.regs.lr);
-    try std.testing.expectEqual(sp, cpu.regs.sp()); // VTOR_NS unreadable here
+    try std.testing.expectEqual(ra8.core.banked.State.non_secure, cpu.banked.current);
+    try std.testing.expectEqual(sp, cpu.banked.other.msp); // the Secure stack is kept
+}
+
+test "BLXNS to a target with bit 0 set is a BLX and stays Secure" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    const sp = cpu.regs.sp();
+    cpu.regs.low[0] = fixture.handler | 1;
+    const instr: ra8.core.cpu.instr.Instr = .{ .address = fixture.code, .hw1 = 0x4784, .size = 2 };
+    try blxns.group.decode(instr).?(&cpu, instr);
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
     try std.testing.expectEqual(ra8.core.banked.State.secure, cpu.banked.current);
+    try std.testing.expectEqual(sp, cpu.regs.sp()); // VTOR_NS unreadable here
 }
 
 test "no Non-secure stack when VTOR_NS cannot be read" {

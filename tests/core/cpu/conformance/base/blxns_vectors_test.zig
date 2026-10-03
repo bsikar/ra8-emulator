@@ -44,10 +44,10 @@ fn run(in: vectors.In) vectors.Out {
     const instr: cpu_ns.instr.Instr = .{ .address = 0x1000, .hw1 = in.hw1, .size = @intCast(in.size) };
     const exec = cpu_ns.ops.blxns.group.decode(instr) orelse return .{ .claimed = false };
     exec(&cpu, instr) catch return .{ .claimed = false, .pc = 1, .lr = 1, .sp = 1 };
-    return .{ .pc = cpu.regs.pc, .lr = cpu.regs.lr, .sp = cpu.regs.sp() };
+    return .{ .pc = cpu.regs.pc, .lr = cpu.regs.lr, .sp = cpu.regs.sp(), .secure = cpu.banked.current == .secure };
 }
 
-test "blxns matches the flat-domain model" {
+test "blxns matches the model" {
     try vector.expectAll(vectors.In, vectors.Out, run, &vectors.all);
 }
 
