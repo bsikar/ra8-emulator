@@ -11,18 +11,17 @@ const Cpu = @import("../cpu.zig").Cpu;
 const active = @import("active.zig");
 const entry = @import("entry.zig");
 const fault = @import("fault.zig");
+const quiet_source = @import("quiet_source.zig");
 
 /// Take the pending winner if it may preempt. True when one was taken.
 pub const Error = fault.Error;
 
 pub fn poll(cpu: *Cpu) Error!bool {
-    if (cpu.quiet) |q| if (q.hushed) return false;
+    if (cpu.quiet) |q| if (q.hushed and (q.clear or q.holds(key(cpu)))) return false;
+    const now = key(cpu);
     const external = if (cpu.source) |from| try from.winner(cpu.bus) else null;
     const pending_fault = fault.pendingUsage(cpu.bus);
-    if (external == null and pending_fault == null) {
-        if (cpu.quiet) |q| q.hush();
-        return false;
-    }
+    if (external == null and pending_fault == null) return hush(cpu, now, true);
     const split = prigroup(cpu.bus);
     const fault_first = if (pending_fault) |pending|
         external == null or active.group(pending.priority, split) < active.group(external.?.priority, split)
@@ -32,8 +31,8 @@ pub fn poll(cpu: *Cpu) Error!bool {
     const selected_fault = fault_first;
     const r = &cpu.regs;
     const candidate = winner orelse return false;
-    if (active.group(candidate.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return false;
-    if (cpu.active.full()) return false;
+    if (active.group(candidate.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return hush(cpu, now, false);
+    if (cpu.active.full()) return hush(cpu, now, false);
     // An image with no handler for what it pended keeps the pend rather than
     // branching to address zero.
     cpu.entering_non_secure = candidate.non_secure;
@@ -43,6 +42,20 @@ pub fn poll(cpu: *Cpu) Error!bool {
     if (selected_fault) fault.clearUsagePending(cpu.bus);
     try enterInternal(cpu, candidate, r.pc, false, !selected_fault);
     return true;
+}
+
+/// The mask registers and active stack a poll's decision rests on.
+fn key(cpu: *const Cpu) quiet_source.Key {
+    const r = &cpu.regs;
+    const running: u16 = if (cpu.active.running()) |top| top.number else 0xFFFF;
+    return .{ .primask = r.primask, .basepri = r.basepri, .faultmask = r.faultmask, .depth = cpu.active.depth, .running = running };
+}
+
+/// Nothing can be taken now; let the quiet source skip the polls that
+/// would find the same until something changes.
+fn hush(cpu: *Cpu, now: quiet_source.Key, clear: bool) bool {
+    if (cpu.quiet) |q| q.hush(now, clear);
+    return false;
 }
 
 /// AIRCR.PRIGROUP. A bus with no SCS behind it reads as 0, every bit but
