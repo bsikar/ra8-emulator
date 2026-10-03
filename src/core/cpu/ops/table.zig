@@ -102,6 +102,7 @@ pub const groups = [_]op.Group{
     @import("mve_float_cvt_int.zig").group,
     @import("mve_float_cvt_fixed.zig").group,
     @import("mve_float_rint.zig").group,
+    @import("mve_float_maxnm.zig").group,
     @import("ldrd_strd.zig").group,
     @import("exclusive.zig").group,
     @import("acq_rel.zig").group,
