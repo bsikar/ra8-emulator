@@ -303,7 +303,7 @@ table above. A group listed as missing does not fail the build yet.
 | imm_arith | 35 |
 | branch_wide | 45 |
 | branch_future | missing |
-| ldst_wide | missing |
+| ldst_wide | 47 |
 | ldr_literal_wide | 33 |
 | preload | 29 |
 | fp_arith | missing |
