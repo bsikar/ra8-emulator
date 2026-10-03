@@ -106,3 +106,43 @@ test "an exception mid-block leaves it and resumes at the interrupted instructio
     try std.testing.expectEqual(@as(u32, 4), cache.next(ram.view(), m85, 4).?.instr.address);
     try std.testing.expectEqual(@as(u64, 0), cache.stale);
 }
+
+const SramRam = struct {
+    bytes: [64]u8 = [_]u8{0} ** 64,
+    const base = ra8.core.memmap.sram_base;
+
+    fn view(self: *SramRam) bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+        const self: *SramRam = @ptrCast(@alignCast(ctx));
+        if (address < base or address - base + into.len > self.bytes.len) return bus.Error.Unmapped;
+        @memcpy(into, self.bytes[address - base ..][0..into.len]);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, from: []const u8) bus.Error!void {
+        const self: *SramRam = @ptrCast(@alignCast(ctx));
+        if (address < base or address - base + from.len > self.bytes.len) return bus.Error.Unmapped;
+        @memcpy(self.bytes[address - base ..][0..from.len], from);
+    }
+};
+
+test "a store over a cached block through the bus drops it and the new code runs" {
+    var ram: SramRam = .{};
+    std.mem.writeInt(u16, ram.bytes[0..2], 0x2001, .little); // movs r0,#1
+    std.mem.writeInt(u16, ram.bytes[2..4], 0x2102, .little); // movs r1,#2
+    std.mem.writeInt(u16, ram.bytes[4..6], 0xE7FE, .little); // b .
+    const cache = try freshCache();
+    defer std.testing.allocator.destroy(cache);
+    var view = ram.view();
+    view.code = &cache.lines;
+    _ = cache.next(view, m85, SramRam.base).?;
+    var patch: [2]u8 = undefined;
+    std.mem.writeInt(u16, &patch, 0x2207, .little); // movs r2,#7
+    try view.write(SramRam.base + 2, &patch);
+    const after = cache.next(view, m85, SramRam.base + 2).?;
+    try std.testing.expectEqual(@as(u64, 1), cache.dropped);
+    try std.testing.expectEqual(@as(u16, 0x2207), after.instr.hw1);
+    try std.testing.expectEqual(@as(u64, 0), cache.stale);
+}

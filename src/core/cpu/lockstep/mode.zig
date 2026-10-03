@@ -59,7 +59,10 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     // `--blocks` puts the block path under the oracle too (RA8EMU-405).
     const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
     defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
-    if (formed) |cache| cache.init();
+    if (formed) |cache| {
+        cache.init();
+        cpu.bus.code = &cache.lines;
+    }
     cpu.blocks = formed;
     // SG, BXNS and TT need the SAU the firmware programs (RA8EMU-388).
     var guard = lockstep_attribution.over(&partitions);
