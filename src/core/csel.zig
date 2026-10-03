@@ -42,6 +42,8 @@ pub const clrm = @import("clrm.zig");
 pub const clrm_hook = @import("clrm_hook.zig");
 pub const fp_context = @import("fp_context.zig");
 pub const fpcxt_resume = @import("fpcxt_resume.zig");
+/// TT from the board's SAU rather than the CPU model's (RA8EMU-348).
+pub const tt_hook = @import("tt_hook.zig");
 
 /// Which tail runs when the condition fails.
 pub const Kind = enum { sel, inc, inv, neg };

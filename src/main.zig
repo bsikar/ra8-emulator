@@ -69,6 +69,8 @@ fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts,
         board.console_input.enabled = true;
     }
     const written = try attachAll(core, image, parts, options);
+    // TT answers from the SAU the firmware programmed: src/core/tt_hook.zig.
+    _ = try ra8.core.csel.tt_hook.attach(core.handle, image, &board.partitions);
     ra8.board.option_memory.apply(board, core.*);
     return written;
 }
