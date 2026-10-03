@@ -16,6 +16,12 @@
 //!
 //! The model is pure: the engine adapters own when ticks are charged and
 //! where a pend lands.
+//!
+//! `pends` (RA8EMU-430) says which banked system exceptions are pending and
+//! in which state: PendSV always, and SysTick when the part has two timers,
+//! pend in their own ICSR (Non-secure copy at 0xE002_ED04, RA8EMU-415) and
+//! take their priority from their own SHPR3 (PRI_14 [23:16], PRI_15 [31:24],
+//! Non-secure copy at 0xE002_ED20). DDI0553A.k D1.2: ICSR, SHPR3.
 const clocks = @import("../periph/clocks.zig");
 const scs_alias = @import("../periph/scs_alias.zig");
 
@@ -101,4 +107,48 @@ fn registerAt(offset: u32) Register {
         2 => .cvr,
         else => .calib,
     };
+}
+
+pub const pendsv: u16 = 14;
+pub const systick: u16 = 15;
+
+const icsr_pendsvset: u32 = 1 << 28;
+
+/// One pending banked system exception and the state it is taken to.
+pub const Pend = struct { number: u16, priority: u8, view: View };
+
+/// The ICSR and SHPR3 words of one Security state's bank.
+pub const Words = struct { icsr: u32, shpr3: u32 };
+
+/// Up to four pends, Secure first; `len` says how many are filled.
+pub const Pends = struct {
+    items: [4]Pend = undefined,
+    len: u3 = 0,
+
+    pub fn slice(self: *const Pends) []const Pend {
+        return self.items[0..self.len];
+    }
+
+    fn add(self: *Pends, pend: Pend) void {
+        self.items[self.len] = pend;
+        self.len += 1;
+    }
+};
+
+/// The banked system exceptions pending in `secure` and `non_secure`. With
+/// one SysTick timer, SysTick is not banked: only the Secure PENDSTSET and
+/// PRI_15 count.
+pub fn pends(secure: Words, non_secure: Words, two_timers: bool) Pends {
+    var out = Pends{};
+    for ([_]View{ .secure, .non_secure }) |view| {
+        const words = if (view == .secure) secure else non_secure;
+        if (words.icsr & icsr_pendsvset != 0) {
+            out.add(.{ .number = pendsv, .priority = @truncate(words.shpr3 >> 16), .view = view });
+        }
+        if (view == .non_secure and !two_timers) continue;
+        if (words.icsr & clocks.icsr_pendstset != 0) {
+            out.add(.{ .number = systick, .priority = @truncate(words.shpr3 >> 24), .view = view });
+        }
+    }
+    return out;
 }
