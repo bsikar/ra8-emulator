@@ -8,6 +8,7 @@ const vdup = ra8.core.cpu.ops.mve_vdup;
 const qreg = ra8.core.mve.qreg;
 const vpt = ra8.core.mve.vpt;
 const decode = ra8.core.cpu.decode;
+const it_state = ra8.core.cpu.it_state;
 
 fn wide(hw1: u16, hw2: u16) Instr {
     return .{ .address = 0, .hw1 = hw1, .hw2 = hw2, .size = 4 };
@@ -49,6 +50,18 @@ test "vdup inside a VPT block writes only the active lanes and advances" {
     try run(&cpu, 0xEEA0, 0x1B10);
     try std.testing.expectEqual(@as(u128, 0xFFFF_FFFF) << 32, qreg.read(&cpu.fp.bank, 0));
     try std.testing.expect(!vpt.inBlock(cpu.fp.vpr));
+}
+
+test "vdup resumes after beat A0 and clears ECI" {
+    var cpu: Cpu = .{ .bus = undefined };
+    cpu.regs.set(1, 0xFFFF_FFFF);
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x10);
+    try run(&cpu, 0xEEA0, 0x1B10);
+    try std.testing.expectEqual(
+        @as(u128, 0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_0000_0000),
+        qreg.read(&cpu.fp.bank, 0),
+    );
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
 }
 
 test "the table routes VDUP here" {

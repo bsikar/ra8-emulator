@@ -40,5 +40,24 @@ test "BKPT, LE and LETP keep ECI; DLS, DLSTP and LCTP refuse it" {
 }
 
 test "beat-wise MVE groups honour ECI" {
-    try std.testing.expectEqual(Eci.beat_wise, try kind(wide(0xEF22, 0x0844))); // vadd.i32
+    for ([_]Instr{
+        wide(0xEF22, 0x0844), // vadd.i32
+        wide(0xFE71, 0x0F4D), // vpst
+        wide(0xEEA0, 0x1B10), // vdup.32
+        wide(0xFE41, 0x0F83), // vpt.u8
+        wide(0xEE73, 0x1F04), // vpt.f32
+    }) |instr| try std.testing.expectEqual(Eci.beat_wise, try kind(instr));
+}
+
+test "FP multiples restart while single transfers refuse ECI" {
+    for ([_]Instr{
+        wide(0xEC92, 0x0A02), // vldmia r2, {s0-s1}
+        wide(0xEC82, 0x0A02), // vstmia r2, {s0-s1}
+        wide(0xED2D, 0x0A02), // vpush {s0-s1}
+        wide(0xECBD, 0x0A02), // vpop {s0-s1}
+    }) |instr| try std.testing.expectEqual(Eci.restarts, try kind(instr));
+    for ([_]Instr{
+        wide(0xED90, 0x0A00), // vldr s0, [r0]
+        wide(0xED80, 0x0A00), // vstr s0, [r0]
+    }) |instr| try std.testing.expectEqual(Eci.refuses, try kind(instr));
 }

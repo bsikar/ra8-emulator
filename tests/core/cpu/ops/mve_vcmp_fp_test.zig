@@ -68,6 +68,15 @@ test "vpt.f32 ge, q1, q2 opens a one-instruction block" {
     try std.testing.expect(vpt.inBlock(cpu.fp.vpr));
 }
 
+test "floating VPT resumed after A0 opens its remaining mask and retires ECI" {
+    var cpu = loaded();
+    cpu.regs.xpsr = ra8.core.cpu.it_state.put(cpu.regs.xpsr, 0x10);
+    try run(&cpu, 0xEE73, 0x1F04);
+    try std.testing.expectEqual(@as(u4, 0b1000), cpu.fp.vpr.mask01);
+    try std.testing.expectEqual(@as(u4, 0b1000), cpu.fp.vpr.mask23);
+    try std.testing.expectEqual(@as(u8, 0), ra8.core.cpu.it_state.get(cpu.regs.xpsr));
+}
+
 test "the table routes the float compares here and the integer ones elsewhere" {
     for ([_][2]u16{ .{ 0xEE33, 0x0F04 }, .{ 0xFE33, 0x0F04 }, .{ 0xEE33, 0x1F62 }, .{ 0xEE73, 0xFFC2 } }) |e| {
         const hit = decode.decode(wide(e[0], e[1])) orelse return error.NotClaimed;

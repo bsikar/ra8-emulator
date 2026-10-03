@@ -84,6 +84,13 @@ fn isSingle(b: Bits) bool {
     return b.p == 1 and b.w == 0;
 }
 
+/// True for decoded floating-point load/store multiples, not VLDR/VSTR
+/// or memory system-register forms.
+pub fn isMultiple(instr: Instr) bool {
+    if (isSystemRegister(instr)) return false;
+    return !isSingle(bits(instr));
+}
+
 /// The plan for `base`, Rn's value (or, for a PC base, the PC it reads).
 pub fn plan(b: Bits, base: u32) transfer.Plan {
     if (isSingle(b)) return transfer.single(.{ .u = b.u, .rn = b.rn, .base = base, .d = b.d, .imm8 = b.imm8, .double = b.double, .store = !b.load });

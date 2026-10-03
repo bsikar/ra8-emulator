@@ -61,8 +61,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr).?;
     const a = mve.qreg.read(&cpu.fp.bank, f.qn);
     const b = if (f.scalar) scalar_ops.splat(cpu.regs.get(f.rm), f.size) else mve.qreg.read(&cpu.fp.bank, f.qm);
-    const done = ~mve_beats.pending(cpu);
+    const pending = mve_beats.pending(cpu);
+    const done = ~pending;
     cpu.fp.vpr.p0 = (cpu.fp.vpr.p0 & done) | (mve.compare.compare(a, b, f.size, f.cond) & mve_beats.mask(cpu));
     mve_beats.finish(cpu);
-    if (f.mask != 0) cpu.fp.vpr = mve.vpt.open(cpu.fp.vpr, f.mask);
+    if (f.mask != 0) cpu.fp.vpr = mve.vpt.openBeats(cpu.fp.vpr, f.mask, pending);
 }

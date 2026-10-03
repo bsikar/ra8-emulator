@@ -15,6 +15,15 @@ pub fn open(vpr: Vpr, mask: u4) Vpr {
     return out;
 }
 
+/// Opens only mask pairs whose odd beat has not completed.
+/// DDI0553 E2.1.377 updates MASK01 on beat 1 and MASK23 on beat 3.
+pub fn openBeats(vpr: Vpr, mask: u4, pending: u16) Vpr {
+    var out = vpr;
+    if (pending & 0x00F0 != 0) out.mask01 = mask;
+    if (pending & 0xF000 != 0) out.mask23 = mask;
+    return out;
+}
+
 /// Whether either beat pair is still in a VPT block.
 pub fn inBlock(vpr: Vpr) bool {
     return vpr.mask01 != 0 or vpr.mask23 != 0;
