@@ -21,21 +21,23 @@ const sau = @import("../../../periph/sau.zig");
 const mpu = @import("../../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../../periph/fault_clear.zig");
 const report = @import("report.zig");
+const Cpu1 = @import("dual.zig").Cpu1;
 
 /// `theirs` is the engine the caller already loaded and reset.
-pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears) !u8 {
+pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1) !u8 {
     var mine = try engine.Engine.open();
     defer mine.close();
     try mine.mapBoardRam();
     _ = try mine.loadImage(image);
-    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle);
+    if (cpu1) |side| try side.attach(&mine);
+    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1);
 }
 
 /// Both engines already hold the image. Returns 0 when the budget was spent
 /// with no divergence, 1 otherwise.
 /// `settle` is the oracle's fault-clear latch; with one, both sides clear
 /// CFSR/HFSR/SFSR within the storing instruction.
-pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears) !u8 {
+pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1) !u8 {
     var log: periph_log.Log = .{};
     var partitions = sau.Sau.init();
     var regions = mpu.Mpu.init();
@@ -56,11 +58,13 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     const taps = try tap_hook.attach(theirs.handle, &log);
     defer tap_hook.detach(theirs.handle, taps);
     const gpa = std.heap.page_allocator;
-    var lock: run_mod.Run = .{ .settle = settle };
+    var lock: run_mod.Run = .{ .settle = settle, .between = if (cpu1) |side| side.between() else null };
     defer lock.deinit(gpa);
     const ended = try lock.go(gpa, &cpu, theirs, &log, budget);
     try report.write(out, &lock, ended);
     try out.print("lockstep: {d} peripheral access(es) replayed and matched\n", .{log.matched});
     try lock.counts.writeTable(out);
-    return if (ended == .budget) 0 else 1;
+    if (cpu1) |side| try side.write(out);
+    const cpu1_clean = if (cpu1) |side| side.clean() else true;
+    return if (ended == .budget and cpu1_clean) 0 else 1;
 }

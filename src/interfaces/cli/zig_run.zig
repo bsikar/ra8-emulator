@@ -14,6 +14,7 @@ const report_run = @import("report/run.zig");
 const report_dumps = @import("report/dumps.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
+const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -68,6 +69,15 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         clock.cpu1 = &pair;
     }
     defer if (clock.cpu1) |second| second.close();
+    var checked: lockstep_dual.Cpu1 = undefined;
+    const checked_path = if (options.cpu == .lockstep) options.cpu1_path else null;
+    if (checked_path) |named| {
+        checked.open(std.heap.page_allocator, core, board, named) catch |err| {
+            std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
+            return 1;
+        };
+    }
+    defer if (checked_path != null) checked.close();
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
@@ -76,7 +86,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         listener = .{ .tracer = found };
     }
     const wrap = if (tracer != null) listener.wrap() else null;
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap });
+    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap, .cpu1 = if (checked_path != null) &checked else null });
     if (options.cpu == .zig) {
         try report_run.zigCore(out, board, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
