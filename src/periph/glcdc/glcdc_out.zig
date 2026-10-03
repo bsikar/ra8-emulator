@@ -130,6 +130,20 @@ pub const Shadow = struct {
     }
 };
 
+/// A host-side copy of what leaves the stage, row-major, for the board view
+/// (RA8EMU-73). Null unless a frame is being saved, so other runs are unchanged.
+pub const Capture = struct {
+    pixels: []u32,
+    width: u32,
+    height: u32,
+
+    /// Keep one pixel; anything outside the buffer is dropped.
+    pub fn put(self: Capture, column: u32, row: u32, colour: u32) void {
+        if (column >= self.width or row >= self.height) return;
+        self.pixels[@as(usize, row) * self.width + column] = colour;
+    }
+};
+
 /// The output stage: the shadows, what was latched into the live copy, the
 /// gamma curves, and what the pixels did on the way through.
 pub const Stage = struct {
@@ -152,6 +166,8 @@ pub const Stage = struct {
     narrowed: u32 = 0,
     /// Pixels brightness or contrast pinned at an end of the range.
     clipped: u32 = 0,
+    /// Where the pixels are copied while a frame is saved (RA8EMU-73).
+    capture: ?Capture = null,
 
     pub fn quiet(self: *const Stage) bool {
         return self.writes == 0 and self.pixels == 0;
@@ -218,6 +234,7 @@ pub const Stage = struct {
         if (moved) self.clipped +%= 1;
         if (patterned) self.dithered +%= 1;
         if (dropped and self.live.format().narrows()) self.narrowed +%= 1;
+        if (self.capture) |grab| grab.put(column, row, result);
         return result;
     }
 

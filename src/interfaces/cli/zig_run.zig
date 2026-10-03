@@ -13,6 +13,7 @@ const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
 const json_run = @import("report/json_run.zig");
 const report_dumps = @import("report/dumps.zig");
+const frame_out = @import("frame_out.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
@@ -116,6 +117,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
             try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
         }
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
+        try frame_out.report(out, board, options.frame_out);
     }
     return status;
 }

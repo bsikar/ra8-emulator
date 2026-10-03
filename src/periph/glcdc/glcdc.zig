@@ -324,12 +324,12 @@ pub const Glcdc = struct {
     /// layers programmed onto it reach, which is all this model had before
     /// the timing block and is still right for a unit test that only
     /// programs a layer.
-    fn panelWidth(self: *Glcdc) u32 {
+    pub fn panelWidth(self: *Glcdc) u32 {
         if (self.timing.timing()) |found| return @min(found.h_active, max_dimension);
         return self.extent(true);
     }
 
-    fn panelHeight(self: *Glcdc) u32 {
+    pub fn panelHeight(self: *Glcdc) u32 {
         if (self.timing.timing()) |found| return @min(found.v_active, max_dimension);
         return self.extent(false);
     }
