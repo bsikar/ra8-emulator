@@ -50,4 +50,5 @@ test {
     _ = @import("exclusive_test.zig");
     _ = @import("acq_rel_test.zig");
     _ = @import("table_branch_test.zig");
+    _ = @import("branch_wide_test.zig");
 }
