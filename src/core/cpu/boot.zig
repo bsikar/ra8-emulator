@@ -32,6 +32,7 @@ const code_lines = @import("code_lines.zig");
 const FpState = @import("fpu/state.zig").State;
 const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
+const Until = @import("../until.zig").Until;
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
 /// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
@@ -61,6 +62,8 @@ pub const Wrap = struct {
 /// into, and the fault status words its stores clear.
 pub const Wiring = struct {
     boundary: ?Boundary = null,
+    /// A finished console line that ends the run at its next boundary.
+    until: ?*Until = null,
     /// A listener put in front of the core's bus and exception source.
     wrap: ?Wrap = null,
     /// A listener called with the address of each retired instruction.
@@ -103,7 +106,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null, false);
+    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
@@ -114,10 +117,10 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks, wiring.until);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -137,6 +140,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     defer if (formed) |cache| code_lines.unwatch(&cache.lines);
     cpu.blocks = formed;
     cpu.retire_listener = retire_listener;
+    cpu.until = until;
     cpu.attribution = source;
     var check: mpu_check.Check = undefined;
     var gate: DataGate = undefined;
@@ -159,21 +163,25 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
-    const stopped = try stretches(&cpu, budget, boundary);
+    const stopped = try stretches(&cpu, budget, boundary, until);
     if (ran) |count| count.* = cpu.retired;
     const code = try report(out, cpu, stopped);
+    if (until) |wait| if (wait.reached) {
+        try out.print("stopped clean on the console line \"{s}\", pc 0x{X:0>8}\n", .{ wait.needle, cpu.regs.pc });
+    };
     if (board) |b| try fault_status.line(out, b.faults());
     return code;
 }
 
 /// The budget in stretches, each closed by the boundary. A stretch the core
 /// stops inside is not closed: it never ran to its edge.
-pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary) !cpu_mod.Stop {
+pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until) !cpu_mod.Stop {
     const edge = boundary orelse return cpu.run(budget);
     var left = budget;
     while (left > 0) {
         const width: u32 = @intCast(@min(left, @max(1, edge.widthFn(edge.context))));
         const stopped = cpu.run(width);
+        if (until) |wait| if (wait.reached) return .count;
         if (stopped != .count) return stopped;
         // The firmware armed SysTick inside this stretch: like the Unicorn
         // run loop, charge it one instruction and no time, and cut the next

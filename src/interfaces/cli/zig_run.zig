@@ -22,6 +22,7 @@ const profile = @import("../../debug/profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
+const Until = @import("../../core/until.zig").Until;
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -67,7 +68,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 }
 
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
-pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table) !u8 {
+pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
@@ -119,6 +120,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .cpu1 = if (checked_path != null) &checked else null,
         .retire_listener = retire_listener,
         .ns_image = if (options.cpu == .lockstep) try report_dumps.nonSecure(std.heap.page_allocator, options) else null,
+        .until = if (options.cpu == .zig) until else null,
     });
     if (options.cpu == .zig) {
         // The core lent its retired count while it ran; `ran` holds the

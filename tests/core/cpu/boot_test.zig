@@ -5,6 +5,7 @@ const memmap = ra8.core.memmap;
 const boot = ra8.core.cpu.boot;
 const elf = ra8.core.elf;
 const Engine = ra8.core.engine.Engine;
+const Until = ra8.core.stop.until.Until;
 
 /// A vector table at the base of SRAM pointing at code right after it:
 /// bf00 nop ; f3af 8000 nop.w ; ba80, unallocated on Armv8-M.
@@ -114,6 +115,35 @@ test "a stretch the core stops inside is never closed" {
     const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 1), status);
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
+}
+
+test "a console success reached before an unknown encoding ends the Zig run" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadTiny(&core);
+    var edges: Edges = .{ .width = 5 };
+    var until = Until{ .needle = "PASS", .seen = true };
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(
+        stream.writer(),
+        &core,
+        &periph,
+        memmap.sram_base,
+        100,
+        null,
+        .{ .boundary = edges.boundary(), .until = &until },
+    );
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expect(until.reached);
+    try std.testing.expectEqual(@as(u32, 0), edges.closes);
+    try std.testing.expectEqualStrings(
+        "zig core: ran 1 instructions clean, pc 0x2200000A\nstopped clean on the console line \"PASS\", pc 0x2200000A\n",
+        stream.getWritten(),
+    );
 }
 
 /// A vector table at the base of SRAM pointing at an idle loop:
