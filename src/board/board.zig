@@ -137,6 +137,8 @@ pub const Board = struct {
     shutoff: poeg.Poeg,
     protection: prcr.Prcr,
     backup: bkup.Bkup,
+    /// VBTBPCR1: the battery power-supply switch stop.
+    battery_switch: bkup.pcr1.Pcr1,
     /// The peripheral clock source selects, built in attach() for the same
     /// reason the two below are: each needs this board's own protection.
     branches: ckcr.Ckcr,

@@ -267,6 +267,8 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
 fn attachProtected(self: *Board) !void {
     self.backup = bkup.Bkup.init(&self.protection);
     try self.bus.add(self.backup.block());
+    self.battery_switch = bkup.pcr1.Pcr1.init(&self.protection);
+    try self.bus.add(self.battery_switch.block());
     self.oscillators = oscsf.Oscillators.init(&self.protection);
     try self.bus.add(self.oscillators.block());
     self.subclk = subclock.Unit.init(&self.protection);
