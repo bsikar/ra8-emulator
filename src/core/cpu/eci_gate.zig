@@ -3,9 +3,11 @@
 //! a beat-wise MVE instruction honours ECI itself, a load/store multiple
 //! restarts from the start with ICI cleared (the IMPDEF choice QEMU makes),
 //! LE, LETP and BKPT leave it, and anything else takes INVSTATE before it
-//! runs.
+//! runs. A reserved ECI value faults a beat-wise instruction too
+//! (RA8EMU-452).
 const op = @import("op.zig");
 const Itstate = @import("it_state.zig").Itstate;
+const eci = @import("mve/eci.zig");
 
 pub const Action = enum { run, fault, restart };
 
@@ -20,6 +22,7 @@ pub fn action(it: Itstate, use: op.Eci) Action {
     return switch (use) {
         .refuses => .fault,
         .restarts => .restart,
-        .beat_wise, .keeps => .run,
+        .beat_wise => if (eci.fromIt(it) == .reserved) .fault else .run,
+        .keeps => .run,
     };
 }

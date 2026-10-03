@@ -24,6 +24,13 @@ test "with ECI set each kind of instruction gets its own action" {
     try std.testing.expectEqual(gate.Action.run, gate.action(0x50, .keeps));
 }
 
+test "a reserved ECI value faults a beat-wise instruction" {
+    for ([_]u8{ 0x30, 0x60, 0x70, 0x80, 0xF0 }) |it| {
+        try std.testing.expectEqual(gate.Action.fault, gate.action(it, .beat_wise));
+    }
+    try std.testing.expectEqual(gate.Action.run, gate.action(0x40, .beat_wise));
+}
+
 fn boot(ram: *fixture.Ram, hw1: u16, hw2: ?u16) !ra8.core.cpu.cpu.Cpu {
     ram.putHalf(fixture.code, hw1);
     if (hw2) |second| ram.putHalf(fixture.code + 2, second);
@@ -42,6 +49,18 @@ test "a NOP run with ECI set takes UsageFault INVSTATE before it runs" {
     try std.testing.expectEqual(invstate, ram.word(ra8.core.memmap.scb.cfsr));
     try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.msp + 6 * 4));
     try std.testing.expectEqual(@as(u64, 0), cpu.retired);
+}
+
+test "vadd.i32 with a reserved ECI takes INVSTATE before it writes Q0" {
+    var ram: fixture.Ram = .{};
+    var cpu = try boot(&ram, 0xEF22, 0x0844); // vadd.i32 q0, q1, q2
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x30);
+    const before: u128 = 0xAAAA_AAAA_AAAA_AAAA_AAAA_AAAA_AAAA_AAAA;
+    ra8.core.mve.qreg.write(&cpu.fp.bank, 0, before);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(invstate, ram.word(ra8.core.memmap.scb.cfsr));
+    try std.testing.expectEqual(before, ra8.core.mve.qreg.read(&cpu.fp.bank, 0));
 }
 
 test "LDM restarts from the start with ICI cleared" {
