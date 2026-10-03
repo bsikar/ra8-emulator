@@ -193,6 +193,7 @@ pub const Channel = struct {
                 kept &= ~flag.iccr2.rs;
             }
         } else if (value & flag.iccr2.sp != 0) {
+            self.rx.stopAfterNext();
             if (self.busy and !self.stop.request(self.stopHeld())) {
                 self.closeTransfer(registry);
             }

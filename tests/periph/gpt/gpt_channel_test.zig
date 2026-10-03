@@ -31,9 +31,9 @@ test "a running channel advances by one odd step per boundary" {
     var unit = gpt.Gpt.init();
     started(&unit, ch0, 0xFFFF);
     unit.tick();
-    try std.testing.expectEqual(gpt.step_per_tick, unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(gpt.step_per_tick + 1, unit.read(ch0 + gpt.off.gtcnt, 4));
     unit.tick();
-    try std.testing.expectEqual(2 * gpt.step_per_tick, unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(2 * gpt.step_per_tick + 2, unit.read(ch0 + gpt.off.gtcnt, 4));
 }
 
 test "the full 32-bit period still overflows, where dev's sum wrapped first" {
@@ -62,7 +62,7 @@ test "GTPR left at zero counts to the 16-bit wrap" {
     unit.write(ch0 + gpt.off.gtstr, 4, 1);
     try std.testing.expectEqual(gpt.default_period, unit.channels[0].periodOrDefault());
     unit.tick();
-    try std.testing.expectEqual(gpt.step_per_tick, unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(gpt.step_per_tick + 1, unit.read(ch0 + gpt.off.gtcnt, 4));
 }
 
 test "a status store can only clear a flag, never raise one" {
@@ -87,4 +87,22 @@ test "a halfword store lands on its own half of the period" {
     unit.write(ch0 + gpt.off.gtpr, 4, 0x1234_5678);
     unit.write(ch0 + gpt.off.gtpr + 2, 2, 0xABCD);
     try std.testing.expectEqual(@as(u32, 0xABCD_5678), unit.read(ch0 + gpt.off.gtpr, 4));
+}
+
+test "counter reads advance a running channel between boundaries" {
+    var unit = gpt.Gpt.init();
+    started(&unit, ch0, 0xFFFF);
+
+    try std.testing.expectEqual(@as(u32, 1), unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(@as(u32, 2), unit.read(ch0 + gpt.off.gtcnt, 4));
+}
+
+test "counter reads respect the selected prescaler" {
+    var unit = gpt.Gpt.init();
+    unit.write(ch0 + gpt.off.gtcr, 4, 0x0080_0000 | gpt.control.cst);
+
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.read(ch0 + gpt.off.gtcnt, 4));
 }

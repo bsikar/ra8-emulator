@@ -83,6 +83,8 @@ pub const Channel = struct {
     overflows: u32 = 0,
     /// Times a triangle came back to zero. Always zero outside one.
     underflows: u32 = 0,
+    /// PCLKD edges accumulated by counter-register reads since the last sample.
+    read_divider_phase: u32 = 0,
     /// Which way the count is going. Only a triangle ever sets it false.
     rising: bool = true,
     compares: compare.Pair = .{},
@@ -115,11 +117,26 @@ pub const Channel = struct {
     /// times the count reached the period, which is zero for a stopped or
     /// in-range channel.
     pub fn tick(self: *Channel) u32 {
+        return self.advance(clk.step(step_per_tick, self.source()));
+    }
+
+    /// A register read takes bus time too. Advance a divided source once the
+    /// access has accumulated a full prescaler interval.
+    pub fn sampleRead(self: *Channel) void {
+        if (!self.running()) return;
+        self.read_divider_phase += 1;
+        const divider = self.source().divider();
+        if (self.read_divider_phase < divider) return;
+        self.read_divider_phase = 0;
+        _ = self.advance(1);
+    }
+
+    fn advance(self: *Channel, amount: u32) u32 {
         if (!self.running()) return 0;
         const period = self.periodOrDefault();
         const before = self.cnt;
         const kind = self.shape();
-        const moved = md.advance(kind, self.cnt, self.rising, period, clk.step(step_per_tick, self.source()));
+        const moved = md.advance(kind, self.cnt, self.rising, period, amount);
         self.cnt = moved.cnt;
         self.rising = moved.rising;
         if (moved.peaks != 0) {

@@ -188,6 +188,7 @@ pub const Gpt = struct {
         if (offset >= win_span) return 0;
         const channel = &self.channels[offset / stride];
         const local = offset % stride;
+        if (local == off.gtcnt) channel.sampleRead();
         var value: u32 = 0;
         var index: u32 = 0;
         while (index < width and local + index < stride) : (index += 1) {
