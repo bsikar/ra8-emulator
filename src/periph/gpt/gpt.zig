@@ -91,6 +91,9 @@ const win = @import("gpt_window.zig");
 const md = @import("gpt_mode.zig");
 const prd = @import("gpt_period.zig");
 const sync = @import("gpt_sync.zig");
+
+/// The PWM output delay generator: gpt_pdg.zig.
+pub const pdg = @import("gpt_pdg.zig");
 const periph = @import("../registry.zig");
 
 /// The compare pair, reached as `gpt.match` the way the other split blocks in

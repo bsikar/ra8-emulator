@@ -119,6 +119,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .lowpower = ulpt.Ulpt.init(),
         .interval = agt.Agt.init(),
         .pwm = gpt.Gpt.init(),
+        .pwm_delay = gpt.pdg.Pdg.init(),
         .ptp = gptp.Gptp.init(),
         .monitors = lvd.Lvd.init(),
         .watchdog = wdt.Wdt.init(),

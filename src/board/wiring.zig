@@ -303,6 +303,7 @@ fn attachProtected(self: *Board) !void {
     // model can say whether the window to change it is still open.
     self.gpt_clock = gtclkcr.Unit.init(&self.modules);
     try self.bus.add(self.gpt_clock.block());
+    try self.bus.add(self.pwm_delay.block());
     for (0..pll.slots.len) |which| try self.bus.add(self.plls.block(which));
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
