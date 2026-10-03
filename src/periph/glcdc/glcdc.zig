@@ -314,8 +314,8 @@ pub const Glcdc = struct {
     /// register is believed instead.
     fn imply(self: *Glcdc, frame: Framebuffer) void {
         const stage = &self.blends[frame.layer - 1];
-        if (!stage.quiet()) return;
-        stage.* = blend.implied(frame.width, frame.height);
+        if (self.timing.timing()) |found| blend.placeAll(&self.blends, .{ .left = found.h_back, .top = found.v_back });
+        if (stage.quiet()) stage.* = blend.implied(frame.width, frame.height);
     }
 
     /// The panel is as wide and as tall as TCON says it is: the driver

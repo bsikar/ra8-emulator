@@ -8,14 +8,20 @@
 //!   AB1  DISPSEL [1:0]  what this layer contributes: nothing, its own BASE
 //!                       colour, its framebuffer, or its framebuffer blended
 //!                       over whatever is under it
-//!        GRCDISPON b4   the layer's rectangle is driven at all
+//!        GRCDISPON b4   a frame line drawn round the rectangle (not
+//!                       modelled; it never gates the layer)
 //!        ARCON    b12   the alpha rectangle narrows the blend further
-//!   AB2  GRCVW [26:16] / GRCVS [10:0]   rectangle height and top edge
-//!   AB3  GRCHW [26:16] / GRCHS [10:0]   rectangle width and left edge
-//!   AB4  ARCVW / ARCVS                  alpha rectangle, vertically
-//!   AB5  ARCHW / ARCHS                  alpha rectangle, horizontally
+//!   AB2  GRCVS [26:16] / GRCVW [10:0]   rectangle top edge and height
+//!   AB3  GRCHS [26:16] / GRCHW [10:0]   rectangle left edge and width
+//!   AB4  ARCVS / ARCVW                  alpha rectangle, vertically
+//!   AB5  ARCHS / ARCHW                  alpha rectangle, horizontally
+//!
+//! The edges are counted the way the timing generator counts, from the
+//! sync pulse's end: ra8_glcdc.c writes (h_back << 16) | fb_w into AB3 to
+//! put a framebuffer at the panel's first column, so the panel origin is
+//! the back porch TCON was given.
 //!   AB6  ARCRATE [23:16] / ARCCOEF      fade rate and coefficient
-//!   AB7  ARCDEF [15:8]  the alpha applied where the pixel carries none
+//!   AB7  ARCDEF [23:16] the alpha applied where the pixel carries none
 //!        CKON     b0    chroma keying on
 //!   AB8  CKKR/CKKG/CKKB the key colour, matched against the source RGB
 //!   AB9  CKA/CKR/CKG/CKB what a keyed pixel becomes instead
@@ -48,12 +54,12 @@ pub const field = struct {
     pub const dispsel: u32 = 0x3;
     pub const grcdispon: u32 = 1 << 4;
     pub const arcon: u32 = 1 << 12;
-    /// A size or position pair: width in [26:16], start in [10:0].
-    pub const size_shift: u5 = 16;
+    /// A position and size pair: start in [26:16], size in [10:0].
+    pub const start_shift: u5 = 16;
     pub const size_mask: u32 = 0x7FF;
     pub const start_mask: u32 = 0x7FF;
     /// AB7.ARCDEF, the alpha a pixel gets when its format carries none.
-    pub const arcdef_shift: u5 = 8;
+    pub const arcdef_shift: u5 = 16;
     pub const arcdef_mask: u32 = 0xFF;
     /// AB7.CKON.
     pub const ckon: u32 = 1 << 0;
@@ -91,15 +97,33 @@ pub const Rect = struct {
             row >= self.top and row < self.top + self.height;
     }
 
-    /// The pair packed in one AB register: width in [26:16], start in [10:0].
+    /// The pair packed in one AB register: start in [26:16], size in [10:0].
     pub fn fromPair(vertical: u32, horizontal: u32) Rect {
         return .{
-            .left = horizontal & field.start_mask,
-            .top = vertical & field.start_mask,
-            .width = horizontal >> field.size_shift & field.size_mask,
-            .height = vertical >> field.size_shift & field.size_mask,
+            .left = horizontal >> field.start_shift & field.start_mask,
+            .top = vertical >> field.start_shift & field.start_mask,
+            .width = horizontal & field.size_mask,
+            .height = vertical & field.size_mask,
         };
     }
+
+    /// The rectangle counted from the panel's first active pixel instead
+    /// of from the sync pulse. Whatever part starts in the porch is lost.
+    pub fn from(self: Rect, origin: Origin) Rect {
+        return .{
+            .left = self.left -| origin.left,
+            .top = self.top -| origin.top,
+            .width = self.width -| (origin.left -| self.left),
+            .height = self.height -| (origin.top -| self.top),
+        };
+    }
+};
+
+/// Where the panel's first active pixel sits in the counter the AB
+/// registers are written against: the horizontal and vertical back porch.
+pub const Origin = struct {
+    left: u32 = 0,
+    top: u32 = 0,
 };
 
 /// One layer's blend configuration, latched as the driver programs it.
@@ -114,6 +138,10 @@ pub const Layer = struct {
     ab9: u32 = 0,
     /// GRn_BASE, the layer's own background colour.
     base_colour: u32 = 0,
+    /// The panel origin in AB coordinates, set by the GLCDC from TCON.
+    origin: Origin = .{},
+    /// Built by `implied`, so its rectangle already sits at the origin.
+    implicit: bool = false,
     /// Pixels this layer handed to the panel.
     shown: u32 = 0,
     /// Pixels the chroma key replaced.
@@ -136,6 +164,7 @@ pub const Layer = struct {
             off.base => self.base_colour = value,
             else => return false,
         }
+        if (offset == off.ab2 or offset == off.ab3) self.implicit = false;
         return true;
     }
 
@@ -143,21 +172,26 @@ pub const Layer = struct {
         return @enumFromInt(self.ab1 & field.dispsel);
     }
 
-    /// Whether the layer drives its rectangle at all. GRCDISPON clear leaves
-    /// the background plane showing through, whatever DISPSEL says.
-    pub fn driven(self: Layer) bool {
+    /// AB1.GRCDISPON: whether the rectangle's frame line is drawn. The
+    /// in-tree driver never sets it and the layer shows either way.
+    pub fn framed(self: Layer) bool {
         return self.ab1 & field.grcdispon != 0;
     }
 
     /// The rectangle the layer occupies on the panel.
     pub fn rect(self: Layer) Rect {
-        return Rect.fromPair(self.ab2, self.ab3);
+        return self.placed(self.ab2, self.ab3);
     }
 
     /// The alpha rectangle, which narrows the blend inside the layer's own
     /// rectangle. Only consulted when AB1.ARCON is set.
     pub fn alphaRect(self: Layer) Rect {
-        return Rect.fromPair(self.ab4, self.ab5);
+        return self.placed(self.ab4, self.ab5);
+    }
+
+    fn placed(self: Layer, vertical: u32, horizontal: u32) Rect {
+        const raw = Rect.fromPair(vertical, horizontal);
+        return if (self.implicit) raw else raw.from(self.origin);
     }
 
     pub fn alphaRectOn(self: Layer) bool {
@@ -190,7 +224,7 @@ pub const Layer = struct {
     /// standing aside, and painting a plane colour there would blanket the
     /// layer below it.
     pub fn contribution(self: *Layer, colour: ?u32, column: u32, row: u32) ?u32 {
-        if (!self.driven() or !self.rect().covers(column, row)) return null;
+        if (!self.rect().covers(column, row)) return null;
         const mode = self.display();
         if (mode == .background or mode == .transparent) {
             self.hidden += 1;
@@ -233,9 +267,16 @@ pub const Layer = struct {
 pub fn implied(width: u32, height: u32) Layer {
     return .{
         .ab1 = field.grcdispon | @intFromEnum(Display.shown),
-        .ab2 = (height & field.size_mask) << field.size_shift,
-        .ab3 = (width & field.size_mask) << field.size_shift,
+        .ab2 = height & field.size_mask,
+        .ab3 = width & field.size_mask,
+        .implicit = true,
     };
+}
+
+/// Tell every layer where the panel's first active pixel sits, so a layer
+/// the scan does not fetch still reports its rectangle on the panel.
+pub fn placeAll(layers: []Layer, origin: Origin) void {
+    for (layers) |*layer| layer.origin = origin;
 }
 
 /// The same colour, fully opaque.

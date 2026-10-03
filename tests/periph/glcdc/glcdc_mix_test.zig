@@ -47,8 +47,8 @@ fn fill(core: engine.Engine, base: u32, count: u32, colour: u32) !void {
 fn stage(width: u32, height: u32, mode: blend.Display) blend.Layer {
     var out = blend.Layer{};
     out.ab1 = blend.field.grcdispon | @intFromEnum(mode);
-    out.ab2 = (height & blend.field.size_mask) << blend.field.size_shift;
-    out.ab3 = (width & blend.field.size_mask) << blend.field.size_shift;
+    out.ab2 = height & blend.field.size_mask;
+    out.ab3 = width & blend.field.size_mask;
     return out;
 }
 
