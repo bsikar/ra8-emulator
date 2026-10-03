@@ -25,7 +25,7 @@
 //!     texture that shears the wrong way is this decision being wrong.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const clut = @import("drw_clut.zig");
 const memmap = @import("../../core/memmap.zig");
 const texel = @import("drw_texel.zig");
@@ -213,7 +213,7 @@ pub const Source = struct {
 
     /// The colour one pixel of the bounding box starts as, or null when the
     /// texture says not to paint it at all.
-    pub fn sample(self: *Source, memory: engine.Engine, control2_word: u32, column: u32, row: u32) ?u32 {
+    pub fn sample(self: *Source, memory: Guest, control2_word: u32, column: u32, row: u32) ?u32 {
         const format = texel.Format.decode(control2_word);
         const width = format.bits() orelse return null;
         const raw = self.fetch(memory, format, width, control2_word, column, row) orelse return null;
@@ -232,7 +232,7 @@ pub const Source = struct {
     /// texture first.
     fn fetch(
         self: *Source,
-        memory: engine.Engine,
+        memory: Guest,
         format: texel.Format,
         width: u32,
         control2_word: u32,

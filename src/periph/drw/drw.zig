@@ -21,7 +21,7 @@
 //! only thing a narrow store can merge its untouched lanes into.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const blend = @import("drw_blend.zig");
 const cache = @import("drw_cache.zig");
 const dlist = @import("drw_dlist.zig");
@@ -73,7 +73,7 @@ pub const Drw = struct {
     /// Where the pixels go. Held by value because an engine handle is a
     /// handle; a board built by a test that never rasterizes leaves it null
     /// and a render is declined as unbacked rather than silently counted.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
 
     /// The six edge limiters, and the tree CONTROL folds them down.
     limits: limit.Set = .{},
@@ -295,12 +295,12 @@ pub const Drw = struct {
     /// What this pixel starts as: COLOR1 for a plain fill, the texel under
     /// it for a textured blit, and null when the texture says to leave the
     /// framebuffer alone (a colour-keyed texel, or one that went nowhere).
-    fn sourceColour(self: *Drw, memory: engine.Engine, painting: blend.Style, column: u32, row: u32) ?u32 {
+    fn sourceColour(self: *Drw, memory: Guest, painting: blend.Style, column: u32, row: u32) ?u32 {
         if (!painting.textured) return self.color1;
         return self.texture.sample(memory, self.control2, column, row);
     }
 
-    fn paint(self: *Drw, memory: engine.Engine, at: u32, painting: blend.Style, bytes: u32, source: u32) void {
+    fn paint(self: *Drw, memory: Guest, at: u32, painting: blend.Style, bytes: u32, source: u32) void {
         const under = self.destination(memory, at, bytes) orelse return;
         const stored = painting.pack(painting.shade(source, self.color2, under));
         if (self.pixel_cache.store(self.memory, at, bytes, stored)) return;
@@ -316,7 +316,7 @@ pub const Drw = struct {
     /// cache is holding for it, else the word in memory. Reading memory
     /// while the cache holds a newer value is how a second primitive over
     /// the same pixel composites against the wrong colour.
-    fn destination(self: *Drw, memory: engine.Engine, at: u32, bytes: u32) ?u32 {
+    fn destination(self: *Drw, memory: Guest, at: u32, bytes: u32) ?u32 {
         if (self.pixel_cache.load(at)) |cached| return cached;
         var cell = [_]u8{0} ** 4;
         const slot = cell[0..bytes];

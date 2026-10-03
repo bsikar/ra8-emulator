@@ -12,7 +12,7 @@
 //! low byte) followed by one value word, and end-of-list words whose low
 //! byte is 0xFF with the argument in byte 1. Multi-index packing was never
 //! observed, so the reader stops on it rather than guessing.
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 
 pub const encoding = struct {
     pub const index_mask: u32 = 0xFF;
@@ -49,11 +49,11 @@ pub const Entry = struct {
 
 /// A cursor over one list.
 pub const Reader = struct {
-    memory: engine.Engine,
+    memory: Guest,
     cursor: u32,
     fetched: u32 = 0,
 
-    pub fn init(memory: engine.Engine, at: u32) Reader {
+    pub fn init(memory: Guest, at: u32) Reader {
         return .{ .memory = memory, .cursor = at };
     }
 

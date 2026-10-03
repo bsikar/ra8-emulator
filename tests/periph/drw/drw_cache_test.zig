@@ -35,8 +35,8 @@ test "CENABLEFX puts the pixel in the cache and not in memory" {
     try memory.writeWord(fb_base, 0);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    try std.testing.expect(unit.store(memory, fb_base, 4, 0xFF00_FF00));
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    try std.testing.expect(unit.store(.{ .engine = memory }, fb_base, 4, 0xFF00_FF00));
     try std.testing.expect(unit.dirty());
     try std.testing.expectEqual(@as(u32, 0), try wordAt(memory, fb_base));
 }
@@ -47,9 +47,9 @@ test "CFLUSHFX is what puts it in memory" {
     try memory.writeWord(fb_base, 0);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0xFF00_FF00);
-    unit.control(memory, cache.bits.enable_fb | cache.bits.flush_fb);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0xFF00_FF00);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb | cache.bits.flush_fb);
     try std.testing.expect(!unit.dirty());
     try std.testing.expectEqual(@as(u32, 0xFF00_FF00), try wordAt(memory, fb_base));
     try std.testing.expectEqual(@as(u64, 1), unit.written_back);
@@ -61,10 +61,10 @@ test "the flush pulse acts on what is held now, before the new enable state" {
     try memory.writeWord(fb_base, 0);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0x1234_5678);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0x1234_5678);
     // The HAL's own word: enables plus the framebuffer flush in one write.
-    unit.control(memory, cache.bits.enable_fb | cache.bits.enable_tx | cache.bits.flush_fb);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb | cache.bits.enable_tx | cache.bits.flush_fb);
     try std.testing.expectEqual(@as(u32, 0x1234_5678), try wordAt(memory, fb_base));
     try std.testing.expect(unit.enabled);
 }
@@ -74,11 +74,11 @@ test "a second write to the same pixel replaces the held one" {
     defer memory.close();
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0x1111_1111);
-    _ = unit.store(memory, fb_base, 4, 0x2222_2222);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0x1111_1111);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0x2222_2222);
     try std.testing.expectEqual(@as(usize, 1), unit.used);
-    unit.flush(memory);
+    unit.flush(.{ .engine = memory });
     try std.testing.expectEqual(@as(u32, 0x2222_2222), try wordAt(memory, fb_base));
     try std.testing.expectEqual(@as(u64, 1), unit.written_back);
 }
@@ -89,8 +89,8 @@ test "a destination read is answered from the cache, not from the stale word" {
     try memory.writeWord(fb_base, 0xDEAD_BEEF);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0xFF00_0000);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0xFF00_0000);
     try std.testing.expectEqual(@as(u32, 0xFF00_0000), unit.load(fb_base).?);
     try std.testing.expectEqual(@as(u64, 1), unit.forwarded);
     try std.testing.expect(unit.load(fb_base + 4) == null);
@@ -101,10 +101,10 @@ test "a full table writes the oldest pixel back to make room" {
     defer memory.close();
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
     var index: u32 = 0;
     while (index <= cache.limits.cells) : (index += 1) {
-        _ = unit.store(memory, fb_base + index * 4, 4, 0xA000_0000 | index);
+        _ = unit.store(.{ .engine = memory }, fb_base + index * 4, 4, 0xA000_0000 | index);
     }
     try std.testing.expectEqual(@as(u64, 1), unit.evicted);
     try std.testing.expectEqual(cache.limits.cells, unit.used);
@@ -119,9 +119,9 @@ test "switching the cache off writes back what it was holding" {
     try memory.writeWord(fb_base, 0);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0x0000_00FF);
-    unit.control(memory, 0);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0x0000_00FF);
+    unit.control(.{ .engine = memory }, 0);
     try std.testing.expectEqual(@as(u32, 1), unit.disabled_dirty);
     try std.testing.expectEqual(@as(u32, 0x0000_00FF), try wordAt(memory, fb_base));
     try std.testing.expect(!unit.enabled);
@@ -133,9 +133,9 @@ test "a pixel narrower than a word writes back only its own bytes" {
     try memory.writeWord(fb_base, 0xFFFF_FFFF);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 2, 0x1234);
-    unit.flush(memory);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 2, 0x1234);
+    unit.flush(.{ .engine = memory });
     try std.testing.expectEqual(@as(u32, 0xFFFF_1234), try wordAt(memory, fb_base));
 }
 
@@ -154,10 +154,10 @@ test "a write-back the memory refuses is a fault, not a stored pixel" {
     defer memory.close();
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
     // Nothing is mapped up here, so the write-back has nowhere to land.
-    _ = unit.store(memory, 0xF000_0000, 4, 0xFF00_FF00);
-    unit.flush(memory);
+    _ = unit.store(.{ .engine = memory }, 0xF000_0000, 4, 0xFF00_FF00);
+    unit.flush(.{ .engine = memory });
     try std.testing.expectEqual(@as(u32, 1), unit.faults);
     try std.testing.expectEqual(@as(u64, 0), unit.written_back);
 }
@@ -189,9 +189,9 @@ test "an enable write on its own is not a flush" {
     try memory.writeWord(fb_base, 0);
 
     var unit = cache.Framebuffer{};
-    unit.control(memory, cache.bits.enable_fb);
-    _ = unit.store(memory, fb_base, 4, 0x00FF_00FF);
-    unit.control(memory, cache.bits.enable_fb);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
+    _ = unit.store(.{ .engine = memory }, fb_base, 4, 0x00FF_00FF);
+    unit.control(.{ .engine = memory }, cache.bits.enable_fb);
     try std.testing.expectEqual(@as(u32, 0), unit.flushes);
     try std.testing.expect(unit.dirty());
     try std.testing.expectEqual(@as(u32, 0), try wordAt(memory, fb_base));
