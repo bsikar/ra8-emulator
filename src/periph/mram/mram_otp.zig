@@ -21,16 +21,36 @@
 //! has programmed reads as erased.
 const std = @import("std");
 
-/// The Program command's legal target range (HUM Table 59.15).
+/// Program targets and cells named by HUM Ch 59.7.4.5 Table 59.15.
 pub const window = struct {
     pub const lo: u32 = 0x02E0_7600;
+    /// Last Program start address, not the end of a contiguous data array.
     pub const hi: u32 = 0x02E1_79F0;
+    pub const program_bytes: u32 = 16;
     /// What an unprogrammed cell holds.
     pub const erased: u8 = 0xFF;
 
     pub fn holds(address: u32, len: usize) bool {
-        if (address < lo) return false;
-        return @as(u64, address) + @as(u64, len) <= @as(u64, hi) + 1;
+        if (len == 0 or len > program_bytes) return false;
+        if (address % program_bytes != 0) return false;
+        return isTarget(address);
+    }
+
+    fn isTarget(address: u32) bool {
+        return address == lo or
+            inRange(address, 0x02E0_7610, 0x02E0_7690) or
+            inRange(address, 0x02E0_76A0, 0x02E0_76F0) or
+            inRange(address, 0x02E1_7700, 0x02E1_7770) or
+            inRange(address, 0x02E1_7780, 0x02E1_77F0) or
+            address == 0x02E1_7900 or
+            address == 0x02E1_7910 or
+            address == 0x02E1_7920 or
+            address == 0x02E1_7930 or
+            inRange(address, 0x02E1_7950, 0x02E1_79F0);
+    }
+
+    fn inRange(address: u32, first: u32, last: u32) bool {
+        return address >= first and address <= last;
     }
 };
 

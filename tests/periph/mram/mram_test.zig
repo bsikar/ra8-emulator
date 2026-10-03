@@ -160,6 +160,16 @@ test "a program outside the window is rejected and locks the sequencer" {
     try std.testing.expect(unit.locked);
 }
 
+test "a program into the OTA demo boot record hole is rejected" {
+    var unit = mram.Mram.init(std.testing.allocator);
+    defer unit.deinit();
+
+    programAt(&unit, 0x02E0_9600, &[_]u16{0xFFFF});
+    try std.testing.expectEqual(@as(u32, 1), unit.illegal);
+    try std.testing.expectEqual(@as(u32, 0), unit.programs);
+    try std.testing.expect(unit.locked);
+}
+
 test "a rejection is readable in MSTATR and MASTAT, where dev answers ready" {
     var unit = mram.Mram.init(std.testing.allocator);
     defer unit.deinit();
