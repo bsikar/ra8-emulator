@@ -12,8 +12,8 @@
 //! negative. A saturating clamp sets APSR.Q; no other flag changes.
 //!
 //! An Armv8.0-M core, Unicorn included, reads these as ORRS with PC as Rd,
-//! so the group is not checked against Unicorn, like the other long shifts
-//! (RA8EMU-138). Left unclaimed: Rda of SP or PC, Rm of SP, PC or Rda,
+//! so src/core/long_shift_hook.zig runs them there and lockstep checks the
+//! group, like the other long shifts (RA8EMU-138). Left unclaimed: Rda of SP or PC, Rm of SP, PC or Rda,
 //! hw2 bit 15 set in the immediate form, hw2 bits 7:6 set or type 01 and 11
 //! in the register form.
 const op = @import("../op.zig");
@@ -34,7 +34,7 @@ pub const Fields = struct {
 
 pub const Result = struct { value: u32, saturated: bool = false };
 
-pub const group: op.Group = .{ .name = "long_shift_sat", .decode = decode, .oracle = false };
+pub const group: op.Group = .{ .name = "long_shift_sat", .decode = decode, .oracle = true };
 
 pub fn fields(instr: Instr) ?Fields {
     if (instr.size != 4) return null;
