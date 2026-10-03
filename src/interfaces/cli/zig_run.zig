@@ -127,7 +127,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         if (options.report_json) {
             const load = loadOf(core, if (tracer) |*found| found else null, clock.cpu1);
             try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
-        } else try report_run.zigCore(out, board, ran);
+        } else try report_run.zigCore(out, board, timebase.*, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
