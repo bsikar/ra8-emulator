@@ -8,13 +8,15 @@
 //!
 //! The core carries the M33's profile (src/core/part.zig), so an Armv8.1-M
 //! encoding takes UsageFault UNDEFINSTR here, where CPU0 would run it.
-//! Its NVIC, decode cache and block cache are its own too.
+//! Its NVIC, decode cache and block cache are its own too, and it polls
+//! the NVIC through its own quiet source, as CPU0 does (RA8EMU-440).
 const std = @import("std");
 const registry = @import("../periph/registry.zig");
 const cpu_mod = @import("cpu/cpu.zig");
 const BoardBus = @import("cpu/board_bus.zig").BoardBus;
 const mpu_check = @import("cpu/mpu_check.zig");
 const NvicSource = @import("cpu/exception/nvic_source.zig").NvicSource;
+const QuietSource = @import("cpu/exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("cpu/decode_cache.zig").DecodeCache;
 const BlockCache = @import("cpu/block_cache.zig").BlockCache;
 const code_lines = @import("cpu/code_lines.zig");
@@ -24,6 +26,7 @@ const Second = @import("second_core.zig").Second;
 pub const SecondZig = struct {
     board: BoardBus,
     pending: NvicSource = .{},
+    quiet: QuietSource = undefined,
     decoded: DecodeCache = .{},
     cpu: cpu_mod.Cpu,
     check: mpu_check.Check = undefined,
@@ -32,7 +35,7 @@ pub const SecondZig = struct {
 
     /// CPU1's Zig core over `second`'s engine, reset from its vector table.
     /// Built in storage the caller holds: the core keeps pointers to this
-    /// struct's bus, interrupt source and decode cache.
+    /// struct's bus, quiet source, interrupt source and decode cache.
     pub fn open(self: *SecondZig, second: *Second, periph: *registry.Bus) !void {
         self.* = .{
             .board = .{
@@ -43,7 +46,8 @@ pub const SecondZig = struct {
             },
             .cpu = undefined,
         };
-        self.cpu = .{ .bus = self.board.view(), .source = self.pending.source(), .profile = part.cpu1_profile };
+        self.quiet = .{ .inner = self.pending.source(), .memory = self.board.view() };
+        self.cpu = .{ .bus = self.quiet.bus(), .source = self.quiet.source(), .quiet = &self.quiet, .profile = part.cpu1_profile };
         self.cpu.decoded = &self.decoded;
         self.board.security = &self.cpu.banked;
         self.pending.banked = &self.cpu.banked;
