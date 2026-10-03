@@ -115,3 +115,11 @@ test "floorMs falls back to the bench window for the conf's mode" {
     const named = hil_conf.parse("HIL_MODE=uart_scrape\nHIL_TIMEOUT_S=15\n");
     try std.testing.expectEqual(@as(?u32, 15_000), named.floorMs());
 }
+
+test "a uart_scrape conf ends its run on the expected line, other modes on none" {
+    const scrape = hil_conf.parse(uart);
+    try std.testing.expectEqualStrings("touch: open=OK", scrape.untilLine().?);
+    try std.testing.expectEqual(@as(?[]const u8, null), hil_conf.parse(probe).untilLine());
+    const bare = hil_conf.parse("HIL_MODE=uart_scrape\n");
+    try std.testing.expectEqual(@as(?[]const u8, null), bare.untilLine());
+}

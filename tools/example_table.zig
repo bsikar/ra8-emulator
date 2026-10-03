@@ -172,6 +172,7 @@ pub fn main() !void {
         const probe = probes.find(image) orelse confProbe(image, conf);
         var job = Job{ .emulator = args[1], .path = path, .image = image, .halves = halves, .conf = conf, .budget = budget };
         job.run = .{ .probe = probe, .console = conf != null, .extra = if (conf) |found| found.emu_args else null };
+        if (conf) |found| job.run.until = found.untilLine();
         var row = try measure(allocator, job);
         // Undecided at the default budget: give a conf row the bench's own
         // modelled time once. Rows already decided keep their fast run.
@@ -316,6 +317,8 @@ const Run = struct {
     ms: ?u32 = null,
     /// The conf's HIL_EMU_ARGS, split on spaces into extra emulator flags.
     extra: ?[]const u8 = null,
+    /// The conf's uart_scrape line: the run ends once the console prints it.
+    until: ?[]const u8 = null,
 };
 
 /// The bench's modelled time for a conf row (RA8EMU-400), used to retry a
@@ -340,6 +343,7 @@ fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8
     if (run.probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
     if (run.probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ "--dump-sym", name });
     if (run.console) try argv.append("--console");
+    if (run.until) |text| try argv.appendSlice(&.{ "--until", text });
     if (run.extra) |extra| {
         var words = std.mem.tokenizeScalar(u8, extra, ' ');
         while (words.next()) |word| try argv.append(word);

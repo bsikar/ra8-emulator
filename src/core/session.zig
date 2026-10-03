@@ -18,6 +18,7 @@ const mpu_guard = @import("mpu_guard.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("../debug/breakpoint.zig");
 const stop = @import("stop.zig");
+const until = @import("until.zig");
 const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
@@ -67,6 +68,8 @@ pub const Session = struct {
     /// gets there. Null watches nothing. A pointer rather than a copy so
     /// the caller can ask afterwards whether the stop was what ended it.
     stop: ?*stop.Stop = null,
+    /// A console line to wait for (`--until`). Null waits for none.
+    until: ?*until.Until = null,
     /// An instruction address to stop at the first time execution reaches
     /// it. Null runs to the budget. Handed to the emulator as the point to
     /// run until, so it costs nothing per instruction; a pointer rather

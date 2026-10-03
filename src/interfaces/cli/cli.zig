@@ -110,6 +110,9 @@ pub const Options = struct {
     /// it. Null watches nothing and the run goes to its instruction budget.
     stop_symbol: ?[]const u8 = null,
     stop_at: u32 = 0,
+    /// Console text that ends the run once a finished line contains it
+    /// (`--until`), the bench's uart_scrape stop. Null waits for none.
+    until: ?[]const u8 = null,
     /// Where to stop, spelled the way `place.parse` reads it: a function,
     /// an address, or either with an offset. Null stops at nothing and the
     /// run goes to its instruction budget.
@@ -238,6 +241,10 @@ pub fn parse(argv: []const []const u8) !Options {
             if (options.dump_count >= options.dump.len) return error.TooManyDumps;
             options.dump[options.dump_count] = argv[index];
             options.dump_count += 1;
+        } else if (std.mem.eql(u8, argv[index], "--until")) {
+            index += 1;
+            if (index >= argv.len) return error.MissingValue;
+            options.until = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--stop-sym")) {
             if (index + 2 >= argv.len) return error.MissingValue;
             options.stop_symbol = argv[index + 1];

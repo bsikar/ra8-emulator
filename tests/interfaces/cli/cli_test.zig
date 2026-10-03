@@ -196,3 +196,21 @@ test "the board-world flags still read the same after moving out of cli.zig" {
     try std.testing.expect(!world.blocks);
     try std.testing.expect(world.usb_loop);
 }
+
+test "--until takes the console text a run ends on" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--until", "decode=96x96 PASS" });
+    try std.testing.expectEqualStrings("decode=96x96 PASS", options.until.?);
+    const none = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expectEqual(@as(?[]const u8, null), none.until);
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--until" }));
+}
+
+test "the console tap hands a finished line to the --until wait" {
+    var tap = mod.console_output.Tap{ .wait = .{ .needle = "PASS" } };
+    try std.testing.expect(tap.wanted());
+    try mod.console_output.tapLine(&tap, "demo: boot");
+    try std.testing.expect(!tap.waiting().?.met());
+    try mod.console_output.tapLine(&tap, "demo: PASS");
+    try std.testing.expect(tap.waiting().?.met());
+    try std.testing.expect(!(mod.console_output.Tap{}).wanted());
+}

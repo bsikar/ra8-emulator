@@ -93,6 +93,7 @@ test {
     _ = @import("core/undefined_ops_test.zig");
     _ = @import("interfaces/cli/debug_front_test.zig");
     _ = @import("core/stop_test.zig");
+    _ = @import("core/until_test.zig");
     _ = @import("core/deadline_test.zig");
     _ = @import("core/fault_test.zig");
     _ = @import("core/engine_test.zig");

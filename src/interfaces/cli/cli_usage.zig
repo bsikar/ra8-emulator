@@ -6,7 +6,7 @@ pub const text =
     \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
     \\                    [--usb-loop] [--cms N] [--sfs N]
-    \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
+    \\                    [--dump-sym NAME] [--stop-sym NAME N] [--until TEXT] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
@@ -29,6 +29,8 @@ pub const text =
     \\  --dump-sym NAME    read that global out of RAM after the run and
     \\                     print it, repeatable
     \\  --stop-sym NAME N  end the run early once that global reaches N
+    \\  --until TEXT       end the run early once a console line contains
+    \\                     TEXT, as the bench's uart_scrape does
     \\  --break-sym PLACE [N]
     \\                     end the run when execution reaches PLACE, on
     \\                     the Nth arrival (default the first); the report
