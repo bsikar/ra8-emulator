@@ -13,9 +13,10 @@ pub const Error = error{
     NothingDecoded,
 };
 
-/// The longest Thumb-2 instruction is four bytes; the text of one is short.
+/// Room for Capstone's longest text: a 31-byte mnemonic, a space and a
+/// 159-byte operand string. A full register list overruns 64 bytes.
 pub const Text = struct {
-    buffer: [64]u8 = undefined,
+    buffer: [192]u8 = undefined,
     len: usize = 0,
 
     pub fn slice(self: *const Text) []const u8 {

@@ -18,8 +18,12 @@ pub const conds = [15][]const u8{
 /// Capstone prints immediates below this in decimal.
 pub const decimal_below: u32 = 10;
 
+/// Room for Capstone's longest text: a 31-byte mnemonic, a space and a
+/// 159-byte operand string (cs_insn holds them in 32 and 160 bytes).
+pub const capacity = 192;
+
 pub const Text = struct {
-    buffer: [64]u8 = undefined,
+    buffer: [capacity]u8 = undefined,
     len: usize = 0,
 
     pub fn slice(self: *const Text) []const u8 {
