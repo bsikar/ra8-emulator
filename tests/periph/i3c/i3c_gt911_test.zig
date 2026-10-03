@@ -3,6 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const gt911 = ra8.periph.i3c_gt911;
+const gpio = ra8.periph.gpio;
 
 fn point(panel: *gt911.Panel) [gt911.record.bytes]u8 {
     var buffer: [gt911.record.bytes]u8 = undefined;
@@ -208,12 +209,13 @@ test "host touches on a pipe reach the panel's point reads during a run" {
     var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
     defer std.posix.close(ends[0]);
     var panel = gt911.Panel{};
+    var pins = gpio.Gpio.init();
     _ = try std.posix.write(ends[1], "down 120,340\nmove 130,3");
-    input.poll(&panel);
+    input.poll(&panel, &pins);
     try std.testing.expectEqual(gt911.Contact{ .x = 120, .y = 340 }, frame(&panel).?);
     try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
     _ = try std.posix.write(ends[1], "50\nup\n\n");
-    input.poll(&panel);
+    input.poll(&panel, &pins);
     try std.testing.expectEqual(gt911.Contact{ .x = 130, .y = 350 }, frame(&panel).?);
     try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
     try std.testing.expectEqual(@as(u32, 2), input.taken);
@@ -224,9 +226,10 @@ test "host touches on a pipe reach the panel's point reads during a run" {
 test "host touch lines that are not a contact are refused and counted" {
     var input = gt911.host.Input{};
     var panel = gt911.Panel{};
-    input.feedLine(&panel, "tap");
-    input.feedLine(&panel, "12,");
-    input.feedLine(&panel, " 7 , 9 \r");
+    var pins = gpio.Gpio.init();
+    input.feedLine(&panel, &pins, "tap");
+    input.feedLine(&panel, &pins, "12,");
+    input.feedLine(&panel, &pins, " 7 , 9 \r");
     try std.testing.expectEqual(@as(u32, 2), input.refused);
     try std.testing.expectEqual(gt911.Contact{ .x = 7, .y = 9 }, frame(&panel).?);
 }
@@ -245,9 +248,28 @@ test "the end of a host touch file stops the polling" {
     var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
     defer std.posix.close(ends[0]);
     var panel = gt911.Panel{};
+    var pins = gpio.Gpio.init();
     _ = try std.posix.write(ends[1], "1,2\n");
     std.posix.close(ends[1]);
-    input.poll(&panel);
+    input.poll(&panel, &pins);
     try std.testing.expect(!input.enabled);
     try std.testing.expectEqual(gt911.Contact{ .x = 1, .y = 2 }, frame(&panel).?);
+}
+
+test "host switch lines press and release SW1 and SW2 on their active-low pins" {
+    var input = gt911.host.Input{};
+    var panel = gt911.Panel{};
+    var pins = gpio.Gpio.init();
+    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    input.feedLine(&panel, &pins, "sw1 down");
+    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw2_pin));
+    input.feedLine(&panel, &pins, "sw2 down");
+    input.feedLine(&panel, &pins, "sw1 up");
+    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw2_pin));
+    input.feedLine(&panel, &pins, "sw2 sideways");
+    try std.testing.expectEqual(@as(u32, 3), input.switched);
+    try std.testing.expectEqual(@as(u32, 1), input.refused);
+    try std.testing.expectEqual(@as(u32, 0), panel.queued_len);
 }

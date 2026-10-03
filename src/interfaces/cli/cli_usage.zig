@@ -89,7 +89,9 @@ pub const text =
     \\  --touch @PATH      read live touches from PATH (a file or FIFO)
     \\                     while the run goes: one "X,Y" per line, with
     \\                     an optional "down "/"move " in front; "up"
-    \\                     and blank lines add nothing
+    \\                     and blank lines add nothing; "sw1 down",
+    \\                     "sw1 up", "sw2 down" and "sw2 up" hold and
+    \\                     release the user switches (P009, P008)
     \\  --battery PCT      state-of-charge the fuel gauge reports (default 72)
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive

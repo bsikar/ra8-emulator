@@ -7,8 +7,20 @@
 //! one contact per frame. "up" and blank lines are accepted and add
 //! nothing: this panel model reports single contacts, so a release is
 //! simply the next frame with nothing armed.
+//!
+//! The same stream carries the two user switches (RA8EMU-344): "sw1 down",
+//! "sw1 up", "sw2 down" and "sw2 up" drive P009 and P008 through the GPIO
+//! model, active-low as the board wires them, so the firmware's PIDR reads
+//! see the press for as long as it is held.
 const std = @import("std");
 const gt911 = @import("i3c_gt911.zig");
+const gpio = @import("../gpio/gpio.zig");
+
+/// The host-side name of each user switch and the pin it drives.
+pub const switches = [_]struct { name: []const u8, pin: u4 }{
+    .{ .name = "sw1", .pin = gpio.sw1_pin },
+    .{ .name = "sw2", .pin = gpio.sw2_pin },
+};
 
 /// Longest line kept. A longer one is dropped whole and counted.
 pub const line_bytes: usize = 32;
@@ -24,6 +36,8 @@ pub const Input = struct {
     seen: bool = false,
     /// Contacts put on the panel's queue.
     taken: u32 = 0,
+    /// Switch presses and releases driven onto their pins.
+    switched: u32 = 0,
     /// Lines that were not a contact, or a contact the full queue refused.
     refused: u32 = 0,
 
@@ -41,7 +55,7 @@ pub const Input = struct {
     /// A partial line waits for its newline. End of file stops the polling
     /// once anything has arrived; before that it is a FIFO whose writer has
     /// not opened yet, so it is asked again next boundary.
-    pub fn poll(self: *Input, panel: *gt911.Panel) void {
+    pub fn poll(self: *Input, panel: *gt911.Panel, pins: *gpio.Gpio) void {
         if (!self.enabled) return;
         var bytes: [256]u8 = undefined;
         while (true) {
@@ -51,11 +65,11 @@ pub const Input = struct {
                 return;
             }
             self.seen = true;
-            for (bytes[0..count]) |byte| self.take(panel, byte);
+            for (bytes[0..count]) |byte| self.take(panel, pins, byte);
         }
     }
 
-    fn take(self: *Input, panel: *gt911.Panel, byte: u8) void {
+    fn take(self: *Input, panel: *gt911.Panel, pins: *gpio.Gpio, byte: u8) void {
         if (byte != '\n') {
             if (self.len == line_bytes) self.overlong = true;
             if (!self.overlong) {
@@ -66,15 +80,17 @@ pub const Input = struct {
         }
         if (self.overlong) {
             self.refused += 1;
-        } else self.feedLine(panel, self.line[0..self.len]);
+        } else self.feedLine(panel, pins, self.line[0..self.len]);
         self.len = 0;
         self.overlong = false;
     }
 
-    /// One host line: a contact queued, or nothing for "up" and blanks.
-    pub fn feedLine(self: *Input, panel: *gt911.Panel, raw: []const u8) void {
+    /// One host line: a switch moved, a contact queued, or nothing for "up"
+    /// and blanks.
+    pub fn feedLine(self: *Input, panel: *gt911.Panel, pins: *gpio.Gpio, raw: []const u8) void {
         var text = std.mem.trim(u8, raw, " \t\r");
         if (text.len == 0 or std.mem.eql(u8, text, "up")) return;
+        if (self.feedSwitch(pins, text)) return;
         for ([_][]const u8{ "down ", "move " }) |verb| {
             if (std.mem.startsWith(u8, text, verb)) text = std.mem.trimLeft(u8, text[verb.len..], " ");
         }
@@ -87,6 +103,24 @@ pub const Input = struct {
             return;
         };
         self.taken += 1;
+    }
+
+    /// "swN down" or "swN up": true when the line named a switch at all.
+    fn feedSwitch(self: *Input, pins: *gpio.Gpio, text: []const u8) bool {
+        for (switches) |one| {
+            if (!std.mem.startsWith(u8, text, one.name)) continue;
+            const verb = std.mem.trim(u8, text[one.name.len..], " ");
+            const pressed = std.mem.eql(u8, verb, "down");
+            if (!pressed and !std.mem.eql(u8, verb, "up")) {
+                self.refused += 1;
+                return true;
+            }
+            // Active-low with a pull-up: a held button reads low.
+            pins.setInput(gpio.sw_port, one.pin, !pressed);
+            self.switched += 1;
+            return true;
+        }
+        return false;
     }
 };
 
