@@ -126,3 +126,10 @@ test "--usb-loop cables the two USB jacks together when requested" {
     try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).usb_loop);
     try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--usb-loop" })).usb_loop);
 }
+
+test "--trace-rtos-out takes a path and turns the trace on" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--trace-rtos-out", "run.trace" });
+    try std.testing.expect(options.trace_rtos);
+    try std.testing.expectEqualStrings("run.trace", options.trace_rtos_out.?);
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--trace-rtos-out" }));
+}

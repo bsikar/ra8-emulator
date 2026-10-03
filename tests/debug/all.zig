@@ -55,4 +55,5 @@ test {
     _ = @import("rtos_load_busy_test.zig");
     _ = @import("rtos_load_wait_test.zig");
     _ = @import("rtos_clock_test.zig");
+    _ = @import("rtos_file_test.zig");
 }

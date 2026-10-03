@@ -29,6 +29,8 @@ pub const zig = @import("rtos_zig.zig");
 pub const second = @import("rtos_second.zig");
 pub const load = @import("rtos_load.zig");
 pub const report = @import("rtos_report.zig");
+/// `--trace-rtos-out FILE`: the trace as a file, and its reader (RA8EMU-345).
+pub const file = @import("rtos_file.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";

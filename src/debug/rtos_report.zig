@@ -13,6 +13,7 @@ const rtos_hook = @import("rtos_hook.zig");
 const rtos_load = @import("rtos_load.zig");
 const names = @import("rtos_names.zig");
 const isr = @import("rtos_isr.zig");
+const rtos_file = @import("rtos_file.zig");
 
 pub const limits = struct {
     /// A whole core's run, in the tenths of a percent shares are counted in.
@@ -25,6 +26,19 @@ pub const limits = struct {
 pub fn all(out: anytype, options: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
     if (options.trace_rtos) try rtos_hook.print(out, tracer, memory);
     if (options.cpu_load) try load(out, tracer, memory);
+    const one = tracer orelse return;
+    if (outPath(options)) |path| try rtos_file.save(path, one.core, &one.trace);
+}
+
+/// `--trace-rtos-out`, when the options carry it and it was given.
+fn outPath(options: anytype) ?[]const u8 {
+    const T = @TypeOf(options);
+    const Fields = switch (@typeInfo(T)) {
+        .pointer => |pointer| pointer.child,
+        else => T,
+    };
+    if (!@hasField(Fields, "trace_rtos_out")) return null;
+    return options.trace_rtos_out;
 }
 
 /// One core's load table: the tracer's core, charged up to its clock now.
