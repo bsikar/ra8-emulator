@@ -74,6 +74,7 @@ test {
     _ = @import("core/fault_hook_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
+    _ = @import("interfaces/usbip/usbip_wire_test.zig");
     _ = @import("debug/all.zig");
     _ = @import("core/elf_test.zig");
     _ = @import("core/idle_test.zig");
