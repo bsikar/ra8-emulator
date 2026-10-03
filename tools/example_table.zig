@@ -5,8 +5,10 @@
 //!   zig build examples -- EMULATOR DIR [INSTRUCTIONS]
 //!
 //! An image passes when its console's last line says OK or PASS. It fails when
-//! the run stopped on a fault or the console says FAIL. Anything else, LED-only
-//! demos included, is unknown until a reader checks it against its README.
+//! the run stopped on a fault or the console says FAIL. An LED-only demo, with
+//! no console and no probe, passes when one of its LEDs toggled at least
+//! twice: it blinks rather than sticking (RA8EMU-398). Anything else is
+//! unknown until a reader checks it against its README.
 //! A few images need more than one budget fits; example_budgets.zig lists
 //! them and the floor each runs at. A few need hardware the default board
 //! does not fit; example_options.zig lists the flags that fit it.
@@ -29,12 +31,16 @@ pub const Verdict = enum { pass, fail, unknown };
 
 pub const Row = struct {
     pub const max_leds = 8;
+    /// On then off: the fewest edges that tell a blink from a stuck LED.
+    pub const blink_edges = 2;
 
     console: ?[]const u8 = null,
     leds_on: [max_leds][]const u8 = undefined,
     led_count: usize = 0,
     unmodelled: ?u32 = null,
     stopped: ?[]const u8 = null,
+    /// Some user LED toggled at least `blink_edges` times.
+    blinking: bool = false,
     /// The memory-probe verdict for an image example_probes.zig lists.
     probe: ?probes.Judgement = null,
 
@@ -49,7 +55,7 @@ pub const Row = struct {
             .fail => .fail,
             .unknown => .unknown,
         };
-        const line = row.console orelse return .unknown;
+        const line = row.console orelse return if (row.blinking) .pass else .unknown;
         if (std.mem.indexOf(u8, line, "FAIL") != null) return .fail;
         if (std.mem.indexOf(u8, line, "OK") != null) return .pass;
         if (std.mem.indexOf(u8, line, "PASS") != null) return .pass;
@@ -90,12 +96,19 @@ fn readLeds(row: *Row, line: []const u8) void {
         const close = std.mem.indexOfScalarPos(u8, rest, open, ']') orelse return;
         const led = rest[open + 1 .. close];
         rest = rest[close + 1 ..];
+        if (edges(led) >= Row.blink_edges) row.blinking = true;
         if (std.mem.indexOf(u8, led, " ON ") == null) continue;
         if (row.led_count == Row.max_leds) return;
         const end = std.mem.indexOfScalar(u8, led, ' ') orelse led.len;
         row.leds_on[row.led_count] = led[0..end];
         row.led_count += 1;
     }
+}
+
+/// The `xN` edge count at the end of one `[LED1 BLUE P600 ON xN]` entry.
+fn edges(led: []const u8) u32 {
+    const at = std.mem.lastIndexOf(u8, led, " x") orelse return 0;
+    return std.fmt.parseInt(u32, led[at + 2 ..], 10) catch 0;
 }
 
 fn unmodelled(line: []const u8) ?u32 {
