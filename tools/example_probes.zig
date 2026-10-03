@@ -30,6 +30,10 @@ pub const probes = [_]Probe{
     // secure scratch buffer. The README's verdict is that the Non-Secure
     // ThreadX kernel runs and the secure fallback main is never reached, so
     // the tick count in the _ns image is the heartbeat (RA8EMU-287).
+    // hil.conf's probe: the NS USB host's verified bulk-echo rounds, and the
+    // NSC CGC veneers never returning non-OK (RA8EMU-289). Both words live
+    // in the _ns image.
+    .{ .image = "tz_nsc_cgc_usb.elf", .symbol = "g_tz_usb_host_rounds_ok", .min = 50, .failure = "g_tz_nsc_cgc_usb_mismatch" },
     .{ .image = "tz_threadx_demo.elf", .symbol = "_tx_timer_system_clock", .min = 5, .failure = "g_tz_threadx_demo_fallback_count" },
 };
 

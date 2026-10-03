@@ -99,3 +99,30 @@ test "tz_threadx_demo passes on the Non-Secure tick and fails on the secure fall
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(demo, fell_back));
     try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("tz_threadx_demo_ns.elf"));
 }
+
+const looping =
+    \\  dump-sym      : g_tz_usb_host_rounds_ok @0x32111260 = 358 (0x00000166)
+    \\  dump-sym      : g_tz_nsc_cgc_usb_mismatch @0x32108F00 = 0 (0x00000000)
+    \\
+;
+
+const not_enumerated =
+    \\  dump-sym      : g_tz_usb_host_rounds_ok @0x32111260 = 0 (0x00000000)
+    \\  dump-sym      : g_tz_nsc_cgc_usb_mismatch @0x32108F00 = 0 (0x00000000)
+    \\
+;
+
+const veneer_error =
+    \\  dump-sym      : g_tz_usb_host_rounds_ok @0x32111260 = 358 (0x00000166)
+    \\  dump-sym      : g_tz_nsc_cgc_usb_mismatch @0x32108F00 = 1 (0x00000001)
+    \\
+;
+
+test "tz_nsc_cgc_usb passes on USB loop rounds and fails on a veneer error" {
+    const pair = probes.find("tz_nsc_cgc_usb.elf").?;
+    try std.testing.expectEqual(@as(u32, 50), pair.min);
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(pair, looping));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(pair, not_enumerated));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(pair, veneer_error));
+    try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("tz_nsc_cgc_usb_ns.elf"));
+}
