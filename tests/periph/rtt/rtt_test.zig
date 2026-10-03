@@ -19,7 +19,7 @@ const Fixture = struct {
         var core = try engine.Engine.open();
         errdefer core.close();
         try core.mapBoardRam();
-        return .{ .core = core, .model = .{ .memory = core } };
+        return .{ .core = core, .model = .{ .memory = .{ .engine = core } } };
     }
 
     fn close(self: *Fixture) void {
