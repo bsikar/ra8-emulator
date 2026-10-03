@@ -25,6 +25,7 @@
 const mpu = @import("../../periph/mpu/mpu.zig");
 const mpu_fault = @import("../../periph/mpu/mpu_fault.zig");
 const background = @import("../../periph/mpu/mpu_background.zig");
+const banked = @import("../banked.zig");
 
 /// The Private Peripheral Bus, which the MPU never checks.
 pub const ppb = struct {
@@ -34,6 +35,10 @@ pub const ppb = struct {
 
 pub const Check = struct {
     unit: *const mpu.Mpu,
+    /// The Non-secure MPU and the core's Security state (RA8EMU-446): while
+    /// the core is Non-secure, its accesses are judged by this unit instead.
+    unit_ns: ?*const mpu.Mpu = null,
+    state: ?*const banked.State = null,
     /// True only while an instruction's own accesses are being made.
     armed: bool = false,
     privileged: bool = true,
@@ -44,7 +49,8 @@ pub const Check = struct {
     pub fn arm(self: *Check, privileged: bool, boosted: bool) void {
         self.privileged = privileged;
         self.refused = null;
-        self.armed = self.unit.on() and (!boosted or self.unit.ctrl & mpu.field.ctrl_hfnmiena != 0);
+        const unit = self.active();
+        self.armed = unit.on() and (!boosted or unit.ctrl & mpu.field.ctrl_hfnmiena != 0);
     }
 
     pub fn disarm(self: *Check) void {
@@ -53,7 +59,7 @@ pub const Check = struct {
 
     /// Whether one access may go ahead. A refusal is remembered for `take`.
     pub fn allows(self: *Check, address: u32, kind: mpu_fault.Kind) bool {
-        if (!self.armed or !refuses(self.unit, address, kind, self.privileged)) return true;
+        if (!self.armed or !refuses(self.active(), address, kind, self.privileged)) return true;
         if (self.refused == null) self.refused = address;
         return false;
     }
@@ -62,8 +68,9 @@ pub const Check = struct {
     /// (RA8EMU-368). The fetch is checked on its own, outside the armed
     /// window, with the same negative-priority rule.
     pub fn refusesFetch(self: *const Check, address: u32, privileged: bool, boosted: bool) bool {
-        if (boosted and self.unit.ctrl & mpu.field.ctrl_hfnmiena == 0) return false;
-        return refuses(self.unit, address, .fetch, privileged);
+        const unit = self.active();
+        if (boosted and unit.ctrl & mpu.field.ctrl_hfnmiena == 0) return false;
+        return refuses(unit, address, .fetch, privileged);
     }
 
     /// Check the rest of this instruction's accesses as unprivileged, as
@@ -71,6 +78,13 @@ pub const Check = struct {
     pub fn lower(self: *Check) bool {
         defer self.privileged = false;
         return self.privileged;
+    }
+
+    /// The MPU of the core's current Security state.
+    fn active(self: *const Check) *const mpu.Mpu {
+        const ns = self.unit_ns orelse return self.unit;
+        const state = self.state orelse return self.unit;
+        return if (state.* == .non_secure) ns else self.unit;
     }
 
     /// The refused address, if any, cleared as it is read.

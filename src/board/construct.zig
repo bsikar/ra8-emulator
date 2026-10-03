@@ -132,6 +132,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .clears = fault_clear.Clears.init(),
         .caches = cache.Cache.init(),
         .regions = mpu.Mpu.init(),
+        .regions_ns = mpu.Mpu.init(),
         .guard = mpu_guard.Guard.init(),
         .partitions = sau.Sau.init(),
     };

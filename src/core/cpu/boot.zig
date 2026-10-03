@@ -69,6 +69,8 @@ pub const Wiring = struct {
     /// The part's IDAU map beside the SAU (RA8EMU-277).
     idau: ?*const sau.idau.Map = null,
     regions: ?*mpu.Mpu = null,
+    /// The Non-secure MPU (RA8EMU-446), banked beside `regions`.
+    regions_ns: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
     /// Direct MRAM/SRAM access is enabled only when the run has no memory
     /// watch or fault instrumentation that must observe each access.
@@ -104,7 +106,7 @@ pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
+    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears } };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
@@ -144,7 +146,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         b.scs.fp = &cpu.fp;
         b.security = &cpu.banked;
         if (b.scs.regions) |unit| {
-            check = .{ .unit = unit };
+            check = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };
             b.check = &check;
             cpu.mpu = &check;
         }

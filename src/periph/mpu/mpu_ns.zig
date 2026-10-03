@@ -33,3 +33,10 @@ pub fn normalOf(address: u32) ?u32 {
     const normal = address - offset;
     return if (span.covers(normal)) normal else null;
 }
+
+/// Put the hardwired region count in the Non-secure MPU_TYPE too. TYPE is
+/// banked like every MPU register, so without this Non-secure code reads a
+/// zero DREGION through its own view and decides the MPU has no regions.
+pub fn prime(core: anytype, type_value: u32) !void {
+    try core.writeWord(span.first + offset, type_value);
+}

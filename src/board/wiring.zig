@@ -245,6 +245,8 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
     try windows.regions.prime(core.*);
+    // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
+    try mpu.ns.prime(core.*, mpu.geometry.type_value);
     // RBAR/RLAR are one word each in RAM, so without this every region a
     // driver programs overwrites the last and the table reads back empty.
     // The guard goes on with it: the same hook that banks the table is the

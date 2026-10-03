@@ -318,6 +318,8 @@ pub const Board = struct {
     /// The MPU window, beside the cache one and primed the same way: TYPE is
     /// hardwired, so nothing would have put the region count there.
     regions: mpu.Mpu,
+    /// The Non-secure MPU the Zig core banks into (RA8EMU-446).
+    regions_ns: mpu.Mpu,
     /// MPU enforcement: the traps kept over the read-only regions while
     /// CTRL.ENABLE stands, and what they caught. Beside the table because
     /// one is what the firmware programmed, the other what the engine does.

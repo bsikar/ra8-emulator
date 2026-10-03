@@ -86,3 +86,18 @@ test "with no Non-secure MPU wired the alias keeps its old path" {
     try region(&board, memmap.mpu.rnr, 4, memmap.mpu.rbar, 0x2200_0000);
     try std.testing.expectEqual(@as(u32, 0x2200_0000), secure_mpu.table[4].rbar);
 }
+
+test "prime puts the region count in the Non-secure MPU_TYPE word" {
+    const Fake = struct {
+        address: u32 = 0,
+        value: u32 = 0,
+        pub fn writeWord(self: *@This(), address: u32, value: u32) !void {
+            self.address = address;
+            self.value = value;
+        }
+    };
+    var fake: Fake = .{};
+    try mpu_ns.prime(&fake, 0x800);
+    try std.testing.expectEqual(memmap.mpu.type_ + mpu_ns.offset, fake.address);
+    try std.testing.expectEqual(@as(u32, 0x800), fake.value);
+}
