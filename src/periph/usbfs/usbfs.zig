@@ -15,6 +15,7 @@ const regs = @import("../usbhs/usbhs_regs.zig");
 pub const dcp = @import("usbfs_dcp.zig");
 pub const host = @import("usbfs_host.zig");
 pub const pipe = @import("usbfs_pipe.zig");
+pub const bulk = @import("usbfs_bulk.zig");
 
 pub const window = struct {
     pub const base: u32 = 0x4025_0000;
@@ -74,6 +75,8 @@ pub const Device = struct {
     control: dcp.Dcp = .{},
     /// PIPE1 through PIPE9.
     pipes: pipe.Pipes = .{},
+    /// The CFIFO port aimed at one of those pipes.
+    endpoints: bulk.Bulk = .{},
 
     /// Accesses refused, each for its own reason.
     misaligned: u32 = 0,
@@ -209,7 +212,7 @@ pub const Device = struct {
 
     pub fn interruptStatus(self: *const Device) u16 {
         const live: u16 = if (self.vbus) intsts0.vbsts else 0;
-        return (self.status & ~intsts0.vbsts) | live | self.control.summary();
+        return (self.status & ~intsts0.vbsts) | live | self.control.summary() | self.endpoints.summary();
     }
 
     pub fn read(self: *Device, address: u32, width: u3) u32 {
@@ -222,11 +225,11 @@ pub const Device = struct {
             regs.reg.intsts0 => self.interruptStatus(),
             regs.reg.dvstctr0 => self.portStatus(),
             regs.reg.dcpctr => self.controlPipeStatus(),
-            regs.reg.cfifo => self.control.readData(width),
+            regs.reg.cfifo => if (self.bulkPipe()) |n| self.endpoints.readData(&self.pipes, n, width) else self.control.readData(width),
             regs.reg.cfifosel => self.control.sel,
-            regs.reg.cfifoctr => self.control.status(),
-            regs.reg.brdysts => @intFromBool(self.control.brdy),
-            regs.reg.bempsts => @intFromBool(self.control.bemp),
+            regs.reg.cfifoctr => if (self.bulkPipe()) |n| self.endpoints.status(&self.pipes, n) else self.control.status(),
+            regs.reg.brdysts => @intFromBool(self.control.brdy) | self.endpoints.brdy,
+            regs.reg.bempsts => @intFromBool(self.control.bemp) | self.endpoints.bemp,
             else => self.shadow[offset / window.word],
         };
     }
@@ -245,17 +248,40 @@ pub const Device = struct {
             regs.reg.usbreq, regs.reg.usbval, regs.reg.usbindx, regs.reg.usbleng => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
             regs.reg.dcpctr => self.controlPipe(v),
-            regs.reg.cfifo => self.control.writeData(value, width),
-            regs.reg.cfifosel => self.control.select(v),
-            regs.reg.cfifoctr => self.control.control(v),
-            regs.reg.brdysts => self.control.brdy = self.control.brdy and v & 1 != 0,
-            regs.reg.bempsts => self.control.bemp = self.control.bemp and v & 1 != 0,
+            regs.reg.cfifo => if (self.bulkPipe()) |n| self.endpoints.writeData(&self.pipes, n, value, width) else self.control.writeData(value, width),
+            regs.reg.cfifosel => self.selectPort(v),
+            regs.reg.cfifoctr => if (self.bulkPipe()) |n| self.endpoints.control(&self.pipes, n, v) else self.control.control(v),
+            regs.reg.brdysts => {
+                self.control.brdy = self.control.brdy and v & 1 != 0;
+                self.endpoints.brdy &= v;
+            },
+            regs.reg.bempsts => {
+                self.control.bemp = self.control.bemp and v & 1 != 0;
+                self.endpoints.bemp &= v;
+            },
             else => self.shadow[offset / window.word] = v,
         }
     }
 
     pub fn refusals(self: *const Device) u32 {
-        return self.misaligned + self.read_only + self.control.refusals() + self.pipes.unselected;
+        const port = self.control.refusals() + self.endpoints.refusals();
+        return self.misaligned + self.read_only + port + self.pipes.unselected;
+    }
+
+    /// CFIFOSEL.CURPIPE when it names a pipe the driver opened. The port
+    /// then belongs to that pipe; otherwise it is the DCP's.
+    fn bulkPipe(self: *const Device) ?u4 {
+        const n: u4 = @truncate(self.control.sel & regs.fifo.curpipe_mask);
+        _ = bulk.opened(&self.pipes, n) orelse return null;
+        return n;
+    }
+
+    /// CFIFOSEL: aiming at an opened pipe is not a DCP refusal.
+    fn selectPort(self: *Device, value: u16) void {
+        const n: u4 = @truncate(value & regs.fifo.curpipe_mask);
+        if (bulk.opened(&self.pipes, n) != null) {
+            self.control.sel = value;
+        } else self.control.select(value);
     }
 
     pub fn block(self: *Device) periph.Block {
