@@ -356,6 +356,6 @@ table above. A group listed as missing does not fail the build yet.
 | ldrd_strd | 33 |
 | exclusive | 40 |
 | acq_rel | 28 |
-| clrm | missing |
+| clrm | 27 |
 | ldm_stm_wide | missing |
 | pac | missing |
