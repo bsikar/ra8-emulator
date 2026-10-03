@@ -53,3 +53,7 @@ test "the SD examples run long enough to read back their card" {
     try std.testing.expectEqualStrings("10000000", budgets.pick("ra8_io_sd_demo.elf", null).?);
     try std.testing.expectEqualStrings("20000000", budgets.pick("tz_secure_only_sd.elf", null).?);
 }
+
+test "rot_verify_hil runs long enough for its software signature check" {
+    try std.testing.expectEqualStrings("200000000", budgets.pick("rot_verify_hil.elf", null).?);
+}
