@@ -7,6 +7,11 @@ const report_run = ra8.board.report_run;
 
 /// Run `zigCore` on a fresh board into a scratch file and return what it wrote.
 fn zigReport(buf: []u8) ![]const u8 {
+    return zigReportWith(buf, .{});
+}
+
+/// The same, with a timebase the caller has already charged.
+fn zigReportWith(buf: []u8, timebase: ra8.periph.clocks.Clocks) ![]const u8 {
     // attach() wires the blocks to their power domains, which the report reads.
     var core = try ra8.core.engine.Engine.open();
     defer core.close();
@@ -18,7 +23,7 @@ fn zigReport(buf: []u8) ![]const u8 {
     defer dir.cleanup();
     const file = try dir.dir.createFile("report.txt", .{ .read = true });
     defer file.close();
-    try report_run.zigCore(file.writer(), &board, 42);
+    try report_run.zigCore(file.writer(), &board, timebase, 42);
     try file.seekTo(0);
     const len = try file.readAll(buf);
     return buf[0..len];
@@ -28,7 +33,7 @@ test "a zig run reports the bus and the blocks and says what it leaves out" {
     var buf: [4096]u8 = undefined;
     const text = try zigReport(&buf);
     try std.testing.expect(std.mem.startsWith(u8, text, "peripheral accesses: 0 read, 0 written"));
-    try std.testing.expect(std.mem.indexOf(u8, text, "zig core: timebase, pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "zig core: pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "GPIO LEDs: none driven\n") != null);
 }
 
@@ -59,4 +64,16 @@ test "a run that raised BusFaults says how many and how many escalated" {
     var buf: [256]u8 = undefined;
     const text = try busLine(&buf, .{ .raised = 3, .escalated = 1 });
     try std.testing.expectEqualStrings("bus faults: 3 raised, 1 escalated to HardFault\n", text);
+}
+test "a zig run reports its own timebase (RA8EMU-470)" {
+    var buf: [4096]u8 = undefined;
+    const text = try zigReportWith(&buf, .{ .elapsed = 1000, .cycles = 1000, .ticks = 3, .pends = 2 });
+    try std.testing.expect(std.mem.indexOf(u8, text, "time: 1000 cycles elapsed, 3 SysTick periods, 2 pended\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "NEVER TOLD") == null);
+}
+
+test "a zig run names the SysTick periods that raised nothing" {
+    var buf: [4096]u8 = undefined;
+    const text = try zigReportWith(&buf, .{ .elapsed = 500, .cycles = 500, .ticks = 5, .pends = 1, .collapsed = 4 });
+    try std.testing.expect(std.mem.indexOf(u8, text, "time: 500 cycles elapsed, 5 SysTick periods, 1 pended, 4 PERIOD(S) THE FIRMWARE WAS NEVER TOLD ABOUT\n") != null);
 }

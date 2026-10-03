@@ -156,22 +156,11 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
     }
 }
 
-/// A SysTick period is only worth anything to the firmware if something
-/// raised for it. `collapsed` is how many wraps raised nothing, so a reader
-/// can tell a slow run from a run whose clock is lying to it, and `rearms`
-/// is the other side of the same ledger: stretches ended early to keep that
-/// number down, each one a stretch whose cycles went uncharged.
-pub fn timing(
-    out: Writer,
-    timebase: clocks.Clocks,
-    seam: idle.Seam,
-    interrupts: nvic.Nvic,
-    release: unmask.Release,
-    pending: pend_break.Pend,
-    pacing: pend_pace.Pace,
-    masking: mask_pace.Pace,
-) !void {
-    try pends(out, pending, interrupts.standing.entries, pacing);
+/// The time lines of a run report: cycles, SysTick periods and pends from the
+/// run's own timebase, plus the warnings when periods collapsed, DWT_CYCCNT
+/// ran short or boundaries ended where the firmware armed SysTick. Both the
+/// Unicorn and the `--cpu zig` report print these (RA8EMU-470).
+pub fn clock(out: Writer, timebase: clocks.Clocks) !void {
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",
         .{ timebase.elapsed, timebase.ticks, timebase.pends },
@@ -195,6 +184,25 @@ pub fn timing(
             .{timebase.rearms},
         );
     }
+}
+
+/// A SysTick period is only worth anything to the firmware if something
+/// raised for it. `collapsed` is how many wraps raised nothing, so a reader
+/// can tell a slow run from a run whose clock is lying to it, and `rearms`
+/// is the other side of the same ledger: stretches ended early to keep that
+/// number down, each one a stretch whose cycles went uncharged.
+pub fn timing(
+    out: Writer,
+    timebase: clocks.Clocks,
+    seam: idle.Seam,
+    interrupts: nvic.Nvic,
+    release: unmask.Release,
+    pending: pend_break.Pend,
+    pacing: pend_pace.Pace,
+    masking: mask_pace.Pace,
+) !void {
+    try pends(out, pending, interrupts.standing.entries, pacing);
+    try clock(out, timebase);
     if (seam.skipped != 0) {
         try out.print(
             "time: {d} of those cycles passed in a loop that could not change anything; {d} closure(s) over {d} boundary(ies)\n",
