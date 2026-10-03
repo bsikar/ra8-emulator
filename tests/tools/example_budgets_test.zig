@@ -5,8 +5,8 @@ const table = @import("example_table");
 const budgets = table.budgets;
 
 test "an image with no override keeps the caller's budget" {
-    try std.testing.expectEqualStrings("5000000", budgets.pick("blink_hal.elf", "5000000").?);
-    try std.testing.expectEqual(@as(?[]const u8, null), budgets.pick("blink_hal.elf", null));
+    try std.testing.expectEqualStrings("5000000", budgets.pick("power_profiler.elf", "5000000").?);
+    try std.testing.expectEqual(@as(?[]const u8, null), budgets.pick("power_profiler.elf", null));
 }
 
 test "a listed image gets its own budget at the default" {
@@ -60,4 +60,9 @@ test "rot_verify_hil runs long enough for its software signature check" {
 
 test "psa_crypto_hil runs long enough for its software KATs" {
     try std.testing.expectEqualStrings("400000000", budgets.pick("psa_crypto_hil.elf", null).?);
+}
+
+test "the LED-only blinks run long enough to toggle twice" {
+    try std.testing.expectEqualStrings("10000000", budgets.pick("blink_hal.elf", null).?);
+    try std.testing.expectEqualStrings("10000000", budgets.pick("blink_ra8p1.elf", null).?);
 }

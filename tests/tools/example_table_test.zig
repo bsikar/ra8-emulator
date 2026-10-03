@@ -43,6 +43,23 @@ test "LEDs with no console line are unknown, and FAIL fails" {
     try std.testing.expectEqual(table.Verdict.fail, failed.verdict());
 }
 
+test "an LED that toggled twice with no console passes as a blink" {
+    const blink = table.parse("GPIO LEDs: [LED1 BLUE  P600 ON x3] [LED2 GREEN P303 OFF x0] [LED3 RED   PA07 OFF x0]\n");
+    try std.testing.expect(blink.blinking);
+    try std.testing.expectEqual(table.Verdict.pass, blink.verdict());
+    const turned_off = table.parse("GPIO LEDs: [LED1 BLUE  P600 OFF x2]\n");
+    try std.testing.expectEqual(table.Verdict.pass, turned_off.verdict());
+}
+
+test "an LED set once and left stays unknown, and a blink that faulted fails" {
+    const stuck = table.parse("GPIO LEDs: [LED1 BLUE  P600 ON x1] [LED2 GREEN P303 OFF x0]\n");
+    try std.testing.expect(!stuck.blinking);
+    try std.testing.expectEqual(table.Verdict.unknown, stuck.verdict());
+    const faulted = table.parse("GPIO LEDs: [LED1 BLUE  P600 ON x5]\nstopped at pc 0x00000000: fetch\n");
+    try std.testing.expectEqual(table.Verdict.fail, faulted.verdict());
+    try std.testing.expectEqual(table.Verdict.unknown, table.parse("GPIO LEDs: none driven\n").verdict());
+}
+
 test "a row prints in table order" {
     var buffer: [256]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);

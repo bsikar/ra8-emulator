@@ -22,6 +22,10 @@ pub const Override = struct {
 /// budget each was seen to finish inside.
 pub const overrides = [_]Override{
     .{ .image = "ra8_io_swap_demo.elf", .instructions = "20000000" },
+    // The LED-only blinks pass on an LED toggling twice (RA8EMU-398); at 2M
+    // each has only switched its LEDs on once, at 10M they read x3.
+    .{ .image = "blink_hal.elf", .instructions = "10000000" },
+    .{ .image = "blink_ra8p1.elf", .instructions = "10000000" },
     // CPU1's ThreadX kernel needs 10 SysTick ticks (about 2.5M CPU1 cycles at
     // 250 MHz) before the M85 prints "10 ticks PASS" (RA8EMU-40).
     .{ .image = "threadx_cpu1.elf", .instructions = "40000000" },
