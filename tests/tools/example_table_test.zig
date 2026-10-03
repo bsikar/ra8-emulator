@@ -132,4 +132,5 @@ test "a Secure image runs with its Non-Secure half, and a lone image runs alone"
 // tools/hil_conf.zig has its own file; tests/all.zig is at 400 lines.
 test {
     _ = @import("hil_conf_test.zig");
+    _ = @import("hil_alive_test.zig");
 }
