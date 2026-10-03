@@ -63,6 +63,7 @@ test {
     _ = @import("ops/imm_logic_test.zig");
     _ = @import("ops/imm_arith_test.zig");
     _ = @import("ops/branch_wide_test.zig");
+    _ = @import("ops/branch_future_test.zig");
     _ = @import("ops/cps_test.zig");
     _ = @import("ops/cbz_test.zig");
     _ = @import("ops/extend_test.zig");

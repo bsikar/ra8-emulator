@@ -64,6 +64,7 @@ pub const imm_fields = @import("ops/imm_fields.zig");
 pub const imm_logic = @import("ops/imm_logic.zig");
 pub const imm_arith = @import("ops/imm_arith.zig");
 pub const branch_wide = @import("ops/branch_wide.zig");
+pub const branch_future = @import("ops/branch_future.zig");
 pub const cps = @import("ops/cps.zig");
 pub const cbz = @import("ops/cbz.zig");
 pub const extend = @import("ops/extend.zig");

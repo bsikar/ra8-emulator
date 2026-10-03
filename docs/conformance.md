@@ -299,6 +299,7 @@ table above. A group listed as missing does not fail the build yet.
 | imm_logic | missing |
 | imm_arith | missing |
 | branch_wide | missing |
+| branch_future | missing |
 | ldst_wide | missing |
 | ldr_literal_wide | missing |
 | preload | missing |
