@@ -43,4 +43,5 @@ test {
     _ = @import("ldst_imm_test.zig");
     _ = @import("preload_test.zig");
     _ = @import("ldst_wide_test.zig");
+    _ = @import("ldst_reg_wide_test.zig");
 }
