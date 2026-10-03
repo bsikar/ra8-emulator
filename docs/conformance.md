@@ -264,7 +264,7 @@ table above. A group listed as missing does not fail the build yet.
 | divide | 22 |
 | dp_shifted | missing |
 | shift_reg | 26 |
-| add_sub_wide | missing |
+| add_sub_wide | 22 |
 | long_mul | 26 |
 | mrs_msr | missing |
 | ldst_reg_wide | missing |
