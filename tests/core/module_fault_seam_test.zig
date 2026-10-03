@@ -4,8 +4,11 @@
 //! naming the target, and a privileged handler can abandon the module by
 //! returning to a kernel recovery point instead of to the module.
 //!
-//! The store itself still lands in the RAM underneath (src/core/mpu_guard.zig
-//! says why), so this checks the fault and the recovery, not the RAM.
+//! On Unicorn the store itself still lands in the RAM underneath
+//! (src/core/mpu_guard.zig says why), so those tests check the fault and the
+//! recovery, not the RAM. The Zig core runs the same program (RA8EMU-367)
+//! and must match Unicorn's frame, CFSR, MMFAR and recovery, except that it
+//! turns the store away before memory.
 
 const std = @import("std");
 const ra8 = @import("ra8");
@@ -15,6 +18,11 @@ const mpu_guard = ra8.core.mpu_guard;
 const Engine = ra8.core.engine.Engine;
 const Nvic = ra8.periph.nvic.Nvic;
 const Watch = ra8.core.session.Watch;
+const bus = ra8.core.cpu.bus;
+const mpu_check = ra8.core.cpu.board_bus.mpu_check;
+const Cpu = ra8.core.cpu.cpu.Cpu;
+const Stop = ra8.core.cpu.cpu.Stop;
+const EngineBus = ra8.core.cpu.engine_bus.EngineBus;
 
 /// The module's code, the kernel's recovery point, its stack, a span only
 /// privileged code may touch, and the vector table with its handlers.
@@ -143,4 +151,83 @@ test "a module on CPU1 is stopped by CPU1's own MPU and CPU0 never sees the faul
     try std.testing.expectEqual(layout.kernel_only, try cpu1.core.readWord(memmap.scb.mmfar));
     try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.cfsr));
     try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.mmfar));
+}
+
+/// The Zig core's bus over the bench's engine with CPU0's MPU check in
+/// front, the way BoardBus asks it.
+const Guarded = struct {
+    memory: EngineBus,
+    check: *mpu_check.Check,
+
+    fn view(self: *Guarded) bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+    }
+    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+        const self: *Guarded = @ptrCast(@alignCast(ctx));
+        if (!self.check.allows(address, .load)) return bus.Error.Unmapped;
+        return self.memory.view().read(address, into);
+    }
+    fn write(ctx: *anyopaque, address: u32, from: []const u8) bus.Error!void {
+        const self: *Guarded = @ptrCast(@alignCast(ctx));
+        if (!self.check.allows(address, .store)) return bus.Error.Unmapped;
+        return self.memory.view().write(address, from);
+    }
+};
+
+/// The same module, kernel and MPU map run on the Zig core instead
+/// (RA8EMU-367): unprivileged Thread mode on the Main stack at the module.
+const ZigRun = struct {
+    bench: Bench,
+    check: mpu_check.Check,
+    guarded: Guarded,
+    cpu: Cpu,
+
+    fn open(self: *ZigRun) !void {
+        try self.bench.open();
+        errdefer self.bench.close();
+        self.check = .{ .unit = &self.bench.unit };
+        self.guarded = .{ .memory = .{ .core = &self.bench.core }, .check = &self.check };
+        self.cpu = .{ .bus = self.guarded.view() };
+        self.cpu.mpu = &self.check;
+        try self.cpu.reset(layout.table);
+        self.cpu.regs.pc = layout.module;
+        self.cpu.regs.msp = layout.stack;
+        self.cpu.regs.control = 1;
+        self.cpu.regs.set(1, layout.kernel_only);
+        self.cpu.regs.set(2, 0x5A);
+        self.cpu.regs.set(3, layout.recovery);
+    }
+};
+
+test "on the Zig core the stray store enters MemManage with the same frame and never lands" {
+    var zig: ZigRun = undefined;
+    try zig.open();
+    defer zig.bench.close();
+    try zig.bench.core.write(layout.handlers + 0x10 * memmanage, &[_]u8{ 0xFE, 0xE7 });
+    try std.testing.expectEqual(Stop.count, zig.cpu.run(1));
+    try std.testing.expectEqual(memmanage, zig.cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(data_violation, try zig.bench.core.readWord(memmap.scb.cfsr));
+    try std.testing.expectEqual(layout.kernel_only, try zig.bench.core.readWord(memmap.scb.mmfar));
+    try std.testing.expectEqual(layout.module, try zig.bench.core.readWord(zig.cpu.regs.msp + 24));
+    // Unicorn lets the store land (see the top of this file); the Zig core
+    // turns it away before memory.
+    try std.testing.expectEqual(@as(u32, 0), try zig.bench.core.readWord(layout.kernel_only));
+}
+
+test "on the Zig core the handler abandons the module the same way Unicorn does" {
+    var zig: ZigRun = undefined;
+    try zig.open();
+    defer zig.bench.close();
+    try std.testing.expectEqual(Stop.count, zig.cpu.run(20));
+    var unicorn: Bench = undefined;
+    try unicorn.open();
+    defer unicorn.close();
+    try std.testing.expect(try unicorn.run(60) == null);
+    try std.testing.expectEqual(try unicorn.core.register(.pc), zig.cpu.regs.pc);
+    try std.testing.expectEqual(try unicorn.core.register(.r4), zig.cpu.regs.get(4));
+    try std.testing.expectEqual(try unicorn.core.register(.r5), zig.cpu.regs.get(5));
+    try std.testing.expectEqual(@as(u32, 0), zig.cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(@as(u32, 0), zig.cpu.regs.control & 1);
+    try std.testing.expectEqual(try unicorn.core.readWord(memmap.scb.cfsr), try zig.bench.core.readWord(memmap.scb.cfsr));
+    try std.testing.expectEqual(try unicorn.core.readWord(memmap.scb.mmfar), try zig.bench.core.readWord(memmap.scb.mmfar));
 }
