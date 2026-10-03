@@ -6,6 +6,7 @@ const op = @import("../op.zig");
 const Instr = @import("../instr.zig").Instr;
 const lob_group = @import("lob.zig");
 const lob_tp = @import("mve_lob_tp.zig");
+const fp_mem = @import("fp_mem.zig");
 
 pub fn lob(instr: Instr) op.Eci {
     const f = lob_group.fields(instr) orelse return .refuses;
@@ -15,4 +16,9 @@ pub fn lob(instr: Instr) op.Eci {
 pub fn lobTp(instr: Instr) op.Eci {
     const f = lob_tp.fields(instr) orelse return .refuses;
     return if (f.kind == .letp) .keeps else .refuses;
+}
+
+/// VLDM/VSTM and VPUSH/VPOP restart from the first register with ICI cleared.
+pub fn fpMem(instr: Instr) op.Eci {
+    return if (fp_mem.isMultiple(instr)) .restarts else .refuses;
 }

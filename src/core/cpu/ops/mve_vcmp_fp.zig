@@ -71,8 +71,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         mve.float_scalar.compare(n, cpu.regs.get(f.rm), f.size, f.cond, mask, &cpu.fp.fpscr)
     else
         mve.float_cmp.compare(n, mve.qreg.read(bank, f.qm), f.size, f.cond, mask, &cpu.fp.fpscr);
-    const done = ~mve_beats.pending(cpu);
+    const pending = mve_beats.pending(cpu);
+    const done = ~pending;
     cpu.fp.vpr.p0 = (cpu.fp.vpr.p0 & done) | p0;
     mve_beats.finish(cpu);
-    if (f.mask != 0) cpu.fp.vpr = mve.vpt.open(cpu.fp.vpr, f.mask);
+    if (f.mask != 0) cpu.fp.vpr = mve.vpt.openBeats(cpu.fp.vpr, f.mask, pending);
 }

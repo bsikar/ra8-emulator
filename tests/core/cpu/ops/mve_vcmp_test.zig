@@ -53,6 +53,19 @@ test "inside a block, VCMP clears the bytes the block masks off" {
     try std.testing.expect(!ra8.core.mve.vpt.inBlock(cpu.fp.vpr));
 }
 
+test "VPT resumed after A0 retains completed P0 and opens the remaining mask" {
+    var cpu: Cpu = .{ .bus = undefined };
+    qreg.write(&cpu.fp.bank, 0, 0x80);
+    qreg.write(&cpu.fp.bank, 1, 0x7F);
+    cpu.fp.vpr.p0 = 0xA55A;
+    cpu.regs.xpsr = ra8.core.cpu.it_state.put(cpu.regs.xpsr, 0x10);
+    try run(&cpu, 0xFE41, 0x0F83);
+    try std.testing.expectEqual(@as(u4, 0b1000), cpu.fp.vpr.mask01);
+    try std.testing.expectEqual(@as(u4, 0b1000), cpu.fp.vpr.mask23);
+    try std.testing.expectEqual(@as(u16, 0x000A), cpu.fp.vpr.p0);
+    try std.testing.expectEqual(@as(u8, 0), ra8.core.cpu.it_state.get(cpu.regs.xpsr));
+}
+
 test "the table routes VCMP and VPT here" {
     for ([_][2]u16{ .{ 0xFE11, 0x0F82 }, .{ 0xFE21, 0x1F62 }, .{ 0xFE61, 0x0F02 }, .{ 0xFE61, 0xEF02 }, .{ 0xFE51, 0x1F62 } }) |e| {
         const hit = decode.decode(wide(e[0], e[1])) orelse return error.NotClaimed;

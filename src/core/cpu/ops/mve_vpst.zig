@@ -7,6 +7,7 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const vpt = @import("../mve/vpt.zig");
+const mve_beats = @import("mve_beats.zig");
 
 pub const group: op.Group = .{ .name = "mve_vpst", .decode = decode, .oracle = false };
 
@@ -31,5 +32,7 @@ fn decode(instr: Instr) ?op.Exec {
 }
 
 fn run(cpu: *Cpu, instr: Instr) op.Error!void {
-    cpu.fp.vpr = vpt.open(cpu.fp.vpr, mask(instr));
+    const pending = mve_beats.pending(cpu);
+    cpu.fp.vpr = vpt.openBeats(cpu.fp.vpr, mask(instr), pending);
+    mve_beats.finishEci(cpu);
 }

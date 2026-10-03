@@ -63,6 +63,62 @@ test "vadd.i32 with a reserved ECI takes INVSTATE before it writes Q0" {
     try std.testing.expectEqual(before, ra8.core.mve.qreg.read(&cpu.fp.bank, 0));
 }
 
+test "VLDM restarts from the first S register with ICI cleared" {
+    var ram: fixture.Ram = .{};
+    ram.putHalf(fixture.code, 0xEC92); // vldmia r2, {s0-s1}
+    ram.putHalf(fixture.code + 2, 0x0A02);
+    ram.putWord(fixture.base + 0x200, 0x3F80_0000);
+    ram.putWord(fixture.base + 0x204, 0x4000_0000);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[2] = fixture.base + 0x200;
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x10);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), cpu.fp.bank.readS(1));
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+}
+
+test "VSTM restarts from the first S register with ICI cleared" {
+    var ram: fixture.Ram = .{};
+    ram.putHalf(fixture.code, 0xEC82); // vstmia r2, {s0-s1}
+    ram.putHalf(fixture.code + 2, 0x0A02);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.low[2] = fixture.base + 0x200;
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x10);
+    cpu.fp.bank.writeS(0, 0x3F80_0000);
+    cpu.fp.bank.writeS(1, 0x4000_0000);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), ram.word(fixture.base + 0x200));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), ram.word(fixture.base + 0x204));
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+}
+
+test "VLDR with ECI takes UsageFault INVSTATE" {
+    var ram: fixture.Ram = .{};
+    ram.putHalf(fixture.code, 0xED90); // vldr s0, [r0]
+    ram.putHalf(fixture.code + 2, 0x0A00);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putWord(ra8.core.memmap.scb.shcsr, 1 << 18);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x10);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(invstate, ram.word(ra8.core.memmap.scb.cfsr));
+}
+
+test "VSTR with ECI takes UsageFault INVSTATE" {
+    var ram: fixture.Ram = .{};
+    ram.putHalf(fixture.code, 0xED80); // vstr s0, [r0]
+    ram.putHalf(fixture.code + 2, 0x0A00);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putWord(ra8.core.memmap.scb.shcsr, 1 << 18);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, 0x10);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(invstate, ram.word(ra8.core.memmap.scb.cfsr));
+}
+
 test "LDM restarts from the start with ICI cleared" {
     var ram: fixture.Ram = .{};
     var cpu = try boot(&ram, 0xC802, null); // ldmia r0!, {r1}

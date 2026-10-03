@@ -14,6 +14,13 @@ fn runs(start: Vpr, count: usize) [4]u16 {
     return out;
 }
 
+test "openBeats leaves completed mask pairs untouched" {
+    const before: Vpr = .{ .mask01 = 0b0101, .mask23 = 0b1010 };
+    const resumed = vpt.openBeats(before, 0b1100, 0xF000);
+    try std.testing.expectEqual(@as(u4, 0b0101), resumed.mask01);
+    try std.testing.expectEqual(@as(u4, 0b1100), resumed.mask23);
+}
+
 test "outside a block nothing is predicated" {
     try std.testing.expectEqual(@as(u16, 0xFFFF), vpt.elementMask(.{ .p0 = 0x1234 }));
     try std.testing.expect(!vpt.inBlock(.{ .p0 = 0x1234 }));
