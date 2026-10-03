@@ -173,6 +173,8 @@ pub const Board = struct {
     tree: sysclk.Tree,
     /// SBYCR / DPSBYCR / LPSCR, behind PRCR.PRC1.
     low_power: lpm.Unit,
+    /// DPSIER/DPSIFR/DPSIEGR: which sources may end deep standby.
+    standby_cancel: lpm.dps.Dps = .{},
     /// PLLCCR / PLLCCR2 / MOSCWTCR, behind PRCR.PRC0.
     plls: pll.Unit,
     /// VSCR, the core voltage range, behind PRCR.PRC0.

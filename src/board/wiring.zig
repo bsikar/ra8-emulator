@@ -303,6 +303,7 @@ fn attachProtected(self: *Board) !void {
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
     for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
+    try self.bus.add(self.standby_cancel.block());
     self.domains = pdctr.Domains.init(&self.protection);
     try self.bus.add(self.domains.graphics.block());
     try self.bus.add(self.domains.eswm.block());
