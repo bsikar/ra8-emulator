@@ -7,6 +7,7 @@ pub const branch_vectors = @import("branch_vectors.zig");
 pub const bxns_vectors = @import("bxns_vectors.zig");
 pub const cbz_vectors = @import("cbz_vectors.zig");
 pub const cps_vectors = @import("cps_vectors.zig");
+pub const divide_vectors = @import("divide_vectors.zig");
 pub const dp_reg_vectors = @import("dp_reg_vectors.zig");
 pub const extend_vectors = @import("extend_vectors.zig");
 pub const hint_vectors = @import("hint_vectors.zig");
@@ -25,4 +26,4 @@ pub const svc_vectors = @import("svc_vectors.zig");
 pub const udf_vectors = @import("udf_vectors.zig");
 
 /// The group named by every base vector, for the coverage table.
-pub const covered: []const []const u8 = &(add_sub_vectors.covered ++ bkpt_vectors.covered ++ blxns_vectors.covered ++ branch_vectors.covered ++ bxns_vectors.covered ++ cbz_vectors.covered ++ cps_vectors.covered ++ dp_reg_vectors.covered ++ extend_vectors.covered ++ hint_vectors.covered ++ it_vectors.covered ++ ldm_stm_vectors.covered ++ ldr_literal_vectors.covered ++ ldst_imm_vectors.covered ++ ldst_reg_vectors.covered ++ mov_wide_vectors.covered ++ push_pop_vectors.covered ++ reverse_vectors.covered ++ shift_imm_vectors.covered ++ sp_arith_vectors.covered ++ special_data_vectors.covered ++ svc_vectors.covered ++ udf_vectors.covered);
+pub const covered: []const []const u8 = &(add_sub_vectors.covered ++ bkpt_vectors.covered ++ blxns_vectors.covered ++ branch_vectors.covered ++ bxns_vectors.covered ++ cbz_vectors.covered ++ cps_vectors.covered ++ divide_vectors.covered ++ dp_reg_vectors.covered ++ extend_vectors.covered ++ hint_vectors.covered ++ it_vectors.covered ++ ldm_stm_vectors.covered ++ ldr_literal_vectors.covered ++ ldst_imm_vectors.covered ++ ldst_reg_vectors.covered ++ mov_wide_vectors.covered ++ push_pop_vectors.covered ++ reverse_vectors.covered ++ shift_imm_vectors.covered ++ sp_arith_vectors.covered ++ special_data_vectors.covered ++ svc_vectors.covered ++ udf_vectors.covered);
