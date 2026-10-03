@@ -21,6 +21,13 @@
 //! ordinary RAM on 4 KiB boundaries, and a hole cannot be cut for it. The
 //! store still lands in the RAM underneath, which is what keeps both
 //! registers readable for free.
+//!
+//! ONE TIMER ON THIS BACKEND (RA8EMU-460). Unicorn tracks no Security state,
+//! so every access to 0xE000_E010 reaches the Secure timer and SysTick pends
+//! in the shared ICSR word. The banked pair, a Non-secure SysTick at the
+//! alias with its own pend and priority, runs on the Zig core, which knows
+//! the state of each access (RA8EMU-449, RA8EMU-455). The Zig core is the
+//! reference, and Unicorn is on its way out (#311).
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
 const clocks = @import("../periph/clocks.zig");
