@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Brighton Sikarskie
 #
-# bench_core.sh -- the RA8EMU-12 throughput benchmark. Runs every ELF in a
-# directory for the same instruction budget under --cpu zig and --cpu unicorn,
+# bench_core.sh -- the RA8EMU-12 throughput benchmark. Runs an ELF or every
+# ELF in a directory for the same budget under --cpu zig and --cpu unicorn,
 # subtracts the load-only time (budget 0) and prints net milliseconds, million
 # instructions per second for each backend and how many times slower the Zig
 # core is.
 #
-#   tools/bench_core.sh EMULATOR DIR [INSTRUCTIONS]
+#   tools/bench_core.sh EMULATOR IMAGE_OR_DIR [INSTRUCTIONS]
 #
 # Build the emulator with -Doptimize=ReleaseFast first; a Debug number says
 # nothing. An image the Zig core does not spend the whole budget on (it went
@@ -43,15 +43,26 @@ ending() {
     printf '%s\n' "$out" | sed -n 's/^zig core: //p' | head -n 1
 }
 
-mips() { awk -v n="$budget" -v ms="$1" 'BEGIN { printf "%.1f", (ms > 0) ? n / ms / 1000 : 0 }'; }
+ips() { awk -v n="$budget" -v ms="$1" 'BEGIN { printf "%.0f", (ms > 0) ? n * 1000 / ms : 0 }'; }
 
 echo "budget $budget instructions per image"
 echo
-echo "| image | zig ms | unicorn ms | zig MIPS | unicorn MIPS | zig/unicorn |"
+echo "| image | zig ms | unicorn ms | zig instructions/s | unicorn instructions/s | zig/unicorn |"
 echo "|---|---|---|---|---|---|"
 zig_total=0
 uc_total=0
-for image in "$dir"/*.elf; do
+if [ -f "$dir" ]; then
+    images=("$dir")
+else
+    shopt -s nullglob
+    images=("$dir"/*.elf)
+    shopt -u nullglob
+fi
+if [ "${#images[@]}" -eq 0 ]; then
+    echo "no ELF image found in $dir" >&2
+    exit 2
+fi
+for image in "${images[@]}"; do
     name=$(basename "$image")
     end=$(ending "$image")
     case $end in
@@ -68,7 +79,7 @@ for image in "$dir"/*.elf; do
     zig_total=$((zig_total + zig))
     uc_total=$((uc_total + uc))
     ratio=$(awk -v a="$zig" -v b="$uc" 'BEGIN { printf "%.1fx", a / b }')
-    echo "| $name | $zig | $uc | $(mips "$zig") | $(mips "$uc") | $ratio |"
+    echo "| $name | $zig | $uc | $(ips "$zig") | $(ips "$uc") | $ratio |"
 done
 [ "$uc_total" -lt 1 ] && uc_total=1
 echo "| total | $zig_total | $uc_total | | | $(awk -v a="$zig_total" -v b="$uc_total" 'BEGIN { printf "%.1fx", a / b }') |"
