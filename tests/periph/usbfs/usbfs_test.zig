@@ -268,4 +268,5 @@ test "a SETUP sets the DCP PID back to NAK, clearing a STALL" {
 
 test {
     _ = @import("usbfs_pipe_test.zig");
+    _ = @import("usbfs_bulk_test.zig");
 }
