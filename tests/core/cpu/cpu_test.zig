@@ -9,6 +9,7 @@ test {
     _ = @import("attribution_test.zig");
     _ = @import("bti_test.zig");
     _ = @import("scs_route_test.zig");
+    _ = @import("mpu_check_test.zig");
 }
 
 /// A little image at address 0: a vector table, then code at 0x08.

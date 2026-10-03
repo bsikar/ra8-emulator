@@ -12,6 +12,7 @@
 const registry = @import("../periph/registry.zig");
 const cpu_mod = @import("cpu/cpu.zig");
 const BoardBus = @import("cpu/board_bus.zig").BoardBus;
+const mpu_check = @import("cpu/mpu_check.zig");
 const NvicSource = @import("cpu/exception/nvic_source.zig").NvicSource;
 const DecodeCache = @import("cpu/decode_cache.zig").DecodeCache;
 const part = @import("part.zig");
@@ -22,6 +23,7 @@ pub const SecondZig = struct {
     pending: NvicSource = .{},
     decoded: DecodeCache = .{},
     cpu: cpu_mod.Cpu,
+    check: mpu_check.Check = undefined,
 
     /// CPU1's Zig core over `second`'s engine, reset from its vector table.
     /// Built in storage the caller holds: the core keeps pointers to this
@@ -39,6 +41,9 @@ pub const SecondZig = struct {
         self.cpu = .{ .bus = self.board.view(), .source = self.pending.source(), .profile = part.cpu1_profile };
         self.cpu.decoded = &self.decoded;
         self.board.security = &self.cpu.banked;
+        self.check = .{ .unit = &second.regions };
+        self.board.check = &self.check;
+        self.cpu.mpu = &self.check;
         try self.cpu.reset(second.vector_base);
     }
 

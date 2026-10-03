@@ -25,6 +25,7 @@ const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
 const Bus = @import("bus.zig").Bus;
 const FpState = @import("fpu/state.zig").State;
+const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
@@ -112,9 +113,15 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     cpu.decoded = &decoded;
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;
+    var check: mpu_check.Check = undefined;
     if (board) |b| {
         b.scs.fp = &cpu.fp;
         b.security = &cpu.banked;
+        if (b.scs.regions) |unit| {
+            check = .{ .unit = unit };
+            b.check = &check;
+            cpu.mpu = &check;
+        }
     }
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {

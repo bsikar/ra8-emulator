@@ -14,6 +14,8 @@ const Instr = @import("instr.zig").Instr;
 const fp_state = @import("fpu/state.zig");
 const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
+const mpu_check = @import("mpu_check.zig");
+const sysreg = @import("sysreg.zig");
 pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
 pub const sau_source = @import("sau_source.zig");
@@ -90,6 +92,9 @@ pub const Cpu = struct {
     banked: banked_mod.Banked = .{},
     /// Which security state an address belongs to; null means all Secure.
     attribution: ?attribution.Attribution = null,
+    /// The MPU check the board bus asks during an instruction's own accesses;
+    /// null checks nothing.
+    mpu: ?*mpu_check.Check = null,
     /// The event register WFE waits on: set by SEV and by exception entry
     /// and return, cleared by a WFE that finds it set.
     event: bool = false,
@@ -130,7 +135,10 @@ pub const Cpu = struct {
         self.regs.pc = address +% instr.size;
         if (runs) {
             const before = StackPointers.read(self);
-            found.?.exec(self, instr) catch |err| {
+            if (self.mpu) |m| m.arm(sysreg.privileged(&self.regs), self.boosted());
+            const ran = found.?.exec(self, instr);
+            if (self.mpu) |m| m.disarm();
+            ran catch |err| {
                 self.regs.pc = address;
                 return switch (err) {
                     error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
@@ -139,7 +147,7 @@ pub const Cpu = struct {
                     error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
                     error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
                     error.InvalidEntry => self.secureFault(.invep, address, .{ .invalid_state = address }),
-                    else => .{ .bus_fault = address },
+                    else => self.refusedOr(address),
                 };
             };
             if (before.overrun(self)) {
@@ -182,6 +190,20 @@ pub const Cpu = struct {
     fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
         exception.fault.usage(self, cause, address) catch return otherwise;
         return null;
+    }
+
+    /// Take the MemManage an access the MPU refused raises, or stop on a bus
+    /// fault when nothing was refused, or when it locks up or cannot stack.
+    fn refusedOr(self: *Cpu, address: u32) ?Stop {
+        const m = self.mpu orelse return .{ .bus_fault = address };
+        const at = m.take() orelse return .{ .bus_fault = address };
+        exception.mem_manage.data(self, address, at) catch return .{ .bus_fault = address };
+        return null;
+    }
+
+    /// A negative execution priority: HardFault, NMI, or FAULTMASK set.
+    fn boosted(self: *const Cpu) bool {
+        return self.regs.faultmask != 0 or exception.fault.inHardFaultOrNmi(self);
     }
 
     /// Take a SecureFault the instruction at `address` caused, or stop with

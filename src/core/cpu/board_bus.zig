@@ -20,6 +20,8 @@ const fp_scb = @import("fpu/scb.zig");
 const banked = @import("../banked.zig");
 /// Public so its tests reach it without a root export.
 pub const scs_route = @import("scs_route.zig");
+/// Public so its tests reach it without a root export.
+pub const mpu_check = @import("mpu_check.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
@@ -31,6 +33,8 @@ pub const BoardBus = struct {
     /// The core's Security state, which picks the bank an SCS access lands
     /// on (scs_route.zig). Null is a core that only runs Secure.
     security: ?*const banked.Banked = null,
+    /// The core's MPU check, asked about every access while it is armed.
+    check: ?*mpu_check.Check = null,
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
@@ -59,6 +63,7 @@ pub const BoardBus = struct {
             .at => |at| at,
             .res0 => return @memset(into, 0),
         };
+        if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
         if (!inWindow(address, into.len)) {
             if (self.scs.load(address, into)) return;
             return self.memory.view().read(address, into);
@@ -76,6 +81,7 @@ pub const BoardBus = struct {
             .at => |at| at,
             .res0 => return,
         };
+        if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
         if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);
