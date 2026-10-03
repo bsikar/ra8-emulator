@@ -236,3 +236,7 @@ test "the PLL locks for a driver that never writes SCKE, as the HS driver does" 
     try std.testing.expectEqual(@as(u32, regs.pllsta.plllock), host.read(at(regs.reg.pllsta), 2));
     try std.testing.expectEqual(@as(u32, 1), host.pll.locks);
 }
+
+test {
+    _ = @import("usbhs_loop_test.zig");
+}
