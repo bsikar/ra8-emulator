@@ -12,7 +12,7 @@
 //! analog (report/json_analog.zig, RA8EMU-373), compute
 //! (report/json_compute.zig, RA8EMU-377), steps, hotspots, functions,
 //! profile (report/json_where.zig, RA8EMU-378), timing (report/json_timing.zig
-//! and json_pends.zig, RA8EMU-383).
+//! and json_pends.zig, RA8EMU-383), sites (report/json_sites.zig, RA8EMU-382).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -42,6 +42,7 @@ const json_analog = @import("json_analog.zig");
 const json_compute = @import("json_compute.zig");
 pub const json_where = @import("json_where.zig");
 pub const json_timing = @import("json_timing.zig");
+pub const json_sites = @import("json_sites.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -54,6 +55,8 @@ pub const Run = struct {
     where: json_where.Where = .{},
     /// The run's timing hooks (RA8EMU-383); null on the Zig core.
     timing: ?*const json_timing.Timing = null,
+    /// The addresses behind the counters (RA8EMU-382); null on the Zig core.
+    sites: ?*const json_sites.Sites = null,
 };
 
 /// The whole document, ending in a newline.
@@ -83,6 +86,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_compute.section(&j, board);
     try json_where.section(&j, of.where);
     try json_timing.section(&j, of.timing);
+    try json_sites.section(&j, of.sites);
     try j.close('}');
     try out.writeByte('\n');
 }

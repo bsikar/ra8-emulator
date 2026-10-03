@@ -99,7 +99,8 @@ fn profiled(j: anytype, image: ?elf.Image, found: ?*const profile.Table) !void {
     try j.close('}');
 }
 
-fn symbol(j: anytype, image: ?elf.Image, address: u32) !void {
+/// The symbol around `address` and the offset into it, both null when none.
+pub fn symbol(j: anytype, image: ?elf.Image, address: u32) !void {
     const found = if (image) |loaded| symbols.inside(loaded, address) else null;
     try j.field("symbol", if (found) |at| at.name else null);
     try j.field("offset", if (found) |at| at.offset else null);
