@@ -299,7 +299,7 @@ table above. A group listed as missing does not fail the build yet.
 | bxns | 14 |
 | sg | missing |
 | tt | missing |
-| imm_logic | missing |
+| imm_logic | 30 |
 | imm_arith | 35 |
 | branch_wide | missing |
 | branch_future | missing |
