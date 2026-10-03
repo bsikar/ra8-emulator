@@ -7,12 +7,22 @@
 //! for the run loop to hand it the board's bus.
 const bus = @import("bus.zig");
 const engine = @import("../engine.zig");
+const memmap = @import("../memmap.zig");
 
 pub const EngineBus = struct {
     core: *const engine.Engine,
+    /// Opt-in keeps diagnostics able to insert their wrappers or injectors
+    /// without a direct memory operation stepping around them.
+    fast_enabled: bool = false,
+    direct: bus.DirectMemory = .{},
 
     pub fn view(self: *EngineBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+        self.direct = .{
+            .flash = self.core.ram.region(memmap.mram_base),
+            .sram = self.core.ram.region(memmap.sram_base),
+            .enabled = self.fast_enabled,
+        };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct };
     }
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {

@@ -187,7 +187,7 @@ pub const Engine = struct {
     /// The aliased ones are backed by pages this engine owns, so both views
     /// of a region are the same bytes; src/core/board_ram.zig has the why.
     pub fn mapBoardRam(self: *Engine) Error!void {
-        board_ram.mapBoard(self.handle, &self.ram) catch return Error.MapFailed;
+        board_ram.mapBoard(self.handle, &self.ram, null) catch return Error.MapFailed;
     }
 
     /// Put this engine in front of the board RAM `owner` already allocated,
@@ -201,7 +201,7 @@ pub const Engine = struct {
     /// a silent empty board, and fails.
     pub fn shareBoardRamWith(self: *Engine, owner: *Engine) Error!void {
         if (!owner.ram.mapped()) return Error.MapFailed;
-        board_ram.mapBoard(self.handle, &owner.ram) catch return Error.MapFailed;
+        board_ram.mapBoard(self.handle, &self.ram, &owner.ram) catch return Error.MapFailed;
     }
 
     /// Put the peripheral bus behind the peripheral window and its Non-secure

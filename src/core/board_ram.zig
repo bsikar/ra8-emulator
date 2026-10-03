@@ -90,10 +90,15 @@ pub fn covers(base: u32, len: u32) bool {
 /// The host pages behind the aliased regions, one entry per pair in
 /// `memmap.alias_of` and in the same order.
 pub const Store = struct {
+    /// The code MRAM backing is per engine. CPU1 may load a different image,
+    /// while its on-chip SRAM aliases below still share CPU0's allocation.
+    mram: ?[]u8 = null,
     backing: [memmap.alias_of.len]?[]u8 = @splat(null),
 
     /// Release every allocation. Safe to call on a store that never mapped.
     pub fn deinit(self: *Store) void {
+        if (self.mram) |bytes| std.heap.page_allocator.free(bytes);
+        self.mram = null;
         for (&self.backing) |*held| {
             if (held.*) |bytes| std.heap.page_allocator.free(bytes);
             held.* = null;
@@ -107,6 +112,14 @@ pub const Store = struct {
             if (held != null) return true;
         }
         return false;
+    }
+
+    /// Host bytes for a whole direct-mapped region, including either alias.
+    pub fn region(self: *const Store, base: u32) ?[]u8 {
+        if (base == memmap.mram_base) return self.mram;
+        if (secureIndex(base)) |index| return self.backing[index];
+        if (viewedRegion(base)) |secure| return self.backing[secureIndex(secure).?];
+        return null;
     }
 
     /// The pages behind the Secure side of a pair, or null when that region
@@ -143,14 +156,25 @@ fn viewedRegion(base: u32) ?u32 {
 /// 0x1000_0000 above it. So the pages behind a pair are always allocated
 /// before the view that has to be given them, and one forward pass is
 /// enough.
-pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store) Error!void {
+pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store, shared: ?*Store) Error!void {
     for (memmap.ram) |region| {
         const prot = protOf(region.perms);
+        if (region.base == memmap.mram_base) {
+            const bytes = store.mram orelse blk: {
+                const fresh = try allocate(region.size);
+                store.mram = fresh;
+                break :blk fresh;
+            };
+            try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
+            continue;
+        }
         if (secureIndex(region.base)) |index| {
             // Already allocated means a second core is being put in front of
             // the board this store already backs: it gets those very pages,
             // which is the whole point of the store outliving one engine.
-            const bytes = store.backing[index] orelse blk: {
+            const backing = (shared orelse store).backing;
+            const bytes = backing[index] orelse blk: {
+                if (shared != null) return Error.MapFailed;
                 const fresh = try allocate(region.size);
                 store.backing[index] = fresh;
                 break :blk fresh;
@@ -159,7 +183,7 @@ pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store) Error!void {
             continue;
         }
         if (viewedRegion(region.base)) |secure| {
-            const bytes = store.pagesFor(secure) orelse return Error.MapFailed;
+            const bytes = (shared orelse store).pagesFor(secure) orelse return Error.MapFailed;
             try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
             continue;
         }

@@ -32,7 +32,7 @@ pub const QuietSource = struct {
 
     /// The run's bus, noticing every access that could pend or unpend.
     pub fn bus(self: *QuietSource) bus_mod.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = self.memory.direct };
     }
 
     /// Forget the last answer: the next poll asks the inner source again.
