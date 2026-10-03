@@ -1,9 +1,9 @@
 //! The Zig core's MPU check on an instruction's own data accesses
 //! (RA8EMU-369).
 //!
-//! The core arms the check around one instruction's execution, so the fetch
-//! before it and the exception entry after it are not checked here (the fetch
-//! is RA8EMU-368). The board bus asks it about every load and store while it
+//! The core arms the check around one instruction's execution, so the
+//! exception entry after it is not checked; the fetch before it is checked
+//! on its own through refusesFetch (RA8EMU-368). The board bus asks it about every load and store while it
 //! is armed, and a refused access is turned away before it reaches memory:
 //! unlike the Unicorn guard (src/core/mpu_guard.zig), the faulting store never
 //! lands.
@@ -56,6 +56,14 @@ pub const Check = struct {
         if (!self.armed or !refuses(self.unit, address, kind, self.privileged)) return true;
         if (self.refused == null) self.refused = address;
         return false;
+    }
+
+    /// Whether the MPU refuses fetching the instruction at `address`
+    /// (RA8EMU-368). The fetch is checked on its own, outside the armed
+    /// window, with the same negative-priority rule.
+    pub fn refusesFetch(self: *const Check, address: u32, privileged: bool, boosted: bool) bool {
+        if (boosted and self.unit.ctrl & mpu.field.ctrl_hfnmiena == 0) return false;
+        return refuses(self.unit, address, .fetch, privileged);
     }
 
     /// The refused address, if any, cleared as it is read.

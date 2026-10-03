@@ -119,6 +119,8 @@ pub const Cpu = struct {
     pub fn step(self: *Cpu) ?Stop {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
+        if (self.mpu) |m| if (m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
+            return self.fetchRefused(address);
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
             return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
@@ -202,6 +204,13 @@ pub const Cpu = struct {
         const m = self.mpu orelse return .{ .bus_fault = address };
         const at = m.take() orelse return .{ .bus_fault = address };
         exception.mem_manage.data(self, address, at) catch return .{ .bus_fault = address };
+        return null;
+    }
+
+    /// Take the MemManage a fetch the MPU refused raises; the instruction at
+    /// `address` never runs. Stops on a bus fault when it locks up.
+    fn fetchRefused(self: *Cpu, address: u32) ?Stop {
+        exception.mem_manage.instruction(self, address) catch return .{ .bus_fault = address };
         return null;
     }
 

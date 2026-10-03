@@ -94,3 +94,21 @@ test "arming takes the privilege it is given" {
     check.arm(true, false);
     try std.testing.expect(check.allows(ram_ro[0], .load));
 }
+
+test "a fetch is refused by execute-never, privilege, and the background" {
+    var unit = unitOf(on);
+    unit.table[1] = mpu.Region.fromPair(ram_ro[0] | mpu.field.rbar_xn | mpu.field.rbar_ap_unprivileged, (ram_ro[1] & mpu.field.address) | mpu.field.rlar_enable);
+    const check: mpu_check.Check = .{ .unit = &unit };
+    try std.testing.expect(check.refusesFetch(ram_ro[0], true, false));
+    try std.testing.expect(!check.refusesFetch(ram_rw[0], false, false));
+    try std.testing.expect(check.refusesFetch(0x6000_0000, true, false));
+}
+
+test "a fetch at negative priority is not checked unless HFNMIENA" {
+    var unit = unitOf(on);
+    unit.table[1] = mpu.Region.fromPair(ram_ro[0] | mpu.field.rbar_xn, (ram_ro[1] & mpu.field.address) | mpu.field.rlar_enable);
+    const check: mpu_check.Check = .{ .unit = &unit };
+    try std.testing.expect(!check.refusesFetch(ram_ro[0], true, true));
+    unit.ctrl |= mpu.field.ctrl_hfnmiena;
+    try std.testing.expect(check.refusesFetch(ram_ro[0], true, true));
+}
