@@ -90,6 +90,10 @@ test "bankedBits: SHCSR keeps BusFault, SecureFault and NMI shared" {
     try std.testing.expectEqual(@as(u32, 0x0025_BC8D), shcsr);
 }
 
+test "bankedBits: ICSR banks PENDST only with two SysTick timers" {
+    try std.testing.expectEqual(@as(u32, 0x1E00_0000), bank.bankedBits(0xE000_ED04, .two).?);
+}
+
 test "every bit-by-bit register now has a split" {
     for ([_]u32{ 0x04, 0x0C, 0x10, 0x14, 0x18, 0x20, 0x24, 0x28 }) |offset| {
         try std.testing.expect(bank.bankedBits(0xE000_ED00 + offset, .one) != null);

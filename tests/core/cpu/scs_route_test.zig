@@ -83,3 +83,46 @@ test "VTOR round trip from each state and through the alias on CPU0" {
 test "VTOR round trip from each state and through the alias on CPU1" {
     try roundTrip(.cpu1);
 }
+
+const SysTicks = ra8.periph.scb_bank.SysTicks;
+const icsr: u32 = 0xE000_ED04;
+const scr: u32 = 0xE000_ED10;
+const ccr: u32 = 0xE000_ED14;
+
+fn splitOf(address: u32, view: ra8.periph.scs_alias.View, systicks: SysTicks) scs_route.Split {
+    return scs_route.split(.{ .address = address, .view = view }, systicks).?;
+}
+
+test "a bit-by-bit register splits over the normal word and its alias copy" {
+    const prigroup = splitOf(aircr + 1, .non_secure, .two);
+    try std.testing.expectEqual(aircr, prigroup.shared);
+    try std.testing.expectEqual(aircr + 0x2_0000, prigroup.non_secure);
+    try std.testing.expectEqual(@as(u32, 0x0000_0700), prigroup.mask);
+    try std.testing.expectEqual(@as(u32, 0x0007_041A), splitOf(ccr, .secure, .one).mask);
+}
+
+test "ICSR banks PENDSV always and PENDST only with two SysTicks" {
+    try std.testing.expectEqual(@as(u32, 0x1800_0000), splitOf(icsr, .non_secure, .one).mask);
+    try std.testing.expectEqual(@as(u32, 0x1E00_0000), splitOf(icsr, .non_secure, .two).mask);
+}
+
+test "unbanked and wholly banked registers have no split" {
+    try std.testing.expect(scs_route.split(.{ .address = hfsr, .view = .non_secure }, .two) == null);
+    try std.testing.expect(scs_route.split(.{ .address = vtor, .view = .non_secure }, .two) == null);
+}
+
+test "a Non-secure read takes the banked bits from the Non-secure copy" {
+    const sleep = splitOf(scr, .non_secure, .two);
+    try std.testing.expectEqual(@as(u32, 0x0000_0006), sleep.read(0x0000_0014, 0x0000_0002));
+    try std.testing.expectEqual(@as(u32, 0x0000_0014), splitOf(scr, .secure, .two).read(0x0000_0014, 0x0000_0002));
+}
+
+test "a Non-secure write leaves the Secure banked bits alone" {
+    const sleep = splitOf(scr, .non_secure, .two);
+    const words = sleep.write(0x0000_0010, 0, 0x0000_0006);
+    try std.testing.expectEqual(@as(u32, 0x0000_0014), words.shared);
+    try std.testing.expectEqual(@as(u32, 0x0000_0002), words.non_secure);
+    const secure = splitOf(scr, .secure, .two).write(0x0000_0010, 0x0000_0002, 0x0000_0004);
+    try std.testing.expectEqual(@as(u32, 0x0000_0004), secure.shared);
+    try std.testing.expectEqual(@as(u32, 0x0000_0002), secure.non_secure);
+}
