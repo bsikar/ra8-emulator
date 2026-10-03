@@ -28,19 +28,17 @@ pub const Instance = struct {
     state: *anyopaque,
 };
 
+/// A model owns its state (create, destroy) apart from where it sits on a
+/// bus (bind), so a board can bind storage it already holds and a run can
+/// make a fresh instance for each extra endpoint.
 pub const Model = struct {
     name: []const u8,
     kind: endpoint.Kind,
-    /// Allocate the model's state for this endpoint and hand back its
-    /// device. The endpoint is already known to be of `kind`.
-    makeFn: *const fn (std.mem.Allocator, endpoint.Endpoint) Error!Made,
+    createFn: *const fn (std.mem.Allocator) Error!*anyopaque,
     destroyFn: *const fn (std.mem.Allocator, *anyopaque) void,
-};
-
-/// What a model's makeFn returns.
-pub const Made = struct {
-    device: Device,
-    state: *anyopaque,
+    /// The device for this state at this endpoint. The endpoint is already
+    /// known to be of `kind`.
+    bindFn: *const fn (*anyopaque, endpoint.Endpoint) Device,
 };
 
 pub const Error = error{
@@ -59,16 +57,30 @@ pub const Catalog = struct {
         return null;
     }
 
+    /// A model that exists and plugs into this kind of endpoint.
+    fn fitting(self: Catalog, name: []const u8, at: endpoint.Endpoint) Error!*const Model {
+        const model = self.find(name) orelse return Error.UnknownModel;
+        if (model.kind != at.kind()) return Error.WrongEndpoint;
+        return model;
+    }
+
+    /// A fresh instance of `name` at `at`; give it back with `destroy`.
     pub fn make(
         self: Catalog,
         allocator: std.mem.Allocator,
         name: []const u8,
         at: endpoint.Endpoint,
     ) Error!Instance {
-        const model = self.find(name) orelse return Error.UnknownModel;
-        if (model.kind != at.kind()) return Error.WrongEndpoint;
-        const made = try model.makeFn(allocator, at);
-        return .{ .model = model, .device = made.device, .state = made.state };
+        const model = try self.fitting(name, at);
+        const state = try model.createFn(allocator);
+        return .{ .model = model, .device = model.bindFn(state, at), .state = state };
+    }
+
+    /// The device of `name` over state the caller holds. `state` must be
+    /// that model's own state type.
+    pub fn bind(self: Catalog, name: []const u8, state: *anyopaque, at: endpoint.Endpoint) Error!Device {
+        const model = try self.fitting(name, at);
+        return model.bindFn(state, at);
     }
 
     pub fn destroy(allocator: std.mem.Allocator, instance: Instance) void {

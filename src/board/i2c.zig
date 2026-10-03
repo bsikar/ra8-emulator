@@ -12,11 +12,14 @@
 //! only when the run asks for them with `click`; by default those addresses
 //! stay silent, the same as the bench.
 const bus = @import("../periph/riic/riic_bus.zig");
+const catalog = @import("../periph/model/catalog.zig");
+const endpoint = @import("../periph/model/endpoint.zig");
 const gt911 = @import("../periph/i3c/i3c_gt911.zig");
 const i3c = @import("../periph/i3c/i3c.zig");
 const lsm6dso = @import("../periph/i3c/i3c_lsm6dso.zig");
 const max17048 = @import("../periph/i3c/i3c_max17048.zig");
 const ov5640 = @import("../periph/riic/riic_ov5640.zig");
+const parts = @import("../periph/model/parts.zig");
 const periph = @import("../periph/registry.zig");
 const pi4ioe = @import("../periph/riic/riic_pi4ioe.zig");
 const riic = @import("../periph/riic/riic.zig");
@@ -45,8 +48,27 @@ pub const Wire = struct {
         try self.controller.attachDevice(self.sensor.device());
         try self.touchline.attachDevice(self.panel.device());
         if (!self.click) return;
-        try self.touchline.attachDevice(self.imu.device());
-        try self.touchline.attachDevice(self.gauge.device());
+        try self.fit(parts.imu_name, &self.imu, lsm6dso.address);
+        try self.fit(parts.gauge_name, &self.gauge, max17048.address);
+    }
+
+    /// Bind a Click part this struct holds through the model catalog, at its
+    /// datasheet address on the touch line where the module's I2C pins land.
+    fn fit(self: *Wire, name: []const u8, state: *anyopaque, address: u7) !void {
+        const at: endpoint.Endpoint = .{ .i2c = .{ .line = .touch, .address = address } };
+        try self.plug(try parts.all.bind(name, state, at), at);
+    }
+
+    /// Put a catalog model's device on the I2C line its endpoint names.
+    pub fn plug(self: *Wire, device: catalog.Device, at: endpoint.Endpoint) !void {
+        const part = switch (device) {
+            .i2c => |part| part,
+            else => return catalog.Error.WrongEndpoint,
+        };
+        switch (at.i2c.line) {
+            .riic => try self.controller.attachDevice(part),
+            .touch => try self.touchline.attachDevice(part),
+        }
     }
 
     pub fn block(self: *Wire) periph.Block {

@@ -35,3 +35,17 @@ test "fitting the Click module puts the IMU and the fuel gauge on the line" {
     try std.testing.expect(wire.touchline.devices.find(max17048.address) != null);
     try std.testing.expect(wire.touchline.devices.find(gt911.address) != null);
 }
+
+test "plug puts a catalog model on the line its endpoint names" {
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var wire = i2c.Wire{};
+    try wire.attach(&bus);
+    const model = ra8.periph.registry.model;
+    const at = try model.endpoint.parse("i2c:riic@0x37");
+    const made = try model.parts.all.make(std.testing.allocator, model.parts.gauge_name, at);
+    defer model.catalog.Catalog.destroy(std.testing.allocator, made);
+    try wire.plug(made.device, at);
+    try std.testing.expect(wire.controller.devices.find(0x37) != null);
+    try std.testing.expect(wire.touchline.devices.find(0x37) == null);
+}
