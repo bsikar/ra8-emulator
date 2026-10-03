@@ -61,10 +61,9 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
 /// Load the image, then read its option-setting memory the way the boot ROM
 /// does before the first instruction: src/board/option_memory.zig.
 fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
-    if (options.console) {
-        cli.console_output.configure(&board.serial.line);
-        board.console_input.enabled = true;
-    }
+    if (options.console) board.console_input.enabled = true;
+    parts.tap = .{ .echo = options.console, .wait = if (options.until) |text| .{ .needle = text } else null };
+    cli.console_output.configure(&board.serial.line, &parts.tap);
     const written = try attachAll(core, image, parts, options);
     // TT answers from the SAU the firmware programmed: src/core/tt_hook.zig.
     _ = try ra8.core.csel.tt_hook.attach(core.handle, image, &board.partitions);
@@ -134,8 +133,7 @@ pub fn main() !u8 {
     };
     try core.resetFromVectorTable(vector_base);
     const entry = try core.register(.pc);
-    var out = std.io.getStdOut().writer();
-    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
+    const out = try announce(core, written, vector_base, entry);
     if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
@@ -166,6 +164,7 @@ pub fn main() !u8 {
         .reboot = &reboot,
         .protection = &board.guard,
         .stop = if (stop) |*one| one else null,
+        .until = parts.tap.waiting(),
         .brk = if (point) |*one| one else null,
         .undefined_sites = if (options.stop_on_undefined) &undefined_found else null,
         .deadline = if (timed) |*one| one else null,
@@ -183,7 +182,15 @@ pub fn main() !u8 {
     }, second);
 
     try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window, tracer);
-    return verdict(out, core, options, fault, stop, point, timed, budget);
+    return verdict(out, core, options, fault, stop, point, timed, budget, if (parts.tap.waiting()) |wait| wait.reached else false);
+}
+
+/// The line every run opens with: what was loaded and where it starts.
+/// Hands back the writer the rest of the run prints through.
+fn announce(core: engine.Engine, written: u32, vector_base: u32, entry: u32) !std.fs.File.Writer {
+    const out = std.io.getStdOut().writer();
+    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
+    return out;
 }
 
 /// Everything a finished run prints, in the order it prints it.
@@ -235,6 +242,7 @@ fn verdict(
     point: ?breakpoint.Break,
     timed: ?deadline.Deadline,
     budget: usize,
+    waited: bool,
 ) !u8 {
     if (fault) |taken| {
         try report.fault(out, taken);
@@ -242,6 +250,10 @@ fn verdict(
     }
     const pc = try core.register(.pc);
     if (point) |arrived| return arrivals(out, options, arrived, pc, budget);
+    if (waited) {
+        try out.print("stopped clean on the console line \"{s}\", pc 0x{X:0>8}\n", .{ options.until.?, pc });
+        return 0;
+    }
     const spent = if (timed) |due| due.reached else false;
     const watched = stop orelse {
         if (spent) {

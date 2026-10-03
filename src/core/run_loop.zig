@@ -113,7 +113,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         }
         // The counter is read here, after the boundary's blocks have
         // run, so a value a peripheral advanced this chunk is seen.
-        if (session.stop) |watch| if (watch.met(core.readWord(watch.address) catch null)) break;
+        if (stopped(core, session)) break;
         // Modelled time is read from the same boundary, after the counter:
         // when both land on one boundary the counter is the verdict the
         // suite asked for and the deadline is only the window it allowed.
@@ -328,6 +328,14 @@ pub fn askedToStop(session: Session) bool {
     const pending = session.pend orelse return false;
     if (!pending.look.cuts()) return false;
     return pending.ended;
+}
+
+/// The two early ends a boundary honours: the counter `--stop-sym` named
+/// reaching its floor, then the console line `--until` waits for.
+fn stopped(core: anytype, session: Session) bool {
+    if (session.stop) |watch| if (watch.met(core.readWord(watch.address) catch null)) return true;
+    if (session.until) |wanted| if (wanted.met()) return true;
+    return false;
 }
 
 /// Take what the boundary owes: a pend that has been waiting out a mask,

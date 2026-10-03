@@ -27,9 +27,12 @@ const reboot_mod = @import("../../core/reboot.zig");
 const undefined_ops = @import("../../core/undefined_ops.zig");
 const report_run = @import("report/run.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
+const console_output = @import("console_output.zig");
 
 pub const Parts = struct {
     watch: engine.Watch = .{},
+    /// Where finished console lines go: `--console` and `--until`.
+    tap: console_output.Tap = .{},
     loops: lob.Loops = .{},
     selects: csel.Selects = .{},
     clears: csel.clrm.Clears = .{},

@@ -13,6 +13,10 @@
 //! which is what keeps the core's only C boundary in one place.
 const std = @import("std");
 
+/// The console line a run waits on (`--until`), reached as stop.until
+/// because src/root.zig is at its line limit.
+pub const until = @import("until.zig");
+
 pub const Stop = struct {
     /// The address of the counter, resolved from the image's symbol table
     /// before the run starts.

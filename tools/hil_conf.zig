@@ -57,6 +57,16 @@ pub const Conf = struct {
     }
 
     /// HIL_MODE=alive: the run passes unless its console says otherwise.
+    /// The line a uart_scrape run ends on, handed to the emulator as
+    /// `--until`: the bench stops scraping at the first match and checks
+    /// HIL_EXPECT_NEGATIVE over what it captured up to there. Null for any
+    /// other mode, or a conf with no HIL_EXPECT.
+    pub fn untilLine(conf: Conf) ?[]const u8 {
+        if (!std.mem.eql(u8, conf.mode orelse return null, "uart_scrape")) return null;
+        const text = conf.expect orelse return null;
+        return if (text.len == 0) null else text;
+    }
+
     pub fn isAlive(conf: Conf) bool {
         return std.mem.eql(u8, conf.mode orelse return false, "alive");
     }
