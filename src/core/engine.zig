@@ -101,6 +101,7 @@ pub const Cortex = enum(c_int) {
     basepri = c.uc.UC_ARM_REG_BASEPRI,
     faultmask = c.uc.UC_ARM_REG_FAULTMASK,
     control = c.uc.UC_ARM_REG_CONTROL,
+    fpscr = c.uc.UC_ARM_REG_FPSCR,
 };
 
 /// What a run is allowed to do, re-exported so `engine.Session` resolves.

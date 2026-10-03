@@ -38,6 +38,7 @@ pub const ZigCore = struct {
             .basepri => r.basepri,
             .faultmask => r.faultmask,
             .control => r.control,
+            .fpscr => self.cpu.fp.fpscr.bits(),
         };
     }
 
@@ -55,6 +56,7 @@ pub const ZigCore = struct {
             .basepri => r.basepri = value,
             .faultmask => r.faultmask = value,
             .control => r.control = value,
+            .fpscr => self.cpu.fp.fpscr = @TypeOf(self.cpu.fp.fpscr).fromBits(value),
         }
     }
 
