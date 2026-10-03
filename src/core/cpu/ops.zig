@@ -108,4 +108,7 @@ pub const mve_float_rint = @import("ops/mve_float_rint.zig");
 pub const mve_float_maxnm = @import("ops/mve_float_maxnm.zig");
 pub const mve_float_maxnma = @import("ops/mve_float_maxnma.zig");
 pub const mve_float_maxnmv = @import("ops/mve_float_maxnmv.zig");
+pub const mve_float_vcadd = @import("ops/mve_float_vcadd.zig");
+pub const mve_float_vcmla = @import("ops/mve_float_vcmla.zig");
+pub const mve_float_vcmul = @import("ops/mve_float_vcmul.zig");
 pub const table = @import("ops/table.zig");
