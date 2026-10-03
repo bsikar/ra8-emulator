@@ -106,4 +106,5 @@ pub const mve_float_cvt_fixed = @import("ops/mve_float_cvt_fixed.zig");
 pub const mve_float_rint = @import("ops/mve_float_rint.zig");
 pub const mve_float_maxnm = @import("ops/mve_float_maxnm.zig");
 pub const mve_float_maxnma = @import("ops/mve_float_maxnma.zig");
+pub const mve_float_maxnmv = @import("ops/mve_float_maxnmv.zig");
 pub const table = @import("ops/table.zig");
