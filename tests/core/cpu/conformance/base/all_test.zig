@@ -5,6 +5,7 @@ const ra8 = @import("ra8");
 test {
     _ = @import("add_sub_vectors_test.zig");
     _ = @import("add_sub_wide_vectors_test.zig");
+    _ = @import("barrier_vectors_test.zig");
     _ = @import("bitfield_vectors_test.zig");
     _ = @import("bkpt_vectors_test.zig");
     _ = @import("blxns_vectors_test.zig");

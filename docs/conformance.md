@@ -243,7 +243,7 @@ table above. A group listed as missing does not fail the build yet.
 | Group | Vectors |
 |---|---|
 | hint | 20 |
-| barrier | missing |
+| barrier | 24 |
 | push_pop | 17 |
 | sp_arith | 23 |
 | ldr_literal | 10 |
