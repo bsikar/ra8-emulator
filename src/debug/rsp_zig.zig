@@ -1,7 +1,10 @@
 //! The remote protocol's run control and threads on the Zig core
 //! (RA8EMU-118), the counterpart of rsp_run.zig for the Unicorn session.
 //!
-//! The Zig core debugs one core, so there is one thread. `c` runs budget
+//! Each core is a thread: CPU0 is thread 1 and, with CPU1 attached
+//! (RA8EMU-338), CPU1 is thread 2. `Hg`, `Hc` and a vCont action's thread
+//! give the session to that core, so `g`, `m`, `s` and `c` act on it while
+//! the other holds where it stopped (all-stop, scheduler locked). `c` runs budget
 //! after budget, asking the poll between them whether gdb sent an
 //! interrupt, and `s` runs one instruction. The stop replies are the same
 //! as rsp_run.zig's: `T05` for a break or a step, `T05watch:` and friends
@@ -32,25 +35,26 @@ pub const Target = struct {
 pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     if (std.mem.eql(u8, request, "vCont?")) return copy(out, vcont_actions);
     if (std.mem.startsWith(u8, request, "vCont;")) return vcont(target, request["vCont;".len..], out);
-    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, "m1");
+    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (target.session.other == null) "m1" else "m1,2");
     if (std.mem.eql(u8, request, "qsThreadInfo")) return copy(out, "l");
-    if (std.mem.eql(u8, request, "qC")) return copy(out, "QC1");
+    if (std.mem.eql(u8, request, "qC")) return print(out, "QC{d}", .{thread(target)});
     return switch (request[0]) {
         'c' => resume_(target, .cont, out),
         's' => resume_(target, .step, out),
         '?' => stopReply(target, out),
-        'H' => copy(out, if (request.len > 1 and alive(request[2..])) "OK" else request_error),
-        'T' => copy(out, if (alive(request[1..])) "OK" else request_error),
+        'H' => copy(out, if (request.len > 1 and select(target, request[2..])) "OK" else request_error),
+        'T' => copy(out, if (alive(target, request[1..])) "OK" else request_error),
         else => out[0..0],
     };
 }
 
-/// Only the first action matters: there is one thread.
+/// Only the first action matters: one core runs at a time, and a thread
+/// on it selects that core first.
 fn vcont(target: *Target, actions: []const u8, out: []u8) Error![]const u8 {
     const first = actions[0 .. std.mem.indexOfScalar(u8, actions, ';') orelse actions.len];
     if (first.len == 0) return copy(out, request_error);
     if (std.mem.indexOfScalar(u8, first, ':')) |colon| {
-        if (!alive(first[colon + 1 ..])) return copy(out, request_error);
+        if (!select(target, first[colon + 1 ..])) return copy(out, request_error);
     }
     return switch (first[0]) {
         'c', 'C' => resume_(target, .cont, out),
@@ -75,16 +79,16 @@ fn resume_(target: *Target, command: zig_session.Command, out: []u8) Error![]con
 
 /// Why the core last stopped, as gdb reads it.
 fn stopReply(target: *Target, out: []u8) Error![]const u8 {
-    const ended = target.last orelse return reply(out, sigtrap);
+    const ended = target.last orelse return reply(target, out, sigtrap);
     return switch (ended) {
-        .count => reply(out, sigtrap),
-        .core => reply(out, sigsegv),
+        .count => reply(target, out, sigtrap),
+        .core => reply(target, out, sigsegv),
         .stop => |stop| switch (stop) {
-            .watchpoint => |hit| print(out, "T{x:0>2}{s}:{x:0>8};thread:1;", .{
-                sigtrap, watchName(target, hit), hit.address,
+            .watchpoint => |hit| print(out, "T{x:0>2}{s}:{x:0>8};thread:{d};", .{
+                sigtrap, watchName(target, hit), hit.address, thread(target),
             }),
-            .halt_requested => reply(out, sigint),
-            else => reply(out, sigtrap),
+            .halt_requested => reply(target, out, sigint),
+            else => reply(target, out, sigtrap),
         },
     };
 }
@@ -103,14 +107,34 @@ fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
     };
 }
 
-/// Thread `0` and `-1` mean any thread; the only thread is `1`.
-fn alive(text: []const u8) bool {
-    if (std.mem.eql(u8, text, "0") or std.mem.eql(u8, text, "-1")) return true;
-    return (std.fmt.parseInt(u32, text, 16) catch return false) == 1;
+/// The selected core's thread id: CPU0 is 1, CPU1 is 2.
+fn thread(target: *const Target) u32 {
+    return @as(u32, target.session.index) + 1;
 }
 
-fn reply(out: []u8, signal: u8) Error![]const u8 {
-    return print(out, "T{x:0>2}thread:1;", .{signal});
+/// Thread `0` and `-1` mean any thread, so the selected one stands.
+fn anyThread(text: []const u8) bool {
+    return std.mem.eql(u8, text, "0") or std.mem.eql(u8, text, "-1");
+}
+
+/// Thread 1 is always there; thread 2 only with CPU1 attached.
+fn alive(target: *const Target, text: []const u8) bool {
+    if (anyThread(text)) return true;
+    const id = std.fmt.parseInt(u32, text, 16) catch return false;
+    return id == 1 or (id == 2 and target.session.other != null);
+}
+
+/// Give the session to the core behind thread `text`; false when there is none.
+fn select(target: *Target, text: []const u8) bool {
+    if (!alive(target, text)) return false;
+    if (anyThread(text)) return true;
+    const id = std.fmt.parseInt(u8, text, 16) catch return false;
+    target.session.switchTo(id - 1) catch return false;
+    return true;
+}
+
+fn reply(target: *const Target, out: []u8, signal: u8) Error![]const u8 {
+    return print(out, "T{x:0>2}thread:{d};", .{ signal, thread(target) });
 }
 
 fn print(out: []u8, comptime format: []const u8, args: anytype) Error![]const u8 {

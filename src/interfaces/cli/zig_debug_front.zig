@@ -5,8 +5,8 @@
 //! as src/core/cpu/boot.zig runOnBoard does, and src/debug/zig_script.zig
 //! carries the commands out. `--gdb` serves gdb from the same Zig session
 //! (RA8EMU-118). `--cpu1` beside it brings CPU1 up on its own Zig core,
-//! and `core 0|1` switches between them (RA8EMU-337); gdb does not serve
-//! CPU1 here yet, and `--cpu lockstep` is not a debugger target. Both say so.
+//! and `core 0|1` switches between them (RA8EMU-337); `--gdb` serves it as
+//! thread 2 (RA8EMU-338). `--cpu lockstep` is not a debugger target and says so.
 const std = @import("std");
 const engine = @import("../../core/engine.zig");
 const elf = @import("../../core/elf.zig");
@@ -29,7 +29,6 @@ const second_core = @import("../../core/second_core.zig");
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {
     if (request.cpu != .zig) return "the debugger runs on --cpu unicorn or --cpu zig";
-    if (request.cpu1 != null and request.mode == .gdb) return "--gdb with --cpu1 beside --cpu zig serves one core yet; use --debug-script or --debug";
     return null;
 }
 
@@ -63,16 +62,21 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
         return 1;
     };
     var target: zig_script.ZigScript = .{ .image = image, .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } };
-    if (request.mode == .gdb) return listen(&core, &target.session, request.mode.gdb);
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};
-    const named = request.cpu1 orelse return drive(allocator, &target, request.mode, out);
+    const named = request.cpu1 orelse return serve(allocator, &core, &target, request.mode, out);
     other.open(allocator, &pair, &core, &board, named, &target) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };
     defer other.close(allocator, &pair);
-    return drive(allocator, &target, request.mode, out);
+    return serve(allocator, &core, &target, request.mode, out);
+}
+
+/// gdb on the port, or the script or terminal.
+fn serve(allocator: std.mem.Allocator, core: *const engine.Engine, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
+    if (mode == .gdb) return listen(core, &target.session, mode.gdb);
+    return drive(allocator, target, mode, out);
 }
 
 /// CPU1 under the debugger: its Zig core, its own stop machine, and its

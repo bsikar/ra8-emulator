@@ -65,6 +65,32 @@ test "one thread: thread queries and selecting any other thread" {
     try expectReply(&target, "?", "T05thread:1;");
 }
 
+test "with CPU1 attached it is thread 2, and selecting it moves g, s and ?" {
+    var memory0 = ram();
+    var cpu0: Cpu = .{ .bus = memory0.view() };
+    try cpu0.reset(0);
+    var memory1 = ram();
+    var cpu1: Cpu = .{ .bus = memory1.view() };
+    try cpu1.reset(0);
+    var machine0 = Machine{};
+    var machine1 = Machine{};
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100, .other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1 } };
+    var target: zig_run.Target = .{ .session = &session };
+    try expectReply(&target, "qfThreadInfo", "m1,2");
+    try expectReply(&target, "T2", "OK");
+    try expectReply(&target, "T3", "E00");
+    try expectReply(&target, "Hg2", "OK");
+    try expectReply(&target, "qC", "QC2");
+    try std.testing.expectEqual(@as(u8, 1), session.index);
+    try expectReply(&target, "s", "T05thread:2;");
+    try std.testing.expectEqual(@as(u32, 0x0A), cpu1.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x08), cpu0.regs.pc);
+    try expectReply(&target, "vCont;s:1", "T05thread:1;");
+    try std.testing.expectEqual(@as(u32, 0x0A), cpu0.regs.pc);
+    try expectReply(&target, "Hg0", "OK");
+    try expectReply(&target, "qC", "QC1");
+}
+
 test "s steps one instruction, c stops on a break and then on the core's fault" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
