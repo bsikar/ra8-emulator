@@ -96,6 +96,9 @@ pub const field = struct {
 
 /// One data region as the firmware left it: the inclusive span it covers, and
 /// the three bits that decide which accesses into it are allowed.
+/// The Non-secure MPU's copy on the Zig core's bus. src/periph/mpu/mpu_ns.zig.
+pub const ns = @import("mpu_ns.zig");
+
 pub const Region = struct {
     base: u32 = 0,
     limit: u32 = 0,

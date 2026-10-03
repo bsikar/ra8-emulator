@@ -128,6 +128,7 @@ test {
     _ = @import("periph/mpu/mpu_escalate_test.zig");
     _ = @import("periph/mpu/mpu_fault_test.zig");
     _ = @import("periph/mpu/mpu_test.zig");
+    _ = @import("periph/mpu/mpu_ns_test.zig");
     _ = @import("periph/canfd/canfd_error_test.zig");
     _ = @import("periph/canfd/canfd_fifo_test.zig");
     _ = @import("periph/canfd/canfd_rx_config_test.zig");
