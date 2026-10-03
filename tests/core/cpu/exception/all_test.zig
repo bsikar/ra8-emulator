@@ -20,4 +20,5 @@ test {
     _ = @import("quiet_source_test.zig");
     _ = @import("target_test.zig");
     _ = @import("cross_test.zig");
+    _ = @import("eci_test.zig");
 }
