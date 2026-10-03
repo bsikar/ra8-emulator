@@ -15,6 +15,7 @@ const fp_state = @import("fpu/state.zig");
 const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
 pub const bti = @import("bti.zig");
+pub const attribution = @import("attribution.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
@@ -86,6 +87,8 @@ pub const Cpu = struct {
     /// The other Security state's banked registers, which Secure code reaches
     /// through the _NS forms of MRS and MSR.
     banked: banked_mod.Banked = .{},
+    /// Which security state an address belongs to; null means all Secure.
+    attribution: ?attribution.Attribution = null,
     /// The event register WFE waits on: set by SEV and by exception entry
     /// and return, cleared by a WFE that finds it set.
     event: bool = false,
@@ -132,6 +135,7 @@ pub const Cpu = struct {
                     error.Breakpoint => self.breakpoint(address),
                     error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
                     error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
+                    error.InvalidEntry => self.secureFault(.invep, address, .{ .invalid_state = address }),
                     else => .{ .bus_fault = address },
                 };
             };
@@ -174,6 +178,13 @@ pub const Cpu = struct {
     /// `otherwise` when it locks up or the frame cannot be stacked.
     fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
         exception.fault.usage(self, cause, address) catch return otherwise;
+        return null;
+    }
+
+    /// Take a SecureFault the instruction at `address` caused, or stop with
+    /// `otherwise` when it locks up or the frame cannot be stacked.
+    fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, otherwise: Stop) ?Stop {
+        exception.secure.raise(self, cause, address, 0) catch return otherwise;
         return null;
     }
 
