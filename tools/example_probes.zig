@@ -46,6 +46,10 @@ pub const probes = [_]Probe{
     // the X's centre, pixels (256,256) and (257,256) of s_framebuffer
     // 0x22001540, is two yellow pixels 0xFFE0FFE0 (RA8EMU-400).
     .{ .image = "lcd_draw_x.elf", .symbol = "0x22041740", .min = 0, .want = 0xFFE0FFE0 },
+    // lcd_color_cycle drives no layer, only the backdrop: BG_BGC at
+    // 0x40343014 has stepped red, green, blue by 2.0 s, and blue (0x0000FF)
+    // is the third colour, so it proves two latched changes (RA8EMU-489).
+    .{ .image = "lcd_color_cycle.elf", .symbol = "0x40343014", .min = 0, .want = 0x0000FF },
     // display_pal_animation scrolls its colour bars one row per frame.
     .{ .image = "display_pal_animation.elf", .symbol = "s_scroll_offset", .min = 2 },
     .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
