@@ -9,6 +9,7 @@ pub const text =
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
+    \\                    [--profile] [--profile-folded FILE]
     \\                    [--cpu1 IMAGE.elf] [--cpu unicorn|zig|lockstep]
     \\                    [--ns IMAGE.elf] [--no-bus-errors]
     \\
@@ -56,6 +57,9 @@ pub const text =
     \\                     _tx_thread_current_ptr, stamped with modelled time
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run
+    \\  --profile          count retired instructions and modelled cycles
+    \\                     by ELF function, most cycles first
+    \\  --profile-folded   also write one function count per folded row
     \\  --count-pc ADDR    count every execution of the instruction at that
     \\                     address, repeatable up to four times. For
     \\                     settling a disagreement between two counters

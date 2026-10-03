@@ -12,6 +12,9 @@ const idle = @import("../../core/idle.zig");
 const unmask = @import("../../core/unmask.zig");
 const hotspots = @import("../../debug/hotspots.zig");
 const functions = @import("../../debug/functions.zig");
+const profile = functions.profile;
+const profile_hook = @import("../../debug/profile_hook.zig");
+const elf = @import("../../core/elf.zig");
 const tally = @import("../../debug/tally.zig");
 const pend_break = @import("../../core/pend_break.zig");
 const pend_pace = @import("../../core/pend_pace.zig");
@@ -34,6 +37,7 @@ pub const Parts = struct {
     release: unmask.Release = .{},
     pcs: hotspots.Table = .{},
     fns: ?functions.Table = null,
+    profile: ?profile.Table = null,
     taken: tally.Tally = .{},
     timebase: clocks.Clocks = .{},
     pend: pend_break.Pend = .{},
@@ -42,6 +46,16 @@ pub const Parts = struct {
     hits: pc_hits.Hits = .{},
     /// The BusFaults a `--bus-errors` run raised; src/core/bus_error.zig.
     bus_tally: bus_fault.Tally = .{},
+
+    /// Build the profile table. `hook` attaches the Unicorn code hook; leave
+    /// it off for Zig and lockstep runs, which feed the table from the Zig
+    /// core's retire path, or lockstep would count each instruction twice.
+    pub fn attachProfile(self: *Parts, core: engine.Engine, image: elf.Image, hook: bool) !void {
+        self.profile = .{ .image = image };
+        self.profile.?.prepare();
+        if (!hook) return;
+        profile_hook.attach(core.handle, &self.profile.?) catch return engine.Error.AttachFailed;
+    }
 };
 
 /// What the run counted, gathered off the parts for the report.

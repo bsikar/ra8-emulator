@@ -1,10 +1,7 @@
 //! ra8_emulator: the RA8D2 board emulator (#14, the Zig rewrite).
 //!
-//! This file is wiring and nothing else: read an ELF, build the board, reset
-//! out of the vector table, run a bounded number of instructions, and say
-//! what happened. The machine lives in src/core, the blocks that answer on
-//! the peripheral bus in src/periph, the board holding them and the words
-//! about them in src/board, all reached through the "ra8" module.
+//! This file wires the ELF, board and run together; the machine and its
+//! peripherals live in src/core and src/periph, reached through "ra8".
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -98,6 +95,7 @@ fn attachAll(core: *engine.Engine, image: elf.Image, parts: *Parts, options: cli
     parts.mask_pacing.on = options.pace_masked;
     try core.attachPend(&parts.pend);
     parts.fns = .{ .image = image };
+    if (options.profile) try parts.attachProfile(core.*, image, options.cpu == .unicorn);
     const written = try core.loadImage(image);
     try core.attachWorlds(image, &parts.worlds);
     return written;
@@ -134,7 +132,7 @@ pub fn main() !u8 {
     const entry = try core.register(.pc);
     var out = std.io.getStdOut().writer();
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
-    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base);
+    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
@@ -206,6 +204,7 @@ fn reportAll(
     try report_run.all(out, board, image, run);
     try report_hotspots.spent(out, image, parts.pcs);
     try report_hotspots.spentIn(out, image, parts.fns.?);
+    if (parts.profile) |table| try ra8.board.report.profile.write(out, image, table, options.profile_folded);
     try report_timing.pendStores(out, image, parts.pend);
     try report_mask.maskSites(out, image, parts.release);
     try report_timing.pcHits(out, image, parts.hits);

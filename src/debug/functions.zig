@@ -25,6 +25,7 @@
 const elf = @import("../core/elf.zig");
 const hotspots = @import("hotspots.zig");
 const symbols = @import("symbols.zig");
+pub const profile = @import("profile.zig");
 
 /// The sampled functions of one run.
 pub const Table = struct {

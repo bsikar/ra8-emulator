@@ -110,3 +110,14 @@ test "precise BusFaults are on unless --no-bus-errors turns them off" {
     const off = try parse(&[_][]const u8{ "emu", "a.elf", "--no-bus-errors" });
     try std.testing.expect(!off.bus_errors);
 }
+
+test "profile prints counts and folded profile takes an output path" {
+    const cli = @import("ra8").core.cli;
+    const asked = try cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile" });
+    try std.testing.expect(asked.profile);
+    try std.testing.expectEqual(@as(?[]const u8, null), asked.profile_folded);
+    const folded = try cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded", "out.folded" });
+    try std.testing.expect(folded.profile);
+    try std.testing.expectEqualStrings("out.folded", folded.profile_folded.?);
+    try std.testing.expectError(error.MissingValue, cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded" }));
+}

@@ -15,6 +15,8 @@ const report_dumps = @import("report/dumps.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
+const profile = @import("../../debug/profile.zig");
+const cpu = @import("../../core/cpu/cpu.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -56,7 +58,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 }
 
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
-pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32) !u8 {
+pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
     var pair: second_core.zig_run.Driver = undefined;
@@ -86,7 +88,8 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         listener = .{ .tracer = found };
     }
     const wrap = if (tracer != null) listener.wrap() else null;
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap, .cpu1 = if (checked_path != null) &checked else null });
+    const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
+    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap, .cpu1 = if (checked_path != null) &checked else null, .retire_listener = retire_listener });
     if (options.cpu == .zig) {
         try report_run.zigCore(out, board, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
@@ -101,4 +104,9 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         }
     }
     return status;
+}
+
+fn profileInstruction(context: *anyopaque, address: u32) void {
+    const table: *profile.Table = @ptrCast(@alignCast(context));
+    table.instruction(address);
 }

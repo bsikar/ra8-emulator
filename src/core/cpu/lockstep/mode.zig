@@ -22,29 +22,30 @@ const mpu = @import("../../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../../periph/fault_clear.zig");
 const report = @import("report.zig");
 const Cpu1 = @import("dual.zig").Cpu1;
+const RetireListener = cpu_mod.RetireListener;
 
 /// `theirs` is the engine the caller already loaded and reset.
-pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1) !u8 {
+pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
     var mine = try engine.Engine.open();
     defer mine.close();
     try mine.mapBoardRam();
     _ = try mine.loadImage(image);
     if (cpu1) |side| try side.attach(&mine);
-    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1);
+    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1, retire_listener);
 }
 
 /// Both engines already hold the image. Returns 0 when the budget was spent
 /// with no divergence, 1 otherwise.
 /// `settle` is the oracle's fault-clear latch; with one, both sides clear
 /// CFSR/HFSR/SFSR within the storing instruction.
-pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1) !u8 {
+pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
     var log: periph_log.Log = .{};
     var partitions = sau.Sau.init();
     var regions = mpu.Mpu.init();
     var clears = fault_clear.Clears.init();
     const own_clears: ?*fault_clear.Clears = if (settle != null) &clears else null;
     var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log, .scs = .{ .partitions = &partitions, .regions = &regions, .clears = own_clears } };
-    var cpu: cpu_mod.Cpu = .{ .bus = memory.view() };
+    var cpu: cpu_mod.Cpu = .{ .bus = memory.view(), .retire_listener = retire_listener };
     // The oracle's board wiring may have set PPB state (DWT_CTRL.NUMCOMP)
     // the image alone does not carry.
     _ = seed.ppb(mine.*, theirs);

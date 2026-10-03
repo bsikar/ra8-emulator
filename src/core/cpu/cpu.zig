@@ -46,6 +46,16 @@ pub const Stop = union(enum) {
     stack_overflow: u32,
 };
 
+/// A listener called once for each instruction that retires.
+pub const RetireListener = struct {
+    context: *anyopaque,
+    instructionFn: *const fn (context: *anyopaque, address: u32) void,
+
+    pub fn instruction(self: RetireListener, address: u32) void {
+        self.instructionFn(self.context, address);
+    }
+};
+
 pub const Cpu = struct {
     regs: regs_mod.Regs = .{},
     bus: bus.Bus,
@@ -53,6 +63,8 @@ pub const Cpu = struct {
     fp: fp_state.State = .{},
     /// Instructions retired since reset.
     retired: u64 = 0,
+    /// Optional observer for each retired instruction (profiling/debugging).
+    retire_listener: ?RetireListener = null,
     /// The vector table the core reset from, for exception entry while
     /// nothing answers at VTOR.
     vtor: u32 = 0,
@@ -133,6 +145,7 @@ pub const Cpu = struct {
         // ran or not. IT itself leaves the state it just wrote.
         if (it_state.active(it)) self.regs.xpsr = it_state.put(self.regs.xpsr, it_state.advance(it));
         self.retired += 1;
+        if (self.retire_listener) |listener| listener.instruction(address);
         return self.finish(address);
     }
 

@@ -36,6 +36,7 @@ test {
     _ = @import("place_test.zig");
     _ = @import("registers_test.zig");
     _ = @import("hotspots_test.zig");
+    _ = @import("profile_test.zig");
     _ = @import("functions_test.zig");
     _ = @import("rsp_packet_test.zig");
     _ = @import("rsp_features_test.zig");
