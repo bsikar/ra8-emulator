@@ -1,5 +1,6 @@
 //! The lockstep checker (RA8EMU-10) as one namespace, so root.zig
 //! carries a single line for it. Every name matches the file it imports.
+pub const attribution = @import("attribution.zig");
 pub const catch_up = @import("catch_up.zig");
 pub const diff = @import("diff.zig");
 pub const dual = @import("dual.zig");
