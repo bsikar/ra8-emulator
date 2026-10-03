@@ -57,3 +57,35 @@ test "vpnot resumed after A0 keeps beat 0 of P0" {
     try run(ops.mve_vpred.group, &cpu, 0xFE31, 0x0F4D);
     try std.testing.expectEqual(@as(u16, 0xFF00), cpu.fp.vpr.p0);
 }
+
+test "the last tail-predicated iteration writes only the elements LR has left" {
+    var cpu = withEci(0);
+    cpu.fp.fpscr.ltpsize = 2;
+    cpu.regs.lr = 3;
+    try run(ops.mve_int.group, &cpu, 0xEF22, 0x0844);
+    try std.testing.expectEqual(@as(u128, 0xAAAA_AAAA_0000_0013_0000_0012_0000_0011), qreg.read(&cpu.fp.bank, 0));
+}
+
+test "a tail-predicated iteration before the last writes every lane" {
+    var cpu = withEci(0);
+    cpu.fp.fpscr.ltpsize = 2;
+    cpu.regs.lr = 5;
+    try run(ops.mve_int.group, &cpu, 0xEF22, 0x0844);
+    try std.testing.expectEqual(@as(u128, 0x0000_0014_0000_0013_0000_0012_0000_0011), qreg.read(&cpu.fp.bank, 0));
+}
+
+test "outside a tail-predicated loop LR does not mask anything" {
+    var cpu = withEci(0);
+    cpu.regs.lr = 1;
+    try run(ops.mve_int.group, &cpu, 0xEF22, 0x0844);
+    try std.testing.expectEqual(@as(u128, 0x0000_0014_0000_0013_0000_0012_0000_0011), qreg.read(&cpu.fp.bank, 0));
+}
+
+test "tail predication and VCTP combine: VCTP.8 with LR 2 of 32-bit elements" {
+    var cpu = withEci(0);
+    cpu.fp.fpscr.ltpsize = 2;
+    cpu.regs.lr = 2;
+    cpu.regs.set(0, 16);
+    try run(ops.mve_vctp.group, &cpu, 0xF000, 0xE801);
+    try std.testing.expectEqual(@as(u16, 0x00FF), cpu.fp.vpr.p0);
+}
