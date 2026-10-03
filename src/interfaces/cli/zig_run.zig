@@ -51,7 +51,7 @@ pub const Clock = struct {
     pub fn close(self: *Clock, instructions: u32) !void {
         try self.timebase.advance(self.core.*, instructions);
         try self.ns_timebase.advanceSysTick(self.core.*, instructions);
-        try self.board.tick(self.core.*);
+        try self.board.tick(self.core.*, instructions);
         if (self.cpu1) |second| second.round(instructions);
     }
 };

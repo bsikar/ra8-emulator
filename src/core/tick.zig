@@ -7,9 +7,9 @@ const engine = @import("engine.zig");
 
 pub const Tick = struct {
     context: *anyopaque,
-    tickFn: *const fn (context: *anyopaque, core: engine.Engine) anyerror!void,
+    tickFn: *const fn (context: *anyopaque, core: engine.Engine, instructions: u32) anyerror!void,
 
-    pub fn run(self: Tick, core: engine.Engine) !void {
-        return self.tickFn(self.context, core);
+    pub fn run(self: Tick, core: engine.Engine, instructions: u32) !void {
+        return self.tickFn(self.context, core, instructions);
     }
 };

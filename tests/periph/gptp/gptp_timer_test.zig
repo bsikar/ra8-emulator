@@ -10,25 +10,25 @@ const four_ns: u32 = 4 << timer.scale.subns_shift;
 
 test "a stopped unit reads time zero" {
     var unit = timer.Unit{};
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     const now = unit.now();
     try std.testing.expectEqual(@as(u64, 0), now.sec);
     try std.testing.expectEqual(@as(u32, 0), now.nsec);
 }
 
-test "a running unit advances one second per boundary at 4 ns per clk" {
+test "a running unit advances one second per ESWCLK second at 4 ns per clk" {
     var unit = timer.Unit{};
     unit.start();
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     try std.testing.expectEqual(@as(u64, 1), unit.now().sec);
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     try std.testing.expectEqual(@as(u64, 2), unit.now().sec);
 }
 
 test "half the increment is half the rate, a mis-programmed timer drifts" {
     var unit = timer.Unit{};
     unit.start();
-    unit.advance(four_ns / 2);
+    unit.advance(four_ns / 2, timer.scale.eswclk_hz);
     const now = unit.now();
     try std.testing.expectEqual(@as(u64, 0), now.sec);
     try std.testing.expectEqual(@as(u32, 500_000_000), now.nsec);
@@ -37,7 +37,7 @@ test "half the increment is half the rate, a mis-programmed timer drifts" {
 test "a zero increment stands still" {
     var unit = timer.Unit{};
     unit.start();
-    unit.advance(0);
+    unit.advance(0, timer.scale.eswclk_hz);
     try std.testing.expectEqual(@as(u64, 0), unit.now().sec);
     try std.testing.expectEqual(@as(u32, 0), unit.ticks);
 }
@@ -46,7 +46,7 @@ test "a stop clears the count and keeps the staged offset" {
     var unit = timer.Unit{};
     unit.start();
     _ = unit.setOffset(1234, 500);
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     unit.stop();
     try std.testing.expectEqual(@as(u64, 0), unit.now().sec);
     unit.start();
@@ -58,7 +58,7 @@ test "the offset adds to the free-running count" {
     var unit = timer.Unit{};
     unit.start();
     try std.testing.expect(!unit.setOffset(10, 250_000_000));
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     const now = unit.now();
     try std.testing.expectEqual(@as(u64, 11), now.sec);
     try std.testing.expectEqual(@as(u32, 250_000_000), now.nsec);
@@ -80,7 +80,7 @@ test "the carry out of the sum is completed" {
     var unit = timer.Unit{};
     unit.start();
     _ = unit.setOffset(0, 900_000_000);
-    unit.advance(four_ns / 2);
+    unit.advance(four_ns / 2, timer.scale.eswclk_hz);
     const now = unit.now();
     try std.testing.expectEqual(@as(u64, 1), now.sec);
     try std.testing.expectEqual(@as(u32, 400_000_000), now.nsec);
@@ -102,7 +102,7 @@ test "an L sample holds the seconds for the M and U reads" {
     unit.start();
     _ = unit.setOffset((2 << 32) | 9, 0);
     _ = unit.sampleGptp();
-    unit.advance(four_ns);
+    unit.advance(four_ns, timer.scale.eswclk_hz);
     try std.testing.expectEqual(@as(u32, 9), unit.latchedMiddle());
     try std.testing.expectEqual(@as(u32, 2), unit.latchedUpper());
 }
@@ -122,7 +122,7 @@ test "the sub-second accumulator never reaches one second" {
     unit.start();
     var round: u32 = 0;
     while (round < 16) : (round += 1) {
-        unit.advance(four_ns + 7);
+        unit.advance(four_ns + 7, timer.scale.eswclk_hz);
         try std.testing.expect(unit.fixed < timer.scale.one_second_fixed);
     }
     try std.testing.expectEqual(@as(u32, 16), unit.ticks);

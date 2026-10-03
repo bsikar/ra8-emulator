@@ -17,7 +17,7 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 /// any line still latched re-pends. The controller picks straight
 /// afterwards, so an interrupt raised here is entered in the same boundary
 /// rather than a chunk later.
-pub fn tick(self: *Board, core: engine.Engine) !void {
+pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
     self.watchdog.tick();
     self.heartbeat.tick();
     self.lowpower.tick();
@@ -25,7 +25,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     self.clock.tick();
     self.interval.tick();
     self.pwm.tick();
-    self.ptp.tick();
+    self.ptp.tick(instructions);
     self.trace.tick();
     self.rswitch.tick();
     self.usb.tick();

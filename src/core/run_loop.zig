@@ -100,7 +100,7 @@ pub fn run(core: anytype, start: u32, instructions: usize, session: Session) !?f
         // left to run, which would report a run that ended inside an
         // exception it never actually took.
         if (!pace.closes(remaining)) break;
-        if (session.board) |tick| tick.run(core) catch return error.RunFailed;
+        if (session.board) |tick| tick.run(core, @intCast(chunk)) catch return error.RunFailed;
         // A part that just reset has nothing pending, so the controller
         // does not get to pick this boundary: carry straight on into the
         // reset vector.
