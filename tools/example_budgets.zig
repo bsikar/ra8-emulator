@@ -45,6 +45,9 @@ pub const overrides = [_]Override{
     .{ .image = "epub_toc.elf", .instructions = "80000000" },
     .{ .image = "ra8_io_sd_demo.elf", .instructions = "10000000" },
     .{ .image = "tz_secure_only_sd.elf", .instructions = "20000000" },
+    // import_reader streams BOOK.EPB, compiles its EPUB and validates the
+    // cached RABOOK1 blob; 20M reaches its PASS banner on both cores (RA8EMU-424).
+    .{ .image = "import_reader.elf", .instructions = "20000000" },
     // The Non-Secure ThreadX tick reads 2 at the 2M default and 5 at 5M; 10M
     // clears the probe's floor of 5 with room (RA8EMU-287).
     .{ .image = "tz_threadx_demo.elf", .instructions = "10000000" },

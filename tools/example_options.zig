@@ -7,6 +7,10 @@
 //! without it, which says nothing about the model, so the table fits the
 //! module for them and only for them.
 //!
+//! import_reader differs from the EPUB demos: it reads a source file that
+//! must already be on the card. Its EIL/matrix harness exports the baked
+//! image as RA8_EMU_IMPORT_READER_IMG, which the example table also consumes.
+//!
 //! The SD card on the SPI line starts blank, like a card fresh out of its
 //! packet, and a firmware that only mounts reports "FAIL mount" on it. The
 //! examples that provision their own files onto an existing FAT volume
@@ -40,12 +44,21 @@ pub const Extra = struct {
     flags: []const []const u8,
 };
 
+pub const CardImage = struct {
+    image: []const u8,
+    environment: []const u8,
+};
+
 const click = [_][]const u8{"--click"};
 const formatted = [_][]const u8{ "--sd-new", "fat16" };
 const large_card = [_][]const u8{ "--sd-size", "4096" };
 const fat32_card = [_][]const u8{ "--sd-size", "64", "--sd-new", "fat32" };
 const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
+
+pub const card_images = [_]CardImage{
+    .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
+};
 
 /// Images that need hardware the default board does not fit, and the flags
 /// that fit it.
@@ -63,7 +76,15 @@ pub const extras = [_]Extra{
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
 };
 
-/// The extra flags to run `image` with; empty for an image not listed.
+/// A required input card path for image, when its harness supplied one.
+pub fn cardImage(image: []const u8, env: *const std.process.EnvMap) ?[]const u8 {
+    for (card_images) |entry| {
+        if (std.mem.eql(u8, entry.image, image)) return env.get(entry.environment);
+    }
+    return null;
+}
+
+/// The extra flags to run image with; empty for an image not listed.
 pub fn flags(image: []const u8) []const []const u8 {
     for (extras) |entry| {
         if (std.mem.eql(u8, entry.image, image)) return entry.flags;

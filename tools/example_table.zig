@@ -345,7 +345,11 @@ fn confMs(image: []const u8, conf: ?hil_conf.Conf, budget: ?[]const u8) ?u32 {
 fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8, halves: Halves, run: Run, budget: ?[]const u8) ![]const u8 {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.appendSlice(&.{ emulator, path });
-    try argv.appendSlice(options.flags(std.fs.path.basename(path)));
+    const image = std.fs.path.basename(path);
+    try argv.appendSlice(options.flags(image));
+    var env = try std.process.getEnvMap(allocator);
+    defer env.deinit();
+    if (options.cardImage(image, &env)) |card| try argv.appendSlice(&.{ "--sd", card });
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
     if (run.probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
