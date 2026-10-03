@@ -9,16 +9,18 @@
 const op = @import("../op.zig");
 const gate = @import("fp_gate.zig");
 const Feature = @import("../profile.zig").Feature;
+const Instr = @import("../instr.zig").Instr;
+const eci_use = @import("eci_use.zig");
 
 pub const groups = [_]op.Group{
     @import("hint.zig").group,
     @import("barrier.zig").group,
-    @import("push_pop.zig").group,
+    eci(.restarts, @import("push_pop.zig").group),
     @import("sp_arith.zig").group,
     @import("ldr_literal.zig").group,
     @import("ldst_imm.zig").group,
     @import("ldst_reg.zig").group,
-    @import("ldm_stm.zig").group,
+    eci(.restarts, @import("ldm_stm.zig").group),
     @import("shift_imm.zig").group,
     @import("add_sub.zig").group,
     @import("dp_reg.zig").group,
@@ -55,13 +57,13 @@ pub const groups = [_]op.Group{
     @import("dsp_mulhi.zig").group,
     @import("dsp_long_mul.zig").group,
     needs(.v8_1m, @import("csel.zig").group),
-    needs(.lob, @import("lob.zig").group),
+    eciBy(eci_use.lob, needs(.lob, @import("lob.zig").group)),
     needs(.mve, @import("long_shift.zig").group),
     needs(.mve, @import("long_shift_reg.zig").group),
     needs(.mve, @import("long_shift_sat.zig").group),
     needs(.mve, @import("long_shift_sat64.zig").group),
     @import("udf.zig").group,
-    @import("bkpt.zig").group,
+    eci(.keeps, @import("bkpt.zig").group),
     @import("svc.zig").group,
     @import("table_branch.zig").group,
     @import("blxns.zig").group,
@@ -86,52 +88,69 @@ pub const groups = [_]op.Group{
     needs(.v8_1m, @import("vlldm_vlstm.zig").group_t2),
     gate.gatedFpMemory(@import("fp_mem.zig").group),
     needs(.mve, gate.gated(@import("mve_vpst.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int_pair.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int_shift.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int_mulh.zig").group)),
+    beatWise(@import("mve_int.zig").group),
+    beatWise(@import("mve_int_pair.zig").group),
+    beatWise(@import("mve_int_shift.zig").group),
+    beatWise(@import("mve_int_mulh.zig").group),
     needs(.mve, gate.gated(@import("mve_int_vmla.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int_scalar.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vcmp.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vpred.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vctp.zig").group)),
-    needs(.mve, gate.gated(@import("mve_lob_tp.zig").group)),
+    beatWise(@import("mve_int_scalar.zig").group),
+    beatWise(@import("mve_vcmp.zig").group),
+    beatWise(@import("mve_vpred.zig").group),
+    beatWise(@import("mve_vctp.zig").group),
+    eciBy(eci_use.lobTp, needs(.mve, gate.gated(@import("mve_lob_tp.zig").group))),
     needs(.mve, gate.gated(@import("mve_vdup.zig").group)),
-    needs(.mve, gate.gated(@import("mve_lane_move.zig").group)),
-    needs(.mve, gate.gated(@import("mve_lane_pair.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vmaxv.zig").group)),
-    needs(.mve, gate.gated(@import("mve_int_vqdmlah.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vldr.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vldr_wide.zig").group)),
-    needs(.mve, gate.gated(@import("mve_gather.zig").group)),
-    needs(.mve, gate.gated(@import("mve_gather64.zig").group)),
-    needs(.mve, gate.gated(@import("mve_gather_imm.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vld_il.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_scalar.zig").group)),
-    needs(.mve, gate.gated(@import("mve_vcmp_fp.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_fma.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_unary.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_cvt_half.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_cvt_int.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_cvt_fixed.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_rint.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_maxnm.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_maxnma.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_maxnmv.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_vcadd.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_vcmla.zig").group)),
-    needs(.mve, gate.gated(@import("mve_float_vcmul.zig").group)),
+    beatWise(@import("mve_lane_move.zig").group),
+    beatWise(@import("mve_lane_pair.zig").group),
+    beatWise(@import("mve_vmaxv.zig").group),
+    beatWise(@import("mve_int_vqdmlah.zig").group),
+    beatWise(@import("mve_vldr.zig").group),
+    beatWise(@import("mve_vldr_wide.zig").group),
+    beatWise(@import("mve_gather.zig").group),
+    beatWise(@import("mve_gather64.zig").group),
+    beatWise(@import("mve_gather_imm.zig").group),
+    beatWise(@import("mve_vld_il.zig").group),
+    beatWise(@import("mve_float.zig").group),
+    beatWise(@import("mve_float_scalar.zig").group),
+    beatWise(@import("mve_vcmp_fp.zig").group),
+    beatWise(@import("mve_float_fma.zig").group),
+    beatWise(@import("mve_float_unary.zig").group),
+    beatWise(@import("mve_float_cvt_half.zig").group),
+    beatWise(@import("mve_float_cvt_int.zig").group),
+    beatWise(@import("mve_float_cvt_fixed.zig").group),
+    beatWise(@import("mve_float_rint.zig").group),
+    beatWise(@import("mve_float_maxnm.zig").group),
+    beatWise(@import("mve_float_maxnma.zig").group),
+    beatWise(@import("mve_float_maxnmv.zig").group),
+    beatWise(@import("mve_float_vcadd.zig").group),
+    beatWise(@import("mve_float_vcmla.zig").group),
+    beatWise(@import("mve_float_vcmul.zig").group),
     @import("ldrd_strd.zig").group,
     @import("exclusive.zig").group,
     @import("acq_rel.zig").group,
     needs(.v8_1m, @import("clrm.zig").group),
-    @import("ldm_stm_wide.zig").group,
+    eci(.restarts, @import("ldm_stm_wide.zig").group),
     needs(.v8_1m, @import("pac.zig").group),
 };
 
 fn needs(comptime feature: Feature, comptime group: op.Group) op.Group {
     var tagged = group;
     tagged.needs = feature;
+    return tagged;
+}
+
+/// An MVE group whose encodings are all beat-wise (RA8EMU-453).
+fn beatWise(comptime group: op.Group) op.Group {
+    return eci(.beat_wise, needs(.mve, gate.gated(group)));
+}
+
+fn eci(comptime use: op.Eci, comptime group: op.Group) op.Group {
+    var tagged = group;
+    tagged.eci = use;
+    return tagged;
+}
+
+fn eciBy(comptime of: *const fn (instr: Instr) op.Eci, comptime group: op.Group) op.Group {
+    var tagged = group;
+    tagged.eci_of = of;
     return tagged;
 }

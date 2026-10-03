@@ -124,3 +124,4 @@ pub const mve_float_vcadd = @import("ops/mve_float_vcadd.zig");
 pub const mve_float_vcmla = @import("ops/mve_float_vcmla.zig");
 pub const mve_float_vcmul = @import("ops/mve_float_vcmul.zig");
 pub const table = @import("ops/table.zig");
+pub const eci_use = @import("ops/eci_use.zig");

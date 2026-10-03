@@ -21,6 +21,18 @@ pub const Error = bus.Error || alignment.Error || Undefined || Debug || error{ S
 /// called; a branch writes the PC, everything else leaves it alone.
 pub const Exec = *const fn (cpu: *Cpu, instr: Instr) Error!void;
 
+/// How an instruction treats a nonzero EPSR.ECI/ICI (RA8EMU-453). The
+/// default refuses it: the instruction takes INVSTATE before it runs.
+pub const Eci = enum {
+    refuses,
+    /// A beat-wise MVE instruction: it reads ECI and moves it on itself.
+    beat_wise,
+    /// A load/store multiple: it restarts from the start with ICI cleared.
+    restarts,
+    /// LE, LETP and BKPT: ECI is left for the next instruction.
+    keeps,
+};
+
 pub const Group = struct {
     name: []const u8,
     decode: *const fn (instr: Instr) ?Exec,
@@ -31,4 +43,12 @@ pub const Group = struct {
     /// The core feature the group's encodings belong to: a core whose
     /// profile lacks it does not ask the group (RA8EMU-233).
     needs: profile.Feature = .base,
+    /// How the group's encodings treat a nonzero ECI.
+    eci: Eci = .refuses,
+    /// For a group whose encodings differ: decides per encoding.
+    eci_of: ?*const fn (instr: Instr) Eci = null,
+
+    pub fn eciOf(self: Group, instr: Instr) Eci {
+        return if (self.eci_of) |of| of(instr) else self.eci;
+    }
 };

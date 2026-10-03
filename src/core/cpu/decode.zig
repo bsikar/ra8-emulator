@@ -10,6 +10,8 @@ pub const Hit = struct {
     exec: op.Exec,
     /// Whether Unicorn can be the lockstep oracle for it; see `op.Group`.
     oracle: bool,
+    /// How it treats a nonzero EPSR.ECI (RA8EMU-453).
+    eci: op.Eci = .refuses,
 };
 
 /// The core feature profiles (RA8EMU-233).
@@ -25,7 +27,7 @@ pub fn decode(instr: Instr) ?Hit {
 pub fn decodeFor(core: profile.Profile, instr: Instr) ?Hit {
     for (table.groups) |group| {
         if (!core.has(group.needs)) continue;
-        if (group.decode(instr)) |exec| return .{ .group = group.name, .exec = exec, .oracle = group.oracle };
+        if (group.decode(instr)) |exec| return .{ .group = group.name, .exec = exec, .oracle = group.oracle, .eci = group.eciOf(instr) };
     }
     return null;
 }
