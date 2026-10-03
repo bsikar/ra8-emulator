@@ -45,7 +45,8 @@ pub const Row = struct {
     stopped: ?[]const u8 = null,
     /// Some user LED toggled at least `blink_edges` times.
     blinking: bool = false,
-    /// The memory-probe verdict for an image example_probes.zig lists.
+    /// The memory-probe verdict for an image example_probes.zig lists, or
+    /// whose hil.conf names a probe.
     probe: ?probes.Judgement = null,
     /// The verdict the example's own hil.conf gives, when it has one.
     hil: ?hil_conf.Judgement = null,
@@ -167,8 +168,8 @@ pub fn main() !void {
             .cpu1 = try halfPath(allocator, args[2], try pairedWith(allocator, image, images)),
             .ns = try halfPath(allocator, args[2], try nsPairedWith(allocator, image, images)),
         };
-        const probe = probes.find(image);
         const conf = try readConf(allocator, path);
+        const probe = probes.find(image) orelse confProbe(image, conf);
         const report = try runImage(allocator, args[1], path, halves, probe, conf != null, budgets.pick(image, budget));
         var row = parse(report);
         if (probe) |wanted| row.probe = probes.judge(wanted, report);
@@ -267,6 +268,11 @@ pub fn confName(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
     return std.mem.concat(allocator, u8, &.{ path[0 .. path.len - elf.len], ".hil.conf" });
 }
 
+fn confProbe(image: []const u8, conf: ?hil_conf.Conf) ?probes.Probe {
+    const found = conf orelse return null;
+    return probes.fromConf(image, found.probe_symbol, found.probe_min_advance, found.probe_failure_symbol, found.probe_max_failure);
+}
+
 fn readConf(allocator: std.mem.Allocator, path: []const u8) !?hil_conf.Conf {
     const text = std.fs.cwd().readFileAlloc(allocator, try confName(allocator, path), 64 * 1024) catch |err| switch (err) {
         error.FileNotFound => return null,
@@ -281,7 +287,8 @@ fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8
     try argv.appendSlice(options.flags(std.fs.path.basename(path)));
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
-    if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol, "--dump-sym", wanted.failure });
+    if (probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
+    if (probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ "--dump-sym", name });
     if (console) try argv.append("--console");
     if (budget) |count| try argv.appendSlice(&.{ "--instructions", count });
     const result = try std.process.Child.run(.{

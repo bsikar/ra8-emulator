@@ -15,7 +15,8 @@ pub const Probe = struct {
     image: []const u8,
     symbol: []const u8,
     min: u32,
-    failure: []const u8,
+    /// Null when the bench checks only the match counter.
+    failure: ?[]const u8 = null,
     max_failure: u32 = 0,
 };
 
@@ -38,6 +39,19 @@ pub const probes = [_]Probe{
 };
 
 pub const Judgement = enum { pass, fail, unknown };
+
+/// The probe hil.conf names for an image the list above leaves out: the
+/// bench's HIL_PROBE_MIN_ADVANCE is taken as a total, like `min` above,
+/// because the counters start at zero (RA8EMU-400).
+pub fn fromConf(image: []const u8, symbol: ?[]const u8, min: ?u32, failure: ?[]const u8, max_failure: ?u32) ?Probe {
+    return .{
+        .image = image,
+        .symbol = symbol orelse return null,
+        .min = @max(min orelse 1, 1),
+        .failure = failure,
+        .max_failure = max_failure orelse 0,
+    };
+}
 
 pub fn find(image: []const u8) ?Probe {
     for (probes) |entry| {
@@ -69,7 +83,7 @@ pub fn dumped(report: []const u8, name: []const u8) ?u32 {
 /// does not carry both words.
 pub fn judge(probe: Probe, report: []const u8) Judgement {
     const matched = dumped(report, probe.symbol) orelse return .unknown;
-    const failed = dumped(report, probe.failure) orelse return .unknown;
+    const failed = if (probe.failure) |name| dumped(report, name) orelse return .unknown else 0;
     if (failed > probe.max_failure) return .fail;
     return if (matched >= probe.min) .pass else .fail;
 }
