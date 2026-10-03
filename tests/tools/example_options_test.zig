@@ -44,3 +44,11 @@ test "the TrustZone USB pair runs with the loop cable for two seconds" {
     try std.testing.expectEqualStrings("--ms", got[1]);
     try std.testing.expectEqualStrings("2000", got[2]);
 }
+
+test "the RA8P1 dual-core pair runs on the RA8P1 part" {
+    const extra = options.flags("cpu1_pingpong_ra8p1.elf");
+    try std.testing.expectEqual(@as(usize, 2), extra.len);
+    try std.testing.expectEqualStrings("--device", extra[0]);
+    try std.testing.expectEqualStrings("ra8p1", extra[1]);
+    try std.testing.expectEqual(@as(usize, 0), options.flags("cpu1_pingpong.elf").len);
+}
