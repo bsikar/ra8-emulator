@@ -9,6 +9,40 @@ const bus = ra8.core.cpu.bus;
 
 const systick: ra8.core.cpu.exception.active.Entry = .{ .number = 15, .priority = 0x80 };
 
+const LatchProbe = struct {
+    writes: u32 = 0,
+    latches: u32 = 0,
+    value: u32 = 0,
+
+    fn view(self: *LatchProbe) bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+        _ = address;
+        const self: *LatchProbe = @ptrCast(@alignCast(ctx));
+        var word: [4]u8 = undefined;
+        std.mem.writeInt(u32, &word, self.value, .little);
+        @memcpy(into, word[0..into.len]);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
+        _ = address;
+        const self: *LatchProbe = @ptrCast(@alignCast(ctx));
+        self.writes += 1;
+        var word: [4]u8 = .{0} ** 4;
+        @memcpy(word[0..bytes.len], bytes);
+        self.value = std.mem.readInt(u32, &word, .little);
+    }
+
+    fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
+        _ = address;
+        const self: *LatchProbe = @ptrCast(@alignCast(ctx));
+        self.latches += 1;
+        self.value |= bits;
+    }
+};
+
 fn settled(ram: *fixture.Ram, fake: *Fake) QuietSource {
     fake.pending = null;
     return .{ .inner = fake.source(), .memory = ram.view() };
@@ -156,4 +190,14 @@ test "a masked pend hushes for its key only (RA8EMU-437)" {
     try std.testing.expect(quiet.holds(masked));
     quiet.stir();
     try std.testing.expect(!quiet.holds(masked));
+}
+
+test "the wrapped bus preserves status latches" {
+    var probe: LatchProbe = .{};
+    var fake: Fake = .{};
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = probe.view() };
+    try quiet.bus().latch(ra8.core.memmap.scb.cfsr, 1 << 25);
+    try std.testing.expectEqual(@as(u32, 1), probe.latches);
+    try std.testing.expectEqual(@as(u32, 0), probe.writes);
+    try std.testing.expectEqual(@as(u32, 1 << 25), probe.value);
 }

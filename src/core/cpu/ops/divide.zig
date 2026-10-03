@@ -1,11 +1,12 @@
 //! SDIV and UDIV (T1): Rd = Rn / Rm, rounding toward zero. Neither touches
-//! the flags. A zero divisor gives 0, the behaviour with CCR.DIV_0_TRP clear;
-//! the trap arrives with the fault model (RA8EMU-18). SDIV of INT_MIN by -1
+//! the flags. A zero divisor gives 0 unless CCR.DIV_0_TRP asks for UsageFault.
+//! SDIV of INT_MIN by -1
 //! wraps to INT_MIN. SP or PC in any field is UNPREDICTABLE and left
 //! unclaimed, so the core stops rather than guess.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const memmap = @import("../../memmap.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.
@@ -68,3 +69,12 @@ fn udiv(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr);
     cpu.regs.set(f.rd, unsignedQuotient(cpu.regs.get(f.rn), cpu.regs.get(f.rm)));
 }
+
+/// Whether this divide raises DIVBYZERO under the active CCR.
+pub fn traps(cpu: *const Cpu, instr: Instr) bool {
+    const f = fields(instr);
+    if (cpu.regs.get(f.rm) != 0) return false;
+    return (cpu.bus.readWord(memmap.scb.ccr) catch 0) & div_0_trp != 0;
+}
+
+const div_0_trp: u32 = 1 << 4;

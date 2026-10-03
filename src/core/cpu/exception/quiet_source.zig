@@ -60,7 +60,11 @@ pub const QuietSource = struct {
 
     /// The run's bus, noticing every access that could pend or unpend.
     pub fn bus(self: *QuietSource) bus_mod.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = self.memory.direct };
+        return .{
+            .ctx = self,
+            .vtable = &.{ .read = read, .write = write, .latch = latch },
+            .direct = self.memory.direct,
+        };
     }
 
     /// Forget the last answer: the next poll asks the inner source again.
@@ -120,5 +124,11 @@ pub const QuietSource = struct {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
         if (address >= peripheral_base) self.stir();
         return self.memory.write(address, bytes);
+    }
+
+    fn latch(ctx: *anyopaque, address: u32, bits: u32) bus_mod.Error!void {
+        const self: *QuietSource = @ptrCast(@alignCast(ctx));
+        self.stir();
+        return self.memory.latch(address, bits);
     }
 };

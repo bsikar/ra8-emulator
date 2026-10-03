@@ -136,6 +136,7 @@ pub fn main() !u8 {
     if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
+    _ = try parts.divide.arm(&core, &interrupts, image);
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     var stop = resolveStop(image, options);
@@ -154,8 +155,7 @@ pub fn main() !u8 {
         return 1;
     };
     defer if (second) |one| one.close();
-    const budget = options.budgetFor(stop != null);
-    const fault = try second_core.interleave(core, entry, budget, .{
+    const fault = try second_core.interleave(core, entry, options.budgetFor(stop != null), .{
         .watch = &parts.watch,
         .timebase = &parts.timebase,
         .interrupts = &interrupts,
@@ -182,7 +182,7 @@ pub fn main() !u8 {
 
     try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window, tracer);
     if (options.ctl_cpu_load) return if (fault != null) 1 else 0;
-    return verdict(out, core, options, fault, stop, point, timed, budget, if (parts.tap.waiting()) |wait| wait.reached else false);
+    return verdict(out, core, options, fault, stop, point, timed, options.budgetFor(stop != null), if (parts.tap.waiting()) |wait| wait.reached else false);
 }
 
 /// The opening line for ordinary runs, plus the writer used for the report.
