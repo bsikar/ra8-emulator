@@ -19,6 +19,8 @@ const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("decode_cache.zig").DecodeCache;
 const sau = @import("../../periph/sau.zig");
+const SauSource = @import("sau_source.zig").SauSource;
+const Attribution = @import("attribution.zig").Attribution;
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
 const Bus = @import("bus.zig").Bus;
@@ -84,16 +86,21 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
 /// the core stopped short of it.
 pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null);
+    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
     var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board.scs.fp);
+    var partitions: SauSource = undefined;
+    const source: ?Attribution = if (wiring.partitions) |unit| blk: {
+        partitions = .{ .unit = unit };
+        break :blk partitions.source();
+    } else null;
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board.scs.fp, source);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, fp_slot: ?*?*FpState) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, fp_slot: ?*?*FpState, source: ?Attribution) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -104,6 +111,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
     cpu.retire_listener = retire_listener;
+    cpu.attribution = source;
     if (fp_slot) |slot| slot.* = &cpu.fp;
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {

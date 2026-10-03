@@ -16,6 +16,7 @@ const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
 pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
+pub const sau_source = @import("sau_source.zig");
 
 /// Why `run` or `step` stopped.
 pub const Stop = union(enum) {
