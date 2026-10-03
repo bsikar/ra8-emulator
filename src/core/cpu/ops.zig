@@ -55,6 +55,7 @@ pub const long_shift_sat = @import("ops/long_shift_sat.zig");
 pub const long_shift_sat64 = @import("ops/long_shift_sat64.zig");
 pub const svc = @import("ops/svc.zig");
 pub const udf = @import("ops/udf.zig");
+pub const bkpt = @import("ops/bkpt.zig");
 pub const table_branch = @import("ops/table_branch.zig");
 pub const blxns = @import("ops/blxns.zig");
 pub const imm_fields = @import("ops/imm_fields.zig");

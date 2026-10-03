@@ -141,6 +141,10 @@ pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
             "zig core: invalid exception return at 0x{X:0>8} after {d} instructions\n",
             .{ at, cpu.retired },
         ),
+        .breakpoint => |at| try out.print(
+            "zig core: BKPT halted at 0x{X:0>8} after {d} instructions\n",
+            .{ at, cpu.retired },
+        ),
         .unaligned => |at| try out.print(
             "zig core: unaligned MemA access at 0x{X:0>8} after {d} instructions\n",
             .{ at, cpu.retired },

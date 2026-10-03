@@ -36,6 +36,10 @@ pub const Stop = union(enum) {
     /// UNALIGNED UsageFault it raises locked up or could not be stacked. The
     /// PC is left on it.
     unaligned: u32,
+    /// A BKPT at this address halted the core for an attached debugger
+    /// (DHCSR.C_DEBUGEN), or the HardFault it escalated to locked up. The PC
+    /// is left on it.
+    breakpoint: u32,
 };
 
 pub const Cpu = struct {
@@ -102,6 +106,7 @@ pub const Cpu = struct {
                 return switch (err) {
                     error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
                     error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
+                    error.Breakpoint => self.breakpoint(address),
                     else => .{ .bus_fault = address },
                 };
             };
@@ -139,6 +144,13 @@ pub const Cpu = struct {
     fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
         exception.fault.usage(self, cause, address) catch return otherwise;
         return null;
+    }
+
+    /// Take the debug event a BKPT at `address` raises, or stop on it for an
+    /// attached debugger or when the HardFault it escalates to locks up.
+    fn breakpoint(self: *Cpu, address: u32) ?Stop {
+        const taken = exception.debug_event.breakpoint(self, address) catch return .{ .breakpoint = address };
+        return if (taken) null else .{ .breakpoint = address };
     }
 
     pub fn run(self: *Cpu, count: u64) Stop {
