@@ -17,6 +17,7 @@ const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
 const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
+const park = @import("park.zig");
 pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
 pub const sau_source = @import("sau_source.zig");
@@ -277,6 +278,13 @@ pub const Cpu = struct {
                 // next boundary, so the rest of the stretch goes by at once.
                 if (!up) return .count;
                 self.waiting = null;
+            }
+            // A park loop's whole trips go by at once (RA8EMU-450).
+            const trips = park.skippable(self, left);
+            if (trips != 0) {
+                self.retired += trips;
+                left -= trips - 1;
+                continue;
             }
             if (self.step()) |stopped| return stopped;
         }
