@@ -300,3 +300,36 @@ test "PRIVDEFENA lets privileged code fetch from the background, not unprivilege
 test "a refused fetch with MEMFAULTENA clear escalates to HardFault with FORCED" {
     try expectFetchRefused(executeNever(on), false, false);
 }
+
+/// A 32-bit store or load at the reset PC from privileged Thread mode, r0
+/// at the privileged-only region, on both cores.
+fn wide(profile: Profile, rig: *Rig, first: u16, second: u16) !Cpu {
+    rig.init(on, true);
+    var cpu = try rig.boot(profile, first, no_access, false);
+    rig.ram.putHalf(fixture.code + 2, second);
+    _ = &cpu;
+    return cpu;
+}
+
+test "a privileged STRT or LDRT is checked as unprivileged; STR.W and LDR.W are not" {
+    const strt = [2]u16{ 0xF840, 0x1E00 };
+    const ldrt = [2]u16{ 0xF850, 0x1E00 };
+    const str_w = [2]u16{ 0xF8C0, 0x1000 };
+    const ldr_w = [2]u16{ 0xF8D0, 0x1000 };
+    for (profiles) |profile| {
+        for ([_][2]u16{ strt, ldrt }) |instr| {
+            var rig: Rig = undefined;
+            var cpu = try wide(profile, &rig, instr[0], instr[1]);
+            try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+            try expectMemManage(&rig.ram, &cpu, no_access);
+            try std.testing.expect(rig.check.privileged);
+        }
+        for ([_][2]u16{ str_w, ldr_w }) |instr| {
+            var rig: Rig = undefined;
+            var cpu = try wide(profile, &rig, instr[0], instr[1]);
+            try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+            try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
+            try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.cfsr));
+        }
+    }
+}

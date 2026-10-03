@@ -112,3 +112,14 @@ test "a fetch at negative priority is not checked unless HFNMIENA" {
     unit.ctrl |= mpu.field.ctrl_hfnmiena;
     try std.testing.expect(check.refusesFetch(ram_ro[0], true, true));
 }
+
+test "lower checks the rest of the instruction as unprivileged and hands back the old privilege" {
+    const unit = unitOf(on);
+    var check: mpu_check.Check = .{ .unit = &unit };
+    check.arm(true, false);
+    try std.testing.expect(check.allows(ram_ro[0], .load));
+    try std.testing.expect(check.lower());
+    try std.testing.expect(!check.allows(ram_ro[0], .load));
+    check.privileged = true;
+    try std.testing.expect(check.allows(ram_ro[0], .load));
+}

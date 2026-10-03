@@ -66,6 +66,13 @@ pub const Check = struct {
         return refuses(self.unit, address, .fetch, privileged);
     }
 
+    /// Check the rest of this instruction's accesses as unprivileged, as
+    /// LDRT/STRT ask (RA8EMU-370). Returns the privilege to put back.
+    pub fn lower(self: *Check) bool {
+        defer self.privileged = false;
+        return self.privileged;
+    }
+
     /// The refused address, if any, cleared as it is read.
     pub fn take(self: *Check) ?u32 {
         defer self.refused = null;
