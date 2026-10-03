@@ -12,6 +12,7 @@ const table = ra8.core.cpu.ops.table;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 const Instr = ra8.core.cpu.instr.Instr;
 const control_bits = ra8.core.cpu.regs.control_bits;
+const cpacr = ra8.core.fpu.cpacr;
 const fixture = @import("../exception/ram.zig");
 
 const vlstm = [2]u16{ 0xEC20, 0x0A00 };
@@ -29,10 +30,11 @@ fn run(cpu: *Cpu, pair: [2]u16) !void {
     try g.decode(wide(pair)).?(cpu, wide(pair));
 }
 
-/// Secure, SFPA and FPCA set, LSPEN clear, every S register and VPR
-/// non-zero, R0 and R3 at the frame.
+/// Secure, CP10 enabled, SFPA and FPCA set, LSPEN clear, every S register
+/// and VPR non-zero, R0 and R3 at the frame.
 fn ready(ram: *fixture.Ram) !Cpu {
     var cpu = try fixture.boot(ram);
+    cpu.fp.cpacr = cpacr.full_access;
     cpu.regs.control |= control_bits.sfpa | control_bits.fpca;
     cpu.fp.context.fpccr.lspen = 0;
     for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0x3F80_0000 + @as(u32, @intCast(i)));
@@ -127,4 +129,49 @@ test "T1 and T2 split by group, Rn = PC unclaimed, and the table routes each onc
         }
         try std.testing.expectEqual(@as(usize, 1), claimed);
     }
+}
+
+test "CPACR refusing CP10 is NOCP before any store or state change" {
+    var ram: fixture.Ram = .{};
+    var cpu = try ready(&ram);
+    cpu.fp.cpacr = 0;
+    try std.testing.expectError(error.NoCoprocessor, run(&cpu, vlstm));
+    try std.testing.expectError(error.NoCoprocessor, run(&cpu, vlldm_t2));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(frame));
+    try std.testing.expect(cpu.regs.control & control_bits.fpca != 0);
+    try std.testing.expectEqual(@as(u32, 0x3F80_0002), cpu.fp.bank.readS(2));
+}
+
+test "privileged-only CP10 refuses unprivileged Thread mode" {
+    var ram: fixture.Ram = .{};
+    var cpu = try ready(&ram);
+    cpu.fp.cpacr = 0x0050_0000;
+    try run(&cpu, vlstm);
+    try std.testing.expect(cpu.regs.control & control_bits.fpca == 0);
+    if (!cpu.regs.handlerMode()) {
+        cpu.regs.control |= control_bits.npriv | control_bits.fpca;
+        try std.testing.expectError(error.NoCoprocessor, run(&cpu, vlstm));
+    }
+}
+
+test "VLSTM with LSPACT already set is LSERR before any store" {
+    var ram: fixture.Ram = .{};
+    var cpu = try ready(&ram);
+    cpu.fp.context.fpccr.lspact = 1;
+    try std.testing.expectError(error.LazyStateError, run(&cpu, vlstm));
+    try std.testing.expectError(error.LazyStateError, run(&cpu, vlstm_t2));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(frame));
+    try std.testing.expect(cpu.regs.control & control_bits.fpca != 0);
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.context.fpccr.lspact);
+}
+
+test "LSERR is checked before alignment; VLLDM with LSPACT skips alignment" {
+    var ram: fixture.Ram = .{};
+    var cpu = try ready(&ram);
+    cpu.fp.context.fpccr.lspact = 1;
+    cpu.regs.set(0, frame + 4);
+    try std.testing.expectError(error.LazyStateError, run(&cpu, vlstm));
+    try run(&cpu, vlldm);
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+    try std.testing.expectError(error.Unaligned, run(&cpu, vlldm));
 }
