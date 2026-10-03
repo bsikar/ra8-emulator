@@ -30,6 +30,8 @@ const memmap = @import("../core/memmap.zig");
 
 /// What the programmed map says about an address. src/periph/sau_attr.zig.
 pub const attribution = @import("sau_attr.zig");
+/// The RA8 IDAU map that feeds the attribution. src/periph/idau.zig.
+pub const idau = @import("idau.zig");
 
 /// The window's fixed shape: how many regions this core reports out of TYPE.
 pub const geometry = struct {
