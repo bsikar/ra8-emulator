@@ -26,6 +26,7 @@ const std = @import("std");
 pub const budgets = @import("example_budgets.zig");
 pub const probes = @import("example_probes.zig");
 pub const options = @import("example_options.zig");
+pub const hil_conf = @import("hil_conf.zig");
 
 pub const Verdict = enum { pass, fail, unknown };
 
