@@ -133,7 +133,16 @@ test "a hil.conf probe with no failure word judges on the match counter alone" {
     const report = "  dump-sym      : g_threadx_blink_tick @0x22000000 = 7 (0x00000007)\n";
     try std.testing.expectEqual(probes.Judgement.pass, probes.judge(probe, report));
     const short = "  dump-sym      : g_threadx_blink_tick @0x22000000 = 2 (0x00000002)\n";
-    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, short));
+    try std.testing.expectEqual(probes.Judgement.unknown, probes.judge(probe, short));
+}
+
+test "a short count still fails a hand-written probe, and a conf probe fails on its failure word" {
+    const short = "  dump-sym      : g_ok @0x22000000 = 2 (0x00000002)\n  dump-sym      : g_bad @0x22000004 = 0 (0x00000000)\n";
+    const listed: probes.Probe = .{ .image = "x.elf", .symbol = "g_ok", .min = 5, .failure = "g_bad" };
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(listed, short));
+    const bad = "  dump-sym      : g_ok @0x22000000 = 9 (0x00000009)\n  dump-sym      : g_bad @0x22000004 = 1 (0x00000001)\n";
+    const conf = probes.fromConf("x.elf", "g_ok", 5, "g_bad", 0).?;
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(conf, bad));
 }
 
 test "a hil.conf probe keeps its failure word and ceiling, and needs a symbol" {
