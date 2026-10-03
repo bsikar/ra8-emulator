@@ -9,12 +9,19 @@ pub const address: u32 = 0x0200_0100;
 const shown_mismatches: usize = 8;
 
 pub fn expectGroupMatches(group: []const u8) !void {
+    try expectGroupMatchesExcept(group, &.{});
+}
+
+/// As expectGroupMatches, skipping the encodings in `skip`: ones Capstone 5
+/// cannot decode, which a by-name test covers instead.
+pub fn expectGroupMatchesExcept(group: []const u8, skip: []const u16) !void {
     var compared: usize = 0;
     var mismatched: usize = 0;
     var hw: u32 = 0;
     while (hw <= 0xFFFF) : (hw += 1) {
         const hw1: u16 = @intCast(hw);
         if (Instr.isWide(hw1)) continue;
+        if (std.mem.indexOfScalar(u16, skip, hw1) != null) continue;
         const instr: Instr = .{ .address = address, .hw1 = hw1, .size = 2 };
         const hit = decode.decode(instr) orelse continue;
         if (!std.mem.eql(u8, hit.group, group)) continue;

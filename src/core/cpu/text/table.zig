@@ -63,6 +63,11 @@ pub const entries = [_]Entry{
     .{ .group = "branch_wide", .print = @import("branch_wide.zig").print },
     .{ .group = "mrs_msr", .print = @import("mrs_msr.zig").print },
     .{ .group = "misc_wide", .print = @import("misc_wide.zig").print },
+    .{ .group = "sg", .print = @import("sg.zig").print },
+    .{ .group = "tt", .print = @import("tt.zig").print },
+    .{ .group = "udf", .print = @import("udf.zig").print },
+    .{ .group = "bkpt", .print = @import("bkpt.zig").print },
+    .{ .group = "bxns", .print = @import("bxns.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {

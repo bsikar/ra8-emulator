@@ -53,4 +53,5 @@ test {
     _ = @import("branch_wide_test.zig");
     _ = @import("mrs_msr_test.zig");
     _ = @import("misc_wide_test.zig");
+    _ = @import("system_test.zig");
 }
