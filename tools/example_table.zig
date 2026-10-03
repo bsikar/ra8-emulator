@@ -172,7 +172,7 @@ pub fn main() !void {
         const probe = probes.find(image) orelse confProbe(image, conf);
         var job = Job{ .emulator = args[1], .path = path, .image = image, .halves = halves, .conf = conf, .budget = budget };
         job.run = .{ .probe = probe, .console = conf != null, .extra = if (conf) |found| found.emu_args else null };
-        if (conf) |found| job.run.until = found.untilLine();
+        job.run.until = untilFor(conf, probe);
         var row = try measure(allocator, job);
         // Undecided at the default budget: give a conf row the bench's own
         // modelled time once. Rows already decided keep their fast run.
@@ -272,6 +272,14 @@ fn lessThan(_: void, a: []const u8, b: []const u8) bool {
 /// foo.elf's bench conf, copied beside it as foo.hil.conf (RA8EMU-400).
 pub fn confName(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
     return std.mem.concat(allocator, u8, &.{ path[0 .. path.len - elf.len], ".hil.conf" });
+}
+
+/// The console line that may end a conf run early. A run that also carries
+/// a memory probe keeps its budget: the probe reads what advances after the
+/// expected line (secure_boot_ns_hil's Non-secure world runs after it).
+pub fn untilFor(conf: ?hil_conf.Conf, probe: ?probes.Probe) ?[]const u8 {
+    if (probe != null) return null;
+    return (conf orelse return null).untilLine();
 }
 
 fn confProbe(image: []const u8, conf: ?hil_conf.Conf) ?probes.Probe {
