@@ -94,14 +94,18 @@ pub const Cpu = struct {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
-        const hit = (if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr)) orelse {
+        const it = it_state.get(self.regs.xpsr);
+        const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
+        const found = if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr);
+        // An encoding whose IT condition failed never runs, so it is skipped
+        // whether or not any group knows it.
+        if (found == null and runs) {
             if (decode.refused(self.profile, instr)) return self.usageFault(.undefinstr, address, .{ .unknown = instr });
             return .{ .unknown = instr };
-        };
+        }
         self.regs.pc = address +% instr.size;
-        const it = it_state.get(self.regs.xpsr);
-        if (!it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr)) {
-            hit.exec(self, instr) catch |err| {
+        if (runs) {
+            found.?.exec(self, instr) catch |err| {
                 self.regs.pc = address;
                 return switch (err) {
                     error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),

@@ -93,3 +93,25 @@ test "entry without an FP context keeps the basic frame and FType set" {
     try std.testing.expectEqual(fixture.msp_top - 0x20, cpu.regs.msp);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), cpu.regs.lr);
 }
+
+test "an SVC inside an IT block: entry clears ITSTATE, the frame keeps it, return restores it" {
+    var ram: fixture.Ram = .{};
+    // itt ne ; svc #0 ; movs r0, #1 (movne inside the block)
+    ram.putWord(fixture.code, 0xDF00_BF1C);
+    ram.putHalf(fixture.code + 4, 0x2001);
+    ram.putHalf(fixture.handler, 0x4770); // bx lr
+    var cpu = try fixture.boot(&ram);
+    const it_state = ra8.core.cpu.it_state;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.xpsr & entry.it_bits);
+    // The SVC moved the block on: NE with one instruction left.
+    try std.testing.expectEqual(@as(u8, 0x18), it_state.get(ram.word(cpu.regs.sp() + 28)));
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u8, 0x18), it_state.get(cpu.regs.xpsr));
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 1), cpu.regs.low[0]);
+    try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+}
