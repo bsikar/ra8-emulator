@@ -55,3 +55,69 @@ test "an unmapped FPCAR is a bus error and LSPACT stays set" {
     try std.testing.expectError(error.Unmapped, lazy.preserve(ram.view(), &s));
     try std.testing.expect(lazy.pending(&s));
 }
+
+const cpu_mod = ra8.core.cpu.cpu;
+const Gate = cpu_mod.data_gate.Gate;
+/// Everything from here up is Secure; below it is Non-secure.
+const secure_from: u32 = fixture.base + 0x300;
+
+const Split = struct {
+    fn of(context: *anyopaque, address: u32) cpu_mod.attribution.State {
+        _ = context;
+        return if (address >= secure_from) .secure else .non_secure;
+    }
+
+    fn source(self: *Split) cpu_mod.attribution.Attribution {
+        return .{ .context = self, .stateFn = of };
+    }
+};
+
+/// A pending push at `at` for a context of security `s`, behind an armed
+/// gate while Non-secure code runs.
+fn behindGate(ram: *fixture.Ram, gate: *Gate, at: u32, s: u1) !void {
+    var state = sample();
+    state.context.writeFpcar(at);
+    state.context.fpccr.lspact = 1;
+    state.context.fpccr.s = s;
+    var view = ram.view();
+    view.gate = gate;
+    gate.armed = true;
+    const result = lazy.preserve(view, &state);
+    try std.testing.expect(gate.armed);
+    try std.testing.expectEqual(std.meta.isError(result), lazy.pending(&state));
+    return result;
+}
+
+test "a Non-secure context's push into Secure memory is LSPERR and writes nothing" {
+    var ram: fixture.Ram = .{};
+    var split: Split = .{};
+    var current: ra8.core.banked.State = .non_secure;
+    var gate: Gate = .{ .source = split.source(), .current = &current };
+    try std.testing.expectError(error.LazyPreserveError, behindGate(&ram, &gate, secure_from, 0));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(secure_from));
+    // Only its far end Secure is refused too.
+    try std.testing.expectError(error.LazyPreserveError, behindGate(&ram, &gate, secure_from - 0x40, 0));
+    // Secure code running does not change whose push it is.
+    current = .secure;
+    try std.testing.expectError(error.LazyPreserveError, behindGate(&ram, &gate, secure_from, 0));
+}
+
+test "a Non-secure context's push into Non-secure memory lands" {
+    var ram: fixture.Ram = .{};
+    var split: Split = .{};
+    var current: ra8.core.banked.State = .non_secure;
+    var gate: Gate = .{ .source = split.source(), .current = &current };
+    const at = secure_from - 0x48;
+    try behindGate(&ram, &gate, at, 0);
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), ram.word(at));
+}
+
+test "a Secure context's push lands in Secure memory while Non-secure code runs" {
+    var ram: fixture.Ram = .{};
+    var split: Split = .{};
+    var current: ra8.core.banked.State = .non_secure;
+    var gate: Gate = .{ .source = split.source(), .current = &current };
+    try behindGate(&ram, &gate, secure_from, 1);
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), ram.word(secure_from));
+    try std.testing.expectEqual(@as(u32, 0x0021_00FF), ram.word(secure_from + 0x44));
+}

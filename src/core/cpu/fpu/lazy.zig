@@ -6,8 +6,14 @@
 //! per the Arm ARM (DDI0553) extended frame: S0 at 0, FPSCR at 0x40, VPR at
 //! 0x44.
 //!
-//! Not modelled yet: the permission and MPU checks PreserveFPState makes
-//! with FPCCR.USER/S/THREAD, faults during lazy stacking (the *RDY bits),
+//! The push is made in the Security state FPCCR.S recorded, not the running
+//! one (RA8EMU-475): a Non-secure context (S clear) may only land in
+//! Non-secure memory, and anything else is LSPERR, a SecureFault that
+//! reports FPCAR in SFAR. A Secure context may land anywhere, so the data
+//! gate, which judges by the running state, is held off for the push.
+//!
+//! Not modelled yet: the privilege and MPU checks PreserveFPState makes
+//! with FPCCR.USER/THREAD, faults during lazy stacking (the *RDY bits),
 //! SPLIMVIOL, and the Secure S16-S31 words (RA8EMU-165).
 const std = @import("std");
 const bus = @import("../bus.zig");
@@ -24,8 +30,31 @@ pub fn pending(state: *const State) bool {
     return state.context.fpccr.lspact == 1;
 }
 
+/// LazyPreserveError: a Non-secure context's push reached memory that is
+/// not Non-secure; the core takes it as SecureFault LSPERR.
+pub const Error = bus.Error || error{LazyPreserveError};
+
 /// Write the FP context into the space FPCAR names and clear LSPACT.
-pub fn preserve(to: bus.Bus, state: *State) bus.Error!void {
+pub fn preserve(to: bus.Bus, state: *State) Error!void {
+    const gate = to.gate orelse return write(to, state);
+    if (state.context.fpccr.s == 0 and !nonSecure(gate.source, state.context.fpcar))
+        return error.LazyPreserveError;
+    const was = gate.armed;
+    gate.armed = false;
+    defer gate.armed = was;
+    return write(to, state);
+}
+
+/// Whether the whole space at `at` is Non-secure. Regions are 32-byte
+/// granular and the space is 0x48 bytes, so both ends and the middle cover it.
+fn nonSecure(source: anytype, at: u32) bool {
+    for ([_]u32{ at, at +% 0x20, at +% offset.vpr }) |word| {
+        if (source.of(word) != .non_secure) return false;
+    }
+    return true;
+}
+
+fn write(to: bus.Bus, state: *State) bus.Error!void {
     const at = state.context.fpcar;
     for (0..16) |i| {
         const n: u5 = @intCast(i);
