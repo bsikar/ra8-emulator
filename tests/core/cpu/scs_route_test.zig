@@ -204,3 +204,47 @@ test "SHCSR keeps a Non-secure copy of its enables on CPU0" {
 test "SHCSR keeps a Non-secure copy of its enables on CPU1" {
     try shcsrRoundTrip(.cpu1);
 }
+
+test "a write-one-to-clear split clears the Non-secure copy and spares the Secure one" {
+    var halves = splitOf(0xE000_ED28, .non_secure, .two);
+    halves.clears = true;
+    const words = halves.write(0x0002_0101, 0x0001_0002, 0x0001_0100);
+    try std.testing.expectEqual(@as(u32, 0x0000_0100), words.shared);
+    try std.testing.expectEqual(@as(u32, 0x0000_0002), words.non_secure);
+}
+
+fn cfsrRoundTrip(issuer: registry.Issuer) !void {
+    const cfsr: u32 = 0xE000_ED28;
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
+    var state: Banked = .{};
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state, .scs = .{ .clears = &clears } };
+    const bus = board.view();
+    // Secure: UNDEFINSTR (banked) and PRECISERR (shared) latched.
+    try bus.latch(cfsr, 0x0001_0200);
+    state.current = .non_secure;
+    // Non-secure: INVSTATE and IACCVIOL go to its own copy.
+    try bus.latch(cfsr, 0x0002_0001);
+    try std.testing.expectEqual(@as(u32, 0x0002_0201), try bus.readWord(cfsr));
+    try std.testing.expectEqual(@as(u32, 0x0003_0201), board.faults().cfsr);
+    // A halfword store to UFSR acknowledges only the Non-secure INVSTATE.
+    try bus.write(cfsr + 2, &[_]u8{ 0x02, 0x00 });
+    try std.testing.expectEqual(@as(u32, 0x0000_0201), try bus.readWord(cfsr));
+    // A word store of what it read clears the rest, BFSR included.
+    try put(bus, cfsr, 0x0000_0201);
+    try std.testing.expectEqual(@as(u32, 0), try bus.readWord(cfsr));
+    state.current = .secure;
+    try std.testing.expectEqual(@as(u32, 0x0001_0000), try bus.readWord(cfsr));
+}
+
+test "CFSR keeps a Non-secure copy of UFSR and MMFSR on CPU0" {
+    try cfsrRoundTrip(.cpu0);
+}
+
+test "CFSR keeps a Non-secure copy of UFSR and MMFSR on CPU1" {
+    try cfsrRoundTrip(.cpu1);
+}
