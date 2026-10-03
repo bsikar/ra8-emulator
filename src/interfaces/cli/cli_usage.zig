@@ -5,6 +5,7 @@ pub const text =
     \\                    [--sd IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y]
     \\                    [--battery PCT] [--charge] [--click] [--console]
+    \\                    [--usb-loop]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
@@ -82,6 +83,8 @@ pub const text =
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
     \\  --console          print each finished SCI console line as it arrives
+    \\  --usb-loop         cable the HS host jack to the board's own FS
+    \\                     device jack, in place of the stand-in device
     \\  --no-bus-errors    end the run with a fault report on an access
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is
