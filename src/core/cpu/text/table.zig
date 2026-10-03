@@ -50,6 +50,7 @@ pub const entries = [_]Entry{
     .{ .group = "dsp_mulhi", .print = @import("dsp_mulhi.zig").print },
     .{ .group = "dsp_long_mul", .print = @import("dsp_long_mul.zig").print },
     .{ .group = "sat_arith", .print = @import("sat_arith.zig").print },
+    .{ .group = "barrier", .print = @import("barrier.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
