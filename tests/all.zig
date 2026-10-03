@@ -3,8 +3,8 @@
 //! of the source file it covers (tests/periph/crc_test.zig covers
 //! src/periph/crc.zig, tests/tools/gate_test.zig covers tools/gate.zig).
 const std = @import("std");
-
 test {
+    _ = @import("core/systick_bank_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");

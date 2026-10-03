@@ -25,6 +25,7 @@ pub const core = struct {
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");
     pub const banked = @import("core/banked.zig");
+    pub const systick_bank = @import("core/systick_bank.zig");
     pub const idle = @import("core/idle.zig");
     pub const pend_break = @import("core/pend_break.zig");
     pub const svc_trap = @import("core/svc_trap.zig");
@@ -119,7 +120,6 @@ pub const core = struct {
         pub const exception = @import("core/cpu/exception/all.zig");
     };
 };
-
 pub const periph = struct {
     pub const adc = @import("periph/adc/adc.zig");
     pub const adc_intr = @import("periph/adc/adc_intr.zig");
