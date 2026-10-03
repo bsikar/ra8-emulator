@@ -60,6 +60,8 @@ test {
     _ = @import("ops/bkpt_test.zig");
     _ = @import("ops/table_branch_test.zig");
     _ = @import("ops/blxns_test.zig");
+    _ = @import("ops/bxns_test.zig");
+    _ = @import("ops/security_round_trip_test.zig");
     _ = @import("ops/sg_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");

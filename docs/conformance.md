@@ -296,6 +296,7 @@ table above. A group listed as missing does not fail the build yet.
 | svc | 3 |
 | table_branch | missing |
 | blxns | 11 |
+| bxns | missing |
 | sg | missing |
 | imm_logic | missing |
 | imm_arith | missing |
