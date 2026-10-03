@@ -103,7 +103,7 @@ test "a stop with nothing holding it still fires at once" {
     try std.testing.expectEqual(@as(u32, 1), channel(&unit).transfers);
 }
 
-test "the transfer is counted after the last byte, not on the request" {
+test "the transfer is counted after the one requested byte, not the request" {
     var unit = riic.Riic.init();
     var expander = pi4ioe.Expander{};
     try armed(&unit, &expander);
@@ -111,9 +111,9 @@ test "the transfer is counted after the last byte, not on the request" {
 
     unit.write(at(flag.reg.iccr2), 1, flag.iccr2.sp);
     _ = unit.read(at(flag.reg.icdrr), 1);
-    // The byte came out of a frame that is still open.
+    // STOP limits the response to the current byte, which closes the frame.
     try std.testing.expectEqual(@as(u32, 1), channel(&unit).received);
-    try std.testing.expectEqual(@as(u32, 0), channel(&unit).transfers);
+    try std.testing.expectEqual(@as(u32, 1), channel(&unit).transfers);
 
     drain(&unit);
     try std.testing.expectEqual(@as(u32, 1), channel(&unit).transfers);

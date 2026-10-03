@@ -23,6 +23,13 @@ pub const Rx = struct {
     /// reading too far got data that looked real.
     overread: u32 = 0,
 
+    /// A STOP request terminates the receive frame after its in-flight byte.
+    /// Devices may expose more data than the controller asked to clock; those
+    /// bytes are not pending bus traffic once the controller requests STOP.
+    pub fn stopAfterNext(self: *Rx) void {
+        self.staged_len = @min(self.staged_len, self.served + 1);
+    }
+
     /// Start a frame empty: nothing staged, nothing served, clock not yet
     /// running.
     pub fn open(self: *Rx) void {

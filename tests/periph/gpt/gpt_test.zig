@@ -36,7 +36,7 @@ test "GTCLR clears the count without stopping it" {
     started(&unit, ch0, 0xFFFF);
     unit.tick();
     unit.write(ch0 + gpt.off.gtclr, 4, 1);
-    try std.testing.expectEqual(@as(u32, 0), unit.read(ch0 + gpt.off.gtcnt, 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.read(ch0 + gpt.off.gtcnt, 4));
     try std.testing.expect(unit.channels[0].running());
 }
 

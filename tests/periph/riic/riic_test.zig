@@ -322,3 +322,7 @@ test "a device may not be attached twice at one address" {
     try unit.attachDevice(first.device());
     try std.testing.expectError(bus.Error.AddressTaken, unit.attachDevice(second.device()));
 }
+
+test {
+    _ = @import("riic_sensor_bus_test.zig");
+}
