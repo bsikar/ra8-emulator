@@ -10,6 +10,7 @@ test {
     _ = @import("eth_gateway_test.zig");
     _ = @import("eth_mac_test.zig");
     _ = @import("eth_mode_test.zig");
+    _ = @import("eth_open_regs_test.zig");
     _ = @import("eth_peer_test.zig");
     _ = @import("eth_phy_test.zig");
     _ = @import("eth_queue_test.zig");

@@ -34,6 +34,10 @@ pub const off = struct {
     /// FWPBFC and FWPBFCSDC: the two words of one port's slot.
     pub const port_span: u32 = 0x8;
     pub const port_count: usize = 3;
+    pub const fwpc10: u32 = 0x104;
+    pub const fwpc11: u32 = 0x114;
+    pub const fwpc12: u32 = 0x124;
+    pub const dde: u32 = 1;
 };
 
 pub const Forward = struct {
@@ -42,6 +46,8 @@ pub const Forward = struct {
     ie: u32 = 0,
     /// FWPBFC0 and FWPBFCSDC0 for ports 0, 1 and the host port.
     ports: [off.port_count][2]u32 = .{.{ 0, 0 }} ** off.port_count,
+    /// FWPC10/11/12.DDE selects the extended descriptor format per agent.
+    fwpc: [3]u32 = .{ 0, 0, 0 },
     /// Stores that landed anywhere here.
     writes: u32 = 0,
 
@@ -55,6 +61,9 @@ pub const Forward = struct {
             off.ctrl => return &self.ctrl,
             off.sts => return &self.sts,
             off.ie => return &self.ie,
+            off.fwpc10 => return &self.fwpc[0],
+            off.fwpc11 => return &self.fwpc[1],
+            off.fwpc12 => return &self.fwpc[2],
             else => {},
         }
         if (aligned < off.fwpbfc0) return null;
@@ -83,12 +92,13 @@ pub const Forward = struct {
     }
 
     /// The control window and one window per port slot.
-    pub fn blocks(self: *Forward) [1 + off.port_count]periph.Block {
-        var out: [1 + off.port_count]periph.Block = undefined;
+    pub fn blocks(self: *Forward) [2 + off.port_count]periph.Block {
+        var out: [2 + off.port_count]periph.Block = undefined;
         out[0] = self.window("MFWD", base, off.control_span);
+        out[1] = self.window("MFWD-FWPC", base + off.fwpc10, 0x24);
         for (0..off.port_count) |p| {
             const at = base + off.fwpbfc0 + off.port_stride * @as(u32, @intCast(p));
-            out[1 + p] = self.window("MFWD-FWPBFC", at, off.port_span);
+            out[2 + p] = self.window("MFWD-FWPBFC", at, off.port_span);
         }
         return out;
     }

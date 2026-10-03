@@ -44,6 +44,8 @@ pub const mac_address = eth_mac;
 pub const agent = @import("eth_agent.zig");
 /// MFWD control and per-port forwarding words: eth_forward.zig.
 pub const forward = @import("eth_forward.zig");
+/// Ancillary Ethernet setup words touched by GWCA open.
+pub const open_regs = @import("eth_open_regs.zig");
 /// COMA RIC, RRC and RCEC: eth_coma.zig.
 pub const coma = @import("eth_coma.zig");
 /// TAS gate-list RAM and indirect access registers.

@@ -30,13 +30,28 @@ test "the AXI init answers the request it was given" {
     var agent = gateway.Gateway{};
     const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
     try std.testing.expectEqual(@as(u32, 0), agent.arirmRead(at, 4) & regs.gwca.arr);
+    var fwpc = [_]u32{ 1, 1, 1 };
+    agent.fwpc = &fwpc;
     agent.arirmWrite(at, 4, regs.gwca.ariog);
     try std.testing.expect(agent.arirmRead(at, 4) & regs.gwca.arr != 0);
     try std.testing.expectEqual(@as(u32, 1), agent.inits);
 }
 
+test "the AXI init waits until each agent enables extended descriptors" {
+    var agent = gateway.Gateway{};
+    var fwpc = [_]u32{ 1, 0, 1 };
+    agent.fwpc = &fwpc;
+    const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
+    agent.arirmWrite(at, 4, regs.gwca.ariog);
+    try std.testing.expectEqual(@as(u32, 0), agent.arirmRead(at, 4) & regs.gwca.arr);
+    fwpc[1] = 1;
+    try std.testing.expect(agent.arirmRead(at, 4) & regs.gwca.arr != 0);
+}
+
 test "holding ARIOG does not count a second init" {
     var agent = gateway.Gateway{};
+    var fwpc = [_]u32{ 1, 1, 1 };
+    agent.fwpc = &fwpc;
     const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
     agent.arirmWrite(at, 4, regs.gwca.ariog);
     agent.arirmWrite(at, 4, regs.gwca.ariog);
@@ -82,6 +97,8 @@ test "a byte store at GWARIRM still asks for the AXI init" {
     const at = regs.cluster.gwca0 + regs.gwca.gwarirm;
     agent.arirmWrite(at, 1, regs.gwca.ariog);
     try std.testing.expectEqual(@as(u32, 1), agent.inits);
+    var fwpc = [_]u32{ 1, 1, 1 };
+    agent.fwpc = &fwpc;
     try std.testing.expect(agent.arirmRead(at, 1) & regs.gwca.arr != 0);
 }
 

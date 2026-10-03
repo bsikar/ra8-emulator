@@ -21,7 +21,7 @@ pub fn reachable(from: Mode, to: Mode) bool {
     return switch (from) {
         .reset => to == .disable,
         .disable => to == .reset or to == .config or to == .operation,
-        .config => to == .disable,
+        .config => to == .disable or to == .operation,
         .operation => to == .disable or to == .config,
     };
 }
