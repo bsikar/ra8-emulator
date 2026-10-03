@@ -202,3 +202,18 @@ test "the Non-secure MRAM view is the engine's own code MRAM (RA8EMU-412)" {
     try std.testing.expectEqual(@as(u32, 0xC0DE_0001), try core.readWord(memmap.mram_base + 0x8_0004));
     try std.testing.expectEqual(core.ram.region(memmap.mram_base).?.ptr, core.ram.region(memmap.ns_mram_base).?.ptr);
 }
+
+test "the PPB is host-backed per engine and starts zeroed (RA8EMU-416)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    const ppb = core.ram.region(ra8.core.memmap.ppb_base) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, ra8.core.memmap.ppb_size), ppb.len);
+    try std.testing.expectEqual(@as(u32, 0), try core.readWord(ra8.core.memmap.scb.ccr));
+    try core.writeWord(ra8.core.memmap.scb.ccr, 0x0007_0200);
+    try std.testing.expectEqual(@as(u32, 0x0007_0200), std.mem.readInt(u32, ppb[0xED14..][0..4], .little));
+    var other = try Engine.open();
+    defer other.close();
+    try other.mapBoardRam();
+    try std.testing.expectEqual(@as(u32, 0), try other.readWord(ra8.core.memmap.scb.ccr));
+}

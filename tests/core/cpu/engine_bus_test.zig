@@ -50,3 +50,20 @@ test "the direct view folds the Non-secure MRAM alias onto flash (RA8EMU-412)" {
     try core.writeWord(memmap.mram_base + 0x8_0020, 0xFEED_F00D);
     try std.testing.expectEqual(@as(u32, 0xFEED_F00D), try view.readWord(memmap.ns_mram_base + 0x8_0020));
 }
+
+test "PPB reads come from the engine's own host pages (RA8EMU-416)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var memory: EngineBus = .{ .core = &core };
+    const view = memory.view();
+    try std.testing.expect(memory.ppb != null);
+    try core.writeWord(memmap.scb.vtor, 0x0200_0400);
+    try std.testing.expectEqual(@as(u32, 0x0200_0400), try view.readWord(memmap.scb.vtor));
+    try view.write(memmap.scb.shpr3, &.{ 0x00, 0x00, 0xE0, 0x40 });
+    try std.testing.expectEqual(@as(u32, 0x40E0_0000), try core.readWord(memmap.scb.shpr3));
+    try std.testing.expectEqual(@as(u32, 0x40E0_0000), try view.readWord(memmap.scb.shpr3));
+    var last: [4]u8 = undefined;
+    try view.read(memmap.ppb_base + memmap.ppb_size - 4, &last);
+    try std.testing.expectError(bus.Error.Unmapped, view.read(memmap.ppb_base + memmap.ppb_size - 2, &last));
+}
