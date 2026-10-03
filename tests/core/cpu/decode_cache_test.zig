@@ -57,3 +57,10 @@ test "an encoding no group knows is not cached" {
     try std.testing.expect(cache.find(unknown) == null);
     try std.testing.expectEqual(@as(u64, 2), cache.misses);
 }
+
+// tests/all.zig is at its 400-line cap, so the block tests (RA8EMU-403)
+// are pulled in from here, next to the cache they build on.
+test {
+    _ = @import("block_test.zig");
+    _ = @import("block_end_test.zig");
+}
