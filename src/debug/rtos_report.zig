@@ -22,45 +22,106 @@ pub const limits = struct {
     pub const rows: usize = rtos_load.limits.slots + 1;
 };
 
+/// One traced core and the memory its threads' names are read through,
+/// as `--report json` takes it (RA8EMU-266).
+pub const Side = struct {
+    tracer: *const rtos_hook.Tracer,
+    memory: rtos_hook.Memory,
+};
+
+/// The side for `tracer`, or null when nothing was traced.
+pub fn sideOf(tracer: ?*const rtos_hook.Tracer, memory: rtos_hook.Memory) ?Side {
+    const one = tracer orelse return null;
+    return .{ .tracer = one, .memory = memory };
+}
+
 /// The trace when `--trace-rtos` asked, then the load when `--cpu-load` did.
+/// Under `--report json` the load is in the document, so its table is not
+/// printed again.
 pub fn all(out: anytype, options: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
     if (options.trace_rtos) try rtos_hook.print(out, tracer, memory);
-    if (options.cpu_load) try load(out, tracer, memory);
+    if (options.cpu_load and !asJson(options)) try load(out, tracer, memory);
     const one = tracer orelse return;
     if (outPath(options)) |path| try rtos_file.save(path, one.core, &one.trace);
 }
 
 /// `--trace-rtos-out`, when the options carry it and it was given.
 fn outPath(options: anytype) ?[]const u8 {
-    const T = @TypeOf(options);
-    const Fields = switch (@typeInfo(T)) {
+    if (!@hasField(Fields(@TypeOf(options)), "trace_rtos_out")) return null;
+    return options.trace_rtos_out;
+}
+
+/// `--report json`, when the options carry it.
+fn asJson(options: anytype) bool {
+    if (!@hasField(Fields(@TypeOf(options)), "report_json")) return false;
+    return options.report_json;
+}
+
+fn Fields(comptime T: type) type {
+    return switch (@typeInfo(T)) {
         .pointer => |pointer| pointer.child,
         else => T,
     };
-    if (!@hasField(Fields, "trace_rtos_out")) return null;
-    return options.trace_rtos_out;
+}
+
+/// One core's load as the run ends: its owners, `other`, and each one's
+/// share in tenths of a percent (`shares[len]` is `other`'s).
+pub const Table = struct {
+    core: u1,
+    total: u64,
+    other: u64,
+    slots: [rtos_load.limits.slots]rtos_load.Slot = undefined,
+    len: usize = 0,
+    shares: [limits.rows]u64 = [_]u64{0} ** limits.rows,
+
+    pub fn rows(self: *const Table) []const rtos_load.Slot {
+        return self.slots[0..self.len];
+    }
+};
+
+/// The tracer's core, charged up to its clock now.
+pub fn table(one: *const rtos_hook.Tracer) Table {
+    var copy = one.trace.load;
+    copy.finish(one.loadClock());
+    const slots = copy.rows(one.core);
+    var made = Table{ .core = one.core, .total = copy.total(one.core), .other = copy.cores[one.core].other, .len = slots.len };
+    @memcpy(made.slots[0..slots.len], slots);
+    if (made.total == 0) return made;
+    var ticks: [limits.rows]u64 = undefined;
+    for (slots, 0..) |slot, index| ticks[index] = slot.ticks;
+    ticks[slots.len] = made.other;
+    split(ticks[0 .. slots.len + 1], made.total, &made.shares);
+    return made;
+}
+
+/// What an owner is called: a thread's name from its control block, an
+/// exception's label or IRQ number, or null for idle, `before` and a
+/// thread whose name cannot be read.
+pub fn ownerName(who: rtos_load.Owner, memory: anytype, buffer: *[names.longest]u8) ?[]const u8 {
+    switch (who.kind) {
+        .before, .idle => return null,
+        .thread => return names.name(memory, who.id, buffer),
+        .exception => {
+            const number: u16 = @intCast(who.id);
+            if (isr.label(number)) |text| return text;
+            if (number < 16) return null;
+            return std.fmt.bufPrint(buffer, "IRQ{d}", .{number - 16}) catch null;
+        },
+    }
 }
 
 /// One core's load table: the tracer's core, charged up to its clock now.
 pub fn load(out: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
     const one = tracer orelse return;
-    var copy = one.trace.load;
-    copy.finish(one.loadClock());
-    const total = copy.total(one.core);
-    try out.print("  cpu load cpu{d} : {d} instruction(s)\n", .{ one.core, total });
-    if (total == 0) return;
-    const slots = copy.rows(one.core);
-    var ticks: [limits.rows]u64 = undefined;
-    for (slots, 0..) |slot, index| ticks[index] = slot.ticks;
-    ticks[slots.len] = copy.cores[one.core].other;
-    var shares: [limits.rows]u64 = undefined;
-    split(ticks[0 .. slots.len + 1], total, &shares);
-    for (slots, 0..) |slot, index| {
-        try share(out, shares[index], slot.ticks);
+    const made = table(one);
+    try out.print("  cpu load cpu{d} : {d} instruction(s)\n", .{ made.core, made.total });
+    if (made.total == 0) return;
+    for (made.rows(), 0..) |slot, index| {
+        try share(out, made.shares[index], slot.ticks);
         try owner(out, slot.owner, memory);
     }
-    if (ticks[slots.len] > 0) {
-        try share(out, shares[slots.len], ticks[slots.len]);
+    if (made.other > 0) {
+        try share(out, made.shares[made.len], made.other);
         try out.print("other\n", .{});
     }
 }

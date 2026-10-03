@@ -40,6 +40,7 @@ const watchpoint = @import("../../../debug/watchpoint.zig");
 const taken_in = @import("../../../debug/taken_in.zig");
 const engine = @import("../../../core/engine.zig");
 const cli = @import("../cli.zig");
+const rtos_report = @import("../../../debug/rtos_report.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -78,6 +79,8 @@ pub const Tally = struct {
     taken_in: ?taken_in.Window = null,
     /// What the dump flags read from (RA8EMU-381), `--report json` only.
     dumps: ?json_run.json_dumps.Dumps = null,
+    /// The `--cpu-load` tracers (RA8EMU-266), `--report json` only.
+    load: ?json_run.json_load.Load = null,
 
     /// This tally with the `--taken-in` window it resolved and the core the
     /// dump flags read from.
@@ -86,6 +89,13 @@ pub const Tally = struct {
         with.taken_in_spec = options.taken_in_place;
         with.taken_in = window;
         with.dumps = .{ .core = core, .image = image, .options = options, .watched = watched };
+        return with;
+    }
+
+    /// This tally with the traced cores `--cpu-load` reads, when it asked.
+    pub fn loaded(self: Tally, wanted: bool, cpu0: ?rtos_report.Side, cpu1: ?rtos_report.Side) Tally {
+        var with = self;
+        if (wanted) with.load = .{ .cpu0 = cpu0, .cpu1 = cpu1 };
         return with;
     }
 };
@@ -132,7 +142,7 @@ pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bo
         .taken = &of.taken,
         .taken_in_spec = of.taken_in_spec,
         .taken_in = if (of.taken_in) |*one| one else null,
-    }, .dumps = if (of.dumps) |*one| one else null });
+    }, .dumps = if (of.dumps) |*one| one else null, .load = if (of.load) |*one| one else null });
 }
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.

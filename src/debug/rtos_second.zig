@@ -40,6 +40,14 @@ pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second)
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = one.core.handle });
 }
 
+/// CPU1's tracer and the memory its names are read through, for
+/// `--report json` (RA8EMU-266). Null when CPU1 was not traced.
+pub fn side(second: ?*const second_core.Second) ?rtos_hook.report.Side {
+    const one = second orelse return null;
+    const tracer = traced orelse return null;
+    return .{ .tracer = tracer, .memory = .{ .handle = one.core.handle } };
+}
+
 /// `--trace-rtos` on CPU1's Zig core under `--cpu zig --cpu1` (RA8EMU-341).
 /// The listener sits in front of CPU1's bus and exception source, as
 /// rtos_zig.zig does for CPU0; stamps come from CPU1's own SysTick count

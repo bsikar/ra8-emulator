@@ -205,7 +205,9 @@ fn reportAll(
     window: ?taken_in.Window,
     tracer: ?*const rtos_hook.Tracer,
 ) !void {
-    try report_run.pick(out, board, image, run.within(core, image, &options, window, watched), options.report_json);
+    const cpu0 = rtos_hook.report.sideOf(tracer, .{ .handle = core.handle });
+    const tally = run.within(core, image, &options, window, watched).loaded(options.cpu_load, cpu0, rtos_hook.second.side(second));
+    try report_run.pick(out, board, image, tally, options.report_json);
     if (!options.report_json) try ra8.board.report.after.text(out, image, options, parts, window);
     try second_core.report(out, second);
     if (!options.report_json) try report_dumps.dumps(out, core, image, options, board, watched);
