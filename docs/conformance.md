@@ -3,7 +3,7 @@
 Every encoding the Zig core's semantics claim, and how many vectors from
 the Arm ARM (DDI0553) pseudocode cover it. Generated from
 src/core/cpu/conformance/suite.zig; `zig build test` fails when this file
-is stale or an encoding is missing. Regenerate with
+is stale or a semantics encoding is missing. Regenerate with
 `RA8_BLESS_CONFORMANCE=1 zig build test`.
 
 | Encoding | Vectors |
@@ -232,3 +232,124 @@ is stale or an encoding is missing. Regenerate with
 | VFMA (MVE, floating-point, by scalar) T1 | 1 |
 | VFMAS (MVE, floating-point, by scalar) T1 | 1 |
 | VCMP (MVE, floating-point, by scalar) T2 | 2 |
+
+## Decode table
+
+Every instruction group the Zig decode table registers
+(src/core/cpu/ops/table.zig), and how many conformance vectors name it.
+The FP and MVE groups' semantics are covered encoding by encoding in the
+table above. A group listed as missing does not fail the build yet.
+
+| Group | Vectors |
+|---|---|
+| hint | missing |
+| barrier | missing |
+| push_pop | missing |
+| sp_arith | missing |
+| ldr_literal | missing |
+| ldst_imm | missing |
+| ldst_reg | missing |
+| ldm_stm | missing |
+| shift_imm | missing |
+| add_sub | missing |
+| dp_reg | missing |
+| special_data | missing |
+| cps | missing |
+| cbz | missing |
+| extend | missing |
+| reverse | missing |
+| it | missing |
+| branch | missing |
+| mov_wide | missing |
+| divide | missing |
+| dp_shifted | missing |
+| shift_reg | missing |
+| add_sub_wide | missing |
+| long_mul | missing |
+| mrs_msr | missing |
+| ldst_reg_wide | missing |
+| bitfield | missing |
+| mul_acc | missing |
+| saturate | missing |
+| misc_wide | missing |
+| extend_wide | missing |
+| pkh | missing |
+| parallel | missing |
+| sel | missing |
+| sat_arith | missing |
+| extend_b16 | missing |
+| sat16 | missing |
+| usad8 | missing |
+| umaal | missing |
+| dsp_mul16 | missing |
+| dsp_dual | missing |
+| dsp_mulhi | missing |
+| dsp_long_mul | missing |
+| csel | missing |
+| lob | missing |
+| long_shift | missing |
+| long_shift_reg | missing |
+| long_shift_sat | missing |
+| long_shift_sat64 | missing |
+| udf | missing |
+| bkpt | missing |
+| svc | missing |
+| table_branch | missing |
+| blxns | missing |
+| imm_logic | missing |
+| imm_arith | missing |
+| branch_wide | missing |
+| ldst_wide | missing |
+| ldr_literal_wide | missing |
+| preload | missing |
+| fp_arith | missing |
+| fp_unary | missing |
+| fp_system | missing |
+| fp_convert | missing |
+| fp_directed | missing |
+| fp_move | missing |
+| vscclrm | missing |
+| fp_mem | missing |
+| mve_vpst | missing |
+| mve_int | missing |
+| mve_int_pair | missing |
+| mve_int_shift | missing |
+| mve_int_mulh | missing |
+| mve_int_vmla | missing |
+| mve_int_scalar | missing |
+| mve_vcmp | missing |
+| mve_vpred | missing |
+| mve_vctp | missing |
+| mve_lob_tp | missing |
+| mve_vdup | missing |
+| mve_lane_move | missing |
+| mve_lane_pair | missing |
+| mve_vmaxv | missing |
+| mve_int_vqdmlah | missing |
+| mve_vldr | missing |
+| mve_vldr_wide | missing |
+| mve_gather | missing |
+| mve_gather64 | missing |
+| mve_gather_imm | missing |
+| mve_vld_il | missing |
+| mve_float | missing |
+| mve_float_scalar | missing |
+| mve_vcmp_fp | missing |
+| mve_float_fma | missing |
+| mve_float_unary | missing |
+| mve_float_cvt_half | missing |
+| mve_float_cvt_int | missing |
+| mve_float_cvt_fixed | missing |
+| mve_float_rint | missing |
+| mve_float_maxnm | missing |
+| mve_float_maxnma | missing |
+| mve_float_maxnmv | missing |
+| mve_float_vcadd | missing |
+| mve_float_vcmla | missing |
+| mve_float_vcmul | missing |
+| ldrd_strd | missing |
+| exclusive | missing |
+| acq_rel | missing |
+| clrm | missing |
+| ldm_stm_wide | missing |
+| pac | missing |
