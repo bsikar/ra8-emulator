@@ -58,4 +58,5 @@ test {
     _ = @import("pkh_test.zig");
     _ = @import("umaal_test.zig");
     _ = @import("usad8_test.zig");
+    _ = @import("parallel_test.zig");
 }

@@ -72,6 +72,7 @@ pub const entries = [_]Entry{
     .{ .group = "pkh", .print = @import("pkh.zig").print },
     .{ .group = "umaal", .print = @import("umaal.zig").print },
     .{ .group = "usad8", .print = @import("usad8.zig").print },
+    .{ .group = "parallel", .print = @import("parallel.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
