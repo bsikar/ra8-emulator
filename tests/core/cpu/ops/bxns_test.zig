@@ -36,6 +36,26 @@ test "BXNS to a target with bit 0 clear switches to Non-secure and banks the sta
     try std.testing.expectEqual(fixture.msp_top, cpu.banked.other.msp);
 }
 
+test "BXNS trades the masks and banked CONTROL bits with the Non-secure bank" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.primask = 1;
+    cpu.regs.basepri = 0x40;
+    cpu.regs.control = 1; // nPRIV, Secure
+    cpu.banked.other.faultmask = 1;
+    cpu.banked.other.control = 2; // SPSEL, Non-secure
+    cpu.banked.other.psp = fixture.base + 0x2C0;
+    cpu.regs.low[0] = fixture.handler;
+    try bxns.group.decode(at(0x4704)).?(&cpu, at(0x4704));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.primask);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.basepri);
+    try std.testing.expectEqual(@as(u32, 1), cpu.regs.faultmask);
+    try std.testing.expectEqual(@as(u32, 2), cpu.regs.control & 3);
+    try std.testing.expectEqual(fixture.base + 0x2C0, cpu.regs.sp()); // Thread mode on PSP_NS
+    try std.testing.expectEqual(@as(u32, 1), cpu.banked.other.primask);
+    try std.testing.expectEqual(@as(u32, 1), cpu.banked.other.control & 3);
+}
+
 test "BXNS to a target with bit 0 set stays Secure and branches like BX" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);

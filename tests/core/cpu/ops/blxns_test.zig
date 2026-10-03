@@ -3,6 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const blxns = ra8.core.cpu.ops.blxns;
 const fixture = @import("../exception/ram.zig");
+const sfpa: u32 = 1 << 3;
 
 fn claims(hw1: u16) bool {
     return blxns.group.decode(.{ .address = 0, .hw1 = hw1, .size = 2 }) != null;
@@ -19,18 +20,48 @@ test "BLXNS claims every low and high Rm but SP and PC, and leaves BXNS and BLX"
     try std.testing.expect(blxns.group.decode(.{ .address = 0, .hw1 = 0x4784, .hw2 = 0, .size = 4 }) == null);
 }
 
-test "BLXNS r0 branches to the target, becomes Non-secure and leaves the return in LR" {
+fn callNs(cpu: *ra8.core.cpu.cpu.Cpu) !void {
+    cpu.regs.low[0] = fixture.handler; // bit 0 clear, as the firmware passes it
+    const instr: ra8.core.cpu.instr.Instr = .{ .address = fixture.code, .hw1 = 0x4784, .size = 2 };
+    try blxns.group.decode(instr).?(cpu, instr);
+}
+
+test "BLXNS r0 pushes the return frame, becomes Non-secure and leaves FNC_RETURN in LR" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
     const sp = cpu.regs.sp();
-    cpu.regs.low[0] = fixture.handler; // bit 0 clear, as the firmware passes it
-    const at = fixture.code;
-    const instr: ra8.core.cpu.instr.Instr = .{ .address = at, .hw1 = 0x4784, .size = 2 };
-    try blxns.group.decode(instr).?(&cpu, instr);
+    try callNs(&cpu);
     try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
-    try std.testing.expectEqual(at + 2 | 1, cpu.regs.lr);
+    try std.testing.expectEqual(blxns.fnc_return, cpu.regs.lr);
     try std.testing.expectEqual(ra8.core.banked.State.non_secure, cpu.banked.current);
-    try std.testing.expectEqual(sp, cpu.banked.other.msp); // the Secure stack is kept
+    try std.testing.expectEqual(sp - 8, cpu.banked.other.msp); // the frame stays on the Secure stack
+    try std.testing.expectEqual(fixture.code + 2 | 1, ram.word(sp - 8));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(sp - 4)); // Thread mode, SFPA clear
+}
+
+test "from Handler mode the frame keeps IPSR and SFPA, IPSR reads 1 and SFPA clears" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    const sp = cpu.regs.sp();
+    cpu.regs.xpsr |= 11;
+    cpu.regs.control |= sfpa;
+    try callNs(&cpu);
+    try std.testing.expectEqual(11 | blxns.retpsr_sfpa, ram.word(sp - 4));
+    try std.testing.expectEqual(@as(u32, 1), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & sfpa);
+}
+
+test "a frame below MSPLIM is a stack overflow and changes nothing" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    const sp = cpu.regs.sp();
+    cpu.regs.msplim = sp - 4;
+    cpu.regs.low[0] = fixture.handler;
+    const instr: ra8.core.cpu.instr.Instr = .{ .address = fixture.code, .hw1 = 0x4784, .size = 2 };
+    try std.testing.expectError(error.StackOverflow, blxns.group.decode(instr).?(&cpu, instr));
+    try std.testing.expectEqual(ra8.core.banked.State.secure, cpu.banked.current);
+    try std.testing.expectEqual(sp, cpu.regs.sp());
+    try std.testing.expectEqual(@as(u32, 0), ram.word(sp - 8));
 }
 
 test "BLXNS to a target with bit 0 set is a BLX and stays Secure" {
