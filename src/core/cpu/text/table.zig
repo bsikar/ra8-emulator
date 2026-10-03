@@ -93,6 +93,13 @@ pub const entries = [_]Entry{
     .{ .group = "pac", .print = @import("pac.zig").print },
     .{ .group = "vlldm_vlstm", .print = @import("vlldm_vlstm.zig").print },
     .{ .group = "vlldm_vlstm_t2", .print = @import("vlldm_vlstm.zig").print },
+    .{ .group = "fp_arith", .print = @import("fp.zig").arith },
+    .{ .group = "fp_unary", .print = @import("fp.zig").unary },
+    .{ .group = "fp_system", .print = @import("fp.zig").system },
+    .{ .group = "fp_convert", .print = @import("fp.zig").convert },
+    .{ .group = "fp_directed", .print = @import("fp.zig").directed },
+    .{ .group = "fp_move", .print = @import("fp.zig").move },
+    .{ .group = "fp_mem", .print = @import("fp.zig").mem },
 };
 
 pub fn findEntry(group: []const u8) ?Entry {
