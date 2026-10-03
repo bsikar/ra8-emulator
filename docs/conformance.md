@@ -273,7 +273,7 @@ table above. A group listed as missing does not fail the build yet.
 | saturate | 31 |
 | misc_wide | 21 |
 | extend_wide | 30 |
-| pkh | missing |
+| pkh | 22 |
 | parallel | missing |
 | sel | missing |
 | sat_arith | missing |
