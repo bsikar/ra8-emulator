@@ -36,3 +36,11 @@ test "the example that formats its own FAT32 volume gets a 4 GB card" {
     try std.testing.expectEqualStrings("--sd-size", got[0]);
     try std.testing.expectEqualStrings("4096", got[1]);
 }
+
+test "the TrustZone USB pair runs with the loop cable for two seconds" {
+    const got = options.flags("tz_nsc_cgc_usb.elf");
+    try std.testing.expectEqual(@as(usize, 3), got.len);
+    try std.testing.expectEqualStrings("--usb-loop", got[0]);
+    try std.testing.expectEqualStrings("--ms", got[1]);
+    try std.testing.expectEqualStrings("2000", got[2]);
+}

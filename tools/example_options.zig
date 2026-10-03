@@ -16,6 +16,13 @@
 //! ra8_io_sd_demo formats the card FAT32 itself before it mounts, and its
 //! formatter gives up without touching the card on anything under 4 GB, so it
 //! gets a blank 4096 MB card, the smallest size it formats (RA8EMU-82).
+//!
+//! tz_nsc_cgc_usb's verdict is its NS host's USB self-loop round count, and
+//! the bench gets there with the loop cable fitted and a boot dwell before
+//! the probe window. The table fits the loop and runs two seconds of target
+//! time: rounds start between 1.0 and 1.5 s and read 358 at 2.0 s on
+//! Unicorn (RA8EMU-289). A caller budget passes --instructions, which wins
+//! over --ms, so that row only reaches its verdict at the table's own budget.
 const std = @import("std");
 
 pub const Extra = struct {
@@ -26,6 +33,7 @@ pub const Extra = struct {
 const click = [_][]const u8{"--click"};
 const formatted = [_][]const u8{ "--sd-new", "fat16" };
 const large_card = [_][]const u8{ "--sd-size", "4096" };
+const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 
 /// Images that need hardware the default board does not fit, and the flags
 /// that fit it.
@@ -36,6 +44,7 @@ pub const extras = [_]Extra{
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
     .{ .image = "smbus_demo.elf", .flags = &click },
+    .{ .image = "tz_nsc_cgc_usb.elf", .flags = &usb_loop },
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
 };
 
