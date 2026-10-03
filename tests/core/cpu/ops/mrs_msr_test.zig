@@ -99,3 +99,15 @@ test "nsAlias names the banked.zig codes and nothing between them" {
     try std.testing.expect(mrs_msr.group.decode(wide(0xF3EF, 0x808C)) == null);
     try std.testing.expect(mrs_msr.group.decode(wide(0xF382, 0x8488)) == null); // mask 01
 }
+
+test "M33 CONTROL reads zero for PACBTI enables and ignores writes to them" {
+    var cpu = fresh();
+    cpu.profile = ra8.core.cpu.decode.profile.Profile.m33;
+    const enables = regs.control_bits.bti_en | regs.control_bits.ubti_en |
+        regs.control_bits.pac_en | regs.control_bits.upac_en;
+    cpu.regs.low[1] = enables;
+    try run(&cpu, 0xF381, 0x8814); // msr control, r1
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & enables);
+    try run(&cpu, 0xF3EF, 0x8014); // mrs r0, control
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[0] & enables);
+}

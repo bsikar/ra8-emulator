@@ -96,7 +96,7 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     }
     if (f.rt == 15) {
         cpu.regs.bxWritePc(value);
-        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
         return;
     }
     cpu.regs.set(f.rt, value);

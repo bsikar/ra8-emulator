@@ -85,12 +85,12 @@ fn bx(cpu: *Cpu, instr: Instr) op.Error!void {
     const rm = second(instr.hw1);
     const target = read(cpu, instr, rm);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) @import("../bti.zig").setForBranch(&cpu.regs, rm);
+    if (cpu.regs.exc_return == null) @import("../bti.zig").setForBranch(&cpu.regs, rm, cpu.profile.v8_1m);
 }
 
 fn blx(cpu: *Cpu, instr: Instr) op.Error!void {
     const target = cpu.regs.get(second(instr.hw1));
     cpu.regs.set(14, (instr.address +% 2) | 1);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) @import("../bti.zig").setForCall(&cpu.regs);
+    if (cpu.regs.exc_return == null) @import("../bti.zig").setForCall(&cpu.regs, cpu.profile.v8_1m);
 }
