@@ -16,6 +16,7 @@ const Choice = @import("choice.zig").Choice;
 const lockstep_mode = @import("lockstep/mode.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
+const DecodeCache = @import("decode_cache.zig").DecodeCache;
 const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
@@ -91,6 +92,8 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         .{ .bus = w.busFn(w.context, memory), .source = w.sourceFn(w.context, pending.source()) }
     else
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
+    var decoded: DecodeCache = .{};
+    cpu.decoded = &decoded;
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
