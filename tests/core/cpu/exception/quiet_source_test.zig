@@ -35,7 +35,7 @@ test "a pending answer is never held" {
     try std.testing.expect((try source.winner(quiet.bus())) == null);
 }
 
-test "RAM traffic leaves it settled, system space stirs it" {
+test "RAM traffic leaves it settled, a system-space store stirs it" {
     var ram: fixture.Ram = .{};
     var fake: Fake = .{};
     var quiet = settled(&ram, &fake);
@@ -47,6 +47,23 @@ test "RAM traffic leaves it settled, system space stirs it" {
     _ = try memory.readWord(fixture.base + 0x200);
     try std.testing.expect((try source.winner(memory)) == null);
     _ = try memory.readWord(fixture.scs + 0xD04);
+    try std.testing.expect((try source.winner(memory)) == null);
+    try memory.write(fixture.scs + 0x200, &.{ 0, 0, 0, 0 });
+    try std.testing.expect((try source.winner(memory)) != null);
+}
+
+test "a peripheral read stirs it, an SCB read does not (RA8EMU-418)" {
+    var ram: fixture.Ram = .{};
+    var fake: Fake = .{};
+    var quiet = settled(&ram, &fake);
+    const source = quiet.source();
+    const memory = quiet.bus();
+    _ = try source.winner(memory);
+    fake.pending = systick;
+    _ = try memory.readWord(fixture.scs + 0xD0C);
+    _ = try memory.readWord(fixture.scs + 0xD24);
+    try std.testing.expect((try source.winner(memory)) == null);
+    try std.testing.expectError(bus.Error.Unmapped, memory.readWord(0x4000_0000));
     try std.testing.expect((try source.winner(memory)) != null);
 }
 
