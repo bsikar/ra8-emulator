@@ -85,6 +85,7 @@ pub const entries = [_]Entry{
     .{ .group = "long_shift_sat64", .print = @import("long_shift_sat64.zig").print },
     .{ .group = "lob", .print = @import("lob.zig").print },
     .{ .group = "mve_lob_tp", .print = @import("mve_lob_tp.zig").print },
+    .{ .group = "mve_vpred", .print = @import("mve_vpred.zig").print, .predicated = @import("mve_vpred.zig").printPredicated },
     .{ .group = "mve_vpst", .print = @import("mve_vpst.zig").print },
     .{ .group = "mve_vcmp", .print = @import("mve_vcmp.zig").print, .predicated = @import("mve_vcmp.zig").printPredicated },
     .{ .group = "mve_vcmp_fp", .print = @import("mve_vcmp_fp.zig").print, .predicated = @import("mve_vcmp_fp.zig").printPredicated },
