@@ -7,6 +7,11 @@
 //! through the +0x2_0000 alias as Secure, so it is there whatever state is
 //! running, and remembers which copy won so taking it clears that copy
 //! (RA8EMU-438).
+//!
+//! The NVIC is one piece of hardware whatever state the core runs in, so the
+//! source reads all of it as Secure: the normal window is then the Secure
+//! copy, not whichever copy the running state's own view would land on
+//! (RA8EMU-465).
 const bus = @import("../bus.zig");
 const banked_mod = @import("../../banked.zig");
 const nvic_banked = @import("../../../periph/nvic_banked.zig");
@@ -74,6 +79,8 @@ pub const NvicSource = struct {
     fn winner(ctx: *anyopaque, through: bus.Bus) bus.Error!?Entry {
         const self: *NvicSource = @ptrCast(@alignCast(ctx));
         var port: Port = .{ .through = through, .banked = self.banked };
+        const was = port.asSecure();
+        defer port.restore(was);
         // Fold the write-to-clear registers first, as the model's own
         // dispatch does: on this bus they are plain memory.
         try nvic_clear.registers(&port, nvic.irq_words, nvic.clear_bits);
@@ -86,6 +93,8 @@ pub const NvicSource = struct {
     fn taken(ctx: *anyopaque, through: bus.Bus, number: u9) bus.Error!void {
         const self: *NvicSource = @ptrCast(@alignCast(ctx));
         var port: Port = .{ .through = through, .banked = self.banked };
+        const was = port.asSecure();
+        defer port.restore(was);
         if (self.last_non_secure == number) {
             self.last_non_secure = null;
             try nvic_banked.clear(&port, number);
@@ -93,8 +102,11 @@ pub const NvicSource = struct {
         try nvic.setActiveBit(&port, number, true);
     }
 
-    fn returned(_: *anyopaque, through: bus.Bus, number: u9) bus.Error!void {
-        var port: Port = .{ .through = through };
+    fn returned(ctx: *anyopaque, through: bus.Bus, number: u9) bus.Error!void {
+        const self: *NvicSource = @ptrCast(@alignCast(ctx));
+        var port: Port = .{ .through = through, .banked = self.banked };
+        const was = port.asSecure();
+        defer port.restore(was);
         try nvic.setActiveBit(&port, number, false);
     }
 };
