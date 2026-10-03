@@ -64,4 +64,5 @@ test {
     _ = @import("../interfaces/cli/report/json_timers_test.zig");
     _ = @import("../interfaces/cli/report/json_serial_test.zig");
     _ = @import("../interfaces/cli/report/json_net_test.zig");
+    _ = @import("../interfaces/cli/report/json_ether_test.zig");
 }
