@@ -23,6 +23,7 @@ test {
     _ = @import("push_pop_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
     _ = @import("shift_imm_vectors_test.zig");
+    _ = @import("shift_reg_vectors_test.zig");
     _ = @import("sp_arith_vectors_test.zig");
     _ = @import("special_data_vectors_test.zig");
     _ = @import("svc_vectors_test.zig");
