@@ -10,6 +10,7 @@ const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
 const rtos_load = @import("../../debug/rtos_load.zig");
+const request = @import("../../periph/model/request.zig");
 
 pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
@@ -97,6 +98,9 @@ pub const Options = struct {
     battery: max17048.Battery = .{},
     /// Fit the Click module, so the IMU and the fuel gauge answer at all.
     click: bool = false,
+    /// `--attach NAME@ENDPOINT`: extra catalog models, in the order asked.
+    attaches: [request.max]request.Request = undefined,
+    attach_count: usize = 0,
     /// A refused access raises the precise BusFault it raises on silicon
     /// instead of ending the run; src/core/bus_error.zig. On by default;
     /// `--no-bus-errors` brings back the old end-of-run fault report.

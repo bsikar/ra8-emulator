@@ -49,3 +49,45 @@ test "plug puts a catalog model on the line its endpoint names" {
     try std.testing.expect(wire.controller.devices.find(0x37) != null);
     try std.testing.expect(wire.touchline.devices.find(0x37) == null);
 }
+
+test "plugAll puts every asked model on its line, in order" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var wire = i2c.Wire{};
+    try wire.attach(&bus);
+    const request = ra8.periph.registry.model.request;
+    const asks = [_]request.Request{
+        try request.parse("max17048@i2c:riic@0x37"),
+        try request.parse("lsm6dso@i2c:touch@0x6A"),
+    };
+    try wire.plugAll(arena.allocator(), &asks);
+    try std.testing.expect(wire.controller.devices.find(0x37) != null);
+    try std.testing.expect(wire.touchline.devices.find(0x6A) != null);
+}
+
+test "plugAll refuses an ask that lands on a fitted part" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var wire = i2c.Wire{ .click = true };
+    try wire.attach(&bus);
+    const request = ra8.periph.registry.model.request;
+    const asks = [_]request.Request{try request.parse("max17048@i2c:touch@0x36")};
+    try std.testing.expectError(error.AddressTaken, wire.plugAll(arena.allocator(), &asks));
+}
+
+test "attach plugs the kept asks after the fitted parts" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var wire = i2c.Wire{ .click = true };
+    const request = ra8.periph.registry.model.request;
+    wire.ask(arena.allocator(), &.{try request.parse("max17048@i2c:riic@0x37")});
+    try wire.attach(&bus);
+    try std.testing.expect(wire.controller.devices.find(0x37) != null);
+    try std.testing.expect(wire.touchline.devices.find(0x36) != null);
+}

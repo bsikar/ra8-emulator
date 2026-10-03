@@ -11,6 +11,7 @@
 //! with no module fitted answers nothing at 0x6B or 0x36. They go on the line
 //! only when the run asks for them with `click`; by default those addresses
 //! stay silent, the same as the bench.
+const std = @import("std");
 const bus = @import("../periph/riic/riic_bus.zig");
 const catalog = @import("../periph/model/catalog.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
@@ -20,6 +21,7 @@ const lsm6dso = @import("../periph/i3c/i3c_lsm6dso.zig");
 const max17048 = @import("../periph/i3c/i3c_max17048.zig");
 const ov5640 = @import("../periph/riic/riic_ov5640.zig");
 const parts = @import("../periph/model/parts.zig");
+const request = @import("../periph/model/request.zig");
 const periph = @import("../periph/registry.zig");
 const pi4ioe = @import("../periph/riic/riic_pi4ioe.zig");
 const riic = @import("../periph/riic/riic.zig");
@@ -37,6 +39,11 @@ pub const Wire = struct {
     /// Whether a Click module carrying the IMU and the fuel gauge is fitted.
     /// Read by `attach`, so it is set before the board is wired.
     click: bool = false,
+    /// The `--attach` asks, copied in by `ask` and plugged by `attach` after
+    /// the fitted parts, from the run's arena.
+    asked: [request.max]request.Request = undefined,
+    asked_count: usize = 0,
+    arena: ?std.mem.Allocator = null,
 
     /// Put both lines and the board's parts on the bus. The blocks hold
     /// pointers into this struct, so this runs once the board has stopped
@@ -47,9 +54,19 @@ pub const Wire = struct {
         try self.controller.attachDevice(self.expander.device());
         try self.controller.attachDevice(self.sensor.device());
         try self.touchline.attachDevice(self.panel.device());
-        if (!self.click) return;
-        try self.fit(parts.imu_name, &self.imu, lsm6dso.address);
-        try self.fit(parts.gauge_name, &self.gauge, max17048.address);
+        if (self.click) {
+            try self.fit(parts.imu_name, &self.imu, lsm6dso.address);
+            try self.fit(parts.gauge_name, &self.gauge, max17048.address);
+        }
+        if (self.arena) |arena| try self.plugAll(arena, self.asked[0..self.asked_count]);
+    }
+
+    /// Keep the run's `--attach` asks for `attach`. The board is not wired
+    /// yet, so nothing is made here. `asks` is at most `request.max` long.
+    pub fn ask(self: *Wire, arena: std.mem.Allocator, asks: []const request.Request) void {
+        @memcpy(self.asked[0..asks.len], asks);
+        self.asked_count = asks.len;
+        self.arena = arena;
     }
 
     /// Bind a Click part this struct holds through the model catalog, at its
@@ -57,6 +74,19 @@ pub const Wire = struct {
     fn fit(self: *Wire, name: []const u8, state: *anyopaque, address: u7) !void {
         const at: endpoint.Endpoint = .{ .i2c = .{ .line = .touch, .address = address } };
         try self.plug(try parts.all.bind(name, state, at), at);
+    }
+
+    /// Make each model a run asked for with `--attach` and put it on its
+    /// line. `attach` runs it after the fitted parts, so a clash is blamed on
+    /// the ask. Instances come from `allocator`, the run's arena.
+    pub fn plugAll(self: *Wire, allocator: std.mem.Allocator, asks: []const request.Request) !void {
+        for (asks) |wanted| {
+            const made = try parts.all.make(allocator, wanted.name, wanted.at);
+            self.plug(made.device, wanted.at) catch |err| {
+                std.debug.print("--attach {s}: nothing put on the line ({s})\n", .{ wanted.name, @errorName(err) });
+                return err;
+            };
+        }
     }
 
     /// Put a catalog model's device on the I2C line its endpoint names.
