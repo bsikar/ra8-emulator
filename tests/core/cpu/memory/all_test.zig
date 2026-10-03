@@ -2,4 +2,5 @@
 test {
     _ = @import("store_test.zig");
     _ = @import("memory_bus_test.zig");
+    _ = @import("guest_test.zig");
 }
