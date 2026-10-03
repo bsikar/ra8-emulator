@@ -91,9 +91,11 @@ test "--cpu-load-from and --cpu-load-to set the load window and turn --cpu-load 
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu-load-to" }));
 }
 
-test "precise BusFaults are off unless --bus-errors asks for them" {
+test "precise BusFaults are on unless --no-bus-errors turns them off" {
     const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
-    try std.testing.expect(!defaults.bus_errors);
+    try std.testing.expect(defaults.bus_errors);
     const asked = try parse(&[_][]const u8{ "emu", "a.elf", "--bus-errors" });
     try std.testing.expect(asked.bus_errors);
+    const off = try parse(&[_][]const u8{ "emu", "a.elf", "--no-bus-errors" });
+    try std.testing.expect(!off.bus_errors);
 }

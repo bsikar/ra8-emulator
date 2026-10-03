@@ -77,9 +77,10 @@ pub const Options = struct {
     battery: max17048.Battery = .{},
     /// Fit the Click module, so the IMU and the fuel gauge answer at all.
     click: bool = false,
-    /// `--bus-errors`: a refused access raises the precise BusFault it
-    /// raises on silicon instead of ending the run; src/core/bus_error.zig.
-    bus_errors: bool = false,
+    /// A refused access raises the precise BusFault it raises on silicon
+    /// instead of ending the run; src/core/bus_error.zig. On by default;
+    /// `--no-bus-errors` brings back the old end-of-run fault report.
+    bus_errors: bool = true,
     /// Globals to read out of RAM once the run is over, in the order asked.
     dump: [dump_limit][]const u8 = .{""} ** dump_limit,
     dump_count: usize = 0,
@@ -327,6 +328,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.click = true;
     } else if (std.mem.eql(u8, flag, "--bus-errors")) {
         options.bus_errors = true;
+    } else if (std.mem.eql(u8, flag, "--no-bus-errors")) {
+        options.bus_errors = false;
     } else if (std.mem.eql(u8, flag, "--sd-size")) {
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {
