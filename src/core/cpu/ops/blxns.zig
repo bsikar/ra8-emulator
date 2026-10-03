@@ -47,7 +47,7 @@ pub fn nonSecureStack(cpu: *const Cpu) ?u32 {
 /// What BLXNS leaves in LR for a call into Non-secure code.
 pub const fnc_return: u32 = 0xFEFF_FFFF;
 /// RETPSR.SFPA in the frame BLXNS pushes.
-pub const retpsr_sfpa: u32 = 1 << 20;
+pub const retpsr_sfpa = @import("../exception/fnc_return.zig").retpsr_sfpa;
 
 fn call(cpu: *Cpu, instr: Instr) op.Error!void {
     const rm = tz.decode(instr.hw1).?;

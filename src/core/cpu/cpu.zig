@@ -230,6 +230,13 @@ pub const Cpu = struct {
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };
         }
+        if (self.regs.fnc_return) |_| {
+            self.regs.fnc_return = null;
+            exception.fnc_return.from(self) catch |err| return switch (err) {
+                error.InconsistentFrame => self.usageFault(.invpc, address, .{ .invalid_return = address }),
+                else => .{ .bus_fault = address },
+            };
+        }
         if (self.raised) |number| {
             self.raised = null;
             exception.dispatch.supervisorCall(self, number, self.regs.pc) catch return .{ .bus_fault = address };

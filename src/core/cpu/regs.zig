@@ -94,6 +94,9 @@ pub const Regs = struct {
     /// An EXC_RETURN value a PC write in Handler mode left for the core to
     /// act on once the instruction retires (src/core/cpu/exception/ret.zig).
     exc_return: ?u32 = null,
+    /// An FNC_RETURN value a PC write left for the core to act on once the
+    /// instruction retires (src/core/cpu/exception/fnc_return.zig).
+    fnc_return: ?u32 = null,
 
     /// A register by number, the way an encoding names it.
     pub fn get(self: *const Regs, n: u4) u32 {
@@ -116,10 +119,15 @@ pub const Regs = struct {
 
     /// BXWritePC: bit 0 becomes EPSR.T, the rest the PC. LDR and POP to the
     /// PC write it this way. In Handler mode a value with bits 31:24 set is
-    /// an exception return instead, held for the core to perform.
+    /// an exception return instead, and in any mode bits 31:24 of 0xFE are
+    /// a function return (FNC_RETURN), each held for the core to perform.
     pub fn bxWritePc(self: *Regs, value: u32) void {
         if (self.handlerMode() and value >> 24 == 0xFF) {
             self.exc_return = value;
+            return;
+        }
+        if (value >> 24 == 0xFE) {
+            self.fnc_return = value;
             return;
         }
         const thumb = xpsr_bits.thumb;
