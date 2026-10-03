@@ -1,6 +1,6 @@
 //! Covers src/core/cpu/conformance/base/blxns_vectors.zig: each vector runs
-//! through the `blxns` group on a bare core whose bus holds only VTOR_NS
-//! and the first word of the Non-secure vector table.
+//! through the `blxns` group on a bare core whose bus holds only VTOR_NS,
+//! the first word of the Non-secure vector table and the 8 bytes below SP.
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
@@ -28,11 +28,10 @@ const Table = struct {
         std.mem.writeInt(u32, into[0..4], value, .little);
     }
 
+    /// Only the return frame a Non-secure call pushes below SP lands.
     fn write(ctx: *anyopaque, address: u32, from: []const u8) bus.Error!void {
-        _ = ctx;
-        _ = address;
-        _ = from;
-        return bus.Error.Unmapped;
+        const self: *Table = @ptrCast(@alignCast(ctx));
+        if (from.len != 4 or address < self.in.sp -% 8 or address >= self.in.sp) return bus.Error.Unmapped;
     }
 };
 
