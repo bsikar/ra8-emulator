@@ -280,7 +280,7 @@ table above. A group listed as missing does not fail the build yet.
 | extend_b16 | missing |
 | sat16 | missing |
 | usad8 | missing |
-| umaal | missing |
+| umaal | 20 |
 | dsp_mul16 | missing |
 | dsp_dual | missing |
 | dsp_mulhi | missing |
