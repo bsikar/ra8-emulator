@@ -48,3 +48,4 @@ pub const transfer_vectors = @import("transfer_vectors.zig");
 pub const state = @import("state.zig");
 pub const context = @import("context.zig");
 pub const lazy = @import("lazy.zig");
+pub const cpacr = @import("cpacr.zig");
