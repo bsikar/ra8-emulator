@@ -1,9 +1,10 @@
 //! The RA8 IDAU (RA8EMU-277): what the part itself says about an address
 //! before the SAU is asked.
 //!
-//! ADDRESS BIT 28 DECIDES IT (HUM 51.3.3.1, p3265). With bit 28 clear the
-//! address is Secure, and the SAU may make it Non-secure callable but never
-//! Non-secure; with it set the address is Non-secure. That is why the
+//! ADDRESS BIT 28 DECIDES IT below 0x5000_0000 (HUM 51.3.3.1, p3265). With
+//! bit 28 clear code and SRAM are Secure, and the SAU may make them
+//! Non-secure callable but never Non-secure; Secure peripherals (0x4..) stay
+//! Secure. With bit 28 set, or from 0x5000_0000 on, it is Non-secure. That is why the
 //! firmware's trustzone_init.c runs Non-secure code from the bit-28 aliases
 //! (0x12.. code, 0x32.. SRAM, 0x5.. peripherals) and marks exactly those
 //! ranges Non-secure in the SAU (HUM p3267).
@@ -79,8 +80,20 @@ pub const Map = struct {
     /// The IDAU's answer for `address`.
     pub fn answer(self: Map, address: u32) sau_attr.Idau {
         const region = regionOf(address);
-        if (address & alias_bit == 0) return .{ .state = .callable, .region = region };
-        return .{ .state = self.sramState(address), .region = region };
+        return .{ .state = self.stateOf(address, region), .region = region };
+    }
+
+    /// Figure 51.5's attribute per region: only Secure code (1) and SRAM (3)
+    /// may become callable, peripherals (5) stay Secure (RA8EMU-417), and
+    /// everything from 0x5000_0000 up to the exempt space is Non-secure.
+    fn stateOf(self: Map, address: u32, region: u8) sau_attr.State {
+        return switch (region) {
+            1, 3 => .callable,
+            5 => .secure,
+            4 => self.sramState(address),
+            0 => if (address & alias_bit == 0) .callable else .non_secure,
+            else => .non_secure,
+        };
     }
 
     /// The SAU and this IDAU together, as sau_attr.attribute combines them.
