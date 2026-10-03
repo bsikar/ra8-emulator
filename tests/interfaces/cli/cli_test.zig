@@ -87,6 +87,7 @@ test "--ns names the Non-Secure companion image, and is off by default" {
 
 test {
     _ = @import("touch_spec_test.zig");
+    _ = @import("png_test.zig");
 }
 
 test "--cpu-load-from and --cpu-load-to set the load window and turn --cpu-load on" {
