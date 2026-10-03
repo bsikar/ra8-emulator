@@ -61,6 +61,7 @@ pub const entries = [_]Entry{
     .{ .group = "acq_rel", .print = @import("acq_rel.zig").print },
     .{ .group = "table_branch", .print = @import("table_branch.zig").print },
     .{ .group = "branch_wide", .print = @import("branch_wide.zig").print },
+    .{ .group = "mrs_msr", .print = @import("mrs_msr.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {

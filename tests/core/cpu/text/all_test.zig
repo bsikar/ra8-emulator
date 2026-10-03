@@ -51,4 +51,5 @@ test {
     _ = @import("acq_rel_test.zig");
     _ = @import("table_branch_test.zig");
     _ = @import("branch_wide_test.zig");
+    _ = @import("mrs_msr_test.zig");
 }
