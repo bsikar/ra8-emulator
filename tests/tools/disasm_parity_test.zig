@@ -42,3 +42,15 @@ test "an Armv8.1-M encoding is counted, not compared" {
     try std.testing.expectEqual(@as(usize, 1), tally.v8_1m);
     try std.testing.expectEqual(@as(usize, 0), tally.total().mismatched);
 }
+
+/// BTI T1 is a hint NOP on the M33, but its Armv8.1-M disassembly alias is
+/// absent from Capstone 5 and is covered directly against the Arm ARM.
+const bti = [_]u8{ 0xAF, 0xF3, 0x0F, 0x80 };
+
+test "BTI is counted as Armv8.1-M rather than compared with Capstone's hint" {
+    var tally = parity.Tally.init(std.testing.allocator);
+    defer tally.deinit();
+    try parity.walk(&tally, 0x0200_0100, &bti, std.io.null_writer);
+    try std.testing.expectEqual(@as(usize, 1), tally.v8_1m);
+    try std.testing.expectEqual(@as(usize, 0), tally.total().mismatched);
+}
