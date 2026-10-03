@@ -22,6 +22,7 @@ const mask_pace = @import("../../core/mask_pace.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 const clocks = @import("../../periph/clocks.zig");
 const lob = @import("../../core/lob.zig");
+const divide_hook = @import("../../core/divide_hook.zig");
 const nvic = @import("../../periph/nvic.zig");
 const reboot_mod = @import("../../core/reboot.zig");
 const undefined_ops = @import("../../core/undefined_ops.zig");
@@ -50,6 +51,8 @@ pub const Parts = struct {
     hits: pc_hits.Hits = .{},
     /// The BusFaults a `--bus-errors` run raised; src/core/bus_error.zig.
     bus_tally: bus_fault.Tally = .{},
+    /// The CCR.DIV_0_TRP trap a Unicorn run hooks; src/core/divide_hook.zig.
+    divide: divide_hook.Trap = undefined,
 
     /// Build the profile table. `hook` attaches the Unicorn code hook; leave
     /// it off for Zig and lockstep runs, which feed the table from the Zig

@@ -7,6 +7,7 @@ const bus = @import("bus.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
 const decode = @import("decode.zig");
+const divide = @import("ops/divide.zig");
 const decode_cache = @import("decode_cache.zig");
 const block_cache = @import("block_cache.zig");
 const cond = @import("cond.zig");
@@ -175,6 +176,9 @@ pub const Cpu = struct {
             .fault => return self.usageFault(.invstate, address, .{ .invalid_state = address }),
             .restart => self.regs.xpsr = it_state.put(self.regs.xpsr, 0),
         };
+        if (runs and divide.group.decode(instr) != null and divide.traps(self, instr)) {
+            return self.usageFault(.divbyzero, address, .{ .unknown = instr });
+        }
         self.regs.pc = address +% instr.size;
         if (runs) {
             const before = StackPointers.read(self);

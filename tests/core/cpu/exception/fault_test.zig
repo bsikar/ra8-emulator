@@ -11,6 +11,8 @@ const usgfaultena: u32 = 1 << 18;
 const unaligned_bit: u32 = 1 << 24;
 const invstate_bit: u32 = 1 << 17;
 const stkof_bit: u32 = 1 << 20;
+const divbyzero_bit: u32 = 1 << 25;
+const div_0_trp: u32 = 1 << 4;
 const forced: u32 = 1 << 30;
 const threadx_current_ptr: u32 = fixture.base + 0x60;
 const threadx_thread: u32 = fixture.base + 0x80;
@@ -232,4 +234,48 @@ test "a blx through a null function pointer is taken as INVSTATE at address zero
     try std.testing.expectEqual(invstate_bit, ram.word(memmap.scb.cfsr));
     // The stacked return address is the even target the branch landed on.
     try std.testing.expectEqual(@as(u32, 0), ram.word(cpu.regs.sp() + 24));
+}
+
+fn divideCpu(ram: *fixture.Ram, hw1: u16, ccr: u32, shcsr: u32) !ra8.core.cpu.cpu.Cpu {
+    ram.putWord(fixture.base + 3 * 4, hard_handler | 1);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putHalf(fixture.code, hw1);
+    ram.putHalf(fixture.code + 2, 0xF2F1); // Rd=r2, Rm=r1
+    ram.putWord(memmap.scb.ccr, ccr);
+    ram.putWord(memmap.scb.shcsr, shcsr);
+    var cpu = try fixture.boot(ram);
+    cpu.regs.low[0] = 100;
+    cpu.regs.low[1] = 0;
+    return cpu;
+}
+
+test "SDIV and UDIV zero traps enter UsageFault and latch DIVBYZERO" {
+    for ([_]u16{ 0xFB90, 0xFBB0 }) |hw1| {
+        var ram: fixture.Ram = .{};
+        var cpu = try divideCpu(&ram, hw1, div_0_trp, usgfaultena);
+        try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+        try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 6), ipsr(&cpu));
+        try std.testing.expectEqual(divbyzero_bit, ram.word(memmap.scb.cfsr));
+        try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.hfsr));
+        try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+    }
+}
+
+test "a disabled UsageFault escalates divide zero to forced HardFault" {
+    var ram: fixture.Ram = .{};
+    var cpu = try divideCpu(&ram, 0xFBB0, div_0_trp, 0);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(hard_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 3), ipsr(&cpu));
+    try std.testing.expectEqual(divbyzero_bit, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(forced, ram.word(memmap.scb.hfsr));
+}
+
+test "DIV_0_TRP clear leaves the zero quotient unchanged" {
+    var ram: fixture.Ram = .{};
+    var cpu = try divideCpu(&ram, 0xFBB0, 0, usgfaultena);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
 }
