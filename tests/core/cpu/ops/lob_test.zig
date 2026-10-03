@@ -124,3 +124,30 @@ test "no earlier group claims dls, wls or le" {
 test "the group is checked against Unicorn" {
     try std.testing.expect(lob.group.oracle);
 }
+
+const fpca = ra8.core.cpu.regs.control_bits.fpca;
+
+/// LE at 0x08 with LR = 3, after an FP context opened or not.
+fn leWith(fp_active: bool, ltpsize: u3) Cpu {
+    var cpu = fresh();
+    if (fp_active) cpu.regs.control |= fpca;
+    cpu.fp.fpscr.ltpsize = ltpsize;
+    cpu.regs.lr = 3;
+    return cpu;
+}
+
+test "le with an FP context active and LTPSIZE not 4 is INVSTATE, state untouched" {
+    var cpu = leWith(true, 2);
+    try std.testing.expectError(error.InvalidState, step(&cpu, 0x08, le_back));
+    try std.testing.expectEqual(@as(u32, 3), cpu.regs.lr);
+    try std.testing.expectEqual(@as(u32, 0x0C), cpu.regs.pc);
+}
+
+test "le loops as before when LTPSIZE is 4 or no FP context is active" {
+    for ([_]Cpu{ leWith(true, 4), leWith(false, 2) }) |start| {
+        var cpu = start;
+        try step(&cpu, 0x08, le_back);
+        try std.testing.expectEqual(@as(u32, 2), cpu.regs.lr);
+        try std.testing.expectEqual(@as(u32, 0x00), cpu.regs.pc);
+    }
+}
