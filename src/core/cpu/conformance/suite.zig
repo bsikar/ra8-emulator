@@ -59,8 +59,11 @@ pub const covered: []const []const u8 = &(fpu_sign.covered ++ fpu_add.covered ++
 
 /// The group named by every decode-table vector (RA8EMU-270). The coverage
 /// table lists every group src/core/cpu/ops/table.zig registers, with or
-/// without vectors; this list is empty until the per-group vector tickets
-/// (RA8EMU-278, 279, 280) add theirs. The group names themselves are read
+/// without vectors; the per-group vector files under base/ fill it
+/// (RA8EMU-278, 279, 280). The group names themselves are read
 /// from the table by the suite test, since evaluating the table from here
 /// would loop through the core's types.
-pub const decoded_covered: []const []const u8 = &.{};
+pub const decoded_covered: []const []const u8 = base.covered;
+
+/// The per-group base vectors, one file per decode-table group.
+pub const base = @import("base/all.zig");
