@@ -88,9 +88,36 @@ test "the debug and system ranges stay exempt" {
     try std.testing.expect(map.attribute(&unit, 0xE000_ED00).exempt);
 }
 
-test "no answer names an IDAU region" {
+test "each address names its HUM Figure 51.5 region" {
     const map = idau.Map{};
-    try std.testing.expectEqual(@as(?u8, null), map.answer(0x2200_0000).region);
+    const cases = [_]struct { address: u32, region: u8 }{
+        .{ .address = 0x0200_0000, .region = 1 }, .{ .address = 0x0FFF_FFFF, .region = 1 },
+        .{ .address = 0x1200_0000, .region = 2 }, .{ .address = 0x2200_0000, .region = 3 },
+        .{ .address = 0x3210_0000, .region = 4 }, .{ .address = 0x4000_8000, .region = 5 },
+        .{ .address = 0x5000_0000, .region = 6 }, .{ .address = 0x6000_0000, .region = 6 },
+        .{ .address = 0xDFFF_FFFF, .region = 6 }, .{ .address = 0xE000_ED00, .region = 0 },
+    };
+    for (cases) |case| try std.testing.expectEqual(@as(?u8, case.region), map.answer(case.address).region);
+}
+
+test "TT from the Secure state reports IRVALID and IREGION" {
+    const tt = ra8.core.csel.tt_hook.tt;
+    const map = idau.Map{};
+    const unit = sau.Sau{ .ctrl = enable };
+    const word = tt.respondWith(&unit, map.answer(0x3210_0000), 0x3210_0000, true);
+    try std.testing.expect(word & tt.field.irvalid != 0);
+    try std.testing.expectEqual(@as(u32, 4), word >> tt.field.iregion_shift);
+    const code = tt.respondWith(&unit, map.answer(0x0200_0100), 0x0200_0100, true);
+    try std.testing.expectEqual(@as(u32, 1), code >> tt.field.iregion_shift);
+}
+
+test "TT from the Non-secure state hides the IDAU region" {
+    const tt = ra8.core.csel.tt_hook.tt;
+    const map = idau.Map{};
+    const unit = sau.Sau{ .ctrl = enable };
+    const word = tt.respondWith(&unit, map.answer(0x3210_0000), 0x3210_0000, false);
+    try std.testing.expectEqual(@as(u32, 0), word & tt.field.irvalid);
+    try std.testing.expectEqual(@as(u32, 0), word >> tt.field.iregion_shift);
 }
 
 test "RA8P1 SRAM0 and SRAM1 each follow their own boundary" {
