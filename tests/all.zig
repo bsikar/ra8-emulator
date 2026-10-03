@@ -182,6 +182,7 @@ test {
     _ = @import("periph/eth/all.zig");
     _ = @import("periph/exc_return_test.zig");
     _ = @import("periph/glcdc/glcdc_test.zig");
+    _ = @import("periph/glcdc/glcdc_backdrop_test.zig");
     _ = @import("periph/glcdc/glcdc_blend_test.zig");
     _ = @import("periph/glcdc/glcdc_clut_test.zig");
     _ = @import("periph/glcdc/glcdc_gamma_test.zig");

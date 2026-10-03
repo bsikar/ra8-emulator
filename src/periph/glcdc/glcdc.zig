@@ -38,6 +38,7 @@ const blend = @import("glcdc_blend.zig");
 const mix = @import("glcdc_mix.zig");
 const output = @import("glcdc_out.zig");
 const descriptor = @import("glcdc_frame.zig");
+pub const backdrop = @import("glcdc_backdrop.zig");
 const tcon = @import("glcdc_tcon.zig");
 const sys = @import("glcdc_sys.zig");
 const update = @import("glcdc_latch.zig");
@@ -261,7 +262,7 @@ pub const Glcdc = struct {
     /// colour and hand back what a viewer would see. Null when there is
     /// nothing to show, and the scanner keeps why.
     pub fn scanOut(self: *Glcdc) ?scan.Picture {
-        const frame = self.framebuffer() orelse return self.scanner.refuseNoLayer();
+        const frame = self.framebuffer() orelse return backdrop.show(self);
         if (!frame.enabled) return self.scanner.refuseOutputOff();
         if (!self.system.startFrame()) return self.scanner.refuseUnclocked();
         const memory = self.memory orelse return null;
@@ -293,7 +294,7 @@ pub const Glcdc = struct {
 
     /// A frame reached the panel: the status block raises VPOS for a driver
     /// waiting on it, and the picture is what the report prints.
-    fn frameLanded(self: *Glcdc, picture: scan.Picture) ?scan.Picture {
+    pub fn frameLanded(self: *Glcdc, picture: scan.Picture) ?scan.Picture {
         self.system.completeFrame();
         return self.scanner.record(picture);
     }
