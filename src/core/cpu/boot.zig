@@ -28,6 +28,7 @@ const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
 const fault_status = @import("../../periph/fault_status.zig");
 const Bus = @import("bus.zig").Bus;
+const code_lines = @import("code_lines.zig");
 const FpState = @import("fpu/state.zig").State;
 const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
@@ -126,8 +127,9 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
     if (formed) |cache| {
         cache.init();
-        cpu.bus.code = &cache.lines;
+        try code_lines.watch(&cache.lines);
     }
+    defer if (formed) |cache| code_lines.unwatch(&cache.lines);
     cpu.blocks = formed;
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;

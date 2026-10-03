@@ -9,6 +9,7 @@ const c = @import("c.zig");
 const elf = @import("elf.zig");
 const pages = @import("pages.zig");
 const memmap = @import("memmap.zig");
+const code_lines = @import("cpu/code_lines.zig");
 const board_ram = @import("board_ram.zig");
 const option_window = @import("../periph/mram/mram_window.zig");
 const periph = @import("../periph/registry.zig");
@@ -145,6 +146,7 @@ pub const Engine = struct {
 
     pub fn write(self: Engine, address: u32, bytes: []const u8) Error!void {
         if (bytes.len == 0) return;
+        code_lines.notify(address, bytes.len);
         if (c.uc.uc_mem_write(self.handle, address, bytes.ptr, bytes.len) != c.uc.UC_ERR_OK) {
             return Error.WriteFailed;
         }
