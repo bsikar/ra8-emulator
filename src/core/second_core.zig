@@ -141,6 +141,10 @@ pub const Second = struct {
     wait: second_wait.Wait = .{},
     /// The board a SYSRESETREQ from CPU1 resets, or null outside one.
     board: ?*Board = null,
+    /// System resets already seen: once the board performs another, CPU1 is
+    /// held in reset and retires nothing (RA8EMU-467).
+    resets_seen: u32 = 0,
+    held: bool = false,
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -180,6 +184,7 @@ pub const Second = struct {
         self.interrupts.vector_base = self.vector_base;
         self.dividers = &board.tree.divcr2;
         self.board = board;
+        if (board.reboot) |pending| self.resets_seen = pending.performed;
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
     }
@@ -197,7 +202,7 @@ pub const Second = struct {
     /// One turn. A core that has faulted stays halted rather than being
     /// restarted into the same fault every round.
     pub fn step(self: *Second, instructions: usize) void {
-        if (self.fault != null) return;
+        if (self.fault != null or self.heldInReset()) return;
         self.turns += 1;
         if (self.wait.parked()) return self.idle(instructions);
         const outcome = self.core.run(self.pc, instructions, self.session()) catch |err| {
@@ -251,6 +256,19 @@ pub const Second = struct {
     pub fn takeResetRequest(self: *Second) void {
         const asked = self.control.poll(self.core) catch false;
         if (asked) if (self.board) |board| board.requestReset(.software);
+    }
+
+    /// A system reset goes to CPU1 too: on silicon it comes back held, and
+    /// only CPU0's release sequence runs it again. Seen here as a reboot the
+    /// board performed since the last look, so both backends park on it.
+    pub fn heldInReset(self: *Second) bool {
+        const board = self.board orelse return self.held;
+        const pending = board.reboot orelse return self.held;
+        if (pending.performed != self.resets_seen) {
+            self.resets_seen = pending.performed;
+            self.held = true;
+        }
+        return self.held;
     }
 
     /// The boundary between two of CPU1's turns. A turn is exactly one
@@ -312,6 +330,7 @@ pub fn report(out: anytype, second: ?*const Second) !void {
     if (other.fault) |taken| {
         try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
     }
+    if (other.held) try out.writeAll("CPU1: held in reset since a system reset\n");
     // Silent on a core that never waited, which is every image in the
     // corpus today, so their reports stay as they were.
     if (other.wait.parks > 0) {
