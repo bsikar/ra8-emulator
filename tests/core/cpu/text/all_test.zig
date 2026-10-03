@@ -41,4 +41,5 @@ test {
     _ = @import("sp_arith_test.zig");
     _ = @import("ldst_reg_test.zig");
     _ = @import("ldst_imm_test.zig");
+    _ = @import("preload_test.zig");
 }
