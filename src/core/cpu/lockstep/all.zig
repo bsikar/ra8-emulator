@@ -11,6 +11,7 @@ pub const periph_log = @import("periph_log.zig");
 pub const replay_bus = @import("replay_bus.zig");
 pub const report = @import("report.zig");
 pub const run = @import("run.zig");
+pub const second = @import("second.zig");
 pub const seed = @import("seed.zig");
 pub const snapshot = @import("snapshot.zig");
 pub const states = @import("states.zig");
