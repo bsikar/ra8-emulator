@@ -91,7 +91,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_where.section(&j, of.where);
     try json_timing.section(&j, of.timing);
     try json_sites.section(&j, of.sites);
-    try json_dumps.section(&j, of.dumps);
+    try json_dumps.section(&j, board, of.dumps);
     try j.close('}');
     try out.writeByte('\n');
 }
