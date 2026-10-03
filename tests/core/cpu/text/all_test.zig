@@ -49,4 +49,5 @@ test {
     _ = @import("ldm_stm_wide_test.zig");
     _ = @import("exclusive_test.zig");
     _ = @import("acq_rel_test.zig");
+    _ = @import("table_branch_test.zig");
 }
