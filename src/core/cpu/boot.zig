@@ -26,6 +26,7 @@ const DataGate = @import("data_gate.zig").Gate;
 const Attribution = @import("attribution.zig").Attribution;
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
+const fault_status = @import("../../periph/fault_status.zig");
 const Bus = @import("bus.zig").Bus;
 const FpState = @import("fpu/state.zig").State;
 const mpu_check = @import("mpu_check.zig");
@@ -152,7 +153,9 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     };
     const stopped = try stretches(&cpu, budget, boundary);
     if (ran) |count| count.* = cpu.retired;
-    return report(out, cpu, stopped);
+    const code = try report(out, cpu, stopped);
+    if (board) |b| try fault_status.line(out, b.faults());
+    return code;
 }
 
 /// The budget in stretches, each closed by the boundary. A stretch the core

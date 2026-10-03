@@ -20,6 +20,7 @@ const fp_scb = @import("fpu/scb.zig");
 const banked = @import("../banked.zig");
 /// Public so its tests reach it without a root export.
 pub const scs_route = @import("scs_route.zig");
+const fault_status = @import("../../periph/fault_status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
 
@@ -88,6 +89,20 @@ pub const BoardBus = struct {
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+    }
+
+    /// CFSR, HFSR and SFSR as the Secure bank holds them, read past the
+    /// write-one-to-clear model for the run report (RA8EMU-394).
+    pub fn faults(self: *BoardBus) fault_status.Words {
+        return .{ .cfsr = self.peek(memmap.scb.cfsr), .hfsr = self.peek(memmap.scb.hfsr), .sfsr = self.peek(0xE000_EDE4) };
+    }
+
+    fn peek(self: *BoardBus, given: u32) u32 {
+        const address = switch (scs_route.land(null, given)) {
+            .at => |at| at,
+            .res0 => return 0,
+        };
+        return self.memory.view().readWord(address) catch 0;
     }
 
     /// The core raising a fault: set `bits` in the banked word straight in

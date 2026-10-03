@@ -220,3 +220,20 @@ test "a word store to CPACR on a board run lands in the core's FP state" {
     try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, try board.view().readWord(cpacr));
     try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, try core.readWord(cpacr));
 }
+
+test "faults reads the latched CFSR, HFSR and SFSR for the run report" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
+    try board.view().latch(memmap.scb.cfsr, 0x0002_0000);
+    try board.view().latch(memmap.scb.hfsr, 0x4000_0000);
+    try board.view().latch(0xE000_EDE4, 0x0000_0001);
+    const words = board.faults();
+    try std.testing.expectEqual(@as(u32, 0x0002_0000), words.cfsr);
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), words.hfsr);
+    try std.testing.expectEqual(@as(u32, 0x0000_0001), words.sfsr);
+}

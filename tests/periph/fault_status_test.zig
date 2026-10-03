@@ -86,3 +86,17 @@ test "the MPU's MemManage bits and the escalation's FORCED come from this table"
     try std.testing.expectEqual(status.Cause.mmarvalid.bit(), mpu_fault.mmfsr.mmarvalid);
     try std.testing.expectEqual(status.Hard.forced.bit(), escalate.hfsr.forced);
 }
+
+test "the fault line is silent when CFSR, HFSR and SFSR are clear" {
+    var buffer: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    try status.line(stream.writer(), .{});
+    try std.testing.expectEqualStrings("", stream.getWritten());
+}
+
+test "the fault line names INVSTATE and HFSR.FORCED (RA8EMU-394)" {
+    var buffer: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    try status.line(stream.writer(), .{ .cfsr = 0x0002_0000, .hfsr = 0x4000_0000 });
+    try std.testing.expectEqualStrings("faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n", stream.getWritten());
+}

@@ -124,6 +124,20 @@ pub fn decodeHard(word: u32) HardCauses {
     return found;
 }
 
+/// The three fault status words as a run left them.
+pub const Words = struct { cfsr: u32 = 0, hfsr: u32 = 0, sfsr: u32 = 0 };
+
+/// One report line naming every cause the words hold, and nothing when all
+/// three are clear, so a run that never faulted prints what it always did.
+pub fn line(out: anytype, words: Words) !void {
+    if (words.cfsr | words.hfsr | words.sfsr == 0) return;
+    try out.print("faults: CFSR 0x{X:0>8}", .{words.cfsr});
+    for (decode(words.cfsr).constSlice()) |cause| try out.print(" {s}", .{@tagName(cause)});
+    try out.print(", HFSR 0x{X:0>8}", .{words.hfsr});
+    for (decodeHard(words.hfsr).constSlice()) |cause| try out.print(" {s}", .{@tagName(cause)});
+    try out.print(", SFSR 0x{X:0>8}\n", .{words.sfsr});
+}
+
 fn maskOf(comptime E: type) u32 {
     var mask: u32 = 0;
     for (@typeInfo(E).@"enum".fields) |entry| mask |= @as(u32, 1) << entry.value;
