@@ -106,24 +106,31 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .ns_image = if (options.cpu == .lockstep) try report_dumps.nonSecure(std.heap.page_allocator, options) else null,
     });
     if (options.cpu == .zig) {
+        // The core lent its retired count while it ran; `ran` holds the
+        // final count once the run is over.
+        if (tracer) |*found| found.trace.fine = &ran;
         if (options.report_json) {
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options } });
+            const load = loadOf(core, if (tracer) |*found| found else null, clock.cpu1);
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
         if (!options.report_json) try report_dumps.dumpSymbols(out, core.*, image, options);
         if (!options.report_json) try mem_dump.print(out, core.*, image, options.dump_mem, options.dump_mem_words);
-        if (tracer) |*found| {
-            // The core lent its retired count while it ran; `ran` holds the
-            // final count once the run is over.
-            found.trace.fine = &ran;
-            try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
-        }
+        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
         try frame_out.report(out, board, options.frame_out);
     }
     return status;
+}
+
+/// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
+fn loadOf(core: *engine.Engine, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
+    return .{
+        .cpu0 = rtos_hook.report.sideOf(tracer, .{ .handle = core.handle }),
+        .cpu1 = rtos_hook.second.side(if (cpu1) |pair| &pair.second else null),
+    };
 }
 
 fn profileInstruction(context: *anyopaque, address: u32) void {
