@@ -43,3 +43,7 @@ test "with no vector table there is nothing to lockstep" {
     var stream = std.io.fixedBufferStream(&buffer);
     try std.testing.expectEqual(@as(u8, 1), try mode.runLoaded(stream.writer(), &mine, theirs, memmap.sram_base, 10, null));
 }
+
+test {
+    _ = @import("second_test.zig");
+}
