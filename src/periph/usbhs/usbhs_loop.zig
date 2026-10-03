@@ -19,6 +19,10 @@ pub const Loop = struct {
     setups: u32 = 0,
     ins: u32 = 0,
     outs: u32 = 0,
+    bulk_ins: u32 = 0,
+    bulk_outs: u32 = 0,
+    /// Bulk tokens for an endpoint the device driver opened no pipe for.
+    unopened: u32 = 0,
 
     /// A SETUP from the host lands on the device's DCP.
     pub fn setup(self: *Loop, packet: [8]u8) void {
@@ -53,6 +57,33 @@ pub const Loop = struct {
         const stage = self.device.interruptStatus() & usbfs.intsts0.ctsq_mask;
         if (stage == usbfs.intsts0.ctsq_idle) return .ack;
         return .pending;
+    }
+
+    /// A bulk or interrupt OUT packet for an endpoint. True once it sits in
+    /// the device pipe's buffer; false is a NAK: no pipe opened for the
+    /// endpoint, or the driver has not drained the last packet yet.
+    pub fn bulkOut(self: *Loop, endpoint: u4, bytes: []const u8) bool {
+        const device = self.device;
+        const n = device.pipes.find(endpoint, false) orelse {
+            self.unopened += 1;
+            return false;
+        };
+        if (!device.endpoints.hostOut(&device.pipes, n, bytes)) return false;
+        self.bulk_outs += 1;
+        return true;
+    }
+
+    /// A bulk or interrupt IN token for an endpoint: the packet the device
+    /// driver committed on that endpoint's pipe, or null (a NAK) while it
+    /// has committed none.
+    pub fn bulkIn(self: *Loop, endpoint: u4, into: []u8) ?u16 {
+        const n = self.device.pipes.find(endpoint, true) orelse {
+            self.unopened += 1;
+            return null;
+        };
+        const len = self.device.endpoints.hostTake(n, into) orelse return null;
+        self.bulk_ins += 1;
+        return len;
     }
 
     /// The device's state as the host would learn it: Default, Address or
