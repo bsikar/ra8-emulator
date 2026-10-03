@@ -1,15 +1,17 @@
 //! The printer table: which decode group each printer covers, by the group's
 //! name in src/core/cpu/ops/table.zig. A group with no entry here has no text
-//! yet, and `disasm.one` returns null for it.
+//! yet, and disasm.one returns null for it.
 const Instr = @import("../instr.zig").Instr;
 const Text = @import("text.zig").Text;
 const std = @import("std");
 
 pub const Print = *const fn (instr: Instr, out: *Text) void;
+pub const PredicatedPrint = *const fn (instr: Instr, out: *Text, suffix: []const u8) void;
 
 pub const Entry = struct {
     group: []const u8,
     print: Print,
+    predicated: ?PredicatedPrint = null,
 };
 
 pub const entries = [_]Entry{
@@ -83,15 +85,23 @@ pub const entries = [_]Entry{
     .{ .group = "long_shift_sat64", .print = @import("long_shift_sat64.zig").print },
     .{ .group = "lob", .print = @import("lob.zig").print },
     .{ .group = "mve_lob_tp", .print = @import("mve_lob_tp.zig").print },
+    .{ .group = "mve_vpst", .print = @import("mve_vpst.zig").print },
+    .{ .group = "mve_vcmp", .print = @import("mve_vcmp.zig").print, .predicated = @import("mve_vcmp.zig").printPredicated },
+    .{ .group = "mve_vcmp_fp", .print = @import("mve_vcmp_fp.zig").print, .predicated = @import("mve_vcmp_fp.zig").printPredicated },
+    .{ .group = "mve_int", .print = @import("mve_int.zig").print, .predicated = @import("mve_int.zig").printPredicated },
     .{ .group = "branch_future", .print = @import("branch_future.zig").print },
     .{ .group = "pac", .print = @import("pac.zig").print },
     .{ .group = "vlldm_vlstm", .print = @import("vlldm_vlstm.zig").print },
     .{ .group = "vlldm_vlstm_t2", .print = @import("vlldm_vlstm.zig").print },
 };
 
-pub fn find(group: []const u8) ?Print {
+pub fn findEntry(group: []const u8) ?Entry {
     for (entries) |entry| {
-        if (std.mem.eql(u8, entry.group, group)) return entry.print;
+        if (std.mem.eql(u8, entry.group, group)) return entry;
     }
     return null;
+}
+
+pub fn find(group: []const u8) ?Print {
+    return if (findEntry(group)) |entry| entry.print else null;
 }
