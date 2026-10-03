@@ -278,7 +278,7 @@ table above. A group listed as missing does not fail the build yet.
 | sel | 23 |
 | sat_arith | 30 |
 | extend_b16 | missing |
-| sat16 | missing |
+| sat16 | 24 |
 | usad8 | 22 |
 | umaal | 20 |
 | dsp_mul16 | missing |
