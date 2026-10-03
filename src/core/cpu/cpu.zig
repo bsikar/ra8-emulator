@@ -95,6 +95,7 @@ pub const Cpu = struct {
                 self.regs.pc = address;
                 return switch (err) {
                     error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
+                    error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
                     else => .{ .bus_fault = address },
                 };
             };

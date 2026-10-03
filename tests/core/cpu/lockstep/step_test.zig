@@ -30,10 +30,10 @@ test "a register the backends disagree on is reported with both values" {
 
 test "an encoding the Zig core does not know stops both, unstepped" {
     var pair: Pair = undefined;
-    try pair.open(&.{ 0x00, 0xDE }); // udf #0
+    try pair.open(&.{ 0x80, 0xBA }); // unallocated on Armv8-M
     defer pair.close();
     const result = try step.one(&pair.cpu, pair.theirs, &pair.log, null);
-    try std.testing.expectEqual(@as(u16, 0xDE00), result.stopped.unknown.hw1);
+    try std.testing.expectEqual(@as(u16, 0xBA80), result.stopped.unknown.hw1);
     try std.testing.expectEqual(pair_mod.entry, try pair.theirs.register(.pc));
 }
 

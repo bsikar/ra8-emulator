@@ -55,6 +55,7 @@ test {
     _ = @import("ops/long_shift_sat_test.zig");
     _ = @import("ops/long_shift_sat64_test.zig");
     _ = @import("ops/svc_test.zig");
+    _ = @import("ops/udf_test.zig");
     _ = @import("ops/table_branch_test.zig");
     _ = @import("ops/blxns_test.zig");
     _ = @import("ops/imm_fields_test.zig");

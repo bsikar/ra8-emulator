@@ -10,8 +10,7 @@ test "a known encoding comes back with its class" {
 }
 
 test "an encoding no group claims is refused" {
-    // de00  udf #0, permanently undefined
-    try std.testing.expect(decode.decode(.{ .address = 0, .hw1 = 0xDE00, .size = 2 }) == null);
-    // f7f0 a000  udf.w #0
-    try std.testing.expect(decode.decode(.{ .address = 0, .hw1 = 0xF7F0, .hw2 = 0xA000, .size = 4 }) == null);
+    // ba80, REV with op 0b10: unallocated on Armv8-M. (UDF is claimed: it
+    // decodes and is taken as UNDEFINSTR, RA8EMU-282.)
+    try std.testing.expect(decode.decode(.{ .address = 0, .hw1 = 0xBA80, .size = 2 }) == null);
 }
