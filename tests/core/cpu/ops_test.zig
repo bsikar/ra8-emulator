@@ -49,6 +49,7 @@ test {
     _ = @import("ops/dsp_mulhi_test.zig");
     _ = @import("ops/dsp_long_mul_test.zig");
     _ = @import("ops/csel_test.zig");
+    _ = @import("ops/lob_test.zig");
     _ = @import("ops/long_shift_test.zig");
     _ = @import("ops/long_shift_reg_test.zig");
     _ = @import("ops/long_shift_sat_test.zig");
