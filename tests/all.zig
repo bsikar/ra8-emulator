@@ -64,6 +64,7 @@ test {
     _ = @import("interfaces/cli/report/dumps_test.zig");
     _ = @import("interfaces/cli/zig_run_test.zig");
     _ = @import("periph/standing_test.zig");
+    _ = @import("periph/esp_hosted_test.zig");
     _ = @import("core/banked_test.zig");
     _ = @import("core/board_ram_test.zig");
     _ = @import("core/session_test.zig");
@@ -381,7 +382,6 @@ test {
     _ = @import("periph/xspi/xspi_test.zig");
     _ = @import("periph/xspi/xspi_reset_test.zig");
     _ = @import("tools/all_test.zig");
-
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
     std.testing.refAllDecls(ra8.periph);

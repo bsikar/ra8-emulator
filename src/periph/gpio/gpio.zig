@@ -90,12 +90,19 @@ pub const sw1_pin: u4 = 9;
 pub const sw2_pin: u4 = 8;
 
 pub const Gpio = struct {
+    /// A listener for a driven port changing, used by devices wired to pins.
+    pub const Observer = struct {
+        context: *anyopaque,
+        changedFn: *const fn (*anyopaque, *Gpio, u8) void,
+    };
+
     ports: [port_count]Port = [1]Port{.{}} ** port_count,
     /// Last level seen on each board LED, and how many times it changed.
     led_level: [led_count]u1 = .{0} ** led_count,
     led_edges: [led_count]u32 = .{0} ** led_count,
     /// Stores into PCNTR2, which the pads drive and firmware does not.
     refused: u32 = 0,
+    observer: ?Observer = null,
 
     pub fn init() Gpio {
         var self = Gpio{};
@@ -117,6 +124,14 @@ pub const Gpio = struct {
 
     /// Drive a pin from outside the firmware: a button press, or a peripheral
     /// that answers on a GPIO line (the e-paper HRDY in the C tree).
+    pub fn observe(self: *Gpio, context: *anyopaque, changedFn: *const fn (*anyopaque, *Gpio, u8) void) void {
+        self.observer = .{ .context = context, .changedFn = changedFn };
+    }
+
+    fn notify(self: *Gpio, port: u8) void {
+        if (self.observer) |listener| listener.changedFn(listener.context, self, port);
+    }
+
     pub fn setInput(self: *Gpio, port: u8, pin: u4, high: bool) void {
         if (port >= port_count) return;
         const bit = @as(u16, 1) << pin;
@@ -223,6 +238,7 @@ pub const Gpio = struct {
                 const next = regs.merge(current, lane, width, value);
                 self.ports[index].pdr = @truncate(next & half_mask);
                 self.setLatch(index, @truncate((next >> half_shift) & half_mask));
+                self.notify(@intCast(index));
             },
             regs.off.pcntr3 => {
                 // POSR sets, PORR clears, in that order, so a word that names
@@ -237,6 +253,7 @@ pub const Gpio = struct {
                 latch |= posr;
                 latch &= ~porr;
                 self.setLatch(index, latch);
+                self.notify(@intCast(index));
             },
             // PCNTR4 is the event output link: writable on silicon, not
             // modelled here, so the store is taken and forgotten rather than

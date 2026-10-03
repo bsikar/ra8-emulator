@@ -83,14 +83,14 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     // The panel is scanned out of the same RAM the engine paints into.
     try self.display.attach(&self.bus, &self.domains.graphics, core.*);
     self.raster = drw.Drw.init(&self.domains.graphics);
-    // The engine rasterizes into RAM, so it needs the machine that owns
-    // it. A board built by a test without one declines the render.
+    // Rendering uses the board's RAM.
     self.raster.memory = core.*;
     try self.bus.add(self.raster.block());
     try self.bus.add(self.link.block());
     try self.bus.add(self.receiver.block());
     try self.bus.add(self.host.block());
     try self.bus.add(self.serial.block());
+    self.c6.init(&self.serial, &self.pins);
     try self.bus.add(self.spi.block());
     // The card is on Pmod2, which is SCI0 in Simple-SPI mode, not on a
     // SPI_B channel (src/periph/sd_card_line.zig).
