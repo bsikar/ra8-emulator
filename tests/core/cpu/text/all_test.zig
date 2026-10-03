@@ -26,6 +26,8 @@ test {
     _ = @import("long_mul_test.zig");
     _ = @import("dsp_mul16_test.zig");
     _ = @import("dsp_mulhi_test.zig");
+    _ = @import("dsp_long_mul_test.zig");
+    _ = @import("sat_arith_test.zig");
     _ = @import("blxns_test.zig");
     _ = @import("hint_test.zig");
     _ = @import("it_test.zig");

@@ -1,4 +1,4 @@
-//! hw2 samples for the dsp_mul16 and dsp_mulhi groups: every Rd, with Ra
+//! hw2 samples for the dsp_mul16, dsp_mulhi and dsp_long_mul groups: every Rd, with Ra
 //! of r0, r4, sp and pc, every value of hw2[7:4], and Rm of r0, r3, ip
 //! and pc.
 pub const hw1_mask: u16 = 0xFF80;
