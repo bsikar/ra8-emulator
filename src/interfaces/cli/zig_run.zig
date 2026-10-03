@@ -101,6 +101,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .wrap = wrap,
         .cpu1 = if (checked_path != null) &checked else null,
         .retire_listener = retire_listener,
+        .ns_image = if (options.cpu == .lockstep) try report_dumps.nonSecure(std.heap.page_allocator, options) else null,
     });
     if (options.cpu == .zig) {
         if (options.report_json) {

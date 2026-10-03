@@ -60,7 +60,7 @@ pub fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options:
 /// side keeps (a heartbeat the bench reads by memprobe) is named only there.
 /// The run already loaded its segments; this reads the file once more and
 /// nothing else, so a run without `--ns` reads nothing.
-fn nonSecure(allocator: std.mem.Allocator, options: cli.Options) !?elf.Image {
+pub fn nonSecure(allocator: std.mem.Allocator, options: cli.Options) !?elf.Image {
     const path = options.ns_path orelse return null;
     const bytes = try std.fs.cwd().readFileAlloc(allocator, path, 64 << 20);
     return try elf.Image.init(bytes);

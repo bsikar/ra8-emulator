@@ -24,12 +24,20 @@ const report = @import("report.zig");
 const Cpu1 = @import("dual.zig").Cpu1;
 const RetireListener = cpu_mod.RetireListener;
 
+/// The images a lockstep run loads: the main one and, for a TrustZone
+/// pair, its Non-Secure half at its load address.
+pub const Images = struct {
+    main: elf.Image,
+    ns: ?elf.Image = null,
+};
+
 /// `theirs` is the engine the caller already loaded and reset.
-pub fn run(out: anytype, image: elf.Image, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
+pub fn run(out: anytype, images: Images, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
     var mine = try engine.Engine.open();
     defer mine.close();
     try mine.mapBoardRam();
-    _ = try mine.loadImage(image);
+    _ = try mine.loadImage(images.main);
+    if (images.ns) |half| _ = try mine.loadImage(half);
     if (cpu1) |side| try side.attach(&mine);
     return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1, retire_listener);
 }
