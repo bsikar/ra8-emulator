@@ -38,6 +38,7 @@ pub const entries = [_]Entry{
     .{ .group = "add_sub_wide", .print = @import("add_sub_wide.zig").print },
     .{ .group = "dp_shifted", .print = @import("dp_shifted.zig").print },
     .{ .group = "shift_reg", .print = @import("shift_reg.zig").print },
+    .{ .group = "bitfield", .print = @import("bitfield.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
