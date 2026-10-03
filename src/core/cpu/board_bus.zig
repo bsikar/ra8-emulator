@@ -15,6 +15,8 @@ const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 /// Public so a test can build the latch without a root export.
 pub const fault_clear = @import("../../periph/fault_clear.zig");
+const fp_state = @import("fpu/state.zig");
+const fp_scb = @import("fpu/scb.zig");
 
 pub const BoardBus = struct {
     memory: EngineBus,
@@ -47,7 +49,10 @@ pub const BoardBus = struct {
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (!inWindow(address, into.len)) return self.memory.view().read(address, into);
+        if (!inWindow(address, into.len)) {
+            if (self.scs.load(address, into)) return;
+            return self.memory.view().read(address, into);
+        }
         self.periph.issuer = self.issuer;
         const value = self.periph.read(address, try width(into.len));
         var bytes: [4]u8 = undefined;
@@ -79,6 +84,18 @@ pub const Scs = struct {
     /// in a hook and settles it at the boundary; here the store is settled
     /// as it lands, so no read in between sees the raw word.
     clears: ?*fault_clear.Clears = null,
+    /// FPCCR, FPCAR and FPDSCR, read and written in the core's FP state.
+    fp: ?*fp_state.State = null,
+
+    /// A word read of FPCCR, FPCAR or FPDSCR answered from the FP state;
+    /// false leaves the read to RAM.
+    pub fn load(self: Scs, address: u32, into: []u8) bool {
+        const state = self.fp orelse return false;
+        if (into.len != fp_scb.width) return false;
+        const value = fp_scb.read(state, address) orelse return false;
+        std.mem.writeInt(u32, into[0..4], value, .little);
+        return true;
+    }
 
     /// A store outside the peripheral windows: RAM, then whichever of the
     /// core's own SCS models the address belongs to.
@@ -96,6 +113,7 @@ pub const Scs = struct {
         }
         if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
         if (self.regions) |unit| try bankRegion(memory, unit, address, bytes);
+        if (self.fp) |state| try fileFp(memory, state, address, bytes);
     }
 };
 
@@ -129,6 +147,14 @@ fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8) 
         try putWord(memory, where[0], words[0]);
         try putWord(memory, where[1], words[1]);
     }
+}
+
+/// File a word store to FPCCR, FPCAR or FPDSCR in the FP state and put the
+/// masked value back in RAM, so a plain RAM read agrees with the model.
+fn fileFp(memory: bus.Bus, state: *fp_state.State, address: u32, bytes: []const u8) bus.Error!void {
+    if (bytes.len != fp_scb.width) return;
+    if (!fp_scb.write(state, address, std.mem.readInt(u32, bytes[0..4], .little))) return;
+    try putWord(memory, address, fp_scb.read(state, address).?);
 }
 
 fn putWord(memory: bus.Bus, address: u32, value: u32) bus.Error!void {

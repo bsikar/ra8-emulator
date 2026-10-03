@@ -168,3 +168,23 @@ test "CFSR and HFSR clear the bits a store writes ones to" {
     try std.testing.expectEqual(@as(u32, 0x0000_0002), try board.view().readWord(memmap.scb.hfsr));
     try std.testing.expectEqual(@as(u32, 3), clears.stores);
 }
+
+test "word stores and loads of FPCCR, FPCAR and FPDSCR reach the core's FP state" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var fp: ra8.core.fpu.state.State = .{};
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .fp = &fp } };
+    const fp_at = ra8.core.fpu.scb.address;
+    try storeWord(&board, fp_at.fpccr, 0x0000_0001);
+    try storeWord(&board, fp_at.fpcar, 0x2000_0104);
+    try storeWord(&board, fp_at.fpdscr, 0x0040_0000);
+    try std.testing.expectEqual(@as(u32, 0x0000_0001), fp.context.readFpccr());
+    try std.testing.expectEqual(@as(u32, 0x2000_0100), fp.context.fpcar);
+    try std.testing.expectEqual(fp.context.fpdscr, try board.view().readWord(fp_at.fpdscr));
+    try std.testing.expectEqual(@as(u32, 0x2000_0100), try core.readWord(fp_at.fpcar));
+    fp.context.fpccr.lspact = 0;
+    try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(fp_at.fpccr));
+}
