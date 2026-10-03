@@ -289,7 +289,7 @@ table above. A group listed as missing does not fail the build yet.
 | lob | missing |
 | long_shift | 20 |
 | long_shift_reg | 32 |
-| long_shift_sat | missing |
+| long_shift_sat | 51 |
 | long_shift_sat64 | missing |
 | udf | 6 |
 | bkpt | 3 |
