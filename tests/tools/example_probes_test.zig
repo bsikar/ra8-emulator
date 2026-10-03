@@ -74,7 +74,7 @@ const denied =
 test "secure boot passes on the Non-Secure heartbeat and fails on a denied handover" {
     const boot = probes.find("secure_boot_ns_hil.elf").?;
     try std.testing.expectEqualStrings("g_sbns_ns_alive", boot.symbol);
-    try std.testing.expectEqualStrings("g_sbns_denied", boot.failure);
+    try std.testing.expectEqualStrings("g_sbns_denied", boot.failure.?);
     try std.testing.expectEqual(probes.Judgement.pass, probes.judge(boot, booted));
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(boot, denied));
     try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("secure_boot_ns_hil_ns.elf"));
@@ -125,4 +125,21 @@ test "tz_nsc_cgc_usb passes on USB loop rounds and fails on a veneer error" {
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(pair, not_enumerated));
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(pair, veneer_error));
     try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("tz_nsc_cgc_usb_ns.elf"));
+}
+
+test "a hil.conf probe with no failure word judges on the match counter alone" {
+    const probe = probes.fromConf("threadx_blink.elf", "g_threadx_blink_tick", 3, null, null).?;
+    try std.testing.expectEqual(@as(?[]const u8, null), probe.failure);
+    const report = "  dump-sym      : g_threadx_blink_tick @0x22000000 = 7 (0x00000007)\n";
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(probe, report));
+    const short = "  dump-sym      : g_threadx_blink_tick @0x22000000 = 2 (0x00000002)\n";
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, short));
+}
+
+test "a hil.conf probe keeps its failure word and ceiling, and needs a symbol" {
+    const probe = probes.fromConf("x.elf", "g_ok", null, "g_bad", 2).?;
+    try std.testing.expectEqual(@as(u32, 1), probe.min);
+    try std.testing.expectEqualStrings("g_bad", probe.failure.?);
+    try std.testing.expectEqual(@as(u32, 2), probe.max_failure);
+    try std.testing.expectEqual(@as(?probes.Probe, null), probes.fromConf("x.elf", null, 3, "g_bad", null));
 }
