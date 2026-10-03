@@ -7,6 +7,10 @@
 //! same or skips the body on a zero count; LE decrements LR and branches back
 //! while it stays non-zero. None of the three writes flags.
 //!
+//! LE takes an INVSTATE UsageFault when the FP context is active and
+//! FPSCR.LTPSIZE is not 4 (RA8EMU-332, the Arm ARM's LE pseudocode):
+//! LTPSIZE() reads 4 whenever no FP context is active.
+//!
 //! Left unclaimed: SP or PC as the DLS/WLS source (UNPREDICTABLE), and the
 //! tail-predicated DLSTP, WLSTP and LETP, which belong to the MVE
 //! tail-predication work under RA8EMU-24 (lob.zig's decode refuses them).
@@ -14,6 +18,8 @@ const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const lob = @import("../../lob.zig");
+const control_bits = @import("../regs.zig").control_bits;
+const tail = @import("../mve/all.zig").tail;
 
 pub const encodings = struct {
     pub const sp: u4 = 13;
@@ -37,8 +43,15 @@ fn decode(instr: Instr) ?op.Exec {
 
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = fields(instr).?;
+    if (f.kind == .le and ltpsize(cpu) != tail.none) return error.InvalidState;
     const source = if (f.kind == .le) 0 else cpu.regs.get(f.source);
     const s = lob.step(f, instr.address, source, cpu.regs.lr);
     cpu.regs.pc = s.next_pc;
     if (s.lr) |value| cpu.regs.lr = value;
+}
+
+/// LTPSIZE() as LE reads it: FPSCR.LTPSIZE with an FP context active, else 4.
+fn ltpsize(cpu: *const Cpu) u3 {
+    if (cpu.regs.control & control_bits.fpca == 0) return tail.none;
+    return cpu.fp.fpscr.ltpsize;
 }
