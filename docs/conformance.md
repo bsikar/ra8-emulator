@@ -251,7 +251,7 @@ table above. A group listed as missing does not fail the build yet.
 | ldst_reg | missing |
 | ldm_stm | missing |
 | shift_imm | 16 |
-| add_sub | missing |
+| add_sub | 18 |
 | dp_reg | missing |
 | special_data | missing |
 | cps | missing |
