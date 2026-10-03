@@ -21,3 +21,12 @@ pub fn expectTexts(cases: []const Case) !void {
         };
     }
 }
+
+/// Checks one T-predicated instruction following a VPST whose mask is TE.
+pub fn expectPredicated(case: Case, expected: []const u8) !void {
+    const vpst: Instr = .{ .address = 0x0200_0100, .hw1 = 0xFE71, .hw2 = 0x8F4D, .size = 4 };
+    const instr: Instr = .{ .address = 0x0200_0104, .hw1 = case.hw1, .hw2 = case.hw2, .size = 4 };
+    var stream: disasm.Stream = .{};
+    try std.testing.expectEqualStrings("vpste", stream.format(vpst).?.slice());
+    try std.testing.expectEqualStrings(expected, stream.format(instr).?.slice());
+}

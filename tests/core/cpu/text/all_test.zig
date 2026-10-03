@@ -16,6 +16,9 @@ test {
     _ = @import("mve_gather_test.zig");
     _ = @import("mve_gather64_test.zig");
     _ = @import("mve_gather_imm_test.zig");
+    _ = @import("mve_float_cvt_fixed_test.zig");
+    _ = @import("mve_float_cvt_half_test.zig");
+    _ = @import("mve_float_cvt_int_test.zig");
     _ = @import("mve_vpst_test.zig");
     _ = @import("shift_imm_test.zig");
     _ = @import("add_sub_test.zig");
