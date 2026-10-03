@@ -110,6 +110,13 @@ test "vst20.32 then vst21.32 interleave q6 and q7 words" {
     try std.testing.expectEqual(@as(u128, 0xB3B3B3B3_A3A3A3A3_B2B2B2B2_A2A2A2A2), bytesAt(&ram, 16));
 }
 
+test "word interleaving store faults when the base is not word aligned" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(1, ram_base + 2);
+    try std.testing.expectError(error.Unaligned, step(&cpu, 0xFC81, 0x1F01));
+}
+
 test "unclaimed: past Q7, size 3, pattern 2 of VLD2, PC, SP with writeback, Q8+" {
     try std.testing.expect(vldr.group.decode(wide(0xFC91, 0xFE00)) == null);
     try std.testing.expect(vldr.group.decode(wide(0xFC91, 0xBE01)) == null);

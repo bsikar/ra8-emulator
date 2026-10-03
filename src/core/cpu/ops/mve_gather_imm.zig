@@ -14,6 +14,7 @@ const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const gather = mve.gather;
@@ -59,6 +60,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         if (!double or e & 1 == 1) moved = mve.qreg.setElem(moved, .word, slot, at);
         const beat = if (double and e & 1 == 1) at +% 4 else at;
         if (!mve.predicate.active(mask, .word, e)) continue;
+        try alignment.memA(beat, 4);
         var buf: [4]u8 = undefined;
         if (load) {
             try cpu.bus.read(beat, &buf);

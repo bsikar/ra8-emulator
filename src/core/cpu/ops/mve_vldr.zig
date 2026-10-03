@@ -8,11 +8,12 @@
 //! A adds the offset, L loads. P and W both clear is another encoding,
 //! and D set (Q8 and up), size 11, a PC base, or an SP base with writeback
 //! stay unclaimed (CONSTRAINED UNPREDICTABLE, undefined as QEMU does).
-//! Alignment checks wait on the core lane's MemA support (RA8EMU-85).
+//! Active elements are MemA accesses and fault before reaching the bus.
 const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const contiguous = mve.contiguous;
@@ -79,6 +80,7 @@ fn load(cpu: *Cpu, start: u32, size: Size, mask: u16) op.Error!u128 {
     for (0..mve.qreg.lanes(size)) |k| {
         const e: u8 = @intCast(k);
         if (!mve.predicate.active(mask, size, e)) continue;
+        try alignment.memA(contiguous.address(start, size, e), contiguous.bytes(size));
         var buf: [4]u8 = .{ 0, 0, 0, 0 };
         try cpu.bus.read(contiguous.address(start, size, e), buf[0..contiguous.bytes(size)]);
         out = mve.qreg.setElem(out, size, e, std.mem.readInt(u32, &buf, .little));
@@ -90,6 +92,7 @@ fn store(cpu: *Cpu, start: u32, size: Size, mask: u16, value: u128) op.Error!voi
     for (0..mve.qreg.lanes(size)) |k| {
         const e: u8 = @intCast(k);
         if (!mve.predicate.active(mask, size, e)) continue;
+        try alignment.memA(contiguous.address(start, size, e), contiguous.bytes(size));
         var buf: [4]u8 = undefined;
         std.mem.writeInt(u32, &buf, mve.qreg.elem(value, size, e), .little);
         try cpu.bus.write(contiguous.address(start, size, e), buf[0..contiguous.bytes(size)]);

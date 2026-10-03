@@ -13,6 +13,7 @@ const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const gather = mve.gather;
@@ -55,6 +56,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
             .os = instr.hw2 & 1 == 1,
             .odd = e & 1 == 1,
         });
+        try alignment.memA(at, 4);
         var buf: [4]u8 = undefined;
         if (load) {
             try cpu.bus.read(at, &buf);

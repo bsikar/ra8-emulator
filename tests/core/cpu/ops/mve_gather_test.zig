@@ -121,6 +121,14 @@ test "vstrw.32 q6, [sp, q7] scatters words off SP" {
     try std.testing.expectEqual(@as(u128, 0x11111111_22222222_33333333_44444444), bytesAt(&ram, 0x10));
 }
 
+test "word gather faults when an active element address is misaligned" {
+    var ram = counting();
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(1, ram_base);
+    qreg.write(&cpu.fp.bank, 1, 2);
+    try std.testing.expectError(error.Unaligned, step(&cpu, 0xFC91, 0x0F42));
+}
+
 test "unclaimed: Qd is Qm on a load, os with bytes, signed same width, Rn PC, Q8+, size 3" {
     try std.testing.expect(vldr.group.decode(wide(0xFC91, 0x2E02)) == null);
     try std.testing.expect(vldr.group.decode(wide(0xFC91, 0x0E83)) == null);

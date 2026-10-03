@@ -14,6 +14,7 @@ const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const gather = mve.gather;
@@ -77,6 +78,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         const offset = mve.qreg.elem(offsets, f.esize, e);
         const at = gather.address(.{ .base = base, .offset = offset, .msize = f.msize, .os = f.os });
         const len = contiguous.bytes(f.msize);
+        try alignment.memA(at, len);
         var buf: [4]u8 = .{ 0, 0, 0, 0 };
         if (f.store) {
             const raw = mve.qreg.elem(value, f.esize, e);

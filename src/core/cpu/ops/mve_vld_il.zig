@@ -14,6 +14,7 @@ const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const alignment = @import("../alignment.zig");
 const mve = @import("../mve/all.zig");
 const mve_beats = @import("mve_beats.zig");
 const interleave = mve.interleave;
@@ -58,6 +59,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     for (0..4) |b| {
         if (pending >> @intCast(b * 4) & 1 == 0) continue;
         const off = interleave.beatOffset(.{ .regs = regs, .pat = @intCast(instr.hw2 >> 5 & 3), .beat = @intCast(b) });
+        try alignment.memA(base +% off, @intCast(mve.qreg.bits(size) / 8));
         var buf: [4]u8 = undefined;
         if (load) {
             try cpu.bus.read(base +% off, &buf);

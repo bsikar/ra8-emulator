@@ -65,6 +65,13 @@ test "vldrd.u64 q0, [r1, q1] gathers two doublewords" {
     try std.testing.expectEqual(@as(u128, 0x0F0E0D0C_0B0A0908_27262524_23222120), qreg.read(&cpu.fp.bank, 0));
 }
 
+test "doubleword gather faults when a word beat is misaligned" {
+    var ram = counting();
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(1, ram_base + 2);
+    try std.testing.expectError(error.Unaligned, step(&cpu, 0xFC91, 0x0FD2));
+}
+
 test "vldrd.u64 q2, [r1, q3, uxtw #3] under a predicate zeroes the inactive beat" {
     var ram = counting();
     var cpu: Cpu = .{ .bus = ram.view() };
