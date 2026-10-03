@@ -113,6 +113,8 @@ pub const Cpu = struct {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
+        if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
+            return self.secureFault(.invep, address, .{ .invalid_state = address });
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
         if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))

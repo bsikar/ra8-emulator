@@ -5,7 +5,12 @@
 //! with the IDAU. A core with no source treats every address as Secure, the
 //! way it behaved before this seam existed, so nothing changes for a board
 //! that does not set one.
+//!
+//! The source answers for a Non-secure fetch: an exempt address takes the
+//! accessing state, so it should answer non_secure.
 const sau_attr = @import("../../periph/sau_attr.zig");
+const Instr = @import("instr.zig").Instr;
+const sg = @import("ops/sg.zig");
 
 pub const State = sau_attr.State;
 
@@ -21,4 +26,20 @@ pub const Attribution = struct {
 /// The state `address` belongs to, or Secure when there is no source.
 pub fn state(source: ?Attribution, address: u32) State {
     return if (source) |s| s.of(address) else .secure;
+}
+
+/// Whether Non-secure code may not run what it fetched (RA8EMU-359): Secure
+/// memory refuses every instruction, Non-secure callable memory everything
+/// but SG. The core takes SecureFault INVEP instead of running it.
+pub fn refusesEntry(source: ?Attribution, instr: Instr) bool {
+    const s = source orelse return false;
+    return switch (s.of(instr.address)) {
+        .non_secure => false,
+        .secure => true,
+        .callable => !isSg(instr),
+    };
+}
+
+fn isSg(instr: Instr) bool {
+    return instr.size == 4 and instr.hw1 == sg.encoding and instr.hw2 == sg.encoding;
 }
