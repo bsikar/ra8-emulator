@@ -16,6 +16,7 @@ const sfsr: u32 = 0xE000_EDE4;
 const sfar: u32 = 0xE000_EDE8;
 const auviol: u32 = 1 << 3;
 const sfarvalid: u32 = 1 << 6;
+const lsperr: u32 = 1 << 5;
 const ns_sp: u32 = fixture.base + 0x280;
 /// The one Secure window in the fixture; everything else is Non-secure.
 const secure_word: u32 = fixture.base + 0x200;
@@ -133,4 +134,24 @@ test "the gate refuses nothing while disarmed and checks both ends of an access"
     try std.testing.expect(!gate.refuses(secure_word, 0));
     current = .secure;
     try std.testing.expect(!gate.refuses(secure_word, 4));
+}
+
+test "a Non-secure FP op whose pending lazy push reaches Secure memory takes LSPERR with SFAR" {
+    var ram: fixture.Ram = .{};
+    var split: Split = .{};
+    var cpu = try nonSecure(&ram, Profile.m85, 0, 0);
+    ram.putHalf(fixture.code, 0xEE30); // vadd.f32 s0, s1, s2
+    ram.putHalf(fixture.code + 2, 0x0A81);
+    cpu.fp.context.writeFpcar(secure_word);
+    cpu.fp.context.fpccr.lspact = 1;
+    cpu.fp.context.fpccr.s = 0;
+    var gate: Gate = .{ .source = split.source(), .current = &cpu.banked.current };
+    cpu.bus.gate = &gate;
+    try std.testing.expectEqual(@as(?cpu_mod.Stop, null), cpu.step());
+    try std.testing.expectEqual(secure_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(lsperr | sfarvalid, ram.word(sfsr));
+    try std.testing.expectEqual(secure_word, ram.word(sfar));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(secure_word));
+    try std.testing.expectEqual(@as(u32, 1), cpu.fp.context.fpccr.lspact);
 }
