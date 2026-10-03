@@ -10,6 +10,7 @@ test {
     _ = @import("bitfield_vectors_test.zig");
     _ = @import("bkpt_vectors_test.zig");
     _ = @import("blxns_vectors_test.zig");
+    _ = @import("branch_future_vectors_test.zig");
     _ = @import("branch_vectors_test.zig");
     _ = @import("branch_wide_vectors_test.zig");
     _ = @import("bxns_vectors_test.zig");
