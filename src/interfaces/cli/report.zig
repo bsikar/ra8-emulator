@@ -42,6 +42,7 @@ pub const usb_cable = @import("report/usb_cable.zig");
 pub const json = @import("report/json.zig");
 pub const json_run = @import("report/json_run.zig");
 pub const json_protect = @import("report/json_protect.zig");
+pub const json_mem = @import("report/json_mem.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const poeg = @import("../../periph/poeg.zig");
 const reset = @import("../../periph/reset.zig");

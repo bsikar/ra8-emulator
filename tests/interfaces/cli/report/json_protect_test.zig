@@ -5,6 +5,7 @@ const ra8 = @import("ra8");
 
 const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
+const Fixture = @import("json_board.zig").Fixture;
 
 fn protection(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
     try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1 });
@@ -26,11 +27,13 @@ fn flag(object: Value, key: []const u8) !bool {
 }
 
 test "a quiet board has every protection key, all zero or false" {
-    var board = ra8.board.Board.init(std.testing.allocator);
-    defer board.deinit();
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    const board = &fix.board;
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
-    const doc = try protection(&board, &buf);
+    const doc = try protection(board, &buf);
     defer doc.deinit();
     const top = doc.value.object.get("protection").?;
     const mpu = top.object.get("mpu").?;
@@ -49,8 +52,10 @@ test "a quiet board has every protection key, all zero or false" {
 }
 
 test "MPU refusals split into stores, loads and fetches as the text does" {
-    var board = ra8.board.Board.init(std.testing.allocator);
-    defer board.deinit();
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    const board = &fix.board;
     board.guard.latch.violations = 7;
     board.guard.latch.loads = 2;
     board.guard.latch.fetches = 1;
@@ -59,7 +64,7 @@ test "MPU refusals split into stores, loads and fetches as the text does" {
     board.mailbox.attrib.locked_writes = 3;
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
-    const doc = try protection(&board, &buf);
+    const doc = try protection(board, &buf);
     defer doc.deinit();
     const top = doc.value.object.get("protection").?;
     const mpu = top.object.get("mpu").?;
