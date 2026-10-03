@@ -313,3 +313,7 @@ test "CPU0 posts to a mailbox and runs SEV, and a parked CPU1 wakes to read it" 
     try std.testing.expectEqual(@as(usize, 0), cpu1.wait.wakes.spurious);
     try std.testing.expectEqual(@as(u32, 0x2A), try cpu1.core.register(.r0));
 }
+
+test {
+    _ = @import("second_zig_test.zig");
+}

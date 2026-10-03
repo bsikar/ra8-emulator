@@ -281,6 +281,9 @@ pub fn start(
 /// re-exported here because `main` reaches it through this file.
 pub const interleave = @import("interleave.zig").interleave;
 
+/// CPU1 on the Zig core, for --cpu zig (RA8EMU-234).
+pub const zig = @import("second_zig.zig");
+
 /// Parking in WFE, re-exported for the same reason.
 pub const parking = second_wait;
 
