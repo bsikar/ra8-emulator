@@ -23,7 +23,7 @@
 //! a pixel is not in memory until a flush, not a cycle count.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 
 /// CACHECTL bits (HUM Ch 62.2.4 p 3694). The enables are state, the two
 /// flushes are write-one pulses, and the whole register is write-only.
@@ -87,7 +87,7 @@ pub const Framebuffer = struct {
 
     /// A CACHECTL write. The flush pulse acts on what is held now, so it
     /// runs before the new enable state lands.
-    pub fn control(self: *Framebuffer, memory: ?engine.Engine, word: u32) void {
+    pub fn control(self: *Framebuffer, memory: ?Guest, word: u32) void {
         if (word & bits.flush_fb != 0) self.flush(memory);
         const on = word & bits.enable_fb != 0;
         if (self.enabled and !on and self.dirty()) {
@@ -98,7 +98,7 @@ pub const Framebuffer = struct {
     }
 
     /// Write every held pixel back and empty the table.
-    pub fn flush(self: *Framebuffer, memory: ?engine.Engine) void {
+    pub fn flush(self: *Framebuffer, memory: ?Guest) void {
         self.flushes +%= 1;
         var index: usize = 0;
         while (index < self.used) : (index += 1) self.writeBack(memory, self.cells[index]);
@@ -107,7 +107,7 @@ pub const Framebuffer = struct {
 
     /// Take a pixel write. True when the cache holds it and the caller must
     /// leave memory alone.
-    pub fn store(self: *Framebuffer, memory: ?engine.Engine, at: u32, bytes: usize, value: u32) bool {
+    pub fn store(self: *Framebuffer, memory: ?Guest, at: u32, bytes: usize, value: u32) bool {
         if (!self.enabled) return false;
         self.held +%= 1;
         if (self.find(at)) |index| {
@@ -128,14 +128,14 @@ pub const Framebuffer = struct {
     }
 
     /// Room for one more: the oldest held pixel goes to memory.
-    fn makeRoom(self: *Framebuffer, memory: ?engine.Engine) void {
+    fn makeRoom(self: *Framebuffer, memory: ?Guest) void {
         self.writeBack(memory, self.cells[0]);
         self.evicted +%= 1;
         std.mem.copyForwards(Cell, self.cells[0 .. self.used - 1], self.cells[1..self.used]);
         self.used -= 1;
     }
 
-    fn writeBack(self: *Framebuffer, memory: ?engine.Engine, cell: Cell) void {
+    fn writeBack(self: *Framebuffer, memory: ?Guest, cell: Cell) void {
         const target = memory orelse {
             self.faults +%= 1;
             return;

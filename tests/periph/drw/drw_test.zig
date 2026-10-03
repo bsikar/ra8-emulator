@@ -134,7 +134,7 @@ test "the framebuffer cache is no longer a decline: the render happens and the p
     var memory = try engine.Engine.open();
     defer memory.close();
     try memory.mapBoardRam();
-    unit.memory = memory;
+    unit.memory = .{ .engine = memory };
 
     const ram: u32 = 0x2200_0000;
     try memory.writeWord(ram, 0);
@@ -180,7 +180,7 @@ const Bench = struct {
         self.guard = unlockedGuard();
         self.domain = poweredDomain(&self.guard);
         self.unit = drw.Drw.init(&self.domain);
-        self.unit.memory = self.core;
+        self.unit.memory = .{ .engine = self.core };
     }
 
     fn close(self: *Bench) void {

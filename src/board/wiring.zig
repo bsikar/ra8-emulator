@@ -84,7 +84,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.display.attach(&self.bus, &self.domains.graphics, core.*);
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
-    self.raster.memory = core.*;
+    self.raster.memory = .{ .engine = core.* };
     try self.bus.add(self.raster.block());
     try self.bus.add(self.link.block());
     try self.bus.add(self.receiver.block());
