@@ -116,7 +116,7 @@ test "BXAUT with a wrong code in Ra faults and does not branch" {
     try std.testing.expectEqual(@as(u32, 0x0800_4567), cpu.regs.low[1]);
 }
 
-test "disabled PAC instructions are inert, including BXAUT" {
+test "disabled PAC instructions are inert and BXAUT still branches" {
     var cpu: Cpu = .{ .bus = undefined };
     cpu.regs.lr = 0x0800_1235;
     cpu.regs.low[1] = 0x0800_1235;
@@ -129,8 +129,8 @@ test "disabled PAC instructions are inert, including BXAUT" {
     try execute(&cpu, 0xFB61, 0xF002); // PACG leaves its destination untouched
     try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), cpu.regs.low[0]);
     try execute(&cpu, 0xFB51, 0x0F02); // AUTG is inert when disabled
-    try execute(&cpu, 0xFB51, 0x0F12);
-    try std.testing.expectEqual(@as(u32, 0), cpu.regs.pc);
+    try execute(&cpu, 0xFB51, 0x0F12); // bxaut r0, r1, r2 skips the check, then branches
+    try std.testing.expectEqual(@as(u32, 0x0800_1234), cpu.regs.pc);
 }
 
 test "the instruction group claims PAC, PACBTI, AUT, PACG, AUTG and BXAUT" {
