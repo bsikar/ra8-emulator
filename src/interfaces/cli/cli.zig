@@ -11,6 +11,7 @@ const cpu_choice = @import("../../core/cpu/choice.zig");
 const rtos_load = @import("../../debug/rtos_load.zig");
 
 pub const usage = @import("cli_usage.zig").text;
+pub const card_setup = @import("card_setup.zig");
 
 /// How many `--dump-sym` names one run will carry. The suite that drives
 /// this asks for at most two, a progress counter and a failure counter; the
@@ -63,6 +64,8 @@ pub const Options = struct {
     sd_label: []const u8 = "RA8",
     /// The card's size in MiB. Null keeps the image's own default.
     sd_size_mb: ?u32 = null,
+    /// Raw SDHC image file to attach to the SPI card.
+    sd_path: ?[]const u8 = null,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
     /// Write one line per SD command to stderr.
@@ -332,6 +335,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.bus_errors = false;
     } else if (std.mem.eql(u8, flag, "--sd-size")) {
         options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
+    } else if (std.mem.eql(u8, flag, "--sd")) {
+        options.sd_path = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {
         options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
     } else if (std.mem.eql(u8, flag, "--usb-disk")) {

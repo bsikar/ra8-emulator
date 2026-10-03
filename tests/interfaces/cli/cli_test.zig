@@ -59,6 +59,12 @@ test "the Click module is off unless --click fits it" {
     try std.testing.expect(fitted.click);
 }
 
+test "--sd selects a raw card image" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--sd", "card.img" });
+    try std.testing.expectEqualStrings("card.img", options.sd_path.?);
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--sd" }));
+}
+
 test "--cpu picks the CPU, defaulting to Unicorn" {
     const Choice = ra8.core.cpu.choice.Choice;
     try std.testing.expectEqual(Choice.unicorn, (try parse(&[_][]const u8{ "emu", "a.elf" })).cpu);

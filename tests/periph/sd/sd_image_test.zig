@@ -103,3 +103,30 @@ test "release hands every block back" {
     img.release();
     try std.testing.expectEqual(@as(usize, 0), img.held());
 }
+
+test "a raw image attaches at its stated capacity and keeps zero blocks sparse" {
+    var img = unit();
+    defer img.deinit();
+    const bytes = try std.testing.allocator.alloc(u8, 512 * 1024);
+    defer std.testing.allocator.free(bytes);
+    @memset(bytes, 0);
+    bytes[5 * image.geometry.block_bytes] = 0xA5;
+    try img.loadBytes(bytes);
+    try std.testing.expectEqual(@as(u32, 1024), img.capacity_blocks);
+    try std.testing.expectEqual(@as(u32, 0), img.csize());
+    try std.testing.expectEqual(@as(usize, 1), img.held());
+    var loaded: image.Block = undefined;
+    try std.testing.expect(img.read(5, &loaded));
+    try std.testing.expectEqual(@as(u8, 0xA5), loaded[0]);
+    try std.testing.expect(img.read(6, &loaded));
+    try std.testing.expectEqual(@as(u8, 0), loaded[0]);
+}
+
+test "a raw image must fit the exact SDHC capacity field" {
+    var img = unit();
+    defer img.deinit();
+    try std.testing.expectError(error.BadImageSize, img.loadBytes(&.{}));
+    const bytes = try std.testing.allocator.alloc(u8, 512 * 1024 + 1);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectError(error.BadImageSize, img.loadBytes(bytes));
+}
