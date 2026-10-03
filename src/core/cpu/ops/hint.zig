@@ -43,6 +43,7 @@ fn decode(instr: Instr) ?op.Exec {
     if (instr.hw1 != e.nop_t2_hw1) return null;
     if (instr.hw2 & 0xFF00 != e.nop_t2_hw2) return null;
     const number = instr.hw2 & 0xFF;
+    if (number == 0x0F) return clearBti;
     for (e.pacbti_hints) |h| if (number == h) return null;
     return byNumber(number);
 }
@@ -55,6 +56,13 @@ fn byNumber(number: u16) ?op.Exec {
         e.sev => sendEvent,
         else => complete,
     };
+}
+
+fn clearBti(cpu: *Cpu, instr: Instr) op.Error!void {
+    _ = instr;
+    // In the hint space, BTI is a NOP on a core without PACBTI (the M33).
+    if (!cpu.profile.v8_1m) return;
+    cpu.regs.xpsr &= ~@import("../regs.zig").xpsr_bits.bti;
 }
 
 fn complete(cpu: *Cpu, instr: Instr) op.Error!void {

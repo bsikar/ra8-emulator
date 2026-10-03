@@ -5,6 +5,10 @@ const bus = ra8.core.cpu.bus;
 const regs = ra8.core.cpu.regs;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 
+test {
+    _ = @import("bti_test.zig");
+}
+
 /// A little image at address 0: a vector table, then code at 0x08.
 const Image = struct {
     bytes: []const u8,

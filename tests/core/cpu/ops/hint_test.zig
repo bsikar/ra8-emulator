@@ -23,11 +23,12 @@ test "yield, wfe, wfi and sev decode in both widths" {
     for ([_]u16{ 0x8001, 0x8002, 0x8003, 0x8004 }) |hw2| try std.testing.expect(wide(hw2) != null);
 }
 
-test "an IT and the PACBTI hints are left alone" {
+test "IT and non-BTI PAC instructions remain unclaimed" {
     // bf08 and bf18 are IT (nonzero mask)
     for ([_]u16{ 0xBF08, 0xBF18 }) |hw1| try std.testing.expect(narrow(hw1) == null);
     // f3af 800d pacbti, 800f bti, 801d pac, 802d aut (arm-none-eabi-as 13.3)
-    for ([_]u16{ 0x800D, 0x800F, 0x801D, 0x802D }) |hw2| try std.testing.expect(wide(hw2) == null);
+    try std.testing.expect(wide(0x800F) != null);
+    for ([_]u16{ 0x800D, 0x801D, 0x802D }) |hw2| try std.testing.expect(wide(hw2) == null);
     // hw2[15:8] not 0x80 is not the hint space
     try std.testing.expect(wide(0x8105) == null);
 }

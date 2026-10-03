@@ -13,8 +13,8 @@ const frame = @import("frame.zig");
 const fp_frame = @import("fp_frame.zig");
 const exc_return = @import("exc_return.zig");
 
-/// EPSR.ICI/IT, bits 26:25 and 15:10; entry clears them.
-pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10);
+/// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
+pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
 
 pub const Number = u9;
 

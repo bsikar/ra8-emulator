@@ -21,6 +21,7 @@ const op = @import("../op.zig");
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const bti = @import("../bti.zig");
 
 pub const encodings = struct {
     /// hw1[15:9] = 0b1111100 for the whole single-register load/store space.
@@ -125,7 +126,10 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     }
     const value = try loadValue(cpu, address, f);
     if (f.writeback) cpu.regs.set(f.rn, offset_address);
-    if (f.rt == 15) cpu.regs.bxWritePc(value) else cpu.regs.set(f.rt, value);
+    if (f.rt == 15) {
+        cpu.regs.bxWritePc(value);
+        if ((f.rn != 13 or !f.writeback) and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+    } else cpu.regs.set(f.rt, value);
 }
 
 fn loadValue(cpu: *Cpu, address: u32, f: Form) op.Error!u32 {
