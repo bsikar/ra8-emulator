@@ -38,6 +38,7 @@ pub const SecondZig = struct {
         };
         self.cpu = .{ .bus = self.board.view(), .source = self.pending.source(), .profile = part.cpu1_profile };
         self.cpu.decoded = &self.decoded;
+        self.board.security = &self.cpu.banked;
         try self.cpu.reset(second.vector_base);
     }
 
