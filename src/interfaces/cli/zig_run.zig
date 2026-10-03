@@ -8,6 +8,7 @@ const engine = @import("../../core/engine.zig");
 const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
+const systick_bank = @import("../../core/systick_bank.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
@@ -26,6 +27,9 @@ pub const Clock = struct {
     core: *engine.Engine,
     board: *Board,
     timebase: *clocks.Clocks,
+    /// CPU0's Non-secure SysTick (RA8EMU-449). Only its timer is charged:
+    /// DWT_CYCCNT and the run's own count belong to `timebase`.
+    ns_timebase: clocks.Clocks = .{ .words = systick_bank.non_secure_words },
     /// CPU1 on its Zig core under --cpu zig --cpu1, or null (RA8EMU-234).
     cpu1: ?*second_core.zig_run.Driver = null,
 
@@ -36,7 +40,7 @@ pub const Clock = struct {
     /// The chunk the Unicorn path uses, cut down to the armed SysTick period
     /// so a stretch never swallows more than one wrap.
     pub fn width(self: *const Clock) u32 {
-        const period = self.timebase.period(self.core.*);
+        const period = systick_bank.width(self.timebase.period(self.core.*), self.ns_timebase.period(self.core.*));
         if (period != 0 and period < self.timebase.per_chunk) return period;
         return self.timebase.per_chunk;
     }
@@ -45,6 +49,7 @@ pub const Clock = struct {
     /// the Unicorn run loop does.
     pub fn close(self: *Clock, instructions: u32) !void {
         try self.timebase.advance(self.core.*, instructions);
+        try self.ns_timebase.advanceSysTick(self.core.*, instructions);
         try self.board.tick(self.core.*);
         if (self.cpu1) |second| second.round(instructions);
     }

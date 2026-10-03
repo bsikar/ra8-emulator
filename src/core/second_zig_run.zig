@@ -11,10 +11,15 @@ const engine = @import("engine.zig");
 const second_core = @import("second_core.zig");
 const SecondZig = @import("second_zig.zig").SecondZig;
 const Board = @import("../board/board.zig").Board;
+const clocks = @import("../periph/clocks.zig");
+const systick_bank = @import("systick_bank.zig");
 
 pub const Driver = struct {
     second: second_core.Second,
     core: SecondZig,
+    /// CPU1's Non-secure SysTick (RA8EMU-449); `second.timebase` is its
+    /// Secure one and keeps DWT_CYCCNT.
+    ns_timebase: clocks.Clocks,
 
     /// CPU1 from the image at `path`, on `owner`'s board, ready to take
     /// turns. Built in storage the caller holds: both halves keep pointers
@@ -27,6 +32,7 @@ pub const Driver = struct {
         try self.second.open(owner, board, try elf.Image.init(bytes));
         errdefer self.second.close();
         try self.core.open(&self.second, &board.bus);
+        self.ns_timebase = .{ .words = systick_bank.non_secure_words };
     }
 
     pub fn close(self: *Driver) void {
@@ -46,6 +52,7 @@ pub const Driver = struct {
         const ran = self.core.cpu.retired - before;
         second.ran += @intCast(ran);
         second.timebase.advance(second.core, @intCast(ran)) catch {};
+        self.ns_timebase.advanceSysTick(second.core, @intCast(ran)) catch {};
         second.pc = self.core.cpu.regs.pc;
         if (stopped != .count) second.fault = .{ .pc = second.pc, .detail = @tagName(stopped) };
     }

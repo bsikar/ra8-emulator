@@ -96,3 +96,33 @@ test "pends: with one timer SysTick is only ever Secure" {
         .{ .number = bank.pendsv, .priority = 0x80, .view = .non_secure },
     }, got.slice());
 }
+
+test "two armed timers ask for the shorter period, one for its own" {
+    try std.testing.expectEqual(@as(u32, 0), bank.width(0, 0));
+    try std.testing.expectEqual(@as(u32, 40), bank.width(40, 0));
+    try std.testing.expectEqual(@as(u32, 25), bank.width(0, 25));
+    try std.testing.expectEqual(@as(u32, 25), bank.width(40, 25));
+}
+
+test "the Non-secure time base counts at the alias and pends only its own ICSR" {
+    const words = bank.non_secure_words;
+    try std.testing.expectEqual(@as(u32, 0xE002_E010), words.csr);
+    try std.testing.expectEqual(@as(u32, 0xE002_ED04), words.icsr);
+    var core = try ra8.core.engine.Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try core.writeWord(words.rvr, 9);
+    try core.writeWord(words.cvr, 3);
+    try core.writeWord(words.csr, run);
+    try core.writeWord(0xE000_EDFC, 1 << 24); // DEMCR.TRCENA
+    try core.writeWord(0xE000_1000, 1); // DWT_CTRL.CYCCNTENA
+    var clock = clocks.Clocks{ .words = words };
+    try std.testing.expectEqual(@as(u32, 10), clock.period(core));
+    try clock.advanceSysTick(core, 5);
+    try std.testing.expectEqual(@as(u32, 8), try core.readWord(words.cvr));
+    try std.testing.expect(try core.readWord(words.csr) & clocks.csr_countflag != 0);
+    try std.testing.expectEqual(clocks.icsr_pendstset, try core.readWord(0xE002_ED04));
+    try std.testing.expectEqual(@as(u32, 0), try core.readWord(0xE000_ED04));
+    try std.testing.expectEqual(@as(u32, 0), try core.readWord(0xE000_E018));
+    try std.testing.expectEqual(@as(u32, 0), try core.readWord(0xE000_1004));
+}

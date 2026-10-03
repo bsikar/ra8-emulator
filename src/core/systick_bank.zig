@@ -109,6 +109,22 @@ fn registerAt(offset: u32) Register {
     };
 }
 
+/// The Non-secure timer as a Clocks counts it: its alias registers, pending
+/// into the Non-secure ICSR copy at 0xE002_ED04 (RA8EMU-415, RA8EMU-449).
+pub const non_secure_words = blk: {
+    var words = clocks.Words.non_secure;
+    words.icsr = 0xE002_ED04;
+    break :blk words;
+};
+
+/// The boundary two timers ask for: the shorter armed period, zero when
+/// neither is armed (Clocks.period).
+pub fn width(secure: u32, non_secure: u32) u32 {
+    if (secure == 0) return non_secure;
+    if (non_secure == 0) return secure;
+    return @min(secure, non_secure);
+}
+
 pub const pendsv: u16 = 14;
 pub const systick: u16 = 15;
 
