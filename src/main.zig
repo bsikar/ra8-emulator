@@ -122,8 +122,8 @@ pub fn main() !u8 {
 
     var board = Board.init(allocator);
     defer board.deinit();
-    fitBoard(&board, options) catch return 2;
-    ra8.board.usb_plug.apply(&board.usb, allocator, options.usb_disk) catch return 2;
+    fitBoard(&board, allocator, options) catch return 2;
+    defer card_setup.saveBack(&board, options.sd_path, options.sd_save);
     try board.attach(&core);
 
     var parts = Parts{};
@@ -343,16 +343,17 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
 }
 
 /// Put the world the command line described onto the board: the part it is,
-/// the card in its slot, the contacts queued on its panel and the charge in
-/// its cell. Each piece refuses on its own terms and says so; this only puts
-/// them in order.
-fn fitBoard(board: *Board, options: cli.Options) !void {
+/// the card in its slot, the contacts queued on its panel, the charge in
+/// its cell and the stick in its USB jack. Each piece refuses on its own
+/// terms and says so; this only puts them in order.
+fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
     board.part = options.part;
     board.wire.click = options.click;
     if (options.usb_loop) board.usb.loopBack();
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     try setBattery(board, options);
+    try ra8.board.usb_plug.apply(&board.usb, allocator, options.usb_disk);
 }
 
 /// Put the contacts the command line asked for on the touch panel. The queue

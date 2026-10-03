@@ -5,6 +5,26 @@ const sd_format = @import("../../periph/sd/sd_format.zig");
 const sd_advice = @import("../../periph/sd/sd_format_advice.zig");
 const sd_image = @import("../../periph/sd/sd_image.zig");
 
+/// The label a `--sd-new` format gives the card when the spec names none.
+pub const default_label = "RA8";
+
+/// The format and label a `--sd-new FS[:LABEL]` spec asks for.
+pub fn newSpec(spec: []const u8) !struct { sd_format.Kind, []const u8 } {
+    const split = std.mem.indexOfScalar(u8, spec, ':') orelse spec.len;
+    const kind = sd_format.Kind.parse(spec[0..split]) orelse return error.UnknownFormat;
+    return .{ kind, if (split < spec.len) spec[split + 1 ..] else default_label };
+}
+
+/// Write the card back over its `--sd-save` image when the run ends. A
+/// failed write is reported and leaves the image file as it was.
+pub fn saveBack(board: *const Board, sd_path: ?[]const u8, save: bool) void {
+    if (!save) return;
+    const path = sd_path orelse return;
+    board.sd.img.saveTo(std.fs.cwd(), path) catch |err| {
+        std.debug.print("SD image {s}: not saved: {s}\n", .{ path, @errorName(err) });
+    };
+}
+
 /// Size and format the card, or import a raw host image when requested.
 pub fn prepare(
     board: *Board,

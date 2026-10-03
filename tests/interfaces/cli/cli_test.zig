@@ -115,10 +115,10 @@ test "precise BusFaults are on unless --no-bus-errors turns them off" {
 
 test "profile prints counts and folded profile takes an output path" {
     const cli = @import("ra8").core.cli;
-    const asked = try cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile" });
+    const asked = try parse(&[_][]const u8{ "emu", "a.elf", "--profile" });
     try std.testing.expect(asked.profile);
     try std.testing.expectEqual(@as(?[]const u8, null), asked.profile_folded);
-    const folded = try cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded", "out.folded" });
+    const folded = try parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded", "out.folded" });
     try std.testing.expect(folded.profile);
     try std.testing.expectEqualStrings("out.folded", folded.profile_folded.?);
     try std.testing.expectError(error.MissingValue, cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded" }));
@@ -145,4 +145,16 @@ test "--report takes text or json and refuses anything else" {
     try std.testing.expect(!as_text.report_json);
     try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--report", "yaml" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--report" }));
+}
+
+test "--sd-save attaches the image and asks for the write-back; --sd does not" {
+    const saved = try parse(&.{ "ra8_emulator", "fw.elf", "--sd-save", "card.img" });
+    try std.testing.expectEqualStrings("card.img", saved.sd_path.?);
+    try std.testing.expect(saved.sd_save);
+    const plain = try parse(&.{ "ra8_emulator", "fw.elf", "--sd", "card.img" });
+    try std.testing.expect(!plain.sd_save);
+    const labelled = try parse(&.{ "ra8_emulator", "fw.elf", "--sd-new", "fat32:BOOK" });
+    try std.testing.expectEqualStrings("BOOK", labelled.sd_label);
+    const bare = try parse(&.{ "ra8_emulator", "fw.elf", "--sd-new", "fat16" });
+    try std.testing.expectEqualStrings("RA8", bare.sd_label);
 }

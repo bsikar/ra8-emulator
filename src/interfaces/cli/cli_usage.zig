@@ -2,7 +2,7 @@
 //! so src/interfaces/cli/cli.zig stays one purpose and under its cap.
 pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
-    \\                    [--sd IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
+    \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y]
     \\                    [--battery PCT] [--charge] [--click] [--console]
     \\                    [--usb-loop]
@@ -21,6 +21,9 @@ pub const text =
     \\                     itself armed
     \\  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU
     \\  --sd IMAGE         attach a raw SDHC image (size must be a whole 512 KiB unit)
+    \\  --sd-save IMAGE    the same card, written back over IMAGE when the
+    \\                     run ends (temp file, fsync, rename); --sd
+    \\                     leaves IMAGE untouched
     \\  --device NAME      the same thing, spelled the way the firmware's
     \\                     own emulator-in-the-loop suite spells it
     \\  --dump-sym NAME    read that global out of RAM after the run and
