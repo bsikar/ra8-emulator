@@ -86,6 +86,7 @@ pub const text =
     \\  --sd-new FS        format that card: fat16 or fat32, with an
     \\                     optional volume label after a colon
     \\  --touch X,Y        queue a contact on the touch panel, repeatable
+    \\  --touch-seq X:Y,X:Y  queue several contacts in order
     \\  --touch @PATH      read live touches from PATH (a file or FIFO)
     \\                     while the run goes: one "X,Y" per line, with
     \\                     an optional "down "/"move " in front; "up"
