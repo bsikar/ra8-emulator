@@ -1,4 +1,5 @@
-//! Tests for src/periph/sau_attr.zig.
+//! Tests for src/periph/sau_attr.zig; also pulls in idau_test.zig, since
+//! tests/all.zig is at its line limit.
 
 const std = @import("std");
 const ra8 = @import("ra8");
@@ -96,4 +97,8 @@ test "an IDAU exemption is honoured and its region carried" {
     const got = mod.attribute(&unit, .{ .exempt = true, .region = 7 }, 0x4000_0000);
     try std.testing.expect(got.exempt);
     try std.testing.expectEqual(@as(?u8, 7), got.idau_region);
+}
+
+test {
+    _ = @import("idau_test.zig");
 }
