@@ -36,7 +36,8 @@ test "the first FP op sets FPCA and seeds FPSCR from FPDSCR before it runs" {
     cpu.fp.bank.writeS(1, 0x3F80_0000); // 1.0
     cpu.fp.bank.writeS(2, 0x3380_0000); // 2^-24
     try run(&cpu, 0xEE30, 0x0A81); // vadd.f32 s0, s1, s2
-    try std.testing.expectEqual(fpca, cpu.regs.control & fpca);
+    try std.testing.expectEqual(fpca | ra8.core.cpu.regs.control_bits.sfpa, cpu.regs.control & (fpca | ra8.core.cpu.regs.control_bits.sfpa));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.context.fpccr.s);
     // Rounded towards zero, so the sum stays 1.0 and only IXC is set.
     try std.testing.expectEqual(@as(u32, 0x3F80_0000), cpu.fp.bank.readS(0));
     try std.testing.expectEqual(@as(u32, 0x00C4_0010), cpu.fp.fpscr.bits());
@@ -44,7 +45,7 @@ test "the first FP op sets FPCA and seeds FPSCR from FPDSCR before it runs" {
 
 test "with FPCA already set the FPSCR carries over" {
     var cpu = fresh();
-    cpu.regs.control = fpca;
+    cpu.regs.control = fpca | ra8.core.cpu.regs.control_bits.sfpa;
     cpu.fp.context.writeFpdscr(0x00C0_0000);
     cpu.fp.fpscr = @bitCast(@as(u32, 0x8004_0000));
     cpu.fp.bank.writeS(1, 0x3F80_0000);
@@ -96,4 +97,22 @@ test "no lazy preservation pending leaves memory alone" {
     cpu.fp.bank.writeS(0, 0x1111_1111);
     try run(&cpu, 0xEE30, 0x0A81);
     try std.testing.expectEqual(@as(u32, 0), ram.word(at));
+}
+
+test "Secure gate reopens context when FPCA is set but SFPA is clear" {
+    var cpu = fresh();
+    cpu.regs.control = fpca;
+    cpu.fp.context.writeFpdscr(0x00C0_0000);
+    cpu.fp.fpscr = @bitCast(@as(u32, 0x8004_0000));
+    cpu.fp.vpr = @bitCast(@as(u32, 0x0084_1234));
+    cpu.fp.bank.writeS(1, 0x3F80_0000);
+    cpu.fp.bank.writeS(2, 0x3F80_0000);
+    try run(&cpu, 0xEE30, 0x0A81);
+    try std.testing.expectEqual(
+        fpca | ra8.core.cpu.regs.control_bits.sfpa,
+        cpu.regs.control & (fpca | ra8.core.cpu.regs.control_bits.sfpa),
+    );
+    try std.testing.expectEqual(@as(u32, 1), cpu.fp.context.fpccr.s);
+    try std.testing.expectEqual(@as(u32, 0x00C4_0000), cpu.fp.fpscr.bits());
+    try std.testing.expectEqual(@as(u32, 0), @as(u32, @bitCast(cpu.fp.vpr)));
 }
