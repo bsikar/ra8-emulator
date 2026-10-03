@@ -69,6 +69,8 @@ pub const Options = struct {
     sd_path: ?[]const u8 = null,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
+    /// Cable the HS host jack to the board's own FS device jack.
+    usb_loop: bool = false,
     /// Write one line per SD command to stderr.
     trace_sd: bool = false,
     /// Stream completed SCI console lines to stdout as they arrive.
@@ -353,6 +355,8 @@ fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.sd_path = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {
         options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
+    } else if (std.mem.eql(u8, flag, "--usb-loop")) {
+        options.usb_loop = true;
     } else if (std.mem.eql(u8, flag, "--usb-disk")) {
         options.usb_disk = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--battery")) {

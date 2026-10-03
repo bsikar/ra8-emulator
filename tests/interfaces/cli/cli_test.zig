@@ -121,3 +121,8 @@ test "profile prints counts and folded profile takes an output path" {
     try std.testing.expectEqualStrings("out.folded", folded.profile_folded.?);
     try std.testing.expectError(error.MissingValue, cli.parse(&[_][]const u8{ "emu", "a.elf", "--profile-folded" }));
 }
+
+test "--usb-loop cables the two USB jacks together when requested" {
+    try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).usb_loop);
+    try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--usb-loop" })).usb_loop);
+}

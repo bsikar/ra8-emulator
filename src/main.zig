@@ -342,6 +342,7 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
 fn fitBoard(board: *Board, options: cli.Options) !void {
     board.part = options.part;
     board.wire.click = options.click;
+    if (options.usb_loop) board.usb.loopBack();
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     try setBattery(board, options);
