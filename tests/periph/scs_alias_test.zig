@@ -53,3 +53,33 @@ test "isScb takes either window and nothing beside them" {
     try std.testing.expect(!alias.isScb(0xE000_ED90));
     try std.testing.expect(!alias.isScb(0xE002_ECFF));
 }
+
+const itns0: u32 = 0xE000_E380;
+const itns15: u32 = 0xE000_E3BC;
+
+test "Non-secure code reads NVIC_ITNS as RES0 on the normal window" {
+    try std.testing.expectEqual(itns0, alias.route(itns0, false).res0);
+    try std.testing.expectEqual(itns15, alias.route(itns15, false).res0);
+    try std.testing.expectEqual(itns15 + 3, alias.route(itns15 + 3, false).res0);
+}
+
+test "Secure code reaches NVIC_ITNS itself on the normal window" {
+    const t = target(itns0, true);
+    try std.testing.expectEqual(itns0, t.address);
+    try std.testing.expectEqual(alias.View.secure, t.view);
+}
+
+test "the Non-secure view of NVIC_ITNS through the alias is RES0 for Secure code too" {
+    try std.testing.expectEqual(itns0, alias.route(itns0 + alias.offset, true).res0);
+    try std.testing.expectEqual(itns0, alias.route(itns0 + alias.offset, false).res0);
+}
+
+test "the words either side of NVIC_ITNS stay registers for Non-secure code" {
+    try std.testing.expectEqual(alias.View.non_secure, target(itns0 - 4, false).view);
+    try std.testing.expectEqual(alias.View.non_secure, target(itns15 + 4, false).view);
+}
+
+test "the ITNS span is the one src/periph/itns.zig names" {
+    try std.testing.expectEqual(ra8.periph.nvic.itns.base, alias.itns.first);
+    try std.testing.expectEqual(ra8.periph.nvic.itns.last + 3, alias.itns.last);
+}
