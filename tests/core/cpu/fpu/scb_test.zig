@@ -29,3 +29,12 @@ test "other addresses are not this file's" {
     try std.testing.expect(scb.read(&state, 0xE000_EF30) == null);
     try std.testing.expect(!scb.write(&state, 0xE000_EF40, 1));
 }
+
+test "CPACR keeps CP10 and CP11 and starts with the FPU off" {
+    var state: State = .{};
+    try std.testing.expectEqual(@as(u32, 0), scb.read(&state, scb.address.cpacr).?);
+    try std.testing.expect(scb.write(&state, scb.address.cpacr, 0xFFFF_FFFF));
+    try std.testing.expectEqual(@as(u32, 0x00F0_0000), scb.read(&state, scb.address.cpacr).?);
+    const cpacr = ra8.core.fpu.cpacr;
+    try std.testing.expectEqual(cpacr.Access.full, cpacr.access(state.cpacr));
+}
