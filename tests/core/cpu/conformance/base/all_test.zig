@@ -33,6 +33,7 @@ test {
     _ = @import("imm_logic_vectors_test.zig");
     _ = @import("it_vectors_test.zig");
     _ = @import("ldm_stm_vectors_test.zig");
+    _ = @import("ldm_stm_wide_vectors_test.zig");
     _ = @import("ldr_literal_vectors_test.zig");
     _ = @import("ldr_literal_wide_vectors_test.zig");
     _ = @import("ldrd_strd_vectors_test.zig");
