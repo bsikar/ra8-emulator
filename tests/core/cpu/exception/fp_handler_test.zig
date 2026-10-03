@@ -65,3 +65,32 @@ test "without an FP context the handler gets the basic frame" {
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), cpu.regs.lr);
     try std.testing.expectEqual(fixture.msp_top - 0x20, cpu.regs.sp());
 }
+
+const vpr_word: u32 = 0x0084_1234; // P0 0x1234, MASK01 0x4, MASK23 0x8
+
+test "with MVE, VPR is stacked at +0x64 and the return restores it" {
+    var ram: fixture.Ram = .{};
+    var cpu = try setup(&ram);
+    cpu.fp.context.fpccr.lspen = 0;
+    cpu.fp.vpr = @bitCast(vpr_word);
+    try enter(&cpu);
+    try std.testing.expectEqual(vpr_word, ram.word(cpu.regs.sp() + 0x64));
+    cpu.fp.vpr = .{}; // the handler's own predication
+    ram.putWord(cpu.regs.sp() + 0x64, vpr_word | 0xFF00_0000);
+    try finish(&cpu);
+    try std.testing.expectEqual(vpr_word, @as(u32, @bitCast(cpu.fp.vpr)));
+}
+
+test "without MVE the VPR word is stacked as 0 and ignored on return" {
+    var ram: fixture.Ram = .{};
+    var cpu = try setup(&ram);
+    cpu.profile = .m33;
+    cpu.fp.context.fpccr.lspen = 0;
+    cpu.fp.vpr = @bitCast(vpr_word);
+    try enter(&cpu);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(cpu.regs.sp() + 0x64));
+    cpu.fp.vpr = .{};
+    ram.putWord(cpu.regs.sp() + 0x64, vpr_word);
+    try finish(&cpu);
+    try std.testing.expectEqual(@as(u32, 0), @as(u32, @bitCast(cpu.fp.vpr)));
+}

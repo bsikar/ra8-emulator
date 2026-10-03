@@ -26,6 +26,16 @@ test "an aligned stack takes the 0x68-byte frame right below it" {
     try std.testing.expectEqual(@as(u32, 0), ram.word(at + 0x64));
 }
 
+test "VPR rides in the word after FPSCR and pops back" {
+    var ram: fixture.Ram = .{};
+    var fp = sampleFp();
+    fp.vpr = 0x0084_1234; // P0 0x1234, MASK01 0x4, MASK23 0x8
+    const at = try fp_frame.push(ram.view(), fixture.msp_top, basic, fp);
+    try std.testing.expectEqual(@as(u32, 0x0084_1234), ram.word(at + 0x64));
+    const popped = try fp_frame.pop(ram.view(), at);
+    try std.testing.expectEqual(@as(u32, 0x0084_1234), popped.fp.vpr);
+}
+
 test "a 4-byte aligned stack is padded down and bit 9 records it" {
     var ram: fixture.Ram = .{};
     const at = try fp_frame.push(ram.view(), fixture.msp_top - 4, basic, sampleFp());
