@@ -173,6 +173,8 @@ pub fn main() !void {
         const report = try runImage(allocator, args[1], path, halves, probe, conf != null, budgets.pick(image, budget));
         var row = parse(report);
         if (probe) |wanted| row.probe = probes.judge(wanted, report);
+        // An undecided conf probe leaves the row to the console and LEDs.
+        if (row.probe == .unknown and probes.find(image) == null) row.probe = null;
         if (conf) |found| row.hil = hil_conf.judge(found, report);
         try writeRow(out, image, row);
     }

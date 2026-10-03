@@ -18,6 +18,9 @@ pub const Probe = struct {
     /// Null when the bench checks only the match counter.
     failure: ?[]const u8 = null,
     max_failure: u32 = 0,
+    /// A conf probe's floor is a bench window of seconds the table's budget
+    /// may not reach, so a short count says the run was short, not wrong.
+    short_is_unknown: bool = false,
 };
 
 pub const probes = [_]Probe{
@@ -50,6 +53,7 @@ pub fn fromConf(image: []const u8, symbol: ?[]const u8, min: ?u32, failure: ?[]c
         .min = @max(min orelse 1, 1),
         .failure = failure,
         .max_failure = max_failure orelse 0,
+        .short_is_unknown = true,
     };
 }
 
@@ -85,5 +89,6 @@ pub fn judge(probe: Probe, report: []const u8) Judgement {
     const matched = dumped(report, probe.symbol) orelse return .unknown;
     const failed = if (probe.failure) |name| dumped(report, name) orelse return .unknown else 0;
     if (failed > probe.max_failure) return .fail;
-    return if (matched >= probe.min) .pass else .fail;
+    if (matched >= probe.min) return .pass;
+    return if (probe.short_is_unknown) .unknown else .fail;
 }
