@@ -25,6 +25,7 @@ const report = @import("report.zig");
 const Cpu1 = @import("dual.zig").Cpu1;
 const RetireListener = cpu_mod.RetireListener;
 const BlockCache = @import("../block_cache.zig").BlockCache;
+const code_lines = @import("../code_lines.zig");
 
 /// The images a lockstep run loads: the main one and, for a TrustZone
 /// pair, its Non-Secure half at its load address.
@@ -61,8 +62,9 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
     if (formed) |cache| {
         cache.init();
-        cpu.bus.code = &cache.lines;
+        try code_lines.watch(&cache.lines);
     }
+    defer if (formed) |cache| code_lines.unwatch(&cache.lines);
     cpu.blocks = formed;
     // SG, BXNS and TT need the SAU the firmware programs (RA8EMU-388).
     var guard = lockstep_attribution.over(&partitions);

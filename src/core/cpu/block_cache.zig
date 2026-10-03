@@ -4,9 +4,8 @@
 //! the block it is walking when the PC is the next entry, else from the
 //! block that starts at the PC, formed on a miss. Every entry is checked
 //! against the halfwords now in memory before it is handed out, so rewritten
-//! code never runs stale. A store through the core's bus over a marked code
-//! line also drops the blocks on it (RA8EMU-407); RA8EMU-409 then retires
-//! the per-entry check. A null answer sends the step down its own fetch and decode,
+//! code never runs stale. A write from anywhere over a marked code line also
+//! drops the blocks on it (RA8EMU-407, RA8EMU-409). A null answer sends the step down its own fetch and decode,
 //! which reports any fault or unknown encoding exactly as before.
 const Instr = @import("instr.zig").Instr;
 const bus = @import("bus.zig");
@@ -22,7 +21,7 @@ pub const BlockCache = struct {
     decoded: decode.cache.DecodeCache,
     current: ?*block.Block,
     index: usize,
-    /// Lines the blocks cover; wire `bus.Bus.code` to it.
+    /// Lines the blocks cover; pass to `code_lines.watch` while running.
     lines: code_lines.CodeLines,
     /// Blocks formed, blocks found already formed, entries whose memory
     /// had changed since they were formed, and blocks a store dropped.

@@ -37,6 +37,35 @@ pub fn line(address: u32) ?usize {
     return null;
 }
 
+/// The caches every write reaches, so writers that bypass a core's bus (DMA,
+/// the MRAM model, the debugger, module placement, the other core's direct
+/// stores) drop blocks too (RA8EMU-409).
+var watching: [4]?*CodeLines = .{ null, null, null, null };
+var watchers: usize = 0;
+
+pub fn watch(cache: *CodeLines) error{TooManyCaches}!void {
+    for (&watching) |*slot| if (slot.* == null) {
+        slot.* = cache;
+        watchers += 1;
+        return;
+    };
+    return error.TooManyCaches;
+}
+
+pub fn unwatch(cache: *CodeLines) void {
+    for (&watching) |*slot| if (slot.* == cache) {
+        slot.* = null;
+        watchers -= 1;
+        return;
+    };
+}
+
+/// A write of `len` bytes at `address` from anywhere.
+pub inline fn notify(address: u32, len: usize) void {
+    if (watchers == 0) return;
+    for (watching) |slot| if (slot) |cache| cache.stored(address, len);
+}
+
 pub const CodeLines = struct {
     marks: [(lines + 63) / 64]u64,
     /// Lines written since the last drop, inclusive; valid while `dirty`.
