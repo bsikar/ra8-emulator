@@ -18,3 +18,6 @@ pub fn decode(instr: Instr) ?Hit {
     }
     return null;
 }
+
+/// The decoded-instruction cache in front of `decode` (RA8EMU-317).
+pub const cache = @import("decode_cache.zig");

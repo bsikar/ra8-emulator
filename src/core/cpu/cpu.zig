@@ -7,6 +7,7 @@ const bus = @import("bus.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
 const decode = @import("decode.zig");
+const decode_cache = @import("decode_cache.zig");
 const cond = @import("cond.zig");
 const it_state = @import("it_state.zig");
 const Instr = @import("instr.zig").Instr;
@@ -58,6 +59,8 @@ pub const Cpu = struct {
     /// The poll shortcut `source` and `bus` go through on the board, stirred
     /// as each `run` starts because the board moves between stretches.
     quiet: ?*exception.quiet_source.QuietSource = null,
+    /// Decodes kept per address on the board; null decodes every step.
+    decoded: ?*decode_cache.DecodeCache = null,
     /// The local exclusive monitor: the address a load-exclusive tagged.
     exclusive: ?u32 = null,
     /// The other Security state's banked registers, which Secure code reaches
@@ -84,7 +87,7 @@ pub const Cpu = struct {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
-        const hit = decode.decode(instr) orelse return .{ .unknown = instr };
+        const hit = (if (self.decoded) |cache| cache.find(instr) else decode.decode(instr)) orelse return .{ .unknown = instr };
         self.regs.pc = address +% instr.size;
         const it = it_state.get(self.regs.xpsr);
         if (!it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr)) {
