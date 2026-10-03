@@ -123,3 +123,39 @@ test "lower checks the rest of the instruction as unprivileged and hands back th
     check.privileged = true;
     try std.testing.expect(check.allows(ram_ro[0], .load));
 }
+
+test "the Non-secure MPU judges accesses made in Non-secure state" {
+    const secure_unit = unitOf(on);
+    var ns_unit = mpu.Mpu{};
+    ns_unit.ctrl = on;
+    var state: ra8.core.banked.State = .secure;
+    var check: mpu_check.Check = .{ .unit = &secure_unit, .unit_ns = &ns_unit, .state = &state };
+    check.arm(true, false);
+    try std.testing.expect(!check.allows(ram_ro[0], .store));
+    try std.testing.expect(check.allows(ram_rw[0], .store));
+    state = .non_secure;
+    check.arm(true, false);
+    try std.testing.expect(!check.allows(0x2000_0000, .load));
+    try std.testing.expect(check.refusesFetch(0x2000_0000, false, false));
+    state = .secure;
+    try std.testing.expect(!check.refusesFetch(0x2000_0000, false, false));
+}
+
+test "with no Non-secure MPU wired, Non-secure state keeps the one unit" {
+    const unit = unitOf(on);
+    const state: ra8.core.banked.State = .non_secure;
+    var check: mpu_check.Check = .{ .unit = &unit, .state = &state };
+    check.arm(true, false);
+    try std.testing.expect(!check.allows(ram_ro[0], .store));
+    try std.testing.expect(check.allows(ram_rw[0], .store));
+}
+
+test "a disabled Non-secure MPU leaves Non-secure accesses unchecked" {
+    const secure_unit = unitOf(on);
+    const ns_unit = mpu.Mpu{};
+    const state: ra8.core.banked.State = .non_secure;
+    var check: mpu_check.Check = .{ .unit = &secure_unit, .unit_ns = &ns_unit, .state = &state };
+    check.arm(false, false);
+    try std.testing.expect(!check.armed);
+    try std.testing.expect(check.allows(ram_ro[0], .store));
+}
