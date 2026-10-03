@@ -317,3 +317,7 @@ test "CPU0 posts to a mailbox and runs SEV, and a parked CPU1 wakes to read it" 
 test {
     _ = @import("second_zig_test.zig");
 }
+
+test {
+    _ = @import("second_zig_run_test.zig");
+}

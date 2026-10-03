@@ -13,12 +13,15 @@ const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
 const report_dumps = @import("report/dumps.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
+const second_core = @import("../../core/second_core.zig");
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
     core: *engine.Engine,
     board: *Board,
     timebase: *clocks.Clocks,
+    /// CPU1 on its Zig core under --cpu zig --cpu1, or null (RA8EMU-234).
+    cpu1: ?*second_core.zig_run.Driver = null,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk };
@@ -37,6 +40,7 @@ pub const Clock = struct {
     pub fn close(self: *Clock, instructions: u32) !void {
         try self.timebase.advance(self.core.*, instructions);
         try self.board.tick(self.core.*);
+        if (self.cpu1) |second| second.round(instructions);
     }
 };
 
@@ -54,6 +58,16 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
+    var pair: second_core.zig_run.Driver = undefined;
+    const path = if (options.cpu == .zig) options.cpu1_path else null;
+    if (path) |named| {
+        pair.open(std.heap.page_allocator, core, board, named) catch |err| {
+            std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
+            return 1;
+        };
+        clock.cpu1 = &pair;
+    }
+    defer if (clock.cpu1) |second| second.close();
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
@@ -65,6 +79,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{ .boundary = clock.boundary(), .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears, .wrap = wrap });
     if (options.cpu == .zig) {
         try report_run.zigCore(out, board, ran);
+        try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
         try report_dumps.dumpSymbols(out, core.*, image, options);
