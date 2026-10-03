@@ -91,6 +91,71 @@ test "vmsr P0, r1 moves only P0 and vmrs r2, P0 zero-extends it" {
     try std.testing.expectEqual(@as(u32, 0x00F0), cpu.regs.get(2));
 }
 
+test "FPSCR_nzcvqc transfers only condition and saturation flags" {
+    var cpu = fresh();
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0xA5CF_009F);
+    try run(&cpu, 0xEEF2, 0x3A10);
+    try std.testing.expectEqual(@as(u32, 0xA000_0000), cpu.regs.get(3));
+    cpu.regs.set(2, 0x5800_0000);
+    try run(&cpu, 0xEEE2, 0x2A10);
+    try std.testing.expectEqual(@as(u32, 0x5DCF_009F), cpu.fp.fpscr.bits());
+}
+
+test "FPCXT_NS saves and restores active non-secure FP context" {
+    var cpu = fresh();
+    cpu.regs.control = ra8.core.cpu.regs.control_bits.fpca;
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0xA5CF_009F);
+    try run(&cpu, 0xEEFE, 0x4A10);
+    try std.testing.expectEqual(@as(u32, 0x05CF_009F), cpu.regs.get(4));
+    try std.testing.expectEqual(cpu.fp.context.defaultFpscr().bits(), cpu.fp.fpscr.bits());
+    cpu.regs.set(5, 0xD123_4567);
+    try run(&cpu, 0xEEEE, 0x5A10);
+    try std.testing.expectEqual(ra8.core.fpu.fpscr.Fpscr.fromBits(0x0123_4567).bits(), cpu.fp.fpscr.bits());
+    try std.testing.expect(cpu.regs.control & ra8.core.cpu.regs.control_bits.sfpa != 0);
+}
+
+test "FPCXT_NS inactive: a read returns the NS defaults and a write is a NOP" {
+    var cpu = fresh();
+    try run(&cpu, 0xEEFE, 0x6A10);
+    try std.testing.expectEqual(cpu.fp.context.defaultFpscr().bits() & 0x0FFF_FFFF, cpu.regs.get(6));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control);
+    const before = cpu.fp.fpscr.bits();
+    cpu.regs.set(7, 0x8000_0000 | 0x0040_0000);
+    try run(&cpu, 0xEEEE, 0x7A10);
+    try std.testing.expectEqual(before, cpu.fp.fpscr.bits());
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control);
+}
+
+test "FPCXT_S saves and restores the Secure FP context" {
+    var cpu = fresh();
+    cpu.regs.control |= ra8.core.cpu.regs.control_bits.sfpa;
+    cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0xA5CF_009F);
+    try run(&cpu, 0xEEFF, 0x8A10);
+    try std.testing.expectEqual(@as(u32, 0x85CF_009F), cpu.regs.get(8));
+    try std.testing.expectEqual(cpu.fp.context.defaultFpscr().bits(), cpu.fp.fpscr.bits());
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & ra8.core.cpu.regs.control_bits.sfpa);
+    cpu.regs.set(9, 0xC123_4567);
+    try run(&cpu, 0xEEEF, 0x9A10);
+    try std.testing.expectEqual(ra8.core.fpu.fpscr.Fpscr.fromBits(0x0123_4567).bits(), cpu.fp.fpscr.bits());
+    try std.testing.expect(cpu.regs.control & ra8.core.cpu.regs.control_bits.sfpa != 0);
+}
+
+test "FPCXT payload accesses are undefined from Non-secure state" {
+    var cpu = fresh();
+    cpu.banked.current = .non_secure;
+    const cases = [_]struct { hw1: u16, hw2: u16 }{
+        .{ .hw1 = 0xEEFE, .hw2 = 0x0A10 },
+        .{ .hw1 = 0xEEEE, .hw2 = 0x0A10 },
+        .{ .hw1 = 0xEEFF, .hw2 = 0x0A10 },
+        .{ .hw1 = 0xEEEF, .hw2 = 0x0A10 },
+    };
+    for (cases) |case| {
+        const instr = wide(case.hw1, case.hw2);
+        const exec = fp_system.group.decode(instr).?;
+        try std.testing.expectError(error.Undefined, exec(&cpu, instr));
+    }
+}
+
 test "VPR and P0 transfers leave SP and PC unclaimed" {
     try std.testing.expect(fp_system.group.decode(wide(0xEEFC, 0xDA10)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEEED, 0xFA10)) == null);
@@ -104,7 +169,7 @@ test "unclaimed: SBZ bits, D16+, SP or PC, other system registers, arith space" 
     try std.testing.expect(fp_system.group.decode(wide(0xEEB4, 0x0B61)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEEF1, 0xDA10)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEEE1, 0xFA10)) == null);
-    try std.testing.expect(fp_system.group.decode(wide(0xEEF2, 0x3A10)) == null);
+    try std.testing.expect(fp_system.group.decode(wide(0xEEF3, 0x3A10)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEEF1, 0x3A30)) == null);
     try std.testing.expect(fp_system.group.decode(wide(0xEE30, 0x0A81)) == null);
 }
