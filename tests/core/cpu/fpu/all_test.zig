@@ -52,5 +52,6 @@ test {
     _ = @import("state_test.zig");
     _ = @import("context_test.zig");
     _ = @import("lazy_test.zig");
+    _ = @import("cpacr_test.zig");
     std.testing.refAllDecls(ra8.core.fpu);
 }
