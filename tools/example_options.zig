@@ -37,6 +37,12 @@
 //! cpu1_pingpong_ra8p1 is built for the RA8P1, whose map and CPU1 window the
 //! default RA8D2 part does not carry, so it runs on `--device ra8p1`
 //! (RA8EMU-135).
+//!
+//! widget_keyboard_demo brings its GLCDC panel up before the keyboard legs,
+//! and the panel's power-on delays are counted in modelled milliseconds that
+//! the 2M default never reaches: at 200M instructions it still reads only
+//! "boot". A second of target time prints "keyboard widget PASS" on the
+//! README's console-only run (500 ms was the shortest seen to, RA8EMU-400).
 const std = @import("std");
 
 pub const Extra = struct {
@@ -55,6 +61,7 @@ const large_card = [_][]const u8{ "--sd-size", "4096" };
 const fat32_card = [_][]const u8{ "--sd-size", "64", "--sd-new", "fat32" };
 const usb_loop = [_][]const u8{ "--usb-loop", "--ms", "2000" };
 const ra8p1 = [_][]const u8{ "--device", "ra8p1" };
+const one_second = [_][]const u8{ "--ms", "1000" };
 
 pub const card_images = [_]CardImage{
     .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
@@ -74,6 +81,7 @@ pub const extras = [_]Extra{
     .{ .image = "smbus_demo.elf", .flags = &click },
     .{ .image = "tz_nsc_cgc_usb.elf", .flags = &usb_loop },
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
+    .{ .image = "widget_keyboard_demo.elf", .flags = &one_second },
 };
 
 /// A required input card path for image, when its harness supplied one.
