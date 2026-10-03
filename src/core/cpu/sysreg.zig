@@ -21,6 +21,8 @@ pub const sysm = struct {
     pub const basepri_max: u8 = 18;
     pub const faultmask: u8 = 19;
     pub const control: u8 = 20;
+    pub const pac_key_p_0: u8 = 0x20;
+    pub const pac_key_u_0: u8 = 0x24;
 };
 
 pub const psr_bits = struct {
@@ -42,6 +44,7 @@ pub fn known(n: u8) bool {
         0...sysm.xpsr_last => n != sysm.reserved_psr,
         sysm.msp...sysm.psplim => true,
         sysm.primask...sysm.control => true,
+        0x20...0x27 => true,
         else => false,
     };
 }
@@ -63,6 +66,8 @@ pub fn read(r: *const Regs, n: u8) u32 {
         sysm.primask => r.primask,
         sysm.basepri, sysm.basepri_max => r.basepri,
         sysm.faultmask => r.faultmask,
+        0x20...0x23 => r.pac_key_p[n - 0x20],
+        0x24...0x27 => r.pac_key_u[n - 0x24],
         else => unreachable,
     };
 }
@@ -90,6 +95,8 @@ pub fn write(r: *Regs, n: u8, mask: u2, value: u32) void {
         sysm.basepri_max => writeBasepriMax(r, value),
         sysm.faultmask => writeFaultmask(r, value),
         sysm.control => writeControl(r, value),
+        0x20...0x23 => r.pac_key_p[n - 0x20] = value,
+        0x24...0x27 => r.pac_key_u[n - 0x24] = value,
         else => unreachable,
     }
 }

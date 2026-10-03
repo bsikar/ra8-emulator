@@ -5,13 +5,14 @@ const regs = ra8.core.cpu.regs;
 const sysreg = ra8.core.cpu.sysreg;
 const Regs = regs.Regs;
 
-test "known covers the PSR views, stack pointers and limits, masks and CONTROL only" {
+test "known covers the PSR views, stack pointers, limits, masks, CONTROL and PAC keys" {
     try std.testing.expect(sysreg.known(0) and sysreg.known(3) and sysreg.known(7));
     try std.testing.expect(!sysreg.known(4));
     try std.testing.expect(sysreg.known(8) and sysreg.known(9));
     try std.testing.expect(sysreg.known(10) and sysreg.known(11)); // MSPLIM, PSPLIM
     try std.testing.expect(!sysreg.known(12) and !sysreg.known(15));
     try std.testing.expect(sysreg.known(16) and sysreg.known(20));
+    try std.testing.expect(sysreg.known(0x20) and sysreg.known(0x27));
     try std.testing.expect(!sysreg.known(0x88)); // MSP_NS
 }
 
@@ -94,4 +95,18 @@ test "MSPLIM and PSPLIM keep bits 31:3 and are privileged only" {
     sysreg.write(&r, sysreg.sysm.psplim, 0b10, 0x2300_0000);
     try std.testing.expectEqual(@as(u32, 0x2210_0008), r.psplim);
     try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, sysreg.sysm.psplim));
+}
+
+test "the eight PAC key system registers are privileged read-write words" {
+    var r: Regs = .{};
+    sysreg.write(&r, 0x20, 0b10, 0x1122_3344);
+    sysreg.write(&r, 0x23, 0b10, 0x5566_7788);
+    sysreg.write(&r, 0x24, 0b10, 0xAABB_CCDD);
+    try std.testing.expectEqual(@as(u32, 0x1122_3344), sysreg.read(&r, 0x20));
+    try std.testing.expectEqual(@as(u32, 0x5566_7788), r.pac_key_p[3]);
+    try std.testing.expectEqual(@as(u32, 0xAABB_CCDD), r.pac_key_u[0]);
+    r.control = regs.control_bits.npriv;
+    sysreg.write(&r, 0x20, 0b10, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0x1122_3344), r.pac_key_p[0]);
+    try std.testing.expectEqual(@as(u32, 0), sysreg.read(&r, 0x20));
 }
