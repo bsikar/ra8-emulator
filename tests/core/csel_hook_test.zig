@@ -155,4 +155,6 @@ test {
     _ = @import("clrm_test.zig");
     _ = @import("fp_context_test.zig");
     _ = @import("fpcxt_resume_test.zig");
+    _ = @import("tt_test.zig");
+    _ = @import("tt_hook_test.zig");
 }
