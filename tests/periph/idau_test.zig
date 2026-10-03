@@ -20,16 +20,24 @@ fn ereaderSram() SramUnit {
     return .{ .sabar = .{ 0x0008_0000, 0x0010_0000, 0x0010_0000, 0x001A_0000 } };
 }
 
-test "bit 28 clear is Secure but may be made callable" {
+test "bit-28-clear code and SRAM are Secure but may be made callable" {
     const map = idau.Map{};
-    for ([_]u32{ 0x0200_0000, 0x2200_0000, 0x4000_8000 }) |address| {
+    for ([_]u32{ 0x0200_0000, 0x2200_0000 }) |address| {
         try std.testing.expectEqual(State.callable, map.answer(address).state);
     }
 }
 
+test "Secure peripherals stay Secure even under an NSC SAU region" {
+    var unit = sau.Sau{ .ctrl = enable };
+    program(&unit, 0, 0x4000_0000, 0x4FFF_FFFF, true);
+    const map = idau.Map{};
+    try std.testing.expectEqual(State.secure, map.answer(0x4000_8000).state);
+    try std.testing.expectEqual(State.secure, map.attribute(&unit, 0x4000_8000).state);
+}
+
 test "bit 28 set is Non-secure with no SRAM boundaries" {
     const map = idau.Map{};
-    for ([_]u32{ 0x1200_0000, 0x3200_0000, 0x5000_0000 }) |address| {
+    for ([_]u32{ 0x1200_0000, 0x3200_0000, 0x5000_0000, 0x6000_0000, 0x8000_0000 }) |address| {
         try std.testing.expectEqual(State.non_secure, map.answer(address).state);
     }
 }
