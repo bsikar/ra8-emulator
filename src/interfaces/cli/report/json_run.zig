@@ -1,7 +1,7 @@
 //! The `--report json` document: the run and cores sections (RA8EMU-347),
 //! then protection (report/json_protect.zig, RA8EMU-349) and memory
 //! (report/json_mem.zig, RA8EMU-350), then clocks (report/json_clock.zig,
-//! RA8EMU-355).
+//! RA8EMU-355) and timers (report/json_timers.zig, RA8EMU-356).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -17,6 +17,7 @@ const json = @import("json.zig");
 const json_protect = @import("json_protect.zig");
 const json_mem = @import("json_mem.zig");
 const json_clock = @import("json_clock.zig");
+const json_timers = @import("json_timers.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -40,6 +41,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_protect.section(&j, board);
     try json_mem.section(&j, board);
     try json_clock.section(&j, board);
+    try json_timers.section(&j, board);
     try j.close('}');
     try out.writeByte('\n');
 }
