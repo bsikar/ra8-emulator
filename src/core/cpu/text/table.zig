@@ -46,6 +46,8 @@ pub const entries = [_]Entry{
     .{ .group = "divide", .print = @import("divide.zig").print },
     .{ .group = "mul_acc", .print = @import("mul_acc.zig").print },
     .{ .group = "long_mul", .print = @import("long_mul.zig").print },
+    .{ .group = "dsp_mul16", .print = @import("dsp_mul16.zig").print },
+    .{ .group = "dsp_mulhi", .print = @import("dsp_mulhi.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
