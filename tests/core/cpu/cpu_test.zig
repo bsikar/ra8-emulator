@@ -9,6 +9,7 @@ test {
     _ = @import("attribution_test.zig");
     _ = @import("data_gate_test.zig");
     _ = @import("tt_mpu_test.zig");
+    _ = @import("park_test.zig");
     _ = @import("bti_test.zig");
     _ = @import("scs_route_test.zig");
     _ = @import("mpu_check_test.zig");
