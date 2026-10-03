@@ -39,6 +39,8 @@ const watchdog = @import("report/watchdog.zig");
 /// Public so its tests can reach it; root.zig is at the gate's 400 lines.
 pub const usb = @import("report/usb.zig");
 pub const usb_cable = @import("report/usb_cable.zig");
+pub const json = @import("report/json.zig");
+pub const json_run = @import("report/json_run.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const poeg = @import("../../periph/poeg.zig");
 const reset = @import("../../periph/reset.zig");

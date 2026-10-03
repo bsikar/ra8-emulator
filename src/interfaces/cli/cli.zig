@@ -121,6 +121,8 @@ pub const Options = struct {
     trace_rtos: bool = false,
     /// `--trace-rtos-out FILE`: also write the trace there (RA8EMU-345).
     trace_rtos_out: ?[]const u8 = null,
+    /// `--report json`: the end-of-run report as one JSON line (RA8EMU-347).
+    report_json: bool = false,
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
     /// hook. src/debug/rtos_report.zig.
     cpu_load: bool = false,
@@ -301,6 +303,8 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
     } else if (std.mem.eql(u8, flag, "--trace-rtos-out")) {
         options.trace_rtos = true;
         options.trace_rtos_out = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--report")) {
+        options.report_json = try reportForm(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--cpu-load")) {
         options.cpu_load = true;
     } else if (std.mem.eql(u8, flag, "--profile")) {
@@ -386,4 +390,11 @@ fn next(argv: []const []const u8, index: *usize) ![]const u8 {
     index.* += 1;
     if (index.* >= argv.len) return error.MissingValue;
     return argv[index.*];
+}
+
+/// `--report text` or `--report json`; anything else is refused.
+fn reportForm(value: []const u8) !bool {
+    if (std.mem.eql(u8, value, "json")) return true;
+    if (std.mem.eql(u8, value, "text")) return false;
+    return error.BadValue;
 }

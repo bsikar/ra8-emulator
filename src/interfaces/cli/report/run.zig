@@ -31,6 +31,7 @@ const tz = @import("../../../core/tz.zig");
 const elf = @import("../../../core/elf.zig");
 const undefined_ops = @import("../../../core/undefined_ops.zig");
 const bus_fault = @import("../../../periph/bus_fault.zig");
+const json_run = @import("json_run.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -72,6 +73,13 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.blocks(board, out, of.timebase);
     try busErrors(out, of.bus_errors);
     try undefined_ops.print(out, image, of.undefined_found);
+}
+
+/// `--report json` swaps this block for one JSON line (RA8EMU-347). Text
+/// stays the default and goes through `all` untouched.
+pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bool) !void {
+    if (!as_json) return all(out, board, image, of);
+    try json_run.document(out, board, .{ .engine = "unicorn", .elapsed = of.timebase.elapsed, .bus_errors = of.bus_errors });
 }
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.
