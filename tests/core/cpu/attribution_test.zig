@@ -69,8 +69,10 @@ fn expectInvep(ram: *fixture.Ram, cpu: *Cpu) !void {
     try std.testing.expectEqual(secure_handler, cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
     try std.testing.expectEqual(invep, ram.word(sfsr));
-    // The refused instruction is the stacked return address.
-    try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+    // SecureFault is taken Secure (RA8EMU-168), so the frame holding the
+    // refused instruction as its return address is on the Non-secure stack.
+    try std.testing.expectEqual(.secure, cpu.banked.current);
+    try std.testing.expectEqual(fixture.code, ram.word(cpu.banked.other.msp + 24));
     try std.testing.expectEqual(@as(u64, 0), cpu.retired);
 }
 

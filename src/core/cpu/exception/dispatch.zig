@@ -31,7 +31,7 @@ pub fn poll(cpu: *Cpu) Error!bool {
     if (cpu.active.full()) return false;
     // An image with no handler for what it pended keeps the pend rather than
     // branching to address zero.
-    const handler = cpu.bus.readWord(entry.vectorTable(cpu) +% @as(u32, candidate.number) * 4) catch return false;
+    const handler = entry.handlerOf(cpu, candidate.number) catch return false;
     if (handler == 0) return false;
     if (selected_fault) fault.clearUsagePending(cpu.bus);
     try enterInternal(cpu, candidate, r.pc, false, !selected_fault);
