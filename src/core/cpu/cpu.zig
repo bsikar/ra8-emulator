@@ -96,6 +96,9 @@ pub const Cpu = struct {
     /// The other Security state's banked registers, which Secure code reaches
     /// through the _NS forms of MRS and MSR.
     banked: banked_mod.Banked = .{},
+    /// Set while a SysTick or PendSV from the Non-secure copy is being
+    /// taken, so it goes to Non-secure state (RA8EMU-438).
+    entering_non_secure: bool = false,
     /// Which security state an address belongs to; null means all Secure.
     attribution: ?attribution.Attribution = null,
     /// How many SecureFaults this core has taken. Lockstep reads it around a

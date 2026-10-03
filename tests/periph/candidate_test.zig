@@ -45,3 +45,7 @@ test "the standing candidate can be the one that loses nothing" {
     try std.testing.expectEqual(@as(u16, 15), won.number);
     try std.testing.expectEqual(@as(u16, 14), lost.number);
 }
+
+test {
+    _ = @import("nvic_banked_test.zig");
+}

@@ -28,3 +28,11 @@ test "BFHFNMINS hands HardFault, NMI and BusFault to Non-secure" {
     for ([_]u9{ 2, 3, 5 }) |number| try std.testing.expect(!target.secure(&cpu, number));
     try std.testing.expect(target.secure(&cpu, 7));
 }
+
+test "SysTick and PendSV from the Non-secure copy go Non-secure from Secure" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.entering_non_secure = true;
+    for ([_]u9{ 14, 15 }) |number| try std.testing.expect(!target.secure(&cpu, number));
+    for ([_]u9{ 3, 11, 16 }) |number| try std.testing.expect(target.secure(&cpu, number));
+}

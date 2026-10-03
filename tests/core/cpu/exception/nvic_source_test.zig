@@ -82,3 +82,22 @@ test "equal priority and subpriority go to the lower exception number" {
     const found = (try nvic.source().winner(ram.view())).?;
     try std.testing.expectEqual(@as(u9, 16 + 2), found.number);
 }
+
+test "a Non-secure PendSV wins from its own copy and taking it clears only that copy" {
+    var ram: fixture.Ram = .{};
+    var nvic: NvicSource = .{};
+    ram.putWord(icsr, 1 << 28);
+    ram.putWord(shpr3, 0x00F0_0000);
+    ram.putWord(icsr + 0x2_0000, 1 << 28);
+    ram.putWord(shpr3 + 0x2_0000, 0x0040_0000);
+    const source = nvic.source();
+    const found = (try source.winner(ram.view())).?;
+    try std.testing.expectEqual(@as(u9, 14), found.number);
+    try std.testing.expectEqual(@as(u8, 0x40), found.priority);
+    try std.testing.expect(found.non_secure);
+    try source.taken(ram.view(), 14);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(icsr + 0x2_0000));
+    try std.testing.expectEqual(@as(u32, 1 << 28), ram.word(icsr));
+    const next = (try source.winner(ram.view())).?;
+    try std.testing.expect(!next.non_secure);
+}

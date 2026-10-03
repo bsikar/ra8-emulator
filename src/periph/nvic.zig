@@ -23,6 +23,7 @@ const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
 const exc_return = @import("exc_return.zig");
 const nvic_clear = @import("nvic_clear.zig");
+pub const nvic_banked = @import("nvic_banked.zig");
 pub const debug_monitor = @import("debug_monitor.zig");
 const dcb = @import("../debug/dcb.zig");
 const standing_pends = @import("standing.zig");
@@ -322,16 +323,12 @@ pub const Nvic = struct {
     pub fn pick(self: *Nvic, core: anytype, tally: ?*passed_pends.Passed) !?Candidate {
         _ = self;
         var best: ?Candidate = null;
-        const icsr = try core.readWord(memmap.scb.icsr);
-        const shpr3 = try core.readWord(memmap.scb.shpr3);
+        const banked = try nvic_banked.read(core);
         const quiet = dcb.masksInterrupts(try core.readWord(dcb.base));
         // SysTick and PendSV have no enable of their own: pending is enough.
-        if (!quiet and icsr & icsr_pendstset != 0) {
-            best = consider(tally, best, .{ .number = systick, .priority = @truncate(shpr3 >> 24) });
-        }
-        if (!quiet and icsr & icsr_pendsvset != 0) {
-            best = consider(tally, best, .{ .number = pendsv, .priority = @truncate(shpr3 >> 16) });
-        }
+        if (!quiet) for (banked.slice()) |pend| {
+            best = consider(tally, best, nvic_banked.candidate(pend));
+        };
         if (try debug_monitor.pending(core)) |monitor| best = consider(tally, best, monitor);
         var word: u16 = 0;
         while (!quiet and word < irq_words) : (word += 1) {

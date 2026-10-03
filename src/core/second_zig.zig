@@ -46,6 +46,7 @@ pub const SecondZig = struct {
         self.cpu = .{ .bus = self.board.view(), .source = self.pending.source(), .profile = part.cpu1_profile };
         self.cpu.decoded = &self.decoded;
         self.board.security = &self.cpu.banked;
+        self.pending.banked = &self.cpu.banked;
         self.check = .{ .unit = &second.regions };
         self.board.check = &self.check;
         self.cpu.mpu = &self.check;
