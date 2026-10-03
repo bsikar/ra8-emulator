@@ -267,7 +267,7 @@ table above. A group listed as missing does not fail the build yet.
 | add_sub_wide | 22 |
 | long_mul | 26 |
 | mrs_msr | 62 |
-| ldst_reg_wide | missing |
+| ldst_reg_wide | 37 |
 | bitfield | 27 |
 | mul_acc | 23 |
 | saturate | 31 |
