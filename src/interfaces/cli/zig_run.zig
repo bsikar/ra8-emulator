@@ -95,6 +95,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
+        .idau = &board.idau,
         .regions = &board.regions,
         .clears = &board.clears,
         .fast_memory = options.watch_place == null and wrap == null,

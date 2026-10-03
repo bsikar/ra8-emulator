@@ -62,6 +62,8 @@ pub const Wiring = struct {
     /// A listener called with the address of each retired instruction.
     retire_listener: ?cpu_mod.RetireListener = null,
     partitions: ?*sau.Sau = null,
+    /// The part's IDAU map beside the SAU (RA8EMU-277).
+    idau: ?*const sau.idau.Map = null,
     regions: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
     /// Direct MRAM/SRAM access is enabled only when the run has no memory
@@ -99,7 +101,7 @@ pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bu
     var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .clears = wiring.clears } };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
-        partitions = .{ .unit = unit };
+        partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
     return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source);

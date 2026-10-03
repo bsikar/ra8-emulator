@@ -150,6 +150,9 @@ pub const Board = struct {
     chip_attribution: cpscu.Unit,
     /// SRAMSAR, SRAMSABAR0..3 and SRAMESAR (RA8EMU-230).
     sram_attribution: cpscu.sram.Unit = .{},
+    /// The IDAU over those words and address bit 28 (RA8EMU-277). Pointed
+    /// at sram_attribution in attach(), where the board's address is final.
+    idau: sau.idau.Map = .{},
     /// The handshake CPU0 uses to take the second core out of reset. Keyed,
     /// so nothing lands here without the key the driver writes.
     second_core: cpu_ctrl.CpuCtrl = .{},
