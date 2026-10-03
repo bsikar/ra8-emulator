@@ -39,6 +39,11 @@ pub const Span = struct {
 pub const scs = Span{ .first = 0xE000_E000, .last = 0xE000_EFFF };
 pub const scb = Span{ .first = 0xE000_ED00, .last = 0xE000_ED8F };
 
+/// NVIC_ITNS0..15, RAZ/WI to Non-secure state (DDI0553A.k D1.2 NVIC_ITNSn
+/// Attributes, RA8EMU-144). The Non-secure view of it, whichever window
+/// reaches that view, is RES0 rather than a register.
+pub const itns = Span{ .first = 0xE000_E380, .last = 0xE000_E3BF };
+
 /// How far the alias sits above the normal window.
 pub const offset: u32 = 0x0002_0000;
 
@@ -66,16 +71,22 @@ pub const Route = union(enum) {
 /// Route one access from code running in the state `secure` says.
 pub fn route(address: u32, secure: bool) Route {
     if (scs.covers(address)) {
-        return .{ .register = .{
+        return viewed(.{
             .address = address,
             .view = if (secure) .secure else .non_secure,
-        } };
+        });
     }
     if (scs_ns.covers(address)) {
         if (!secure) return .{ .res0 = address - offset };
-        return .{ .register = .{ .address = address - offset, .view = .non_secure } };
+        return viewed(.{ .address = address - offset, .view = .non_secure });
     }
     return .outside;
+}
+
+/// A register access, unless its view has no register behind it.
+fn viewed(target: Target) Route {
+    if (target.view == .non_secure and itns.covers(target.address)) return .{ .res0 = target.address };
+    return .{ .register = target };
 }
 
 /// True when `address` is an SCB register through either window.
