@@ -287,7 +287,7 @@ table above. A group listed as missing does not fail the build yet.
 | dsp_long_mul | 28 |
 | csel | 37 |
 | lob | missing |
-| long_shift | missing |
+| long_shift | 20 |
 | long_shift_reg | missing |
 | long_shift_sat | missing |
 | long_shift_sat64 | missing |
