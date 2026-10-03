@@ -8,7 +8,11 @@
 //! Non-secure copy, and on the alias window reads zero and writes nothing.
 //!
 //! A register banked bit by bit, or one the bank table does not list yet,
-//! keeps the address it was given: its field split is RA8EMU-365.
+//! keeps the address it was given. `Split` (RA8EMU-365, RA8EMU-415) says
+//! where its two halves live: the normal word holds the shared bits and the
+//! Secure copy of the banked ones, and the Non-secure copy of the banked
+//! bits sits at the same word + scs_alias.offset, where wholly banked words
+//! already keep theirs. It is not wired into the bus yet.
 
 const alias = @import("../../periph/scs_alias.zig");
 const scb_bank = @import("../../periph/scb_bank.zig");
@@ -38,5 +42,51 @@ fn copy(target: alias.Target, address: u32) u32 {
     return switch (scb_bank.backing(.{ .address = word, .view = target.view })) {
         .word => |at| at + within,
         .bit_by_bit, .unknown => address,
+    };
+}
+
+/// The two words a bit-by-bit SCB register is spread over, and which copy of
+/// its banked bits an access names.
+pub const Split = struct {
+    /// Shared bits plus the Secure copy of the banked bits (0xE000_EDxx).
+    shared: u32,
+    /// The Non-secure copy of the banked bits (0xE002_EDxx).
+    non_secure: u32,
+    /// The banked bits, as src/periph/scb_bank.zig bankedBits gives them.
+    mask: u32,
+    view: alias.View,
+
+    /// What a word read returns, given what the two words hold.
+    pub fn read(self: Split, shared_word: u32, ns_word: u32) u32 {
+        const banked_word = if (self.view == .non_secure) ns_word else shared_word;
+        return (shared_word & ~self.mask) | (banked_word & self.mask);
+    }
+
+    /// What each word holds after a word write of `value`.
+    pub const Words = struct { shared: u32, non_secure: u32 };
+
+    pub fn write(self: Split, shared_word: u32, ns_word: u32, value: u32) Words {
+        return switch (self.view) {
+            .secure => .{ .shared = value, .non_secure = ns_word },
+            .non_secure => .{
+                .shared = (shared_word & self.mask) | (value & ~self.mask),
+                .non_secure = (ns_word & ~self.mask) | (value & self.mask),
+            },
+        };
+    }
+};
+
+/// The split for an access `target` names, or null when the register is not
+/// banked bit by bit or its field split has not been read yet.
+pub fn split(target: alias.Target, systicks: scb_bank.SysTicks) ?Split {
+    const word = target.address & ~@as(u32, 3);
+    return switch (scb_bank.backing(.{ .address = word, .view = target.view })) {
+        .bit_by_bit => .{
+            .shared = word,
+            .non_secure = word + alias.offset,
+            .mask = scb_bank.bankedBits(word, systicks) orelse return null,
+            .view = target.view,
+        },
+        .word, .unknown => null,
     };
 }

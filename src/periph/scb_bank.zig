@@ -28,7 +28,8 @@
 //! SLEEPDEEPS [3] and SLEEPDEEP [2] are not. CCR (p874 to p877): BP [18],
 //! IC [17], DC [16], STKOFHFNMIGN [10], DIV_0_TRP [4], UNALIGN_TRP [3] and
 //! USERSETMPEND [1] are banked; BFHFNMIGN [8] is not. ICSR (p1025 to
-//! p1029): only PENDSVSET [28] and PENDSVCLR [27]. SHPR1 (p1145): PRI_6
+//! p1029): PENDSVSET [28] and PENDSVCLR [27], and PENDSTSET [26] and
+//! PENDSTCLR [25] only when two SysTick timers are implemented. SHPR1 (p1145): PRI_6
 //! (UsageFault) and PRI_4 (MemManage). SHPR3 (p1148): PRI_14 (PendSV), and
 //! PRI_15 (SysTick) only when two SysTick timers are implemented. SHCSR
 //! (p1138 to p1144): the HardFault, UsageFault, MemManage, SVCall and PendSV
@@ -104,7 +105,7 @@ const splits = [_]Split{
     .{ .offset = 0x0C, .banked = 0x0000_0700 }, // AIRCR.PRIGROUP
     .{ .offset = 0x10, .banked = 0x0000_0012 }, // SCR.SEVONPEND, SLEEPONEXIT
     .{ .offset = 0x14, .banked = 0x0007_041A }, // CCR, see the file comment
-    .{ .offset = 0x04, .banked = 0x1800_0000 }, // ICSR.PENDSVSET, PENDSVCLR
+    .{ .offset = 0x04, .banked = 0x1800_0000, .systick = 0x0600_0000 }, // ICSR.PENDSV*, PENDST*
     .{ .offset = 0x18, .banked = 0x00FF_00FF }, // SHPR1.PRI_6, PRI_4
     .{ .offset = 0x20, .banked = 0x00FF_0000, .systick = 0xFF00_0000 }, // SHPR3
     .{ .offset = 0x24, .banked = 0x0025_B48D, .systick = 0x0000_0800 }, // SHCSR
