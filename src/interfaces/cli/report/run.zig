@@ -92,6 +92,14 @@ pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bo
         .pcs = &of.pcs,
         .fns = if (of.fns) |*table| table else null,
         .profile = if (of.profile) |*table| table else null,
+    }, .timing = &.{
+        .timebase = of.timebase,
+        .seam = of.idle,
+        .interrupts = of.interrupts,
+        .release = of.release,
+        .pending = of.pend,
+        .pacing = of.pacing,
+        .masking = of.mask_pacing,
     } });
 }
 
