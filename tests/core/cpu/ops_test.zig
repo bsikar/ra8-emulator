@@ -70,6 +70,7 @@ test {
     _ = @import("ops/push_pop_test.zig");
     _ = @import("ops/sp_arith_test.zig");
     _ = @import("ops/fp_arith_test.zig");
+    _ = @import("ops/fp_gate_test.zig");
     _ = @import("ops/fp_unary_test.zig");
     _ = @import("ops/fp_regs_test.zig");
     _ = @import("ops/fp_system_test.zig");
