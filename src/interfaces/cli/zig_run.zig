@@ -69,6 +69,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
             return 1;
         };
         clock.cpu1 = &pair;
+        rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }
     defer if (clock.cpu1) |second| second.close();
     var checked: lockstep_dual.Cpu1 = undefined;
@@ -102,6 +103,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
             found.trace.fine = &ran;
             try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
         }
+        if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
     }
     return status;
 }
