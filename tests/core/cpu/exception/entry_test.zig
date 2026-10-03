@@ -4,6 +4,43 @@ const ra8 = @import("ra8");
 const regs = ra8.core.cpu.regs;
 const entry = ra8.core.cpu.exception.entry;
 const fixture = @import("ram.zig");
+const memmap = ra8.core.memmap;
+const stkof: u32 = 1 << 20;
+const usage_fault_enable: u32 = 1 << 18;
+const shcsr_usage_pending: u32 = 1 << 12;
+const dispatch = ra8.core.cpu.exception.dispatch;
+const ExceptionSource = ra8.core.cpu.exception.source.Source;
+const ActiveEntry = ra8.core.cpu.exception.active.Entry;
+const bus = ra8.core.cpu.bus;
+
+const PendingException = struct {
+    pending: bool = true,
+    active: bool = false,
+    taken_count: u32 = 0,
+
+    fn source(self: *PendingException) ExceptionSource {
+        return .{ .ctx = self, .vtable = &.{ .winner = winner, .taken = taken, .returned = returned } };
+    }
+
+    fn winner(ctx: *anyopaque, _: bus.Bus) bus.Error!?ActiveEntry {
+        const self: *PendingException = @ptrCast(@alignCast(ctx));
+        return if (self.pending) .{ .number = 16, .priority = 0xFF } else null;
+    }
+
+    fn taken(ctx: *anyopaque, _: bus.Bus, number: u9) bus.Error!void {
+        const self: *PendingException = @ptrCast(@alignCast(ctx));
+        if (number == 16) {
+            self.pending = false;
+            self.active = true;
+            self.taken_count += 1;
+        }
+    }
+
+    fn returned(ctx: *anyopaque, _: bus.Bus, number: u9) bus.Error!void {
+        const self: *PendingException = @ptrCast(@alignCast(ctx));
+        if (number == 16) self.active = false;
+    }
+};
 
 test "entry from Thread mode on the MSP stacks the frame and runs the handler" {
     var ram: fixture.Ram = .{};
@@ -12,7 +49,7 @@ test "entry from Thread mode on the MSP stacks the frame and runs the handler" {
     cpu.regs.low[12] = 0xC0;
     cpu.regs.lr = 0x2000_0141;
     cpu.regs.xpsr |= 0x8000_0000 | (0x3 << 25) | (0x2 << 10); // N, plus IT state
-    try entry.take(&cpu, 11, 0x2000_0102);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
     const sp = fixture.msp_top - 0x20;
     try std.testing.expectEqual(sp, cpu.regs.msp);
     try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
@@ -33,7 +70,7 @@ test "entry from Thread mode on the PSP stacks there and switches to the MSP" {
     var cpu = try fixture.boot(&ram);
     cpu.regs.psp = fixture.psp_top;
     cpu.regs.control |= regs.control_bits.spsel;
-    try entry.take(&cpu, 11, 0x2000_0102);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
     try std.testing.expectEqual(fixture.psp_top - 0x20, cpu.regs.psp);
     try std.testing.expectEqual(fixture.msp_top, cpu.regs.msp);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFFD), cpu.regs.lr);
@@ -45,7 +82,7 @@ test "entry from Handler mode nests on the MSP" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
     cpu.regs.xpsr |= 14; // in PendSV
-    try entry.take(&cpu, 11, 0x2000_0102);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF1), cpu.regs.lr);
     try std.testing.expectEqual(@as(u32, 14), ram.word(cpu.regs.msp + 28) & regs.xpsr_bits.ipsr);
 }
@@ -72,7 +109,7 @@ test "entry with an FP context stacks the extended frame and clears FPCA" {
     for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
     cpu.fp.bank.writeS(16, 0xDEAD_BEEF);
     cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0x0300_0000);
-    try entry.take(&cpu, 11, 0x2000_0102);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
     const sp = fixture.msp_top - 0x68;
     try std.testing.expectEqual(sp, cpu.regs.msp);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFE9), cpu.regs.lr);
@@ -89,7 +126,7 @@ test "entry without an FP context keeps the basic frame and FType set" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
     cpu.fp.bank.writeS(0, 0x4000_0000);
-    try entry.take(&cpu, 11, 0x2000_0102);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
     try std.testing.expectEqual(fixture.msp_top - 0x20, cpu.regs.msp);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), cpu.regs.lr);
 }
@@ -114,4 +151,100 @@ test "an SVC inside an IT block: entry clears ITSTATE, the frame keeps it, retur
     try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
     try std.testing.expectEqual(@as(u32, 1), cpu.regs.low[0]);
     try std.testing.expectEqual(@as(u8, 0), it_state.get(cpu.regs.xpsr));
+}
+
+test "exception entry crossing PSPLIM raises derived STKOF UsageFault" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, usage_fault_enable);
+    ram.putWord(memmap.scb.shpr1, 0x0000_0000);
+    ram.putWord(fixture.base + 16 * 4, fixture.handler | 1);
+    ram.putWord(fixture.base + 6 * 4, fixture.handler | 1);
+    var cpu = try fixture.boot(&ram);
+    var pending: PendingException = .{};
+    cpu.source = pending.source();
+    const limit = fixture.psp_top - 16;
+    cpu.regs.control |= regs.control_bits.spsel;
+    cpu.regs.psp = fixture.psp_top;
+    cpu.regs.psplim = limit;
+
+    try dispatch.enter(&cpu, .{ .number = 16, .priority = 0xFF }, fixture.code);
+    try std.testing.expectEqual(@as(u32, 6), cpu.regs.xpsr & regs.xpsr_bits.ipsr);
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
+    try std.testing.expectEqual(limit, cpu.regs.psp);
+    try std.testing.expectEqual(stkof, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFD), cpu.regs.lr);
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    try std.testing.expectEqual(@as(u9, 6), cpu.active.running().?.number);
+    try std.testing.expect(pending.pending);
+    try std.testing.expect(!pending.active);
+    try std.testing.expectEqual(@as(u32, 0), pending.taken_count);
+}
+
+test "exception entry crossing MSPLIM raises derived STKOF UsageFault" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, usage_fault_enable);
+    ram.putWord(memmap.scb.shpr1, 0x0000_0000);
+    ram.putWord(fixture.base + 16 * 4, fixture.handler | 1);
+    ram.putWord(fixture.base + 6 * 4, fixture.handler | 1);
+    var cpu = try fixture.boot(&ram);
+    var pending: PendingException = .{};
+    cpu.source = pending.source();
+    const limit = fixture.msp_top - 16;
+    cpu.regs.msplim = limit;
+
+    try dispatch.enter(&cpu, .{ .number = 16, .priority = 0xFF }, fixture.code);
+    try std.testing.expectEqual(@as(u32, 6), cpu.regs.xpsr & regs.xpsr_bits.ipsr);
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
+    try std.testing.expectEqual(limit, cpu.regs.msp);
+    try std.testing.expectEqual(stkof, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), cpu.regs.lr);
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    try std.testing.expectEqual(@as(u9, 6), cpu.active.running().?.number);
+    try std.testing.expect(pending.pending);
+    try std.testing.expect(!pending.active);
+    try std.testing.expectEqual(@as(u32, 0), pending.taken_count);
+}
+
+test "disabled UsageFault escalates entry STKOF to HardFault and leaves IRQ pending" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.base + 16 * 4, fixture.handler | 1);
+    ram.putWord(fixture.base + 3 * 4, fixture.handler | 1);
+    var cpu = try fixture.boot(&ram);
+    var pending: PendingException = .{};
+    cpu.source = pending.source();
+    const limit = fixture.msp_top - 16;
+    cpu.regs.msplim = limit;
+
+    try dispatch.enter(&cpu, .{ .number = 16, .priority = 0xFF }, fixture.code);
+    try std.testing.expectEqual(@as(u32, 3), cpu.regs.xpsr & regs.xpsr_bits.ipsr);
+    try std.testing.expectEqual(fixture.handler, cpu.regs.pc);
+    try std.testing.expectEqual(limit, cpu.regs.msp);
+    try std.testing.expectEqual(stkof, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 1 << 30), ram.word(memmap.scb.hfsr));
+    try std.testing.expectEqual(@as(usize, 1), cpu.active.depth);
+    try std.testing.expectEqual(@as(u9, 3), cpu.active.running().?.number);
+    try std.testing.expect(pending.pending);
+    try std.testing.expect(!pending.active);
+    try std.testing.expectEqual(@as(u32, 0), pending.taken_count);
+}
+
+test "higher-priority original exception leaves STKOF UsageFault pending" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, usage_fault_enable);
+    ram.putWord(memmap.scb.shpr1, 0x00FF_0000);
+    ram.putWord(fixture.base + 16 * 4, fixture.handler | 1);
+    ram.putWord(fixture.base + 6 * 4, fixture.handler | 1);
+    var cpu = try fixture.boot(&ram);
+    var pending: PendingException = .{};
+    cpu.source = pending.source();
+    const limit = fixture.msp_top - 16;
+    cpu.regs.msplim = limit;
+
+    try dispatch.enter(&cpu, .{ .number = 16, .priority = 0 }, fixture.code);
+    try std.testing.expectEqual(@as(u32, 16), cpu.regs.xpsr & regs.xpsr_bits.ipsr);
+    try std.testing.expectEqual(@as(u9, 16), cpu.active.running().?.number);
+    try std.testing.expect(!pending.pending);
+    try std.testing.expect(pending.active);
+    try std.testing.expectEqual(@as(u32, 1), pending.taken_count);
+    try std.testing.expect(ram.word(memmap.scb.shcsr) & shcsr_usage_pending != 0);
 }

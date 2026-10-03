@@ -19,7 +19,7 @@ pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
 pub const Number = u9;
 
 /// Take exception `number`, with `return_address` stacked as where to resume.
-pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!void {
+pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
     const r = &cpu.regs;
     cpu.exclusive = null;
     const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
@@ -29,14 +29,30 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!void {
     };
     const fp = r.control & regs_mod.control_bits.fpca != 0;
     const from: exc_return.Target = .{ .thread = !r.handlerMode(), .psp = r.usesPsp(), .fp = fp };
-    const at = if (fp)
-        try fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu))
-    else
-        try frame.push(cpu.bus, r.sp(), stacked);
-    r.setSp(at);
+    const size = if (fp) fp_frame.size else frame.size;
+    const at = frameAddress(r.sp(), size);
+    const limit = r.spLimit();
+    const overflow = limit != 0 and at < limit;
+    if (overflow) {
+        // DDI0553 B3.21: exception entry sets SP to the limit and does not
+        // push frame words below it. The derived STKOF UsageFault is selected
+        // by dispatch after the original entry has established its context.
+        r.setSp(limit);
+    } else {
+        const pushed = if (fp)
+            try fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu))
+        else
+            try frame.push(cpu.bus, r.sp(), stacked);
+        r.setSp(pushed);
+    }
     r.lr = exc_return.forEntry(from);
     r.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
+    return overflow;
+}
+
+fn frameAddress(sp: u32, size: u32) u32 {
+    return (sp -% size) & ~(sp & 4);
 }
 
 /// S0-S15 and FPSCR as the extended frame stacks them. Stacking is eager;
@@ -45,6 +61,13 @@ fn fpContext(cpu: *const Cpu) fp_frame.Fp {
     var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits() };
     for (&fp.s, 0..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
     return fp;
+}
+
+/// Redirect an in-progress entry to a derived exception without stacking
+/// again. LR already contains EXC_RETURN for the interrupted context.
+pub fn retarget(cpu: *Cpu, number: Number) bus.Error!void {
+    const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
+    land(cpu, number, handler);
 }
 
 /// Take exception `number` without stacking a frame, with `lr` as the link

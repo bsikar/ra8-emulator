@@ -83,7 +83,7 @@ fn stackOverrun(ram: *fixture.Ram, psp: bool, first: u16, second: ?u16) !ra8.cor
     try std.testing.expectEqual(@as(u32, 6), ipsr(&cpu));
     try std.testing.expectEqual(stkof_bit, ram.word(memmap.scb.cfsr));
     const frame_sp = if (psp) cpu.regs.psp else cpu.regs.sp();
-    try std.testing.expectEqual(fixture.code, ram.word(frame_sp + 24));
+    try std.testing.expectEqual(if (psp) fixture.psp_top else fixture.msp_top, frame_sp);
     return cpu;
 }
 
