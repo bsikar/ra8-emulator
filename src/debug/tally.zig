@@ -83,10 +83,12 @@ pub const Tally = struct {
     }
 
     /// The kept sites, most written first. Written into `into` so asking
-    /// does not disturb what a later store sees.
+    /// does not disturb what a later store sees. An empty tally ranks to an
+    /// empty slice rather than tripping the 1.. range (RA8EMU-382).
     pub fn ranked(self: *const Tally, into: *[limits.kept]Site) []const Site {
         @memcpy(into[0..self.used], self.sites[0..self.used]);
         const out = into[0..self.used];
+        if (out.len < 2) return out;
         for (1..out.len) |index| {
             var at = index;
             while (at > 0 and out[at].writes > out[at - 1].writes) : (at -= 1) {

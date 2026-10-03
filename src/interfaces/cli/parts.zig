@@ -87,5 +87,7 @@ pub fn tallyOf(
         .pcs = parts.pcs,
         .fns = parts.fns,
         .profile = parts.profile,
+        .hits = parts.hits,
+        .taken = parts.taken,
     };
 }

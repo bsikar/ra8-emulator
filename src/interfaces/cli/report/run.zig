@@ -34,6 +34,9 @@ const bus_fault = @import("../../../periph/bus_fault.zig");
 const json_run = @import("json_run.zig");
 const hotspots = @import("../../../debug/hotspots.zig");
 const functions = @import("../../../debug/functions.zig");
+const pc_hits = @import("../../../debug/pc_hits.zig");
+const tally_mod = @import("../../../debug/tally.zig");
+const taken_in = @import("../../../debug/taken_in.zig");
 
 /// What a run accumulated, gathered so the report is asked for once.
 pub const Tally = struct {
@@ -64,6 +67,20 @@ pub const Tally = struct {
     pcs: hotspots.Table = .{},
     fns: ?functions.Table = null,
     profile: ?functions.profile.Table = null,
+    /// The site tables main.zig prints after this block, read only by
+    /// `--report json` (RA8EMU-382).
+    hits: pc_hits.Hits = .{},
+    taken: tally_mod.Tally = .{},
+    taken_in_spec: ?[]const u8 = null,
+    taken_in: ?taken_in.Window = null,
+
+    /// This tally with what `--taken-in` named and the window it resolved.
+    pub fn within(self: Tally, spec: ?[]const u8, window: ?taken_in.Window) Tally {
+        var with = self;
+        with.taken_in_spec = spec;
+        with.taken_in = window;
+        return with;
+    }
 };
 
 /// Say what the board and the image have to say, in reading order: the bus,
@@ -100,6 +117,14 @@ pub fn pick(out: Writer, board: *Board, image: elf.Image, of: Tally, as_json: bo
         .pending = of.pend,
         .pacing = of.pacing,
         .masking = of.mask_pacing,
+    }, .sites = &.{
+        .image = image,
+        .pend = of.pend.sites,
+        .gave_up = of.release.gave_up,
+        .hits = &of.hits,
+        .taken = &of.taken,
+        .taken_in_spec = of.taken_in_spec,
+        .taken_in = if (of.taken_in) |*one| one else null,
     } });
 }
 

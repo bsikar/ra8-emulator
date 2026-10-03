@@ -71,4 +71,5 @@ test {
     _ = @import("../interfaces/cli/report/json_compute_test.zig");
     _ = @import("../interfaces/cli/report/json_where_test.zig");
     _ = @import("../interfaces/cli/report/json_timing_test.zig");
+    _ = @import("../interfaces/cli/report/json_sites_test.zig");
 }

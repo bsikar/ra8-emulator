@@ -89,3 +89,9 @@ test "a one-off row is what a full tally loses" {
         try std.testing.expect(site.pc != 0x0200_22B6 or site.writes == 1);
     }
 }
+
+test "an empty tally ranks to nothing" {
+    const empty: tally_mod.Tally = .{};
+    var room: [tally_mod.limits.kept]tally_mod.Site = undefined;
+    try std.testing.expectEqual(@as(usize, 0), empty.ranked(&room).len);
+}
