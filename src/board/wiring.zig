@@ -73,7 +73,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.dataops.block());
     try self.bus.add(self.accuracy.block());
     try self.bus.add(self.comparators.block());
-    self.capture.memory = core.*;
+    self.capture.memory = .{ .engine = core.* };
     try self.bus.add(self.capture.block());
     try self.bus.add(self.analog.block());
     try attachAdc(self, core.*);
@@ -134,7 +134,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
     self.dma = dmac.Dmac.init(&self.dma_module);
-    self.dma.memory = core.*;
+    self.dma.memory = .{ .engine = core.* };
     try self.bus.add(self.dma.block());
     try self.bus.add(self.monitors.statusBlock());
     try self.bus.add(self.monitors.controlBlock());

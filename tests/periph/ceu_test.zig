@@ -28,7 +28,7 @@ const Bench = struct {
         self.core = try engine.Engine.open();
         try self.core.map(frame_base, 0x1000);
         self.unit = ceu.Ceu.init();
-        self.unit.memory = self.core;
+        self.unit.memory = .{ .engine = self.core };
     }
 
     fn close(self: *Bench) void {

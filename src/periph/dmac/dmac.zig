@@ -21,7 +21,7 @@
 //! boundary later.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const dma_bank = @import("../dma_bank.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
@@ -159,7 +159,7 @@ pub const Dmac = struct {
     channels: [channel_count]Channel = [_]Channel{.{}} ** channel_count,
     /// The machine whose memory a transfer moves. Board.attach points this at
     /// the run's engine; a board built without one declines every request.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     /// The module bank next door, whose DMAST.DMST gates every channel.
     /// Board.attach points this at the board's own bank, not a copy.
     bank: *const dma_bank.Bank,

@@ -39,7 +39,7 @@
 //! driver's own retry sees it.
 const std = @import("std");
 
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const memmap = @import("../../core/memmap.zig");
 const desc = @import("eth_desc.zig");
 const peer = @import("eth_peer.zig");
@@ -66,7 +66,7 @@ pub const Refusals = struct {
 pub const Dma = struct {
     /// The machine the rings live in. A board built by a test without one
     /// moves nothing, which is the only way this is ever null.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     link: peer.Link = .{},
     /// GWDCBAC: where the LINKFIX table is.
     linkfix: u32 = 0,
