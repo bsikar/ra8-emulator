@@ -266,7 +266,7 @@ table above. A group listed as missing does not fail the build yet.
 | shift_reg | 26 |
 | add_sub_wide | 22 |
 | long_mul | 26 |
-| mrs_msr | missing |
+| mrs_msr | 62 |
 | ldst_reg_wide | missing |
 | bitfield | 27 |
 | mul_acc | 23 |
