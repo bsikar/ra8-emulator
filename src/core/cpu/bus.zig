@@ -6,8 +6,10 @@
 //! what lets a lockstep run compare the two.
 const std = @import("std");
 const memmap = @import("../memmap.zig");
+const Gate = @import("data_gate.zig").Gate;
 
-pub const Error = error{Unmapped};
+/// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
+pub const Error = error{ Unmapped, SecurityViolation };
 
 /// Fixed host-backed ranges. Separate fields avoid a per-access region loop;
 /// peripheral addresses and cross-range accesses continue through the vtable.
@@ -55,6 +57,8 @@ pub const Bus = struct {
     ctx: *anyopaque,
     vtable: *const VTable,
     direct: ?*const DirectMemory = null,
+    /// Attribution on data accesses; null checks nothing (RA8EMU-274).
+    gate: ?*Gate = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
@@ -62,6 +66,7 @@ pub const Bus = struct {
     };
 
     pub inline fn read(self: Bus, address: u32, into: []u8) Error!void {
+        if (self.gate) |gate| if (gate.refuses(address, into.len)) return error.SecurityViolation;
         if (into.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.read(address, into)) return;
         };
@@ -69,6 +74,7 @@ pub const Bus = struct {
     }
 
     pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
+        if (self.gate) |gate| if (gate.refuses(address, bytes.len)) return error.SecurityViolation;
         if (bytes.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.write(address, bytes)) return;
         };

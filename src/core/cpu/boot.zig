@@ -20,6 +20,7 @@ const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("decode_cache.zig").DecodeCache;
 const sau = @import("../../periph/sau.zig");
 const SauSource = @import("sau_source.zig").SauSource;
+const DataGate = @import("data_gate.zig").Gate;
 const Attribution = @import("attribution.zig").Attribution;
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
@@ -117,6 +118,11 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     cpu.retire_listener = retire_listener;
     cpu.attribution = source;
     var check: mpu_check.Check = undefined;
+    var gate: DataGate = undefined;
+    if (source) |from| {
+        gate = .{ .source = from, .current = &cpu.banked.current };
+        cpu.bus.gate = &gate;
+    }
     if (board) |b| {
         b.scs.fp = &cpu.fp;
         b.security = &cpu.banked;
