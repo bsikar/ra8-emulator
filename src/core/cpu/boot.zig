@@ -68,6 +68,9 @@ pub const Wiring = struct {
     fast_memory: bool = false,
     /// CPU1 under `--cpu lockstep --cpu1` (RA8EMU-235).
     cpu1: ?*lockstep_dual.Cpu1 = null,
+    /// The `--ns` half, loaded into lockstep's own engine beside the main
+    /// image so both sides start from the same memory (RA8EMU-372).
+    ns_image: ?elf.Image = null,
 };
 
 /// The hand-off from main for any CPU but Unicorn.
@@ -78,7 +81,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine
     return switch (choice) {
         .unicorn => unreachable,
         .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget, wiring.retire_listener),
-        .lockstep => lockstep_mode.run(out, image, core, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener),
+        .lockstep => lockstep_mode.run(out, .{ .main = image, .ns = wiring.ns_image }, core, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener),
     };
 }
 
