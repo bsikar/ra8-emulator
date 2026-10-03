@@ -1,7 +1,6 @@
 //! SP- and PC-relative address arithmetic, 16-bit: ADD and SUB SP, SP, #imm7
 //! (T2/T1), ADD Rd, SP, #imm8 (T1) and ADR Rd, #imm8 (T1). None of them
-//! touch the flags. The stack-limit check on a lowered SP arrives with the
-//! m85 lane's RA8EMU-21.
+//! touch the flags. Stack-limit checks run at the core's instruction boundary.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;

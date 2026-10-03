@@ -40,6 +40,9 @@ pub const Stop = union(enum) {
     /// (DHCSR.C_DEBUGEN), or the HardFault it escalated to locked up. The PC
     /// is left on it.
     breakpoint: u32,
+    /// The instruction crossed MSPLIM or PSPLIM and its STKOF UsageFault
+    /// locked up or could not be stacked.
+    stack_overflow: u32,
 };
 
 pub const Cpu = struct {
@@ -105,15 +108,22 @@ pub const Cpu = struct {
         }
         self.regs.pc = address +% instr.size;
         if (runs) {
+            const before = StackPointers.read(self);
             found.?.exec(self, instr) catch |err| {
                 self.regs.pc = address;
                 return switch (err) {
                     error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
                     error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
                     error.Breakpoint => self.breakpoint(address),
+                    error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
                     else => .{ .bus_fault = address },
                 };
             };
+            if (before.overrun(self)) {
+                before.restore(self);
+                self.regs.pc = address;
+                return self.usageFault(.stkof, address, .{ .stack_overflow = address });
+            }
         }
         // An instruction an IT block governs moves the block on whether it
         // ran or not. IT itself leaves the state it just wrote.
@@ -173,5 +183,40 @@ pub const Cpu = struct {
             if (self.step()) |stopped| return stopped;
         }
         return .count;
+    }
+};
+
+/// The four stack pointers an instruction may move, taken before it runs so
+/// a write that crosses MSPLIM or PSPLIM can be undone.
+const StackPointers = struct {
+    msp: u32,
+    psp: u32,
+    other_msp: u32,
+    other_psp: u32,
+
+    fn read(cpu: *const Cpu) StackPointers {
+        return .{
+            .msp = cpu.regs.msp,
+            .psp = cpu.regs.psp,
+            .other_msp = cpu.banked.other.msp,
+            .other_psp = cpu.banked.other.psp,
+        };
+    }
+
+    /// Whether a pointer the instruction changed now sits below its limit.
+    fn overrun(self: StackPointers, cpu: *const Cpu) bool {
+        const r = &cpu.regs;
+        const o = &cpu.banked.other;
+        return (r.msp != self.msp and r.msp < r.msplim) or
+            (r.psp != self.psp and r.psp < r.psplim) or
+            (o.msp != self.other_msp and o.msp < o.msplim) or
+            (o.psp != self.other_psp and o.psp < o.psplim);
+    }
+
+    fn restore(self: StackPointers, cpu: *Cpu) void {
+        cpu.regs.msp = self.msp;
+        cpu.regs.psp = self.psp;
+        cpu.banked.other.msp = self.other_msp;
+        cpu.banked.other.psp = self.other_psp;
     }
 };
