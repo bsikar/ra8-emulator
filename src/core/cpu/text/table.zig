@@ -43,6 +43,7 @@ pub const entries = [_]Entry{
     .{ .group = "sat16", .print = @import("sat16.zig").print },
     .{ .group = "extend_wide", .print = @import("extend_wide.zig").print },
     .{ .group = "extend_b16", .print = @import("extend_b16.zig").print },
+    .{ .group = "divide", .print = @import("divide.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
