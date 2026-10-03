@@ -72,3 +72,23 @@ fn unquote(value: []const u8) []const u8 {
 fn number(value: []const u8) ?u32 {
     return std.fmt.parseInt(u32, value, 10) catch null;
 }
+
+/// What a conf says about one run, read from the `console> ` lines the
+/// emulator streams under --console.
+pub const Judgement = enum { pass, fail };
+
+pub const console_prefix = "console> ";
+
+/// A negative anywhere in the console fails the run, the bench's rule; else
+/// the expected text anywhere passes it. Null when the conf decides nothing.
+pub fn judge(conf: Conf, report: []const u8) ?Judgement {
+    var passed = false;
+    var lines = std.mem.splitScalar(u8, report, '\n');
+    while (lines.next()) |line| {
+        if (!std.mem.startsWith(u8, line, console_prefix)) continue;
+        const text = line[console_prefix.len..];
+        if (conf.refused(text)) return .fail;
+        if (conf.expected(text)) passed = true;
+    }
+    return if (passed) .pass else null;
+}

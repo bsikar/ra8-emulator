@@ -54,3 +54,41 @@ test "comments, blanks, CRLF, unknown keys and bad numbers are ignored" {
     try std.testing.expect(!conf.refused("anything"));
     try std.testing.expect(!conf.expected("anything"));
 }
+
+const streamed =
+    \\loaded 17056 bytes, vectors at 0x02000000
+    \\console> touch-demo: boot
+    \\console> touch: open=OK
+    \\SCI console: 2 line(s), last "touch: open=OK"
+    \\
+;
+
+test "judge passes on the expected text in any streamed console line" {
+    try std.testing.expectEqual(@as(?hil_conf.Judgement, .pass), hil_conf.judge(hil_conf.parse(uart), streamed));
+}
+
+test "judge fails on a negative even when the expected text also printed" {
+    const report = streamed ++ "console> HardFault: pc 0x02000100\n";
+    try std.testing.expectEqual(@as(?hil_conf.Judgement, .fail), hil_conf.judge(hil_conf.parse(uart), report));
+}
+
+test "judge reads only console lines and decides nothing without a match" {
+    const report = "stopped at 0x0: TIMEOUT in a report line\nconsole> touch-demo: boot\n";
+    try std.testing.expectEqual(@as(?hil_conf.Judgement, null), hil_conf.judge(hil_conf.parse(uart), report));
+    try std.testing.expectEqual(@as(?hil_conf.Judgement, null), hil_conf.judge(hil_conf.parse(probe), streamed));
+}
+
+test "a row's hil verdict wins over the last-line rule but not over a stop" {
+    var row: table.Row = .{ .console = "boot OK", .hil = .fail };
+    try std.testing.expectEqual(table.Verdict.fail, row.verdict());
+    row = .{ .hil = .pass };
+    try std.testing.expectEqual(table.Verdict.pass, row.verdict());
+    row = .{ .hil = .pass, .stopped = "0x02000100" };
+    try std.testing.expectEqual(table.Verdict.fail, row.verdict());
+}
+
+test "foo.elf's conf sits beside it as foo.hil.conf" {
+    const name = try table.confName(std.testing.allocator, "/c/touch_demo.elf");
+    defer std.testing.allocator.free(name);
+    try std.testing.expectEqualStrings("/c/touch_demo.hil.conf", name);
+}
