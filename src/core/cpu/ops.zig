@@ -46,6 +46,7 @@ pub const umaal = @import("ops/umaal.zig");
 pub const dsp_mul16 = @import("ops/dsp_mul16.zig");
 pub const dsp_dual = @import("ops/dsp_dual.zig");
 pub const dsp_mulhi = @import("ops/dsp_mulhi.zig");
+pub const dsp_long_mul = @import("ops/dsp_long_mul.zig");
 pub const csel = @import("ops/csel.zig");
 pub const long_shift = @import("ops/long_shift.zig");
 pub const long_shift_reg = @import("ops/long_shift_reg.zig");
