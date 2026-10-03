@@ -96,3 +96,17 @@ test "a claim that merges is not refused once the set is full" {
     try set.add(0x0000_0800, 0x10);
     try std.testing.expectEqual(pages.capacity, set.items().len);
 }
+
+test "a segment that runs where it loads claims its .bss too" {
+    const bytes = [_]u8{0} ** 8;
+    const here = ra8.core.elf.Segment{ .vaddr = 0x2200_0000, .paddr = 0x2200_0000, .flags = 6, .bytes = &bytes, .memsz = 0x400 };
+    try std.testing.expectEqual(@as(u64, 0x400), pages.loadSpan(here));
+}
+
+test "data copied out of MRAM claims only its file bytes at the load address" {
+    const bytes = [_]u8{0} ** 0xD8;
+    // pagecache's .data: loads at the end of its text, runs in SRAM with
+    // nearly 1 MiB of .bss that would run past the end of MRAM.
+    const copied = ra8.core.elf.Segment{ .vaddr = 0x2200_0000, .paddr = 0x0202_65B8, .flags = 6, .bytes = &bytes, .memsz = 0xF_7B24 };
+    try std.testing.expectEqual(@as(u64, 0xD8), pages.loadSpan(copied));
+}

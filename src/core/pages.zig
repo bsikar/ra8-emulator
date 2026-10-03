@@ -69,18 +69,28 @@ pub const Set = struct {
 };
 
 /// Every page an image's load segments need, merged.
-///
-/// A segment claims the larger of what it carries and what it reserves: .bss
-/// is a load segment with no bytes in the file and a memory size, and the
-/// page holding it still has to be mapped for the firmware to zero it.
 pub fn forImage(image: elf.Image) Error!Set {
     var set = Set{};
     var index: u16 = 0;
     while (index < image.segmentCount()) : (index += 1) {
         const segment = image.loadSegment(index) orelse continue;
-        try set.add(segment.paddr, @max(segment.memsz, segment.bytes.len));
+        try set.add(segment.paddr, loadSpan(segment));
     }
     return set;
+}
+
+/// The bytes a segment needs mapped at its load address.
+///
+/// A segment that runs where it loads claims the larger of what it carries
+/// and what it reserves: .bss is a load segment with no bytes in the file and
+/// a memory size, and the page holding it still has to be mapped for the
+/// firmware to zero it. A segment that runs somewhere else, .data copied out
+/// of MRAM into SRAM at boot, leaves only its file bytes at the load address;
+/// its .bss belongs to the run address, so claiming it there would ask for
+/// MRAM past the end of the part (RA8EMU-400).
+pub fn loadSpan(segment: elf.Segment) u64 {
+    if (segment.paddr != segment.vaddr) return segment.bytes.len;
+    return @max(segment.memsz, segment.bytes.len);
 }
 
 fn roundUp(address: u64) u64 {
