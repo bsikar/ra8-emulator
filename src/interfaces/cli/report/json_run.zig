@@ -9,7 +9,8 @@
 //! (report/json_glcdc.zig and json_glcdc_out.zig, RA8EMU-366; json_drw.zig, RA8EMU-371),
 //! audio, mipi_phy, capture (report/json_media.zig, RA8EMU-371), icu, pinfunc,
 //! options, part, backup (report/json_system.zig, json_options.zig) and
-//! analog (report/json_analog.zig, RA8EMU-373).
+//! analog (report/json_analog.zig, RA8EMU-373), compute
+//! (report/json_compute.zig, RA8EMU-377).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -36,6 +37,7 @@ const json_glcdc = @import("json_glcdc.zig");
 const json_media = @import("json_media.zig");
 const json_system = @import("json_system.zig");
 const json_analog = @import("json_analog.zig");
+const json_compute = @import("json_compute.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -70,6 +72,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_media.section(&j, board);
     try json_system.section(&j, board);
     try json_analog.section(&j, board);
+    try json_compute.section(&j, board);
     try j.close('}');
     try out.writeByte('\n');
 }
