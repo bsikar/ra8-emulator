@@ -60,6 +60,7 @@ pub const entries = [_]Entry{
     .{ .group = "exclusive", .print = @import("exclusive.zig").print },
     .{ .group = "acq_rel", .print = @import("acq_rel.zig").print },
     .{ .group = "table_branch", .print = @import("table_branch.zig").print },
+    .{ .group = "branch_wide", .print = @import("branch_wide.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
