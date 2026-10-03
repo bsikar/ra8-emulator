@@ -66,4 +66,5 @@ test {
     _ = @import("../interfaces/cli/report/json_net_test.zig");
     _ = @import("../interfaces/cli/report/json_ether_test.zig");
     _ = @import("../interfaces/cli/report/json_glcdc_test.zig");
+    _ = @import("../interfaces/cli/report/json_media_test.zig");
 }

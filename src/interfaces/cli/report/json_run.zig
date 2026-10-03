@@ -6,7 +6,8 @@
 //! json_riic.zig, RA8EMU-360), then network (report/json_net.zig and
 //! json_i2c.zig, RA8EMU-362), ethernet and usb (report/json_ether.zig,
 //! json_usb.zig and json_usbfs.zig, RA8EMU-364), graphics
-//! (report/json_glcdc.zig and json_glcdc_out.zig, RA8EMU-366).
+//! (report/json_glcdc.zig and json_glcdc_out.zig, RA8EMU-366; json_drw.zig, RA8EMU-371),
+//! audio, mipi_phy, capture (report/json_media.zig, RA8EMU-371).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -30,6 +31,7 @@ const json_net = @import("json_net.zig");
 const json_ether = @import("json_ether.zig");
 const json_usb = @import("json_usb.zig");
 const json_glcdc = @import("json_glcdc.zig");
+const json_media = @import("json_media.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -61,6 +63,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_ether.section(&j, board);
     try json_usb.section(&j, board);
     try json_glcdc.section(&j, board);
+    try json_media.section(&j, board);
     try j.close('}');
     try out.writeByte('\n');
 }
