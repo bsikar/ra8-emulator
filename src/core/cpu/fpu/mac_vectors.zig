@@ -11,45 +11,45 @@ pub const V32 = vector.Vector(case.Ternary(u32), case.Result(u32));
 pub const V64 = vector.Vector(case.Ternary(u64), case.Result(u64));
 
 pub const mla32 = [_]V32{
-    .{ .encoding = "VMLA.F32 T2", .name = "1+2*3", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x40E0_0000 } },
-    .{ .encoding = "VMLA.F32 T2", .name = "product rounds before the add", .input = .{ .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F80_0001, .mode = .plus_inf }, .expect = .{ .bits = 0x34C0_0000, .flags = f.ixc } },
-    .{ .encoding = "VMLA.F32 T2", .name = "+0 + 1*-0", .input = .{ .d = 0x0000_0000, .n = 0x3F80_0000, .m = 0x8000_0000 }, .expect = .{ .bits = 0x0000_0000 } },
-    .{ .encoding = "VMLA.F32 T2", .name = "-0 + 1*-0", .input = .{ .d = 0x8000_0000, .n = 0x3F80_0000, .m = 0x8000_0000 }, .expect = .{ .bits = 0x8000_0000 } },
-    .{ .encoding = "VMLA.F32 T2", .name = "product overflows, then inf-inf", .input = .{ .d = 0xFF80_0000, .n = 0x7F7F_FFFF, .m = 0x7F7F_FFFF }, .expect = .{ .bits = 0x7FC0_0000, .flags = f.ioc | f.ofc | f.ixc } },
-    .{ .encoding = "VMLA.F32 T2", .name = "qNaN accumulator beats a quietened product", .input = .{ .d = 0x7FC0_0001, .n = 0x7F80_0002, .m = 0x3F80_0000 }, .expect = .{ .bits = 0x7FC0_0001, .flags = f.ioc } },
-    .{ .encoding = "VMLA.F32 T2", .name = "inf*0 gives the default NaN", .input = .{ .d = 0x3F80_0000, .n = 0x7F80_0000, .m = 0x0000_0000 }, .expect = .{ .bits = 0x7FC0_0000, .flags = f.ioc } },
+    .{ .encoding = "VMLA (floating-point)", .name = "1+2*3", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x40E0_0000 } },
+    .{ .encoding = "VMLA (floating-point)", .name = "product rounds before the add", .input = .{ .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F80_0001, .mode = .plus_inf }, .expect = .{ .bits = 0x34C0_0000, .flags = f.ixc } },
+    .{ .encoding = "VMLA (floating-point)", .name = "+0 + 1*-0", .input = .{ .d = 0x0000_0000, .n = 0x3F80_0000, .m = 0x8000_0000 }, .expect = .{ .bits = 0x0000_0000 } },
+    .{ .encoding = "VMLA (floating-point)", .name = "-0 + 1*-0", .input = .{ .d = 0x8000_0000, .n = 0x3F80_0000, .m = 0x8000_0000 }, .expect = .{ .bits = 0x8000_0000 } },
+    .{ .encoding = "VMLA (floating-point)", .name = "product overflows, then inf-inf", .input = .{ .d = 0xFF80_0000, .n = 0x7F7F_FFFF, .m = 0x7F7F_FFFF }, .expect = .{ .bits = 0x7FC0_0000, .flags = f.ioc | f.ofc | f.ixc } },
+    .{ .encoding = "VMLA (floating-point)", .name = "qNaN accumulator beats a quietened product", .input = .{ .d = 0x7FC0_0001, .n = 0x7F80_0002, .m = 0x3F80_0000 }, .expect = .{ .bits = 0x7FC0_0001, .flags = f.ioc } },
+    .{ .encoding = "VMLA (floating-point)", .name = "inf*0 gives the default NaN", .input = .{ .d = 0x3F80_0000, .n = 0x7F80_0000, .m = 0x0000_0000 }, .expect = .{ .bits = 0x7FC0_0000, .flags = f.ioc } },
 };
 
 pub const mls32 = [_]V32{
-    .{ .encoding = "VMLS.F32 T2", .name = "7-2*3", .input = .{ .d = 0x40E0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x3F80_0000 } },
-    .{ .encoding = "VMLS.F32 T2", .name = "6-2*3", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x0000_0000 } },
-    .{ .encoding = "VMLS.F32 T2", .name = "6-2*3, RM", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000, .mode = .minus_inf }, .expect = .{ .bits = 0x8000_0000 } },
-    .{ .encoding = "VMLS.F32 T2", .name = "a NaN product is negated", .input = .{ .d = 0x3F80_0000, .n = 0x7FC0_0001, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001 } },
-    .{ .encoding = "VMLS.F32 T2", .name = "inf*0 negates the default NaN", .input = .{ .d = 0x3F80_0000, .n = 0x7F80_0000, .m = 0x0000_0000 }, .expect = .{ .bits = 0xFFC0_0000, .flags = f.ioc } },
+    .{ .encoding = "VMLS (floating-point)", .name = "7-2*3", .input = .{ .d = 0x40E0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x3F80_0000 } },
+    .{ .encoding = "VMLS (floating-point)", .name = "6-2*3", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x0000_0000 } },
+    .{ .encoding = "VMLS (floating-point)", .name = "6-2*3, RM", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000, .mode = .minus_inf }, .expect = .{ .bits = 0x8000_0000 } },
+    .{ .encoding = "VMLS (floating-point)", .name = "a NaN product is negated", .input = .{ .d = 0x3F80_0000, .n = 0x7FC0_0001, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001 } },
+    .{ .encoding = "VMLS (floating-point)", .name = "inf*0 negates the default NaN", .input = .{ .d = 0x3F80_0000, .n = 0x7F80_0000, .m = 0x0000_0000 }, .expect = .{ .bits = 0xFFC0_0000, .flags = f.ioc } },
 };
 
 pub const nmla32 = [_]V32{
-    .{ .encoding = "VNMLA.F32 T2", .name = "-(1+2*3)", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0xC0E0_0000 } },
-    .{ .encoding = "VNMLA.F32 T2", .name = "a NaN accumulator is negated", .input = .{ .d = 0x7FC0_0001, .n = 0x3F80_0000, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001 } },
-    .{ .encoding = "VNMLA.F32 T2", .name = "6 - 6 is +0", .input = .{ .d = 0xC0C0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x0000_0000 } },
+    .{ .encoding = "VNMLA (floating-point)", .name = "-(1+2*3)", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0xC0E0_0000 } },
+    .{ .encoding = "VNMLA (floating-point)", .name = "a NaN accumulator is negated", .input = .{ .d = 0x7FC0_0001, .n = 0x3F80_0000, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001 } },
+    .{ .encoding = "VNMLA (floating-point)", .name = "6 - 6 is +0", .input = .{ .d = 0xC0C0_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x0000_0000 } },
 };
 
 pub const nmls32 = [_]V32{
-    .{ .encoding = "VNMLS.F32 T2", .name = "2*3-1", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x40A0_0000 } },
-    .{ .encoding = "VNMLS.F32 T2", .name = "2*3-6, RM", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000, .mode = .minus_inf }, .expect = .{ .bits = 0x8000_0000 } },
-    .{ .encoding = "VNMLS.F32 T2", .name = "a negated sNaN accumulator is quietened", .input = .{ .d = 0x7F80_0001, .n = 0x3F80_0000, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001, .flags = f.ioc } },
+    .{ .encoding = "VNMLS (floating-point)", .name = "2*3-1", .input = .{ .d = 0x3F80_0000, .n = 0x4000_0000, .m = 0x4040_0000 }, .expect = .{ .bits = 0x40A0_0000 } },
+    .{ .encoding = "VNMLS (floating-point)", .name = "2*3-6, RM", .input = .{ .d = 0x40C0_0000, .n = 0x4000_0000, .m = 0x4040_0000, .mode = .minus_inf }, .expect = .{ .bits = 0x8000_0000 } },
+    .{ .encoding = "VNMLS (floating-point)", .name = "a negated sNaN accumulator is quietened", .input = .{ .d = 0x7F80_0001, .n = 0x3F80_0000, .m = 0x3F80_0000 }, .expect = .{ .bits = 0xFFC0_0001, .flags = f.ioc } },
 };
 
 pub const all64 = [_]V64{
-    .{ .encoding = "VMLA.F64 T2", .name = "1+2*3", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x401C_0000_0000_0000 } },
-    .{ .encoding = "VMLS.F64 T2", .name = "7-2*3", .input = .{ .d = 0x401C_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
-    .{ .encoding = "VNMLA.F64 T2", .name = "-(1+2*3)", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0xC01C_0000_0000_0000 } },
-    .{ .encoding = "VNMLS.F64 T2", .name = "2*3-1", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x4014_0000_0000_0000 } },
+    .{ .encoding = "VMLA (floating-point)", .name = "1+2*3", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x401C_0000_0000_0000 } },
+    .{ .encoding = "VMLS (floating-point)", .name = "7-2*3", .input = .{ .d = 0x401C_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x3FF0_0000_0000_0000 } },
+    .{ .encoding = "VNMLA (floating-point)", .name = "-(1+2*3)", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0xC01C_0000_0000_0000 } },
+    .{ .encoding = "VNMLS (floating-point)", .name = "2*3-1", .input = .{ .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .expect = .{ .bits = 0x4014_0000_0000_0000 } },
 };
 
 pub const claimed = [_][]const u8{
-    "VMLA.F32 T2",  "VMLA.F64 T2",  "VMLS.F32 T2",  "VMLS.F64 T2",
-    "VNMLA.F32 T2", "VNMLA.F64 T2", "VNMLS.F32 T2", "VNMLS.F64 T2",
+    "VMLA (floating-point)",  "VMLS (floating-point)",
+    "VNMLA (floating-point)", "VNMLS (floating-point)",
 };
 
 const T32 = case.Ternary(u32);

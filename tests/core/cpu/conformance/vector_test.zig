@@ -35,8 +35,8 @@ test "a float result is compared by its bits, so the zero's sign counts" {
             return bits ^ 0x8000_0000;
         }
     }.f;
-    const zero = [_]Neg{.{ .encoding = "VNEG.F32 T1", .name = "+0 to -0", .input = 0, .expect = 0x8000_0000 }};
-    const plus = [_]Neg{.{ .encoding = "VNEG.F32 T1", .name = "not +0", .input = 0, .expect = 0 }};
+    const zero = [_]Neg{.{ .encoding = "VNEG (floating-point)", .name = "+0 to -0", .input = 0, .expect = 0x8000_0000 }};
+    const plus = [_]Neg{.{ .encoding = "VNEG (floating-point)", .name = "not +0", .input = 0, .expect = 0 }};
     try std.testing.expectEqual(@as(?usize, null), vector.firstMismatch(u32, u32, flip, &zero));
     try std.testing.expectEqual(@as(?usize, 0), vector.firstMismatch(u32, u32, flip, &plus));
 }
