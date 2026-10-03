@@ -20,6 +20,7 @@ const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const transfer = @import("../fpu/transfer.zig");
 const alignment = @import("../alignment.zig");
+const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
 
 pub const group: op.Group = .{ .name = "fp_mem", .decode = decode, .oracle = false };
 
@@ -41,6 +42,44 @@ pub fn bits(instr: Instr) Bits {
     };
 }
 
+/// The system-register forms use regh:regl in hw1[6]:hw2[15:12].
+pub const SystemBits = struct { p: u1, add: u1, regh: u1, w: u1, load: bool, rn: u4, regl: u4, imm: u7 };
+
+pub fn systemBits(instr: Instr) SystemBits {
+    return .{
+        .p = @intCast(instr.hw1 >> 8 & 1),
+        .add = @intCast(instr.hw1 >> 7 & 1),
+        .regh = @intCast(instr.hw1 >> 6 & 1),
+        .w = @intCast(instr.hw1 >> 5 & 1),
+        .load = instr.hw1 >> 4 & 1 == 1,
+        .rn = @intCast(instr.hw1 & 0xF),
+        .regl = @intCast(instr.hw2 >> 12),
+        .imm = @truncate(instr.hw2),
+    };
+}
+
+/// FPCXT_NS VLDR avoids ExecuteFPCheck when the FP context is inactive.
+pub fn isInactiveFpcxtNs(instr: Instr) bool {
+    if (!isSystemRegister(instr)) return false;
+    const b = systemBits(instr);
+    return systemRegister(b) == 14;
+}
+
+fn systemRegister(b: SystemBits) u4 {
+    return @as(u4, b.regh) << 3 | b.regl;
+}
+
+fn isSystemRegister(instr: Instr) bool {
+    if (instr.size != 4 or instr.hw1 & 0xFE00 != 0xEC00) return false;
+    if (instr.hw2 & 0x0F80 != 0x0F80) return false;
+    const b = systemBits(instr);
+    if (b.p == 0 and b.w == 0 or b.rn == 15) return false;
+    return switch (systemRegister(b)) {
+        1, 2, 12, 13, 14, 15 => true,
+        else => false,
+    };
+}
+
 fn isSingle(b: Bits) bool {
     return b.p == 1 and b.w == 0;
 }
@@ -53,12 +92,94 @@ pub fn plan(b: Bits, base: u32) transfer.Plan {
 
 fn decode(instr: Instr) ?op.Exec {
     if (instr.size != 4 or instr.hw1 & 0xFE00 != 0xEC00) return null;
+    if (isSystemRegister(instr)) return &runSystem;
+    if (instr.hw2 & 0x0F80 == 0x0F80) return null;
     if (instr.hw2 & 0x0F00 == 0x0900) return decodeHalf(instr);
     if (instr.hw2 & 0x0E00 != 0x0A00) return null;
     const b = bits(instr);
     if (b.p == 0 and b.u == 0 and b.w == 0) return null;
     if (plan(b, 0).fault != .none) return null;
     return &run;
+}
+
+fn runSystem(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (!cpu.profile.v8_1m) return error.Undefined;
+    const b = systemBits(instr);
+    const reg = systemRegister(b);
+    if ((reg == 12 or reg == 13) and !cpu.profile.mve) return error.Undefined;
+    if ((reg == 14 or reg == 15) and cpu.banked.current != .secure) return error.Undefined;
+
+    const base = cpu.regs.get(b.rn);
+    const delta: u32 = @as(u32, b.imm) << 2;
+    const offset_addr = if (b.add == 1) base +% delta else base -% delta;
+    const address = if (b.p == 1) offset_addr else base;
+    if (b.w == 1 and b.rn == 13 and offset_addr < cpu.regs.spLimit()) return error.StackOverflow;
+    const inactive = cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & @import("../regs.zig").control_bits.fpca == 0;
+    if (reg == 14 and inactive) {
+        // DDI0553's FPCXT_NS load case does not read memory for an inactive context.
+        updateBase(cpu, b);
+        return;
+    }
+
+    try alignment.memA(address, 4);
+
+    if (b.load) {
+        const value = try readWord(cpu, address);
+        loadSystem(cpu, reg, value, inactive);
+    } else {
+        const value = storeSystem(cpu, reg, inactive);
+        try writeWord(cpu, address, value);
+        if (reg == 15 or (reg == 14 and !inactive and cpu.regs.control & @import("../regs.zig").control_bits.sfpa == 0)) {
+            cpu.fp.fpscr = cpu.fp.context.defaultFpscr();
+            if (reg == 15) cpu.regs.control &= ~@import("../regs.zig").control_bits.sfpa;
+        }
+    }
+    updateBase(cpu, b);
+}
+
+fn updateBase(cpu: *Cpu, b: SystemBits) void {
+    if (b.w == 1) {
+        const base = cpu.regs.get(b.rn);
+        const delta: u32 = @as(u32, b.imm) << 2;
+        cpu.regs.set(b.rn, if (b.add == 1) base +% delta else base -% delta);
+    }
+}
+
+fn loadSystem(cpu: *Cpu, reg: u4, value: u32, inactive: bool) void {
+    switch (reg) {
+        1 => cpu.fp.fpscr = Fpscr.fromBits(value),
+        2 => cpu.fp.fpscr = Fpscr.fromBits((cpu.fp.fpscr.bits() & 0x07FF_FFFF) | (value & 0xF800_0000)),
+        12 => {
+            var vpr: @TypeOf(cpu.fp.vpr) = @bitCast(value);
+            vpr.reserved = 0;
+            cpu.fp.vpr = vpr;
+        },
+        13 => cpu.fp.vpr.p0 = @truncate(value),
+        14 => if (!inactive) loadFpcxt(cpu, value),
+        15 => loadFpcxt(cpu, value),
+        else => unreachable,
+    }
+}
+
+fn loadFpcxt(cpu: *Cpu, payload: u32) void {
+    const control_bits = @import("../regs.zig").control_bits;
+    cpu.regs.control = (cpu.regs.control & ~control_bits.sfpa) | (@as(u32, @truncate(payload >> 31)) << 3);
+    cpu.fp.fpscr = Fpscr.fromBits(payload & 0x0FFF_FFFF);
+}
+
+fn storeSystem(cpu: *Cpu, reg: u4, inactive: bool) u32 {
+    return switch (reg) {
+        1 => cpu.fp.fpscr.bits(),
+        2 => cpu.fp.fpscr.bits() & 0xF800_0000,
+        12 => @bitCast(cpu.fp.vpr),
+        13 => cpu.fp.vpr.p0,
+        14 => if (inactive)
+            cpu.fp.context.defaultFpscr().bits() & 0x0FFF_FFFF
+        else
+            (@as(u32, @truncate(cpu.regs.control >> 3)) << 31) | (cpu.fp.fpscr.bits() & 0x0FFF_FFFF),
+        15 => (@as(u32, @truncate(cpu.regs.control >> 3)) << 31) | (cpu.fp.fpscr.bits() & 0x0FFF_FFFF),
+        else => unreachable,
+    };
 }
 
 fn run(cpu: *Cpu, instr: Instr) op.Error!void {

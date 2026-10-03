@@ -5,6 +5,7 @@ const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 const Instr = ra8.core.cpu.instr.Instr;
 const fp_mem = ra8.core.cpu.ops.fp_mem;
+const Fpscr = ra8.core.fpu.fpscr.Fpscr;
 
 /// 64 bytes of RAM at 0x2000_0000.
 const Ram = struct {
@@ -154,4 +155,111 @@ test "vldr.16 s0, [r1, #-2] and vldr.16 s0, [pc, #4]" {
     try std.testing.expectEqual(@as(u32, 0xBEEF), cpu.fp.bank.readS(0));
     try run(&cpu, at(Ram.base + 2, 0xED9F, 0x0902));
     try std.testing.expectEqual(@as(u32, 0x1234), cpu.fp.bank.readS(0));
+}
+
+const SystemRegister = struct { name: []const u8, regh: u1, regl: u4 };
+const system_registers = [_]SystemRegister{
+    .{ .name = "FPSCR", .regh = 0, .regl = 1 },
+    .{ .name = "FPSCR_nzcvqc", .regh = 0, .regl = 2 },
+    .{ .name = "VPR", .regh = 1, .regl = 4 },
+    .{ .name = "P0", .regh = 1, .regl = 5 },
+    .{ .name = "FPCXT_NS", .regh = 1, .regl = 6 },
+    .{ .name = "FPCXT_S", .regh = 1, .regl = 7 },
+};
+
+const AddressForm = struct { name: []const u8, p: u1, w: u1 };
+const address_forms = [_]AddressForm{
+    .{ .name = "offset", .p = 1, .w = 0 },
+    .{ .name = "pre-index", .p = 1, .w = 1 },
+    .{ .name = "post-index", .p = 0, .w = 1 },
+};
+
+fn systemInstr(reg: SystemRegister, form: AddressForm, load: bool) Instr {
+    const hw1: u16 = 0xEC00 | (@as(u16, form.p) << 8) | (1 << 7) |
+        (@as(u16, reg.regh) << 6) | (@as(u16, form.w) << 5) |
+        (@as(u16, @intFromBool(load)) << 4);
+    const hw2: u16 = (@as(u16, reg.regl) << 12) | 0x0F80 | 2;
+    return at(0, hw1, hw2);
+}
+
+fn expectedAddress(base: u32, form: AddressForm) u32 {
+    return if (form.p == 1) base + 8 else base;
+}
+
+fn expectedBase(base: u32, form: AddressForm) u32 {
+    return if (form.w == 1) base + 8 else base;
+}
+
+test "VLDR and VSTR system registers cover each register and addressing form" {
+    const stored: u32 = 0x8000_0015;
+    const loaded: u32 = 0xA5C3_5A69;
+    for (system_registers) |reg| {
+        for (address_forms) |form| {
+            var ram: Ram = .{};
+            var cpu: Cpu = .{ .bus = ram.view() };
+            const base = Ram.base + 16;
+            const address = expectedAddress(base, form);
+            cpu.regs.set(0, base);
+            cpu.regs.control |= ra8.core.cpu.regs.control_bits.fpca | ra8.core.cpu.regs.control_bits.sfpa;
+            cpu.fp.fpscr = Fpscr.fromBits(stored);
+            cpu.fp.vpr = @bitCast(stored);
+
+            const store = systemInstr(reg, form, false);
+            try std.testing.expect(claimed(store.hw1, store.hw2));
+            try run(&cpu, store);
+            const expected_store = switch (reg.regl | (@as(u4, reg.regh) << 3)) {
+                2 => stored & 0xF800_0000,
+                13 => stored & 0xFFFF,
+                6, 7 => stored,
+                else => stored,
+            };
+            try std.testing.expectEqual(expected_store, ram.word(address));
+            try std.testing.expectEqual(expectedBase(base, form), cpu.regs.get(0));
+
+            cpu.regs.set(0, base);
+            ram.put(address, loaded);
+            cpu.fp.fpscr = Fpscr.fromBits(0x0123_4567);
+            cpu.fp.vpr = @bitCast(@as(u32, 0x1234_5678));
+            const load = systemInstr(reg, form, true);
+            try run(&cpu, load);
+            try std.testing.expectEqual(expectedBase(base, form), cpu.regs.get(0));
+            switch (reg.regl | (@as(u4, reg.regh) << 3)) {
+                1 => try std.testing.expectEqual(loaded & 0xFFCF_009F, cpu.fp.fpscr.bits()),
+                2 => try std.testing.expectEqual((@as(u32, 0x0123_4567) & 0xFFCF_009F & 0x07FF_FFFF) | (loaded & 0xF800_0000), cpu.fp.fpscr.bits()),
+                12 => try std.testing.expectEqual(loaded & 0x00FF_FFFF, @as(u32, @bitCast(cpu.fp.vpr))),
+                13 => try std.testing.expectEqual(@as(u16, @truncate(loaded)), cpu.fp.vpr.p0),
+                14, 15 => {
+                    try std.testing.expectEqual(@as(u1, @truncate(loaded >> 31)), @as(u1, @truncate(cpu.regs.control >> 3)));
+                    try std.testing.expectEqual(loaded & 0x0FFF_FFFF & 0xFFCF_009F, cpu.fp.fpscr.bits());
+                },
+                else => unreachable,
+            }
+            _ = reg.name;
+            _ = form.name;
+        }
+    }
+}
+
+test "inactive FPCXT_NS VLDR skips ExecuteFPCheck and memory access" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    cpu.regs.set(0, Ram.base + 16);
+    cpu.fp.fpscr = Fpscr.fromBits(0x1234_5678);
+    const instr = systemInstr(system_registers[4], address_forms[1], true);
+    const exec = ra8.core.cpu.decode.decode(instr).?.exec;
+    try exec(&cpu, instr);
+    try std.testing.expectEqual(@as(u32, 0x1234_5678) & 0xFFCF_009F, cpu.fp.fpscr.bits());
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & ra8.core.cpu.regs.control_bits.fpca);
+    try std.testing.expectEqual(Ram.base + 24, cpu.regs.get(0));
+}
+
+test "VLDR VPR runs unprivileged and keeps the reserved bits zero" {
+    var ram: Ram = .{};
+    var cpu: Cpu = .{ .bus = ram.view() };
+    const base = Ram.base + 16;
+    cpu.regs.set(0, base);
+    cpu.regs.control |= ra8.core.cpu.regs.control_bits.fpca | ra8.core.cpu.regs.control_bits.npriv;
+    ram.put(base + 8, 0xFF12_3456);
+    try run(&cpu, systemInstr(system_registers[2], address_forms[0], true));
+    try std.testing.expectEqual(@as(u32, 0x0012_3456), @as(u32, @bitCast(cpu.fp.vpr)));
 }
