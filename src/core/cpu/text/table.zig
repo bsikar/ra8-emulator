@@ -52,6 +52,7 @@ pub const entries = [_]Entry{
     .{ .group = "sat_arith", .print = @import("sat_arith.zig").print },
     .{ .group = "barrier", .print = @import("barrier.zig").print },
     .{ .group = "preload", .print = @import("preload.zig").print },
+    .{ .group = "ldst_wide", .print = @import("ldst_wide.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
