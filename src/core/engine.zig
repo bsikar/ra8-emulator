@@ -338,7 +338,7 @@ pub const Engine = struct {
         const needed = pages.forImage(image) catch return Error.MapFailed;
         for (needed.items()) |range| {
             if (board_ram.covers(range.base, range.size())) continue;
-            if (option_window.claim(self, range.base, range.size())) continue;
+            if (option_window.claim(.{ .engine = self }, range.base, range.size())) continue;
             try self.map(range.base, range.size());
         }
         var written: u32 = 0;

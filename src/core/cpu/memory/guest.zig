@@ -9,6 +9,9 @@ const Store = @import("store.zig").Store;
 
 pub const Error = error{Unmapped};
 
+/// A map refused: the range is already backed, or the store is out of room.
+pub const MapError = error{ Mapped, Full, OutOfMemory };
+
 pub const Guest = union(enum) {
     engine: engine.Engine,
     store: *Store,
@@ -33,6 +36,15 @@ pub const Guest = union(enum) {
                 code_lines.notify(address, bytes.len);
                 @memcpy(into, bytes);
             },
+        }
+    }
+
+    /// Back `size` bytes at `base` that no region covers yet: a peripheral
+    /// window mapped at attach (mram_window.zig, adc_tsn_cal.zig).
+    pub fn map(self: Guest, base: u32, size: u32) MapError!void {
+        switch (self) {
+            .engine => |core| core.map(base, size) catch return MapError.Mapped,
+            .store => |memory| try memory.map(base, size),
         }
     }
 

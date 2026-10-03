@@ -19,7 +19,7 @@
 //! 0x02E1_7700 in most of the corpus), so the order matters both ways: a
 //! page an image already mapped is left alone, and the image loader skips
 //! a page attach already mapped and writes its bytes over the fill.
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig");
 const cells = @import("mram_otp.zig");
 
 pub const page: u32 = 0x1000;
@@ -43,7 +43,7 @@ pub fn covers(base: u32, size: u32) bool {
 /// has not mapped it yet, and either way the loader does not map it again.
 /// Returns false for a range outside the window, which the loader maps
 /// itself as before.
-pub fn claim(machine: engine.Engine, base: u32, size: u32) bool {
+pub fn claim(machine: Guest.Guest, base: u32, size: u32) bool {
     if (!covers(base, size)) return false;
     machine.map(base, size) catch {};
     return true;
@@ -52,7 +52,7 @@ pub fn claim(machine: engine.Engine, base: u32, size: u32) bool {
 /// Map each page of the window that is not mapped yet and fill it with the
 /// erased value. A page something already mapped (an image segment that
 /// loaded first) keeps its bytes. Returns how many pages were mapped here.
-pub fn map(machine: engine.Engine) engine.Error!u32 {
+pub fn map(machine: Guest.Guest) Guest.Error!u32 {
     const erased = [_]u8{cells.window.erased} ** page;
     var mapped: u32 = 0;
     var at: u32 = span.base;

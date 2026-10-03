@@ -56,3 +56,12 @@ test "a span outside every region, or across a region's end, is refused" {
     try std.testing.expect(store.span(memmap.sram_end - 4, 4) != null);
     try std.testing.expect(store.region(0x4000_0000) == null);
 }
+
+test "a store maps a window outside memmap and refuses one inside a region" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    try store.map(0x02C1_E000, 0x1000);
+    try std.testing.expect(store.span(0x02C1_EDA0, 8) != null);
+    try std.testing.expectError(error.Mapped, store.map(0x02C1_E000, 0x1000));
+    try std.testing.expectError(error.Mapped, store.map(memmap.sram_base, 0x1000));
+}

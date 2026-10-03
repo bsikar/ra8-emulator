@@ -45,3 +45,22 @@ test "an engine guest reads back what it wrote" {
     try std.testing.expectEqual(@as(u32, 0xA5A5_5A5A), try guest.readWord(memmap.sram_base + 4));
     try std.testing.expectError(Error.Unmapped, guest.readWord(0x9000_0000));
 }
+
+test "a store guest maps a window once and reads and writes through it" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const guest = Guest{ .store = &store };
+    try std.testing.expectError(Error.Unmapped, guest.readWord(0x02E0_7600));
+    try guest.map(0x02E0_7000, 0x1000);
+    try guest.writeWord(0x02E0_7600, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFF), try guest.readWord(0x02E0_7600));
+    try std.testing.expectError(error.Mapped, guest.map(0x02E0_7000, 0x1000));
+}
+
+test "an engine guest reports a page it already holds as Mapped" {
+    var core = try ra8.core.engine.Engine.open();
+    defer core.close();
+    const guest = Guest{ .engine = core };
+    try guest.map(0x02C1_E000, 0x1000);
+    try std.testing.expectError(error.Mapped, guest.map(0x02C1_E000, 0x1000));
+}
