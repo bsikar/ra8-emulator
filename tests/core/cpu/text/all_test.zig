@@ -19,6 +19,16 @@ test {
     _ = @import("mve_float_cvt_fixed_test.zig");
     _ = @import("mve_float_cvt_half_test.zig");
     _ = @import("mve_float_cvt_int_test.zig");
+    _ = @import("mve_float_fma_test.zig");
+    _ = @import("mve_float_maxnm_test.zig");
+    _ = @import("mve_float_maxnma_test.zig");
+    _ = @import("mve_float_maxnmv_test.zig");
+    _ = @import("mve_float_rint_test.zig");
+    _ = @import("mve_float_unary_test.zig");
+    _ = @import("mve_float_scalar_test.zig");
+    _ = @import("mve_float_vcadd_test.zig");
+    _ = @import("mve_float_vcmla_test.zig");
+    _ = @import("mve_float_vcmul_test.zig");
     _ = @import("mve_vpst_test.zig");
     _ = @import("shift_imm_test.zig");
     _ = @import("add_sub_test.zig");
