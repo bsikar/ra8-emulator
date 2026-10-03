@@ -150,6 +150,9 @@ pub const Mstp = struct {
     /// The security attribution words next door, or null on a board that
     /// has none, in which case nothing is delegated.
     attribution: ?*const pscu.Unit = null,
+    /// The bus, read for which alias a store came through. Null treats
+    /// every store as Secure, as a board without one always did.
+    bus: ?*const periph.Bus = null,
     /// Secure stores whose bits the attribution mask refused to move.
     masked_writes: u32 = 0,
     /// The OCTACLK watch, or null on a board that has none. MSTPB16/B17 are
@@ -237,7 +240,7 @@ pub const Mstp = struct {
             const register = &self.regs[byte / 4];
             // A delegated bit is owned by the Non-secure alias: the store
             // names it, and it does not move.
-            const writable = ~self.delegated(byte / 4) & (@as(u32, 0xFF) << shift);
+            const writable = self.movable(byte / 4) & (@as(u32, 0xFF) << shift);
             if (writable == 0) {
                 self.masked_writes +%= 1;
                 continue;
@@ -259,6 +262,16 @@ pub const Mstp = struct {
         const freed = before & ~after & octaclk.ospi_bits;
         if (freed == 0) return;
         unit.release();
+    }
+
+    /// The bits of one MSTPCR register the store being served may move. A
+    /// Secure store moves what was not delegated. A store through the
+    /// Non-secure alias moves the delegated bits too: they are its own. The
+    /// silicon also ignores a Non-secure store to a Secure-owned bit; that
+    /// is not modelled, so such a store still lands, as it always has.
+    fn movable(self: *const Mstp, register: usize) u32 {
+        const bus = self.bus orelse return ~self.delegated(register);
+        return if (bus.nonsecure) 0xFFFF_FFFF else ~self.delegated(register);
     }
 
     /// The bits of one MSTPCR register that a Secure store cannot move.

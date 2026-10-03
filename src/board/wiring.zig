@@ -51,6 +51,7 @@ const sd_card_line = @import("../periph/sd/sd_card_line.zig");
 fn attachGate(self: *Board) !void {
     try self.bus.add(self.modules.block());
     self.modules.attribution = &self.attribution;
+    self.modules.bus = &self.bus;
     try self.bus.add(self.attribution.block());
     self.bus.gate = self.modules.gate();
 }
