@@ -34,6 +34,8 @@ pub const control_bits = struct {
     pub const spsel: u32 = 1 << 1;
     /// An FP context is active: the next exception stacks the extended frame.
     pub const fpca: u32 = 1 << 2;
+    /// Secure FP context is active, as carried in FPCXT payloads.
+    pub const sfpa: u32 = 1 << 3;
     /// Pointer authentication and branch target identification enable bits.
     pub const bti_en: u32 = 1 << 4;
     pub const ubti_en: u32 = 1 << 5;

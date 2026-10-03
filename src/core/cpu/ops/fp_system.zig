@@ -9,9 +9,9 @@
 //! APSR_nzcv form, which copies FPSCR.NZCV into the APSR flags. VMSR:
 //! 1110 1110 1110 0001, same hw2. The register field (hw1[3:0]) decodes
 //! FPSCR (0001) and the Armv8.1-M VPR (1100) and P0 (1101), where P0 moves
-//! only VPR[15:0] and a VPR write clears its reserved top byte. The FPCXT
-//! forms are not decoded, and neither the privilege nor the CPACR checks
-//! are modelled yet. SP as Rt, and PC for VMSR, stay unclaimed.
+//! only VPR[15:0] and a VPR write clears its reserved top byte. FPCXT and
+//! FPSCR_nzcvqc forms are decoded; FPCXT access is Secure-only. SP as Rt,
+//! and PC for VMSR, stay unclaimed.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
@@ -29,6 +29,12 @@ pub const encodings = struct {
     pub const vmsr_vpr: u16 = 0xEEEC;
     pub const vmrs_p0: u16 = 0xEEFD;
     pub const vmsr_p0: u16 = 0xEEED;
+    pub const vmrs_nzcvqc: u16 = 0xEEF2;
+    pub const vmsr_nzcvqc: u16 = 0xEEE2;
+    pub const vmrs_fpcxt_ns: u16 = 0xEEFE;
+    pub const vmsr_fpcxt_ns: u16 = 0xEEEE;
+    pub const vmrs_fpcxt_s: u16 = 0xEEFF;
+    pub const vmsr_fpcxt_s: u16 = 0xEEEF;
     /// hw2 of VMRS and VMSR with Rt ([15:12]) masked out.
     pub const transfer_hw2: u16 = 0x0A10;
 };
@@ -58,6 +64,12 @@ fn decodeTransfer(instr: Instr) ?op.Exec {
         encodings.vmsr_vpr => if (rt >= 13) null else &vmsrVpr,
         encodings.vmrs_p0 => if (rt >= 13) null else &vmrsP0,
         encodings.vmsr_p0 => if (rt >= 13) null else &vmsrP0,
+        encodings.vmrs_nzcvqc => if (rt >= 13) null else &vmrsNzcvqc,
+        encodings.vmsr_nzcvqc => if (rt >= 13) null else &vmsrNzcvqc,
+        encodings.vmrs_fpcxt_ns => if (rt >= 13) null else &vmrsFpcxtNs,
+        encodings.vmsr_fpcxt_ns => if (rt >= 13) null else &vmsrFpcxtNs,
+        encodings.vmrs_fpcxt_s => if (rt >= 13) null else &vmrsFpcxtS,
+        encodings.vmsr_fpcxt_s => if (rt >= 13) null else &vmsrFpcxtS,
         else => null,
     };
 }
@@ -120,4 +132,66 @@ fn vmrsP0(cpu: *Cpu, instr: Instr) op.Error!void {
 
 fn vmsrP0(cpu: *Cpu, instr: Instr) op.Error!void {
     cpu.fp.vpr.p0 = @truncate(cpu.regs.get(@intCast(instr.hw2 >> 12)));
+}
+
+fn vmrsNzcvqc(cpu: *Cpu, instr: Instr) op.Error!void {
+    cpu.regs.set(@intCast(instr.hw2 >> 12), cpu.fp.fpscr.bits() & 0xF800_0000);
+}
+
+fn vmsrNzcvqc(cpu: *Cpu, instr: Instr) op.Error!void {
+    const flags = cpu.regs.get(@intCast(instr.hw2 >> 12)) & 0xF800_0000;
+    cpu.fp.fpscr = Fpscr.fromBits((cpu.fp.fpscr.bits() & 0x07FF_FFFF) | flags);
+}
+
+fn requireSecure(cpu: *const Cpu) op.Error!void {
+    if (cpu.banked.current != .secure) return error.Undefined;
+}
+
+fn fpInactive(cpu: *const Cpu) bool {
+    const control_bits = @import("../regs.zig").control_bits;
+    return cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & control_bits.fpca == 0;
+}
+
+fn contextPayload(sfpa: u1, fpscr: u32) u32 {
+    return (@as(u32, sfpa) << 31) | (fpscr & 0x0FFF_FFFF);
+}
+
+fn vmrsFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireSecure(cpu);
+    const inactive = fpInactive(cpu);
+    const control_bits = @import("../regs.zig").control_bits;
+    const secure_context = cpu.regs.control & control_bits.sfpa != 0;
+    const saved = if (inactive)
+        contextPayload(0, cpu.fp.context.defaultFpscr().bits())
+    else
+        contextPayload(@intFromBool(secure_context), cpu.fp.fpscr.bits());
+    cpu.regs.set(@intCast(instr.hw2 >> 12), saved);
+    if (!inactive and !secure_context) cpu.fp.fpscr = cpu.fp.context.defaultFpscr();
+}
+
+fn vmsrFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireSecure(cpu);
+    // With no FP context active the write is a NOP (DDI0553 VMSR FPCXT_NS).
+    if (fpInactive(cpu)) return;
+    writeContext(cpu, cpu.regs.get(@intCast(instr.hw2 >> 12)));
+}
+
+fn vmrsFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireSecure(cpu);
+    const control_bits = @import("../regs.zig").control_bits;
+    cpu.regs.set(@intCast(instr.hw2 >> 12), contextPayload(@truncate(cpu.regs.control >> 3), cpu.fp.fpscr.bits()));
+    cpu.fp.fpscr = cpu.fp.context.defaultFpscr();
+    cpu.regs.control &= ~control_bits.sfpa;
+}
+
+fn vmsrFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireSecure(cpu);
+    writeContext(cpu, cpu.regs.get(@intCast(instr.hw2 >> 12)));
+}
+
+fn writeContext(cpu: *Cpu, payload: u32) void {
+    const control_bits = @import("../regs.zig").control_bits;
+    const sfpa = @as(u32, @truncate(payload >> 31)) << 3;
+    cpu.regs.control = (cpu.regs.control & ~control_bits.sfpa) | sfpa;
+    cpu.fp.fpscr = Fpscr.fromBits(payload & 0x0FFF_FFFF);
 }
