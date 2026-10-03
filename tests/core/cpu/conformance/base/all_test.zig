@@ -40,5 +40,6 @@ test {
     _ = @import("special_data_vectors_test.zig");
     _ = @import("svc_vectors_test.zig");
     _ = @import("udf_vectors_test.zig");
+    _ = @import("umaal_vectors_test.zig");
     std.testing.refAllDecls(ra8.core.conformance_suite.base);
 }
