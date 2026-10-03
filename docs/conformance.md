@@ -254,7 +254,7 @@ table above. A group listed as missing does not fail the build yet.
 | add_sub | 18 |
 | dp_reg | 29 |
 | special_data | 18 |
-| cps | missing |
+| cps | 13 |
 | cbz | 7 |
 | extend | 7 |
 | reverse | 6 |
@@ -291,9 +291,9 @@ table above. A group listed as missing does not fail the build yet.
 | long_shift_reg | missing |
 | long_shift_sat | missing |
 | long_shift_sat64 | missing |
-| udf | missing |
-| bkpt | missing |
-| svc | missing |
+| udf | 6 |
+| bkpt | 3 |
+| svc | 3 |
 | table_branch | missing |
 | blxns | missing |
 | imm_logic | missing |
