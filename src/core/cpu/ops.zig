@@ -99,4 +99,5 @@ pub const mve_vcmp_fp = @import("ops/mve_vcmp_fp.zig");
 pub const mve_float_fma = @import("ops/mve_float_fma.zig");
 pub const mve_float_unary = @import("ops/mve_float_unary.zig");
 pub const mve_float_cvt_half = @import("ops/mve_float_cvt_half.zig");
+pub const mve_float_cvt_int = @import("ops/mve_float_cvt_int.zig");
 pub const table = @import("ops/table.zig");
