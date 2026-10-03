@@ -5,7 +5,7 @@ pub const text =
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
-    \\                    [--usb-loop]
+    \\                    [--usb-loop] [--cms N] [--sfs N]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
@@ -97,6 +97,8 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
+    \\  --cms N            Secure code MRAM, 32 KB units (CMSAMON.CMS, 0..0x1FF)
+    \\  --sfs N            Secure SiP flash, 32 KB units (SFSAMON.SFS, 0..0x1FF)
     \\  --console          stream SCI lines and read host input as console RX
     \\  --usb-loop         cable the HS host jack to the board's own FS
     \\                     device jack, in place of the stand-in device

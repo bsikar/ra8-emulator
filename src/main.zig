@@ -341,6 +341,7 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
 /// terms and says so; this only puts them in order.
 fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
     board.part = options.part;
+    board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
     if (options.usb_loop) board.usb.loopBack();
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);

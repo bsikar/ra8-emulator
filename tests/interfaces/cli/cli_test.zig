@@ -174,3 +174,25 @@ test "--touch @PATH names a live touch source; --touch X,Y still queues" {
     try std.testing.expectEqual(@as(usize, 1), live.touch_count);
     try std.testing.expectEqual(@as(u16, 3), live.touches[0].x);
 }
+
+test "--cms and --sfs set the code MRAM and SiP flash split, nine bits at most" {
+    const unset = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expectEqual(@as(?u9, null), unset.cms);
+    try std.testing.expectEqual(@as(?u9, null), unset.sfs);
+
+    const split = try parse(&[_][]const u8{ "emu", "a.elf", "--cms", "2", "--sfs", "0x1FF" });
+    try std.testing.expectEqual(@as(?u9, 2), split.cms);
+    try std.testing.expectEqual(@as(?u9, 0x1FF), split.sfs);
+
+    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cms", "0x200" }));
+    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--sfs", "-1" }));
+    try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cms" }));
+}
+
+test "the board-world flags still read the same after moving out of cli.zig" {
+    const world = try parse(&[_][]const u8{ "emu", "a.elf", "--click", "--battery", "40", "--no-blocks", "--usb-loop" });
+    try std.testing.expect(world.click);
+    try std.testing.expectEqual(@as(u8, 40), world.battery.soc_pct);
+    try std.testing.expect(!world.blocks);
+    try std.testing.expect(world.usb_loop);
+}

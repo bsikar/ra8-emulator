@@ -4,7 +4,8 @@ const part = @import("../../core/part.zig");
 const place = @import("../../debug/place.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
-const touch_spec = @import("touch_spec.zig");
+const world_flags = @import("world_flags.zig");
+const next = world_flags.next;
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
@@ -59,6 +60,10 @@ pub const Options = struct {
     /// also carries the Ethos-U55, so this decides whether that window
     /// answers at all.
     part: part.Part = .ra8d2,
+    /// CMSAMON.CMS and SFSAMON.SFS, the Secure code MRAM and SiP flash in
+    /// 32 KB units. Null leaves the part unprogrammed (RA8EMU-428).
+    cms: ?u9 = null,
+    sfs: ?u9 = null,
     /// Format the card on the SPI line before the run. Null leaves it the
     /// way it has always come up: blank, with no volume on it at all.
     sd_new: ?sd_format.Kind = null,
@@ -221,7 +226,7 @@ pub fn parse(argv: []const []const u8) !Options {
     var options = Options{ .path = argv[1] };
     var index: usize = 2;
     while (index < argv.len) : (index += 1) {
-        if (try parseWorld(&options, argv, &index)) continue;
+        if (try world_flags.parse(&options, argv, &index)) continue;
         if (try parseDebug(&options, argv, &index)) continue;
         if (std.mem.eql(u8, argv[index], "--instructions")) {
             index += 1;
@@ -348,48 +353,6 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.stop_on_undefined = true;
     } else return false;
     return true;
-}
-
-fn parseWorld(options: *Options, argv: []const []const u8, index: *usize) !bool {
-    const flag = argv[index.*];
-    if (std.mem.eql(u8, flag, "--console")) {
-        options.console = true;
-    } else if (std.mem.eql(u8, flag, "--trace-sd")) {
-        options.trace_sd = true;
-    } else if (std.mem.eql(u8, flag, "--charge")) {
-        options.battery.charging = true;
-    } else if (std.mem.eql(u8, flag, "--click")) {
-        options.click = true;
-    } else if (std.mem.eql(u8, flag, "--bus-errors") or std.mem.eql(u8, flag, "--no-bus-errors")) {
-        options.bus_errors = flag[2] == 'b';
-    } else if (std.mem.eql(u8, flag, "--blocks") or std.mem.eql(u8, flag, "--no-blocks")) {
-        options.blocks = flag[2] == 'b';
-    } else if (std.mem.eql(u8, flag, "--sd-size")) {
-        options.sd_size_mb = try std.fmt.parseInt(u32, try next(argv, index), 10);
-    } else if (std.mem.eql(u8, flag, "--sd") or std.mem.eql(u8, flag, "--sd-save")) {
-        options.sd_path = try next(argv, index);
-        options.sd_save = flag.len > "--sd".len;
-    } else if (std.mem.eql(u8, flag, "--dump-sd")) {
-        options.dump_sd = try std.fmt.parseInt(u32, try next(argv, index), 0);
-    } else if (std.mem.eql(u8, flag, "--usb-loop")) {
-        options.usb_loop = true;
-    } else if (std.mem.eql(u8, flag, "--usb-disk")) {
-        options.usb_disk = try next(argv, index);
-    } else if (std.mem.eql(u8, flag, "--battery")) {
-        options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
-    } else if (std.mem.eql(u8, flag, "--sd-new")) {
-        options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
-    } else if (touch_spec.claims(flag)) {
-        try touch_spec.take(options, flag, try next(argv, index));
-    } else return false;
-    return true;
-}
-
-/// The argument after the flag, or a refusal when the flag was last.
-fn next(argv: []const []const u8, index: *usize) ![]const u8 {
-    index.* += 1;
-    if (index.* >= argv.len) return error.MissingValue;
-    return argv[index.*];
 }
 
 /// `--report text` or `--report json`; anything else is refused.
