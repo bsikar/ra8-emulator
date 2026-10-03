@@ -46,4 +46,5 @@ test {
     _ = @import("ldst_reg_wide_test.zig");
     _ = @import("ldr_literal_wide_test.zig");
     _ = @import("ldrd_strd_test.zig");
+    _ = @import("ldm_stm_wide_test.zig");
 }
