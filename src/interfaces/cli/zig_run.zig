@@ -18,6 +18,7 @@ const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
 const profile = @import("../../debug/profile.zig");
+const mem_dump = @import("../../debug/mem_dump.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
 
 /// The board side of a Zig-core boundary.
@@ -111,6 +112,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
         try report_dumps.dumpSymbols(out, core.*, image, options);
+        try mem_dump.print(out, core.*, image, options.dump_mem, options.dump_mem_words);
         if (tracer) |*found| {
             // The core lent its retired count while it ran; `ran` holds the
             // final count once the run is over.
