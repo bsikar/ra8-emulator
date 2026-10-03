@@ -2,6 +2,7 @@
 //! what it actually moved, and the kicks it refused to pretend about.
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
+const vela_hook = @import("../../../periph/npu/npu_vela_hook.zig");
 
 /// One line per run that touched the NPU window, plus a line for each kind
 /// of kick that produced no job. A stream dev would have run down the copy
@@ -10,13 +11,15 @@ const Writer = @import("../report.zig").Writer;
 pub fn sections(board: *Board, out: Writer) !void {
     const unit = &board.npu;
     if (unit.quiet()) return;
-    if (unit.jobs == 0 and unit.faults() == 0) {
+    if (unit.jobs == 0 and unit.faults() == 0 and unit.vela.kicks() == 0) {
         try out.print(
             "NPU(Ethos-U55): window touched, {d} read(s), {d} write(s), no job kicked\n",
             .{ unit.reads, unit.writes },
         );
         return;
     }
+    try vela(unit.vela, out);
+    if (unit.jobs == 0 and unit.faults() == 0) return faked(unit.faked, out);
     try out.print(
         "NPU(Ethos-U55): {d} job(s), {d} byte(s) moved, last {s} {d}B check=0x{X:0>8}" ++
             " (stand-in, not Vela)\n",
@@ -64,10 +67,39 @@ pub fn sections(board: *Board, out: Writer) !void {
             .{ unit.short_jobs, unit.short_bytes },
         );
     }
-    if (unit.faked != 0) {
+    try faked(unit.faked, out);
+}
+
+/// The Vela path's own lines: programs that reached their STOP, then one
+/// line for each way a kick on that path ended in a fault.
+fn vela(counters: vela_hook.Counters, out: Writer) !void {
+    if (counters.jobs != 0) {
         try out.print(
-            "NPU(Ethos-U55): REFUSED {d} store(s) to ID or STATUS\n",
-            .{unit.faked},
+            "NPU(Ethos-U55): {d} Vela program(s) ran to STOP, {d} byte(s) moved by DMA\n",
+            .{ counters.jobs, counters.moved },
         );
     }
+    if (counters.unmodelled != 0) {
+        try out.print(
+            "NPU(Ethos-U55): REFUSED {d} Vela program(s) at an operator this model does not run\n",
+            .{counters.unmodelled},
+        );
+    }
+    if (counters.malformed != 0) {
+        try out.print(
+            "NPU(Ethos-U55): REFUSED {d} Vela stream(s) that do not walk to a STOP\n",
+            .{counters.malformed},
+        );
+    }
+    if (counters.refused != 0) {
+        try out.print(
+            "NPU(Ethos-U55): {d} Vela kick(s) FAULTED, the stream or a DMA could not reach memory\n",
+            .{counters.refused},
+        );
+    }
+}
+
+fn faked(count: u32, out: Writer) !void {
+    if (count == 0) return;
+    try out.print("NPU(Ethos-U55): REFUSED {d} store(s) to ID or STATUS\n", .{count});
 }
