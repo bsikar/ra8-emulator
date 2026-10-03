@@ -15,6 +15,10 @@ pub const EngineBus = struct {
     /// without a direct memory operation stepping around them.
     fast_enabled: bool = false,
     direct: bus.DirectMemory = .{},
+    /// The PPB's host pages. A read there is the same bytes the engine
+    /// would return, without its lookup; Scs.load and every wrapper still
+    /// run above this, and writes still go through the engine (RA8EMU-416).
+    ppb: ?[]const u8 = null,
 
     pub fn view(self: *EngineBus) bus.Bus {
         self.direct = .{
@@ -22,11 +26,16 @@ pub const EngineBus = struct {
             .sram = self.core.ram.region(memmap.sram_base),
             .enabled = self.fast_enabled,
         };
+        self.ppb = self.core.ram.region(memmap.ppb_base);
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct };
     }
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *EngineBus = @ptrCast(@alignCast(ctx));
+        if (self.ppb) |bytes| if (address >= memmap.ppb_base) {
+            const offset = address - memmap.ppb_base;
+            if (offset < bytes.len and into.len <= bytes.len - offset) return @memcpy(into, bytes[offset..][0..into.len]);
+        };
         self.core.read(address, into) catch return bus.Error.Unmapped;
     }
 

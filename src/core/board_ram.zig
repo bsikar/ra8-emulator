@@ -93,12 +93,16 @@ pub const Store = struct {
     /// The code MRAM backing is per engine. CPU1 may load a different image,
     /// while its on-chip SRAM aliases below still share CPU0's allocation.
     mram: ?[]u8 = null,
+    /// The PPB is per engine as well: each core has its own SCS (RA8EMU-416).
+    ppb: ?[]u8 = null,
     backing: [memmap.alias_of.len]?[]u8 = @splat(null),
 
     /// Release every allocation. Safe to call on a store that never mapped.
     pub fn deinit(self: *Store) void {
         if (self.mram) |bytes| std.heap.page_allocator.free(bytes);
         self.mram = null;
+        if (self.ppb) |bytes| std.heap.page_allocator.free(bytes);
+        self.ppb = null;
         for (&self.backing) |*held| {
             if (held.*) |bytes| std.heap.page_allocator.free(bytes);
             held.* = null;
@@ -117,6 +121,7 @@ pub const Store = struct {
     /// Host bytes for a whole direct-mapped region, including either alias.
     pub fn region(self: *const Store, base: u32) ?[]u8 {
         if (base == memmap.mram_base or base == memmap.ns_mram_base) return self.mram;
+        if (base == memmap.ppb_base) return self.ppb;
         if (secureIndex(base)) |index| return self.backing[index];
         if (viewedRegion(base)) |secure| return self.backing[secureIndex(secure).?];
         return null;
@@ -171,6 +176,15 @@ pub fn mapBoard(handle: ?*c.uc.uc_engine, store: *Store, shared: ?*Store) Error!
         if (region.base == memmap.ns_mram_base) {
             // This engine's own MRAM, mapped just above in address order.
             const bytes = store.mram orelse return Error.MapFailed;
+            try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
+            continue;
+        }
+        if (region.base == memmap.ppb_base) {
+            const bytes = store.ppb orelse blk: {
+                const fresh = try allocate(region.size);
+                store.ppb = fresh;
+                break :blk fresh;
+            };
             try mapPointer(handle, region.base, region.size, prot, bytes.ptr);
             continue;
         }
