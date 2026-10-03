@@ -281,7 +281,7 @@ table above. A group listed as missing does not fail the build yet.
 | sat16 | 24 |
 | usad8 | 22 |
 | umaal | 20 |
-| dsp_mul16 | missing |
+| dsp_mul16 | 27 |
 | dsp_dual | missing |
 | dsp_mulhi | missing |
 | dsp_long_mul | missing |
