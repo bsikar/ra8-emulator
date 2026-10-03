@@ -88,6 +88,8 @@ pub const groups = [_]op.Group{
     needs(.mve, gate.gated(@import("mve_int_scalar.zig").group)),
     needs(.mve, gate.gated(@import("mve_vcmp.zig").group)),
     needs(.mve, gate.gated(@import("mve_vpred.zig").group)),
+    needs(.mve, gate.gated(@import("mve_vctp.zig").group)),
+    needs(.mve, gate.gated(@import("mve_lob_tp.zig").group)),
     needs(.mve, gate.gated(@import("mve_vdup.zig").group)),
     needs(.mve, gate.gated(@import("mve_lane_move.zig").group)),
     needs(.mve, gate.gated(@import("mve_lane_pair.zig").group)),

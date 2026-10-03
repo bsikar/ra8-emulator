@@ -89,6 +89,8 @@ test {
     _ = @import("ops/mve_int_scalar_test.zig");
     _ = @import("ops/mve_vcmp_test.zig");
     _ = @import("ops/mve_vpred_test.zig");
+    _ = @import("ops/mve_vctp_test.zig");
+    _ = @import("ops/mve_lob_tp_test.zig");
     _ = @import("ops/mve_vdup_test.zig");
     _ = @import("ops/mve_lane_move_test.zig");
     _ = @import("ops/mve_lane_pair_test.zig");
