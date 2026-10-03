@@ -260,7 +260,7 @@ table above. A group listed as missing does not fail the build yet.
 | reverse | 6 |
 | it | 8 |
 | branch | 18 |
-| mov_wide | missing |
+| mov_wide | 18 |
 | divide | missing |
 | dp_shifted | missing |
 | shift_reg | missing |
