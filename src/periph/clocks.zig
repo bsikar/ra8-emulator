@@ -184,7 +184,7 @@ pub const Clocks = struct {
     /// cannot see reads, so it is cleared at the next chunk boundary instead:
     /// a poll gets one chunk to observe each wrap, and a firmware that never
     /// polls does not accumulate a flag that was never true for a whole period.
-    fn advanceSysTick(self: *Clocks, core: anytype, instructions: u32) !void {
+    pub fn advanceSysTick(self: *Clocks, core: anytype, instructions: u32) !void {
         const csr = try core.readWord(self.words.csr);
         var next = csr & ~csr_countflag;
         defer_write: {
