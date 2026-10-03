@@ -25,11 +25,12 @@ pub const Conf = struct {
     probe_seconds: ?u32 = null,
     probe_boot_s: ?u32 = null,
 
-    /// The longest modelled time the table gives a conf row: long enough for
-    /// every bench window the firmware tree uses today (epub_open's 12 s boot
-    /// plus 5 s), short enough that an image spinning in a busy loop does not
-    /// stall the whole table.
-    pub const max_floor_ms: u32 = 20_000;
+    /// The longest modelled time the table gives a conf row: the 60 s scrape
+    /// the bench gives wdt_reset_recovery_demo (a 25 s watchdog countdown and
+    /// a second boot), import_reader and usb_printer_vendor. Only
+    /// fs_format_mount's 240 s format is cut short, so an image spinning in a
+    /// busy loop still cannot stall the whole table.
+    pub const max_floor_ms: u32 = 60_000;
 
     /// The bench's own windows when a conf names none: scripts/hil/all.sh
     /// scrapes the console for 10 s and watches a probe for 3 s.
