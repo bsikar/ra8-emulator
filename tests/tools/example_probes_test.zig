@@ -187,3 +187,25 @@ test "ereader_m33 passes on three turns and fails short of them" {
     ;
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, short));
 }
+
+test "lcd_draw_x passes on a yellow centre word and fails on any other colour" {
+    const probe = probes.find("lcd_draw_x.elf").?;
+    const yellow =
+        \\  dump-mem      : 0x22041740 @0x22041740
+        \\                  +0x0000 0xFFE0FFE0 0xFFE0FFE0 0x001FFFE0 0x001F001F
+        \\
+    ;
+    const blue =
+        \\  dump-mem      : 0x22041740 @0x22041740
+        \\                  +0x0000 0x001F001F
+        \\
+    ;
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(probe, yellow));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(probe, blue));
+}
+
+test "display_pal_animation is judged on its scroll offset" {
+    const probe = probes.find("display_pal_animation.elf").?;
+    try std.testing.expectEqualStrings("s_scroll_offset", probe.symbol);
+    try std.testing.expectEqual(@as(u32, 2), probe.min);
+}
