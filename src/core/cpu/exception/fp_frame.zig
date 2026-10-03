@@ -1,8 +1,9 @@
 //! The extended exception frame (RA8EMU-124): the basic eight words, then
-//! S0-S15, FPSCR and a reserved word, 0x68 bytes in all. Entry pushes it
+//! S0-S15, FPSCR and VPR, 0x68 bytes in all. Entry pushes it
 //! when an FP context is active and clears EXC_RETURN.FType; a return with
 //! FType clear pops it. The Secure S16-S31 extension is RA8EMU-165 and lazy
-//! preservation is RA8EMU-163.
+//! preservation is RA8EMU-163. The word after FPSCR is VPR on a core with
+//! MVE (RA8EMU-330) and reserved, stacked as 0, on one without.
 const std = @import("std");
 const bus = @import("../bus.zig");
 const frame = @import("frame.zig");
@@ -14,13 +15,14 @@ pub const words = 26;
 pub const slot = struct {
     pub const s0: usize = frame.words;
     pub const fpscr: usize = frame.words + 16;
-    pub const reserved: usize = frame.words + 17;
+    pub const vpr: usize = frame.words + 17;
 };
 
 /// The FP half of the frame.
 pub const Fp = struct {
     s: [16]u32,
     fpscr: u32,
+    vpr: u32 = 0,
 };
 
 /// Push the basic `basic` frame and `fp` below `sp`; give back the new
@@ -34,6 +36,7 @@ pub fn push(to: bus.Bus, sp: u32, basic: frame.Frame, fp: Fp) bus.Error!u32 {
     if (pad != 0) all[frame.slot.xpsr] |= frame.realigned;
     @memcpy(all[slot.s0..slot.fpscr], &fp.s);
     all[slot.fpscr] = fp.fpscr;
+    all[slot.vpr] = fp.vpr;
     for (all, 0..) |word, i| {
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, word, .little);
@@ -52,7 +55,7 @@ pub const Popped = struct {
 pub fn pop(from: bus.Bus, at: u32) bus.Error!Popped {
     var all: [words]u32 = undefined;
     for (&all, 0..) |*word, i| word.* = try from.readWord(at +% @as(u32, @intCast(i * 4)));
-    var popped: Popped = .{ .frame = undefined, .fp = .{ .s = undefined, .fpscr = all[slot.fpscr] }, .sp = 0 };
+    var popped: Popped = .{ .frame = undefined, .fp = .{ .s = undefined, .fpscr = all[slot.fpscr], .vpr = all[slot.vpr] }, .sp = 0 };
     @memcpy(&popped.frame, all[0..frame.words]);
     @memcpy(&popped.fp.s, all[slot.s0..slot.fpscr]);
     const pad: u32 = if (all[frame.slot.xpsr] & frame.realigned != 0) 4 else 0;

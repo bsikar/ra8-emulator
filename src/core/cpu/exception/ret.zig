@@ -7,6 +7,7 @@ const Cpu = @import("../cpu.zig").Cpu;
 const frame = @import("frame.zig");
 const fp_frame = @import("fp_frame.zig");
 const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
+const Vpr = @import("../mve/predicate.zig").Vpr;
 const exc_return = @import("exc_return.zig");
 
 pub const Error = bus.Error || error{InvalidReturn};
@@ -25,6 +26,7 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
         if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
         for (ext.fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
         cpu.fp.fpscr = Fpscr.fromBits(ext.fp.fpscr);
+        if (cpu.profile.mve) cpu.fp.vpr = vprFrom(ext.fp.vpr);
         break :blk .{ .frame = ext.frame, .sp = ext.sp };
     } else try frame.pop(cpu.bus, at);
     const f = popped.frame;
@@ -42,4 +44,11 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     r.pc = f[frame.slot.return_address] & ~@as(u32, 1);
     r.xpsr = f[frame.slot.xpsr] & restored;
     cpu.event = true;
+}
+
+/// VPR as an extended-frame return restores it: bits 31:24 are reserved.
+fn vprFrom(word: u32) Vpr {
+    var vpr: Vpr = @bitCast(word);
+    vpr.reserved = 0;
+    return vpr;
 }

@@ -55,10 +55,11 @@ fn frameAddress(sp: u32, size: u32) u32 {
     return (sp -% size) & ~(sp & 4);
 }
 
-/// S0-S15 and FPSCR as the extended frame stacks them. Stacking is eager;
-/// lazy preservation is RA8EMU-163.
+/// S0-S15, FPSCR and, with MVE, VPR as the extended frame stacks them.
+/// Stacking is eager; lazy preservation is RA8EMU-163.
 fn fpContext(cpu: *const Cpu) fp_frame.Fp {
-    var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits() };
+    const vpr: u32 = if (cpu.profile.mve) @bitCast(cpu.fp.vpr) else 0;
+    var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits(), .vpr = vpr };
     for (&fp.s, 0..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
     return fp;
 }
