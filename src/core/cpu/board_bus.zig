@@ -13,6 +13,7 @@ const registry = @import("../../periph/registry.zig");
 const memmap = @import("../memmap.zig");
 const sau = @import("../../periph/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
+const mpu_ns = @import("../../periph/mpu/mpu_ns.zig");
 /// Public so a test can build the latch without a root export.
 pub const fault_clear = @import("../../periph/fault_clear.zig");
 const fp_state = @import("fpu/state.zig");
@@ -64,10 +65,7 @@ pub const BoardBus = struct {
     fn read(ctx: *anyopaque, given: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (scs_route.wired(self.security, given)) |halves| return self.readSplit(halves, given, into);
-        const address = switch (scs_route.land(self.security, given)) {
-            .at => |at| at,
-            .res0 => return @memset(into, 0),
-        };
+        const address = self.landing(given) orelse return @memset(into, 0);
         if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
         if (!inWindow(address, into.len)) {
             if (self.scs.load(address, into)) return;
@@ -83,10 +81,7 @@ pub const BoardBus = struct {
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
-        const address = switch (scs_route.land(self.security, given)) {
-            .at => |at| at,
-            .res0 => return,
-        };
+        const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
         if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
         var padded = [_]u8{0} ** 4;
@@ -94,6 +89,18 @@ pub const BoardBus = struct {
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+    }
+
+    /// Where an access lands, or null for RES0: the SCS bank the core's
+    /// state names, and once a Non-secure MPU is wired, that MPU's own copy
+    /// for the Non-secure view of an MPU register (RA8EMU-447).
+    fn landing(self: *const BoardBus, given: u32) ?u32 {
+        const secure = if (self.security) |s| s.current == .secure else true;
+        if (self.scs.regions_ns != null) if (mpu_ns.copyOf(given, secure)) |at| return at;
+        return switch (scs_route.land(self.security, given)) {
+            .at => |at| at,
+            .res0 => null,
+        };
     }
 
     /// A bit-by-bit SCB register read from its Non-secure view: the shared
@@ -176,6 +183,9 @@ pub const Scs = struct {
     /// MPU pairs bank through RNR, as src/core/mpu_hook.zig does.
     /// Enforcement is not armed from here.
     regions: ?*mpu.Mpu = null,
+    /// The Non-secure MPU, programmed through its own copy at +0x20000
+    /// (src/periph/mpu/mpu_ns.zig). Null keeps every MPU access on `regions`.
+    regions_ns: ?*mpu.Mpu = null,
     /// CFSR, HFSR and SFSR are write-one-to-clear. Unicorn latches the clear
     /// in a hook and settles it at the boundary; here the store is settled
     /// as it lands, so no read in between sees the raw word.
@@ -208,7 +218,10 @@ pub const Scs = struct {
             unit.apply(engine_memory.core.*) catch return bus.Error.Unmapped;
         }
         if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
-        if (self.regions) |unit| try bankRegion(memory, unit, address, bytes);
+        if (self.regions) |unit| try bankRegion(memory, unit, address, bytes, 0);
+        if (self.regions_ns) |unit| if (mpu_ns.normalOf(address)) |normal| {
+            try bankRegion(memory, unit, normal, bytes, mpu_ns.offset);
+        };
         if (self.fp) |state| try fileFp(memory, state, address, bytes);
     }
 };
@@ -228,7 +241,8 @@ fn bankPartition(memory: bus.Bus, unit: *sau.Sau, address: u32, bytes: []const u
 /// File a word store into the MPU window and, when it moved RNR, put the
 /// four pairs RNR now selects back in RAM. A CTRL store is taken into the
 /// table by `observe`; the Unicorn-only traps it rearms have no Zig twin.
-fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8) bus.Error!void {
+/// `shift` is where the bank's copy sits above the normal window.
+fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8, shift: u32) bus.Error!void {
     if (bytes.len != 4 or address < memmap.mpu.type_ or address > memmap.mpu.mair1) return;
     const word = std.mem.readInt(u32, bytes[0..4], .little);
     if (unit.observe(address, word) != .rebank) return;
@@ -240,8 +254,8 @@ fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8) 
     };
     for (pairs, 0..) |where, offset| {
         const words = unit.pairFor(@intCast(offset));
-        try putWord(memory, where[0], words[0]);
-        try putWord(memory, where[1], words[1]);
+        try putWord(memory, where[0] + shift, words[0]);
+        try putWord(memory, where[1] + shift, words[1]);
     }
 }
 
