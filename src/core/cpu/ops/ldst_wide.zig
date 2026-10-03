@@ -6,9 +6,8 @@
 //!
 //! The imm8 encoding with P=1 U=1 W=0 is the unprivileged family LDRT,
 //! LDRBT, LDRHT, LDRSBT, LDRSHT, STRT, STRBT and STRHT (RA8EMU-133): a
-//! positive offset, no writeback, and `Form.unprivileged` set so the MPU can
-//! check the access as unprivileged. The Zig bus carries no privilege yet;
-//! RA8EMU-103 arms the MPU on it.
+//! positive offset, no writeback, and `Form.unprivileged` set: the MPU
+//! checks the access as unprivileged from any mode (RA8EMU-370).
 //!
 //! Left unclaimed for their own slices or as UNPREDICTABLE: Rn = PC (the
 //! literal forms), the register-offset forms, byte and halfword loads to the
@@ -116,6 +115,10 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const base = cpu.regs.get(f.rn);
     const offset_address = if (f.add) base +% f.offset else base -% f.offset;
     const address = if (f.index) offset_address else base;
+    const kept: ?bool = if (!f.unprivileged) null else if (cpu.mpu) |m| m.lower() else null;
+    defer if (kept) |was| {
+        cpu.mpu.?.privileged = was;
+    };
     try alignment.memU(cpu.bus, address, f.size);
     if (!f.load) {
         var bytes: [4]u8 = undefined;
