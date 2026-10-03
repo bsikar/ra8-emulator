@@ -32,6 +32,12 @@ pub const probes = [_]Probe{
     // No console: the README's pin-independent liveness word is the GPT
     // free-run tick (RA8EMU-400); the capture counters need an edge source.
     .{ .image = "gpt_edge_capture_count.elf", .symbol = "g_gpt_ecc_tick", .min = 5 },
+    // ereader_m33: a release build logs nothing (ra8_log_info is a no-op),
+    // so the verdict is the shared SRAM2 mailbox: turn_done (0x22100034)
+    // reaches k_erm33_max_turns = 3, which the M33 publishes only after a
+    // re-render per turn (RA8EMU-400). The CLI keeps one --dump-mem, so the
+    // status word is not read alongside it.
+    .{ .image = "ereader_m33.elf", .symbol = "0x22100034", .min = 3 },
     .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
     // No console and no hil.conf: its NSC log veneer only copies into a
     // secure scratch buffer. The README's verdict is that the Non-Secure
@@ -67,9 +73,23 @@ pub fn find(image: []const u8) ?Probe {
     return null;
 }
 
-/// The value the report printed for `name` on a "dump-sym" line, or null
-/// when the line is missing, unresolved or unreadable.
+/// A probe word named by address ("0x22100034") rather than by symbol: a
+/// mailbox two cores share sits at a fixed address and has no symbol, so
+/// the table reads it with --dump-mem instead of --dump-sym.
+pub fn isPlace(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "0x");
+}
+
+/// The command-line flag that reads `name` out of memory.
+pub fn flag(name: []const u8) []const u8 {
+    return if (isPlace(name)) "--dump-mem" else "--dump-sym";
+}
+
+/// The value the report printed for `name` on a "dump-sym" line, or for a
+/// place the first word under its "dump-mem" line; null when the line is
+/// missing, unresolved or unreadable.
 pub fn dumped(report: []const u8, name: []const u8) ?u32 {
+    if (isPlace(name)) return dumpedPlace(report, name);
     var lines = std.mem.splitScalar(u8, report, '\n');
     while (lines.next()) |raw| {
         const line = std.mem.trimLeft(u8, raw, " ");
@@ -81,6 +101,23 @@ pub fn dumped(report: []const u8, name: []const u8) ?u32 {
         const digits = rest[equals + 3 ..];
         const end = std.mem.indexOfScalar(u8, digits, ' ') orelse digits.len;
         return std.fmt.parseInt(u32, digits[0..end], 10) catch null;
+    }
+    return null;
+}
+
+fn dumpedPlace(report: []const u8, name: []const u8) ?u32 {
+    var lines = std.mem.splitScalar(u8, report, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trimLeft(u8, raw, " ");
+        if (!std.mem.startsWith(u8, line, "dump-mem")) continue;
+        const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const rest = std.mem.trimLeft(u8, line[colon + 1 ..], " ");
+        if (!std.mem.startsWith(u8, rest, name) or rest.len == name.len or rest[name.len] != ' ') continue;
+        const words = std.mem.trimLeft(u8, lines.next() orelse return null, " ");
+        if (!std.mem.startsWith(u8, words, "+0x0000 0x")) return null;
+        const digits = words["+0x0000 0x".len..];
+        const end = std.mem.indexOfScalar(u8, digits, ' ') orelse digits.len;
+        return std.fmt.parseInt(u32, digits[0..end], 16) catch null;
     }
     return null;
 }

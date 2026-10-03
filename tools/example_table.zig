@@ -359,8 +359,8 @@ fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8
     if (options.cardImage(image, &env)) |card| try argv.appendSlice(&.{ "--sd", card });
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
-    if (run.probe) |wanted| try argv.appendSlice(&.{ "--dump-sym", wanted.symbol });
-    if (run.probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ "--dump-sym", name });
+    if (run.probe) |wanted| try argv.appendSlice(&.{ probes.flag(wanted.symbol), wanted.symbol });
+    if (run.probe) |wanted| if (wanted.failure) |name| try argv.appendSlice(&.{ probes.flag(name), name });
     if (run.console) try argv.append("--console");
     if (run.until) |text| try argv.appendSlice(&.{ "--until", text });
     if (run.extra) |extra| {
