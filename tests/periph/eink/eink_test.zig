@@ -308,3 +308,7 @@ test "the panel answers through the SPI device seam" {
     _ = on_line.exchange(0x01);
     try std.testing.expectEqual(@as(u32, 1), panel.commands);
 }
+
+test "the panel sits on SPI_B channel 0, where the epaper app drives it" {
+    try std.testing.expectEqual(@as(usize, 0), eink.line_channel);
+}

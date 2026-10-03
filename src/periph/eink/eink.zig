@@ -50,9 +50,9 @@
 //! word decode, which is why a load at 4 bpp accounts four pixels to a word
 //! and not two.
 //!
-//! THE PANEL IS ON CHANNEL 1, and that is the model's own rule rather than a
-//! register: the card took channel 0 and nothing in this tree gives either
-//! chip select.
+//! THE PANEL IS ON SPI_B CHANNEL 0, where the epaper app's k_ep_spi_channel
+//! puts it. The card is on SCI0 in Simple-SPI mode, not on SPI_B, so
+//! nothing else shares the line and no chip select is needed.
 //!
 //! NOT MODELLED, AND NOT GUESSED: the waveform modes themselves (a refresh
 //! is counted and its waveform recorded, no pixels are transformed), the
@@ -70,7 +70,7 @@ pub const lut = busy;
 
 /// Which SPI_B channel the panel is wired to. The model's own rule; see the
 /// header.
-pub const line_channel: usize = 1;
+pub const line_channel: usize = 0;
 
 /// The panel's ready line, driven from the board so an HRDY poll reads a
 /// level rather than a floating zero. Matches the epaper app's busy pin.
