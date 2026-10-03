@@ -355,7 +355,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_float_vcmul | missing |
 | ldrd_strd | 33 |
 | exclusive | 40 |
-| acq_rel | missing |
+| acq_rel | 28 |
 | clrm | missing |
 | ldm_stm_wide | missing |
 | pac | missing |
