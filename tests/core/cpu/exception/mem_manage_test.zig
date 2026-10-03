@@ -1,6 +1,6 @@
 //! Covers src/core/cpu/exception/mem_manage.zig through Cpu.step: a load or
-//! store the MPU refuses is turned away before memory and taken as
-//! MemManage, or escalated to HardFault.
+//! store the MPU refuses is turned away before memory, and a fetch it
+//! refuses never runs; each is taken as MemManage or escalated to HardFault.
 const std = @import("std");
 const ra8 = @import("ra8");
 const fixture = @import("ram.zig");
@@ -175,10 +175,11 @@ test "the background without PRIVDEFENA refuses privileged code too" {
     try expectRefusedUncovered(on, true);
 }
 
-/// Region 0 dropped, so `uncovered` falls to the background.
+/// Region 0 shrunk to the code and handler, so `uncovered` falls to the
+/// background while the instruction itself may still be fetched.
 fn backgroundOnly(ctrl: u32) mpu.Mpu {
     var unit = unitOf(ctrl);
-    unit.table[0] = .{};
+    unit.table[0] = mpu.Region.fromPair(fixture.code | mpu.field.rbar_ap_unprivileged, ((fixture.code + 0xFF) & mpu.field.address) | mpu.field.rlar_enable);
     return unit;
 }
 
@@ -233,4 +234,69 @@ test "under FAULTMASK the MPU is off, unless HFNMIENA, which locks up" {
         locked.regs.faultmask = 1;
         try std.testing.expectEqual(@as(?Stop, .{ .bus_fault = fixture.code }), locked.step());
     }
+}
+
+const iaccviol: u32 = 1 << 0;
+
+/// A fetch of the instruction at the reset PC the MPU refuses: IACCVIOL
+/// alone, MMFAR untouched, the store never made, on both cores.
+fn expectFetchRefused(unit: mpu.Mpu, enabled: bool, unprivileged: bool) !void {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(0, enabled);
+        rig.unit = unit;
+        var cpu = try rig.boot(profile, str_r1_r0, window + 0x40, unprivileged);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(iaccviol, rig.ram.word(memmap.scb.cfsr));
+        try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.mmfar));
+        try std.testing.expectEqual(@as(u32, 0), rig.ram.word(window + 0x40));
+        try std.testing.expectEqual(fixture.code, rig.ram.word(fixture.msp_top - 8));
+        if (enabled) {
+            try std.testing.expectEqual(mem_handler, cpu.regs.pc);
+            try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.hfsr));
+        } else {
+            try std.testing.expectEqual(hard_handler, cpu.regs.pc);
+            try std.testing.expectEqual(forced, rig.ram.word(memmap.scb.hfsr));
+        }
+    }
+}
+
+/// Region 0 made execute-never, so the code it covers cannot be fetched.
+fn executeNever(ctrl: u32) mpu.Mpu {
+    var unit = unitOf(ctrl);
+    unit.table[0] = mpu.Region.fromPair(fixture.base | mpu.field.rbar_ap_unprivileged | mpu.field.rbar_xn, ((fixture.base + 0x3FF) & mpu.field.address) | mpu.field.rlar_enable);
+    return unit;
+}
+
+/// Every region dropped, so the code falls to the background.
+fn nothingMapped(ctrl: u32) mpu.Mpu {
+    var unit = mpu.Mpu{};
+    unit.ctrl = ctrl;
+    return unit;
+}
+
+test "a fetch from an execute-never region is MemManage IACCVIOL, privileged or not" {
+    try expectFetchRefused(executeNever(on), true, false);
+    try expectFetchRefused(executeNever(on), true, true);
+}
+
+test "a fetch from an unmapped address without PRIVDEFENA is MemManage IACCVIOL" {
+    try expectFetchRefused(nothingMapped(on), true, false);
+    try expectFetchRefused(nothingMapped(on), true, true);
+}
+
+test "PRIVDEFENA lets privileged code fetch from the background, not unprivileged" {
+    for (profiles) |profile| {
+        var rig: Rig = undefined;
+        rig.init(0, true);
+        rig.unit = nothingMapped(privdef);
+        var cpu = try rig.boot(profile, str_r1_r0, window + 0x40, false);
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
+    }
+    try expectFetchRefused(nothingMapped(privdef), true, true);
+}
+
+test "a refused fetch with MEMFAULTENA clear escalates to HardFault with FORCED" {
+    try expectFetchRefused(executeNever(on), false, false);
 }
