@@ -172,3 +172,24 @@ test "an unwatched cache hears nothing" {
     decode.code_lines.notify(SramRam.base, 2);
     try std.testing.expect(!cache.lines.dirty);
 }
+
+test "a block in tracked memory is trusted and one outside it is re-checked" {
+    var ram: SramRam = .{};
+    std.mem.writeInt(u16, ram.bytes[0..2], 0x2001, .little); // movs r0,#1
+    std.mem.writeInt(u16, ram.bytes[2..4], 0xE7FE, .little); // b .
+    const cache = try freshCache();
+    defer std.testing.allocator.destroy(cache);
+    _ = cache.next(ram.view(), m85, SramRam.base).?;
+    try std.testing.expect(cache.current.?.tracked);
+    // Rewritten with no report: the trusted block hands out what it formed.
+    std.mem.writeInt(u16, ram.bytes[0..2], 0x2309, .little);
+    cache.current = null;
+    const kept = cache.next(ram.view(), m85, SramRam.base).?;
+    try std.testing.expectEqual(@as(u16, 0x2001), kept.instr.hw1);
+    try std.testing.expectEqual(@as(u64, 0), cache.stale);
+
+    var low: Ram = .{};
+    straightRun(&low);
+    _ = cache.next(low.view(), m85, 0).?;
+    try std.testing.expect(!cache.current.?.tracked);
+}

@@ -56,3 +56,15 @@ test "the Non-secure MRAM alias lands on the same line (RA8EMU-412)" {
     lines.stored(memmap.ns_mram_base + 0x8_0004, 4);
     try std.testing.expect(lines.dirty);
 }
+
+test "covers holds only when every line of the range is tracked" {
+    try std.testing.expect(code_lines.covers(memmap.sram_base + 0x10, memmap.sram_base + 0x90));
+    try std.testing.expect(code_lines.covers(memmap.ns_mram_base, memmap.ns_mram_base + 4));
+    try std.testing.expect(!code_lines.covers(0, 8));
+    try std.testing.expect(!code_lines.covers(memmap.sram_end - 4, memmap.sram_end + 4));
+    try std.testing.expect(!code_lines.covers(memmap.sram_base, memmap.sram_base));
+}
+
+test "the Non-secure MRAM alias lands on the same line" {
+    try std.testing.expectEqual(code_lines.line(memmap.mram_base + 0x400).?, code_lines.line(memmap.ns_mram_base + 0x400).?);
+}
