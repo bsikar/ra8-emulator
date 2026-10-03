@@ -92,6 +92,7 @@ pub const Table = struct {
     pub fn ranked(self: *const Table, into: *[limits.kept]Site) []const Site {
         @memcpy(into[0..self.used], self.sites[0..self.used]);
         const out = into[0..self.used];
+        if (out.len < 2) return out;
         for (1..out.len) |index| {
             var at = index;
             while (at > 0 and out[at].samples > out[at - 1].samples) : (at -= 1) {

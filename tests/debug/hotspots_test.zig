@@ -69,3 +69,13 @@ test "a run that fell into one spin is not quiet" {
     try std.testing.expectEqual(@as(u32, 0x0200029E), out[0].address);
     try std.testing.expectEqual(@as(u64, 50), table.shareOf(out[0]));
 }
+
+test "ranked on an empty or one-site table returns it as it is" {
+    var into: [hotspots.limits.kept]hotspots.Site = undefined;
+    var table = hotspots.Table{};
+    try std.testing.expectEqual(@as(usize, 0), table.ranked(&into).len);
+    table.sample(0x3000);
+    const out = table.ranked(&into);
+    try std.testing.expectEqual(@as(usize, 1), out.len);
+    try std.testing.expectEqual(@as(u32, 0x3000), out[0].address);
+}
