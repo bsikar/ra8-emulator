@@ -149,6 +149,10 @@ pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
             "zig core: unaligned MemA access at 0x{X:0>8} after {d} instructions\n",
             .{ at, cpu.retired },
         ),
+        .stack_overflow => |at| try out.print(
+            "zig core: stack limit overrun at 0x{X:0>8} after {d} instructions\n",
+            .{ at, cpu.retired },
+        ),
     }
     return 1;
 }

@@ -80,8 +80,7 @@ pub const Regs = struct {
     primask: u32 = 0,
     basepri: u32 = 0,
     faultmask: u32 = 0,
-    /// The stack limits MSR and MRS reach. Bits 2:0 are RES0. Checking a
-    /// stack pointer against them is the m85 lane's RA8EMU-21.
+    /// The stack limits MSR and MRS reach. Bits 2:0 are RES0.
     msplim: u32 = 0,
     psplim: u32 = 0,
     /// An EXC_RETURN value a PC write in Handler mode left for the core to
@@ -132,6 +131,11 @@ pub const Regs = struct {
 
     pub fn sp(self: *const Regs) u32 {
         return if (self.usesPsp()) self.psp else self.msp;
+    }
+
+    /// The limit for R13 in the current mode and CONTROL.SPSEL state.
+    pub fn spLimit(self: *const Regs) u32 {
+        return if (self.usesPsp()) self.psplim else self.msplim;
     }
 
     /// SP[1:0] read as zero and ignore writes, on both banked pointers.

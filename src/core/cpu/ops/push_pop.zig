@@ -4,8 +4,8 @@
 //! UNPREDICTABLE, so the group leaves it unclaimed. POP into the PC
 //! interworks: bit 0 sets EPSR.T. An EXC_RETURN value popped in Handler mode
 //! is an exception return, which the core performs once the POP retires
-//! (src/core/cpu/exception/ret.zig). The stack-limit check
-//! (MSPLIM/PSPLIM) arrives with the m85 lane's RA8EMU-21.
+//! (src/core/cpu/exception/ret.zig). The stack-limit check runs at the core's
+//! instruction boundary; PUSH checks before it writes any words.
 const std = @import("std");
 const op = @import("../op.zig");
 const alignment = @import("../alignment.zig");
@@ -44,6 +44,7 @@ fn push(cpu: *Cpu, instr: Instr) op.Error!void {
     const start = cpu.regs.sp() -% 4 * @as(u32, @popCount(registers));
     var address = start;
     try alignment.memA(start, 4);
+    if (start < cpu.regs.spLimit()) return error.StackOverflow;
     for (0..16) |i| {
         if (registers & (@as(u16, 1) << @intCast(i)) == 0) continue;
         var bytes: [4]u8 = undefined;
