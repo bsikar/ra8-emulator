@@ -13,4 +13,7 @@ pub const State = struct {
     vpr: Vpr = .{},
     /// FPCCR, FPCAR and FPDSCR.
     context: Context = .{},
+    /// CPACR as software last wrote it (RA8EMU-353); only CP10 and CP11 are
+    /// implemented. Reset leaves the FPU off. fpu/cpacr.zig decides access.
+    cpacr: u32 = 0,
 };

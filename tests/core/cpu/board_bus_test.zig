@@ -188,3 +188,18 @@ test "word stores and loads of FPCCR, FPCAR and FPDSCR reach the core's FP state
     fp.context.fpccr.lspact = 0;
     try std.testing.expectEqual(@as(u32, 0), try board.view().readWord(fp_at.fpccr));
 }
+
+test "a word store to CPACR on a board run lands in the core's FP state" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var fp: ra8.core.fpu.state.State = .{};
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .fp = &fp } };
+    const cpacr = ra8.core.fpu.scb.address.cpacr;
+    try storeWord(&board, cpacr, ra8.core.fpu.cpacr.full_access | 0x0000_000F);
+    try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, fp.cpacr);
+    try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, try board.view().readWord(cpacr));
+    try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, try core.readWord(cpacr));
+}
