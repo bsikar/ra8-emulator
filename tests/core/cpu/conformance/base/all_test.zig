@@ -17,6 +17,7 @@ test {
     _ = @import("extend_vectors_test.zig");
     _ = @import("hint_vectors_test.zig");
     _ = @import("imm_arith_vectors_test.zig");
+    _ = @import("imm_logic_vectors_test.zig");
     _ = @import("it_vectors_test.zig");
     _ = @import("ldm_stm_vectors_test.zig");
     _ = @import("ldr_literal_vectors_test.zig");
