@@ -141,3 +141,47 @@ test "the gate follows the Non-secure alias too" {
     try std.testing.expectEqual(@as(u32, 1), modules.gated_reads);
     try std.testing.expectEqual(reset_rest, bus.read(win_base + periph.ns_offset + 4, 4));
 }
+
+/// A bus with MSTPCRB bit 11 (USBHS) delegated to Non-secure, the way the
+/// tz_nsc_cgc_usb secure boot leaves it (RA8EMU-354).
+fn delegatedBus(bus: *periph.Bus, modules: *Mstp, unit: *ra8.periph.pscu.Unit) !void {
+    try bus.add(modules.block());
+    modules.attribution = unit;
+    modules.bus = bus;
+    unit.words[1] = 1 << 11;
+}
+
+test "a Non-secure alias store moves a bit delegated to Non-secure" {
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var modules = Mstp{};
+    var unit = ra8.periph.pscu.Unit{};
+    try delegatedBus(&bus, &modules, &unit);
+
+    bus.write(win_base + periph.ns_offset + 4, 4, reset_rest & ~@as(u32, 1 << 11));
+    try std.testing.expectEqual(reset_rest & ~@as(u32, 1 << 11), bus.read(win_base + 4, 4));
+    try std.testing.expectEqual(@as(u32, 0), modules.masked_writes);
+}
+
+test "a Secure store still cannot move a delegated bit" {
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var modules = Mstp{};
+    var unit = ra8.periph.pscu.Unit{};
+    try delegatedBus(&bus, &modules, &unit);
+
+    bus.write(win_base + 4, 4, reset_rest & ~@as(u32, 1 << 11));
+    try std.testing.expectEqual(reset_rest, bus.read(win_base + 4, 4));
+    try std.testing.expectEqual(@as(u32, 1), modules.masked_writes);
+}
+
+test "a Non-secure alias store to an undelegated bit lands as before" {
+    var bus = periph.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var modules = Mstp{};
+    var unit = ra8.periph.pscu.Unit{};
+    try delegatedBus(&bus, &modules, &unit);
+
+    bus.write(win_base + periph.ns_offset + 4, 4, reset_rest & ~@as(u32, 1 << 31));
+    try std.testing.expectEqual(reset_rest & ~@as(u32, 1 << 31), bus.read(win_base + 4, 4));
+}

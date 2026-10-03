@@ -17,14 +17,14 @@ pub const Error = error{AttachFailed};
 /// windows. One bus serves both: src/periph/registry.zig folds the
 /// non-secure alias onto the secure address before it looks anything up.
 pub fn attachBus(handle: ?*c.uc.uc_engine, port: *periph.Port) Error!void {
-    for ([_]u32{ periph.base, periph.ns_base }) |window| {
+    inline for (.{ periph.base, periph.ns_base }) |window| {
         if (c.uc.uc_mmio_map(
             handle,
             window,
             periph.size,
-            onRead,
+            Window(window).onRead,
             port,
-            onWrite,
+            Window(window).onWrite,
             port,
         ) != c.uc.UC_ERR_OK) {
             return Error.AttachFailed;
@@ -50,18 +50,24 @@ pub fn attachWatch(handle: ?*c.uc.uc_engine, watch: *fault.Watch) Error!void {
     }
 }
 
-/// Unicorn hands an offset inside the mapped window, so the window base is
-/// added back before the bus sees it.
-fn onRead(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, user: ?*anyopaque) callconv(.C) u64 {
-    _ = uc;
-    const port: *periph.Port = @ptrCast(@alignCast(user.?));
-    return port.read(periph.base + @as(u32, @truncate(offset)), widthOf(size));
-}
+/// Unicorn hands an offset inside the mapped window, so that window's own
+/// base is added back before the bus sees it. Adding the Secure base for
+/// both windows lost the alias, and the bus could not tell a Non-secure
+/// store from a Secure one (RA8EMU-354).
+fn Window(comptime window: u32) type {
+    return struct {
+        fn onRead(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, user: ?*anyopaque) callconv(.C) u64 {
+            _ = uc;
+            const port: *periph.Port = @ptrCast(@alignCast(user.?));
+            return port.read(window + @as(u32, @truncate(offset)), widthOf(size));
+        }
 
-fn onWrite(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, value: u64, user: ?*anyopaque) callconv(.C) void {
-    _ = uc;
-    const port: *periph.Port = @ptrCast(@alignCast(user.?));
-    port.write(periph.base + @as(u32, @truncate(offset)), widthOf(size), @truncate(value));
+        fn onWrite(uc: ?*c.uc.uc_engine, offset: u64, size: c_uint, value: u64, user: ?*anyopaque) callconv(.C) void {
+            _ = uc;
+            const port: *periph.Port = @ptrCast(@alignCast(user.?));
+            port.write(window + @as(u32, @truncate(offset)), widthOf(size), @truncate(value));
+        }
+    };
 }
 
 fn onInvalid(

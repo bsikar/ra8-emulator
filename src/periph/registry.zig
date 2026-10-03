@@ -119,6 +119,10 @@ pub const Bus = struct {
     /// Set once the module-stop model is attached; null leaves every address
     /// clocked, which is what the smaller tests and the loader want.
     gate: ?Gate = null,
+    /// Whether the access being served came through the Non-secure alias.
+    /// The fold below hands every block the Secure address, so a block whose
+    /// answer depends on the alias (MSTP, RA8EMU-354) reads it here.
+    nonsecure: bool = false,
     /// Whose access is being served. Set by the Port the access came
     /// through; CPU0 when nothing has said otherwise.
     issuer: Issuer = .cpu0,
@@ -163,6 +167,7 @@ pub const Bus = struct {
     pub fn read(self: *Bus, address: u32, width: u3) u32 {
         self.counters.reads += 1;
         const canonical = canonicalize(address);
+        self.nonsecure = canonical != address;
         // An unclocked peripheral reads zero on silicon, whether or not this
         // emulator models the block behind the address.
         if (self.gate) |gate| {
@@ -184,6 +189,7 @@ pub const Bus = struct {
     pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {
         self.counters.writes += 1;
         const canonical = canonicalize(address);
+        self.nonsecure = canonical != address;
         if (self.gate) |gate| {
             if (gate.drops(canonical, .write)) return;
         }
