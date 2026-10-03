@@ -119,7 +119,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
     if (self.part.hasNpu()) {
-        self.npu.memory = core.*;
+        self.npu.memory = .{ .engine = core.* };
         try self.bus.add(self.npu.block());
     }
     try self.bus.add(self.lowpower.block());

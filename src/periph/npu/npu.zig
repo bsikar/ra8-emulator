@@ -56,7 +56,7 @@
 //! and a guest address is 32 bits here, so a BASEPn with anything in its
 //! high word is refused rather than truncated into a plausible pointer.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const periph = @import("../registry.zig");
 const cmd = @import("npu_cmd.zig");
 const vela_hook = @import("npu_vela_hook.zig");
@@ -124,7 +124,7 @@ pub const Npu = struct {
     state: u32 = 0,
     /// The arenas a job moves bytes between. A board built by a test without
     /// an engine leaves it null and a kick is refused rather than faked.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
 
     jobs: u32 = 0,
     /// Bytes the completed jobs moved.
@@ -262,7 +262,7 @@ pub const Npu = struct {
     }
 
     /// The five header words at QBASE, or null if guest memory refused one.
-    fn readStream(self: *const Npu, memory: engine.Engine) ?[cmd.header.words]u32 {
+    fn readStream(self: *const Npu, memory: Guest) ?[cmd.header.words]u32 {
         const base = self.reg64(off.qbase);
         if (base > std.math.maxInt(u32)) return null;
         var stream: [cmd.header.words]u32 = undefined;
@@ -279,7 +279,7 @@ pub const Npu = struct {
     /// stands: the chunk it refused moved nothing, the chunks before it are
     /// in the destination arena, and that is what comes back.
     fn transfer(
-        memory: engine.Engine,
+        memory: Guest,
         program: cmd.Command,
         source: u32,
         destination: u32,
