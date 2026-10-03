@@ -244,7 +244,7 @@ table above. A group listed as missing does not fail the build yet.
 |---|---|
 | hint | 20 |
 | barrier | missing |
-| push_pop | missing |
+| push_pop | 17 |
 | sp_arith | 23 |
 | ldr_literal | missing |
 | ldst_imm | missing |
