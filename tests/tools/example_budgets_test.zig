@@ -57,3 +57,7 @@ test "the SD examples run long enough to read back their card" {
 test "rot_verify_hil runs long enough for its software signature check" {
     try std.testing.expectEqualStrings("200000000", budgets.pick("rot_verify_hil.elf", null).?);
 }
+
+test "psa_crypto_hil runs long enough for its software KATs" {
+    try std.testing.expectEqualStrings("400000000", budgets.pick("psa_crypto_hil.elf", null).?);
+}
