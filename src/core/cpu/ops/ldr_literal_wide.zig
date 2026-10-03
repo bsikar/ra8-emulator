@@ -8,6 +8,7 @@
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const bti = @import("../bti.zig");
 
 pub const encodings = struct {
     /// hw1 with S ([8]), U ([7]) and size ([6:5]) masked out: load, Rn = PC.
@@ -62,5 +63,8 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
         },
         else => try cpu.bus.readWord(f.address),
     };
-    if (f.rt == 15) cpu.regs.bxWritePc(value) else cpu.regs.set(f.rt, value);
+    if (f.rt == 15) {
+        cpu.regs.bxWritePc(value);
+        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+    } else cpu.regs.set(f.rt, value);
 }

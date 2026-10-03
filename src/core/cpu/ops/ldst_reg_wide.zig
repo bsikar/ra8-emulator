@@ -11,6 +11,7 @@ const op = @import("../op.zig");
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const bti = @import("../bti.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.
@@ -93,6 +94,10 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
         const top: u5 = @intCast(@as(u6, f.size) * 8 - 1);
         if ((value >> top) & 1 != 0) value |= ~@as(u32, 0) << top;
     }
-    if (f.rt == 15) return cpu.regs.bxWritePc(value);
+    if (f.rt == 15) {
+        cpu.regs.bxWritePc(value);
+        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+        return;
+    }
     cpu.regs.set(f.rt, value);
 }

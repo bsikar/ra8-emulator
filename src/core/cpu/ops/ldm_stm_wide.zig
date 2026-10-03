@@ -11,6 +11,7 @@ const op = @import("../op.zig");
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const bti = @import("../bti.zig");
 
 pub const encodings = struct {
     /// hw1 with W and Rn masked out.
@@ -110,5 +111,8 @@ fn ldm(cpu: *Cpu, instr: Instr) op.Error!void {
     for (0..15) |i| {
         if (form.list & (@as(u16, 1) << @intCast(i)) != 0) cpu.regs.set(@intCast(i), values[i]);
     }
-    if (form.list & (1 << 15) != 0) cpu.regs.bxWritePc(values[15]);
+    if (form.list & (1 << 15) != 0) {
+        cpu.regs.bxWritePc(values[15]);
+        if (form.rn != 13 and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs);
+    }
 }
