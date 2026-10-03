@@ -71,6 +71,7 @@ fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts,
     const written = try attachAll(core, image, parts, options);
     // TT answers from the SAU the firmware programmed: src/core/tt_hook.zig.
     _ = try ra8.core.csel.tt_hook.attach(core.handle, image, &board.partitions);
+    _ = try ra8.core.csel.vscclrm_hook.attach(core.handle, image);
     ra8.board.option_memory.apply(board, core.*);
     return written;
 }

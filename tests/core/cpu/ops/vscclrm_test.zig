@@ -16,9 +16,13 @@ fn exec(cpu: *Cpu, hw1: u16, hw2: u16) !void {
     try vscclrm.group.decode(wide(hw1, hw2)).?(cpu, wide(hw1, hw2));
 }
 
-/// A core with every S register non-zero and VPR set.
+const sfpa = ra8.core.cpu.regs.control_bits.sfpa;
+
+/// A core with every S register non-zero, VPR set, and an active Secure FP
+/// context (CONTROL.SFPA), so VSCCLRM has something to clear.
 fn filled(ram: *fixture.Ram) !Cpu {
     var cpu = try fixture.boot(ram);
+    cpu.regs.control |= sfpa;
     var n: u6 = 0;
     while (n < 32) : (n += 1) cpu.fp.bank.writeS(@intCast(n), 0x3F80_0000 + @as(u32, n));
     cpu.fp.vpr = @bitCast(@as(u32, 0x00FF_ABCD));
@@ -89,4 +93,27 @@ test "the table routes the veneer's vscclrm to this group alone" {
         try std.testing.expectEqualStrings("vscclrm", g.name);
     }
     try std.testing.expectEqual(@as(usize, 1), claimed);
+}
+
+test "vscclrm with ASPEN set and SFPA clear is a NOP" {
+    var ram: fixture.Ram = .{};
+    var cpu = try filled(&ram);
+    cpu.regs.control &= ~sfpa;
+    const control = cpu.regs.control;
+    try std.testing.expect(vscclrm.idle(&cpu));
+    try exec(&cpu, 0xEC9F, 0x0A10);
+    var n: u6 = 0;
+    while (n < 32) : (n += 1) try std.testing.expectEqual(0x3F80_0000 + @as(u32, n), cpu.fp.bank.readS(@intCast(n)));
+    try std.testing.expectEqual(@as(u32, 0x00FF_ABCD), @as(u32, @bitCast(cpu.fp.vpr)));
+    try std.testing.expectEqual(control, cpu.regs.control);
+}
+
+test "vscclrm with ASPEN clear clears even without SFPA" {
+    var ram: fixture.Ram = .{};
+    var cpu = try filled(&ram);
+    cpu.regs.control &= ~sfpa;
+    cpu.fp.context.fpccr.aspen = 0;
+    try std.testing.expect(!vscclrm.idle(&cpu));
+    try exec(&cpu, 0xEC9F, 0x0A10);
+    try expectCleared(&cpu, 0, 16);
 }
