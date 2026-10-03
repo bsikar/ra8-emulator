@@ -13,6 +13,9 @@ test {
     _ = @import("mve_float_test.zig");
     _ = @import("mve_int_mulh_test.zig");
     _ = @import("mve_int_shift_test.zig");
+    _ = @import("mve_int_vmla_test.zig");
+    _ = @import("mve_int_vqdmlah_test.zig");
+    _ = @import("mve_int_scalar_test.zig");
     _ = @import("mve_gather_test.zig");
     _ = @import("mve_gather64_test.zig");
     _ = @import("mve_gather_imm_test.zig");
