@@ -102,5 +102,6 @@ test {
     _ = @import("ops/mve_float_unary_test.zig");
     _ = @import("ops/mve_float_cvt_half_test.zig");
     _ = @import("ops/mve_float_cvt_int_test.zig");
+    _ = @import("ops/mve_float_cvt_fixed_test.zig");
     _ = @import("ops/table_test.zig");
 }
