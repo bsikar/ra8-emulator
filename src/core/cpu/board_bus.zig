@@ -60,6 +60,7 @@ pub const BoardBus = struct {
 
     fn read(ctx: *anyopaque, given: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (scs_route.wired(self.security, given)) |halves| return self.readSplit(halves, given, into);
         const address = switch (scs_route.land(self.security, given)) {
             .at => |at| at,
             .res0 => return @memset(into, 0),
@@ -78,6 +79,7 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
         const address = switch (scs_route.land(self.security, given)) {
             .at => |at| at,
             .res0 => return,
@@ -89,6 +91,35 @@ pub const BoardBus = struct {
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+    }
+
+    /// A bit-by-bit SCB register read from its Non-secure view: the shared
+    /// bits from the normal word, the banked ones from the Non-secure copy.
+    fn readSplit(self: *BoardBus, halves: scs_route.Split, given: u32, into: []u8) bus.Error!void {
+        const within = given & 3;
+        if (within + into.len > 4) return bus.Error.Unmapped;
+        const memory = self.memory.view();
+        const merged = halves.read(try memory.readWord(halves.shared), try memory.readWord(halves.non_secure));
+        var word: [4]u8 = undefined;
+        std.mem.writeInt(u32, &word, merged, .little);
+        @memcpy(into, word[within..][0..into.len]);
+    }
+
+    /// The write twin of readSplit: the bytes land on the merged word, the
+    /// shared bits go back through Scs.store and the banked ones to the copy.
+    fn writeSplit(self: *BoardBus, halves: scs_route.Split, given: u32, bytes: []const u8) bus.Error!void {
+        const within = given & 3;
+        if (within + bytes.len > 4) return bus.Error.Unmapped;
+        const memory = self.memory.view();
+        const shared = try memory.readWord(halves.shared);
+        const copy = try memory.readWord(halves.non_secure);
+        var word: [4]u8 = undefined;
+        std.mem.writeInt(u32, &word, halves.read(shared, copy), .little);
+        @memcpy(word[within..][0..bytes.len], bytes);
+        const words = halves.write(shared, copy, std.mem.readInt(u32, &word, .little));
+        try putWord(memory, halves.non_secure, words.non_secure);
+        std.mem.writeInt(u32, &word, words.shared, .little);
+        try self.scs.store(self.memory, halves.shared, &word);
     }
 
     /// CFSR, HFSR and SFSR as the Secure bank holds them, read past the

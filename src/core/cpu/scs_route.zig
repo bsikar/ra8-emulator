@@ -12,7 +12,8 @@
 //! where its two halves live: the normal word holds the shared bits and the
 //! Secure copy of the banked ones, and the Non-secure copy of the banked
 //! bits sits at the same word + scs_alias.offset, where wholly banked words
-//! already keep theirs. It is not wired into the bus yet.
+//! already keep theirs. `wired` (RA8EMU-419) hands the bus the split for
+//! the registers wired so far.
 
 const alias = @import("../../periph/scs_alias.zig");
 const scb_bank = @import("../../periph/scb_bank.zig");
@@ -89,4 +90,26 @@ pub fn split(target: alias.Target, systicks: scb_bank.SysTicks) ?Split {
         },
         .word, .unknown => null,
     };
+}
+
+/// AIRCR, SCR, CCR and SHPR1: the bit-by-bit registers wired through the
+/// split so far (RA8EMU-419). ICSR, SHPR3, SHCSR and CFSR wait on a
+/// bank-aware NVIC pick and the write-one-to-clear model (RA8EMU-365).
+const wired_words = [_]u32{ 0xE000_ED0C, 0xE000_ED10, 0xE000_ED14, 0xE000_ED18 };
+
+/// The split an access by a core in `state` to `address` goes through, or
+/// null when it takes the plain path: Secure code on the normal window, a
+/// register not wired yet, or anything outside the SCB.
+pub fn wired(state: ?*const banked.Banked, address: u32) ?Split {
+    const secure = if (state) |s| s.current == .secure else true;
+    const target = switch (alias.route(address, secure)) {
+        .register => |t| t,
+        .outside, .res0 => return null,
+    };
+    if (target.view == .secure) return null;
+    const word = target.address & ~@as(u32, 3);
+    for (wired_words) |candidate| {
+        if (candidate == word) return split(target, .two);
+    }
+    return null;
 }
