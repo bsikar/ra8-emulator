@@ -64,7 +64,10 @@ fn armWatch(core: engine.Engine, one: *watchpoint.Watched, clock: *const u64) !v
 /// Load the image, then read its option-setting memory the way the boot ROM
 /// does before the first instruction: src/board/option_memory.zig.
 fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
-    if (options.console) cli.console_output.configure(&board.serial.line);
+    if (options.console) {
+        cli.console_output.configure(&board.serial.line);
+        board.console_input.enabled = true;
+    }
     const written = try attachAll(core, image, parts, options);
     ra8.board.option_memory.apply(board, core.*);
     return written;

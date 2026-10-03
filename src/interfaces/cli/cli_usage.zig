@@ -82,7 +82,7 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
-    \\  --console          print each finished SCI console line as it arrives
+    \\  --console          stream SCI lines and read host input as console RX
     \\  --usb-loop         cable the HS host jack to the board's own FS
     \\                     device jack, in place of the stand-in device
     \\  --no-bus-errors    end the run with a fault report on an access

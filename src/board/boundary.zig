@@ -29,6 +29,7 @@ pub fn tick(self: *Board, core: engine.Engine) !void {
     self.rswitch.tick();
     self.usb.tick();
     try takeResetRequests(self, core);
+    self.console_input.poll(&self.serial);
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());
     try drain(self, core, self.mailbox.dueEvents());
