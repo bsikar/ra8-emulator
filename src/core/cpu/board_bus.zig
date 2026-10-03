@@ -38,7 +38,7 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = memory.direct };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch }, .direct = memory.direct };
     }
 
     /// Whether the whole access sits in either peripheral window.
@@ -88,6 +88,22 @@ pub const BoardBus = struct {
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
         self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+    }
+
+    /// The core raising a fault: set `bits` in the banked word straight in
+    /// RAM. Going through `write` would reach Scs.store, whose
+    /// write-one-to-clear takes every one written as an acknowledge and
+    /// clears the bit it was asked to raise (RA8EMU-394).
+    fn latch(ctx: *anyopaque, given: u32, bits: u32) bus.Error!void {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        const address = switch (scs_route.land(self.security, given)) {
+            .at => |at| at,
+            .res0 => return,
+        };
+        const memory = self.memory.view();
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, try memory.readWord(address) | bits, .little);
+        try memory.write(address, &bytes);
     }
 };
 

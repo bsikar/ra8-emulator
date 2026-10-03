@@ -102,11 +102,9 @@ pub fn running(level: i16) ?u8 {
     return if (level <= 0) 0 else @intCast(level);
 }
 
-/// Set `bits` in the status word at `address`. A bus with no SCS behind it
-/// keeps no status, so a refused access is dropped.
+/// Set `bits` in the status word at `address` as a latch, never as a store
+/// (Bus.latch). A bus with no SCS behind it keeps no status, so a refused
+/// access is dropped.
 pub fn orInto(on: bus.Bus, address: u32, bits: u32) void {
-    const value = on.readWord(address) catch return;
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value | bits, .little);
-    on.write(address, &bytes) catch {};
+    on.latch(address, bits) catch {};
 }
