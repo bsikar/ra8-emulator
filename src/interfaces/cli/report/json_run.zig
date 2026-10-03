@@ -10,7 +10,8 @@
 //! audio, mipi_phy, capture (report/json_media.zig, RA8EMU-371), icu, pinfunc,
 //! options, part, backup (report/json_system.zig, json_options.zig) and
 //! analog (report/json_analog.zig, RA8EMU-373), compute
-//! (report/json_compute.zig, RA8EMU-377).
+//! (report/json_compute.zig, RA8EMU-377), steps, hotspots, functions,
+//! profile (report/json_where.zig, RA8EMU-378).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -38,6 +39,7 @@ const json_media = @import("json_media.zig");
 const json_system = @import("json_system.zig");
 const json_analog = @import("json_analog.zig");
 const json_compute = @import("json_compute.zig");
+pub const json_where = @import("json_where.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -46,6 +48,8 @@ pub const Run = struct {
     engine: []const u8,
     elapsed: u64,
     bus_errors: bus_fault.Tally = .{},
+    /// The run's own tables (RA8EMU-378); each null when not collected.
+    where: json_where.Where = .{},
 };
 
 /// The whole document, ending in a newline.
@@ -73,6 +77,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try json_system.section(&j, board);
     try json_analog.section(&j, board);
     try json_compute.section(&j, board);
+    try json_where.section(&j, of.where);
     try j.close('}');
     try out.writeByte('\n');
 }

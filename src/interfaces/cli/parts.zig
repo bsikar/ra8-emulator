@@ -84,5 +84,8 @@ pub fn tallyOf(
         .worlds = parts.worlds,
         .undefined_found = undefined_found,
         .bus_errors = parts.bus_tally,
+        .pcs = parts.pcs,
+        .fns = parts.fns,
+        .profile = parts.profile,
     };
 }
