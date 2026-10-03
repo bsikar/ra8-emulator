@@ -271,7 +271,7 @@ table above. A group listed as missing does not fail the build yet.
 | bitfield | 27 |
 | mul_acc | 23 |
 | saturate | 31 |
-| misc_wide | missing |
+| misc_wide | 21 |
 | extend_wide | missing |
 | pkh | missing |
 | parallel | missing |
