@@ -102,3 +102,14 @@ test "floorMs is the probe's boot dwell plus window, else the scrape timeout, ca
     try std.testing.expectEqual(@as(?u32, hil_conf.Conf.max_floor_ms), long.floorMs());
     try std.testing.expectEqual(@as(?u32, null), hil_conf.parse("HIL_MODE=alive\n").floorMs());
 }
+
+test "floorMs falls back to the bench window for the conf's mode" {
+    const scrape = hil_conf.parse("HIL_MODE=uart_scrape\nHIL_EXPECT=\"ok\"\n");
+    try std.testing.expectEqual(@as(?u32, 10_000), scrape.floorMs());
+    const watch = hil_conf.parse("HIL_MODE=jlink_memprobe\nHIL_PROBE_SYMBOL=\"g\"\n");
+    try std.testing.expectEqual(@as(?u32, 3_000), watch.floorMs());
+    const booted = hil_conf.parse("HIL_MODE=jlink_memprobe\nHIL_PROBE_BOOT_S=4\n");
+    try std.testing.expectEqual(@as(?u32, 7_000), booted.floorMs());
+    const named = hil_conf.parse("HIL_MODE=uart_scrape\nHIL_TIMEOUT_S=15\n");
+    try std.testing.expectEqual(@as(?u32, 15_000), named.floorMs());
+}

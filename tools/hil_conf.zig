@@ -30,15 +30,28 @@ pub const Conf = struct {
     /// stall the whole table.
     pub const max_floor_ms: u32 = 20_000;
 
+    /// The bench's own windows when a conf names none: scripts/hil/all.sh
+    /// scrapes the console for 10 s and watches a probe for 3 s.
+    pub const bench_scrape_s: u32 = 10;
+    pub const bench_probe_s: u32 = 3;
+
     /// How much modelled time the bench gives this example: a memory probe's
-    /// boot dwell plus its window, else the console scrape's timeout. Null
-    /// when the conf names neither.
+    /// boot dwell plus its window, else the console scrape's timeout, each
+    /// falling back to the bench default for its mode. Null for any other
+    /// mode that names neither.
     pub fn floorMs(conf: Conf) ?u32 {
-        const seconds = if (conf.probe_seconds) |window|
-            window + (conf.probe_boot_s orelse 0)
-        else
-            conf.timeout_s orelse return null;
+        const seconds = conf.windowS() orelse return null;
         return @min(seconds * 1000, max_floor_ms);
+    }
+
+    fn windowS(conf: Conf) ?u32 {
+        const boot = conf.probe_boot_s orelse 0;
+        if (conf.probe_seconds) |window| return window + boot;
+        if (conf.timeout_s) |timeout| return timeout;
+        const mode = conf.mode orelse return null;
+        if (std.mem.eql(u8, mode, "jlink_memprobe")) return bench_probe_s + boot;
+        if (std.mem.eql(u8, mode, "uart_scrape")) return bench_scrape_s;
+        return null;
     }
 
     /// Whether `console` carries any HIL_EXPECT_NEGATIVE alternative.
