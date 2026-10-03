@@ -32,6 +32,11 @@ pub const control_bits = struct {
     pub const spsel: u32 = 1 << 1;
     /// An FP context is active: the next exception stacks the extended frame.
     pub const fpca: u32 = 1 << 2;
+    /// Pointer authentication and branch target identification enable bits.
+    pub const bti_en: u32 = 1 << 4;
+    pub const ubti_en: u32 = 1 << 5;
+    pub const pac_en: u32 = 1 << 6;
+    pub const upac_en: u32 = 1 << 7;
 };
 
 /// The registers by name. R0-R15 come first, in order, so a register number

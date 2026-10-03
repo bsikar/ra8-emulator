@@ -2,27 +2,32 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const banked = ra8.core.banked;
-const Regs = ra8.core.cpu.regs.Regs;
+const regs = ra8.core.cpu.regs;
+const Regs = regs.Regs;
 
 test "a state switch swaps the banked registers and keeps the shared ones" {
-    var r = Regs{ .msp = 0x2000_1000, .psp = 0x2000_2000, .primask = 1, .basepri = 0x40, .control = 0b1110, .lr = 0xFFFF_FFF9 };
+    const secure_control = regs.control_bits.spsel | regs.control_bits.fpca |
+        regs.control_bits.pac_en | regs.control_bits.upac_en;
+    const non_secure_control = regs.control_bits.npriv | regs.control_bits.bti_en |
+        regs.control_bits.ubti_en;
+    var r = Regs{ .msp = 0x2000_1000, .psp = 0x2000_2000, .primask = 1, .basepri = 0x40, .control = secure_control, .lr = 0xFFFF_FFF9 };
     r.low[0] = 7;
     var b = banked.Banked{ .msplim = 0x2000_0800 };
-    b.other = .{ .msp = 0x3000_1000, .psp = 0x3000_2000, .msplim = 0x3000_0000, .control = 0b01 };
+    b.other = .{ .msp = 0x3000_1000, .psp = 0x3000_2000, .msplim = 0x3000_0000, .control = non_secure_control };
     b.switchTo(&r, .non_secure);
     try std.testing.expectEqual(banked.State.non_secure, b.current);
     try std.testing.expectEqual(@as(u32, 0x3000_1000), r.msp);
     try std.testing.expectEqual(@as(u32, 0x3000_2000), r.psp);
     try std.testing.expectEqual(@as(u32, 0x3000_0000), b.msplim);
     try std.testing.expectEqual(@as(u32, 0), r.primask);
-    // nPRIV/SPSEL come from the Non-secure bank, FPCA/SFPA stay as they were.
-    try std.testing.expectEqual(@as(u32, 0b1101), r.control);
+    // nPRIV/SPSEL and PACBTI enables are banked; FPCA/SFPA stay shared.
+    try std.testing.expectEqual(non_secure_control | regs.control_bits.fpca, r.control);
     try std.testing.expectEqual(@as(u32, 7), r.low[0]);
     try std.testing.expectEqual(@as(u32, 0xFFFF_FFF9), r.lr);
-    try std.testing.expectEqual(banked.Bank{ .msp = 0x2000_1000, .psp = 0x2000_2000, .msplim = 0x2000_0800, .primask = 1, .basepri = 0x40, .control = 0b10 }, b.other);
+    try std.testing.expectEqual(banked.Bank{ .msp = 0x2000_1000, .psp = 0x2000_2000, .msplim = 0x2000_0800, .primask = 1, .basepri = 0x40, .control = regs.control_bits.spsel | regs.control_bits.pac_en | regs.control_bits.upac_en }, b.other);
     b.switchTo(&r, .secure);
     try std.testing.expectEqual(@as(u32, 0x2000_1000), r.msp);
-    try std.testing.expectEqual(@as(u32, 0b1110), r.control);
+    try std.testing.expectEqual(secure_control, r.control);
     try std.testing.expectEqual(@as(u32, 0x40), r.basepri);
 }
 
@@ -57,7 +62,9 @@ test "Secure code reaches the Non-secure copy through the _NS encodings" {
     try std.testing.expect(b.writeNs(&r, s.primask_ns, 3));
     try std.testing.expect(b.writeNs(&r, s.basepri_ns, 0x1E0));
     try std.testing.expect(b.writeNs(&r, s.faultmask_ns, 2));
-    try std.testing.expect(b.writeNs(&r, s.control_ns, 0xF));
+    const ns_enables = regs.control_bits.pac_en | regs.control_bits.bti_en |
+        regs.control_bits.upac_en | regs.control_bits.ubti_en;
+    try std.testing.expect(b.writeNs(&r, s.control_ns, 0xFF));
     try std.testing.expectEqual(@as(?u32, 0x3000_1000), b.readNs(&r, s.msp_ns));
     try std.testing.expectEqual(@as(?u32, 0x3000_2000), b.readNs(&r, s.psp_ns));
     try std.testing.expectEqual(@as(?u32, 0x3000_0000), b.readNs(&r, s.msplim_ns));
@@ -65,7 +72,7 @@ test "Secure code reaches the Non-secure copy through the _NS encodings" {
     try std.testing.expectEqual(@as(?u32, 1), b.readNs(&r, s.primask_ns));
     try std.testing.expectEqual(@as(?u32, 0xE0), b.readNs(&r, s.basepri_ns));
     try std.testing.expectEqual(@as(?u32, 0), b.readNs(&r, s.faultmask_ns));
-    try std.testing.expectEqual(@as(?u32, 0b11), b.readNs(&r, s.control_ns));
+    try std.testing.expectEqual(@as(?u32, 0b11 | ns_enables), b.readNs(&r, s.control_ns));
     // The running (Secure) copy is untouched.
     try std.testing.expectEqual(@as(u32, 0), r.msp);
     try std.testing.expectEqual(@as(u32, 0), r.control);
