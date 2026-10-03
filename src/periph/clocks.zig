@@ -41,6 +41,27 @@ pub const icsr_pendstset: u32 = 1 << 26;
 pub const dwt_ctrl_cyccntena: u32 = 1 << 0;
 pub const demcr_trcena: u32 = 1 << 24;
 
+/// The words one SysTick timer lives at, and the ICSR its wrap pends into.
+/// The default is the timer the normal window names (memmap.syst); a core's
+/// Non-secure timer is the same logic run against `non_secure` (RA8EMU-154).
+pub const Words = struct {
+    csr: u32 = memmap.syst.csr,
+    rvr: u32 = memmap.syst.rvr,
+    cvr: u32 = memmap.syst.cvr,
+    icsr: u32 = memmap.scb.icsr,
+
+    /// The Non-secure timer at the SCS alias, 0xE002_E010 (DDI0553 B6.2).
+    /// Its pend word is left to the caller that wires it.
+    pub const non_secure = Words{
+        .csr = memmap.syst.csr + alias_offset,
+        .rvr = memmap.syst.rvr + alias_offset,
+        .cvr = memmap.syst.cvr + alias_offset,
+    };
+};
+
+/// How far the SCS Non-secure alias sits above the normal window.
+const alias_offset: u32 = 0x0002_0000;
+
 /// The time bases, advanced once per chunk by whoever runs the core.
 ///
 /// The counters here are telemetry, not architectural state: the registers the
@@ -50,6 +71,8 @@ pub const Clocks = struct {
     /// Instructions charged per advance. A field rather than a constant so a
     /// test can run a short chunk; the default is the C tree's chunk.
     per_chunk: u32 = chunk_instructions,
+    /// Which SysTick timer this base counts down.
+    words: Words = .{},
     /// Modelled cycles this run covered, one per instruction. Unconditional,
     /// because time passes whether or not the firmware is watching it: this
     /// is the run's own account of how far it got, and it is the only field
@@ -106,10 +129,9 @@ pub const Clocks = struct {
     /// so the two are the same number. A disabled counter or a zero reload
     /// never wraps and asks for nothing.
     pub fn period(self: *const Clocks, core: anytype) u32 {
-        _ = self;
-        const csr = core.readWord(memmap.syst.csr) catch return 0;
+        const csr = core.readWord(self.words.csr) catch return 0;
         if (csr & csr_enable == 0) return 0;
-        const reload = (core.readWord(memmap.syst.rvr) catch return 0) & counter_mask;
+        const reload = (core.readWord(self.words.rvr) catch return 0) & counter_mask;
         if (reload == 0) return 0;
         return reload + 1;
     }
@@ -163,26 +185,26 @@ pub const Clocks = struct {
     /// a poll gets one chunk to observe each wrap, and a firmware that never
     /// polls does not accumulate a flag that was never true for a whole period.
     fn advanceSysTick(self: *Clocks, core: anytype, instructions: u32) !void {
-        const csr = try core.readWord(memmap.syst.csr);
+        const csr = try core.readWord(self.words.csr);
         var next = csr & ~csr_countflag;
         defer_write: {
             if (csr & csr_enable == 0) break :defer_write; // disabled: the counter holds.
-            const reload = try core.readWord(memmap.syst.rvr) & counter_mask;
+            const reload = try core.readWord(self.words.rvr) & counter_mask;
             if (reload == 0) break :defer_write; // a zero reload never wraps.
-            const current = try core.readWord(memmap.syst.cvr) & counter_mask;
+            const current = try core.readWord(self.words.cvr) & counter_mask;
             const wrapped = wrap(current, reload, instructions);
-            try core.writeWord(memmap.syst.cvr, wrapped.value);
+            try core.writeWord(self.words.cvr, wrapped.value);
             if (wrapped.periods == 0) break :defer_write;
             self.ticks += wrapped.periods;
             self.collapsed += wrapped.periods - 1;
             next |= csr_countflag;
             if (csr & csr_tickint != 0) {
-                const icsr = try core.readWord(memmap.scb.icsr);
-                try core.writeWord(memmap.scb.icsr, icsr | icsr_pendstset);
+                const icsr = try core.readWord(self.words.icsr);
+                try core.writeWord(self.words.icsr, icsr | icsr_pendstset);
                 self.pends += 1;
             }
         }
-        if (next != csr) try core.writeWord(memmap.syst.csr, next);
+        if (next != csr) try core.writeWord(self.words.csr, next);
     }
 };
 
