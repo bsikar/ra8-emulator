@@ -174,3 +174,33 @@ test "a PACBTI-built firmware image runs through the Zig core" {
     try std.testing.expectEqual(@as(u32, 0x247), try core.readWord(memmap.sram_base));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 100 instructions clean"));
 }
+
+/// Reset branches to an even address with UsageFault disabled; HardFault
+/// spins. movs r0, #0 ; bx r0 ; then b . as the NMI and HardFault handler.
+fn loadEvenBranch(core: *Engine) !void {
+    const base = memmap.sram_base;
+    var image: [0x16]u8 = undefined;
+    std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
+    std.mem.writeInt(u32, image[4..8], (base + 0x10) | 1, .little);
+    std.mem.writeInt(u32, image[8..12], (base + 0x14) | 1, .little);
+    std.mem.writeInt(u32, image[12..16], (base + 0x14) | 1, .little);
+    @memcpy(image[0x10..0x16], &[_]u8{ 0x00, 0x20, 0x00, 0x47, 0xFE, 0xE7 });
+    try core.write(base, &image);
+}
+
+test "a board run that took INVSTATE reports CFSR and HFSR.FORCED (RA8EMU-394)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadEvenBranch(&core);
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    _ = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 50, null, .{});
+    const line = "faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n";
+    std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), line) != null) catch |err| {
+        std.debug.print("report was: {s}\n", .{stream.getWritten()});
+        return err;
+    };
+}
