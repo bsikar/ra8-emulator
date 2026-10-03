@@ -169,6 +169,23 @@ test "CFSR and HFSR clear the bits a store writes ones to" {
     try std.testing.expectEqual(@as(u32, 3), clears.stores);
 }
 
+test "a fault the core latches survives the CFSR, HFSR and SFSR write-one-to-clear" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
+    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
+    const sfsr: u32 = 0xE000_EDE4;
+    for ([_][2]u32{ .{ memmap.scb.cfsr, 0x0002_0000 }, .{ memmap.scb.hfsr, 0x4000_0000 }, .{ sfsr, 0x0000_0001 } }) |raise| {
+        try core.writeWord(raise[0], 0x0000_0002);
+        try board.view().latch(raise[0], raise[1]);
+        try std.testing.expectEqual(raise[1] | 0x0000_0002, try board.view().readWord(raise[0]));
+    }
+    try std.testing.expectEqual(@as(u32, 0), clears.stores);
+}
+
 test "word stores and loads of FPCCR, FPCAR and FPDSCR reach the core's FP state" {
     var core = try Engine.open();
     defer core.close();

@@ -63,6 +63,9 @@ pub const Bus = struct {
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
         write: *const fn (ctx: *anyopaque, address: u32, bytes: []const u8) Error!void,
+        /// Sets bits in a status word without a store; null reads and
+        /// writes the word back instead.
+        latch: ?*const fn (ctx: *anyopaque, address: u32, bits: u32) Error!void = null,
     };
 
     pub inline fn read(self: Bus, address: u32, into: []u8) Error!void {
@@ -79,6 +82,16 @@ pub const Bus = struct {
             if (memory.enabled and memory.write(address, bytes)) return;
         };
         return self.vtable.write(self.ctx, address, bytes);
+    }
+
+    /// Set `bits` in a status word the way the core raises a fault. This is
+    /// not a store: a bus with a write-one-to-clear model behind it must not
+    /// take the core's own latch for an acknowledge (RA8EMU-394).
+    pub fn latch(self: Bus, address: u32, bits: u32) Error!void {
+        if (self.vtable.latch) |set| return set(self.ctx, address, bits);
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, try self.readWord(address) | bits, .little);
+        return self.write(address, &bytes);
     }
 
     pub fn readHalf(self: Bus, address: u32) Error!u16 {
