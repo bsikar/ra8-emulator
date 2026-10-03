@@ -305,7 +305,7 @@ table above. A group listed as missing does not fail the build yet.
 | branch_future | missing |
 | ldst_wide | missing |
 | ldr_literal_wide | missing |
-| preload | missing |
+| preload | 29 |
 | fp_arith | missing |
 | fp_unary | missing |
 | fp_system | missing |

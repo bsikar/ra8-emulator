@@ -44,6 +44,7 @@ test {
     _ = @import("mul_acc_vectors_test.zig");
     _ = @import("parallel_vectors_test.zig");
     _ = @import("pkh_vectors_test.zig");
+    _ = @import("preload_vectors_test.zig");
     _ = @import("push_pop_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
     _ = @import("sat16_vectors_test.zig");
