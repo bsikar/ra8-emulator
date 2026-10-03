@@ -94,6 +94,7 @@ pub const entries = [_]Entry{
     .{ .group = "mve_int_pair", .print = @import("mve_int_pair.zig").print, .predicated = @import("mve_int_pair.zig").printPredicated },
     .{ .group = "mve_float", .print = @import("mve_float.zig").print, .predicated = @import("mve_float.zig").printPredicated },
     .{ .group = "mve_int_mulh", .print = @import("mve_int_mulh.zig").print, .predicated = @import("mve_int_mulh.zig").printPredicated },
+    .{ .group = "mve_int_shift", .print = @import("mve_int_shift.zig").print, .predicated = @import("mve_int_shift.zig").printPredicated },
     .{ .group = "mve_vpst", .print = @import("mve_vpst.zig").print },
     .{ .group = "mve_vcmp", .print = @import("mve_vcmp.zig").print, .predicated = @import("mve_vcmp.zig").printPredicated },
     .{ .group = "mve_vcmp_fp", .print = @import("mve_vcmp_fp.zig").print, .predicated = @import("mve_vcmp_fp.zig").printPredicated },
