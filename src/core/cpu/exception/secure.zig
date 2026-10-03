@@ -18,6 +18,7 @@ const secure_fault = @import("../../../periph/secure_fault.zig");
 const fault = @import("fault.zig");
 const active = @import("active.zig");
 const dispatch = @import("dispatch.zig");
+const target = @import("target.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 
 pub const Error = fault.Error;
@@ -30,6 +31,21 @@ pub fn raise(cpu: *Cpu, cause: Cause, pc: u32, address: u32) Error!void {
     const which = try latch(cpu, cause, address);
     cpu.regs.pc = pc;
     try dispatch.enter(cpu, which, pc);
+}
+
+/// INVER for an exception return that refused `value` (RA8EMU-472): a
+/// Non-secure handler returned with EXC_RETURN.ES set. As for INVPC
+/// (fault.invalidReturn), the handler is no longer active, its frame stays
+/// on the stack, and the SecureFault is tail-chained in the state it is taken to with LR set to
+/// 0xF000_0000 + EXC_RETURN.
+pub fn invalidReturn(cpu: *Cpu, value: u32) Error!void {
+    try dispatch.left(cpu);
+    const which = try latch(cpu, .inver, 0);
+    // A tail-chain keeps the frame where it is but not the state: the fault
+    // runs in the state it is taken to, so VTOR and the stacks are its own.
+    const to_secure = target.secure(cpu, which.number);
+    cpu.banked.switchTo(&cpu.regs, if (to_secure) .secure else .non_secure);
+    try dispatch.chain(cpu, which, 0xF000_0000 +% value);
 }
 
 /// Route the fault, latch SFSR (and SFAR), owe HFSR.FORCED when it

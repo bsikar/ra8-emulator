@@ -220,6 +220,11 @@ pub const Cpu = struct {
                     return null;
                 },
                 error.Integrity => self.secureFault(.invis, address, 0, .{ .invalid_return = address }),
+                error.SecureReturn => {
+                    exception.secure.invalidReturn(self, value) catch return .{ .invalid_return = address };
+                    self.secure_faults +%= 1;
+                    return null;
+                },
                 else => .{ .bus_fault = address },
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };

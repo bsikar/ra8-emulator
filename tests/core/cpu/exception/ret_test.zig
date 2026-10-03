@@ -172,3 +172,27 @@ test "a Non-secure EXC_RETURN from Secure state is not a return the core takes" 
     try std.testing.expect(cpu.regs.pc != fixture.code + 2);
     try std.testing.expect(cpu.regs.handlerMode());
 }
+
+test "a Non-secure handler returning to a Secure exception tail-chains SecureFault INVER" {
+    var ram: fixture.Ram = .{};
+    program(&ram, bx_lr);
+    const secure_handler: u32 = fixture.base + 0x1E0;
+    ram.putWord(fixture.base + 7 * 4, secure_handler | 1);
+    ram.putWord(ra8.core.memmap.scb.shcsr, 1 << 19);
+    var cpu = try fixture.boot(&ram);
+    cpu.banked.current = .non_secure;
+    _ = cpu.step();
+    const frame_at = cpu.regs.msp;
+    const value: u32 = 0xFFFF_FFB9; // ES set: names a Secure exception
+    cpu.regs.lr = value;
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(secure_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(@as(u32, 1 << 2), ram.word(0xE000_EDE4));
+    try std.testing.expectEqual(0xF000_0000 +% value, cpu.regs.lr);
+    try std.testing.expectEqual(.secure, cpu.banked.current);
+    try std.testing.expectEqual(@as(u9, 7), cpu.active.running().?.number);
+    try std.testing.expectEqual(@as(u32, 1), cpu.secure_faults);
+    // No new frame: the refused one stays on the Non-secure stack.
+    try std.testing.expectEqual(frame_at, cpu.banked.other.msp);
+}
