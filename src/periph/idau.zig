@@ -65,12 +65,26 @@ pub fn regionOf(address: u32) u8 {
 }
 
 pub const exempt_base: u32 = 0xE000_0000;
+
+/// Code MRAM's Non-secure alias base (HUM Table 51.1 p3270).
+pub const code_ns_base: u32 = 0x1200_0000;
+/// CMSAMON.CMS counts 32 KB units (HUM Table 51.1, 51.8.11 p3299).
+pub const cms_unit: u32 = 32 * 1024;
+
+/// Bytes of Secure code MRAM a CMSAMON.CMS value names. A blank part reads
+/// 0x1FF, which covers the whole MRAM.
+pub fn cmsBytes(area: u9) u32 {
+    return @as(u32, area) * cms_unit;
+}
 const last_region_base: u32 = 0x5000_0000;
 
 pub const Map = struct {
     /// The SRAMSABARn words. With none, SRAM follows the bit-28 rule alone.
     sram: ?*const cpscu_sram.Unit = null,
     banks: *const [cpscu_sram.bank_count]Bank = &ra8d2_banks,
+    /// Bytes of Secure code MRAM from CMSAMON.CMS (cmsBytes). Null leaves
+    /// code to the bit-28 rule, the emulator default (RA8EMU-389).
+    code_secure: ?u32 = null,
 
     /// The map for one part: RA8P1 banks when `ra8p1`, RA8D2 otherwise.
     pub fn forPart(sram: *const cpscu_sram.Unit, ra8p1: bool) Map {
@@ -90,6 +104,7 @@ pub const Map = struct {
         return switch (region) {
             1, 3 => .callable,
             5 => .secure,
+            2 => self.codeState(address),
             4 => self.sramState(address),
             0 => if (address & alias_bit == 0) .callable else .non_secure,
             else => .non_secure,
@@ -99,6 +114,15 @@ pub const Map = struct {
     /// The SAU and this IDAU together, as sau_attr.attribute combines them.
     pub fn attribute(self: Map, unit: *const sau.Sau, address: u32) sau_attr.Attribution {
         return sau_attr.attribute(unit, self.answer(address), address);
+    }
+
+    /// The Non-secure code alias below the CMSAMON boundary is Secure code
+    /// MRAM (HUM Table 51.1, RA8EMU-389). With no boundary set it follows
+    /// the bit-28 rule alone.
+    fn codeState(self: Map, address: u32) sau_attr.State {
+        const bytes = self.code_secure orelse return .non_secure;
+        if (address < code_ns_base) return .non_secure;
+        return if (address - code_ns_base < bytes) .secure else .non_secure;
     }
 
     fn sramState(self: Map, address: u32) sau_attr.State {

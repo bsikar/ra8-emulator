@@ -155,3 +155,25 @@ test "the RA8D2 map reads the same address through a different bank" {
     try std.testing.expectEqual(State.non_secure, idau.Map.forPart(&sram, false).answer(0x3210_0000).state);
     try std.testing.expectEqual(State.secure, idau.Map.forPart(&sram, true).answer(0x3210_0000).state);
 }
+
+test "the code NS alias below the CMSAMON boundary answers Secure" {
+    const map = idau.Map{ .code_secure = idau.cmsBytes(2) };
+    try std.testing.expectEqual(State.secure, map.answer(0x1200_0000).state);
+    try std.testing.expectEqual(State.secure, map.answer(0x1200_FFFF).state);
+    try std.testing.expectEqual(State.non_secure, map.answer(0x1201_0000).state);
+    try std.testing.expectEqual(State.callable, map.answer(0x0200_0000).state);
+}
+
+test "an NS SAU region cannot loosen Secure code MRAM" {
+    var unit = sau.Sau{ .ctrl = enable };
+    program(&unit, 0, 0x1200_0000, 0x120F_FFFF, false);
+    const map = idau.Map{ .code_secure = idau.cmsBytes(1) };
+    try std.testing.expectEqual(State.secure, map.attribute(&unit, 0x1200_7FFF).state);
+    try std.testing.expectEqual(State.non_secure, map.attribute(&unit, 0x1200_8000).state);
+}
+
+test "no boundary keeps code on the bit-28 rule, a blank part covers 1 MB" {
+    const map = idau.Map{};
+    try std.testing.expectEqual(State.non_secure, map.answer(0x1200_0000).state);
+    try std.testing.expect(idau.cmsBytes(0x1FF) >= 1024 * 1024);
+}
