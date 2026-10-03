@@ -49,3 +49,4 @@ pub const state = @import("state.zig");
 pub const context = @import("context.zig");
 pub const lazy = @import("lazy.zig");
 pub const cpacr = @import("cpacr.zig");
+pub const scb = @import("scb.zig");
