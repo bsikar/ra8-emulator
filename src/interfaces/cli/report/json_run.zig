@@ -1,5 +1,6 @@
 //! The `--report json` document: the run and cores sections (RA8EMU-347),
-//! then protection (report/json_protect.zig, RA8EMU-349).
+//! then protection (report/json_protect.zig, RA8EMU-349) and memory
+//! (report/json_mem.zig, RA8EMU-350).
 //!
 //! One line, one object, `"schema": "ra8-report/1"` first. Every key in a
 //! section is always present, quiet or not, so an agent can index without
@@ -13,6 +14,7 @@ const ipc = @import("../../../periph/ipc/ipc.zig");
 const sync = @import("../../../periph/ipc/ipc_sync.zig");
 const json = @import("json.zig");
 const json_protect = @import("json_protect.zig");
+const json_mem = @import("json_mem.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -34,6 +36,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try mailbox(&j, &board.mailbox);
     try j.close('}');
     try json_protect.section(&j, board);
+    try json_mem.section(&j, board);
     try j.close('}');
     try out.writeByte('\n');
 }

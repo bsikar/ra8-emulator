@@ -5,6 +5,7 @@ const ra8 = @import("ra8");
 
 const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
+const Fixture = @import("json_board.zig").Fixture;
 
 /// The document for `board`, parsed. The caller frees both.
 fn parsed(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
@@ -27,11 +28,13 @@ fn has(object: Value, key: []const u8, tag: std.meta.Tag(Value)) !void {
 }
 
 test "a quiet board has every run and cores key, and empty unit lists" {
-    var board = ra8.board.Board.init(std.testing.allocator);
-    defer board.deinit();
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    const board = &fix.board;
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
-    const doc = try parsed(&board, &buf);
+    const doc = try parsed(board, &buf);
     defer doc.deinit();
     try std.testing.expectEqualStrings("ra8-report/1", doc.value.object.get("schema").?.string);
     const run = doc.value.object.get("run").?;
@@ -54,8 +57,10 @@ test "a quiet board has every run and cores key, and empty unit lists" {
 }
 
 test "busy IPC units are listed with their index and counts" {
-    var board = ra8.board.Board.init(std.testing.allocator);
-    defer board.deinit();
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    const board = &fix.board;
     board.second_core.act = true;
     board.second_core.initvtor = 0x0200_0000;
     board.mailbox.channels[2].sends = 3;
@@ -65,7 +70,7 @@ test "busy IPC units are listed with their index and counts" {
     board.mailbox.locks.doorbells[1].sends = 2;
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
-    const doc = try parsed(&board, &buf);
+    const doc = try parsed(board, &buf);
     defer doc.deinit();
     const cores = doc.value.object.get("cores").?;
     try std.testing.expect(cores.object.get("cpu1").?.object.get("activated").?.bool);
