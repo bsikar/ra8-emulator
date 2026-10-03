@@ -41,9 +41,27 @@ test "the shift crosses the register boundary" {
     try std.testing.expectEqual(@as(u64, 2), try run(0xEA52, 0x73DF, 0, 1));
 }
 
+/// Runs the op with r4:r5 = lo:hi; returns hi:lo.
+fn runR4(hw2: u16, value: u64) !u64 {
+    var cpu: Cpu = .{ .bus = undefined };
+    cpu.regs.low[4] = @truncate(value);
+    cpu.regs.low[5] = @truncate(value >> 32);
+    const exec = long_shift.group.decode(wide(0xEA54, hw2)) orelse return error.NotClaimed;
+    try exec(&cpu, wide(0xEA54, hw2));
+    return (@as(u64, cpu.regs.low[5]) << 32) | cpu.regs.low[4];
+}
+
+test "lsrl and asrl r4, r5, #32 encode the amount as zero (npu_vela_conv)" {
+    const f = long_shift.fields(wide(0xEA54, 0x051F)).?;
+    try std.testing.expectEqual(@as(u6, 32), f.amount);
+    try std.testing.expectEqual(long_shift.Kind.lsrl, f.kind);
+    try std.testing.expectEqual(@as(u64, 0x89AB_CDEF), try runR4(0x051F, 0x89AB_CDEF_0123_4567));
+    try std.testing.expectEqual(@as(u64, 0xFFFF_FFFF_89AB_CDEF), try runR4(0x052F, 0x89AB_CDEF_0123_4567));
+}
+
 test "the forms this slice leaves alone" {
     const left = [_][2]u16{
-        .{ 0xEA52, 0x030F }, // shift of zero
+        .{ 0xEA52, 0x030F }, // lsll of zero
         .{ 0xEA52, 0x1F4F }, // RdaHi 1111: single-register saturating shift
         .{ 0xEA52, 0x137F }, // type 11
         .{ 0xEA53, 0x134F }, // hw1 bit 0 set
