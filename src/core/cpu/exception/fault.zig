@@ -21,6 +21,32 @@ const Cpu = @import("../cpu.zig").Cpu;
 pub const Error = bus.Error || error{Lockup};
 pub const Cause = status.Cause;
 
+/// Keep a configurable UsageFault pending when a higher-priority original
+/// exception wins DerivedLateArrival.
+pub fn pendUsage(cpu: *const Cpu) bus.Error!void {
+    const value = cpu.bus.readWord(memmap.scb.shcsr) catch 0;
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value | usage_pending, .little);
+    try cpu.bus.write(memmap.scb.shcsr, &bytes);
+}
+
+/// The pending UsageFault synthesized by exception-entry stacking.
+pub fn pendingUsage(on: bus.Bus) ?active.Entry {
+    const shcsr = on.readWord(memmap.scb.shcsr) catch return null;
+    if (shcsr & usage_pending == 0) return null;
+    const priority = on.readWord(memmap.scb.shpr1) catch 0;
+    return .{ .number = 6, .priority = @truncate(priority >> 16) };
+}
+
+pub fn clearUsagePending(on: bus.Bus) void {
+    const value = on.readWord(memmap.scb.shcsr) catch return;
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value & ~usage_pending, .little);
+    on.write(memmap.scb.shcsr, &bytes) catch {};
+}
+
+const usage_pending: u32 = 1 << 12;
+
 /// Raise UsageFault for `cause`, which the instruction at `pc` caused.
 pub fn usage(cpu: *Cpu, cause: status.Cause, pc: u32) Error!void {
     const which = try latch(cpu, cause);
@@ -36,6 +62,12 @@ pub fn invalidReturn(cpu: *Cpu, value: u32) Error!void {
     try dispatch.left(cpu);
     const which = try latch(cpu, .invpc);
     try dispatch.chain(cpu, which, 0xF000_0000 +% value);
+}
+
+/// Latch a UsageFault derived during exception entry and say which
+/// exception it routes to (HardFault when it escalates).
+pub fn derivedEntry(cpu: *Cpu, cause: status.Cause) Error!active.Entry {
+    return latch(cpu, cause);
 }
 
 /// Route a UsageFault for `cause`, latch its CFSR bit and HFSR.FORCED when

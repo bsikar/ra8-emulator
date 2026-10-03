@@ -10,20 +10,31 @@ const memmap = @import("../../memmap.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const active = @import("active.zig");
 const entry = @import("entry.zig");
+const fault = @import("fault.zig");
 
 /// Take the pending winner if it may preempt. True when one was taken.
-pub fn poll(cpu: *Cpu) bus.Error!bool {
-    const from = cpu.source orelse return false;
-    const winner = (try from.winner(cpu.bus)) orelse return false;
-    const r = &cpu.regs;
+pub const Error = fault.Error;
+
+pub fn poll(cpu: *Cpu) Error!bool {
+    const external = if (cpu.source) |from| try from.winner(cpu.bus) else null;
+    const pending_fault = fault.pendingUsage(cpu.bus);
     const split = prigroup(cpu.bus);
-    if (active.group(winner.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return false;
+    const fault_first = if (pending_fault) |pending|
+        external == null or active.group(pending.priority, split) < active.group(external.?.priority, split)
+    else
+        false;
+    const winner = if (fault_first) pending_fault else external;
+    const selected_fault = fault_first;
+    const r = &cpu.regs;
+    const candidate = winner orelse return false;
+    if (active.group(candidate.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return false;
     if (cpu.active.full()) return false;
-    // An image with no handler for what it pended keeps the pend, as the
-    // NVIC model does, rather than branching to address zero.
-    const handler = cpu.bus.readWord(entry.vectorTable(cpu) +% @as(u32, winner.number) * 4) catch return false;
+    // An image with no handler for what it pended keeps the pend rather than
+    // branching to address zero.
+    const handler = cpu.bus.readWord(entry.vectorTable(cpu) +% @as(u32, candidate.number) * 4) catch return false;
     if (handler == 0) return false;
-    try enter(cpu, winner, r.pc);
+    if (selected_fault) fault.clearUsagePending(cpu.bus);
+    try enterInternal(cpu, candidate, r.pc, false, !selected_fault);
     return true;
 }
 
@@ -35,21 +46,41 @@ pub fn prigroup(on: bus.Bus) u3 {
 }
 
 /// Enter `which` with `return_address` stacked, and record it active.
-pub fn enter(cpu: *Cpu, which: active.Entry, return_address: u32) bus.Error!void {
-    try entry.take(cpu, which.number, return_address);
+pub fn enter(cpu: *Cpu, which: active.Entry, return_address: u32) Error!void {
+    try enterInternal(cpu, which, return_address, true, true);
+}
+
+fn enterInternal(cpu: *Cpu, which: active.Entry, return_address: u32, derive: bool, notify_source: bool) Error!void {
+    const overflow = try entry.take(cpu, which.number, return_address);
+    if (overflow and derive) {
+        const derived = try fault.derivedEntry(cpu, .stkof);
+        if (derivedWins(derived, which, prigroup(cpu.bus))) {
+            try entry.retarget(cpu, derived.number);
+            _ = cpu.active.push(derived);
+            return;
+        }
+        try fault.pendUsage(cpu);
+    }
     _ = cpu.active.push(which);
-    if (cpu.source) |from| try from.taken(cpu.bus, which.number);
+    if (notify_source) {
+        if (cpu.source) |from| try from.taken(cpu.bus, which.number);
+    }
+}
+
+fn derivedWins(derived: active.Entry, original: active.Entry, split: u3) bool {
+    if (derived.number == 3) return true;
+    return active.group(derived.priority, split) < active.group(original.priority, split);
 }
 
 /// Enter `which` as a tail chain: no frame, `lr` as the link value.
-pub fn chain(cpu: *Cpu, which: active.Entry, lr: u32) bus.Error!void {
+pub fn chain(cpu: *Cpu, which: active.Entry, lr: u32) Error!void {
     try entry.chain(cpu, which.number, lr);
     _ = cpu.active.push(which);
     if (cpu.source) |from| try from.taken(cpu.bus, which.number);
 }
 
 /// SVC, at the priority SHPR2 gives it.
-pub fn supervisorCall(cpu: *Cpu, number: u9, return_address: u32) bus.Error!void {
+pub fn supervisorCall(cpu: *Cpu, number: u9, return_address: u32) Error!void {
     const shpr2 = cpu.bus.readWord(memmap.scb.shpr2) catch 0;
     try enter(cpu, .{ .number = number, .priority = @truncate(shpr2 >> 24) }, return_address);
 }

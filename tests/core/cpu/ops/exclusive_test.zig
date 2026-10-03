@@ -96,7 +96,7 @@ test "exception entry clears the monitor" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
     cpu.exclusive = data;
-    try ra8.core.cpu.exception.entry.take(&cpu, 11, fixture.code);
+    _ = try ra8.core.cpu.exception.entry.take(&cpu, 11, fixture.code);
     try std.testing.expectEqual(@as(?u32, null), cpu.exclusive);
 }
 
