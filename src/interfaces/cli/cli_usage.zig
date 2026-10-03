@@ -56,6 +56,9 @@ pub const text =
     \\                     before the run starts
     \\  --trace-rtos       record each ThreadX thread switch, the stores to
     \\                     _tx_thread_current_ptr, stamped with modelled time
+    \\  --trace-rtos-out FILE
+    \\                     --trace-rtos, and write the trace to FILE (CPU1's
+    \\                     to FILE.cpu1) as text a reader can take back
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run
     \\  --profile          count retired instructions and modelled cycles

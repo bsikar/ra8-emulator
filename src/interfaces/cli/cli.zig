@@ -119,6 +119,8 @@ pub const Options = struct {
     watch_place: ?[]const u8 = null,
     /// `--trace-rtos`: record ThreadX thread switches. src/debug/rtos_hook.zig.
     trace_rtos: bool = false,
+    /// `--trace-rtos-out FILE`: also write the trace there (RA8EMU-345).
+    trace_rtos_out: ?[]const u8 = null,
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
     /// hook. src/debug/rtos_report.zig.
     cpu_load: bool = false,
@@ -296,6 +298,9 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.watch_place = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--trace-rtos")) {
         options.trace_rtos = true;
+    } else if (std.mem.eql(u8, flag, "--trace-rtos-out")) {
+        options.trace_rtos = true;
+        options.trace_rtos_out = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--cpu-load")) {
         options.cpu_load = true;
     } else if (std.mem.eql(u8, flag, "--profile")) {
