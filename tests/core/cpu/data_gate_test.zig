@@ -55,7 +55,9 @@ fn expectAuviol(ram: *fixture.Ram, cpu: *Cpu) !void {
     try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
     try std.testing.expectEqual(auviol | sfarvalid, ram.word(sfsr));
     try std.testing.expectEqual(secure_word, ram.word(sfar));
-    try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+    // SecureFault is taken Secure (RA8EMU-168): the frame is on the
+    // Non-secure stack, parked in the other bank.
+    try std.testing.expectEqual(fixture.code, ram.word(cpu.banked.other.msp + 24));
     try std.testing.expect(!cpu.bus.gate.?.armed);
 }
 

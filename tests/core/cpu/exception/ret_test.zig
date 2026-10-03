@@ -96,7 +96,7 @@ fn expectInvpc(value: u32) !void {
 }
 
 test "an EXC_RETURN the core cannot honour tail-chains INVPC" {
-    try expectInvpc(0xFFFF_FFB9); // Non-secure stack, not banked yet
+    try expectInvpc(0xFFFF_FFF8); // Non-secure exception on a Secure stack: needs the callee frame
 }
 
 test "a frame whose IPSR contradicts the return mode tail-chains INVPC" {
@@ -109,7 +109,7 @@ test "a refused return with FAULTMASK set locks up and stops the core" {
     var cpu = try fixture.boot(&ram);
     _ = cpu.step();
     cpu.regs.faultmask = 1;
-    cpu.regs.lr = 0xFFFF_FFB9;
+    cpu.regs.lr = 0xFFFF_FFF8;
     try std.testing.expectEqual(fixture.handler, cpu.step().?.invalid_return);
 }
 

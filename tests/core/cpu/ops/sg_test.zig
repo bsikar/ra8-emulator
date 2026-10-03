@@ -109,5 +109,7 @@ test "stepping SG outside NSC takes SecureFault INVEP on the SG itself" {
     try std.testing.expectEqual(secure_handler, cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 7), cpu.regs.xpsr & 0x1FF);
     try std.testing.expectEqual(invep, ram.word(sfsr));
-    try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+    // SecureFault is taken Secure (RA8EMU-168): the frame is on the
+    // Non-secure stack, parked in the other bank.
+    try std.testing.expectEqual(fixture.code, ram.word(cpu.banked.other.msp + 24));
 }

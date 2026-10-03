@@ -12,6 +12,8 @@ const Cpu = @import("../cpu.zig").Cpu;
 const frame = @import("frame.zig");
 const fp_frame = @import("fp_frame.zig");
 const exc_return = @import("exc_return.zig");
+const target = @import("target.zig");
+const State = @import("../../banked.zig").State;
 
 /// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
 pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
@@ -22,7 +24,9 @@ pub const Number = u9;
 pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
     const r = &cpu.regs;
     cpu.exclusive = null;
-    const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
+    const from_secure = cpu.banked.current == .secure;
+    const to_secure = target.secure(cpu, number);
+    const handler = try handlerOf(cpu, number);
     const stacked: frame.Frame = .{
         r.low[0],  r.low[1], r.low[2],       r.low[3],
         r.low[12], r.lr,     return_address, r.xpsr,
@@ -32,7 +36,8 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         .thread = !r.handlerMode(),
         .psp = r.usesPsp(),
         .fp = fp,
-        .secure = cpu.banked.current == .secure,
+        .secure = to_secure,
+        .secure_stack = from_secure,
     };
     const size = if (fp) fp_frame.size else frame.size;
     const at = frameAddress(r.sp(), size);
@@ -51,6 +56,7 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         r.setSp(pushed);
     }
     r.lr = exc_return.forEntry(from);
+    if (to_secure) cpu.banked.switchTo(r, .secure);
     r.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
     return overflow;
@@ -95,6 +101,16 @@ fn land(cpu: *Cpu, number: Number, handler: u32) void {
     const thumb = regs_mod.xpsr_bits.thumb;
     r.xpsr = if (handler & 1 != 0) r.xpsr | thumb else r.xpsr & ~thumb;
     r.pc = handler & ~@as(u32, 1);
+}
+
+/// The handler for `number` in the vector table of the state it is taken
+/// to: VTOR reads through the bus as the running state sees it, so the
+/// state is set for the read and put back.
+pub fn handlerOf(cpu: *Cpu, number: Number) bus.Error!u32 {
+    const was = cpu.banked.current;
+    cpu.banked.current = if (target.secure(cpu, number)) State.secure else State.non_secure;
+    defer cpu.banked.current = was;
+    return cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
 }
 
 /// VTOR as the firmware set it, or the table the core reset from while

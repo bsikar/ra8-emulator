@@ -24,7 +24,6 @@ test "decode gives back what entry encoded" {
 test "decode turns away the forms the core does not make" {
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFFF)); // reserved bit 1: LR at reset
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFF5)); // Handler on the PSP
-    try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFB9)); // Non-secure stack
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFF8)); // Non-secure exception
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FF79)); // bit 7 clear
 }
@@ -45,10 +44,16 @@ test "an FP context clears FType" {
 }
 
 test "a Non-secure exception clears S and ES and decodes back" {
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB8), exc_return.forEntry(.{ .thread = true, .psp = false, .secure = false }));
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFBC), exc_return.forEntry(.{ .thread = true, .psp = true, .secure = false }));
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB0), exc_return.forEntry(.{ .thread = false, .psp = false, .secure = false }));
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFAC), exc_return.forEntry(.{ .thread = true, .psp = true, .fp = true, .secure = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB8), exc_return.forEntry(.{ .thread = true, .psp = false, .secure = false, .secure_stack = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFBC), exc_return.forEntry(.{ .thread = true, .psp = true, .secure = false, .secure_stack = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB0), exc_return.forEntry(.{ .thread = false, .psp = false, .secure = false, .secure_stack = false }));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFAC), exc_return.forEntry(.{ .thread = true, .psp = true, .fp = true, .secure = false, .secure_stack = false }));
     const target = exc_return.decode(0xFFFF_FFBC).?;
     try std.testing.expect(!target.secure and target.thread and target.psp and !target.fp);
+}
+
+test "a Secure exception over Non-secure code keeps ES and clears S" {
+    const target: exc_return.Target = .{ .thread = true, .psp = false, .secure = true, .secure_stack = false };
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB9), exc_return.forEntry(target));
+    try std.testing.expectEqual(target, exc_return.decode(0xFFFF_FFB9).?);
 }

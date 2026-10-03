@@ -16,4 +16,6 @@ test {
     _ = @import("debug_event_test.zig");
     _ = @import("sleep_test.zig");
     _ = @import("quiet_source_test.zig");
+    _ = @import("target_test.zig");
+    _ = @import("cross_test.zig");
 }

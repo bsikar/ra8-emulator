@@ -13,4 +13,5 @@ pub const mem_manage = @import("mem_manage.zig");
 pub const debug_event = @import("debug_event.zig");
 pub const nvic_source = @import("nvic_source.zig");
 pub const sleep = @import("sleep.zig");
+pub const target = @import("target.zig");
 pub const quiet_source = @import("quiet_source.zig");
