@@ -349,3 +349,22 @@ test "one arming store ends one boundary" {
     try std.testing.expect(!clock.took());
     try std.testing.expectEqual(@as(u64, 1), clock.rearms);
 }
+
+test "a base on the Non-secure words counts the alias timer and leaves the normal one" {
+    var ppb = FakePpb.init(std.testing.allocator);
+    defer ppb.deinit();
+    const ns = mod.Words.non_secure;
+    try std.testing.expectEqual(@as(u32, 0xE002_E010), ns.csr);
+    try ppb.writeWord(ns.rvr, 99);
+    try ppb.writeWord(ns.cvr, 99);
+    try ppb.writeWord(ns.csr, csr_enable);
+    try ppb.armSysTick(999, csr_enable);
+    var clocks = Clocks{ .words = ns };
+
+    try std.testing.expectEqual(@as(u32, 100), clocks.period(&ppb));
+    try clocks.advance(&ppb, 150);
+    try std.testing.expectEqual(@as(u64, 1), clocks.ticks);
+    try std.testing.expect(try ppb.readWord(ns.csr) & csr_countflag != 0);
+    try std.testing.expectEqual(@as(u32, 999), try ppb.readWord(memmap.syst.cvr));
+    try std.testing.expectEqual(csr_enable, try ppb.readWord(memmap.syst.csr));
+}
