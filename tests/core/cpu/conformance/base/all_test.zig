@@ -22,6 +22,7 @@ test {
     _ = @import("ldst_reg_vectors_test.zig");
     _ = @import("long_mul_vectors_test.zig");
     _ = @import("mov_wide_vectors_test.zig");
+    _ = @import("mul_acc_vectors_test.zig");
     _ = @import("push_pop_vectors_test.zig");
     _ = @import("reverse_vectors_test.zig");
     _ = @import("shift_imm_vectors_test.zig");
