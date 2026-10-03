@@ -19,6 +19,9 @@ pub const Entry = struct {
 pub const Block = struct {
     start: u32 = 0,
     len: usize = 0,
+    /// Every line it covers is tracked, so writes over it drop it and its
+    /// entries are handed out without a re-check (RA8EMU-409).
+    tracked: bool = false,
     entries: [cap]Entry = undefined,
 
     /// Fetch and decode forward from `start` through `cache`. The block ends

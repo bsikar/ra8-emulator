@@ -2,10 +2,11 @@
 //!
 //! `next` hands `Cpu.step` the instruction at the PC with its decode, from
 //! the block it is walking when the PC is the next entry, else from the
-//! block that starts at the PC, formed on a miss. Every entry is checked
-//! against the halfwords now in memory before it is handed out, so rewritten
-//! code never runs stale. A write from anywhere over a marked code line also
-//! drops the blocks on it (RA8EMU-407, RA8EMU-409). A null answer sends the step down its own fetch and decode,
+//! block that starts at the PC, formed on a miss. A write from anywhere over
+//! a marked code line drops the blocks on it (RA8EMU-407, RA8EMU-409), so a
+//! block in DTCM, MRAM or SRAM is trusted as formed. A block anywhere else is
+//! checked against the halfwords now in memory before each entry is handed
+//! out, so rewritten code never runs stale. A null answer sends the step down its own fetch and decode,
 //! which reports any fault or unknown encoding exactly as before.
 const Instr = @import("instr.zig").Instr;
 const bus = @import("bus.zig");
@@ -59,6 +60,7 @@ pub const BlockCache = struct {
             self.reused += 1;
         } else {
             found.* = block.Block.form(from, &self.decoded, core, address);
+            found.tracked = code_lines.covers(found.start, found.end());
             self.lines.mark(found.start, found.end());
             self.formed += 1;
         }
@@ -70,6 +72,10 @@ pub const BlockCache = struct {
     fn take(self: *BlockCache, from: bus.Bus, walking: *block.Block) ?block.Entry {
         if (self.index >= walking.len) return self.leave();
         const kept = walking.entries[self.index];
+        if (walking.tracked) {
+            self.index += 1;
+            return kept;
+        }
         const now = Instr.fetch(from, kept.instr.address) catch return self.leave();
         if (now.size != kept.instr.size or now.hw1 != kept.instr.hw1 or now.hw2 != kept.instr.hw2) {
             walking.len = 0;

@@ -24,9 +24,19 @@ const ranges = [_]Range{
     .{ .base = memmap.dtcm_base, .end = memmap.dtcm_end, .first = 0 },
     .{ .base = memmap.mram_base, .end = memmap.mram_end, .first = dtcm_lines },
     .{ .base = memmap.ns_mram_base, .end = memmap.ns_mram_end, .first = dtcm_lines },
+    .{ .base = memmap.ns_mram_base, .end = memmap.ns_mram_end, .first = dtcm_lines },
     .{ .base = memmap.sram_base, .end = memmap.sram_end, .first = dtcm_lines + mram_lines },
     .{ .base = memmap.ns_sram_base, .end = memmap.ns_sram_end, .first = dtcm_lines + mram_lines },
 };
+
+/// Whether every line of [start, end) is tracked, so a write over it is
+/// always reported and the block needs no re-check (RA8EMU-409).
+pub fn covers(start: u32, end: u32) bool {
+    if (end <= start) return false;
+    const first = line(start) orelse return false;
+    const last = line(end - 1) orelse return false;
+    return last >= first and last - first == ((end - 1) >> line_shift) - (start >> line_shift);
+}
 
 /// The line holding `address`, or null outside the tracked ranges.
 pub fn line(address: u32) ?usize {
