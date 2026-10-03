@@ -201,6 +201,7 @@ pub const Cpu = struct {
                     exception.fault.invalidReturn(self, value) catch return .{ .invalid_return = address };
                     return null;
                 },
+                error.Integrity => self.secureFault(.invis, address, 0, .{ .invalid_return = address }),
                 else => .{ .bus_fault = address },
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };

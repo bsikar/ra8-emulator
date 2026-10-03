@@ -24,8 +24,14 @@ test "decode gives back what entry encoded" {
 test "decode turns away the forms the core does not make" {
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFFF)); // reserved bit 1: LR at reset
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFF5)); // Handler on the PSP
-    try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FFF8)); // Non-secure exception
     try std.testing.expectEqual(@as(?exc_return.Target, null), exc_return.decode(0xFFFF_FF79)); // bit 7 clear
+}
+
+test "decode takes a Non-secure exception over Secure code (S set, ES clear)" {
+    const target = exc_return.decode(0xFFFF_FFF8).?;
+    try std.testing.expect(!target.secure);
+    try std.testing.expect(target.secure_stack);
+    try std.testing.expect(target.thread);
 }
 
 test "only bits 31:24 all set mark an exception return" {
