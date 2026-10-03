@@ -14,6 +14,6 @@ test "PACG, AUTG and BXAUT print their three registers" {
         .{ .hw1 = 0xFB61, .hw2 = 0xF002, .text = "pacg r0, r1, r2" },
         .{ .hw1 = 0xFB6C, .hw2 = 0xFB0E, .text = "pacg fp, ip, lr" },
         .{ .hw1 = 0xFB54, .hw2 = 0x3F05, .text = "autg r3, r4, r5" },
-        .{ .hw1 = 0xFB51, .hw2 = 0xCF1D, .text = "bxaut ip, r1, sp" },
+        .{ .hw1 = 0xFB5E, .hw2 = 0xCF1D, .text = "bxaut ip, lr, sp" },
     });
 }
