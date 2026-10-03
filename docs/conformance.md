@@ -300,7 +300,7 @@ table above. A group listed as missing does not fail the build yet.
 | sg | missing |
 | tt | missing |
 | imm_logic | missing |
-| imm_arith | missing |
+| imm_arith | 35 |
 | branch_wide | missing |
 | branch_future | missing |
 | ldst_wide | missing |
