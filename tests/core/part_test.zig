@@ -32,3 +32,9 @@ test "CPU0 has a Secure and a Non-secure SysTick" {
 test "CPU1 has a Secure and a Non-secure SysTick too" {
     try std.testing.expectEqual(@as(u2, 2), part.cpu1_systicks);
 }
+
+test "CPU0 decodes as a Cortex-M85 and CPU1 as a Cortex-M33" {
+    const Profile = ra8.core.cpu.decode.profile.Profile;
+    try std.testing.expectEqual(Profile.m85, part.cpu0_profile);
+    try std.testing.expectEqual(Profile.m33, part.cpu1_profile);
+}

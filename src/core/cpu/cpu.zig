@@ -71,6 +71,9 @@ pub const Cpu = struct {
     event: bool = false,
     /// What a WFI or WFE left the core waiting for, or null while it runs.
     waiting: ?exception.sleep.Wait = null,
+    /// Which encodings this core implements: an M85's unless the board
+    /// says otherwise (src/core/part.zig, RA8EMU-233).
+    profile: decode.profile.Profile = decode.profile.Profile.m85,
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
@@ -87,7 +90,10 @@ pub const Cpu = struct {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         const instr = Instr.fetch(self.bus, address) catch return .{ .bus_fault = address };
-        const hit = (if (self.decoded) |cache| cache.find(instr) else decode.decode(instr)) orelse return .{ .unknown = instr };
+        const hit = (if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr)) orelse {
+            if (decode.refused(self.profile, instr)) return self.usageFault(.undefinstr, address, .{ .unknown = instr });
+            return .{ .unknown = instr };
+        };
         self.regs.pc = address +% instr.size;
         const it = it_state.get(self.regs.xpsr);
         if (!it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr)) {
