@@ -37,6 +37,9 @@ pub const overrides = [_]Override{
     .{ .image = "epub_toc.elf", .instructions = "80000000" },
     .{ .image = "ra8_io_sd_demo.elf", .instructions = "10000000" },
     .{ .image = "tz_secure_only_sd.elf", .instructions = "20000000" },
+    // The Non-Secure ThreadX tick reads 2 at the 2M default and 5 at 5M; 10M
+    // clears the probe's floor of 5 with room (RA8EMU-287).
+    .{ .image = "tz_threadx_demo.elf", .instructions = "10000000" },
     // RSA/ECC signature checks in software mbedtls bignum code (RA8EMU-285);
     // PASS seen at 200M on both backends, not at 100M.
     .{ .image = "rot_verify_hil.elf", .instructions = "200000000" },
