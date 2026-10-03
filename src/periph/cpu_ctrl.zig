@@ -95,6 +95,15 @@ pub const CpuCtrl = struct {
         return self.accepted == 0 and self.refused == 0 and self.initvtor == 0;
     }
 
+    /// A system reset takes the page back to its reset values, so CPU1 waits
+    /// for a fresh release (RA8EMU-468). The counters are the run's, and stay.
+    pub fn reset(self: *CpuCtrl) void {
+        self.initvtor = 0;
+        self.waitcr = 0;
+        self.actreq = false;
+        self.act = false;
+    }
+
     /// The truth table ra8_cpu1_is_running walks: activated, and not stalled.
     pub fn running(self: *const CpuCtrl) bool {
         if (!self.act) return false;

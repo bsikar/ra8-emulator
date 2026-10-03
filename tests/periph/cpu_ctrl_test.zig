@@ -95,3 +95,15 @@ test "the block covers its own three registers and no more" {
     try std.testing.expect(b.covers(at(cpu_ctrl.regs.actcsr)));
     try std.testing.expect(!b.covers(cpu_ctrl.win_base + cpu_ctrl.win_span));
 }
+
+test "a system reset takes the page back to its reset values" {
+    var page: cpu_ctrl.CpuCtrl = .{};
+    page.write(cpu_ctrl.win_base + cpu_ctrl.regs.initvtor, 4, 0x2200_0400);
+    page.write(cpu_ctrl.win_base + cpu_ctrl.regs.actcsr, 2, cpu_ctrl.key.value | cpu_ctrl.bits.actreq);
+    try std.testing.expect(page.running());
+    page.reset();
+    try std.testing.expect(!page.running());
+    try std.testing.expectEqual(@as(u32, 0), page.initvtor);
+    try std.testing.expectEqual(@as(u32, 0), page.status());
+    try std.testing.expectEqual(@as(u32, 1), page.accepted);
+}

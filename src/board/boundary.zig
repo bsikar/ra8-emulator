@@ -119,5 +119,6 @@ pub fn takeResetRequests(self: *Board, core: anytype) !void {
 pub fn resetFor(self: *Board, source: reset.Source) void {
     self.causes.request(source);
     self.events.clearLatches();
+    self.second_core.reset();
     if (self.reboot) |pending| pending.requested = true;
 }
