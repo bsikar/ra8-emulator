@@ -290,7 +290,7 @@ table above. A group listed as missing does not fail the build yet.
 | long_shift | 20 |
 | long_shift_reg | 32 |
 | long_shift_sat | 51 |
-| long_shift_sat64 | missing |
+| long_shift_sat64 | 50 |
 | udf | 6 |
 | bkpt | 3 |
 | svc | 3 |
