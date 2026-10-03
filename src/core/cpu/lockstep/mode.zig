@@ -24,6 +24,7 @@ const fault_clear = @import("../../../periph/fault_clear.zig");
 const report = @import("report.zig");
 const Cpu1 = @import("dual.zig").Cpu1;
 const RetireListener = cpu_mod.RetireListener;
+const BlockCache = @import("../block_cache.zig").BlockCache;
 
 /// The images a lockstep run loads: the main one and, for a TrustZone
 /// pair, its Non-Secure half at its load address.
@@ -33,21 +34,21 @@ pub const Images = struct {
 };
 
 /// `theirs` is the engine the caller already loaded and reset.
-pub fn run(out: anytype, images: Images, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
+pub fn run(out: anytype, images: Images, theirs: *const engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener, blocks: bool) !u8 {
     var mine = try engine.Engine.open();
     defer mine.close();
     try mine.mapBoardRam();
     _ = try mine.loadImage(images.main);
     if (images.ns) |half| _ = try mine.loadImage(half);
     if (cpu1) |side| try side.attach(&mine);
-    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1, retire_listener);
+    return runLoaded(out, &mine, theirs.*, vector_base, budget, settle, cpu1, retire_listener, blocks);
 }
 
 /// Both engines already hold the image. Returns 0 when the budget was spent
 /// with no divergence, 1 otherwise.
 /// `settle` is the oracle's fault-clear latch; with one, both sides clear
 /// CFSR/HFSR/SFSR within the storing instruction.
-pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener) !u8 {
+pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine, vector_base: u32, budget: u64, settle: ?*fault_clear.Clears, cpu1: ?*Cpu1, retire_listener: ?RetireListener, blocks: bool) !u8 {
     var log: periph_log.Log = .{};
     var partitions = sau.Sau.init();
     var regions = mpu.Mpu.init();
@@ -55,6 +56,11 @@ pub fn runLoaded(out: anytype, mine: *const engine.Engine, theirs: engine.Engine
     const own_clears: ?*fault_clear.Clears = if (settle != null) &clears else null;
     var memory: ReplayBus = .{ .memory = .{ .core = mine }, .log = &log, .scs = .{ .partitions = &partitions, .regions = &regions, .clears = own_clears } };
     var cpu: cpu_mod.Cpu = .{ .bus = memory.view(), .retire_listener = retire_listener };
+    // `--blocks` puts the block path under the oracle too (RA8EMU-405).
+    const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
+    defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
+    if (formed) |cache| cache.init();
+    cpu.blocks = formed;
     // SG, BXNS and TT need the SAU the firmware programs (RA8EMU-388).
     var guard = lockstep_attribution.over(&partitions);
     cpu.attribution = guard.source();
