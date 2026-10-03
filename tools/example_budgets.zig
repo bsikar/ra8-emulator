@@ -40,6 +40,9 @@ pub const overrides = [_]Override{
     // RSA/ECC signature checks in software mbedtls bignum code (RA8EMU-285);
     // PASS seen at 200M on both backends, not at 100M.
     .{ .image = "rot_verify_hil.elf", .instructions = "200000000" },
+    // Software GCM and bignum KATs (RA8EMU-290); PASS seen at 400M on both
+    // backends, not at 200M.
+    .{ .image = "psa_crypto_hil.elf", .instructions = "400000000" },
 };
 
 pub fn find(image: []const u8) ?Override {
