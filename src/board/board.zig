@@ -370,6 +370,12 @@ pub const Board = struct {
         return boundary.takeResetRequests(self, core);
     }
 
+    /// A reset another core asked for, latched and handed to the run loop
+    /// the way CPU0's own request is (RA8EMU-59).
+    pub fn requestReset(self: *Board, source: reset.Source) void {
+        boundary.resetFor(self, source);
+    }
+
     pub fn ticker(self: *Board) engine.Tick {
         return .{ .context = self, .tickFn = tickThunk };
     }

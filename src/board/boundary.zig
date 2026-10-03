@@ -116,7 +116,7 @@ pub fn takeResetRequests(self: *Board, core: anytype) !void {
 /// Latch one cause and ask for the reboot. The interrupt latches go down on
 /// the way past: a line still pending would be entered before the firmware
 /// coming back up has put its vector table back.
-fn resetFor(self: *Board, source: reset.Source) void {
+pub fn resetFor(self: *Board, source: reset.Source) void {
     self.causes.request(source);
     self.events.clearLatches();
     if (self.reboot) |pending| pending.requested = true;

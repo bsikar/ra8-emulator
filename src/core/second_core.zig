@@ -139,6 +139,8 @@ pub const Second = struct {
     release: unmask.Release = .{},
     /// Parked in WFE, and what woke it: src/core/second_wait.zig.
     wait: second_wait.Wait = .{},
+    /// The board a SYSRESETREQ from CPU1 resets, or null outside one.
+    board: ?*Board = null,
     /// Where its vectors were found, for the report.
     vector_base: u32 = 0,
     /// Bytes its image put in memory.
@@ -177,6 +179,7 @@ pub const Second = struct {
         try primeVectorTable(self.core, self.vector_base);
         self.interrupts.vector_base = self.vector_base;
         self.dividers = &board.tree.divcr2;
+        self.board = board;
         try self.core.resetFromVectorTable(self.vector_base);
         self.pc = try self.core.register(.pc);
     }
@@ -234,10 +237,20 @@ pub const Second = struct {
         self.ran += instructions;
         self.timebase.advance(self.core, @intCast(instructions)) catch {};
         self.clears.apply(self.core) catch {};
-        _ = self.control.poll(self.core) catch false;
+        self.takeResetRequest();
         const entered = self.interrupts.dispatch(self.core) catch null;
         self.wait.idled(entered != null);
         self.pc = self.core.register(.pc) catch self.pc;
+    }
+
+    /// A SYSRESETREQ from CPU1 is the part's one software reset: R01AN7883
+    /// Table 11 lists a per-core watchdog, lockup and local-memory reset but
+    /// a single "Software reset" (AIRCR.SYSRESETREQ), and 6.9 latches it in
+    /// RSTSR1.SWRF. So it goes to the board exactly as CPU0's does
+    /// (RA8EMU-59).
+    pub fn takeResetRequest(self: *Second) void {
+        const asked = self.control.poll(self.core) catch false;
+        if (asked) if (self.board) |board| board.requestReset(.software);
     }
 
     /// The boundary between two of CPU1's turns. A turn is exactly one
@@ -249,8 +262,7 @@ pub const Second = struct {
         // pend held by PRIMASK is stepped out of the mask here, before the
         // dispatch below, and the steps are charged as run.
         self.ran += run_loop.liftMask(self.core, &self.interrupts, self.session(), unmask.limits.steps) catch 0;
-        // Counted in `control.requests`; acting on one is RA8EMU-59.
-        _ = self.control.poll(self.core) catch false;
+        self.takeResetRequest();
         _ = self.interrupts.dispatch(self.core) catch null;
         self.pc = self.core.register(.pc) catch self.pc;
     }
