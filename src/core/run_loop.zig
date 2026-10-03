@@ -24,6 +24,7 @@ const pend_resume = @import("pend_resume.zig");
 const bus_error = @import("bus_error.zig");
 const svc_trap = @import("svc_trap.zig");
 const hint_resume = @import("hint_resume.zig");
+const fpcxt_resume = @import("fpcxt_resume.zig");
 const hotspots = @import("../debug/hotspots.zig");
 const Session = @import("session.zig").Session;
 
@@ -33,6 +34,7 @@ const Session = @import("session.zig").Session;
 fn excepted(core: anytype, session: Session, taken: fault.Fault) !?u32 {
     if (try bus_error.raised(core, session, taken)) |resumed| return resumed;
     if (try hint_resume.raised(core, session, taken)) |resumed| return resumed;
+    if (try fpcxt_resume.raised(core, taken)) |resumed| return resumed;
     return svc_trap.raised(core, session, taken);
 }
 

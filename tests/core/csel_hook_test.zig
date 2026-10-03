@@ -153,4 +153,6 @@ test "an encoding no hook owns is still the fault it should be" {
 
 test {
     _ = @import("clrm_test.zig");
+    _ = @import("fp_context_test.zig");
+    _ = @import("fpcxt_resume_test.zig");
 }
