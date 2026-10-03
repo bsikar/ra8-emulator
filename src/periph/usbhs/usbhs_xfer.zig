@@ -148,7 +148,7 @@ pub const Transfer = struct {
     }
 
     /// The mirror on the empty side: a staged buffer has gone out.
-    fn raiseEmpty(self: *Transfer, bits: u16) void {
+    pub fn raiseEmpty(self: *Transfer, bits: u16) void {
         self.bemp |= bits;
         self.intsts0.empty();
     }
@@ -183,6 +183,14 @@ pub const Transfer = struct {
         self.port.in[0].clear();
         self.port.in[0].ready = true;
         self.raiseReady(regs.status.dcp);
+    }
+
+    /// BEMPSTS is where the polled host waits for its OUT packet to go. On
+    /// the cable a packet the device NAKed is sent again here, as the SIE
+    /// retries the token until the device takes it.
+    pub fn emptyStatus(self: *Transfer, pipes: *usbhs_pipe.Table) u16 {
+        if (self.loop) |cable| xfer_loop.empty(self, cable, pipes);
+        return self.bemp;
     }
 
     /// BRDYSTS is the register the polled host spins on, so it is where the

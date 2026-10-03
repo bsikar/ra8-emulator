@@ -59,3 +59,19 @@ fn fill(staging: *usbhs_fifo.Staging, cable: *usbhs_loop.Loop, endpoint: ?u4) bo
     staging.ready = true;
     return true;
 }
+
+/// BEMPSTS on the cable: every armed OUT pipe still holding a packet the
+/// device NAKed tries it again. Taken, the buffer empties and BEMP rises;
+/// NAKed again, the bytes stay where the host put them.
+pub fn empty(t: *usbhs_xfer.Transfer, cable: *usbhs_loop.Loop, pipes: *usbhs_pipe.Table) void {
+    var index: u32 = 1;
+    while (index < regs.pipe.count) : (index += 1) {
+        const pipe = pipes.pipes[index];
+        const staging = &t.port.out[index];
+        if (pipe.in or !pipe.armed() or staging.len == 0) continue;
+        if (!cable.bulkOut(@truncate(pipe.endpoint), staging.staged())) continue;
+        t.refused_bytes -|= staging.len;
+        staging.clear();
+        t.raiseEmpty(@as(u16, 1) << @intCast(index));
+    }
+}
