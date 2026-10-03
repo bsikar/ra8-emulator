@@ -72,6 +72,8 @@ pub const Wiring = struct {
     /// The Non-secure MPU (RA8EMU-446), banked beside `regions`.
     regions_ns: ?*mpu.Mpu = null,
     clears: ?*fault_clear.Clears = null,
+    /// The SysTick timers whose arming ends a stretch (RA8EMU-464).
+    cut: ?*cpu_mod.systick_cut.Cut = null,
     /// Direct MRAM/SRAM access is enabled only when the run has no memory
     /// watch or fault instrumentation that must observe each access.
     fast_memory: bool = false,
@@ -106,7 +108,7 @@ pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears } };
+    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut } };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
@@ -145,6 +147,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     if (board) |b| {
         b.scs.fp = &cpu.fp;
         b.security = &cpu.banked;
+        cpu.cut = b.scs.cut;
         if (b.scs.regions) |unit| {
             check = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };
             b.check = &check;
@@ -172,6 +175,13 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary) !cpu_mod.S
         const width: u32 = @intCast(@min(left, @max(1, edge.widthFn(edge.context))));
         const stopped = cpu.run(width);
         if (stopped != .count) return stopped;
+        // The firmware armed SysTick inside this stretch: like the Unicorn
+        // run loop, charge it one instruction and no time, and cut the next
+        // stretch from the period now armed (RA8EMU-464).
+        if (cpu.cut) |cut| if (cut.take()) {
+            left -= 1;
+            continue;
+        };
         left -= width;
         try edge.closeFn(edge.context, width);
     }
