@@ -44,7 +44,7 @@ pub const Driver = struct {
     /// has stopped stays stopped, the way a faulted Unicorn CPU1 does.
     pub fn round(self: *Driver, round_size: u32) void {
         const second = &self.second;
-        if (second.fault != null) return;
+        if (second.fault != null or second.heldInReset()) return;
         const share = second.turn(round_size);
         second.turns += 1;
         const before = self.core.cpu.retired;
