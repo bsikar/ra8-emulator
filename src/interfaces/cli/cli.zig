@@ -11,6 +11,7 @@ const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
 const rtos_load = @import("../../debug/rtos_load.zig");
 const request = @import("../../periph/model/request.zig");
+pub const ctl_args = @import("ctl_args.zig");
 
 pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
@@ -146,6 +147,8 @@ pub const Options = struct {
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
     /// hook. src/debug/rtos_report.zig.
     cpu_load: bool = false,
+    /// `ctl cpu-load`: print just the load object after a one-shot image run.
+    ctl_cpu_load: bool = false,
     /// Count instructions and modelled cycles by ELF function.
     profile: bool = false,
     /// Write folded function counts to this path as well as printing them.
@@ -229,6 +232,11 @@ pub fn ceilingFor(milliseconds: u64) usize {
 }
 
 pub fn parse(argv: []const []const u8) !Options {
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "ctl")) return parseCtl(argv);
+    return parseRun(argv);
+}
+
+fn parseRun(argv: []const []const u8) !Options {
     if (argv.len < 2) return error.MissingImage;
     var options = Options{ .path = argv[1] };
     var index: usize = 2;
@@ -297,6 +305,16 @@ pub fn parse(argv: []const []const u8) !Options {
             }
         } else return error.UnknownFlag;
     }
+    return options;
+}
+
+/// Parse the available one-shot CPU-load command through the ordinary run
+/// options, translating its shorter window flags.
+fn parseCtl(argv: []const []const u8) !Options {
+    const args = try ctl_args.parse(argv);
+    var options = try parseRun(args.slice());
+    options.ctl_cpu_load = true;
+    options.cpu_load = true;
     return options;
 }
 

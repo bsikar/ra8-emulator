@@ -24,6 +24,19 @@ const cpu = @import("../../core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
 const Until = @import("../../core/until.zig").Until;
 
+const BootWriter = struct {
+    output: *std.fs.File.Writer,
+    quiet: bool,
+
+    pub fn print(self: BootWriter, comptime format: []const u8, args: anytype) !void {
+        if (!self.quiet) try self.output.print(format, args);
+    }
+
+    pub fn writeAll(self: BootWriter, bytes: []const u8) !void {
+        if (!self.quiet) try self.output.writeAll(bytes);
+    }
+};
+
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
     core: *engine.Engine,
@@ -106,7 +119,8 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     }
     const wrap = if (tracer != null) listener.wrap() else null;
     const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
-    const status = try boot.start(out, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{
+    var boot_output = out;
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -123,9 +137,9 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         .until = if (options.cpu == .zig) until else null,
     });
     if (options.cpu == .zig) {
-        // The core lent its retired count while it ran; `ran` holds the
-        // final count once the run is over.
+        // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
+        if (options.ctl_cpu_load) return ctlLoad(out, loadOf(core, if (tracer) |*found| found else null, clock.cpu1), status);
         if (options.report_json) {
             const load = loadOf(core, if (tracer) |*found| found else null, clock.cpu1);
             try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
@@ -138,7 +152,13 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
         try frame_out.report(out, board, options.frame_out);
-    }
+    } else if (options.ctl_cpu_load) return ctlLoad(out, .{}, status);
+    return status;
+}
+
+/// `ctl cpu-load` prints only the load object, then the run's status.
+fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !u8 {
+    try json_run.json_load.document(out, &load);
     return status;
 }
 

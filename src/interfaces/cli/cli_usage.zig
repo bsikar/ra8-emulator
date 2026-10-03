@@ -2,6 +2,7 @@
 //! so src/interfaces/cli/cli.zig stays one purpose and under its cap.
 pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
+    \\       ra8_emulator ctl cpu-load <firmware.elf> [--from N --to N]
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
@@ -68,6 +69,8 @@ pub const text =
     \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run
+    \\  ctl cpu-load       run an image once and print only its per-core load
+    \\                     object; --from and --to select instruction bounds
     \\  --profile          count retired instructions and modelled cycles
     \\                     by ELF function, most cycles first
     \\  --profile-folded   also write one function count per folded row

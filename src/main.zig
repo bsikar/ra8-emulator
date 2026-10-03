@@ -110,7 +110,6 @@ pub fn main() !u8 {
     const allocator = arena.allocator();
     const argv = try std.process.argsAlloc(allocator);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
-
     const image = openImage(allocator, options.path) catch return 1;
 
     var core = try engine.Engine.open();
@@ -133,7 +132,7 @@ pub fn main() !u8 {
     };
     try core.resetFromVectorTable(vector_base);
     const entry = try core.register(.pc);
-    const out = try announce(core, written, vector_base, entry);
+    const out = try announce(core, written, vector_base, entry, options.ctl_cpu_load);
     if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
@@ -182,14 +181,14 @@ pub fn main() !u8 {
     }, second);
 
     try reportAll(out, core, &board, image, options, parts_mod.tallyOf(parts, interrupts, reboot, undefined_found), parts, second, watched, window, tracer);
+    if (options.ctl_cpu_load) return if (fault != null) 1 else 0;
     return verdict(out, core, options, fault, stop, point, timed, budget, if (parts.tap.waiting()) |wait| wait.reached else false);
 }
 
-/// The line every run opens with: what was loaded and where it starts.
-/// Hands back the writer the rest of the run prints through.
-fn announce(core: engine.Engine, written: u32, vector_base: u32, entry: u32) !std.fs.File.Writer {
+/// The opening line for ordinary runs, plus the writer used for the report.
+fn announce(core: engine.Engine, written: u32, vector_base: u32, entry: u32, quiet: bool) !std.fs.File.Writer {
     const out = std.io.getStdOut().writer();
-    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
+    if (!quiet) try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, try core.register(.sp), entry });
     return out;
 }
 
@@ -213,6 +212,11 @@ fn reportAll(
     tracer: ?*const rtos_hook.Tracer,
 ) !void {
     const cpu0 = rtos_hook.report.sideOf(tracer, .{ .handle = core.handle });
+    if (options.ctl_cpu_load) {
+        const load = report.json_run.json_load.Load{ .cpu0 = cpu0, .cpu1 = rtos_hook.second.side(second) };
+        try report.json_run.json_load.document(out, &load);
+        return;
+    }
     const tally = run.within(core, image, &options, window, watched).loaded(options.cpu_load, cpu0, rtos_hook.second.side(second));
     try report_run.pick(out, board, image, tally, options.report_json);
     if (!options.report_json) try ra8.board.report.after.text(out, image, options, parts, window);
