@@ -25,6 +25,9 @@ const memmap = @import("memmap.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 
+/// The same hook over the MPU_NS alias, into the Non-secure table.
+pub const ns = @import("mpu_ns_hook.zig");
+
 pub const Error = error{AttachFailed};
 
 /// The window the hook watches: TYPE through MAIR1, inclusive.
