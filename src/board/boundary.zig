@@ -30,6 +30,7 @@ pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
     self.rswitch.tick();
     self.usb.tick();
     try takeResetRequests(self, core);
+    self.c6.tick(&self.pins);
     self.console_input.poll(&self.serial);
     self.touch_input.poll(&self.wire.panel, &self.pins);
     try raisePinEdges(self, core);

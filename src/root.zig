@@ -1,5 +1,4 @@
-//! The emulator as one module, imported as "ra8" by `zig build test` and
-//! src/main.zig, so every file is reached through one name, not a path.
+//! The emulator module, imported as "ra8" by the build and tests.
 pub const core = struct {
     pub const c = @import("core/c.zig");
     pub const board_ram = @import("core/board_ram.zig");
@@ -328,6 +327,7 @@ pub const periph = struct {
     pub const sci_lin = @import("periph/sci/sci_lin.zig");
     pub const sci_device = @import("periph/sci/sci_device.zig");
     pub const sci_spi = @import("periph/sci/sci_spi.zig");
+    pub const esp_hosted = @import("periph/esp_hosted.zig");
     pub const sci_status = @import("periph/sci/sci_status.zig");
     pub const sd_card = @import("periph/sd/sd_card.zig");
     pub const sd_card_line = @import("periph/sd/sd_card_line.zig");

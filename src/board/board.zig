@@ -78,6 +78,7 @@ const mpu_guard = @import("../core/mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 const sci = @import("../periph/sci/sci.zig");
+const esp_hosted = @import("../periph/esp_hosted.zig");
 const sci_input = @import("../periph/sci/sci_input.zig");
 const gt911 = @import("../periph/i3c/i3c_gt911.zig");
 const sd_card = @import("../periph/sd/sd_card.zig");
@@ -201,6 +202,8 @@ pub const Board = struct {
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
     serial: sci.Sci,
+    /// The ESP32-C6 on SCI2 Simple-SPI and the Pmod1 sideband pins.
+    c6: esp_hosted.C6 = .{},
     /// Host stdin is sampled at each board boundary when --console is set.
     console_input: sci_input.Input = .{},
     /// Host touches sampled at each board boundary under `--touch @PATH`.

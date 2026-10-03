@@ -197,3 +197,26 @@ test "a store into PCNTR4 is taken and forgotten, not refused" {
     try std.testing.expectEqual(@as(u32, 0), gpio.refusedStores());
     try std.testing.expectEqual(@as(u32, 0), gpio.readReg(regAddress(6, pcntr4), 4));
 }
+
+const Observe = struct {
+    count: u32 = 0,
+    port: u8 = 0,
+
+    fn changed(context: *anyopaque, gpio: *Gpio, port: u8) void {
+        _ = gpio;
+        const self: *Observe = @ptrCast(@alignCast(context));
+        self.count += 1;
+        self.port = port;
+    }
+};
+
+test "port output changes notify a wired device" {
+    var gpio = Gpio.init();
+    var observed = Observe{};
+    gpio.observe(&observed, Observe.changed);
+    gpio.applyWrite(regAddress(8, pcntr1), 4, (@as(u32, 1) << 20) | 0x10);
+    try std.testing.expectEqual(@as(u32, 1), observed.count);
+    try std.testing.expectEqual(@as(u8, 8), observed.port);
+    gpio.applyWrite(regAddress(8, pcntr3), 4, 0x10);
+    try std.testing.expectEqual(@as(u32, 2), observed.count);
+}
