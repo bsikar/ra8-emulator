@@ -7,6 +7,7 @@ test {
     _ = @import("bkpt_vectors_test.zig");
     _ = @import("blxns_vectors_test.zig");
     _ = @import("branch_vectors_test.zig");
+    _ = @import("bxns_vectors_test.zig");
     _ = @import("cbz_vectors_test.zig");
     _ = @import("cps_vectors_test.zig");
     _ = @import("dp_reg_vectors_test.zig");
