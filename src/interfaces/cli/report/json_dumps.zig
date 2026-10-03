@@ -2,7 +2,8 @@
 //! globals, `--dump-regs` and `--dump-mem` words, the same reads
 //! report/dumps.zig and debug/mem_dump.zig print. A symbol the images do
 //! not carry or a word the core will not read is null, never a number
-//! nothing measured. The sd block and the watch log are RA8EMU-391.
+//! nothing measured. The `--dump-sd` block and the `--watch` log follow
+//! (RA8EMU-391, json_sd.zig and json_watched.zig).
 const std = @import("std");
 const engine = @import("../../../core/engine.zig");
 const elf = @import("../../../core/elf.zig");
@@ -12,6 +13,10 @@ const registers = @import("../../../debug/registers.zig");
 const mem_dump = @import("../../../debug/mem_dump.zig");
 const place = @import("../../../debug/place.zig");
 const report_dumps = @import("dumps.zig");
+const watchpoint = @import("../../../debug/watchpoint.zig");
+pub const json_sd = @import("json_sd.zig");
+pub const json_watched = @import("json_watched.zig");
+const Board = @import("../../../board/board.zig").Board;
 
 /// What the dumps read from: the core as the run left it, the image and the
 /// flags that asked.
@@ -19,15 +24,19 @@ pub const Dumps = struct {
     core: engine.Engine,
     image: elf.Image,
     options: *const cli.Options,
+    /// The `--watch` log as the run left it, null when nothing was watched.
+    watched: ?watchpoint.Watched = null,
 };
 
 /// The `dumps` object, or null when nothing was handed over to read.
-pub fn section(j: anytype, found: ?*const Dumps) !void {
+pub fn section(j: anytype, board: *Board, found: ?*const Dumps) !void {
     const of = found orelse return j.field("dumps", null);
     try j.open("dumps", '{');
     try globals(j, of);
     try regs(j, of.core, of.options.dump_regs);
     try memory(j, of.core, of.image, of.options.dump_mem, of.options.dump_mem_words);
+    try json_sd.block(j, board, of.options.dump_sd);
+    try json_watched.log(j, of.image, of.options.watch_place, if (of.watched) |*one| one else null);
     try j.close('}');
 }
 

@@ -36,6 +36,7 @@ const hotspots = @import("../../../debug/hotspots.zig");
 const functions = @import("../../../debug/functions.zig");
 const pc_hits = @import("../../../debug/pc_hits.zig");
 const tally_mod = @import("../../../debug/tally.zig");
+const watchpoint = @import("../../../debug/watchpoint.zig");
 const taken_in = @import("../../../debug/taken_in.zig");
 const engine = @import("../../../core/engine.zig");
 const cli = @import("../cli.zig");
@@ -80,11 +81,11 @@ pub const Tally = struct {
 
     /// This tally with the `--taken-in` window it resolved and the core the
     /// dump flags read from.
-    pub fn within(self: Tally, core: engine.Engine, image: elf.Image, options: *const cli.Options, window: ?taken_in.Window) Tally {
+    pub fn within(self: Tally, core: engine.Engine, image: elf.Image, options: *const cli.Options, window: ?taken_in.Window, watched: ?watchpoint.Watched) Tally {
         var with = self;
         with.taken_in_spec = options.taken_in_place;
         with.taken_in = window;
-        with.dumps = .{ .core = core, .image = image, .options = options };
+        with.dumps = .{ .core = core, .image = image, .options = options, .watched = watched };
         return with;
     }
 };

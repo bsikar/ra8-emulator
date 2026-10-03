@@ -31,9 +31,6 @@ const report = ra8.board.report;
 const report_steps = ra8.board.report_steps;
 const report_run = ra8.board.report_run;
 const report_dumps = ra8.board.report_dumps;
-const report_hotspots = ra8.board.report_hotspots;
-const report_timing = ra8.board.report_timing;
-const report_mask = ra8.board.report_mask;
 
 /// Read the image off disk and parse it, saying which of the two failed.
 fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
@@ -208,17 +205,10 @@ fn reportAll(
     window: ?taken_in.Window,
     tracer: ?*const rtos_hook.Tracer,
 ) !void {
-    try report_run.pick(out, board, image, run.within(core, image, &options, window), options.report_json);
-    try report_hotspots.spent(out, image, parts.pcs);
-    try report_hotspots.spentIn(out, image, parts.fns.?);
-    if (parts.profile) |table| try ra8.board.report.profile.write(out, image, table, options.profile_folded);
-    try report_timing.pendStores(out, image, parts.pend);
-    try report_mask.maskSites(out, image, parts.release);
-    try report_timing.pcHits(out, image, parts.hits);
-    try report_timing.takenFrom(out, image, parts.taken);
-    try report_timing.takenIn(out, image, options.taken_in_place, window);
+    try report_run.pick(out, board, image, run.within(core, image, &options, window, watched), options.report_json);
+    if (!options.report_json) try ra8.board.report.after.text(out, image, options, parts, window);
     try second_core.report(out, second);
-    try report_dumps.dumps(out, core, image, options, board, watched);
+    if (!options.report_json) try report_dumps.dumps(out, core, image, options, board, watched);
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = core.handle });
     try rtos_hook.second.print(out, options, second);
     try report.frame_out.report(out, board, options.frame_out);

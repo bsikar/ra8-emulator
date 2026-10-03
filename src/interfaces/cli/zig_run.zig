@@ -112,8 +112,8 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
-        try report_dumps.dumpSymbols(out, core.*, image, options);
-        try mem_dump.print(out, core.*, image, options.dump_mem, options.dump_mem_words);
+        if (!options.report_json) try report_dumps.dumpSymbols(out, core.*, image, options);
+        if (!options.report_json) try mem_dump.print(out, core.*, image, options.dump_mem, options.dump_mem_words);
         if (tracer) |*found| {
             // The core lent its retired count while it ran; `ran` holds the
             // final count once the run is over.
