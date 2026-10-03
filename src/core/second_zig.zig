@@ -8,13 +8,16 @@
 //!
 //! The core carries the M33's profile (src/core/part.zig), so an Armv8.1-M
 //! encoding takes UsageFault UNDEFINSTR here, where CPU0 would run it.
-//! Its NVIC and decode cache are its own too.
+//! Its NVIC, decode cache and block cache are its own too.
+const std = @import("std");
 const registry = @import("../periph/registry.zig");
 const cpu_mod = @import("cpu/cpu.zig");
 const BoardBus = @import("cpu/board_bus.zig").BoardBus;
 const mpu_check = @import("cpu/mpu_check.zig");
 const NvicSource = @import("cpu/exception/nvic_source.zig").NvicSource;
 const DecodeCache = @import("cpu/decode_cache.zig").DecodeCache;
+const BlockCache = @import("cpu/block_cache.zig").BlockCache;
+const code_lines = @import("cpu/code_lines.zig");
 const part = @import("part.zig");
 const Second = @import("second_core.zig").Second;
 
@@ -24,6 +27,8 @@ pub const SecondZig = struct {
     decoded: DecodeCache = .{},
     cpu: cpu_mod.Cpu,
     check: mpu_check.Check = undefined,
+    /// CPU1's formed blocks, when the run uses them (RA8EMU-408).
+    formed: ?*BlockCache = null,
 
     /// CPU1's Zig core over `second`'s engine, reset from its vector table.
     /// Built in storage the caller holds: the core keeps pointers to this
@@ -45,6 +50,25 @@ pub const SecondZig = struct {
         self.board.check = &self.check;
         self.cpu.mpu = &self.check;
         try self.cpu.reset(second.vector_base);
+    }
+
+    /// Run from formed blocks, as CPU0 does by default. The cache watches
+    /// every write, so CPU0's stores over CPU1's code drop its blocks.
+    pub fn useBlocks(self: *SecondZig) !void {
+        const cache = try std.heap.page_allocator.create(BlockCache);
+        errdefer std.heap.page_allocator.destroy(cache);
+        cache.init();
+        try code_lines.watch(&cache.lines);
+        self.formed = cache;
+        self.cpu.blocks = cache;
+    }
+
+    pub fn dropBlocks(self: *SecondZig) void {
+        const cache = self.formed orelse return;
+        code_lines.unwatch(&cache.lines);
+        self.cpu.blocks = null;
+        self.formed = null;
+        std.heap.page_allocator.destroy(cache);
     }
 
     /// One turn of `instructions`, as the interleave hands them out.

@@ -103,6 +103,8 @@ pub const text =
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is
     \\                     still accepted
-    \\  --blocks           the Zig core runs from formed instruction blocks
+    \\  --no-blocks        the Zig core steps one instruction at a time instead
+    \\                     of running formed blocks (the default; --blocks
+    \\                     is still accepted)
     \\
 ;
