@@ -39,5 +39,8 @@ pub fn refused(core: profile.Profile, instr: Instr) bool {
 /// The decoded-instruction cache in front of `decode` (RA8EMU-317).
 pub const cache = @import("decode_cache.zig");
 
+/// Straight-line runs of decoded instructions (RA8EMU-403).
+pub const block = @import("block.zig");
+
 /// The disassembler built on this table (RA8EMU-17).
 pub const text = @import("text/all.zig");
