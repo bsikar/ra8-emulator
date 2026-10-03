@@ -4,6 +4,7 @@
 pub const qreg = @import("qreg.zig");
 pub const predicate = @import("predicate.zig");
 pub const vpt = @import("vpt.zig");
+pub const tail = @import("tail.zig");
 pub const int = @import("int.zig");
 pub const int_vectors = @import("int_vectors.zig");
 pub const int_shift = @import("int_shift.zig");
