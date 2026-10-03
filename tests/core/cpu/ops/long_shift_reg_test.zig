@@ -89,3 +89,15 @@ test "no earlier group claims the register forms" {
 test "the group is checked against Unicorn" {
     try std.testing.expect(long_shift_reg.group.oracle);
 }
+
+test "seam port: asrl r2, r3, r12 reads the amount and leaves Rm alone" {
+    var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+    cpu.regs.low[3] = 0x8000_0000;
+    cpu.regs.set(12, 4);
+    const instr: ra8.core.cpu.instr.Instr = .{ .address = 0, .hw1 = 0xEA52, .hw2 = 0xC32D, .size = 4 };
+    const exec = ra8.core.cpu.ops.long_shift_reg.group.decode(instr) orelse return error.NotClaimed;
+    try exec(&cpu, instr);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 0xF800_0000), cpu.regs.low[3]);
+    try std.testing.expectEqual(@as(u32, 4), cpu.regs.get(12));
+}

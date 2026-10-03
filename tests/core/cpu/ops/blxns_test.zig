@@ -42,3 +42,23 @@ test "no Non-secure stack when VTOR_NS cannot be read" {
 test "BLXNS is not checked against Unicorn" {
     try std.testing.expect(!blxns.group.oracle);
 }
+
+// Ported from tests/core/tz_test.zig (the Unicorn seam's decode), run
+// against the core's group (RA8EMU-252). The seam decodes SP and PC too;
+// the core leaves those UNPREDICTABLE forms unclaimed.
+
+test "seam port: blxns r2, the one the RA8D2 secure boot issues, is claimed" {
+    try std.testing.expect(claims(0x4794));
+}
+
+test "seam port: every Rm but SP and PC is claimed" {
+    var rm: u16 = 0;
+    while (rm < 15) : (rm += 1) {
+        const hw1: u16 = 0x4780 | (rm << 3) | 0x04;
+        try std.testing.expectEqual(rm != 13, claims(hw1));
+    }
+}
+
+test "seam port: a plain BLX and unrelated halfwords are not BLXNS" {
+    for ([_]u16{ 0x4790, 0xB580, 0x0000, 0xE002 }) |hw1| try std.testing.expect(!claims(hw1));
+}

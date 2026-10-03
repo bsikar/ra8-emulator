@@ -156,3 +156,7 @@ test "no earlier group claims these encodings" {
 test "the group is checked against Unicorn" {
     try std.testing.expect(sat.group.oracle);
 }
+
+test "seam port: uqshl r2, #5 clamps to all ones and sets Q" {
+    try expectRun(uqshl5, 0x0800_0000, 0, 0xFFFF_FFFF, true);
+}
