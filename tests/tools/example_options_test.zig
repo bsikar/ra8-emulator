@@ -22,7 +22,7 @@ test "a match is on the whole file name" {
 }
 
 test "the examples that mount an existing volume get a FAT16 card" {
-    for ([_][]const u8{ "epub_open.elf", "epub_toc.elf", "tz_secure_only_sd.elf" }) |image| {
+    for ([_][]const u8{ "epub_open.elf", "epub_toc.elf", "sd_font_render.elf", "tz_secure_only_sd.elf" }) |image| {
         const got = options.flags(image);
         try std.testing.expectEqual(@as(usize, 2), got.len);
         try std.testing.expectEqualStrings("--sd-new", got[0]);

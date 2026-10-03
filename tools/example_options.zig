@@ -11,7 +11,9 @@
 //! packet, and a firmware that only mounts reports "FAIL mount" on it. The
 //! examples that provision their own files onto an existing FAT volume
 //! (epub_open, epub_toc, tz_secure_only_sd) get a card formatted FAT16, the
-//! filesystem that fits the default 32 MB card (RA8EMU-82).
+//! filesystem that fits the default 32 MB card (RA8EMU-82). sd_font_render
+//! self-provisions its font onto "any FAT card" but never formats one, so it
+//! gets the same card (RA8EMU-400).
 //!
 //! ra8_io_sd_demo formats the card FAT32 itself before it mounts, and its
 //! formatter gives up without touching the card on anything under 4 GB, so it
@@ -55,6 +57,7 @@ pub const extras = [_]Extra{
     .{ .image = "imu_lsm6dso_demo.elf", .flags = &click },
     .{ .image = "pagecache.elf", .flags = &fat32_card },
     .{ .image = "ra8_io_sd_demo.elf", .flags = &large_card },
+    .{ .image = "sd_font_render.elf", .flags = &formatted },
     .{ .image = "smbus_demo.elf", .flags = &click },
     .{ .image = "tz_nsc_cgc_usb.elf", .flags = &usb_loop },
     .{ .image = "tz_secure_only_sd.elf", .flags = &formatted },
