@@ -61,7 +61,7 @@ fn attachGate(self: *Board) !void {
 /// is converted against (adc_tsn_cal.zig).
 fn attachAdc(self: *Board, core: engine.Engine) !void {
     try self.bus.add(self.adc.block());
-    _ = tsn_cal.map(core) catch false;
+    _ = tsn_cal.map(.{ .engine = core }) catch false;
 }
 
 /// Put every block on the bus, in the order that works.
@@ -105,7 +105,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.trace.memory = .{ .engine = core.* };
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
-    try self.options.attach(&self.bus, core.*);
+    try self.options.attach(&self.bus, .{ .engine = core.* });
     try self.bus.add(self.second_core.block());
     try self.bus.add(self.memory_rates.block());
     try self.memory_ecc.attach(&self.bus);

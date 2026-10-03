@@ -82,7 +82,7 @@
 //! it, and a store to it is refused there for the same reason a store to
 //! MSTATR is refused here.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const maci = @import("../maci.zig");
@@ -124,7 +124,7 @@ pub const Mram = struct {
     /// Where a program that lands is also written through, so firmware can
     /// read the option word back. A board built by a test leaves it null and
     /// the write-through is skipped; the cells still hold the program.
-    memory: ?engine.Engine = null,
+    memory: ?Guest = null,
     /// The latched MSTATR error bits, held rather than shadowed.
     errors: u32 = 0,
     /// The latched MASTAT access bits.
@@ -301,7 +301,7 @@ pub const Mram = struct {
 
     /// Put every window the option memory answers for on the bus, and hand
     /// it the machine a landed program is written through to.
-    pub fn attach(self: *Mram, bus: *periph.Bus, machine: engine.Engine) periph.Error!void {
+    pub fn attach(self: *Mram, bus: *periph.Bus, machine: Guest) periph.Error!void {
         self.memory = machine;
         _ = option_window.map(machine) catch 0;
         try bus.add(self.block());

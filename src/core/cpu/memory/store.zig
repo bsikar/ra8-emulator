@@ -20,8 +20,10 @@
 //! SCS. A borrower must not outlive the store it borrowed from.
 const std = @import("std");
 const memmap = @import("../../memmap.zig");
+const extra = @import("extra.zig");
 
 pub const Error = error{OutOfMemory};
+pub const MapError = extra.Error;
 
 pub const Store = struct {
     /// Host bytes for each `memmap.ram` entry, in the same order. A view
@@ -29,6 +31,9 @@ pub const Store = struct {
     pages: [memmap.ram.len]?[]u8 = @splat(null),
     /// Which entries this store allocated, and so frees.
     owned: [memmap.ram.len]bool = @splat(false),
+    /// Windows outside memmap, mapped by peripherals at attach (extra.zig).
+    /// Per core: a borrower never sees its lender's.
+    extra: extra.Extra = .{},
 
     /// Back every region. With a `lender`, the shared regions are the
     /// lender's pages rather than fresh ones.
@@ -61,6 +66,7 @@ pub const Store = struct {
             held.* = null;
             mine.* = false;
         }
+        self.extra.deinit();
     }
 
     /// Host bytes for the whole region based at `base`, either view.
@@ -78,7 +84,14 @@ pub const Store = struct {
             const bytes = self.pages[index] orelse return null;
             return bytes[offset..][0..len];
         }
-        return null;
+        return self.extra.span(address, len);
+    }
+
+    /// Back a window outside memmap. A range inside a memmap region, or one
+    /// touching a window already mapped, fails with Mapped.
+    pub fn map(self: *Store, base: u32, size: u32) MapError!void {
+        if (self.span(base, 1) != null) return MapError.Mapped;
+        return self.extra.map(base, size);
     }
 };
 

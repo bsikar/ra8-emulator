@@ -13,7 +13,7 @@
 //! firmware's integer maths turns that code into 26.000 degC, the same
 //! plausible deterministic die the ADC model already promised. A page an
 //! image already mapped keeps its bytes, the way mram_window.zig does.
-const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig");
 
 pub const page: u32 = 0x1000;
 
@@ -32,7 +32,7 @@ pub const code = struct {
 
 /// Map the page and seed both words. Returns false and writes nothing when
 /// something already mapped the page.
-pub fn map(machine: engine.Engine) engine.Error!bool {
+pub fn map(machine: Guest.Guest) Guest.Error!bool {
     machine.map(addr.page_base, page) catch return false;
     try machine.writeWord(addr.tscdr, code.high);
     try machine.writeWord(addr.tscdr2, code.low);

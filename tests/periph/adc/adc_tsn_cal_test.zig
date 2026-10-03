@@ -12,7 +12,7 @@ test "map seeds both calibration words where adc_diag_tsn_demo stopped" {
     var core = try engine.Engine.open();
     defer core.close();
 
-    try std.testing.expect(try tsn_cal.map(core));
+    try std.testing.expect(try tsn_cal.map(.{ .engine = core }));
     try std.testing.expectEqual(tsn_cal.code.high, try core.readWord(0x02C1_EDA0));
     try std.testing.expectEqual(tsn_cal.code.low, try core.readWord(0x02C1_EDA4));
 }
@@ -23,7 +23,7 @@ test "a page something already mapped keeps its bytes" {
 
     try core.map(tsn_cal.addr.page_base, tsn_cal.page);
     try core.writeWord(tsn_cal.addr.tscdr, 0x0000_0ABC);
-    try std.testing.expect(!try tsn_cal.map(core));
+    try std.testing.expect(!try tsn_cal.map(.{ .engine = core }));
     try std.testing.expectEqual(@as(u32, 0x0000_0ABC), try core.readWord(tsn_cal.addr.tscdr));
 }
 
