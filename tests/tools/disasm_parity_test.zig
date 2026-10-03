@@ -30,3 +30,15 @@ test "the report ends with the total row and the uncompared counts" {
     try std.testing.expect(std.mem.indexOf(u8, out, "| total | 3 | 0 |") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "1 unclaimed by our decode") != null);
 }
+
+/// CSET r0, eq: Armv8.1-M, so counted and not compared (Capstone 5 reads it
+/// as LSRS.W from PC).
+const v8_1m = [_]u8{ 0x5F, 0xEA, 0x1F, 0x90 };
+
+test "an Armv8.1-M encoding is counted, not compared" {
+    var tally = parity.Tally.init(std.testing.allocator);
+    defer tally.deinit();
+    try parity.walk(&tally, 0x0200_0100, &v8_1m, std.io.null_writer);
+    try std.testing.expectEqual(@as(usize, 1), tally.v8_1m);
+    try std.testing.expectEqual(@as(usize, 0), tally.total().mismatched);
+}

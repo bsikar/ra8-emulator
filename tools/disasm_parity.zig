@@ -4,8 +4,9 @@
 //! on any mismatch.
 //!
 //! Not compared, only counted: encodings our decode leaves unclaimed (literal
-//! pools, data, UNPREDICTABLE forms) and groups with no printer yet (the
-//! Armv8.1-M ones, RA8EMU-256). The walk is a linear sweep, so a literal pool
+//! pools, data, UNPREDICTABLE forms), Armv8.1-M encodings (the M33 profile
+//! refuses them; Capstone 5 cannot read them, so their printers are tested
+//! against the Arm ARM instead, RA8EMU-256), and groups with no printer yet. The walk is a linear sweep, so a literal pool
 //! can desync it for a few halfwords; every comparison stays valid because
 //! each instruction is decoded on its own.
 const std = @import("std");
@@ -22,6 +23,7 @@ pub const Row = struct { matched: usize = 0, mismatched: usize = 0 };
 pub const Tally = struct {
     rows: std.StringArrayHashMap(Row),
     unclaimed: usize = 0,
+    v8_1m: usize = 0,
     unprinted: usize = 0,
     shown: usize = 0,
 
@@ -63,6 +65,10 @@ fn compare(tally: *Tally, instr: Instr, raw: []const u8, log: anytype) !void {
         tally.unclaimed += 1;
         return;
     };
+    if (decode.decodeFor(decode.profile.Profile.m33, instr) == null) {
+        tally.v8_1m += 1;
+        return;
+    }
     const ours = decode.text.disasm.one(instr) orelse {
         tally.unprinted += 1;
         return;
@@ -90,7 +96,7 @@ pub fn report(tally: *const Tally, out: anytype) !void {
     }
     const sum = tally.total();
     try out.print("| total | {d} | {d} |\n", .{ sum.matched, sum.mismatched });
-    try out.print("\nnot compared: {d} unclaimed by our decode, {d} in groups with no printer yet\n", .{ tally.unclaimed, tally.unprinted });
+    try out.print("\nnot compared: {d} unclaimed by our decode, {d} Armv8.1-M, {d} in groups with no printer yet\n", .{ tally.unclaimed, tally.v8_1m, tally.unprinted });
 }
 
 pub fn main() !void {
