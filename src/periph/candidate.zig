@@ -11,6 +11,8 @@
 pub const Candidate = struct {
     number: u16,
     priority: u8,
+    /// SysTick or PendSV pended in the Non-secure copy of ICSR (RA8EMU-438).
+    non_secure: bool = false,
 };
 
 /// The more urgent of two candidates. Ties go to the lower exception number,

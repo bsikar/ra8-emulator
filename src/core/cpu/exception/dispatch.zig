@@ -36,6 +36,8 @@ pub fn poll(cpu: *Cpu) Error!bool {
     if (cpu.active.full()) return false;
     // An image with no handler for what it pended keeps the pend rather than
     // branching to address zero.
+    cpu.entering_non_secure = candidate.non_secure;
+    defer cpu.entering_non_secure = false;
     const handler = entry.handlerOf(cpu, candidate.number) catch return false;
     if (handler == 0) return false;
     if (selected_fault) fault.clearUsagePending(cpu.bus);
@@ -79,6 +81,8 @@ fn derivedWins(derived: active.Entry, original: active.Entry, split: u3) bool {
 
 /// Enter `which` as a tail chain: no frame, `lr` as the link value.
 pub fn chain(cpu: *Cpu, which: active.Entry, lr: u32) Error!void {
+    cpu.entering_non_secure = which.non_secure;
+    defer cpu.entering_non_secure = false;
     try entry.chain(cpu, which.number, lr);
     _ = cpu.active.push(which);
     if (cpu.source) |from| try from.taken(cpu.bus, which.number);

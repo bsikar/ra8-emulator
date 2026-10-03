@@ -57,6 +57,7 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
     var cpu: cpu_mod.Cpu = .{ .bus = watching.view() };
     var pending: NvicSource = .{};
     cpu.source = pending.source();
+    pending.banked = &cpu.banked;
     cpu.reset(vector_base) catch {
         std.debug.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;

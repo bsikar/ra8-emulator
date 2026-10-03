@@ -121,6 +121,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         .{ .bus = w.busFn(w.context, memory), .source = w.sourceFn(w.context, pending.source()) }
     else
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
+    pending.banked = &cpu.banked;
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
     const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;

@@ -14,10 +14,13 @@ pub const handler: u32 = base + 0x180;
 pub const psp_top: u32 = base + 0x300;
 pub const msp_top: u32 = base + 0x400;
 pub const scs: u32 = 0xE000_E000;
+pub const scs_ns: u32 = 0xE002_E000;
 
 pub const Ram = struct {
     bytes: [0x400]u8 = [_]u8{0} ** 0x400,
     scs_page: [0x1000]u8 = [_]u8{0} ** 0x1000,
+    /// The Non-secure alias of the SCS page (RA8EMU-438).
+    scs_ns_page: [0x1000]u8 = [_]u8{0} ** 0x1000,
 
     pub fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -25,6 +28,7 @@ pub const Ram = struct {
 
     fn slot(self: *Ram, address: u32, len: usize) bus.Error![]u8 {
         if (address >= scs and address - scs + len <= self.scs_page.len) return self.scs_page[address - scs ..][0..len];
+        if (address >= scs_ns and address - scs_ns + len <= self.scs_ns_page.len) return self.scs_ns_page[address - scs_ns ..][0..len];
         if (address < base or address - base + len > self.bytes.len) return bus.Error.Unmapped;
         return self.bytes[address - base ..][0..len];
     }

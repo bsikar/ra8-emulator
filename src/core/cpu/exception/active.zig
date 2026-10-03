@@ -9,6 +9,8 @@
 pub const Entry = struct {
     number: u9,
     priority: u8,
+    /// SysTick or PendSV pended in the Non-secure copy (RA8EMU-438).
+    non_secure: bool = false,
 };
 
 /// Execution priority with nothing active and no mask set: lower than any
