@@ -79,3 +79,23 @@ test "secure boot passes on the Non-Secure heartbeat and fails on a denied hando
     try std.testing.expectEqual(probes.Judgement.fail, probes.judge(boot, denied));
     try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("secure_boot_ns_hil_ns.elf"));
 }
+
+const ticking =
+    \\  dump-sym      : _tx_timer_system_clock @0x321020B0 = 2999 (0x00000BB7)
+    \\  dump-sym      : g_tz_threadx_demo_fallback_count @0x22001850 = 0 (0x00000000)
+    \\
+;
+
+const fell_back =
+    \\  dump-sym      : _tx_timer_system_clock @0x321020B0 = 0 (0x00000000)
+    \\  dump-sym      : g_tz_threadx_demo_fallback_count @0x22001850 = 1 (0x00000001)
+    \\
+;
+
+test "tz_threadx_demo passes on the Non-Secure tick and fails on the secure fallback" {
+    const demo = probes.find("tz_threadx_demo.elf").?;
+    try std.testing.expectEqualStrings("_tx_timer_system_clock", demo.symbol);
+    try std.testing.expectEqual(probes.Judgement.pass, probes.judge(demo, ticking));
+    try std.testing.expectEqual(probes.Judgement.fail, probes.judge(demo, fell_back));
+    try std.testing.expectEqual(@as(?probes.Probe, null), probes.find("tz_threadx_demo_ns.elf"));
+}

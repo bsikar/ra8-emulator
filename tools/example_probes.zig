@@ -26,6 +26,11 @@ pub const probes = [_]Probe{
     // secure side never records a denied handover. The heartbeat lives in
     // the _ns image; --dump-sym looks there when the secure image lacks it.
     .{ .image = "secure_boot_ns_hil.elf", .symbol = "g_sbns_ns_alive", .min = 5, .failure = "g_sbns_denied" },
+    // No console and no hil.conf: its NSC log veneer only copies into a
+    // secure scratch buffer. The README's verdict is that the Non-Secure
+    // ThreadX kernel runs and the secure fallback main is never reached, so
+    // the tick count in the _ns image is the heartbeat (RA8EMU-287).
+    .{ .image = "tz_threadx_demo.elf", .symbol = "_tx_timer_system_clock", .min = 5, .failure = "g_tz_threadx_demo_fallback_count" },
 };
 
 pub const Judgement = enum { pass, fail, unknown };
