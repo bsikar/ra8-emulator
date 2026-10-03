@@ -1,9 +1,11 @@
-//! BLXNS (T1), the Secure boot's one call into the Non-secure image, taken
-//! the way src/core/tz.zig models it on the Unicorn path: in this emulator's
-//! single flat domain the call is a branch. The core stays Secure, moves SP
-//! to the Non-secure vector table's initial stack when VTOR_NS points at one,
-//! and leaves the address after the BLXNS (with the Thumb bit) in LR so a
-//! callee that returns lands where the architecture would put it.
+//! BLXNS (T1), the Secure boot's one call into the Non-secure image. With
+//! bit 0 of the target clear the core becomes Non-secure (Banked.switchTo,
+//! as BXNS does), so Non-secure exceptions stack and return in their own
+//! state; with bit 0 set it is a plain BLX and stays Secure (RA8EMU-32).
+//! SP moves to the Non-secure vector table's initial stack when VTOR_NS
+//! points at one, and LR keeps the address after the BLXNS (with the Thumb
+//! bit) rather than FNC_RETURN, the way src/core/tz.zig models the call on
+//! the Unicorn path: the Non-secure reset handler never returns.
 //!
 //! Left unclaimed: Rm of SP or PC, and the 32-bit space. BXNS is
 //! src/core/cpu/ops/bxns.zig.
@@ -35,7 +37,9 @@ pub fn nonSecureStack(cpu: *const Cpu) ?u32 {
 
 fn call(cpu: *Cpu, instr: Instr) op.Error!void {
     const rm = tz.decode(instr.hw1).?;
-    const entry = tz.enter(cpu.regs.get(rm), nonSecureStack(cpu), instr.address +% tz.encoding.width);
+    const target = cpu.regs.get(rm);
+    const entry = tz.enter(target, nonSecureStack(cpu), instr.address +% tz.encoding.width);
+    if (target & 1 == 0) cpu.banked.switchTo(&cpu.regs, .non_secure);
     if (entry.sp) |stack| cpu.regs.setSp(stack);
     cpu.regs.lr = entry.lr;
     cpu.regs.bxWritePc(entry.pc);
