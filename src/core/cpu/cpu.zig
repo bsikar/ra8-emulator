@@ -220,12 +220,8 @@ pub const Cpu = struct {
                     exception.fault.invalidReturn(self, value) catch return .{ .invalid_return = address };
                     return null;
                 },
-                error.Integrity => self.secureFault(.invis, address, 0, .{ .invalid_return = address }),
-                error.SecureReturn => {
-                    exception.secure.invalidReturn(self, value) catch return .{ .invalid_return = address };
-                    self.secure_faults +%= 1;
-                    return null;
-                },
+                error.Integrity => self.chainedSecure(exception.secure.invalidIntegrity, value, address),
+                error.SecureReturn => self.chainedSecure(exception.secure.invalidReturn, value, address),
                 else => .{ .bus_fault = address },
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };
@@ -277,6 +273,14 @@ pub const Cpu = struct {
     /// `sfar` is the address AUVIOL reports; the other causes ignore it.
     fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, sfar: u32, otherwise: Stop) ?Stop {
         exception.secure.raise(self, cause, address, sfar) catch return otherwise;
+        self.secure_faults +%= 1;
+        return null;
+    }
+
+    /// Chain the SecureFault a refused exception return of `value` owes
+    /// over the frame it left, or stop when that locks up.
+    fn chainedSecure(self: *Cpu, chain: *const fn (*Cpu, u32) exception.secure.Error!void, value: u32, address: u32) ?Stop {
+        chain(self, value) catch return .{ .invalid_return = address };
         self.secure_faults +%= 1;
         return null;
     }
