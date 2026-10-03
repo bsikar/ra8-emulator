@@ -19,6 +19,19 @@ pub const entries = [_]Entry{
     .{ .group = "special_data", .print = @import("special_data.zig").print },
     .{ .group = "extend", .print = @import("extend.zig").print },
     .{ .group = "reverse", .print = @import("reverse.zig").print },
+    .{ .group = "ldst_imm", .print = @import("ldst_imm.zig").print },
+    .{ .group = "ldst_reg", .print = @import("ldst_reg.zig").print },
+    .{ .group = "sp_arith", .print = @import("sp_arith.zig").print },
+    .{ .group = "ldr_literal", .print = @import("ldr_literal.zig").print },
+    .{ .group = "ldm_stm", .print = @import("ldm_stm.zig").print },
+    .{ .group = "push_pop", .print = @import("push_pop.zig").print },
+    .{ .group = "cbz", .print = @import("cbz.zig").print },
+    .{ .group = "branch", .print = @import("branch.zig").print },
+    .{ .group = "svc", .print = @import("svc.zig").print },
+    .{ .group = "it", .print = @import("it.zig").print },
+    .{ .group = "hint", .print = @import("hint.zig").print },
+    .{ .group = "blxns", .print = @import("blxns.zig").print },
+    .{ .group = "cps", .print = @import("cps.zig").print },
 };
 
 pub fn find(group: []const u8) ?Print {
