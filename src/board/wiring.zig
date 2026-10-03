@@ -13,6 +13,7 @@ const tsn_cal = @import("../periph/adc/adc_tsn_cal.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
+const mpu_ns_hook = @import("../core/mpu_ns_hook.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const dwt = @import("../debug/dwt.zig");
 const scb = @import("../periph/scb.zig");
@@ -163,6 +164,7 @@ fn attachCore(self: *Board, core: *engine.Engine) !void {
     try primeCoreWindows(self, core, .{
         .partitions = &self.partitions,
         .regions = &self.regions,
+        .regions_ns = &self.regions_ns,
         .guard = &self.guard,
         .identity = cpuid.cpu0,
         .control = &self.control,
@@ -177,6 +179,9 @@ pub const CoreWindows = struct {
     partitions: *sau.Sau,
     regions: *mpu.Mpu,
     guard: *mpu_guard.Guard,
+    /// The Non-secure MPU table the MPU_NS alias files into, when this core
+    /// has one wired (RA8EMU-445).
+    regions_ns: ?*mpu.Mpu = null,
     /// The CPUID word this core answers with: a Cortex-M85 on CPU0, a
     /// Cortex-M33 on CPU1.
     identity: u32,
@@ -252,6 +257,8 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     // The guard goes on with it: the same hook that banks the table is the
     // one that sees CTRL and arms the read-only traps.
     try core.attachRegions(windows.regions, windows.guard);
+    // Secure code programs the Non-secure MPU through the MPU_NS alias.
+    if (windows.regions_ns) |ns| try mpu_ns_hook.attach(core.handle, ns);
     // SAU_TYPE read as zero, so the secure boot's capability check failed
     // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
     // error, parking the run in the Secure fallback main() forever.
