@@ -2,3 +2,6 @@
 pub const text = @import("text.zig");
 pub const table = @import("table.zig");
 pub const disasm = @import("disasm.zig");
+pub const mve_vpst = @import("mve_vpst.zig");
+pub const mve_vcmp = @import("mve_vcmp.zig");
+pub const mve_vcmp_fp = @import("mve_vcmp_fp.zig");
