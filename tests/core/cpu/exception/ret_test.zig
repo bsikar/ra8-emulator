@@ -148,3 +148,27 @@ test "a basic-frame return leaves FPCA clear" {
     _ = cpu.step();
     try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & regs.control_bits.fpca);
 }
+
+test "a Non-secure exception enters and returns without leaving its state" {
+    var ram: fixture.Ram = .{};
+    program(&ram, bx_lr);
+    var cpu = try fixture.boot(&ram);
+    cpu.banked.current = .non_secure;
+    _ = cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFB8), cpu.regs.lr);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.code + 2, cpu.regs.pc);
+    try std.testing.expect(!cpu.regs.handlerMode());
+    try std.testing.expectEqual(fixture.msp_top, cpu.regs.msp);
+}
+
+test "a Non-secure EXC_RETURN from Secure state is not a return the core takes" {
+    var ram: fixture.Ram = .{};
+    program(&ram, bx_lr);
+    var cpu = try fixture.boot(&ram);
+    _ = cpu.step();
+    cpu.regs.lr = 0xFFFF_FFB8;
+    _ = cpu.step();
+    try std.testing.expect(cpu.regs.pc != fixture.code + 2);
+    try std.testing.expect(cpu.regs.handlerMode());
+}

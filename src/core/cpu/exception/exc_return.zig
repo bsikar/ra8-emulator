@@ -3,9 +3,10 @@
 //!
 //! Bits 31:24 all set is what marks a branch target as an exception return.
 //! Below that, bits 6:0 say which stack the frame is on and what it holds.
-//! The core makes the Secure, default-stacking, basic-frame form only: the
-//! Non-secure banks arrive with RA8EMU-41 and the extended FP frame with a
-//! later slice of RA8EMU-18, so `decode` turns anything else away.
+//! The core makes the default-stacking forms in the state the exception was
+//! taken in: S and ES both set in Secure, both clear in Non-secure. A return
+//! that crosses states needs the callee frame and its integrity signature
+//! (RA8EMU-168), so `decode` turns S != ES away.
 
 /// Bits 31:7, always set in a valid EXC_RETURN.
 pub const res1: u32 = 0xFFFF_FF80;
@@ -27,9 +28,12 @@ pub const bits = struct {
     pub const reserved: u32 = 1 << 1;
 };
 
-/// The bits every value `forEntry` makes carries; FType is set on top of
-/// them unless an FP context was stacked.
-const fixed: u32 = res1 | bits.s | bits.dcrs | bits.es;
+/// The bits every value `forEntry` makes carries; S and ES are set on top
+/// in Secure, and FType unless an FP context was stacked.
+const fixed: u32 = res1 | bits.dcrs;
+
+/// S and ES together: the frame's stack and the exception's state.
+const state: u32 = bits.s | bits.es;
 
 /// Where an exception return goes.
 pub const Target = struct {
@@ -37,6 +41,8 @@ pub const Target = struct {
     psp: bool,
     /// The frame is the extended one, with S0-S15 and FPSCR (FType clear).
     fp: bool = false,
+    /// Taken to, and stacked in, the Secure state.
+    secure: bool = true,
 };
 
 /// Whether a value written to the PC in Handler mode is an exception return.
@@ -51,6 +57,7 @@ pub fn forEntry(from: Target) u32 {
     if (from.thread) value |= bits.mode;
     if (from.psp) value |= bits.spsel;
     if (!from.fp) value |= bits.ftype;
+    if (from.secure) value |= state;
     return value;
 }
 
@@ -59,10 +66,13 @@ pub fn forEntry(from: Target) u32 {
 pub fn decode(value: u32) ?Target {
     if (value & fixed != fixed) return null;
     if (value & bits.reserved != 0) return null;
+    const both = value & state;
+    if (both != 0 and both != state) return null;
     const target: Target = .{
         .thread = value & bits.mode != 0,
         .psp = value & bits.spsel != 0,
         .fp = value & bits.ftype == 0,
+        .secure = both == state,
     };
     if (!target.thread and target.psp) return null;
     return target;
