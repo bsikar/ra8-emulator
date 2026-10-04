@@ -43,3 +43,13 @@ test "an image that is not there refuses the run when it opens" {
     const spec = try registry.parse("image:/nonexistent/ra8-camera.png");
     try std.testing.expectError(error.FileNotFound, spec.open(allocator, &format_control));
 }
+
+test "the report names each source: the gradient by default, a picture by its path" {
+    const gradient = try (registry.Spec{}).open(allocator, &format_control);
+    try std.testing.expectEqualStrings("synthetic gradient", gradient.label);
+    try std.testing.expectEqualStrings("", gradient.detail);
+    const named = camera.still.labelled(camera.gradient.source(), "shots/frame.png");
+    try std.testing.expectEqualStrings("still image", named.label);
+    try std.testing.expectEqualStrings("shots/frame.png", named.detail);
+    try std.testing.expectEqual(camera.gradient.source().vtable, named.vtable);
+}

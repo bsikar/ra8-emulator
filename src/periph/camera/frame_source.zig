@@ -17,6 +17,10 @@ pub const Shape = struct {
 pub const FrameSource = struct {
     context: *anyopaque,
     vtable: *const VTable,
+    /// What the end-of-run report calls this source (RA8EMU-538).
+    label: []const u8 = "synthetic gradient",
+    /// The argument it was opened with, such as an image path; "" for none.
+    detail: []const u8 = "",
 
     pub const VTable = struct {
         /// Ready the frame for one capture armed at `when` (emulated ns).
