@@ -63,3 +63,7 @@ test "SCI2 receives the C6 idle header in Simple-SPI mode" {
         serial.read(sci.regAddress(c6.channel, sci.off_rdr), 4),
     );
 }
+
+test {
+    _ = @import("esp_hosted/esp_frame_test.zig");
+}
