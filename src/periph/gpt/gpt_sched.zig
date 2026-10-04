@@ -9,8 +9,16 @@
 //! boundary the step lands it on. The clock tree slice (RA8EMU-515) is where
 //! PCLKD becomes the part's real number.
 //!
+//! The count itself moves by virtual time too (`tickFor`): a full boundary
+//! at PCLKD is exactly the old 0x4001 step. A divided channel counts the
+//! true quotient (4096 or 4097 a boundary at /4, averaging 4096.25) instead
+//! of the old step nudged odd; the sum over four boundaries is 16385, odd,
+//! so the count still walks every value of a power-of-two period.
+//!
 //! A triangle (GTCR.MD symmetric) has nothing due here yet: its peak is a
 //! fold of the phase, not a wrap, and it gets its own slice.
+const std = @import("std");
+const gpt = @import("gpt.zig");
 const ch = @import("gpt_channel.zig");
 const clk = @import("gpt_clock.zig");
 const cadence = @import("../../core/cadence.zig");
@@ -27,4 +35,28 @@ pub fn dueAt(channel: ch.Channel, now_ns: u64) ?u64 {
     const period = channel.periodOrDefault();
     const in_ns = clk.overflowInNs(channel.cnt, period, channel.source(), pclkd_hz) orelse return null;
     return now_ns + in_ns;
+}
+
+/// One boundary of counting by virtual time rather than by a fixed step:
+/// each channel moves by the counts its TPCS divider passes between
+/// `from_ns` and `to_ns`. Worked out from absolute time, so a boundary a
+/// timed event narrowed counts a narrow stretch and nothing is lost to
+/// rounding across boundaries. Channel 0 wrapping raises its overflow
+/// event, as `Gpt.tick` does.
+pub fn tickFor(timer: *gpt.Gpt, from_ns: u64, to_ns: u64) void {
+    for (&timer.channels, 0..) |*channel, index| {
+        const counts = countsBetween(from_ns, to_ns, channel.source().divider());
+        if (channel.advance(counts) != 0 and index == 0) timer.pending = true;
+    }
+}
+
+/// Counts of a PCLKD / `divider` clock between two virtual times, clamped
+/// to the counter's width.
+pub fn countsBetween(from_ns: u64, to_ns: u64, divider: u32) u32 {
+    const counts = countsAt(to_ns, divider) - countsAt(from_ns, divider);
+    return @intCast(@min(counts, std.math.maxInt(u32)));
+}
+
+fn countsAt(at_ns: u64, divider: u32) u128 {
+    return @as(u128, at_ns) * pclkd_hz / (timebase.ns_per_s * @as(u128, divider));
 }

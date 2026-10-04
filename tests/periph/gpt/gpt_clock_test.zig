@@ -199,3 +199,30 @@ test "one boundary of steps lands on the derived due time" {
     const sched = clk.sched;
     try testing.expectEqual(@as(?u64, 50_000), clk.overflowInNs(0, gpt.step_per_tick - 1, .pclkd, sched.pclkd_hz));
 }
+
+test "a GPT boundary counts the counts its virtual time passes" {
+    const sched = clk.sched;
+    // A full 50000 ns boundary at PCLKD is exactly the old step.
+    try testing.expectEqual(@as(u32, gpt.step_per_tick), sched.countsBetween(0, 50_000, 1));
+    // At /4 the true quotient is kept: four boundaries sum to the full step.
+    var total: u32 = 0;
+    var at: u64 = 0;
+    while (at < 200_000) : (at += 50_000) total += sched.countsBetween(at, at + 50_000, 4);
+    try testing.expectEqual(@as(u32, gpt.step_per_tick), total);
+    // A narrowed 2000 ns boundary counts a narrow stretch, not a whole step.
+    try testing.expectEqual(@as(u32, 655), sched.countsBetween(0, 2_000, 1));
+}
+
+test "a GPT overflow is raised on the boundary its due time falls in" {
+    var timer = gpt.Gpt.init();
+    timer.channels[0].cr = control(0);
+    const due = clk.sched.dueAt(timer.channels[0], 0).?;
+    var at: u64 = 0;
+    while (at + 1_000 < due) : (at += 1_000) {
+        clk.sched.tickFor(&timer, at, at + 1_000);
+        try testing.expect(!timer.pending);
+    }
+    clk.sched.tickFor(&timer, at, due);
+    try testing.expect(timer.pending);
+    try testing.expectEqual(@as(u32, 1), timer.channels[0].overflows);
+}

@@ -12,6 +12,7 @@ const Board = @import("board.zig").Board;
 const reset = @import("../periph/reset.zig");
 const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 const agt_sched = @import("../periph/agt/agt_sched.zig");
+const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
 
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
@@ -27,7 +28,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.microphone.tick();
     self.clock.tick();
     agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
-    self.pwm.tick();
+    gpt_sched.tickFor(&self.pwm, before_ns, self.time.base.now());
     self.ptp.tick(instructions);
     self.trace.tick();
     self.rswitch.tick();
