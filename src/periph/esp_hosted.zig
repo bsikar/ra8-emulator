@@ -15,6 +15,8 @@ pub const link = @import("esp_hosted/esp_link.zig");
 pub const rpc = @import("esp_hosted/esp_rpc.zig");
 pub const station = @import("esp_hosted/esp_station.zig");
 pub const queue = @import("esp_hosted/esp_queue.zig");
+pub const eth = @import("esp_hosted/esp_eth.zig");
+pub const dhcp = @import("esp_hosted/esp_dhcp.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
