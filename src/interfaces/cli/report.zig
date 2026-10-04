@@ -62,7 +62,6 @@ const poeg = @import("../../periph/poeg.zig");
 const reset = @import("../../periph/reset.zig");
 const reboot = @import("../../core/reboot.zig");
 const scb = @import("../../periph/scb.zig");
-const engine = @import("../../core/engine.zig");
 const lob = @import("../../core/lob.zig");
 const unmodelled = @import("report/unmodelled.zig");
 
@@ -385,15 +384,6 @@ pub fn reboots(out: Writer, pending: reboot.Reboot) !void {
     try out.print(
         "reboots: {d} warm reset(s) performed from the vector table, peripheral state kept\n",
         .{pending.performed},
-    );
-}
-
-pub fn fault(out: Writer, taken: engine.Fault) !void {
-    try out.print("stopped at pc 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
-    if (taken.instruction) |text| try out.print("  instruction: {s}\n", .{text.slice()});
-    if (taken.access) |access| try out.print(
-        "  {s} of {d} bytes at 0x{X:0>8}\n",
-        .{ @tagName(access.kind), access.size, access.address },
     );
 }
 

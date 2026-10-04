@@ -4,7 +4,6 @@
 //! boundary, so a ThreadX image gets its tick and the peripherals that count
 //! time (the USB host script among them) move.
 const std = @import("std");
-const engine = @import("../../core/engine.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
