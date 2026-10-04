@@ -78,6 +78,7 @@ test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     board.asks.attached_eink = &board.panel;
+    board.panel.planes.resize(.{ .width = 128, .height = 128 });
 
     const panel = board.asks.attached_eink.?;
     word(panel, proto.preamble.command);

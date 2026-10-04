@@ -6,6 +6,7 @@
 //! staging with no protocol decisions in it. eink.zig decides what to
 //! answer; this holds the answer and hands it over one byte per exchange,
 //! which is the only rate the wire has.
+const std = @import("std");
 
 /// The three words a transaction opens with (IT8951 DS 3.4, table 3-3).
 pub const preamble = struct {
@@ -65,11 +66,32 @@ pub const reg = struct {
     pub const idle: u16 = 0;
 };
 
-/// The panel geometry the device-info block reports.
-pub const panel = struct {
-    pub const width: u16 = 128;
-    pub const height: u16 = 128;
+/// A panel's pixel geometry, which the device-info block reports. The
+/// default is the e-reader's 1072x1448 glass; `--attach eink:WxH@...` sets
+/// another panel's.
+pub const Geometry = struct {
+    width: u16 = 1072,
+    height: u16 = 1448,
+
+    /// The longest side the emulator takes, so two planes stay bounded.
+    pub const max_side: u16 = 4096;
+
+    pub fn pixels(self: Geometry) usize {
+        return @as(usize, self.width) * self.height;
+    }
+
+    /// "WxH", each side 1..max_side.
+    pub fn parse(text: []const u8) error{BadGeometry}!Geometry {
+        const split = std.mem.indexOfScalar(u8, text, 'x') orelse return error.BadGeometry;
+        const width = std.fmt.parseInt(u16, text[0..split], 10) catch return error.BadGeometry;
+        const height = std.fmt.parseInt(u16, text[split + 1 ..], 10) catch return error.BadGeometry;
+        if (width == 0 or height == 0 or width > max_side or height > max_side) return error.BadGeometry;
+        return .{ .width = width, .height = height };
+    }
 };
+
+/// The default panel.
+pub const panel: Geometry = .{};
 
 /// Byte assembly and the LD_IMG_AREA mode word's format field.
 pub const wire = struct {
@@ -106,10 +128,10 @@ pub fn pixelsPerWord(code: u16) u16 {
 pub const info = struct {
     pub const words: u16 = 20;
 
-    pub fn word(index: u16) u16 {
+    pub fn word(geometry: Geometry, index: u16) u16 {
         return switch (index) {
-            0 => panel.width,
-            1 => panel.height,
+            0 => geometry.width,
+            1 => geometry.height,
             else => 0,
         };
     }

@@ -54,6 +54,7 @@ fn refresh(panel: *eink.Panel, x: u16, y: u16, width: u16, height: u16) void {
 
 test "4 bpp pixels reach a separate glass buffer on refresh" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .load_area);
     data(&panel, 0x0020);
     data(&panel, 0);
@@ -62,19 +63,20 @@ test "4 bpp pixels reach a separate glass buffer on refresh" {
     data(&panel, 2);
     data(&panel, 0xF321);
 
-    try std.testing.expectEqual(@as(u8, 17), panel.image_buffer.pixel(0, 0));
-    try std.testing.expectEqual(@as(u8, 0), panel.glass_buffer.pixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 17), panel.planes.image.pixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 0), panel.planes.glass.pixel(0, 0));
     refresh(&panel, 0, 0, 2, 2);
     const expected = [_]u8{ 17, 34, 51, 255 };
     for (0..2) |y| {
         for (0..2) |x| {
-            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x), @intCast(y)));
+            try std.testing.expectEqual(expected[y * 2 + x], panel.planes.glass.pixel(@intCast(x), @intCast(y)));
         }
     }
 }
 
 test "8 bpp pixels reach the glass plane pixel for pixel" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     openLoad(&panel, 2, 2);
     data(&panel, 0x2211);
     data(&panel, 0x4433);
@@ -83,13 +85,14 @@ test "8 bpp pixels reach the glass plane pixel for pixel" {
     const expected = [_]u8{ 0x11, 0x22, 0x33, 0x44 };
     for (0..2) |y| {
         for (0..2) |x| {
-            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x), @intCast(y)));
+            try std.testing.expectEqual(expected[y * 2 + x], panel.planes.glass.pixel(@intCast(x), @intCast(y)));
         }
     }
 }
 
 test "big endian rotated pixels map into the declared panel area" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .load_area);
     data(&panel, 0x0121); // big endian, 4 bpp, rotate 90 degrees
     data(&panel, 4);
@@ -102,7 +105,7 @@ test "big endian rotated pixels map into the declared panel area" {
     const expected = [_]u8{ 51, 17, 68, 34 };
     for (0..2) |y| {
         for (0..2) |x| {
-            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x + 4), @intCast(y + 5)));
+            try std.testing.expectEqual(expected[y * 2 + x], panel.planes.glass.pixel(@intCast(x + 4), @intCast(y + 5)));
         }
     }
 }
@@ -133,6 +136,7 @@ test "a word is assembled MSB first, so a half-clocked word is not one" {
 
 test "a refresh is counted with the waveform it named" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .display_area);
     data(&panel, 0);
     data(&panel, 0);
@@ -154,6 +158,7 @@ test "a load accounts its pixels at the format the mode word declared" {
 
 test "a load at 4 bpp puts four pixels in a word, not two" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .load_area);
     data(&panel, 0x0020); // 4 bpp
     data(&panel, 0);
@@ -209,6 +214,7 @@ test "ending the load closes the rectangle" {
 
 test "sleep stops the panel taking commands" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .sleep);
     try std.testing.expect(!panel.awake);
     openLoad(&panel, 8, 8);
@@ -222,6 +228,7 @@ test "sleep stops the panel taking commands" {
 
 test "sys_run wakes it back up and the next command lands" {
     var panel = eink.Panel.init();
+    defer panel.deinit();
     command(&panel, .sleep);
     command(&panel, .display_area);
     command(&panel, .sys_run);
@@ -375,4 +382,12 @@ test "the panel answers through the SPI device seam" {
 
 test "the panel sits on SPI_B channel 0, where the epaper app drives it" {
     try std.testing.expectEqual(@as(usize, 0), eink.line_channel);
+}
+
+test "a resized panel reports its own geometry in the device-info block" {
+    var panel = eink.Panel.init();
+    panel.planes.resize(.{ .width = 1872, .height = 1404 });
+    command(&panel, .device_info);
+    try std.testing.expectEqual(@as(u16, 1872), read(&panel));
+    try std.testing.expectEqual(@as(u16, 1404), read(&panel));
 }

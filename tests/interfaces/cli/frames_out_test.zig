@@ -155,6 +155,7 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     board.asks.attached_eink = &board.panel;
+    board.panel.planes.resize(.{ .width = 128, .height = 128 });
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();

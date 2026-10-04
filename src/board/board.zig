@@ -344,8 +344,7 @@ pub const Board = struct {
     /// before attach(); a test's board is an RA8D2 unless it says otherwise.
     part: part.Part = .ra8d2,
 
-    /// A fresh board. What each block starts as lives next door in
-    /// construct.zig, so this file stays the list of what a board is.
+    /// A fresh board; what each block starts as lives in construct.zig.
     pub fn init(allocator: std.mem.Allocator) Board {
         return construct.build(allocator);
     }
@@ -356,6 +355,7 @@ pub const Board = struct {
         self.options.deinit();
         self.flash.deinit();
         self.bus.deinit();
+        self.panel.deinit();
     }
 
     /// Put every block on the bus. The order is load-bearing and lives

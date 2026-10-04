@@ -46,7 +46,7 @@
 //!
 //! KEPT FROM DEV DELIBERATELY: the self-framing itself, the dummy word ahead
 //! of every value, the 1530 mV power-on VCOM (a modelled controller value,
-//! not any real panel's), the reported 128x128 geometry, and the pixels-per-
+//! not any real panel's), and the pixels-per-
 //! word decode, which is why a load at 4 bpp accounts four pixels to a word
 //! and not two.
 //!
@@ -120,8 +120,7 @@ pub const Panel = struct {
     load_left: u32 = 0,
     pixels_per_word: u16 = 2,
     load_mode: u16 = 0,
-    image_buffer: image.Buffer = .{},
-    glass_buffer: image.Buffer = .{},
+    planes: image.Planes = .{},
     refresh_hook: ?image.RefreshHook = null,
     loaded_pixels: u32 = 0,
     display_args: [5]u16 = .{0} ** 5,
@@ -148,6 +147,10 @@ pub const Panel = struct {
 
     pub fn init() Panel {
         return .{};
+    }
+
+    pub fn deinit(self: *Panel) void {
+        self.planes.deinit();
     }
 
     pub fn quiet(self: *const Panel) bool {
@@ -303,7 +306,7 @@ pub const Panel = struct {
                 self.load_width,
                 self.load_height,
             );
-            self.image_buffer.set(
+            if (self.planes.ready()) self.planes.image.set(
                 @as(u32, self.load_x) + target.x,
                 @as(u32, self.load_y) + target.y,
                 grey,
@@ -320,8 +323,8 @@ pub const Panel = struct {
         }
         if (self.data_index != proto.arg.display_waveform) return;
         self.last_waveform = word;
-        self.glass_buffer.copyRectFrom(
-            &self.image_buffer,
+        if (self.planes.ready()) self.planes.glass.copyRectFrom(
+            &self.planes.image,
             self.display_args[proto.arg.display_x],
             self.display_args[proto.arg.display_y],
             self.display_args[proto.arg.display_width],
@@ -350,7 +353,7 @@ pub const Panel = struct {
             self.overdrain +%= 1;
             return 0;
         }
-        const value = proto.info.word(self.info_index);
+        const value = proto.info.word(self.planes.geometry, self.info_index);
         self.info_index += 1;
         return value;
     }

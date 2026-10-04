@@ -59,7 +59,9 @@ fn Owned(comptime State: type) type {
         }
 
         fn destroy(allocator: std.mem.Allocator, state: *anyopaque) void {
-            allocator.destroy(@as(*State, @ptrCast(@alignCast(state))));
+            const part: *State = @ptrCast(@alignCast(state));
+            if (@hasDecl(State, "deinit")) part.deinit();
+            allocator.destroy(part);
         }
     };
 }
