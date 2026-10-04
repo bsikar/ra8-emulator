@@ -3,7 +3,17 @@
 //! Learn and read operations complete at the bus boundary. The RAM address
 //! register selects one of 256 entries; the data word carries gate time and
 //! gate state.
+//!
+//! EATASCTM (TASOCT) reports the cycle time of the ongoing schedule, not the
+//! configured one (HUM 32.5.1.6). EATASCTC is copied into it when the
+//! schedule is taken into operation: when TASE is set, or TASCC asks for a
+//! change, while the agent is in OPERATION, or when the agent enters
+//! OPERATION with TASE already set. In CONFIG mode nothing runs, so the
+//! monitor stays 0; the EK-RA8D2 reads tas_cycle=0 there (RA8EMU-496).
+//! Clearing TASE or entering RESET clears it. A configuration change
+//! completes at once: the start-time wait is not modelled.
 const lanes = @import("../lanes.zig");
+const eth_mode = @import("eth_mode.zig");
 
 pub const reg = struct {
     pub const start: u32 = 0x0300;
@@ -47,6 +57,10 @@ pub const Tas = struct {
     resets: u32 = 0,
     learns: u32 = 0,
     reads: u32 = 0,
+    /// Whether the agent is in OPERATION, the only mode the scheduler runs.
+    operating: bool = false,
+    /// TASOCT: the cycle time the ongoing schedule took into operation.
+    oper_cycle: u32 = 0,
 
     pub fn init(base: u32) Tas {
         return .{ .base = base };
@@ -116,13 +130,38 @@ pub const Tas = struct {
         self.resets +%= 1;
     }
 
+    /// The agent's mode machine moved to `mode`.
+    pub fn enterMode(self: *Tas, mode: eth_mode.Mode) void {
+        const was = self.operating;
+        self.operating = mode == .operation;
+        if (mode == .reset) {
+            self.setWord(reg.config, self.word(reg.config) & ~reg.tas_enable);
+            self.oper_cycle = 0;
+        }
+        if (self.operating and !was and self.enabled()) self.apply();
+    }
+
     fn setConfig(self: *Tas, value: u32) void {
+        const was = self.enabled();
         const writable = reg.tas_enable | reg.timer_select;
         self.setWord(reg.config, value & writable & ~(reg.config_change | reg.config_impossible));
+        if (!self.enabled()) {
+            self.oper_cycle = 0;
+            return;
+        }
+        if (!was or value & reg.config_change != 0) self.apply();
+    }
+
+    fn enabled(self: *const Tas) bool {
+        return self.word(reg.config) & reg.tas_enable != 0;
+    }
+
+    /// Take the configured cycle into operation, if the scheduler runs.
+    fn apply(self: *Tas) void {
+        if (self.operating) self.oper_cycle = self.word(reg.cycle_time);
     }
 
     fn cycleMonitor(self: *const Tas) u32 {
-        if (self.word(reg.config) & reg.tas_enable == 0) return 0;
-        return self.word(reg.cycle_time);
+        return self.oper_cycle;
     }
 };

@@ -121,6 +121,7 @@ pub const Port = struct {
         if (lanes.named(at, width) & regs.etha.opc_mask == 0) return;
         const asked = lanes.merge(self.mode.status(), at, width, value);
         self.mode.command(asked & regs.etha.opc_mask);
+        self.tas_ram.enterMode(self.mode.mode);
     }
 
     pub fn tasRead(self: *Port, address: u32, width: u3) u32 {
