@@ -330,7 +330,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_vdup | 18 |
 | mve_lane_move | 26 |
 | mve_lane_pair | 19 |
-| mve_vmaxv | missing |
+| mve_vmaxv | 30 |
 | mve_int_vqdmlah | missing |
 | mve_vldr | missing |
 | mve_vldr_wide | missing |
