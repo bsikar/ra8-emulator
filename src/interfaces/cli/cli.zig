@@ -17,6 +17,7 @@ pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
 /// The USB/IP wire format the host bridge speaks (RA8EMU-75).
 pub const usbip_wire = @import("../usbip/usbip_wire.zig");
+pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
 pub const console_input = @import("../../periph/sci/sci_input.zig");
 
