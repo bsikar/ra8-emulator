@@ -58,3 +58,11 @@ loops and Helium bodies at `-O ReleaseFast` with MVE on, so build it with
 `M=cortex_m85+mve_fp+fp_armv8d16+fullfp16` and `-O ReleaseFast` in the
 second command, swapping in `lob`. `lob_corpus_test.zig` boots it on the
 Zig core and compares against the host-worked words in `lob_vectors.zig`.
+
+`dsp.zig` is the Helium DSP corpus (RA8EMU-116). For trip counts 0, 1, 7,
+8, 9, 31 and 64 (read back from SRAM) it runs CMSIS-DSP shaped kernels: q15
+and q31 dot products, q15 and q7 saturating adds, a q31 scale, a q15 max,
+an 8-tap q15 FIR and a fused f32 dot product, storing eight words per count.
+Build it like `lob` (`M=cortex_m85+mve_fp+fp_armv8d16+fullfp16`,
+`-O ReleaseFast`), swapping in `dsp`. `dsp_corpus_test.zig` boots it on the
+Zig core and compares against the host-worked words in `dsp_vectors.zig`.
