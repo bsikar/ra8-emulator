@@ -125,6 +125,8 @@ pub const text =
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is
     \\                     still accepted
+    \\  --rtc-start T      start the RTC running at T (YYYY-MM-DDTHH:MM:SS or
+    \\                     now, UTC) and count virtual time
     \\  --camera-source K  where the camera engine's pixels come from:
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or

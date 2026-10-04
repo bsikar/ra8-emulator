@@ -9,6 +9,7 @@ const touch_spec = @import("touch_spec.zig");
 const request = @import("../../periph/model/request.zig");
 const fault_spec = @import("../../periph/model/fault_spec.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const rtc_start = @import("rtc_start.zig");
 
 const Options = cli.Options;
 const card_setup = cli.card_setup;
@@ -47,6 +48,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--rtc-start")) {
+        options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {
         options.camera = try camera(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--attach")) {
@@ -99,6 +102,14 @@ fn fault(options: *Options, spec: []const u8) !void {
     }
     fault_spec.place(options.attaches[0..options.attach_count], wanted) catch |err| {
         std.debug.print("--fault {s}: no --attach before it names that part\n", .{spec});
+        return err;
+    };
+}
+
+/// One `--rtc-start` value. A bad one says why before the run starts.
+fn rtcStart(text: []const u8) !@import("../../periph/rtc/rtc_clock.zig").Calendar {
+    return rtc_start.parse(text) catch |err| {
+        std.debug.print("--rtc-start {s}: {s}\n", .{ text, @errorName(err) });
         return err;
     };
 }

@@ -19,9 +19,8 @@ pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
 pub const console_input = @import("../../periph/sci/sci_input.zig");
 
-/// How many `--dump-sym` names one run will carry. The suite that drives
-/// this asks for at most two, a progress counter and a failure counter; the
-/// cap is a little room above that rather than an allocation.
+/// How many `--dump-sym` names one run will carry: the suite asks for at most
+/// two (progress and failure counters), so this is a little room above that.
 pub const dump_limit: usize = 8;
 
 /// Instructions a run gets when nothing tells it when to stop. Long enough
@@ -87,6 +86,7 @@ pub const Options = struct {
     /// `--panel-only`: save only the glass at its own dimensions.
     panel_only: bool = false,
     frames: @import("frames_args.zig").Options = .{},
+    rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.
