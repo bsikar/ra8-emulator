@@ -131,7 +131,9 @@ pub const Channel = struct {
         _ = self.advance(1);
     }
 
-    fn advance(self: *Channel, amount: u32) u32 {
+    /// Move the count by `amount` counts of its own clock. Public so the
+    /// virtual time base can count a boundary by elapsed time (gpt_sched).
+    pub fn advance(self: *Channel, amount: u32) u32 {
         if (!self.running()) return 0;
         const period = self.periodOrDefault();
         const before = self.cnt;
