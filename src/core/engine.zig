@@ -10,7 +10,6 @@ const guest_load = @import("cpu/memory/load.zig");
 const memmap = @import("memmap.zig");
 const code_lines = @import("cpu/code_lines.zig");
 const board_ram = @import("board_ram.zig");
-const periph = @import("../periph/registry.zig");
 const disasm = @import("../debug/disasm.zig");
 const cadence = @import("cadence.zig");
 const clocks = @import("../periph/clocks.zig");
@@ -185,21 +184,6 @@ pub const Engine = struct {
     pub fn shareBoardRamWith(self: *Engine, owner: *Engine) Error!void {
         if (!owner.ram.mapped()) return Error.MapFailed;
         board_ram.mapBoard(self.handle, &self.ram, &owner.ram) catch return Error.MapFailed;
-    }
-
-    /// Put the peripheral bus behind the peripheral window and its Non-secure
-    /// alias. Until this runs, the first store a driver makes to a peripheral
-    /// register is an unmapped write and the run ends there; after it, every
-    /// access in the window reaches the bus and either a modelled block or the
-    /// sparse register file answers it.
-    pub fn attachPeriph(self: Engine, bus: *periph.Bus) Error!void {
-        return self.attachPeriphAs(bus, .cpu0);
-    }
-
-    /// The same, for the core named `issuer`, so the bus can tell whose
-    /// access it is serving.
-    pub fn attachPeriphAs(self: Engine, bus: *periph.Bus, issuer: periph.Issuer) Error!void {
-        bus_hook.attachBus(self.handle, bus.port(issuer)) catch return Error.AttachFailed;
     }
 
     /// Record the invalid accesses a run takes, so a fault can say which

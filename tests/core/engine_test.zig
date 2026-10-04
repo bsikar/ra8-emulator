@@ -3,7 +3,6 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const clocks = ra8.periph.clocks;
 const memmap = ra8.core.memmap;
-const periph = ra8.periph.registry;
 const mod = ra8.core.engine;
 
 const Engine = mod.Engine;
@@ -110,53 +109,6 @@ test "a copied Thumb image runs from SRAM after its loaded reset vector" {
     try std.testing.expectEqual(@as(u32, 0xE7FE_222A), try engine.readWord(0x2202_0000));
     try std.testing.expectEqual(@as(u32, 42), try engine.register(.r2));
     try std.testing.expectEqual(@as(u32, 0x2202_0002), try engine.register(.pc));
-}
-
-test "with the bus attached, a store into peripheral space is serviced" {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-
-    var bus = periph.Bus.init(std.testing.allocator);
-    defer bus.deinit();
-    try engine.attachPeriph(&bus);
-
-    // r0 = 0x40000000; store a byte-sized constant there and read it back.
-    const code = [_]u8{
-        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
-        0xC4, 0xF2, 0x00, 0x00, // movt r0, #0x4000
-        0x55, 0x21, //             movs r1, #0x55
-        0x01, 0x60, //             str  r1, [r0]
-        0x02, 0x68, //             ldr  r2, [r0]
-    };
-    try engine.write(memmap.sram_base, &code);
-    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-    const fault = try engine.run(memmap.sram_base, 5, .{});
-    try std.testing.expect(fault == null);
-    try std.testing.expect(bus.counters.writes >= 1);
-    try std.testing.expectEqual(@as(u32, 0x55), bus.read(periph.base, 4));
-    try std.testing.expectEqual(@as(u32, 0x55), try engine.register(.r2));
-}
-
-test "an engine attached as CPU1 reaches the bus as CPU1" {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-
-    var bus = periph.Bus.init(std.testing.allocator);
-    defer bus.deinit();
-    try engine.attachPeriphAs(&bus, .cpu1);
-
-    const code = [_]u8{
-        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
-        0xC4, 0xF2, 0x00, 0x00, // movt r0, #0x4000
-        0x55, 0x21, //             movs r1, #0x55
-        0x01, 0x60, //             str  r1, [r0]
-    };
-    try engine.write(memmap.sram_base, &code);
-    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-    try std.testing.expect((try engine.run(memmap.sram_base, 4, .{})) == null);
-    try std.testing.expectEqual(periph.Issuer.cpu1, bus.issuer);
 }
 
 test "a fault reports the address it reached for and the instruction that did it" {
