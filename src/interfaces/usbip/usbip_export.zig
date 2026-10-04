@@ -11,6 +11,8 @@ const wire = @import("usbip_wire.zig");
 pub const server = @import("usbip_server.zig");
 /// The loopback socket that runs `server` for usbip hosts.
 pub const listen = @import("usbip_listen.zig");
+/// The board device the bridge exports.
+pub const board = @import("usbip_board.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
