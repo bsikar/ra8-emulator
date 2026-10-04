@@ -2,51 +2,59 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const mod = ra8.core.second_core;
-const engine = ra8.core.engine;
 const memmap = ra8.core.memmap;
-const Engine = engine.Engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const Board = ra8.board.Board;
 const sau = ra8.periph.sau;
 const mpu = ra8.periph.mpu;
 const scb = ra8.periph.scb;
 const nvic = ra8.periph.nvic;
 
-/// A thumb image is not needed to test the wiring: what matters is that the
-/// second core is put in front of the first core's board and takes turns.
-///
-/// CPU1 is built into storage the caller holds, the way `open` requires:
-/// its watch is registered with Unicorn by address, so a `Second` moved
-/// after that leaves the hook pointing at where it used to be.
-fn pair(cpu1: *mod.Second) !Engine {
-    var cpu0 = try Engine.open();
-    errdefer cpu0.close();
-    try cpu0.mapBoardRam();
-    cpu1.* = .{ .core = try Engine.open() };
-    errdefer cpu1.close();
-    try cpu1.core.shareBoardRamWith(&cpu0);
-    try cpu1.core.attachWatch(&cpu1.watch);
-    try cpu1.core.attachPend(&cpu1.pend);
-    return cpu0;
-}
+/// A thumb image is not needed to test the wiring: CPU1's own store
+/// beside CPU0's, sharing its SRAM the way the Zig run lays them out.
+/// Closed with `part`.
+const Pair = struct {
+    cpu0: Store,
+    cpu1: Store,
+
+    fn open(self: *Pair) !void {
+        self.cpu0 = try Store.init(null);
+        errdefer self.cpu0.deinit();
+        self.cpu1 = try Store.init(&self.cpu0);
+    }
+
+    fn part(self: *Pair) void {
+        self.cpu1.deinit();
+        self.cpu0.deinit();
+    }
+
+    fn first(self: *Pair) Guest {
+        return .{ .store = &self.cpu0 };
+    }
+
+    fn second(self: *Pair) Guest {
+        return .{ .store = &self.cpu1 };
+    }
+};
 
 test "what one core stores in shared SRAM the other core reads" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
 
-    try cpu1.core.writeWord(memmap.ns_sram_base + 0x100200, 0xB055_A55A);
+    try pair.second().writeWord(memmap.ns_sram_base + 0x100200, 0xB055_A55A);
     try std.testing.expectEqual(
         @as(u32, 0xB055_A55A),
-        try cpu0.readWord(memmap.sram_base + 0x100200),
+        try pair.first().readWord(memmap.sram_base + 0x100200),
     );
 }
 
 test "a second core carries an SAU of its own, not the board's" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
+    var cpu1: mod.Second = .{ .core = undefined };
 
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
@@ -82,10 +90,10 @@ test "a round is the chunk boundary" {
 }
 
 test "a second core carries an MPU and guard of its own, not the board's" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
+    var cpu1: mod.Second = .{ .core = undefined };
     cpu1.regions = mpu.Mpu.init();
     cpu1.guard = ra8.core.mpu_guard.Guard.init();
 
@@ -94,10 +102,10 @@ test "a second core carries an MPU and guard of its own, not the board's" {
     try std.testing.expect(&cpu1.regions != &board.regions);
     try std.testing.expect(&cpu1.guard != &board.guard);
 
-    // The guard CPU1 attaches enforces CPU1's table, never the board's.
-    try cpu1.core.attachRegions(&cpu1.regions, &cpu1.guard);
-    try std.testing.expect(cpu1.guard.unit.? == &cpu1.regions);
-    try std.testing.expect(board.guard.unit == null);
+    // The units CPU1's Zig core enforces are CPU1's table, never the board's.
+    const units = mod.zig.Units.of(&cpu1);
+    try std.testing.expect(units.regions == &cpu1.regions);
+    try std.testing.expect(units.regions != &board.regions);
 }
 
 test "programming one core's MPU leaves the other's table alone" {
@@ -124,75 +132,72 @@ test "a fresh second core's MPU is empty and off" {
 }
 
 test "each core reads its own VTOR, primed to its own vector base" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
     const base: u32 = memmap.sram_base + 0x0010_0000;
 
-    try mod.primeVectorTable(.{ .engine = cpu1.core }, base);
-    try std.testing.expectEqual(base, try cpu1.core.readWord(memmap.scb.vtor));
-    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.vtor));
+    try mod.primeVectorTable(pair.second(), base);
+    try std.testing.expectEqual(base, try pair.second().readWord(memmap.scb.vtor));
+    try std.testing.expectEqual(@as(u32, 0), try pair.first().readWord(memmap.scb.vtor));
 }
 
 test "moving CPU0's vector table leaves CPU1's VTOR where it was" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
     const base: u32 = memmap.sram_base + 0x0010_0000;
-    try mod.primeVectorTable(.{ .engine = cpu1.core }, base);
+    try mod.primeVectorTable(pair.second(), base);
 
-    try cpu0.writeWord(memmap.scb.vtor, memmap.sram_base);
-    try std.testing.expectEqual(memmap.sram_base, try cpu0.readWord(memmap.scb.vtor));
-    try std.testing.expectEqual(base, try cpu1.core.readWord(memmap.scb.vtor));
+    try pair.first().writeWord(memmap.scb.vtor, memmap.sram_base);
+    try std.testing.expectEqual(memmap.sram_base, try pair.first().readWord(memmap.scb.vtor));
+    try std.testing.expectEqual(base, try pair.second().readWord(memmap.scb.vtor));
 }
 
 test "each core's AIRCR model keeps the PRIGROUP that core programmed" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
+    var cpu1: mod.Second = .{ .core = undefined };
     cpu1.control = scb.Scb.init();
     var cpu0_control = scb.Scb.init();
-    try cpu0_control.prime(cpu0);
-    try cpu1.control.prime(cpu1.core);
+    try cpu0_control.prime(pair.first());
+    try cpu1.control.prime(pair.second());
 
     const keyed: u32 = scb.key.write << scb.key.shift;
-    try cpu1.core.writeWord(memmap.scb.aircr, keyed | (5 << 8));
-    try std.testing.expect(!try cpu1.control.poll(cpu1.core));
-    try std.testing.expect(!try cpu0_control.poll(cpu0));
+    try pair.second().writeWord(memmap.scb.aircr, keyed | (5 << 8));
+    try std.testing.expect(!try cpu1.control.poll(pair.second()));
+    try std.testing.expect(!try cpu0_control.poll(pair.first()));
 
     try std.testing.expectEqual(@as(u3, 5), cpu1.control.priorityGroup());
     try std.testing.expectEqual(@as(u3, 0), cpu0_control.priorityGroup());
-    try std.testing.expectEqual(scb.key.status, try cpu0.readWord(memmap.scb.aircr));
+    try std.testing.expectEqual(scb.key.status, try pair.first().readWord(memmap.scb.aircr));
 }
 
 test "a reset CPU1 asks for is counted on CPU1's model, not CPU0's" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
+    var cpu1: mod.Second = .{ .core = undefined };
     cpu1.control = scb.Scb.init();
     const cpu0_control = scb.Scb.init();
-    try cpu1.control.prime(cpu1.core);
+    try cpu1.control.prime(pair.second());
 
     const keyed: u32 = scb.key.write << scb.key.shift;
-    try cpu1.core.writeWord(memmap.scb.aircr, keyed | scb.field.sysresetreq);
-    try std.testing.expect(try cpu1.control.poll(cpu1.core));
+    try pair.second().writeWord(memmap.scb.aircr, keyed | scb.field.sysresetreq);
+    try std.testing.expect(try cpu1.control.poll(pair.second()));
     try std.testing.expectEqual(@as(u32, 1), cpu1.control.requests);
     try std.testing.expectEqual(@as(u32, 0), cpu0_control.requests);
 }
 
 test "CCR, SHCSR and the fault status words are each core's own" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
     const words = [_]u32{ memmap.scb.ccr, 0xE000_ED24, 0xE000_ED28, 0xE000_ED2C, 0xE000_ED34, 0xE000_ED38 };
     for (words, 0..) |address, i| {
-        try cpu0.writeWord(address, 0x100 + @as(u32, @intCast(i)));
-        try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(address));
+        try pair.first().writeWord(address, 0x100 + @as(u32, @intCast(i)));
+        try std.testing.expectEqual(@as(u32, 0), try pair.second().readWord(address));
     }
 }
 
