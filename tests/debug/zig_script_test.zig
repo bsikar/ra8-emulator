@@ -1,6 +1,5 @@
-//! Tests for src/debug/zig_script.zig: one script on the Unicorn session
-//! and on the Zig core, over the program tests/debug/session_test.zig uses,
-//! prints one transcript.
+//! Tests for src/debug/zig_script.zig: one script on the Zig core prints
+//! the transcript the Unicorn session printed before RA8EMU-605.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -12,7 +11,6 @@ const session = ra8.core.debug_session;
 const stop_machine = ra8.core.stop_machine;
 const step_hook = ra8.core.step_hook;
 const zig_script = step_hook.zig_script;
-const Engine = ra8.core.engine.Engine;
 
 const image = struct {
     const base: u32 = memmap.sram_base;
@@ -81,19 +79,6 @@ fn play(target: anytype, into: *std.ArrayList(u8)) !void {
     }
 }
 
-fn unicorn(into: *std.ArrayList(u8)) !void {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-    try engine.write(image.base, &image.bytes);
-    try engine.setRegister(.sp, image.stack);
-    var machine: stop_machine.Machine = .{};
-    var driver: step_hook.Driver = .{ .machine = &machine };
-    try step_hook.attach(engine.handle, &driver, true);
-    var target: session.Session = .{ .core = &engine, .driver = &driver, .entry = image.reset, .budget = image.budget };
-    try play(&target, into);
-}
-
 fn zig(into: *std.ArrayList(u8)) !void {
     var memory: Sram = .{};
     @memcpy(memory.bytes[0..image.bytes.len], &image.bytes);
@@ -106,15 +91,37 @@ fn zig(into: *std.ArrayList(u8)) !void {
     try play(&target, into);
 }
 
-test "a script prints the same transcript on the Zig core as on Unicorn" {
-    var expected = std.ArrayList(u8).init(std.testing.allocator);
-    defer expected.deinit();
-    try unicorn(&expected);
+/// What this script printed on the Unicorn session before RA8EMU-605
+/// retired it, kept so the Zig core stays held to it.
+const transcript =
+    \\Breakpoint 1 at 0x22000008, arrival 3
+    \\Breakpoint 1, 0x22000008: ldr r1, [pc, #8]
+    \\r0  0x00000002  r1  0x22000054  r2  0x00000000  r3  0x00000000
+    \\r12 0x00000000  sp  0x22001EF8  lr  0x22000027  pc  0x22000008
+    \\0x22000054: 0x00000001 0x00000000
+    \\0x22000054 = 0x00000001 (1)
+    \\0x2200000A: ldr r2, [r1]
+    \\0x2200000C: add r0, r2
+    \\0x2200000E: str r0, [r1]
+    \\0x22000026: adds r4, #1
+    \\#0 0x22000026
+    \\#1 0x22000026
+    \\Temporary breakpoint 2 at 0x22000022
+    \\Temporary breakpoint 2, 0x22000022: bl #0x22000008
+    \\Breakpoint 1, 0x22000008: ldr r1, [pc, #8]
+    \\Deleted breakpoint 1
+    \\error: NoSymbols
+    \\error: NoSuchBreak
+    \\Budget of 400 instructions spent at 0x2200000C
+    \\
+;
+
+test "a script prints the transcript it printed on Unicorn, on the Zig core" {
     var got = std.ArrayList(u8).init(std.testing.allocator);
     defer got.deinit();
     try zig(&got);
-    try std.testing.expect(std.mem.indexOf(u8, expected.items, "Breakpoint 1, 0x22000008") != null);
-    try std.testing.expectEqualStrings(expected.items, got.items);
+    try std.testing.expect(std.mem.indexOf(u8, got.items, "Breakpoint 1, 0x22000008") != null);
+    try std.testing.expectEqualStrings(transcript, got.items);
 }
 
 test "a command the Zig core does not carry out yet says so" {

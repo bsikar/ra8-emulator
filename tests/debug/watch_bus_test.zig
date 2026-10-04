@@ -1,5 +1,5 @@
 //! Tests for src/debug/watch_bus.zig: watchpoints and DWT data matches on
-//! the Zig core stop on the same instruction as on Unicorn.
+//! the Zig core stop where they stopped on Unicorn before RA8EMU-605.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -14,7 +14,6 @@ const watch_bus = step_hook.watch_bus;
 const zig_drive = step_hook.zig_drive;
 const zig_script = step_hook.zig_script;
 const dwt = ra8.core.dwt;
-const Engine = ra8.core.engine.Engine;
 
 /// The program tests/debug/zig_script_test.zig uses: a loop at +0x18
 /// calling a helper at +0x8 that adds r0 into the word at 0x22000054.
@@ -92,19 +91,6 @@ fn play(target: anytype, into: *std.ArrayList(u8)) !void {
     }
 }
 
-fn unicorn(into: *std.ArrayList(u8)) !void {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-    try engine.write(image.base, &image.bytes);
-    try engine.setRegister(.sp, image.stack);
-    var machine: stop_machine.Machine = .{};
-    var driver: step_hook.Driver = .{ .machine = &machine };
-    try step_hook.attach(engine.handle, &driver, true);
-    var target: session.Session = .{ .core = &engine, .driver = &driver, .entry = image.reset, .budget = image.budget };
-    try play(&target, into);
-}
-
 fn zig(into: *std.ArrayList(u8)) !void {
     var rig: Rig = .{};
     rig.wire();
@@ -115,16 +101,27 @@ fn zig(into: *std.ArrayList(u8)) !void {
     try play(&target, into);
 }
 
-test "a write and a read watchpoint stop on the same instruction as on Unicorn" {
-    var expected = std.ArrayList(u8).init(std.testing.allocator);
-    defer expected.deinit();
-    try unicorn(&expected);
+/// What this script printed on the Unicorn session before RA8EMU-605
+/// retired it, kept so the Zig core stays held to it.
+const transcript =
+    \\Watchpoint 1 (write) at 0x22000054
+    \\Watchpoint 1: write of 4 at 0x22000054, 0x22000010: bx lr
+    \\Watchpoint 1: write of 4 at 0x22000054, 0x22000010: bx lr
+    \\r0  0x00000001  r1  0x22000054  r2  0x00000000  r3  0x00000000
+    \\r12 0x00000000  sp  0x22001EF8  lr  0x22000027  pc  0x22000010
+    \\Deleted watchpoint 1
+    \\Watchpoint 2 (read) at 0x22000054
+    \\Watchpoint 2: read of 4 at 0x22000054, 0x2200000C: add r0, r2
+    \\
+;
+
+test "a write and a read watchpoint stop on the instruction they stopped on under Unicorn" {
     var got = std.ArrayList(u8).init(std.testing.allocator);
     defer got.deinit();
     try zig(&got);
-    try std.testing.expect(std.mem.indexOf(u8, expected.items, "Watchpoint 1: write") != null);
-    try std.testing.expect(std.mem.indexOf(u8, expected.items, "Watchpoint 2: read") != null);
-    try std.testing.expectEqualStrings(expected.items, got.items);
+    try std.testing.expect(std.mem.indexOf(u8, got.items, "Watchpoint 1: write") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got.items, "Watchpoint 2: read") != null);
+    try std.testing.expectEqualStrings(transcript, got.items);
 }
 
 test "firmware that arms a DWT write comparator halts after the store on the Zig core" {

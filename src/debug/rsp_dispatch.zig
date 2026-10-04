@@ -5,9 +5,9 @@
 //! reads and writes of registers and memory: `g`/`G` all registers, `p`/`P`
 //! one, `m`/`M` memory as hex and `X` memory as binary. With a stop
 //! machine attached, `Z`/`z` set and clear breaks and watches
-//! (rsp_points.zig); without one they are not supported. With a debugger
+//! (rsp_points.zig); without one they are not supported. With a Zig
 //! session attached, `c`, `s`, `vCont` and the thread requests resume and
-//! select cores through it (rsp_run.zig).
+//! select cores through it (rsp_zig.zig).
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
@@ -19,8 +19,6 @@ pub const Error = error{NoSpace};
 
 /// The Z and z requests, reached through here so tests see them.
 pub const points = @import("rsp_points.zig");
-/// Run control and threads, reached through here for the same reason.
-pub const run_control = @import("rsp_run.zig");
 /// Debugger stores handed on to the debug unit models.
 pub const units = @import("rsp_units.zig");
 /// Run control on the Zig core (RA8EMU-118).
@@ -30,7 +28,6 @@ pub const server = @import("rsp_server.zig");
 pub const poll = @import("rsp_poll.zig");
 /// ITM text sent to gdb as `O` packets.
 pub const console = @import("rsp_console.zig");
-const debug_session = @import("session.zig");
 const core_view = @import("core_view.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
@@ -51,35 +48,26 @@ const memory_error = "E01";
 const request_error = "E00";
 
 pub const Dispatch = struct {
-    /// The Unicorn engine behind a Unicorn session; null on a Zig session,
-    /// which always answers through `view` (RA8EMU-483).
-    core: ?*const engine.Engine,
     machine: ?*stop_machine.Machine = null,
-    /// With a debugger session attached, run control and threads go to it,
-    /// and everything else is answered for the core it has selected.
-    session: ?*debug_session.Session = null,
-    /// With a Zig session attached instead, run control goes to it and
-    /// registers and memory are the Zig core's.
+    /// With a Zig session attached, run control and threads go to it, and
+    /// everything else is answered for the core it has selected.
     zig: ?*zig_run.Target = null,
-    /// Where registers and memory are read; null reads `core`.
+    /// Where registers and memory are read. Without one, the requests that
+    /// need a core get the empty reply.
     view: ?core_view.View = null,
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
-        if (self.session) |live| {
-            if (run_control.handles(request)) return run_control.answer(live, request, out);
-            const selected = Dispatch{ .core = live.core, .machine = live.driver.machine };
-            return selected.answer(request, out);
-        }
         if (self.zig) |live| {
-            if (run_control.handles(request)) return zig_run.answer(live, request, out);
-            const selected = Dispatch{ .core = self.core, .machine = live.session.machine, .view = live.session.view() };
+            if (zig_run.handles(request)) return zig_run.answer(live, request, out);
+            const selected = Dispatch{ .machine = live.session.machine, .view = live.session.view() };
             return selected.answer(request, out);
         }
         if (request.len == 0) return out[0..0];
         if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, supported);
         if (std.mem.startsWith(u8, request, xfer)) return features.read(request[xfer.len..], out);
         if (std.mem.eql(u8, request, "qAttached")) return copy(out, "1");
+        if (needsCore(request[0]) and self.view == null) return out[0..0];
         return switch (request[0]) {
             '?' => copy(out, halted),
             'g' => self.allRegisters(out),
@@ -97,7 +85,14 @@ pub const Dispatch = struct {
 
     /// The core registers and memory are read from and written to.
     fn target(self: Dispatch) core_view.View {
-        return self.view orelse .{ .unicorn = self.core.? };
+        return self.view.?;
+    }
+
+    fn needsCore(kind: u8) bool {
+        return switch (kind) {
+            'g', 'p', 'm', 'G', 'P', 'M', 'X' => true,
+            else => false,
+        };
     }
 
     fn allRegisters(self: Dispatch, out: []u8) Error![]const u8 {

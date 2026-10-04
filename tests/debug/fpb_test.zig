@@ -52,8 +52,6 @@ test {
     _ = @import("dwt_test.zig");
     _ = @import("itm_test.zig");
     _ = @import("dcb_test.zig");
-    _ = @import("session_monitor_test.zig");
-    _ = @import("session_poll_test.zig");
     _ = @import("dwarf_line_test.zig");
     _ = @import("session_source_test.zig");
     _ = @import("dwarf_line_find_test.zig");

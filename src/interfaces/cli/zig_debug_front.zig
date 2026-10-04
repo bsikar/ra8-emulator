@@ -1,6 +1,6 @@
 //! The debugger on the Zig core (RA8EMU-117): `--cpu zig` with
 //! `--debug-script` or `--debug`. The image is loaded and the board
-//! attached as for a Unicorn debug session (src/interfaces/cli/debug_front.zig);
+//! attached as the front end in src/interfaces/cli/debug_front.zig asks;
 //! the Zig core then resets out of the same vector table on the board's bus,
 //! as src/core/cpu/boot.zig runOnBoard does, and src/debug/zig_script.zig
 //! carries the commands out. `--gdb` serves gdb from the same Zig session
@@ -126,8 +126,8 @@ fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debu
     return 0;
 }
 
-/// Wait for gdb on the loopback port and serve it from the Zig core, the
-/// way debug_front.zig's listen serves the Unicorn session (RA8EMU-118).
+/// Wait for gdb on the loopback port and serve it from the Zig core
+/// (RA8EMU-118).
 fn listen(live: *zig_session.ZigSession, port: u16) !u8 {
     const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
     var server = address.listen(.{ .reuse_address = true }) catch |err| {
@@ -141,7 +141,7 @@ fn listen(live: *zig_session.ZigSession, port: u16) !u8 {
     var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
     live.budget = rsp_poll.chunk;
     var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll() };
-    const stub = rsp_dispatch.Dispatch{ .core = null, .zig = &target };
+    const stub = rsp_dispatch.Dispatch{ .zig = &target };
     const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
     std.debug.print("gdb: {s}\n", .{@tagName(end)});
     return 0;

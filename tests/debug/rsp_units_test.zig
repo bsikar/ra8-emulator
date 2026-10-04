@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const dispatch = ra8.core.rsp_dispatch;
-const Engine = ra8.core.engine.Engine;
+const Rig = @import("view_ram.zig").Rig;
 
 const demcr: u32 = 0xE000_EDFC;
 const dwt_ctrl: u32 = 0xE000_1000;
@@ -20,11 +20,10 @@ fn store(stub: dispatch.Dispatch, address: u32, value: u32) !void {
 }
 
 test "a debugger store to DEMCR sets and clears TRCENA in the model" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var rig: Rig = .{};
+    rig.wire();
     var machine = ra8.core.stop_machine.Machine{};
-    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    const stub = dispatch.Dispatch{ .machine = &machine, .view = rig.view() };
     try store(stub, demcr, 1 << 24);
     try std.testing.expect(machine.dwt.trcena);
     try store(stub, demcr, 0);
@@ -32,11 +31,10 @@ test "a debugger store to DEMCR sets and clears TRCENA in the model" {
 }
 
 test "a debugger store to a comparator reaches the model" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var rig: Rig = .{};
+    rig.wire();
     var machine = ra8.core.stop_machine.Machine{};
-    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    const stub = dispatch.Dispatch{ .machine = &machine, .view = rig.view() };
     try store(stub, demcr, 1 << 24);
     try store(stub, comp0, 40);
     try store(stub, function0, 0x11);
@@ -45,35 +43,23 @@ test "a debugger store to a comparator reaches the model" {
 }
 
 test "a debugger store over DWT_CTRL keeps NUMCOMP" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var rig: Rig = .{};
+    rig.wire();
     var machine = ra8.core.stop_machine.Machine{};
     machine.dwt.numcomp = 4;
-    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    const stub = dispatch.Dispatch{ .machine = &machine, .view = rig.view() };
     try store(stub, dwt_ctrl, 1);
     var bytes: [4]u8 = undefined;
-    try core.read(dwt_ctrl, &bytes);
+    try rig.view().read(dwt_ctrl, &bytes);
     try std.testing.expectEqual(@as(u32, 0x4000_0001), std.mem.readInt(u32, &bytes, .little));
 }
 
 test "a store outside the units leaves the model alone" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var rig: Rig = .{};
+    rig.wire();
     var machine = ra8.core.stop_machine.Machine{};
-    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    const stub = dispatch.Dispatch{ .machine = &machine, .view = rig.view() };
     try store(stub, ra8.core.memmap.sram_base, 0xffff_ffff);
     try std.testing.expect(!machine.dwt.trcena);
     try std.testing.expectEqual(@as(u32, 0), machine.dwt.comps[0]);
-}
-
-test "a debugger store reaches the models through the selected view with no engine named" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    var machine = ra8.core.stop_machine.Machine{};
-    const stub = dispatch.Dispatch{ .core = null, .machine = &machine, .view = .{ .unicorn = &core } };
-    try store(stub, demcr, 1 << 24);
-    try std.testing.expect(machine.dwt.trcena);
 }

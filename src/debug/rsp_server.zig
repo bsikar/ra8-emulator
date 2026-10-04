@@ -45,9 +45,7 @@ pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: anytype, writer: anytype) 
                     if (std.mem.eql(u8, request, "k")) return .killed;
                     const detach = request.len > 0 and request[0] == 'D';
                     const reply = if (detach) "OK" else try dispatch.answer(request, &payload);
-                    if (dispatch.session) |live| {
-                        if (console.resumes(request)) try console.send(writer, &live.driver.machine.itm, &framed);
-                    } else if (dispatch.zig) |live| {
+                    if (dispatch.zig) |live| {
                         if (console.resumes(request)) try console.send(writer, &live.session.machine.itm, &framed);
                     }
                     last = try packet.frame(&framed, reply);

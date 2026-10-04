@@ -8,14 +8,11 @@ const dispatch = ra8.core.rsp_dispatch;
 const packet = ra8.core.rsp_packet;
 const server = dispatch.server;
 const memmap = ra8.core.memmap;
-const Engine = ra8.core.engine.Engine;
+const Rig = @import("view_ram.zig").Rig;
 
-fn open() !Engine {
-    var core = try Engine.open();
-    errdefer core.close();
-    try core.mapBoardRam();
-    try core.write(memmap.sram_base, &[_]u8{ 0xca, 0xfe });
-    return core;
+fn open(rig: *Rig) !void {
+    rig.wire();
+    try rig.view().write(memmap.sram_base, &[_]u8{ 0xca, 0xfe });
 }
 
 /// `payloads` framed the way gdb sends them, with `extra` after.
@@ -26,41 +23,41 @@ fn wire(buffer: []u8, payloads: []const []const u8, extra: []const u8) ![]const 
     return buffer[0 .. at + extra.len];
 }
 
-fn play(core: *Engine, input: []const u8, sent: *std.ArrayList(u8)) !server.End {
+fn play(rig: *Rig, input: []const u8, sent: *std.ArrayList(u8)) !server.End {
     var stream = std.io.fixedBufferStream(input);
-    return server.serve(.{ .core = core }, stream.reader(), sent.writer());
+    return server.serve(.{ .view = rig.view() }, stream.reader(), sent.writer());
 }
 
 // Each packet is acknowledged and answered, and D ends the connection.
 test "packets are acknowledged and answered until detach" {
-    var core = try open();
-    defer core.close();
+    var rig: Rig = .{};
+    try open(&rig);
     var buffer: [128]u8 = undefined;
     const input = try wire(&buffer, &.{ "m22000000,2", "D" }, "");
     var sent = std.ArrayList(u8).init(std.testing.allocator);
     defer sent.deinit();
-    try std.testing.expectEqual(server.End.detached, try play(&core, input, &sent));
+    try std.testing.expectEqual(server.End.detached, try play(&rig, input, &sent));
     try std.testing.expectEqualStrings("+$cafe#8f+$OK#9a", sent.items);
 }
 
 // A `-` gets the last reply again; a bad checksum gets `-`; k ends silently.
 test "resend, a corrupt packet, and kill" {
-    var core = try open();
-    defer core.close();
+    var rig: Rig = .{};
+    try open(&rig);
     var buffer: [128]u8 = undefined;
     const input = try wire(&buffer, &.{"qAttached"}, "-$m0,1#00$k#6b");
     var sent = std.ArrayList(u8).init(std.testing.allocator);
     defer sent.deinit();
-    try std.testing.expectEqual(server.End.killed, try play(&core, input, &sent));
+    try std.testing.expectEqual(server.End.killed, try play(&rig, input, &sent));
     try std.testing.expectEqualStrings("+$1#31$1#31-+", sent.items);
 }
 
 // The stream running dry ends the connection as closed.
 test "the other end closing" {
-    var core = try open();
-    defer core.close();
+    var rig: Rig = .{};
+    try open(&rig);
     var sent = std.ArrayList(u8).init(std.testing.allocator);
     defer sent.deinit();
-    try std.testing.expectEqual(server.End.closed, try play(&core, "+", &sent));
+    try std.testing.expectEqual(server.End.closed, try play(&rig, "+", &sent));
     try std.testing.expectEqual(@as(usize, 0), sent.items.len);
 }
