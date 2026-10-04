@@ -105,6 +105,7 @@ test "the table the core reset from stands in while nothing answers at VTOR" {
 test "entry with an FP context stacks the extended frame and clears FPCA" {
     var ram: fixture.Ram = .{};
     var cpu = try fixture.boot(&ram);
+    cpu.fp.context.fpccr.lspen = 0;
     cpu.regs.control |= regs.control_bits.fpca;
     for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
     cpu.fp.bank.writeS(16, 0xDEAD_BEEF);
@@ -120,6 +121,26 @@ test "entry with an FP context stacks the extended frame and clears FPCA" {
     try std.testing.expectEqual(@as(u32, 0x0300_0000), ram.word(sp + 0x60));
     // S16 is not part of this frame; the Secure extension is RA8EMU-165.
     try std.testing.expectEqual(@as(u32, 0), ram.word(sp + 0x64));
+}
+
+test "lazy entry reserves the FP space, names it in FPCAR and sets LSPACT" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= regs.control_bits.fpca;
+    cpu.fp.bank.writeS(0, 0x4000_0000);
+    _ = try entry.take(&cpu, 11, 0x2000_0102);
+    const sp = fixture.msp_top - 0x68;
+    try std.testing.expectEqual(sp, cpu.regs.msp);
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFE9), cpu.regs.lr);
+    try std.testing.expectEqual(@as(u32, 0x2000_0102), ram.word(sp + 0x18));
+    // S0 is not written yet: the first FP op in the handler does that.
+    try std.testing.expectEqual(@as(u32, 0), ram.word(sp + 0x20));
+    const fpccr = cpu.fp.context.fpccr;
+    try std.testing.expectEqual(sp + 0x20, cpu.fp.context.fpcar);
+    try std.testing.expectEqual(@as(u1, 1), fpccr.lspact);
+    try std.testing.expectEqual(@as(u1, 1), fpccr.thread);
+    try std.testing.expectEqual(@as(u1, 0), fpccr.user);
+    try std.testing.expectEqual(@intFromBool(cpu.banked.current == .secure), fpccr.s);
 }
 
 test "entry without an FP context keeps the basic frame and FType set" {

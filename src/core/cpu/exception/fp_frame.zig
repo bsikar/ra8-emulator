@@ -1,8 +1,9 @@
 //! The extended exception frame (RA8EMU-124): the basic eight words, then
 //! S0-S15, FPSCR and VPR, 0x68 bytes in all. Entry pushes it
 //! when an FP context is active and clears EXC_RETURN.FType; a return with
-//! FType clear pops it. The Secure S16-S31 extension is RA8EMU-165 and lazy
-//! preservation is RA8EMU-163. The word after FPSCR is VPR on a core with
+//! FType clear pops it. The Secure S16-S31 extension is RA8EMU-165. With
+//! FPCCR.LSPEN set, entry reserves the same space but writes only the basic
+//! words (`reserve`); fpu/lazy.zig fills the rest later (RA8EMU-163). The word after FPSCR is VPR on a core with
 //! MVE (RA8EMU-330) and reserved, stacked as 0, on one without.
 const std = @import("std");
 const bus = @import("../bus.zig");
@@ -37,12 +38,28 @@ pub fn push(to: bus.Bus, sp: u32, basic: frame.Frame, fp: Fp) bus.Error!u32 {
     @memcpy(all[slot.s0..slot.fpscr], &fp.s);
     all[slot.fpscr] = fp.fpscr;
     all[slot.vpr] = fp.vpr;
+    try writeWords(to, at, &all);
+    return at;
+}
+
+/// Reserve the whole extended frame below `sp` but write only `basic`: the
+/// lazy entry. Give back the new stack pointer.
+pub fn reserve(to: bus.Bus, sp: u32, basic: frame.Frame) bus.Error!u32 {
+    const pad = sp & 4;
+    const at = (sp -% size) & ~pad;
+    var stacked = basic;
+    stacked[frame.slot.xpsr] &= ~frame.realigned;
+    if (pad != 0) stacked[frame.slot.xpsr] |= frame.realigned;
+    try writeWords(to, at, &stacked);
+    return at;
+}
+
+fn writeWords(to: bus.Bus, at: u32, all: []const u32) bus.Error!void {
     for (all, 0..) |word, i| {
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, word, .little);
         try to.write(at +% @as(u32, @intCast(i * 4)), &bytes);
     }
-    return at;
 }
 
 pub const Popped = struct {

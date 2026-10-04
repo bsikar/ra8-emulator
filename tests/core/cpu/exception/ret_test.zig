@@ -124,6 +124,7 @@ test "an FP frame comes back with S0-S15, FPSCR and FPCA restored" {
     var ram: fixture.Ram = .{};
     program(&ram, bx_lr);
     var cpu = try fixture.boot(&ram);
+    cpu.fp.context.fpccr.lspen = 0;
     cpu.regs.control |= regs.control_bits.fpca;
     for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
     cpu.fp.fpscr = ra8.core.fpu.fpscr.Fpscr.fromBits(0x0300_0000);

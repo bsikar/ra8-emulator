@@ -15,6 +15,7 @@ const exc_return = @import("exc_return.zig");
 const target = @import("target.zig");
 const callee = @import("callee.zig");
 const State = @import("../../banked.zig").State;
+const sysreg = @import("../sysreg.zig");
 
 /// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
 pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
@@ -51,7 +52,7 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         r.setSp(limit);
     } else {
         const pushed = if (fp)
-            try fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu))
+            try pushFp(cpu, stacked, from_secure)
         else
             try frame.push(cpu.bus, r.sp(), stacked);
         r.setSp(pushed);
@@ -79,8 +80,25 @@ fn frameAddress(sp: u32, size: u32) u32 {
     return (sp -% size) & ~(sp & 4);
 }
 
-/// S0-S15, FPSCR and, with MVE, VPR as the extended frame stacks them.
-/// Stacking is eager; lazy preservation is RA8EMU-163.
+/// The extended frame. With FPCCR.LSPEN clear it goes out whole. With it
+/// set only the basic words are written: FPCAR names the reserved FP space
+/// and UpdateFPCCR records LSPACT, USER, THREAD and S, so the first FP
+/// instruction in the handler writes the context (fpu/lazy.zig, RA8EMU-163).
+/// The *RDY bits are not modelled yet.
+fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool) bus.Error!u32 {
+    const r = &cpu.regs;
+    const ctx = &cpu.fp.context;
+    if (ctx.fpccr.lspen == 0) return fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu));
+    const at = try fp_frame.reserve(cpu.bus, r.sp(), stacked);
+    ctx.writeFpcar(at +% frame.size);
+    ctx.fpccr.lspact = 1;
+    ctx.fpccr.user = @intFromBool(!sysreg.privileged(r));
+    ctx.fpccr.thread = @intFromBool(!r.handlerMode());
+    ctx.fpccr.s = @intFromBool(secure);
+    return at;
+}
+
+/// S0-S15, FPSCR and, with MVE, VPR as the eager extended frame stacks them.
 fn fpContext(cpu: *const Cpu) fp_frame.Fp {
     const vpr: u32 = if (cpu.profile.mve) @bitCast(cpu.fp.vpr) else 0;
     var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits(), .vpr = vpr };
