@@ -10,6 +10,7 @@ const threadx_usage_handler: u32 = fixture.base + 0x180;
 const usgfaultena: u32 = 1 << 18;
 const unaligned_bit: u32 = 1 << 24;
 const invstate_bit: u32 = 1 << 17;
+const nocp_bit: u32 = 1 << 19;
 const stkof_bit: u32 = 1 << 20;
 const divbyzero_bit: u32 = 1 << 25;
 const div_0_trp: u32 = 1 << 4;
@@ -278,4 +279,25 @@ test "DIV_0_TRP clear leaves the zero quotient unchanged" {
     try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
     try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[2]);
     try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+}
+
+test "a refused coprocessor op latches NOCP and runs the UsageFault handler" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    ram.putWord(memmap.scb.shcsr, usgfaultena);
+    ram.putHalf(fixture.code, 0xEC20); // vlstm r0
+    ram.putHalf(fixture.code + 2, 0x0A00);
+    ram.putHalf(usage_handler, 0x202A); // movs r0, #42
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= ra8.core.cpu.regs.control_bits.sfpa;
+
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 6), ipsr(&cpu));
+    try std.testing.expectEqual(nocp_bit, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 42), cpu.regs.low[0]);
+    try std.testing.expectEqual(usage_handler + 2, cpu.regs.pc);
 }
