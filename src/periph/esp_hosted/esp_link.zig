@@ -6,9 +6,11 @@
 //! silicon answers that with its Event_ESPInit boot event and services no
 //! RPC before it. The answer waits in the transmit queue and DATA_READY
 //! stays high until the host clocks it out. With nothing queued the model
-//! sends esp-hosted's idle filler.
+//! sends esp-hosted's idle filler. After the boot event, an RPC request on
+//! the serial interface gets its answer queued the same way.
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
+const rpc = @import("esp_rpc.zig");
 
 /// Octets of the host capabilities announcement kept for inspection.
 pub const caps_capacity: usize = 17;
@@ -22,6 +24,9 @@ pub const Link = struct {
     caps_len: u8 = 0,
     boot_queued: bool = false,
     boots_sent: u32 = 0,
+    reply: [frame.frame_size]u8 = undefined,
+    reply_queued: bool = false,
+    replies_sent: u32 = 0,
 
     /// Clocks one byte in from the host and returns the byte clocked out.
     pub fn exchange(self: *Link, byte: u8) u8 {
@@ -38,7 +43,7 @@ pub const Link = struct {
 
     /// DATA_READY: high while the transmit queue holds a frame.
     pub fn dataReady(self: *const Link) bool {
-        return self.boot_queued;
+        return self.boot_queued or self.reply_queued;
     }
 
     fn load(self: *Link) void {
@@ -49,16 +54,34 @@ pub const Link = struct {
                 return;
             } else |_| {}
         }
+        if (self.reply_queued) {
+            self.reply_queued = false;
+            @memcpy(&self.tx, &self.reply);
+            self.replies_sent += 1;
+            return;
+        }
         frame.filler(&self.tx);
     }
 
     fn receive(self: *Link) void {
         const got = frame.parse(&self.rx) catch return;
-        if (got.header.interface != .priv) return;
+        if (got.header.interface == .priv) self.announce(got.payload);
+        if (got.header.interface == .serial) self.serve(got.payload);
+    }
+
+    fn announce(self: *Link, payload: []const u8) void {
         self.caps_seen = true;
-        const take = @min(got.payload.len, caps_capacity);
-        @memcpy(self.caps[0..take], got.payload[0..take]);
+        const take = @min(payload.len, caps_capacity);
+        @memcpy(self.caps[0..take], payload[0..take]);
         self.caps_len = @intCast(take);
         self.boot_queued = true;
+    }
+
+    /// Answers a known RPC request; none before the host has announced itself.
+    fn serve(self: *Link, payload: []const u8) void {
+        if (!self.caps_seen or self.reply_queued) return;
+        const proto = rpc.tlvData(payload) orelse return;
+        const req = rpc.request(proto) catch return;
+        self.reply_queued = rpc.answerFrame(&self.reply, req) catch false;
     }
 };

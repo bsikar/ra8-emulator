@@ -69,4 +69,5 @@ test {
     _ = @import("esp_hosted/esp_event_test.zig");
     _ = @import("esp_hosted/esp_link_test.zig");
     _ = @import("esp_hosted/esp_link_sci_test.zig");
+    _ = @import("esp_hosted/esp_rpc_test.zig");
 }
