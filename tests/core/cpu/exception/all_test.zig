@@ -16,6 +16,7 @@ test {
     _ = @import("nvic_source_test.zig");
     _ = @import("fault_test.zig");
     _ = @import("../../divide_hook_test.zig");
+    _ = @import("clronret_test.zig");
     _ = @import("mem_manage_test.zig");
     _ = @import("lazy_fault_test.zig");
     _ = @import("secure_test.zig");

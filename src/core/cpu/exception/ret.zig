@@ -45,7 +45,10 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
             cpu.fp.context.fpccr.lspact = 0;
         } else restoreFp(cpu, ext.fp);
         break :blk .{ .frame = ext.frame, .sp = ext.sp };
-    } else try frame.pop(cpu.bus, at);
+    } else blk: {
+        if (cpu.fp.context.fpccr.clronret == 1) clearCallerSaved(cpu);
+        break :blk try frame.pop(cpu.bus, at);
+    };
     const f = popped.frame;
     // Returning to Thread mode with an exception number stacked, or to
     // Handler mode with none, is an INVPC UsageFault.
@@ -61,6 +64,18 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     r.pc = f[frame.slot.return_address] & ~@as(u32, 1);
     r.xpsr = f[frame.slot.xpsr] & restored;
     cpu.event = true;
+}
+
+/// FPCCR.CLRONRET on a return that restores no FP context: S0-S15, FPSCR
+/// and VPR are cleared so the handler's values do not reach the code it
+/// returns to (RA8EMU-165). A return with FType clear restores them from
+/// the frame, or with LSPACT set they still hold the interrupted context,
+/// so neither clears.
+fn clearCallerSaved(cpu: *Cpu) void {
+    if (cpu.fp.context.fpccr.lspact == 1) return;
+    for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+    cpu.fp.fpscr = Fpscr.fromBits(0);
+    cpu.fp.vpr = vprFrom(0);
 }
 
 fn restoreFp(cpu: *Cpu, fp: fp_frame.Fp) void {
