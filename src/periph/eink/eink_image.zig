@@ -54,3 +54,9 @@ pub fn rotate(rotation: u16, column: u32, row: u32, width: u16, height: u16) str
         else => .{ .x = column, .y = row },
     };
 }
+
+/// A host observer called after a requested glass refresh has copied.
+pub const RefreshHook = struct {
+    context: *anyopaque,
+    refreshFn: *const fn (*anyopaque) void,
+};

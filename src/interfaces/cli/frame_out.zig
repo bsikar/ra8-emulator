@@ -7,6 +7,8 @@
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../periph/gpio/gpio.zig");
+const eink = @import("../../periph/eink/eink.zig");
+const eink_wire = @import("../../periph/eink/eink_wire.zig");
 const png = @import("png.zig");
 pub const board_view = @import("board_view.zig");
 
@@ -26,6 +28,7 @@ pub fn opaqueRgba(pixels: []const u32, rgba: []u8) png.Error!void {
 /// PNG. A run with no frame (an LED-only example) still gets the view,
 /// with the LEDs as the pins left them round a dark panel.
 pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8, panel_only: bool) !Saved {
+    if (board.asks.attached_eink) |panel| return saveEink(allocator, panel, path);
     const unit = &board.display;
     const scanned = unit.panelWidth() != 0 and unit.panelHeight() != 0;
     const width = if (scanned) unit.panelWidth() else board_view.panel_width;
@@ -54,6 +57,34 @@ fn scan(board: *Board, pixels: []u32, width: u32, height: u32) bool {
     return unit.scanOut() != null;
 }
 
+/// Save the requested e-ink panel's refreshed glass, as grey pixels.
+fn saveEink(allocator: std.mem.Allocator, panel: *const eink.Panel, path: []const u8) !Saved {
+    const width: u32 = eink_wire.panel.width;
+    const height: u32 = eink_wire.panel.height;
+    const view = board_view.Size{ .width = width, .height = height };
+    const rgba = try allocator.alloc(u8, @as(usize, width) * height * png.bytes_per_pixel);
+    defer allocator.free(rgba);
+    try grayRgba(&panel.glass_buffer.pixels, rgba);
+    var file = try std.fs.cwd().createFile(path, .{});
+    defer file.close();
+    var buffered = std.io.bufferedWriter(file.writer());
+    try png.encode(allocator, buffered.writer(), width, height, rgba);
+    try buffered.flush();
+    return .{ .width = width, .height = height, .view = view, .frame = panel.refreshes != 0 };
+}
+
+/// Expand 8-bit glass samples into opaque, equal-channel RGB pixels.
+pub fn grayRgba(pixels: []const u8, rgba: []u8) png.Error!void {
+    if (rgba.len != pixels.len * png.bytes_per_pixel) return png.Error.BadShape;
+    for (pixels, 0..) |gray, index| {
+        const at = index * png.bytes_per_pixel;
+        rgba[at] = gray;
+        rgba[at + 1] = gray;
+        rgba[at + 2] = gray;
+        rgba[at + 3] = 0xFF;
+    }
+}
+
 /// The user LEDs as the pins left them at the end of the run.
 pub fn ledsOf(board: *Board) [gpio.led_count]board_view.Led {
     var lit: [gpio.led_count]board_view.Led = undefined;
@@ -76,6 +107,12 @@ fn write(allocator: std.mem.Allocator, canvas: []const u32, view: board_view.Siz
 pub fn report(out: anytype, board: *Board, path: ?[]const u8, panel_only: bool) !void {
     const target = path orelse return;
     const saved = try save(std.heap.page_allocator, board, target, panel_only);
+    if (board.asks.attached_eink != null) {
+        if (!saved.frame) return out.print("frame-out: no e-ink refresh, the {d}x{d} grey glass written to {s}\n", .{
+            saved.width, saved.height, target,
+        });
+        return out.print("frame-out: {d}x{d} grey e-ink glass written to {s}\n", .{ saved.width, saved.height, target });
+    }
     if (!saved.frame) {
         if (panel_only) return out.print("frame-out: no panel frame, a dark {d}x{d} panel written to {s}\n", .{
             saved.view.width, saved.view.height, target,

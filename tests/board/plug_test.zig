@@ -65,6 +65,8 @@ test "the kept asks are plugged on their lines, I2C included" {
     try plug.all(&board);
     try std.testing.expect(board.wire.controller.devices.find(0x37) != null);
     try std.testing.expect(board.spi.channels[1].device != null);
+    try std.testing.expect(board.asks.attached_eink != null);
+    try std.testing.expectEqual(board.spi.channels[1].device.?.context, @as(*anyopaque, @ptrCast(board.asks.attached_eink.?)));
     try std.testing.expect(board.serial.channels[4].device != null);
 }
 

@@ -146,3 +146,59 @@ test "an armed run keeps one frame per period with its emulated time" {
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, "P6\n2 1\n255\n\x44\x55\x66\x44\x55\x66", bytes);
 }
+
+test "an attached e-ink refresh records its grey glass plane once per refresh" {
+    const proto = ra8.periph.eink_wire;
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.asks.attached_eink = &board.panel;
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
+    defer std.testing.allocator.free(path);
+    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    defer armed.deinit();
+
+    eInkRefresh(&board.panel, proto, 0x2211);
+    eInkRefresh(&board.panel, proto, 0x4433);
+    try armed.finish();
+
+    try std.testing.expectEqual(@as(usize, 2), armed.sequence.written);
+    try expectIndex(armed.sequence, "frame_00000.ppm 0\nframe_00001.ppm 0\n");
+    for ([_]struct { name: []const u8, rgb: [6]u8 }{
+        .{ .name = "frame_00000.ppm", .rgb = .{ 0x11, 0x11, 0x11, 0x22, 0x22, 0x22 } },
+        .{ .name = "frame_00001.ppm", .rgb = .{ 0x33, 0x33, 0x33, 0x44, 0x44, 0x44 } },
+    }) |frame| {
+        var file = try armed.sequence.directory.openFile(frame.name, .{});
+        defer file.close();
+        const bytes = try file.readToEndAlloc(std.testing.allocator, 128 * 128 * 3 + 32);
+        defer std.testing.allocator.free(bytes);
+        const header = "P6\n128 128\n255\n";
+        try std.testing.expect(std.mem.startsWith(u8, bytes, header));
+        try std.testing.expectEqualSlices(u8, &frame.rgb, bytes[header.len .. header.len + 6]);
+        try std.testing.expectEqual(@as(u8, 0), bytes[header.len + 6]);
+    }
+}
+
+fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void {
+    panelWord(panel, proto.preamble.command);
+    panelWord(panel, @intFromEnum(proto.Command.load_area));
+    for ([_]u16{ 0x0030, 0, 0, 2, 1, pixels }) |value| {
+        panelWord(panel, proto.preamble.write);
+        panelWord(panel, value);
+    }
+    panelWord(panel, proto.preamble.command);
+    panelWord(panel, @intFromEnum(proto.Command.display_area));
+    for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
+        panelWord(panel, proto.preamble.write);
+        panelWord(panel, value);
+    }
+}
+
+fn panelWord(panel: *ra8.periph.eink.Panel, value: u16) void {
+    _ = panel.exchange(@intCast(value >> 8));
+    _ = panel.exchange(@intCast(value & 0xFF));
+}

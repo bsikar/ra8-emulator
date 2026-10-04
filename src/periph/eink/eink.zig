@@ -122,6 +122,7 @@ pub const Panel = struct {
     load_mode: u16 = 0,
     image_buffer: image.Buffer = .{},
     glass_buffer: image.Buffer = .{},
+    refresh_hook: ?image.RefreshHook = null,
     loaded_pixels: u32 = 0,
     display_args: [5]u16 = .{0} ** 5,
     /// The film: busy while a refresh is still being driven.
@@ -328,6 +329,7 @@ pub const Panel = struct {
         );
         self.refreshes +%= 1;
         self.film.start();
+        if (self.refresh_hook) |hook| hook.refreshFn(hook.context);
     }
 
     /// What the next read burst carries. A refused command answers zero: the
