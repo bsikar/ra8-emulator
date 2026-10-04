@@ -86,13 +86,18 @@ pub const I2c = struct {
         self.inner.stop();
     }
 
-    /// xorshift32: cheap, and the same sequence for the same seed.
     fn nextNoise(self: *I2c) u8 {
-        var x = self.noise;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        self.noise = x;
-        return @truncate(x);
+        return noiseByte(&self.noise);
     }
 };
+
+/// xorshift32: cheap, and the same sequence for the same seed. Shared by
+/// every wrapper so a seed means the same noise on any line.
+pub fn noiseByte(state: *u32) u8 {
+    var x = state.*;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    state.* = x;
+    return @truncate(x);
+}
