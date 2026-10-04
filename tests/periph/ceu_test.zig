@@ -293,3 +293,9 @@ test "a line refused halfway books the bytes before the refused chunk" {
     try std.testing.expectEqual(@as(u32, 0), bench.unit.short_lines);
     try std.testing.expectEqual(@as(u32, 0x800), bench.unit.short_bytes);
 }
+
+// The camera sources the CEU captures from; tests/all.zig is full.
+test {
+    _ = @import("camera/frame_source_test.zig");
+    _ = @import("camera/gradient_source_test.zig");
+}
