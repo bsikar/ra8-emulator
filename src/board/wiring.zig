@@ -76,6 +76,14 @@ fn attachWire(self: *Board) !void {
 
 /// Put every block on the bus, in the order that works.
 pub fn attach(self: *Board, core: *engine.Engine) !void {
+    try attachBlocks(self, .{ .engine = core.* });
+    try attachCore(self, core);
+}
+
+/// Every block onto the bus, with no core behind it yet. The blocks that
+/// paint or read RAM get `memory`, whichever backend holds it, so a
+/// `--cpu zig` run hands its own store here and skips `attachCore`.
+pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try attachGate(self);
     try self.bus.add(self.pins.block());
     try self.bus.add(self.pinfunc.block());
@@ -83,18 +91,18 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.dataops.block());
     try self.bus.add(self.accuracy.block());
     try self.bus.add(self.comparators.block());
-    self.capture.memory = .{ .engine = core.* };
+    self.capture.memory = memory;
     try self.bus.add(self.capture.block());
     try self.bus.add(self.analog.block());
-    try attachAdc(self, .{ .engine = core.* });
+    try attachAdc(self, memory);
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the engine paints into.
-    try self.display.attach(&self.bus, &self.domains.graphics, .{ .engine = core.* });
+    try self.display.attach(&self.bus, &self.domains.graphics, memory);
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
-    self.raster.memory = .{ .engine = core.* };
+    self.raster.memory = memory;
     try self.bus.add(self.raster.block());
     try self.bus.add(self.link.block());
     try self.bus.add(self.receiver.block());
@@ -110,12 +118,12 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());
     try attachWire(self);
-    try self.rswitch.attach(&self.bus, .{ .engine = core.* }, &self.domains.eswm);
+    try self.rswitch.attach(&self.bus, memory, &self.domains.eswm);
     try self.usb.attach(&self.bus);
-    self.trace.memory = .{ .engine = core.* };
+    self.trace.memory = memory;
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
-    try self.options.attach(&self.bus, .{ .engine = core.* });
+    try self.options.attach(&self.bus, memory);
     try self.bus.add(self.second_core.block());
     try self.bus.add(self.memory_rates.block());
     try self.memory_ecc.attach(&self.bus);
@@ -129,7 +137,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
     if (self.part.hasNpu()) {
-        self.npu.memory = .{ .engine = core.* };
+        self.npu.memory = memory;
         try self.bus.add(self.npu.block());
     }
     try self.bus.add(self.lowpower.block());
@@ -144,7 +152,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
     self.dma = dmac.Dmac.init(&self.dma_module);
-    self.dma.memory = .{ .engine = core.* };
+    self.dma.memory = memory;
     try self.bus.add(self.dma.block());
     try self.bus.add(self.monitors.statusBlock());
     try self.bus.add(self.monitors.controlBlock());
@@ -153,7 +161,6 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     try self.bus.add(self.heartbeat.block());
     try self.bus.add(self.causes.statusBlock());
     try self.bus.add(self.causes.causeBlock());
-    try attachCore(self, core);
 }
 
 /// Last step of `attach`: hand the finished bus to the engine, then prime
