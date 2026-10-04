@@ -19,7 +19,7 @@ test "a boundary is the chunk until SysTick is armed, then its period" {
     defer board.deinit();
     try board.attach(&core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .core = &core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase };
     try std.testing.expectEqual(@as(u32, 5000), clock.width());
     try core.writeWord(memmap.syst.rvr, 999);
     try core.writeWord(memmap.syst.csr, 0x7);
@@ -36,7 +36,7 @@ test "closing a boundary charges the clocks and wraps SysTick into ICSR" {
     defer board.deinit();
     try board.attach(&core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .core = &core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase };
     try clock.close(7);
     try std.testing.expectEqual(@as(u64, 7), timebase.elapsed);
     try core.writeWord(memmap.syst.rvr, 9);

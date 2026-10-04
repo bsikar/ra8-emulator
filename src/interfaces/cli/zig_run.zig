@@ -5,6 +5,7 @@
 //! time (the USB host script among them) move.
 const std = @import("std");
 const engine = @import("../../core/engine.zig");
+const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
@@ -39,7 +40,8 @@ const BootWriter = struct {
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
-    core: *engine.Engine,
+    /// The memory the clocks, the board tick and the reports read and write.
+    memory: Guest,
     board: *Board,
     timebase: *clocks.Clocks,
     /// CPU0's Non-secure SysTick (RA8EMU-449). Only its timer is charged:
@@ -55,7 +57,7 @@ pub const Clock = struct {
     /// The chunk the Unicorn path uses, cut down to the armed SysTick period
     /// so a stretch never swallows more than one wrap.
     pub fn width(self: *const Clock) u32 {
-        const period = systick_bank.width(self.timebase.period(self.core.*), self.ns_timebase.period(self.core.*));
+        const period = systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory));
         if (period != 0 and period < self.timebase.per_chunk) return period;
         return self.timebase.per_chunk;
     }
@@ -63,9 +65,9 @@ pub const Clock = struct {
     /// Charge the stretch to the clocks, then tick the blocks, in the order
     /// the Unicorn run loop does.
     pub fn close(self: *Clock, instructions: u32) !void {
-        try self.timebase.advance(self.core.*, instructions);
-        try self.ns_timebase.advanceSysTick(self.core.*, instructions);
-        try self.board.tick(.{ .engine = self.core.* }, instructions);
+        try self.timebase.advance(self.memory, instructions);
+        try self.ns_timebase.advanceSysTick(self.memory, instructions);
+        try self.board.tick(self.memory, instructions);
         if (self.cpu1) |second| second.round(instructions);
     }
 };
@@ -83,7 +85,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
 pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .core = core, .board = board, .timebase = timebase };
+    var clock: Clock = .{ .memory = .{ .engine = core.* }, .board = board, .timebase = timebase };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
@@ -139,17 +141,17 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
-        if (options.ctl_cpu_load) return ctlLoad(out, loadOf(core, if (tracer) |*found| found else null, clock.cpu1), status);
+        if (options.ctl_cpu_load) return ctlLoad(out, loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1), status);
         if (options.report_json) {
-            const load = loadOf(core, if (tracer) |*found| found else null, clock.cpu1);
+            const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
             try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, timebase.*, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads. The Zig core's stores land
         // in the same engine memory, so the line is the Unicorn run's line.
-        if (!options.report_json) try report_dumps.dumpSymbols(out, .{ .engine = core.* }, image, options);
-        if (!options.report_json) try mem_dump.printAll(out, .{ .engine = core.* }, image, options.memDumps());
-        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = .{ .engine = core.* } });
+        if (!options.report_json) try report_dumps.dumpSymbols(out, clock.memory, image, options);
+        if (!options.report_json) try mem_dump.printAll(out, clock.memory, image, options.memDumps());
+        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
         try frame_out.report(out, board, options.frame_out);
     } else if (options.ctl_cpu_load) return ctlLoad(out, .{}, status);
@@ -163,9 +165,9 @@ fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !
 }
 
 /// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
-fn loadOf(core: *engine.Engine, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
+fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
     return .{
-        .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = .{ .engine = core.* } }),
+        .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
         .cpu1 = rtos_hook.second.side(if (cpu1) |pair| &pair.second else null),
     };
 }
