@@ -70,14 +70,18 @@ test "a b-to-itself loop is a park loop of one" {
     try std.testing.expect(rig.cache.reused < 8);
 }
 
-test "a loop that stores is stepped" {
+test "a loop that stores is not a park loop" {
     var rig: Rig = .{};
     try rig.init(&store_loop);
     defer rig.deinit();
     rig.cpu.regs.set(1, fixture.base + 0x200);
+    const found = ra8.core.cpu.cpu.fixed_trip.park.calmHead(&rig.cpu);
+    try std.testing.expect(found == null or ra8.core.cpu.cpu.fixed_trip.park.tripLength(found.?) == null);
+    // RA8EMU-463 may still retire it once a trip stores the value already
+    // there; the count and the PC come out as stepping leaves them.
     try std.testing.expectEqual(ra8.core.cpu.cpu.Stop.count, rig.cpu.run(1000));
     try std.testing.expectEqual(@as(u64, 1000), rig.cpu.retired);
-    try std.testing.expect(rig.cache.reused > 400);
+    try std.testing.expectEqual(fixture.code, rig.cpu.regs.pc);
 }
 
 const Counter = struct {

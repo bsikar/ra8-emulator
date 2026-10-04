@@ -24,20 +24,29 @@ const nop: u16 = 0xBF00;
 /// number of trips round a park loop, no more than `left`. 0 when the PC is
 /// not on one or the core cannot be sure nothing changes meanwhile.
 pub fn skippable(cpu: *const Cpu, left: u64) u64 {
-    if (cpu.retire_listener != null or cpu.waiting != null) return 0;
-    const quiet = cpu.quiet orelse return 0;
-    if (!quiet.settled and !(quiet.hushed and quiet.clear)) return 0;
-    const cache = cpu.blocks orelse return 0;
-    if (cache.lines.dirty) return 0;
-    const xpsr = cpu.regs.xpsr;
-    if (xpsr & regs_mod.xpsr_bits.thumb == 0 or xpsr & regs_mod.xpsr_bits.bti != 0) return 0;
-    if (it_state.active(it_state.get(xpsr))) return 0;
-    const pc = cpu.regs.pc;
-    const found = &cache.blocks[(pc >> 1) & (block_cache.slots - 1)];
-    if (found.len == 0 or found.start != pc or !found.tracked) return 0;
+    const found = calmHead(cpu) orelse return 0;
     const trip = tripLength(found) orelse return 0;
     if (left < trip) return 0;
     return left - left % trip;
+}
+
+/// The tracked block starting at the PC, when nothing watches single
+/// instructions and the poll has settled, so no trip round a loop there can
+/// change what is pending before the stretch ends. Shared with
+/// fixed_trip.zig (RA8EMU-463).
+pub fn calmHead(cpu: *const Cpu) ?*const block.Block {
+    if (cpu.retire_listener != null or cpu.waiting != null) return null;
+    const quiet = cpu.quiet orelse return null;
+    if (!quiet.settled and !(quiet.hushed and quiet.clear)) return null;
+    const cache = cpu.blocks orelse return null;
+    if (cache.lines.dirty) return null;
+    const xpsr = cpu.regs.xpsr;
+    if (xpsr & regs_mod.xpsr_bits.thumb == 0 or xpsr & regs_mod.xpsr_bits.bti != 0) return null;
+    if (it_state.active(it_state.get(xpsr))) return null;
+    const pc = cpu.regs.pc;
+    const found = &cache.blocks[(pc >> 1) & (block_cache.slots - 1)];
+    if (found.len == 0 or found.start != pc or !found.tracked) return null;
+    return found;
 }
 
 /// Instructions in one trip round `formed` when it is a park loop: narrow
