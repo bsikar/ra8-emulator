@@ -313,8 +313,8 @@ table above. A group listed as missing does not fail the build yet.
 | fp_directed | 48 |
 | fp_move | 26 |
 | vscclrm | 24 |
-| vlldm_vlstm | missing |
-| vlldm_vlstm_t2 | missing |
+| vlldm_vlstm | 22 |
+| vlldm_vlstm_t2 | 11 |
 | fp_mem | 36 |
 | mve_vpst | missing |
 | mve_int | missing |
