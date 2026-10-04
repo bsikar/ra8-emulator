@@ -41,7 +41,6 @@ const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const run_loop = @import("run_loop.zig");
 const idle = @import("idle.zig");
-const idle_hook = @import("idle_hook.zig");
 
 pub const Error = error{
     OpenFailed,
@@ -218,13 +217,6 @@ pub const Engine = struct {
     /// src/core/systick_hook.zig says what is swallowed without this.
     pub fn attachTimebase(self: Engine, clock: *clocks.Clocks) Error!void {
         systick_hook.attach(self.handle, clock) catch return Error.AttachFailed;
-    }
-
-    /// Watch every store a closure probe makes, so a loop that stores can
-    /// still be proved harmless. src/core/idle.zig says what is proved and
-    /// what a store outside ordinary RAM costs.
-    pub fn attachIdle(self: Engine, seam: *idle.Seam) Error!void {
-        idle_hook.attach(self.handle, seam) catch return Error.AttachFailed;
     }
 
     /// Arm the break: one instruction is hooked, and reaching it the
