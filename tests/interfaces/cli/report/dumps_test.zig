@@ -13,7 +13,7 @@ fn dumped(core: engine.Engine, image: elf.Image, names: []const []const u8, into
     for (names, 0..) |name, index| options.dump[index] = name;
     options.dump_count = names.len;
     var stream = std.io.fixedBufferStream(into);
-    try report_dumps.dumpSymbols(stream.writer(), core, image, options);
+    try report_dumps.dumpSymbols(stream.writer(), .{ .engine = core }, image, options);
     return stream.getWritten();
 }
 
