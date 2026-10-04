@@ -14,7 +14,27 @@ pub const Error = error{ Truncated, NotRequest } || event.Error;
 pub const Id = struct {
     pub const req_fw_version: u32 = 350;
     pub const resp_fw_version: u32 = 606;
+    pub const req_base: u32 = 256;
+    pub const resp_base: u32 = 512;
+
+    /// The response id answering request `id`.
+    pub fn responseTo(id: u32) u32 {
+        return id - req_base + resp_base;
+    }
 };
+
+/// Station requests the model acknowledges with resp 0 and nothing else:
+/// SetWifiMode, WifiInit, WifiDeinit, WifiStart, WifiStop, WifiConnect,
+/// WifiDisconnect and WifiSetConfig, as in ra8-firmware's host-test model.
+pub const bare = [_]u32{ 260, 278, 279, 280, 281, 282, 283, 284 };
+
+/// True when the model answers `id` with a bare acknowledgement.
+pub fn isBare(id: u32) bool {
+    for (bare) |known| {
+        if (known == id) return true;
+    }
+    return false;
+}
 
 /// The co-processor firmware version the bench C6 reports.
 pub const Version = struct { major: u32 = 2, minor: u32 = 12, patch: u32 = 11 };
@@ -130,13 +150,14 @@ pub fn fwVersion(w: *event.Writer) Error!void {
 
 /// Builds the frame answering `req`; false when the model has no answer.
 pub fn answerFrame(out: *[frame.frame_size]u8, req: Request) Error!bool {
-    if (req.id != Id.req_fw_version) return false;
     var body_buf: [32]u8 = undefined;
     var body: event.Writer = .{ .buf = &body_buf };
-    try fwVersion(&body);
+    if (req.id == Id.req_fw_version) {
+        try fwVersion(&body);
+    } else if (!isBare(req.id)) return false;
     var proto_buf: [64]u8 = undefined;
     var proto: event.Writer = .{ .buf = &proto_buf };
-    try response(&proto, Id.resp_fw_version, req.uid, body.written());
+    try response(&proto, Id.responseTo(req.id), req.uid, body.written());
     var payload_buf: [96]u8 = undefined;
     var payload: event.Writer = .{ .buf = &payload_buf };
     try event.envelope(&payload, event.endpoint_response, proto.written());
