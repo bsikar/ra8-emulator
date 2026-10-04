@@ -17,7 +17,7 @@
 //! `read_block(ctx, uint64_t lba, count, buf)` shows its lba and hides its
 //! count.
 const std = @import("std");
-const engine = @import("../core/engine.zig");
+const Cortex = @import("../core/cpu/cortex.zig").Cortex;
 
 pub const limits = struct {
     /// How many registers share one printed line.
@@ -31,7 +31,7 @@ pub const limits = struct {
 /// A register under the name the ABI calls it.
 pub const Named = struct {
     name: []const u8,
-    which: engine.Cortex,
+    which: Cortex,
 };
 
 /// What a dump prints, in the order it prints them. The argument

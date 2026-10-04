@@ -4,12 +4,11 @@
 //!
 //! It owns nothing. The front end builds the `Cpu` on the board's bus and
 //! hands this a pointer to it, so the session can drive either core.
-const engine = @import("../core/engine.zig");
 const cpu_mod = @import("../core/cpu/cpu.zig");
 const bus = @import("../core/cpu/bus.zig");
 const dispatch = @import("../core/cpu/exception/dispatch.zig");
 
-pub const Cortex = engine.Cortex;
+pub const Cortex = @import("../core/cpu/cortex.zig").Cortex;
 
 /// Why a run handed control back to the debugger.
 pub const Stop = union(enum) {
