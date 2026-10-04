@@ -2,7 +2,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const frames_out = ra8.board.report.frames_out;
-const engine = ra8.core.engine;
+const store_board = @import("store_board.zig");
 const glcdc = ra8.periph.glcdc;
 const tcon = ra8.periph.glcdc_tcon;
 const glcdc_sys = ra8.periph.glcdc_sys;
@@ -59,12 +59,12 @@ test "every Nth scan gets a sequential filename" {
 }
 
 test "capture records the panel pixels from a completed GLCDC scan" {
-    var core = try engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try store_board.attach(&board, core);
 
     board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
     board.domains.graphics.write(pdctr.Domain.graphics.base(), 1, 0);
@@ -106,12 +106,12 @@ fn expectIndex(sequence: frames_out.Sequence, expected: []const u8) !void {
 }
 
 test "an armed run keeps one frame per period with its emulated time" {
-    var core = try engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try store_board.attach(&board, core);
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
