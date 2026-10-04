@@ -25,6 +25,7 @@ const cpu = @import("../../core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
 const Until = @import("../../core/until.zig").Until;
 const Stop = @import("../../core/stop.zig").Stop;
+const Deadline = @import("../../core/deadline.zig").Deadline;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
@@ -35,6 +36,8 @@ pub const break_sym = @import("zig_break.zig");
 pub const Ends = struct {
     stop: ?*Stop = null,
     point: ?*break_sym.Break = null,
+    /// The `--ms` window, read against the clocks' SysTick periods.
+    timed: ?*Deadline = null,
 };
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
@@ -69,6 +72,8 @@ pub const Clock = struct {
     stop: ?*Stop = null,
     /// The `--break-sym` arrival, which ends the run once met.
     point: ?*break_sym.Break = null,
+    /// The `--ms` window, which ends the run once modelled time runs out.
+    timed: ?*Deadline = null,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk };
@@ -78,6 +83,7 @@ pub const Clock = struct {
     /// not a stop, as on the Unicorn path (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
         if (self.point) |point| if (point.reached) return true;
+        if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
         const watch = self.stop orelse return false;
         return watch.met(self.memory.readWord(watch.address) catch null);
     }
@@ -121,7 +127,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// engine-backed CPU1 needs it.
 pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
@@ -147,10 +153,11 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         listener = .{ .tracer = found };
     }
     const wrap = if (tracer != null) listener.wrap() else null;
+    const budget = options.budgetFor(ends.stop != null);
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
     var boot_output = out;
     var final: boot.Regs = .{};
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, options.budgetFor(ends.stop != null), &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -166,8 +173,9 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         .final = &final,
     });
     const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
-    if (ends.stop) |watch| if (watch.reached) try said.print("stopped clean on {s} >= {d}, pc 0x{X:0>8}\n", .{ options.stop_symbol.?, watch.reaches, final.pc });
-    if (ends.point) |point| try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, options.budgetFor(ends.stop != null));
+    if (ends.point) |point| {
+        try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, budget);
+    } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;

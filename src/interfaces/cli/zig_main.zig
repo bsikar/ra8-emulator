@@ -44,9 +44,11 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options)
     const table = if (parts.profile) |*one| one else null;
     var stop = zig_run.stop_sym.resolve(image, options);
     var point = zig_run.break_sym.resolve(image, options);
+    var timed = zig_run.stop_sym.deadline(options);
     return zig_run.run(out, null, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), .{
         .stop = if (stop) |*watch| watch else null,
         .point = if (point) |*one| one else null,
+        .timed = if (timed) |*due| due else null,
     });
 }
 
