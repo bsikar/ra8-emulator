@@ -97,13 +97,12 @@ pub const Wiring = struct {
     final: ?*Regs = null,
 };
 
-/// The hand-off from main for any CPU but Unicorn.
+/// The hand-off from main to the CPU the run asked for.
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
 /// `ran` is set to how many instructions a `--cpu zig` run retired.
 pub fn start(out: anytype, choice: Choice, memory: Guest, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
     return switch (choice) {
-        .unicorn => unreachable,
         .zig => if (periph) |board| runOnBoard(out, memory, board, vector_base, budget, ran, wiring) else run(out, memory, vector_base, budget, wiring.retire_listener),
     };
 }

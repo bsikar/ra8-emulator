@@ -31,7 +31,7 @@ const Cpu0 = @import("zig_memory.zig").Cpu0;
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {
-    if (request.cpu != .zig) return "the debugger runs on --cpu unicorn or --cpu zig";
+    if (request.cpu != .zig) return "the debugger runs on --cpu zig";
     return null;
 }
 
