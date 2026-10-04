@@ -35,17 +35,62 @@ test "TAS gate entries learn and read back from their addressed RAM slots" {
     try std.testing.expectEqual(@as(u32, 2), unit.reads);
 }
 
+fn config(unit: *eth.tas.Tas, value: u32) void {
+    unit.write(base + eth.tas.reg.config, 4, value);
+}
+
+fn monitor(unit: *eth.tas.Tas) u32 {
+    return unit.read(base + eth.tas.reg.cycle_monitor, 4);
+}
+
 test "TAS cycle time reads through configuration and active monitoring" {
     var unit = eth.tas.Tas.init(base);
     const cycle: u32 = 250_000;
+    unit.enterMode(.operation);
     unit.write(base + eth.tas.reg.cycle_time, 4, cycle);
-    unit.write(base + eth.tas.reg.config, 4, eth.tas.reg.tas_enable | 0x6);
+    config(&unit, eth.tas.reg.tas_enable | 0x6);
 
     try std.testing.expectEqual(eth.tas.reg.tas_enable, unit.read(base + eth.tas.reg.config, 4));
     try std.testing.expectEqual(cycle, unit.read(base + eth.tas.reg.cycle_time, 4));
-    try std.testing.expectEqual(cycle, unit.read(base + eth.tas.reg.cycle_monitor, 4));
-    unit.write(base + eth.tas.reg.config, 4, 0);
-    try std.testing.expectEqual(@as(u32, 0), unit.read(base + eth.tas.reg.cycle_monitor, 4));
+    try std.testing.expectEqual(cycle, monitor(&unit));
+    config(&unit, 0);
+    try std.testing.expectEqual(@as(u32, 0), monitor(&unit));
+}
+
+test "TAS enabled in CONFIG mode runs nothing, so TASOCT reads 0 as on the EK-RA8D2" {
+    var unit = eth.tas.Tas.init(base);
+    unit.enterMode(.config);
+    unit.write(base + eth.tas.reg.cycle_time, 4, 250_000);
+    config(&unit, eth.tas.reg.tas_enable);
+    config(&unit, eth.tas.reg.tas_enable);
+    try std.testing.expectEqual(@as(u32, 250_000), unit.read(base + eth.tas.reg.cycle_time, 4));
+    try std.testing.expectEqual(@as(u32, 0), monitor(&unit));
+    unit.enterMode(.operation);
+    try std.testing.expectEqual(@as(u32, 250_000), monitor(&unit));
+}
+
+test "TASCC takes a new cycle into operation; a plain rewrite of TASE does not" {
+    var unit = eth.tas.Tas.init(base);
+    unit.enterMode(.operation);
+    unit.write(base + eth.tas.reg.cycle_time, 4, 250_000);
+    config(&unit, eth.tas.reg.tas_enable);
+    unit.write(base + eth.tas.reg.cycle_time, 4, 500_000);
+    config(&unit, eth.tas.reg.tas_enable);
+    try std.testing.expectEqual(@as(u32, 250_000), monitor(&unit));
+    config(&unit, eth.tas.reg.tas_enable | 0x2);
+    try std.testing.expectEqual(@as(u32, 500_000), monitor(&unit));
+}
+
+test "RESET mode clears TASE and the ongoing cycle" {
+    var unit = eth.tas.Tas.init(base);
+    unit.enterMode(.operation);
+    unit.write(base + eth.tas.reg.cycle_time, 4, 250_000);
+    config(&unit, eth.tas.reg.tas_enable);
+    unit.enterMode(.disable);
+    try std.testing.expectEqual(@as(u32, 250_000), monitor(&unit));
+    unit.enterMode(.reset);
+    try std.testing.expectEqual(@as(u32, 0), unit.read(base + eth.tas.reg.config, 4));
+    try std.testing.expectEqual(@as(u32, 0), monitor(&unit));
 }
 
 test "TAS register window is connected to the powered board bus" {
