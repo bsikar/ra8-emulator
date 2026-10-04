@@ -10,6 +10,8 @@ const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
+const sleep_pace = @import("../../core/sleep_pace.zig");
+const board_edge = @import("../../board/boundary.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
@@ -79,9 +81,20 @@ pub const Clock = struct {
     /// The `--ms` window, which ends the run once modelled time runs out.
     timed: ?*Deadline = null,
     undefined_sites: ?*undefined_sites.Found = null,
+    /// `--idle-skip`: a sleeping CPU0 runs straight to the next edge (RA8EMU-185).
+    idle_skip: bool = false,
 
     pub fn boundary(self: *Clock) boot.Boundary {
-        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk };
+        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
+    }
+
+    /// A sleeping CPU0's width: to the nearest armed SysTick period or the
+    /// board's next queued event. CPU1 shares each boundary, so a run with
+    /// it keeps the normal width.
+    pub fn asleepWidth(self: *Clock, normal: u32) u32 {
+        if (self.cpu1 != null) return normal;
+        const edges = [_]u64{ self.timebase.period(self.memory), self.ns_timebase.period(self.memory), board_edge.cyclesToDue(self.board) };
+        return sleep_pace.width(normal, true, &edges);
     }
 
     /// Has the watched counter climbed to its floor? An unreadable word is
@@ -117,6 +130,11 @@ fn widthThunk(context: *anyopaque) u32 {
     return self.width();
 }
 
+fn sleepThunk(context: *anyopaque, normal: u32) u32 {
+    const self: *Clock = @ptrCast(@alignCast(context));
+    return self.asleepWidth(normal);
+}
+
 fn doneThunk(context: *anyopaque) bool {
     const self: *Clock = @ptrCast(@alignCast(context));
     return self.done();
@@ -131,7 +149,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
 pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;

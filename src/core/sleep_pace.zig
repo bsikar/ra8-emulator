@@ -16,6 +16,19 @@
 //! narrower pace chosen elsewhere still has the final say when it applies
 //! after this.
 const std = @import("std");
+const Cpu = @import("cpu/cpu.zig").Cpu;
+
+/// Whether the core sleeps with nothing that could wake it at the start of
+/// the next stretch. Unlike `sleep.wakes` it changes nothing: a WFE's event
+/// register is read, never taken. Anything pending, masked or not, counts
+/// as a reason to keep the normal width.
+pub fn still(cpu: *Cpu) bool {
+    const why = cpu.waiting orelse return false;
+    if (why == .event and cpu.event) return false;
+    const from = cpu.source orelse return false;
+    const pending = from.winner(cpu.bus) catch return false;
+    return pending == null;
+}
 
 /// The width the next stretch gets. `normal` is what the run would use
 /// otherwise; `edges` are cycles until each known next event.
