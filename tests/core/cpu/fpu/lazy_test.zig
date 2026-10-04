@@ -36,6 +36,19 @@ test "preserve writes S0-S15, FPSCR and VPR at FPCAR and clears LSPACT" {
     try std.testing.expectEqual(@as(u32, 0x0021_00FF), ram.word(at + 0x44));
 }
 
+test "SPLIMVIOL: preserve writes nothing but still clears LSPACT" {
+    var ram: fixture.Ram = .{};
+    var s = sample();
+    const at = fixture.msp_top - 0x48;
+    s.context.writeFpcar(at);
+    s.context.fpccr.lspact = 1;
+    s.context.fpccr.splimviol = 1;
+    try lazy.preserve(ram.view(), &s);
+    try std.testing.expect(!lazy.pending(&s));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(at));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(at + 0x40));
+}
+
 test "S16 and up stay out of the non-Secure frame" {
     var ram: fixture.Ram = .{};
     var s = sample();
