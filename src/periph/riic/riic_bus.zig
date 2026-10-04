@@ -88,6 +88,14 @@ pub const Error = error{
 /// answers.
 pub const Registry = struct {
     devices: [max_devices]?Device = .{null} ** max_devices,
+    /// Something is holding SDA/SCL low (RA8EMU-519). The bus is a shared
+    /// line, so this is the bus's fact, not one part's: every channel sees
+    /// it busy until it is let go.
+    held_low: bool = false,
+
+    pub fn hold(self: *Registry, on: bool) void {
+        self.held_low = on;
+    }
 
     pub fn attach(self: *Registry, device: Device) Error!void {
         if (reserved.holds(device.address)) return Error.ReservedAddress;

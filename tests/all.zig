@@ -300,6 +300,7 @@ test {
     _ = @import("periph/riic/riic_stop_test.zig");
     _ = @import("periph/riic/riic_target_test.zig");
     _ = @import("periph/riic/riic_test.zig");
+    _ = @import("periph/riic/riic_held_test.zig");
     _ = @import("periph/rtc/rtc_clock_test.zig");
     _ = @import("periph/rtc/rtc_frequency_test.zig");
     _ = @import("periph/rtc/rtc_reset_test.zig");
