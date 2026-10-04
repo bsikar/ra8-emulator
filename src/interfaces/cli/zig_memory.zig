@@ -8,9 +8,9 @@
 //! for what still reads it: the reset line main announces, option memory
 //! and the register dumps (RA8EMU-579).
 //!
-//! A run with a second core keeps the engine for now: CPU1 still steps over
-//! engine memory, and the two cores have to share SRAM (RA8EMU-581). A
-//! lockstep run compares against Unicorn, so it stays on the engine too.
+//! A run with a second core goes on the store too: CPU1 gets a store of its
+//! own that borrows this one's shared SRAM (RA8EMU-588). A lockstep run
+//! compares against Unicorn, so it stays on the engine.
 const engine = @import("../../core/engine.zig");
 const elf = @import("../../core/elf.zig");
 const Store = @import("../../core/cpu/memory/store.zig").Store;
@@ -22,7 +22,7 @@ const cli = @import("cli.zig");
 
 /// Whether this run's CPU0 runs on its own store.
 pub fn wanted(options: cli.Options) bool {
-    return options.cpu == .zig and options.cpu1_path == null;
+    return options.cpu == .zig;
 }
 
 pub const Cpu0 = struct {

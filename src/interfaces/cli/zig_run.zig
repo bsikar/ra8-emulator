@@ -94,7 +94,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
     if (path) |named| {
-        pair.open(std.heap.page_allocator, core, board, named) catch |err| {
+        pair.open(std.heap.page_allocator, core, board, named, memory) catch |err| {
             std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
             return 1;
         };
@@ -158,7 +158,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
         if (!options.report_json) try report_dumps.dumpSymbols(out, clock.memory, image, options);
         if (!options.report_json) try mem_dump.printAll(out, clock.memory, image, options.memDumps());
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
-        if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
+        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
         try finishFrames(out, board, options, &frames);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
@@ -187,7 +187,7 @@ fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !
 fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
     return .{
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
-        .cpu1 = rtos_hook.second.side(if (cpu1) |pair| &pair.second else null),
+        .cpu1 = if (cpu1) |pair| rtos_hook.second.sideOn(pair.guest()) else null,
     };
 }
 

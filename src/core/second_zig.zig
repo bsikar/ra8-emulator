@@ -133,18 +133,13 @@ pub const Own = struct {
     pub fn open(self: *Own, lender: *const Store, board: *Board, image: elf.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
-        const memory: Guest = .{ .store = &self.store };
-        try wiring.primeWindows(board, memory, .{
+        _ = try bringUp(&self.core, .{ .store = &self.store }, board, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
             .guard = &self.guard,
-            .identity = cpuid.cpu1,
             .control = &self.control,
             .clears = &self.clears,
-        });
-        const seeded = try second_core.seedImage(memory, image);
-        const units: Units = .{ .partitions = &self.partitions, .regions = &self.regions, .clears = &self.clears, .vector_base = seeded.vector_base };
-        try self.core.openOn(memory, units, &board.bus);
+        }, image);
     }
 
     pub fn close(self: *Own) void {
@@ -152,3 +147,30 @@ pub const Own = struct {
         self.store.deinit();
     }
 };
+
+/// The units a Zig CPU1 keeps outside its memory, wherever they are held.
+pub const Parts = struct {
+    partitions: *sau.Sau,
+    regions: *mpu.Mpu,
+    guard: *mpu_guard.Guard,
+    control: *scb.Scb,
+    clears: *fault_clear.Clears,
+};
+
+/// Prime CPU1's PPB windows into `memory` as an M33, load `image` there,
+/// and open `core` over it reset from the image's vector table
+/// (RA8EMU-574, shared with the run path by RA8EMU-588).
+pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, image: elf.Image) !second_core.Seeded {
+    try wiring.primeWindows(board, memory, .{
+        .partitions = parts.partitions,
+        .regions = parts.regions,
+        .guard = parts.guard,
+        .identity = cpuid.cpu1,
+        .control = parts.control,
+        .clears = parts.clears,
+    });
+    const seeded = try second_core.seedImage(memory, image);
+    const units: Units = .{ .partitions = parts.partitions, .regions = parts.regions, .clears = parts.clears, .vector_base = seeded.vector_base };
+    try core.openOn(memory, units, &board.bus);
+    return seeded;
+}

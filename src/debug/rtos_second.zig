@@ -9,6 +9,7 @@
 //! `?*Second`; a run has at most one CPU1 and so at most one of these, and
 //! like rtos_hook.arm's it lives until the process ends.
 const std = @import("std");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../core/elf.zig");
 const second_core = @import("../core/second_core.zig");
 const rtos_hook = @import("rtos_hook.zig");
@@ -36,16 +37,26 @@ pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Windo
 /// not traced.
 pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second) !void {
     const one = second orelse return;
+    try printOn(out, options, .{ .engine = one.core });
+}
+
+/// `print` for a CPU1 whose memory is `memory`, engine or store (RA8EMU-588).
+pub fn printOn(out: anytype, options: anytype, memory: Guest) !void {
     const tracer = traced orelse return;
-    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = one.core } });
+    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = memory });
 }
 
 /// CPU1's tracer and the memory its names are read through, for
 /// `--report json` (RA8EMU-266). Null when CPU1 was not traced.
 pub fn side(second: ?*const second_core.Second) ?rtos_hook.report.Side {
     const one = second orelse return null;
+    return sideOn(.{ .engine = one.core });
+}
+
+/// `side` for a CPU1 whose memory is `memory` (RA8EMU-588).
+pub fn sideOn(memory: Guest) ?rtos_hook.report.Side {
     const tracer = traced orelse return null;
-    return .{ .tracer = tracer, .memory = .{ .guest = .{ .engine = one.core } } };
+    return .{ .tracer = tracer, .memory = .{ .guest = memory } };
 }
 
 /// `--trace-rtos` on CPU1's Zig core under `--cpu zig --cpu1` (RA8EMU-341).

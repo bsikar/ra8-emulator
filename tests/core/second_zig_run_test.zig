@@ -19,6 +19,7 @@ fn bring(driver: *Driver, cpu0: *Engine, board: *Board, program: []const u16) !v
     errdefer cpu0.close();
     try cpu0.mapBoardRam();
     driver.second = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
+    driver.store = null;
     errdefer driver.close();
     try driver.second.core.shareBoardRamWith(cpu0);
     try driver.second.core.writeWord(vectors, stack);
