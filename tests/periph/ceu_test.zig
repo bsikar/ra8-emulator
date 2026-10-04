@@ -310,6 +310,7 @@ test {
     _ = @import("camera/video_source_test.zig");
     _ = @import("camera/pipe_frame_test.zig");
     _ = @import("camera/pipe_source_test.zig");
+    _ = @import("camera/pipe_windows_test.zig");
 }
 
 /// A source that records the emulated instant each capture asked for.

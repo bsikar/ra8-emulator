@@ -1,7 +1,8 @@
 //! Covers src/periph/camera/pipe_source.zig: frames streamed through a real
 //! pipe come back out of the FrameSource, the newest whole frame wins, half
 //! a frame is never shown, and an empty pipe or a closed writer returns at
-//! once with the last frame held. Unix only; Windows is RA8EMU-585.
+//! once with the last frame held. Unix only; the Windows server is covered in
+//! pipe_windows_test.zig.
 const std = @import("std");
 const builtin = @import("builtin");
 const ra8 = @import("ra8");
