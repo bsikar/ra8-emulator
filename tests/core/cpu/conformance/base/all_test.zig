@@ -65,6 +65,7 @@ test {
     _ = @import("mve_int_shift_vectors_test.zig");
     _ = @import("mve_int_vectors_test.zig");
     _ = @import("mve_int_vmla_vectors_test.zig");
+    _ = @import("mve_int_vqdmlah_vectors_test.zig");
     _ = @import("mve_lane_move_vectors_test.zig");
     _ = @import("mve_lane_pair_vectors_test.zig");
     _ = @import("mve_lob_tp_vectors_test.zig");
