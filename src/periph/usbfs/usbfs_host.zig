@@ -106,7 +106,7 @@ pub const Host = struct {
                 self.advance(if (answer == .ack) .get_configuration else .failed),
             .get_configuration => self.read(device, requests.get_configuration, &self.config_value, .get_status),
             .get_status => self.read(device, requests.get_status, &self.status, .string_languages),
-            .string_languages => self.read(device, requests.stringDescriptor(0, 0), &self.languages, .string_product),
+            .string_languages => self.readLanguages(device),
             .string_product => self.readProduct(device),
             .set_interface => if (self.write(device, requests.set_interface)) |answer| {
                 self.interface = answer;
@@ -142,6 +142,14 @@ pub const Host = struct {
         const total = self.config_len;
         if (total <= 9) return self.advance(.set_configuration);
         self.read(device, requests.configDescriptor(self.config_len), self.config[0..total], .set_configuration);
+    }
+
+    /// String descriptor 0, only from a device that names a string. One
+    /// whose iManufacturer, iProduct and iSerialNumber are all 0 has no
+    /// strings at all (USB 2.0 9.6.7) and may stall the request.
+    fn readLanguages(self: *Host, device: *usbfs.Device) void {
+        if (std.mem.allEqual(u8, self.device[14..17], 0)) return self.advance(.set_interface);
+        self.read(device, requests.stringDescriptor(0, 0), &self.languages, .string_product);
     }
 
     /// The iProduct string in the device's first language; a device that
