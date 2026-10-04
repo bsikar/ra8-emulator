@@ -1,0 +1,14 @@
+.{
+    .name = .ra8_emulator,
+    .version = "0.0.0",
+    .fingerprint = 0xd7a6ec1532845ea,
+    .minimum_zig_version = "0.14.1",
+    .dependencies = .{
+        .sdl = .{
+            .url = "git+https://github.com/castholm/SDL.git?ref=v0.2.6+3.2.20#0f81c0affb2584b242b2fb5744e7dfebcfd904a5",
+            .hash = "sdl-0.2.6+3.2.20-7uIn9JkjfwGIQ6j3-etow2rCe-Zt16Yj-2gdp9jW7WZ9",
+            .lazy = true,
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "tools", "tests", "docs" },
+}

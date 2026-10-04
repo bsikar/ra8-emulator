@@ -51,3 +51,15 @@ Pending: filled in by the spike slice after RA8EMU-616, on Brighton's Mac and `w
 |------|---------------------|------------------------|--------------------|---------------------------|
 | Mac (arm64) | pending | pending | pending | pending |
 | win (Windows 11) | pending | pending | pending | pending |
+
+## SDL3 in the build (RA8EMU-616)
+
+SDL3 comes from castholm/SDL, pinned at v0.2.6+3.2.20 (SDL 3.2.20), the
+last tag that builds on Zig 0.14.1; newer tags need Zig 0.15. Move the pin
+with the Zig version. It is a lazy dependency asked for only under `-Dgui`,
+so `zig build`, `test` and `gate` never fetch or compile it.
+`zig build gui-hello -Dgui` builds the hello window and runs it on a native
+target (`-- --frames N` presents N frames and exits;
+`SDL_VIDEO_DRIVER=offscreen` needs no display). A cross target only
+installs. `src/gui/sdl.zig` is its own module and reaches the GUI through
+`ra8`, so the tests never see SDL.
