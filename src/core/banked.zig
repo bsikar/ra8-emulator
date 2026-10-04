@@ -50,18 +50,15 @@ pub const sysm = struct {
 pub const Banked = struct {
     /// The state `Regs` holds. A Security Extension core resets Secure.
     current: State = .secure,
-    /// The running state's stack limits; `Regs` has no slot for them.
-    msplim: u32 = 0,
-    psplim: u32 = 0,
     /// The other state's copy of everything banked.
     other: Bank = .{},
 
-    fn capture(self: *const Banked, r: *const regs.Regs) Bank {
+    fn capture(r: *const regs.Regs) Bank {
         return .{
             .msp = r.msp,
             .psp = r.psp,
-            .msplim = self.msplim,
-            .psplim = self.psplim,
+            .msplim = r.msplim,
+            .psplim = r.psplim,
             .primask = r.primask,
             .basepri = r.basepri,
             .faultmask = r.faultmask,
@@ -69,11 +66,11 @@ pub const Banked = struct {
         };
     }
 
-    fn restore(self: *Banked, r: *regs.Regs, from: Bank) void {
+    fn restore(r: *regs.Regs, from: Bank) void {
         r.msp = from.msp;
         r.psp = from.psp;
-        self.msplim = from.msplim;
-        self.psplim = from.psplim;
+        r.msplim = from.msplim;
+        r.psplim = from.psplim;
         r.primask = from.primask;
         r.basepri = from.basepri;
         r.faultmask = from.faultmask;
@@ -84,15 +81,15 @@ pub const Banked = struct {
     /// other in. The shared registers are left alone.
     pub fn switchTo(self: *Banked, r: *regs.Regs, state: State) void {
         if (state == self.current) return;
-        const parked = self.capture(r);
-        self.restore(r, self.other);
+        const parked = capture(r);
+        restore(r, self.other);
         self.other = parked;
         self.current = state;
     }
 
     /// One state's copy, wherever it lives right now.
     pub fn bank(self: *const Banked, r: *const regs.Regs, state: State) Bank {
-        return if (state == self.current) self.capture(r) else self.other;
+        return if (state == self.current) capture(r) else self.other;
     }
 
     /// The Non-secure SP as Non-secure code would see it: Handler mode or

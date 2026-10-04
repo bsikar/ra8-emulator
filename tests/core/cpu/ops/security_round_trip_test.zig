@@ -56,8 +56,8 @@ fn roundTrip(profile: Profile) !void {
     cpu.attribution = Attribution{ .context = &unused, .stateFn = callable };
     cpu.regs.msp = secure.msp;
     cpu.regs.psp = secure.psp;
-    cpu.banked.msplim = secure.msplim;
-    cpu.banked.psplim = secure.psplim;
+    cpu.regs.msplim = secure.msplim;
+    cpu.regs.psplim = secure.psplim;
     cpu.regs.primask = secure.primask;
     cpu.regs.basepri = secure.basepri;
     cpu.regs.faultmask = secure.faultmask;
