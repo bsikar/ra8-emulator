@@ -332,7 +332,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_lane_pair | 19 |
 | mve_vmaxv | 30 |
 | mve_int_vqdmlah | 43 |
-| mve_vldr | missing |
+| mve_vldr | 35 |
 | mve_vldr_wide | missing |
 | mve_gather | missing |
 | mve_gather64 | missing |
