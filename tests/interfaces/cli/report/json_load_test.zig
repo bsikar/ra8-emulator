@@ -61,7 +61,7 @@ test "the known run's owners, instructions and permille" {
     defer fix.close();
     var clock: u64 = 0;
     const tracer = run(&clock);
-    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .handle = fix.core.handle } } };
+    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = .{ .engine = fix.core } } } };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &load, &buf);
@@ -91,7 +91,7 @@ test "shares on a core add up to exactly 1000" {
     clock = 2;
     tracer.onStore(0x2200_1ABC, 4, thread_a + 0x100);
     clock = 3;
-    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .handle = fix.core.handle } } };
+    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = .{ .engine = fix.core } } } };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &load, &buf);
@@ -118,7 +118,7 @@ test "ctl cpu-load emits the same per-core object as the report field" {
     defer fix.close();
     var clock: u64 = 0;
     const tracer = run(&clock);
-    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .handle = fix.core.handle } } };
+    const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = .{ .engine = fix.core } } } };
     var report_buf = std.ArrayList(u8).init(std.testing.allocator);
     defer report_buf.deinit();
     const report_doc = try render(&fix.board, &load, &report_buf);
