@@ -157,11 +157,12 @@ pub const Channel = struct {
 /// end-of-run line.
 pub const Dmac = struct {
     channels: [channel_count]Channel = [_]Channel{.{}} ** channel_count,
-    /// The machine whose memory a transfer moves. Board.attach points this at
-    /// the run's engine; a board built without one declines every request.
+    /// The machine whose memory a transfer moves. wiring.attachBlocks points
+    /// this at the run's guest memory; a board built without one declines
+    /// every request.
     memory: ?Guest = null,
     /// The module bank next door, whose DMAST.DMST gates every channel.
-    /// Board.attach points this at the board's own bank, not a copy.
+    /// wiring.attachBlocks points this at the board's own bank, not a copy.
     bank: *const dma_bank.Bank,
     due: Due = Due{},
     refused: u32 = 0,
