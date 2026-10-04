@@ -16,6 +16,7 @@ test {
     _ = @import("core/cpu/fp_cvt_corpus_test.zig");
     _ = @import("core/cpu/fp_modes_corpus_test.zig");
     _ = @import("core/cpu/lob_corpus_test.zig");
+    _ = @import("core/cpu/dsp_corpus_test.zig");
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
     _ = @import("core/cpu/cortex_test.zig");
