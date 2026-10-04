@@ -42,6 +42,7 @@ test {
     _ = @import("ldst_reg_vectors_test.zig");
     _ = @import("ldst_reg_wide_vectors_test.zig");
     _ = @import("ldst_wide_vectors_test.zig");
+    _ = @import("lob_vectors_test.zig");
     _ = @import("long_mul_vectors_test.zig");
     _ = @import("long_shift_reg_vectors_test.zig");
     _ = @import("long_shift_sat64_vectors_test.zig");
