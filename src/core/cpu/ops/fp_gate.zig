@@ -59,13 +59,25 @@ pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
 pub fn check(cpu: *Cpu) op.Error!void {
     const verdict = cpacr.check(.{ .cpacr = cpu.fp.cpacr, .privileged = sysreg.privileged(&cpu.regs) });
     if (!verdict.enabled) return error.NoCoprocessor;
-    if (lazy.pending(&cpu.fp)) try preserve(cpu);
+    if (lazy.pending(&cpu.fp)) {
+        try preserve(cpu);
+        if (cpu.fp.context.fpccr.s == 1 and cpu.banked.current == .non_secure) hideSecure(cpu);
+    }
     cpu.regs.control = cpu.fp.context.touch(
         cpu.regs.control,
         cpu.banked.current,
         &cpu.fp.fpscr,
         &cpu.fp.vpr,
     );
+}
+
+/// A Secure context the deferred push just saved while Non-secure code
+/// runs: S0-S15 and FPSCR, and S16-S31 with FPCCR.TS, are cleared so the
+/// Non-secure instruction cannot read Secure values (RA8EMU-165).
+fn hideSecure(cpu: *Cpu) void {
+    const n: usize = if (cpu.fp.context.fpccr.ts == 1) 32 else 16;
+    for (0..n) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+    cpu.fp.fpscr = @TypeOf(cpu.fp.fpscr).fromBits(0);
 }
 
 /// PreserveFPState under the MPU as the lazy entry saw it: privileged as
