@@ -84,9 +84,10 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 }
 
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
-pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
+/// `memory` is CPU0's: the caller picks its backend (RA8EMU-577).
+pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = .{ .engine = core.* }, .board = board, .timebase = timebase };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
