@@ -172,3 +172,15 @@ test "an IWDT underflow lands on the tick its due time names" {
     unit.counter = 0;
     try std.testing.expectEqual(@as(?u64, 9 + 50_000), unit.underflowDueAt(9));
 }
+
+test "the IWDT counts the virtual ns that passed, not the boundaries" {
+    var unit = iwdt.Iwdt.init();
+    unit.armed = true;
+    unit.counter = iwdt.counts_per_tick * 2 + 1;
+    for (0..24) |_| unit.tickFor(2_000);
+    try std.testing.expectEqual(iwdt.counts_per_tick * 2 + 1, unit.counter);
+    unit.tickFor(2_000);
+    try std.testing.expectEqual(iwdt.counts_per_tick + 1, unit.counter);
+    unit.tickFor(100_000);
+    try std.testing.expectEqual(@as(u32, 1), unit.underflows);
+}

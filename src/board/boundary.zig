@@ -22,8 +22,9 @@ const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
 pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
-    self.watchdog.tick();
-    self.heartbeat.tick();
+    const elapsed_ns = self.time.base.now() - before_ns;
+    self.watchdog.tickFor(elapsed_ns);
+    self.heartbeat.tickFor(elapsed_ns);
     self.lowpower.tick();
     self.microphone.tick();
     self.clock.tick();

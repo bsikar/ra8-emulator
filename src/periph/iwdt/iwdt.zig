@@ -110,6 +110,8 @@ pub const Iwdt = struct {
     dropped: u32 = 0,
     /// Times the counter reached zero.
     underflows: u32 = 0,
+    /// Virtual ns toward the next tick, left over from the last boundary.
+    carry_ns: u64 = 0,
     /// Underflows that asked for an NMI rather than a reset, which this
     /// model has nowhere to deliver.
     nmis: u32 = 0,
@@ -144,6 +146,13 @@ pub const Iwdt = struct {
     pub fn stoppedByOptions(self: *const Iwdt) bool {
         const word = self.option_word orelse return false;
         return !iwdt_ofs0.autoStarts(word);
+    }
+
+    /// The ticks `elapsed_ns` of virtual time stands for, so the counter
+    /// follows the time base rather than the number of boundaries.
+    pub fn tickFor(self: *Iwdt, elapsed_ns: u64) void {
+        var n = wdt_clock.ticksIn(&self.carry_ns, elapsed_ns);
+        while (n > 0) : (n -= 1) self.tick();
     }
 
     /// One run-loop chunk of counting. The counter cannot be stopped by
