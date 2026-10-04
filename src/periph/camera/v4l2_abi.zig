@@ -71,3 +71,42 @@ fn ioc(dir: u32, nr: u8, size: usize) u32 {
 pub const vidioc_querycap = ioc(ioc_read, 0, @sizeOf(Capability));
 pub const vidioc_g_fmt = ioc(ioc_read | ioc_write, 4, @sizeOf(Format));
 pub const vidioc_s_fmt = ioc(ioc_read | ioc_write, 5, @sizeOf(Format));
+
+pub const memory_mmap: u32 = 1;
+
+/// struct v4l2_requestbuffers.
+pub const RequestBuffers = extern struct {
+    count: u32 = 0,
+    type: u32 = buf_type_video_capture,
+    memory: u32 = memory_mmap,
+    capabilities: u32 = 0,
+    flags: u8 = 0,
+    reserved: [3]u8 = .{0} ** 3,
+};
+
+/// struct timeval as the kernel lays it out in a v4l2_buffer.
+pub const TimeVal = extern struct { sec: isize = 0, usec: isize = 0 };
+
+/// struct v4l2_buffer, single-planar.
+pub const Buffer = extern struct {
+    index: u32 = 0,
+    type: u32 = buf_type_video_capture,
+    bytesused: u32 = 0,
+    flags: u32 = 0,
+    field: u32 = 0,
+    timestamp: TimeVal = .{},
+    timecode: [4]u32 = .{0} ** 4,
+    sequence: u32 = 0,
+    memory: u32 = memory_mmap,
+    m: extern union { offset: u32, userptr: usize } = .{ .userptr = 0 },
+    length: u32 = 0,
+    reserved2: u32 = 0,
+    request_fd: u32 = 0,
+};
+
+pub const vidioc_reqbufs = ioc(ioc_read | ioc_write, 8, @sizeOf(RequestBuffers));
+pub const vidioc_querybuf = ioc(ioc_read | ioc_write, 9, @sizeOf(Buffer));
+pub const vidioc_qbuf = ioc(ioc_read | ioc_write, 15, @sizeOf(Buffer));
+pub const vidioc_dqbuf = ioc(ioc_read | ioc_write, 17, @sizeOf(Buffer));
+pub const vidioc_streamon = ioc(ioc_write, 18, @sizeOf(u32));
+pub const vidioc_streamoff = ioc(ioc_write, 19, @sizeOf(u32));

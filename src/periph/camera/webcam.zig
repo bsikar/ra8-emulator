@@ -5,5 +5,6 @@ pub const consent = @import("webcam_consent.zig");
 pub const v4l2 = @import("v4l2_abi.zig");
 pub const negotiate = @import("v4l2_negotiate.zig");
 pub const device = @import("v4l2_device.zig");
+pub const stream = @import("v4l2_stream.zig");
 pub const source = @import("webcam_source.zig");
 pub const opener = @import("webcam_open.zig");
