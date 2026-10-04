@@ -125,6 +125,10 @@ is stale or a semantics encoding is missing. Regenerate with
 | VORR (register) T1 | 3 |
 | VORN T1 | 3 |
 | VEOR T1 | 3 |
+| VMOV (vector immediate) T1 | 13 |
+| VMVN (immediate) T1 | 4 |
+| VORR (immediate) T1 | 4 |
+| VBIC (immediate) T1 | 3 |
 | VLDRB.8 | 2 |
 | VLDRH.16 | 2 |
 | VLDRW.32 | 4 |
@@ -324,6 +328,7 @@ table above. A group with no vector fails `zig build test`.
 | mve_vpst | 17 |
 | mve_int | 27 |
 | mve_bitwise | 20 |
+| mve_modimm | 26 |
 | mve_int_pair | 68 |
 | mve_int_shift | 52 |
 | mve_int_mulh | 39 |

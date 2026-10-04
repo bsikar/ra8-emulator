@@ -1,0 +1,18 @@
+//! Covers src/core/cpu/mve/modimm_vectors.zig.
+const std = @import("std");
+const ra8 = @import("ra8");
+const vector = ra8.core.conformance_vector;
+const modimm = ra8.core.mve.modimm;
+const vectors = ra8.core.mve.modimm_vectors;
+
+fn run(in: vectors.Case) u128 {
+    return modimm.run(in.op, in.cmode, in.imm8, in.qd).?;
+}
+
+test "VMOV, VMVN, VORR and VBIC (immediate) match the pseudocode" {
+    try vector.expectAll(vectors.Case, u128, run, &vectors.vectors);
+}
+
+test "every vector is counted in covered" {
+    try std.testing.expectEqual(vectors.vectors.len, vectors.covered.len);
+}
