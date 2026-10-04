@@ -42,7 +42,6 @@ pub const core = struct {
     pub const symbols = @import("debug/symbols.zig");
     pub const tz = @import("core/tz.zig");
     pub const undefined_ops = @import("core/undefined_ops.zig");
-    pub const undefined_hook = @import("core/undefined_hook.zig");
     pub const tick = @import("core/tick.zig");
     pub const breakpoint = @import("debug/breakpoint.zig");
     pub const break_hook = @import("debug/break_hook.zig");

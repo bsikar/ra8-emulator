@@ -30,8 +30,6 @@ const pc_hits = @import("../debug/pc_hits.zig");
 const watch_hook = @import("../debug/watch_hook.zig");
 const pend_break = @import("pend_break.zig");
 const cpu_reset = @import("cpu/reset.zig");
-const undefined_hook = @import("undefined_hook.zig");
-const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("../debug/breakpoint.zig");
 const stop = @import("stop.zig");
@@ -228,13 +226,6 @@ pub const Engine = struct {
     /// written more than once tells its whole story in one run.
     pub fn attachWatchpoint(self: Engine, watched: *watchpoint.Watched) Error!void {
         watch_hook.attach(self.handle, watched) catch return Error.AttachFailed;
-    }
-
-    /// Count every arrival at an undefined site the sweep found, so the
-    /// report can separate an encoding that merely sits in the image from
-    /// one the firmware runs.
-    pub fn attachUndefined(self: Engine, found: *undefined_ops_mod.Found) Error!void {
-        undefined_hook.attach(self.handle, found) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
