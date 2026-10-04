@@ -9,8 +9,8 @@
 //! of that stretch cut from a period the firmware has already replaced.
 //!
 //! A pure function over four words, so it is tested without an engine or a
-//! clock: `src/core/systick_hook.zig` is the only caller and it supplies
-//! them straight from the PPB.
+//! clock: `src/core/cpu/systick_cut.zig` is the only caller and it supplies
+//! them straight from the bus.
 const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
 

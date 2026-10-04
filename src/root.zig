@@ -40,7 +40,6 @@ pub const core = struct {
     pub const run_pace = @import("core/run_pace.zig");
     pub const sleep_pace = @import("core/sleep_pace.zig");
     pub const symbols = @import("debug/symbols.zig");
-    pub const systick_hook = @import("core/systick_hook.zig");
     pub const tz = @import("core/tz.zig");
     pub const undefined_ops = @import("core/undefined_ops.zig");
     pub const undefined_hook = @import("core/undefined_hook.zig");
