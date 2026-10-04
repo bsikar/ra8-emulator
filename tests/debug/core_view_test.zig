@@ -3,8 +3,6 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
-const memmap = ra8.core.memmap;
-const Engine = ra8.core.engine.Engine;
 const zig_core = ra8.core.step_hook.zig_core;
 const View = ra8.core.step_hook.core_view.View;
 
@@ -45,14 +43,6 @@ test "the Zig core reads and writes through the view" {
     var cpu: Cpu = .{ .bus = memory.view() };
     try roundTrip(.{ .zig = .{ .cpu = &cpu } }, 0x20);
     try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), cpu.regs.low[4]);
-}
-
-test "the Unicorn engine reads and writes through the view" {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-    try roundTrip(.{ .unicorn = &engine }, memmap.sram_base);
-    try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), try engine.register(.r4));
 }
 
 test "an unmapped read is an error on the Zig core" {

@@ -4,7 +4,6 @@ const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 const Machine = ra8.core.stop_machine.Machine;
-const Engine = ra8.core.engine.Engine;
 const dispatch = ra8.core.rsp_dispatch;
 const zig_run = dispatch.zig_run;
 const zig_session = ra8.core.step_hook.zig_session;
@@ -138,9 +137,7 @@ test "Dispatch with a Zig session reads the Zig core's registers and memory" {
     var machine = Machine{};
     var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
     var target: zig_run.Target = .{ .session = &session };
-    var core = try Engine.open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core, .zig = &target };
+    const stub = dispatch.Dispatch{ .zig = &target };
     var out: [512]u8 = undefined;
     try std.testing.expectEqualStrings("08000000", try stub.answer("pf", &out));
     try std.testing.expectEqualStrings("40000000", try stub.answer("pd", &out));

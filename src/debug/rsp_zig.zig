@@ -1,5 +1,5 @@
 //! The remote protocol's run control and threads on the Zig core
-//! (RA8EMU-118), the counterpart of rsp_run.zig for the Unicorn session.
+//! (RA8EMU-118). The Unicorn counterpart, rsp_run.zig, went with RA8EMU-605.
 //!
 //! Each core is a thread: CPU0 is thread 1 and, with CPU1 attached
 //! (RA8EMU-338), CPU1 is thread 2. `Hg`, `Hc` and a vCont action's thread
@@ -7,7 +7,7 @@
 //! the other holds where it stopped (all-stop, scheduler locked). `c` runs budget
 //! after budget, asking the poll between them whether gdb sent an
 //! interrupt, and `s` runs one instruction. The stop replies are the same
-//! as rsp_run.zig's: `T05` for a break or a step, `T05watch:` and friends
+//! as gdb expects: `T05` for a break or a step, `T05watch:` and friends
 //! for a watch, `T02` for an interrupt and `T0b` when the core faulted.
 const std = @import("std");
 const debug_session = @import("session.zig");
@@ -31,7 +31,19 @@ pub const Target = struct {
     last: ?zig_drive.Ended = null,
 };
 
-/// The reply to a run-control or thread request (rsp_run.handles says which).
+/// Whether `request` is one this file answers.
+pub fn handles(request: []const u8) bool {
+    if (request.len == 0) return false;
+    if (std.mem.startsWith(u8, request, "vCont")) return true;
+    if (std.mem.eql(u8, request, "qfThreadInfo") or std.mem.eql(u8, request, "qsThreadInfo")) return true;
+    if (std.mem.eql(u8, request, "qC")) return true;
+    return switch (request[0]) {
+        'c', 's', '?', 'H', 'T' => true,
+        else => false,
+    };
+}
+
+/// The reply to a run-control or thread request (`handles` says which).
 pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     if (std.mem.eql(u8, request, "vCont?")) return copy(out, vcont_actions);
     if (std.mem.startsWith(u8, request, "vCont;")) return vcont(target, request["vCont;".len..], out);

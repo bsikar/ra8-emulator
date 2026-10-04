@@ -1,10 +1,10 @@
-//! The remote protocol's requests against a live engine: halt reason,
+//! The remote protocol's requests against a live Zig core: halt reason,
 //! qSupported, registers in target.xml order, and memory, read and written.
 const std = @import("std");
 const ra8 = @import("ra8");
 const dispatch = ra8.core.rsp_dispatch;
 const memmap = ra8.core.memmap;
-const Engine = ra8.core.engine.Engine;
+const Rig = @import("view_ram.zig").Rig;
 
 const base: u32 = memmap.sram_base;
 
@@ -12,28 +12,25 @@ const base: u32 = memmap.sram_base;
 // at its limit.
 test {
     _ = @import("rsp_points_test.zig");
-    _ = @import("rsp_run_test.zig");
     _ = @import("rsp_server_test.zig");
     _ = @import("rsp_console_test.zig");
     _ = @import("rsp_zig_test.zig");
 }
 
-fn open() !Engine {
-    var core = try Engine.open();
-    errdefer core.close();
-    try core.mapBoardRam();
+fn open(rig: *Rig) !void {
+    rig.wire();
+    const core = rig.view();
     try core.write(base, &[_]u8{ 0xde, 0xad, 0xbe, 0xef, 0x01, 0x02 });
     try core.setRegister(.r0, 0x1122_3344);
     try core.setRegister(.r12, 0xc);
     try core.setRegister(.sp, base + 0x1f00);
     try core.setRegister(.pc, base + 0x18);
-    return core;
 }
 
 test "the halt reason, qSupported and qAttached" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [64]u8 = undefined;
     try std.testing.expectEqualStrings("S05", try stub.answer("?", &out));
     try std.testing.expectEqualStrings("PacketSize=1000;qXfer:features:read+", try stub.answer("qSupported:multiprocess+;swbreak+", &out));
@@ -42,9 +39,9 @@ test "the halt reason, qSupported and qAttached" {
 }
 
 test "an unknown request gets the empty reply" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [16]u8 = undefined;
     try std.testing.expectEqualStrings("", try stub.answer("vMustReplyEmpty", &out));
     try std.testing.expectEqualStrings("", try stub.answer("", &out));
@@ -52,9 +49,9 @@ test "an unknown request gets the empty reply" {
 
 // Words go out little-endian: r0 = 0x11223344 reads as 44332211.
 test "g is seventeen little-endian words in target.xml order" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [256]u8 = undefined;
     const all = try stub.answer("g", &out);
     try std.testing.expectEqual(@as(usize, 17 * 8), all.len);
@@ -65,9 +62,9 @@ test "g is seventeen little-endian words in target.xml order" {
 }
 
 test "p reads one register by its target.xml number" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [16]u8 = undefined;
     try std.testing.expectEqualStrings("18000022", try stub.answer("pf", &out));
     try std.testing.expectEqualStrings("44332211", try stub.answer("p0", &out));
@@ -76,9 +73,9 @@ test "p reads one register by its target.xml number" {
 }
 
 test "m reads memory as hex, and an unmapped span is E01" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [256]u8 = undefined;
     try std.testing.expectEqualStrings("deadbeef0102", try stub.answer("m22000000,6", &out));
     try std.testing.expectEqualStrings("E01", try stub.answer("m90000000,4", &out));
@@ -86,20 +83,20 @@ test "m reads memory as hex, and an unmapped span is E01" {
 }
 
 test "an m reply that would not fit says so" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [8]u8 = undefined;
     try std.testing.expectError(error.NoSpace, stub.answer("m22000000,40", &out));
 }
 
 test "P writes one register, sent little-endian, and p reads it back" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [16]u8 = undefined;
     try std.testing.expectEqualStrings("OK", try stub.answer("P3=78563412", &out));
-    try std.testing.expectEqual(@as(u32, 0x1234_5678), try core.register(.r3));
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), try rig.view().register(.r3));
     try std.testing.expectEqualStrings("78563412", try stub.answer("p3", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("P11=00000000", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("P3=1234", &out));
@@ -107,9 +104,9 @@ test "P writes one register, sent little-endian, and p reads it back" {
 }
 
 test "G writes all seventeen registers from what g sent" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var read: [256]u8 = undefined;
     var sent: [256]u8 = undefined;
     const all = try stub.answer("g", &read);
@@ -118,15 +115,15 @@ test "G writes all seventeen registers from what g sent" {
     @memcpy(sent[1 .. 1 + 8], "efbeadde");
     var out: [16]u8 = undefined;
     try std.testing.expectEqualStrings("OK", try stub.answer(sent[0 .. all.len + 1], &out));
-    try std.testing.expectEqual(@as(u32, 0xdead_beef), try core.register(.r0));
-    try std.testing.expectEqual(base + 0x18, try core.register(.pc));
+    try std.testing.expectEqual(@as(u32, 0xdead_beef), try rig.view().register(.r0));
+    try std.testing.expectEqual(base + 0x18, try rig.view().register(.pc));
     try std.testing.expectEqualStrings("E00", try stub.answer("G0011", &out));
 }
 
 test "M writes hex and X writes binary, and m reads both back" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [64]u8 = undefined;
     try std.testing.expectEqualStrings("OK", try stub.answer("M22000000,2:cafe", &out));
     try std.testing.expectEqualStrings("OK", try stub.answer("X22000002,4:\x23\x24\x7d\x2a", &out));
@@ -135,9 +132,9 @@ test "M writes hex and X writes binary, and m reads both back" {
 }
 
 test "a write that does not match its length, or lands nowhere, is refused" {
-    var core = try open();
-    defer core.close();
-    const stub = dispatch.Dispatch{ .core = &core };
+    var rig: Rig = .{};
+    try open(&rig);
+    const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [16]u8 = undefined;
     try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,4:cafe", &out));
     try std.testing.expectEqualStrings("E00", try stub.answer("M22000000,2:caf", &out));
@@ -147,13 +144,13 @@ test "a write that does not match its length, or lands nowhere, is refused" {
 
 // Without a stop machine Z is not supported; with one it reaches the tables.
 test "Z goes to the stop machine when one is attached" {
-    var core = try open();
-    defer core.close();
+    var rig: Rig = .{};
+    try open(&rig);
     var out: [16]u8 = undefined;
-    const bare = dispatch.Dispatch{ .core = &core };
+    const bare = dispatch.Dispatch{ .view = rig.view() };
     try std.testing.expectEqualStrings("", try bare.answer("Z0,22000008,2", &out));
     var machine = ra8.core.stop_machine.Machine{};
-    const stub = dispatch.Dispatch{ .core = &core, .machine = &machine };
+    const stub = dispatch.Dispatch{ .view = rig.view(), .machine = &machine };
     try std.testing.expectEqualStrings("OK", try stub.answer("Z0,22000008,2", &out));
     try std.testing.expect(machine.breaks.find(0x2200_0008) != null);
 }
