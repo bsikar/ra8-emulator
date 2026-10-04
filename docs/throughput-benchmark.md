@@ -42,6 +42,17 @@ varies by about a third:
 tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
 ```
 
+`--cpu unicorn` left main with RA8EMU-606, so the Unicorn column needs a
+reference (RA8EMU-611). Point `UNICORN_EMULATOR` at a build from before 606,
+or `UNICORN_BASELINE` at a file of `IMAGE.elf MILLISECONDS` lines holding net
+Unicorn time at the same budget. A pinned file only holds for the machine
+that measured it:
+
+```sh
+UNICORN_EMULATOR=/path/to/pre-606/ra8_emulator tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
+UNICORN_BASELINE=unicorn_ms.txt tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
+```
+
 The RA8EMU-12 speed budget (no slower than 2x Unicorn) is read from the total
 row of that table over a directory holding the corpus images and their
 companions.
