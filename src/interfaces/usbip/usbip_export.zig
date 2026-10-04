@@ -13,7 +13,7 @@ pub const server = @import("usbip_server.zig");
 pub const listen = @import("usbip_listen.zig");
 /// The board device the bridge exports.
 pub const board = @import("usbip_board.zig");
-/// `--usbip PORT`: the bridge after a run.
+/// `--usbip PORT`: the live bridge on the board's USB tick.
 pub const run = @import("usbip_run.zig");
 /// Bulk URBs on the FS device's pipes.
 pub const urb = @import("usbip_urb.zig");

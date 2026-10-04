@@ -225,7 +225,6 @@ fn reportAll(
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = core } });
     try rtos_hook.second.print(out, options, second);
     try report.frame_out.report(out, board, options.frame_out, options.panel_only);
-    try cli.usbip_export.run.afterRun(out, options.usbip, &board.usb.script);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.
@@ -368,6 +367,7 @@ fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !
     if (options.touch_in) |path| try board.touch_input.open(path);
     try setBattery(board, options);
     try ra8.board.usb_plug.apply(&board.usb, allocator, options.usb_disk);
+    try cli.usbip_export.run.install(&board.usb, allocator, options.usbip);
 }
 
 /// Put the contacts the command line asked for on the touch panel. The queue

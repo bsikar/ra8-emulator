@@ -115,8 +115,8 @@ pub const text =
     \\  --console          stream SCI lines and read host input as console RX
     \\  --usb-loop         cable the HS host jack to the board's own FS
     \\                     device jack, in place of the stand-in device
-    \\  --usbip PORT       after the run, offer the FS device to usbip hosts
-    \\                     on 127.0.0.1:PORT (3240 is usbip's own)
+    \\  --usbip PORT       export the FS device to usbip hosts on
+    \\                     127.0.0.1:PORT while the run goes (3240 is usbip's)
     \\  --no-bus-errors    end the run with a fault report on an access
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is

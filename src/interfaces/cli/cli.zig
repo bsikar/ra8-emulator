@@ -80,7 +80,7 @@ pub const Options = struct {
     sd_save: bool = false,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
-    /// `--usbip PORT`: offer the FS device to usbip hosts after the run.
+    /// `--usbip PORT`: export the FS device to usbip hosts during the run.
     usbip: ?u16 = null,
     /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
     frame_out: ?[]const u8 = null,
