@@ -93,3 +93,41 @@ test "a disconnected gauge stays on the bus but answers no address phase" {
     try std.testing.expect(registry.find(gauge_mod.address) != null);
     try std.testing.expect(registry.answering(gauge_mod.address) == null);
 }
+
+test "a slow gauge NACKs after a write until its virtual deadline" {
+    var clock = ra8.periph.clocks.timebase.TimeBase{};
+    var gauge = gauge_mod.Gauge{};
+    var wrapper = fault.I2c.timed(gauge.device(), &clock);
+    wrapper.set(.{ .slow_ns = 5_000 });
+    var registry = bus.Registry{};
+    try registry.attach(wrapper.device());
+    const device = registry.answering(gauge_mod.address).?;
+    device.write(gauge_mod.reg.version);
+    device.stop();
+    try std.testing.expect(registry.answering(gauge_mod.address) == null);
+    clock.advance(4_999);
+    try std.testing.expect(registry.answering(gauge_mod.address) == null);
+    clock.advance(1);
+    try std.testing.expect(registry.answering(gauge_mod.address) != null);
+    try std.testing.expectEqual(@as(u32, 2), wrapper.refused);
+}
+
+test "a slow gauge stays ready across reads, and without a clock" {
+    var clock = ra8.periph.clocks.timebase.TimeBase{};
+    var gauge = gauge_mod.Gauge{};
+    var wrapper = fault.I2c.timed(gauge.device(), &clock);
+    wrapper.set(.{ .slow_ns = 5_000 });
+    var registry = bus.Registry{};
+    try registry.attach(wrapper.device());
+    const device = registry.answering(gauge_mod.address).?;
+    var word: [2]u8 = undefined;
+    _ = device.read(&word);
+    device.stop();
+    try std.testing.expect(registry.answering(gauge_mod.address) != null);
+    var bare = fault.I2c.wrap(gauge.device());
+    bare.set(.{ .slow_ns = 5_000 });
+    const loose = bare.device();
+    loose.write(0);
+    loose.stop();
+    try std.testing.expect(loose.acks());
+}
