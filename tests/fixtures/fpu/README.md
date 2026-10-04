@@ -33,3 +33,11 @@ half-precision overflow and subnormals. It stores each result with
 for `fp_cvt`. `tests/core/cpu/fp_cvt_corpus_test.zig` boots it; the expected
 words in `fp_cvt_vectors.zig` come from the DDI0553 FPToFixed, FixedToFP,
 FPRoundInt and FPConvert pseudocode.
+
+`fp_cmp.zig` runs VCMP, VCMPE (register and `#0`), VMAXNM and VMINNM in single
+and double precision over ordered pairs, equal values, signed zeros,
+infinities, subnormals and quiet and signalling NaNs in both operand
+positions. Compares store `FPSCR & 0xF000009F` (NZCV and flags); min and max
+store the result too. Build it the same way, swapping in `fp_cmp`.
+`tests/core/cpu/fp_cmp_corpus_test.zig` boots it; `fp_cmp_vectors.zig` holds
+the DDI0553 FPCompare, FPMaxNum and FPMinNum words.
