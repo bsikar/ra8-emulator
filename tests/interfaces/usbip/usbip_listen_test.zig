@@ -1,0 +1,92 @@
+//! Covers src/interfaces/usbip/usbip_listen.zig: a loopback host that lists
+//! on one connection and imports on the next gets the export back.
+const std = @import("std");
+const ra8 = @import("ra8");
+const wire = ra8.core.cli.usbip_wire;
+const exp = ra8.core.cli.usbip_export;
+
+/// A CDC ACM device: class 0xEF/2/1 (IAD), VID 0x045B PID 0x5310, bcd 1.00.
+const device = [_]u8{ 18, 1, 0x00, 0x02, 0xEF, 0x02, 0x01, 64, 0x5B, 0x04, 0x10, 0x53, 0x00, 0x01, 1, 2, 3, 1 };
+
+/// Configuration 1: an IAD, a CDC communication interface with one
+/// functional descriptor and an interrupt endpoint, a data interface with
+/// two bulk endpoints, and an alternate setting that must not be listed.
+const config = [_]u8{
+    9,  2,  75,   0,    2,    1, 0,    0x80, 50,
+    8,  11, 0,    2,    2,    2, 1,    0,    9,
+    4,  0,  0,    1,    2,    2, 1,    0,    5,
+    36, 0,  0x10, 0x01, 7,    5, 0x83, 3,    16,
+    0,  16, 9,    4,    1,    0, 2,    0x0A, 0,
+    0,  0,  7,    5,    0x81, 2, 0,    2,    0,
+    7,  5,  0x01, 2,    0,    2, 0,    9,    4,
+    1,  1,  0,    0x0A, 0,    0, 0,
+};
+
+const place = exp.Place{ .path = "/sys/devices/ra8/usbhs", .busid = "1-1", .speed = .high };
+const lis = exp.listen;
+
+/// One CDC export listed: header, count, record, two interfaces.
+const devlist_len = wire.op_header_len + 4 + wire.device_len + 2 * wire.interface_len;
+
+/// One request header, then `busid` padded to 32 bytes when importing.
+fn send(stream: std.net.Stream, code: u16, busid: ?[]const u8) !void {
+    var header: [wire.op_header_len]u8 = undefined;
+    (wire.OpHeader{ .code = code }).encode(&header);
+    try stream.writeAll(&header);
+    const name = busid orelse return;
+    var body = [_]u8{0} ** wire.busid_len;
+    @memcpy(body[0..name.len], name);
+    try stream.writeAll(&body);
+}
+
+/// What the scripted host saw.
+const Host = struct {
+    port: u16,
+    listed_len: usize = 0,
+    import_status: ?u32 = null,
+    failed: bool = false,
+
+    fn run(self: *Host) void {
+        self.script() catch {
+            self.failed = true;
+        };
+    }
+
+    fn script(self: *Host) !void {
+        const address = try std.net.Address.parseIp4("127.0.0.1", self.port);
+        const first = try std.net.tcpConnectToAddress(address);
+        try send(first, wire.op.req_devlist, null);
+        var reply: [devlist_len]u8 = undefined;
+        try first.reader().readNoEof(&reply);
+        self.listed_len = reply.len;
+        first.close();
+        const second = try std.net.tcpConnectToAddress(address);
+        defer second.close();
+        try send(second, wire.op.req_import, "1-1");
+        var header: [wire.op_header_len]u8 = undefined;
+        try second.reader().readNoEof(&header);
+        self.import_status = (try wire.OpHeader.decode(&header)).status;
+    }
+};
+
+test "a host lists, reconnects and imports the export" {
+    const items = [_]exp.Export{try exp.fromDescriptors(place, &device, &config)};
+    var listener = try lis.open(0);
+    defer listener.deinit();
+    var host = Host{ .port = lis.port(&listener) };
+    const thread = try std.Thread.spawn(.{}, Host.run, .{&host});
+    const attached = try lis.attach(&listener, &items);
+    thread.join();
+    attached.stream.close();
+    try std.testing.expect(!host.failed);
+    try std.testing.expectEqual(&items[0], attached.item);
+    try std.testing.expectEqual(devlist_len, host.listed_len);
+    try std.testing.expectEqual(@as(?u32, 0), host.import_status);
+}
+
+test "a bound listener reports a real port and the usbip default is 3240" {
+    var listener = try lis.open(0);
+    defer listener.deinit();
+    try std.testing.expect(lis.port(&listener) != 0);
+    try std.testing.expectEqual(@as(u16, 3240), lis.default_port);
+}
