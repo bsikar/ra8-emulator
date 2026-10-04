@@ -61,6 +61,7 @@ test {
     _ = @import("mul_acc_vectors_test.zig");
     _ = @import("mve_int_mulh_vectors_test.zig");
     _ = @import("mve_int_scalar_vectors_test.zig");
+    _ = @import("mve_int_vectors_test.zig");
     _ = @import("mve_int_vmla_vectors_test.zig");
     _ = @import("mve_lane_move_vectors_test.zig");
     _ = @import("mve_lane_pair_vectors_test.zig");
