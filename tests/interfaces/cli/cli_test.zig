@@ -261,4 +261,8 @@ test "--camera-source picks the CEU's source; unknown kinds are refused" {
     try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.gradient, chosen.camera.kind);
     try std.testing.expectError(error.UnknownCameraSource, parse(&.{ "ra8", "app.elf", "--camera-source", "webcam:0" }));
     try std.testing.expectError(error.MissingValue, parse(&.{ "ra8", "app.elf", "--camera-source" }));
+    const still = try parse(&.{ "ra8", "app.elf", "--camera-source", "image:pic.ppm" });
+    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.image, still.camera.kind);
+    try std.testing.expectEqualStrings("pic.ppm", still.camera.arg);
+    try std.testing.expectError(error.BadValue, parse(&.{ "ra8", "app.elf", "--camera-source", "image" }));
 }

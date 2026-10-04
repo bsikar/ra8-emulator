@@ -71,6 +71,7 @@ pub const camera = struct {
     pub const ppm = @import("camera/ppm_decode.zig");
     pub const bmp = @import("camera/bmp_decode.zig");
     pub const png = @import("camera/png_decode.zig");
+    pub const still = @import("camera/image_source.zig");
 };
 
 pub const win_base: u32 = 0x4034_8000;

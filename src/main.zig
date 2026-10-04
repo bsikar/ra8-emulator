@@ -362,7 +362,7 @@ fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !
     board.wire.click = options.click;
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
-    board.capture.source = options.camera.open();
+    board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(path);
