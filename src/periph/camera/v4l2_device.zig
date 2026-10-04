@@ -7,6 +7,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const negotiate = @import("v4l2_negotiate.zig");
+const stream = @import("v4l2_stream.zig");
 
 /// True on hosts where a V4L2 device can be opened.
 pub const supported = builtin.os.tag == .linux;
@@ -44,6 +45,24 @@ pub const Fd = struct {
     pub fn readFrame(self: *Fd, out: []u8) ReadError!void {
         const got = std.posix.read(self.fd, out) catch return error.ReadFailed;
         if (got != out.len) return error.ShortFrame;
+    }
+
+    /// The mapping seam a memory-mapped stream maps driver buffers with.
+    pub fn mapper(self: *Fd) stream.Mapper {
+        return .{ .ctx = self, .mapFn = map, .unmapFn = unmap };
+    }
+
+    fn map(ctx: *anyopaque, offset: u32, length: u32) ?[]u8 {
+        if (comptime !supported) return null;
+        const self: *Fd = @ptrCast(@alignCast(ctx));
+        const prot = std.posix.PROT.READ | std.posix.PROT.WRITE;
+        return std.posix.mmap(null, length, prot, .{ .TYPE = .SHARED }, self.fd, offset) catch null;
+    }
+
+    fn unmap(ctx: *anyopaque, memory: []u8) void {
+        _ = ctx;
+        if (comptime !supported) return;
+        std.posix.munmap(@alignCast(memory));
     }
 
     /// Releases the device.

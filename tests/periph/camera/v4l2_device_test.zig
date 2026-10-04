@@ -33,3 +33,18 @@ test "hosts without V4L2 refuse to open anything" {
     if (v4l2.supported) return error.SkipZigTest;
     try std.testing.expectError(error.Unsupported, v4l2.Fd.open("/dev/video0"));
 }
+
+test "the mapper maps a page of a real file and unmaps it" {
+    if (!v4l2.supported) return error.SkipZigTest;
+    var zero = try v4l2.Fd.open("/dev/zero");
+    defer zero.close();
+    const mapper = zero.mapper();
+    const memory = mapper.mapFn(mapper.ctx, 0, 4096) orelse return error.MapFailed;
+    try std.testing.expectEqual(@as(usize, 4096), memory.len);
+    try std.testing.expectEqual(@as(u8, 0), memory[4095]);
+    mapper.unmapFn(mapper.ctx, memory);
+    var empty = try v4l2.Fd.open("/dev/null");
+    defer empty.close();
+    const refused = empty.mapper();
+    try std.testing.expect(refused.mapFn(refused.ctx, 0, 4096) == null);
+}

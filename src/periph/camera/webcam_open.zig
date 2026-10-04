@@ -1,19 +1,21 @@
 //! Opens `--camera-source webcam[:N|PATH]` (RA8EMU-506): the consent gate
 //! first, then the V4L2 node, the format negotiation and the frame source.
 //! The device is asked for 640x480; the converter scales whatever it
-//! settles on to the size the firmware programmed. This first source reads
-//! frames with read() I/O, so a node that only streams is refused for now.
+//! settles on to the size the firmware programmed. Frames come by read()
+//! when the node offers it, otherwise by a memory-mapped stream, which is
+//! what most UVC webcams offer.
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const consent = @import("webcam_consent.zig");
 const v4l2 = @import("v4l2_device.zig");
 const negotiate = @import("v4l2_negotiate.zig");
+const v4l2_stream = @import("v4l2_stream.zig");
 const source = @import("webcam_source.zig");
 
 pub const request_width: u32 = 640;
 pub const request_height: u32 = 480;
 
-pub const Error = error{ WebcamRefused, NeedsStreaming };
+pub const Error = error{ WebcamRefused, NoCaptureIo };
 
 /// Room for a device name built from `webcam:N`.
 const Name = [32]u8;
@@ -29,6 +31,8 @@ const Node = struct {
     allocator: std.mem.Allocator,
     fd: v4l2.Fd,
     path: []u8,
+    /// The memory-mapped stream, when the node has no read() I/O.
+    stream: ?v4l2_stream.Stream = null,
 
     fn capture(self: *Node) source.Capture {
         return .{ .ctx = self, .readFn = read, .closeFn = close };
@@ -36,12 +40,14 @@ const Node = struct {
 
     fn read(ctx: *anyopaque, out: []u8) bool {
         const self: *Node = @ptrCast(@alignCast(ctx));
+        if (self.stream) |*stream| return stream.readFrame(out);
         self.fd.readFrame(out) catch return false;
         return true;
     }
 
     fn close(ctx: *anyopaque) void {
         const self: *Node = @ptrCast(@alignCast(ctx));
+        if (self.stream) |*stream| stream.stop();
         self.fd.close();
         consent.logStop(std.io.getStdErr().writer(), self.path) catch {};
         self.allocator.free(self.path);
@@ -67,7 +73,11 @@ pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Gr
     node.* = .{ .allocator = allocator, .fd = try v4l2.Fd.open(path), .path = path };
     errdefer node.fd.close();
     const agreed = try negotiate.negotiate(node.fd.device(), request_width, request_height);
-    if (!agreed.read_io) return error.NeedsStreaming;
+    if (!agreed.read_io) {
+        if (!agreed.streaming) return error.NoCaptureIo;
+        node.stream = try v4l2_stream.Stream.start(node.fd.device(), node.fd.mapper());
+    }
+    errdefer if (node.stream) |*stream| stream.stop();
     const webcam = try source.WebcamSource.open(allocator, node.capture(), agreed, path, format_control);
     consent.logStart(writer, path) catch {};
     return webcam.source();
