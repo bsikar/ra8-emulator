@@ -14,7 +14,6 @@ pub const core = struct {
     pub const long_shift = @import("core/long_shift.zig");
     pub const engine = @import("core/engine.zig");
     pub const lob = @import("core/lob.zig");
-    pub const lob_hook = @import("core/lob_hook.zig");
     pub const memmap = @import("core/memmap.zig");
     pub const mpu_guard = @import("core/mpu_guard.zig");
     pub const mpu_hook = @import("core/mpu_hook.zig");

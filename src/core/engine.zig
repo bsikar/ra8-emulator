@@ -1,8 +1,7 @@
 //! The Unicorn engine, wrapped once so nothing above it touches C.
 //!
 //! Unicorn stays a C library: this is the boundary, and with src/core/c.zig
-//! and src/core/lob_hook.zig it is the only place that handles uc_err, raw
-//! pointers or C integer types.
+//! it is the only place that handles uc_err, raw pointers or C integer types.
 //! Callers get Zig errors, slices and named registers.
 const std = @import("std");
 const c = @import("c.zig");
@@ -26,7 +25,6 @@ const tz_hook = @import("tz_hook.zig");
 const symbols = @import("../debug/symbols.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
-const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
 const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("../debug/break_hook.zig");
@@ -216,13 +214,6 @@ pub const Engine = struct {
     /// address the firmware reached for and how wide the access was.
     pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
         bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
-    }
-
-    /// Step the Armv8.1-M low-overhead loops the CPU model cannot decode.
-    /// Without this a real Cortex-M85 image stops on the first counted loop
-    /// its C startup runs, which is before main().
-    pub fn attachLoops(self: Engine, loops: *lob.Loops) Error!void {
-        lob_hook.attach(self.handle, loops) catch return Error.AttachFailed;
     }
 
     /// Bank the MPU region table through RNR. Without this every region a

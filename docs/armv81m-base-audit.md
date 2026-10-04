@@ -17,7 +17,7 @@ Audited for RA8EMU-258.
 | LSLL, ASRL by register | none | none | RA8EMU-136 |
 | UQSHL, SQSHL, URSHR, SRSHR, UQRSHL, SQRSHR | none | none | RA8EMU-137 |
 | UQSHLL, URSHRL, SRSHRL, SQSHLL, UQRSHLL, SQRSHRL | none | none | RA8EMU-139 |
-| DLS, WLS, LE | none in the decoder; src/core/lob.zig steps them for Unicorn | tests/core/lob_test.zig, tests/core/lob_hook_test.zig | RA8EMU-239 |
+| DLS, WLS, LE | src/core/cpu/ops/lob.zig on the Zig core; src/core/lob.zig decodes | tests/core/lob_test.zig, tests/core/cpu/ops/lob_test.zig | RA8EMU-239 |
 | DLSTP, WLSTP, LETP, LCTP, VCTP | none | none | RA8EMU-24 |
 | BF, BFX, BFL, BFLX, BFCSEL | none | none | RA8EMU-299 |
 | PAC, PACBTI, PACG, AUT, AUTG, BXAUT | none | none | RA8EMU-244 |

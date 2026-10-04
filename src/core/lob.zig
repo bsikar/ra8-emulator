@@ -5,9 +5,9 @@
 //! `memset` included. The pinned Unicorn offers no Armv8.1-M CPU model: the
 //! newest it has is the Cortex-M33, which is Armv8.0-M, so the core rejects
 //! the encoding and a real image stops in its C startup before it reaches
-//! main(). They are decoded and stepped here instead, off the
-//! invalid-instruction hook, which is cheaper and far more honest than
-//! telling a compiler not to emit them.
+//! main(). They are decoded here and stepped by the Zig core in
+//! src/core/cpu/ops/lob.zig, which is far more honest than telling a
+//! compiler not to emit them.
 //!
 //! LETP and the rest of the tail-predicated family belong to MVE and are
 //! deliberately absent: predication changes how the loop body executes, not
