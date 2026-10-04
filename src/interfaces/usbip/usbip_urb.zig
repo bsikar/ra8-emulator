@@ -4,10 +4,11 @@
 //! max-packet chunk to the pipe once the driver has emptied it, and an IN
 //! URB takes each packet the driver commits, ending on a short packet or
 //! the URB's length. `null` means the pipe is not ready yet: run the
-//! firmware and advance again. Endpoint 0 and endpoints the firmware never
-//! opened stall, as the kernel's -EPIPE.
+//! firmware and advance again. Endpoint 0 goes through usbip_control.zig;
+//! endpoints the firmware never opened stall, as the kernel's -EPIPE.
 const wire = @import("usbip_wire.zig");
 const usbfs = @import("../../periph/usbfs/usbfs.zig");
+const control = @import("usbip_control.zig");
 
 pub const epipe: i32 = -32;
 pub const econnreset: i32 = -104;
@@ -18,11 +19,14 @@ pub const Reply = struct { status: i32, actual: u32 };
 pub const Transfer = struct {
     submit: wire.Submit,
     moved: u32 = 0,
+    /// Where an endpoint 0 URB is in its control transfer.
+    stage: control.Stage = .setup,
 
     /// Move at most one packet. `out_data` is the URB's OUT payload and
     /// `in_buf` where IN data lands; the other one is ignored.
     pub fn advance(self: *Transfer, device: *usbfs.Device, out_data: []const u8, in_buf: []u8) ?Reply {
-        if (self.submit.ep == 0 or self.submit.ep > 15) return stalled();
+        if (self.submit.ep == 0) return control.advance(self, device, out_data, in_buf);
+        if (self.submit.ep > 15) return stalled();
         const in = self.submit.direction == .in;
         const n = device.pipes.find(@intCast(self.submit.ep), in) orelse return stalled();
         const size = packetSize(device, n);

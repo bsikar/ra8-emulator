@@ -60,11 +60,8 @@ test "a bulk IN URB waits for the driver, then ends on its short packet" {
     try std.testing.expectEqualSlices(u8, "hi", buf[0..2]);
 }
 
-test "endpoint 0 and an endpoint nobody opened stall" {
+test "an endpoint nobody opened stalls" {
     var device = usbfs.Device{};
-    var control = submit(.in, 0, 18);
-    var buf: [18]u8 = undefined;
-    try std.testing.expectEqual(urb.Reply{ .status = urb.epipe, .actual = 0 }, control.advance(&device, &.{}, &buf).?);
     var stray = submit(.out, 3, 1);
     try std.testing.expectEqual(urb.Reply{ .status = urb.epipe, .actual = 0 }, stray.advance(&device, "x", &.{}).?);
 }
