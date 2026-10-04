@@ -237,3 +237,18 @@ test "faults reads the latched CFSR, HFSR and SFSR for the run report" {
     try std.testing.expectEqual(@as(u32, 0x4000_0000), words.hfsr);
     try std.testing.expectEqual(@as(u32, 0x0000_0001), words.sfsr);
 }
+
+test "a byte stored to STIM0 lands in the ITM and STIM0 reads FIFOREADY again" {
+    const itm = ra8.core.itm;
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var port: itm.Itm = .{ .tcr = itm.tcr_bits.itmena, .ter = 1 };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .itm = &port } };
+    try board.view().write(itm.base, "h");
+    try board.view().write(itm.base, "i");
+    try std.testing.expectEqualStrings("hi", port.output());
+    try std.testing.expectEqual(itm.fifo_ready, try board.view().readWord(itm.base));
+}

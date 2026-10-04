@@ -32,6 +32,8 @@ const Deadline = @import("../../core/deadline.zig").Deadline;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
 const soak_symbols = @import("soak_symbols.zig");
+/// Re-exported for tests/interfaces/cli/itm_console_test.zig: cli.zig is full.
+pub const itm_console = @import("itm_console.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
 pub const break_sym = @import("zig_break.zig");
 /// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
@@ -180,15 +182,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
     if (path) |named| {
-        pair.open(std.heap.page_allocator, board, named, memory) catch |err| {
-            std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
-            return 1;
-        };
-        if (options.blocks) pair.core.useBlocks() catch |err| {
-            pair.close();
-            std.debug.print("cannot give the second core its block cache: {s}\n", .{@errorName(err)});
-            return 1;
-        };
+        if (!openSecond(&pair, board, named, memory, options.blocks)) return 1;
         clock.cpu1 = &pair;
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }
@@ -206,6 +200,9 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
     var boot_output = out;
     var final: boot.Regs = .{};
+    // --console opens the ITM as a probe would (RA8EMU-629).
+    var itm_port = itm_console.opened();
+    if (options.console) try itm_console.prime(clock.memory, &itm_port);
     const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
@@ -221,7 +218,9 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
+        .itm = if (options.console) &itm_port else null,
     });
+    if (options.console) try itm_port.flush(out, true);
     clock.soakFaults();
     board.time.soak.place(final.pc, if (board.clock.running()) board.clock.now else null);
     const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
@@ -251,6 +250,21 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         return ctlLoad(out, .{}, status);
     } else try captureFrames(board, options);
     return status;
+}
+
+/// Bring CPU1 up from `named`, with its block cache when asked; false once
+/// the reason it could not is printed.
+fn openSecond(pair: *second_core.zig_run.Driver, board: *Board, named: []const u8, memory: Guest, blocks: bool) bool {
+    pair.open(std.heap.page_allocator, board, named, memory) catch |err| {
+        std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
+        return false;
+    };
+    if (blocks) pair.core.useBlocks() catch |err| {
+        pair.close();
+        std.debug.print("cannot give the second core its block cache: {s}\n", .{@errorName(err)});
+        return false;
+    };
+    return true;
 }
 
 fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run) !void {

@@ -100,6 +100,8 @@ pub const Wiring = struct {
     /// Filled with the core's registers as the run left them, for the
     /// `--report json` register dump (RA8EMU-579).
     final: ?*Regs = null,
+    /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
+    itm: ?*@import("../../debug/itm.zig").Itm = null,
 };
 
 /// The hand-off from main to the CPU the run asked for.
@@ -122,7 +124,7 @@ pub fn run(out: anytype, memory: Guest, vector_base: u32, budget: u64, retire_li
 
 /// As `run`, with the peripheral windows answered by the board's bus.
 pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = GuestBus.of(&memory, wiring.fast_memory), .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut } };
+    var board: BoardBus = .{ .memory = GuestBus.of(&memory, wiring.fast_memory), .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut, .itm = wiring.itm } };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
