@@ -297,7 +297,7 @@ table above. A group listed as missing does not fail the build yet.
 | table_branch | 23 |
 | blxns | 11 |
 | bxns | 14 |
-| sg | missing |
+| sg | 17 |
 | tt | missing |
 | imm_logic | 30 |
 | imm_arith | 35 |

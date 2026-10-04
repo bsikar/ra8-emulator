@@ -60,6 +60,7 @@ test {
     _ = @import("sat_arith_vectors_test.zig");
     _ = @import("saturate_vectors_test.zig");
     _ = @import("sel_vectors_test.zig");
+    _ = @import("sg_vectors_test.zig");
     _ = @import("shift_imm_vectors_test.zig");
     _ = @import("shift_reg_vectors_test.zig");
     _ = @import("sp_arith_vectors_test.zig");
