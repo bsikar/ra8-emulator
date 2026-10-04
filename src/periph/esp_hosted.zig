@@ -10,6 +10,7 @@ const gpio = @import("gpio/gpio.zig");
 
 /// The esp-hosted frame codec (RA8EMU-597).
 pub const frame = @import("esp_hosted/esp_frame.zig");
+pub const event = @import("esp_hosted/esp_event.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
