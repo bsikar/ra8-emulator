@@ -186,3 +186,33 @@ test "a software reset takes the interrupt latches down" {
     // reboot, and only the flag would have re-pended into a bare firmware.
     try std.testing.expectEqual(@as(u32, 7), unit.events.links[3] & icu.field.iels);
 }
+
+test "an AGT underflow is raised on the boundary that closes at its due time" {
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var unit = board();
+    defer unit.deinit();
+    try ra8.board.wiring.attachBlocks(&unit, memory);
+    const agt = ra8.periph.agt;
+    const sched = ra8.periph.agt_clock.sched;
+    // 0x1100 counts at the AGT's PCLKB lands a few thousand ns past the
+    // second whole boundary, wide enough that the floor does not round it.
+    unit.interval.channels[0] = .{ .counter = 0x1100, .reload = 0xFFFF, .cr = agt.control.tstart };
+    try sched.arm(&unit.interval, &unit.time.queue, 0);
+    var boundary: usize = 0;
+    while (unit.interval.channels[0].underflows == 0) : (boundary += 1) {
+        try std.testing.expect(boundary < 8);
+        const due = unit.time.queue.next().?;
+        const pace = ra8.core.run_pace.forStretch(memory, .{ .per_boundary = 50_000 }, .{ .board = unit.ticker() });
+        try unit.tick(memory, pace.per_boundary);
+        // Nothing before the due time underflows, and the boundary that
+        // does is the one whose end is that time, not the next whole one.
+        // The count rather than `pending`: the boundary hands that to the
+        // event path before it returns.
+        if (unit.interval.channels[0].underflows != 0) try std.testing.expectEqual(due, unit.time.base.now());
+        if (unit.interval.channels[0].underflows == 0) try std.testing.expect(unit.time.base.now() < due);
+    }
+    try std.testing.expectEqual(@as(usize, 3), boundary);
+    try std.testing.expect(unit.time.base.now() % 50_000 != 0);
+}
