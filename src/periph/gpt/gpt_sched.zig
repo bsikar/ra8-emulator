@@ -19,8 +19,9 @@
 //! (`compareDueAt`, RA8EMU-578), worked out from the same absolute counts
 //! `tickFor` uses, so it is exact whatever width the boundaries are.
 //!
-//! A triangle (GTCR.MD symmetric) has nothing due here yet: its peak is a
-//! fold of the phase, not a wrap, and it gets its own slice.
+//! A triangle (GTCR.MD symmetric) turns rather than wraps. Its peak and
+//! trough are due where the folded phase gpt_mode.zig counts in next
+//! reaches the period or a whole cycle (`turnDueAt`).
 const std = @import("std");
 const gpt = @import("gpt.zig");
 const ch = @import("gpt_channel.zig");
@@ -32,11 +33,11 @@ const timebase = @import("../time/timebase.zig");
 /// The PCLKD rate the per-boundary step stands for.
 pub const pclkd_hz: u64 = @as(u64, ch.step_per_tick) * timebase.default_hz / cadence.instructions;
 
-/// The virtual ns channel next overflows at, from `now_ns`. A stopped
-/// channel and a triangle have nothing due.
+/// The virtual ns channel next overflows at, from `now_ns`: a saw's wrap,
+/// or a triangle's peak (both set TCFPO). A stopped channel has nothing due.
 pub fn dueAt(channel: ch.Channel, now_ns: u64) ?u64 {
     if (!channel.running()) return null;
-    if (channel.shape().symmetric()) return null;
+    if (channel.shape().symmetric()) return turnDueAt(channel, .peak, now_ns);
     const period = channel.periodOrDefault();
     const in_ns = clk.overflowInNs(channel.cnt, period, channel.source(), pclkd_hz) orelse return null;
     return now_ns + in_ns;
@@ -100,4 +101,26 @@ fn nsAtCount(count: u128, divider: u32) ?u64 {
     const ns = (num + pclkd_hz - 1) / pclkd_hz;
     if (ns > std.math.maxInt(u64)) return null;
     return @intCast(ns);
+}
+
+/// The two places a triangle turns: the peak sets TCFPO, the trough TCFPU
+/// and ends the cycle.
+pub const Turn = enum { peak, trough };
+
+/// The virtual ns a running triangle next reaches its peak or its trough,
+/// from `now_ns`. Null for a stopped channel or one that is not a triangle.
+pub fn turnDueAt(channel: ch.Channel, turn: Turn, now_ns: u64) ?u64 {
+    if (!channel.running() or !channel.shape().symmetric()) return null;
+    const period: u64 = channel.periodOrDefault();
+    const cycle = 2 * period;
+    // The same phase gpt_mode.fold counts in: the count on the way up, the
+    // cycle less the count on the way down.
+    const cnt: u64 = channel.cnt;
+    const phase = if (channel.rising) cnt else cycle - @min(cnt, cycle);
+    const counts = switch (turn) {
+        .peak => if (phase < period) period - phase else period + cycle - phase,
+        .trough => cycle - phase % cycle,
+    };
+    const divider = channel.source().divider();
+    return nsAtCount(countsAt(now_ns, divider) + counts, divider);
 }

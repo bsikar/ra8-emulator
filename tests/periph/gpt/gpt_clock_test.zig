@@ -266,3 +266,53 @@ test "a compare-A match is flagged on the boundary that reaches its due time" {
     clk.sched.tickFor(&timer, due - 1, due);
     try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfa != 0);
 }
+
+fn triangle(encoding: u32) u32 {
+    return control(encoding) | 0x0004_0000;
+}
+
+test "a triangle's peak and trough are due where the folded phase reaches them" {
+    const sched = clk.sched;
+    var channel = ra8.periph.gpt_channel.Channel{};
+    channel.cr = triangle(0);
+    channel.period.live = 100_000;
+    channel.cnt = 30_000;
+    // Rising from 30000: the peak is 70000 counts on, the trough 170000.
+    const peak = sched.turnDueAt(channel, .peak, 0).?;
+    try testing.expectEqual(@as(?u64, peak), sched.dueAt(channel, 0));
+    try testing.expectEqual(@as(u32, 70_000), sched.countsBetween(0, peak, 1));
+    try testing.expect(sched.countsBetween(0, peak - 1, 1) < 70_000);
+    const trough = sched.turnDueAt(channel, .trough, 0).?;
+    try testing.expectEqual(@as(u32, 170_000), sched.countsBetween(0, trough, 1));
+    // Falling through 30000, the trough comes first and the peak a cycle on.
+    channel.rising = false;
+    try testing.expectEqual(@as(u32, 30_000), sched.countsBetween(0, sched.turnDueAt(channel, .trough, 0).?, 1));
+    try testing.expectEqual(@as(u32, 130_000), sched.countsBetween(0, sched.turnDueAt(channel, .peak, 0).?, 1));
+    // A saw has no turns, and a stopped triangle nothing due.
+    channel.cr = control(0);
+    try testing.expectEqual(@as(?u64, null), sched.turnDueAt(channel, .peak, 0));
+    channel.cr = 0x0004_0000;
+    try testing.expectEqual(@as(?u64, null), sched.dueAt(channel, 0));
+}
+
+test "a triangle peak is flagged on the boundary that reaches its due time" {
+    var timer = gpt.Gpt.init();
+    const channel = &timer.channels[0];
+    channel.cr = triangle(2);
+    channel.period.live = 0x8000;
+    channel.cnt = 0x1234;
+    const start: u64 = 4_321;
+    const due = clk.sched.dueAt(channel.*, start).?;
+    var at = start;
+    while (at + 2_999 < due) : (at += 2_999) {
+        clk.sched.tickFor(&timer, at, at + 2_999);
+        try testing.expect(!timer.pending);
+        try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfpo == 0);
+    }
+    clk.sched.tickFor(&timer, at, due - 1);
+    try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfpo == 0);
+    clk.sched.tickFor(&timer, due - 1, due);
+    try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfpo != 0);
+    try testing.expect(timer.pending);
+    try testing.expect(!channel.rising);
+}
