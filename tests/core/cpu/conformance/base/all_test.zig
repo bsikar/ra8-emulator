@@ -82,6 +82,7 @@ test {
     _ = @import("mve_int_shift_vectors_test.zig");
     _ = @import("mve_bitwise_vectors_test.zig");
     _ = @import("mve_modimm_vectors_test.zig");
+    _ = @import("mve_widen_vectors_test.zig");
     _ = @import("mve_int_vectors_test.zig");
     _ = @import("mve_int_vmla_vectors_test.zig");
     _ = @import("mve_int_vqdmlah_vectors_test.zig");

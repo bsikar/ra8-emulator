@@ -329,6 +329,7 @@ table above. A group with no vector fails `zig build test`.
 | mve_int | 27 |
 | mve_bitwise | 20 |
 | mve_modimm | 26 |
+| mve_widen | 22 |
 | mve_int_pair | 68 |
 | mve_int_shift | 52 |
 | mve_int_mulh | 39 |
