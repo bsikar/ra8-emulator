@@ -325,7 +325,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_int_scalar | missing |
 | mve_vcmp | missing |
 | mve_vpred | missing |
-| mve_vctp | missing |
+| mve_vctp | 24 |
 | mve_lob_tp | missing |
 | mve_vdup | missing |
 | mve_lane_move | missing |
