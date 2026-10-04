@@ -63,6 +63,7 @@ test {
     _ = @import("ops/bxns_test.zig");
     _ = @import("ops/security_round_trip_test.zig");
     _ = @import("ops/sg_test.zig");
+    _ = @import("ops/nsc_fp_callee_test.zig");
     _ = @import("ops/tt_test.zig");
     _ = @import("ops/imm_fields_test.zig");
     _ = @import("ops/imm_logic_test.zig");
