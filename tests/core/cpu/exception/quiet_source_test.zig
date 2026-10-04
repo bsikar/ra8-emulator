@@ -201,3 +201,47 @@ test "the wrapped bus preserves status latches" {
     try std.testing.expectEqual(@as(u32, 0), probe.writes);
     try std.testing.expectEqual(@as(u32, 1 << 25), probe.value);
 }
+
+const RepeatProbe = struct {
+    allow: bool = true,
+    times: u64 = 0,
+
+    fn view(self: *RepeatProbe) bus.Bus {
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .repeat = repeat } };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+        _ = ctx;
+        _ = address;
+        @memset(into, 0);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
+        _ = ctx;
+        _ = address;
+        _ = bytes;
+    }
+
+    fn repeat(ctx: *anyopaque, address: u32, len: usize, times: u64) bool {
+        _ = address;
+        _ = len;
+        const self: *RepeatProbe = @ptrCast(@alignCast(ctx));
+        self.times += times;
+        return self.allow;
+    }
+};
+
+test "a repeat passes through to the real bus and stirs only when it reads" {
+    var fake: Fake = .{};
+    var probe: RepeatProbe = .{};
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = probe.view() };
+    const source = quiet.source();
+    try std.testing.expect((try source.winner(quiet.bus())) == null);
+    try std.testing.expect(quiet.bus().repeat(0x5002_00C0, 4, 0));
+    try std.testing.expect(quiet.settled);
+    try std.testing.expect(quiet.bus().repeat(0x5002_00C0, 4, 7));
+    try std.testing.expectEqual(@as(u64, 7), probe.times);
+    try std.testing.expect(!quiet.settled);
+    probe.allow = false;
+    try std.testing.expect(!quiet.bus().repeat(0x5002_00C0, 4, 3));
+}

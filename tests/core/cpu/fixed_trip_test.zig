@@ -248,3 +248,14 @@ test "a count kept in a RAM word moves on with the word" {
     }
     try std.testing.expect((try counting(&word_loop, 2500, 12_001, true)).reused < 64);
 }
+
+test "the poll borrows the real bus only from a watch that is on" {
+    var rig: Rig = .{};
+    try rig.init(&bounded_loop);
+    defer rig.deinit();
+    const before = rig.cpu.bus;
+    try std.testing.expect(!rig.cpu.trip.lend(&rig.cpu));
+    rig.cpu.trip.reclaim(&rig.cpu, false, true);
+    try std.testing.expectEqual(before.ctx, rig.cpu.bus.ctx);
+    try std.testing.expect(!rig.cpu.trip.on);
+}

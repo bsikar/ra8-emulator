@@ -320,7 +320,9 @@ pub const Cpu = struct {
         defer self.trip.drop(self);
         var left = count;
         while (left > 0) : (left -= 1) {
+            const lent = self.trip.lend(self);
             const taken = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
+            self.trip.reclaim(self, lent, taken);
             if (taken) self.waiting = null;
             if (self.waiting) |why| {
                 const up = exception.sleep.wakes(self, why) catch return .{ .bus_fault = self.regs.pc };

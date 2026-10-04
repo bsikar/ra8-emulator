@@ -196,6 +196,22 @@ pub const Watch = struct {
         self.miss_wait = backoff;
     }
 
+    /// The interrupt poll reads the SCS for the core, not for the trip, so it
+    /// runs on the real bus: its reads are no reason to stop watching.
+    pub fn lend(self: *Watch, cpu: *Cpu) bool {
+        if (!self.on) return false;
+        cpu.bus = self.inner;
+        return true;
+    }
+
+    /// Back on the recorder after the poll, unless it took an exception: a
+    /// trip an exception interrupts is not watched on.
+    pub fn reclaim(self: *Watch, cpu: *Cpu, lent: bool, taken: bool) void {
+        if (!lent) return;
+        if (taken) return self.miss(cpu);
+        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate };
+    }
+
     /// Put the real bus back. `run` calls this on every way out.
     pub fn drop(self: *Watch, cpu: *Cpu) void {
         if (!self.on) return;
