@@ -15,6 +15,8 @@ pub const listen = @import("usbip_listen.zig");
 pub const board = @import("usbip_board.zig");
 /// `--usbip PORT`: the bridge after a run.
 pub const run = @import("usbip_run.zig");
+/// Bulk URBs on the FS device's pipes.
+pub const urb = @import("usbip_urb.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
