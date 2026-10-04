@@ -17,6 +17,13 @@
 //! dividers scale from /4 the way their names say is the manual's claim, not
 //! a bench reading, and is the one inference here.
 const cadence = @import("../../core/cadence.zig");
+const timebase = @import("../time/timebase.zig");
+
+/// Virtual ns one run-loop tick (a full chunk boundary) stands for on the
+/// time base. A due time built from it lands on the very boundary the
+/// per-tick pacing fires on, so moving the watchdogs onto the event queue
+/// (RA8EMU-179, slice RA8EMU-514) leaves the corpus where it is.
+pub const ns_per_tick: u64 = @as(u64, cadence.instructions) * timebase.ns_per_s / timebase.default_hz;
 
 /// The bench reading, and the divider it was taken at.
 pub const bench = struct {

@@ -182,6 +182,16 @@ pub const Wdt = struct {
         self.count();
     }
 
+    /// The virtual ns the next underflow lands at, from `now_ns`, at the
+    /// per-tick pacing: `counter + 1` counts, each `ticksPerCount` ticks, less
+    /// the ticks already paced toward the first. Null while disarmed.
+    pub fn underflowDueAt(self: *const Wdt, now_ns: u64) ?u64 {
+        if (!self.armed) return null;
+        const per = clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift));
+        const ticks = (@as(u64, self.counter) + 1) * per - self.pace;
+        return now_ns + ticks * clock.ns_per_tick;
+    }
+
     /// One watchdog count. An armed counter that reaches zero underflows
     /// once: the flag latches, a reset is asked for in RSTIRQS mode, and the
     /// counter disarms so it cannot fire again unrefreshed.
