@@ -109,4 +109,5 @@ test {
     _ = @import("usbip_listen_test.zig");
     _ = @import("usbip_board_test.zig");
     _ = @import("usbip_run_test.zig");
+    _ = @import("usbip_urb_test.zig");
 }
