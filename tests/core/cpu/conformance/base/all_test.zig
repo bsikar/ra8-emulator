@@ -59,6 +59,7 @@ test {
     _ = @import("mov_wide_vectors_test.zig");
     _ = @import("mrs_msr_vectors_test.zig");
     _ = @import("mul_acc_vectors_test.zig");
+    _ = @import("mve_float_maxnm_vectors_test.zig");
     _ = @import("mve_int_mulh_vectors_test.zig");
     _ = @import("mve_int_pair_vectors_test.zig");
     _ = @import("mve_int_scalar_vectors_test.zig");
