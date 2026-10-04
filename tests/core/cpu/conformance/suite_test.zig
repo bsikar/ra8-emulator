@@ -1,5 +1,6 @@
-//! The build-failing half of the conformance suite: a claimed encoding with no
-//! vector, or a vector naming an encoding nobody claims, fails `zig build test`.
+//! The build-failing half of the conformance suite: a claimed encoding or a
+//! registered decode group with no vector, or a vector naming an encoding or
+//! group nobody claims, fails `zig build test`.
 const std = @import("std");
 const ra8 = @import("ra8");
 const coverage = ra8.core.conformance_coverage;
@@ -72,6 +73,14 @@ test "the decode table section lists every registered group exactly once" {
     for (groups, decoded) |group, name| {
         try std.testing.expectEqualStrings(group.name, name);
         try std.testing.expectEqual(@as(usize, 1), coverage.count(name, decoded));
+    }
+}
+
+test "every registered group has at least one vector" {
+    var names: [256][]const u8 = undefined;
+    if (coverage.firstMissing(groupNames(&names), suite.decoded_covered)) |gap| {
+        std.debug.print("conformance: group {s} is decoded but has no vector\n", .{gap});
+        return error.MissingConformanceVector;
     }
 }
 

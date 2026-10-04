@@ -238,7 +238,7 @@ is stale or a semantics encoding is missing. Regenerate with
 Every instruction group the Zig decode table registers
 (src/core/cpu/ops/table.zig), and how many conformance vectors name it.
 The FP and MVE groups' semantics are covered encoding by encoding in the
-table above. A group listed as missing does not fail the build yet.
+table above. A group with no vector fails `zig build test`.
 
 | Group | Vectors |
 |---|---|
