@@ -103,3 +103,7 @@ test "an import of an unknown busid answers status 1 with no record" {
     try exp.writeImport(stream.writer(), found);
     try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x11, 0x00, 0x03, 0, 0, 0, 1 }, stream.getWritten());
 }
+
+test {
+    _ = @import("usbip_server_test.zig");
+}
