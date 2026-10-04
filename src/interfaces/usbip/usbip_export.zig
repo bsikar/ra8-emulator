@@ -9,6 +9,8 @@ const std = @import("std");
 const wire = @import("usbip_wire.zig");
 /// The operation phase built on these exports.
 pub const server = @import("usbip_server.zig");
+/// The loopback socket that runs `server` for usbip hosts.
+pub const listen = @import("usbip_listen.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
