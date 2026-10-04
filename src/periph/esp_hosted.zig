@@ -11,6 +11,7 @@ const gpio = @import("gpio/gpio.zig");
 /// The esp-hosted frame codec (RA8EMU-597).
 pub const frame = @import("esp_hosted/esp_frame.zig");
 pub const event = @import("esp_hosted/esp_event.zig");
+pub const link = @import("esp_hosted/esp_link.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
@@ -24,9 +25,9 @@ pub const idle_header: u8 = 0xF8;
 
 /// The ESP32-C6 endpoint used by SCI2 and the Pmod1 sideband pins.
 pub const C6 = struct {
-    frame_offset: u16 = 0,
     reply: [1]u8 = .{0},
     pins: ?*gpio.Gpio = null,
+    wire: link.Link = .{},
 
     pub fn init(self: *C6, serial: *sci.Sci, pins: *gpio.Gpio) void {
         serial.attachDevice(channel, self.device());
@@ -61,12 +62,12 @@ pub const C6 = struct {
     }
 
     fn feed(context: *anyopaque, byte: u8) []const u8 {
-        _ = byte;
         const self: *C6 = @ptrCast(@alignCast(context));
-        if (self.pins) |pins| pins.setInput(handshake_port, handshake_pin, false);
-        self.reply[0] = if (self.frame_offset == 0) idle_header else 0;
-        self.frame_offset += 1;
-        if (self.frame_offset == frame_size) self.frame_offset = 0;
+        self.reply[0] = self.wire.exchange(byte);
+        if (self.pins) |pins| {
+            pins.setInput(handshake_port, handshake_pin, false);
+            pins.setInput(data_ready_port, data_ready_pin, self.wire.dataReady());
+        }
         return &self.reply;
     }
 };
