@@ -97,7 +97,9 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("disasm_parity", parity_mod);
     link(b, tests, prefix);
-    b.step("test", "Run the unit tests").dependOn(&b.addRunArtifact(tests).step);
+    const test_step = b.step("test", "Run the unit tests and compile the emulator");
+    test_step.dependOn(&b.addRunArtifact(tests).step);
+    test_step.dependOn(&exe.step);
 
     b.step("gate", "Check formatting and file and function length").dependOn(gate(b, target));
 }
