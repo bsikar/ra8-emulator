@@ -32,7 +32,10 @@ pub const Driver = struct {
     /// CPU1 from the image at `path`, on `owner`'s board, ready to take
     /// turns. `memory` is CPU0's: on a store, CPU1 borrows its shared SRAM.
     /// Built in storage the caller holds: both halves keep pointers into it.
-    pub fn open(self: *Driver, allocator: std.mem.Allocator, owner: *engine.Engine, board: *Board, path: []const u8, memory: Guest) !void {
+    /// `owner` is CPU0's engine; only the engine arm needs it, so a run on
+    /// stores passes null and opens no engine (RA8EMU-593).
+    pub fn open(self: *Driver, allocator: std.mem.Allocator, owner: ?*engine.Engine, board: *Board, path: []const u8, memory: Guest) !void {
+        if (memory == .engine and owner == null) return error.NoEngine;
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
         const bytes = try file.readToEndAlloc(allocator, second_core.limits.image_bytes);
@@ -44,7 +47,7 @@ pub const Driver = struct {
             .store => |lender| return self.openOwn(lender, board, image),
             .engine => {},
         }
-        try self.second.open(owner, board, image);
+        try self.second.open(owner.?, board, image);
         errdefer self.second.close();
         try self.core.open(&self.second, &board.bus);
     }
