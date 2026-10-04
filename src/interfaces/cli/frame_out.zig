@@ -25,7 +25,7 @@ pub fn opaqueRgba(pixels: []const u32, rgba: []u8) png.Error!void {
 /// Scan the panel into a buffer and write the board view to `path` as a
 /// PNG. A run with no frame (an LED-only example) still gets the view,
 /// with the LEDs as the pins left them round a dark panel.
-pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8) !Saved {
+pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8, panel_only: bool) !Saved {
     const unit = &board.display;
     const scanned = unit.panelWidth() != 0 and unit.panelHeight() != 0;
     const width = if (scanned) unit.panelWidth() else board_view.panel_width;
@@ -35,11 +35,15 @@ pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8) !Save
     @memset(pixels, 0);
     const frame = scanned and scan(board, pixels, width, height);
     if (!frame) @memset(pixels, 0);
-    const view = board_view.size(width, height);
-    const canvas = try allocator.alloc(u32, @as(usize, view.width) * view.height);
-    defer allocator.free(canvas);
-    board_view.compose(canvas, pixels, width, height, &ledsOf(board));
-    try write(allocator, canvas, view, path);
+    const view = if (panel_only) board_view.Size{ .width = width, .height = height } else board_view.size(width, height);
+    if (panel_only) {
+        try write(allocator, pixels, view, path);
+    } else {
+        const canvas = try allocator.alloc(u32, @as(usize, view.width) * view.height);
+        defer allocator.free(canvas);
+        board_view.compose(canvas, pixels, width, height, &ledsOf(board));
+        try write(allocator, canvas, view, path);
+    }
     return .{ .width = width, .height = height, .view = view, .frame = frame };
 }
 
@@ -69,12 +73,18 @@ fn write(allocator: std.mem.Allocator, canvas: []const u32, view: board_view.Siz
 }
 
 /// One line for the end of the run: what went into the view, and where.
-pub fn report(out: anytype, board: *Board, path: ?[]const u8) !void {
+pub fn report(out: anytype, board: *Board, path: ?[]const u8, panel_only: bool) !void {
     const target = path orelse return;
-    const saved = try save(std.heap.page_allocator, board, target);
-    if (!saved.frame) return out.print("frame-out: no panel frame, the LEDs on a {d}x{d} board view written to {s}\n", .{
-        saved.view.width, saved.view.height, target,
-    });
+    const saved = try save(std.heap.page_allocator, board, target, panel_only);
+    if (!saved.frame) {
+        if (panel_only) return out.print("frame-out: no panel frame, a dark {d}x{d} panel written to {s}\n", .{
+            saved.view.width, saved.view.height, target,
+        });
+        return out.print("frame-out: no panel frame, the LEDs on a {d}x{d} board view written to {s}\n", .{
+            saved.view.width, saved.view.height, target,
+        });
+    }
+    if (panel_only) return out.print("frame-out: {d}x{d} panel written to {s}\n", .{ saved.width, saved.height, target });
     try out.print("frame-out: {d}x{d} panel on a {d}x{d} board view written to {s}\n", .{
         saved.width, saved.height, saved.view.width, saved.view.height, target,
     });

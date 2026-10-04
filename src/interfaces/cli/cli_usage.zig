@@ -67,6 +67,7 @@ pub const text =
     \\                     --trace-rtos, and write the trace to FILE (CPU1's
     \\                     to FILE.cpu1) as text a reader can take back
     \\  --frame-out PATH   write what the panel shows at the end as a PNG
+    \\  --panel-only       write just the panel, at its own size
     \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run
