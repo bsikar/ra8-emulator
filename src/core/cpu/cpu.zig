@@ -22,6 +22,7 @@ const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
 const park = @import("park.zig");
 pub const fixed_trip = @import("fixed_trip.zig");
+pub const trip_decode = @import("trip_decode.zig");
 const Until = @import("../until.zig").Until;
 /// Public so its tests reach it without a root export.
 pub const systick_cut = @import("systick_cut.zig");
