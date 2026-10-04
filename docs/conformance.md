@@ -358,4 +358,4 @@ table above. A group listed as missing does not fail the build yet.
 | acq_rel | 28 |
 | clrm | 27 |
 | ldm_stm_wide | 41 |
-| pac | missing |
+| pac | 38 |
