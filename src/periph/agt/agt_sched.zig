@@ -14,6 +14,7 @@ const agt = @import("agt.zig");
 const clk = @import("agt_clock.zig");
 const cadence = @import("../../core/cadence.zig");
 const timebase = @import("../time/timebase.zig");
+const event_queue = @import("../time/event_queue.zig");
 
 /// The PCLKB rate the per-boundary step stands for.
 pub const pclkb_hz: u64 = @as(u64, agt.step_per_tick) * timebase.default_hz / cadence.instructions;
@@ -25,6 +26,26 @@ pub fn dueAt(channel: agt.Channel, index: usize, now_ns: u64) ?u64 {
     if (!channel.running()) return null;
     const in_ns = clk.underflowInNs(channel.counter, channel.source(index), pclkb_hz) orelse return null;
     return now_ns + in_ns;
+}
+
+/// The queue id channel `index` schedules its underflow under.
+pub fn queueId(index: usize) u16 {
+    return queue_id_base + @as(u16, @intCast(index));
+}
+
+pub const queue_id_base: u16 = 0x0A00;
+
+/// Put each running channel's next underflow on `queue`, dropping whatever
+/// it had there first. Called at every boundary, so an underflow that just
+/// fired, a channel that stopped and a counter or reload firmware rewrote
+/// all re-arm without hooking the register writes: the next stretch is
+/// sized after this has run.
+pub fn arm(timer: *const agt.Agt, queue: *event_queue.EventQueue, now_ns: u64) event_queue.Error!void {
+    for (timer.channels, 0..) |channel, index| {
+        _ = queue.cancel(queueId(index));
+        const at = dueAt(channel, index, now_ns) orelse continue;
+        try queue.schedule(at, queueId(index));
+    }
 }
 
 /// One boundary of counting by virtual time rather than by a fixed step:

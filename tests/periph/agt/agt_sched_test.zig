@@ -89,3 +89,25 @@ test "an AGT underflow fires at its virtual time" {
     sched.tickFor(&timer, due - 1, due);
     try std.testing.expectEqual(@as(u32, 1), timer.pending);
 }
+
+test "arm puts each running channel's underflow on the queue under its own id" {
+    var queue = ra8.periph.clocks.event_queue.EventQueue{};
+    var timer = started(0x0100, 0);
+    try sched.arm(&timer, &queue, 5_000);
+    try std.testing.expectEqual(@as(usize, 1), queue.count);
+    try std.testing.expectEqual(sched.dueAt(timer.channels[0], 0, 5_000), queue.next());
+    try std.testing.expectEqual(sched.queueId(0), queue.items[0].id);
+    // Re-arming replaces rather than stacks, and follows a rewritten counter.
+    timer.channels[0].counter = 0x0010;
+    try sched.arm(&timer, &queue, 6_000);
+    try std.testing.expectEqual(@as(usize, 1), queue.count);
+    try std.testing.expectEqual(sched.dueAt(timer.channels[0], 0, 6_000), queue.next());
+    // A second running channel gets its own entry; a stopped one drops out.
+    timer.channels[3] = timer.channels[0];
+    try sched.arm(&timer, &queue, 6_000);
+    try std.testing.expectEqual(@as(usize, 2), queue.count);
+    timer.channels[0].cr = 0;
+    timer.channels[3].cr = 0;
+    try sched.arm(&timer, &queue, 7_000);
+    try std.testing.expectEqual(@as(?u64, null), queue.next());
+}
