@@ -31,7 +31,7 @@ const Fake = struct {
 };
 
 fn agreed(pixelformat: u32, bytesperline: u32) webcam.negotiate.Agreed {
-    return .{ .width = 2, .height = 2, .pixelformat = pixelformat, .bytesperline = bytesperline, .sizeimage = bytesperline * 2, .streaming = false };
+    return .{ .width = 2, .height = 2, .pixelformat = pixelformat, .bytesperline = bytesperline, .sizeimage = bytesperline * 2, .streaming = false, .read_io = true };
 }
 
 test "a padded RGB565 frame decodes row by row and reaches the firmware as RGB565" {

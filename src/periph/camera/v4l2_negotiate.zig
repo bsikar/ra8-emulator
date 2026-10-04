@@ -31,6 +31,8 @@ pub const Agreed = struct {
     bytesperline: u32,
     sizeimage: u32,
     streaming: bool,
+    /// The node takes read() I/O, which the first webcam source uses.
+    read_io: bool = false,
 };
 
 /// Checks the node can capture, then sets the first preferred format the
@@ -55,6 +57,7 @@ pub fn negotiate(dev: Device, width: u32, height: u32) Error!Agreed {
             .bytesperline = pix.bytesperline,
             .sizeimage = pix.sizeimage,
             .streaming = streaming,
+            .read_io = node & abi.cap_readwrite != 0,
         };
     }
     return error.NoUsableFormat;

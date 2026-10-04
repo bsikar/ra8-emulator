@@ -314,6 +314,7 @@ test {
     _ = @import("camera/v4l2_negotiate_test.zig");
     _ = @import("camera/v4l2_device_test.zig");
     _ = @import("camera/webcam_source_test.zig");
+    _ = @import("camera/webcam_open_test.zig");
     _ = @import("camera/pipe_windows_test.zig");
 }
 

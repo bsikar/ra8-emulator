@@ -26,7 +26,7 @@ test "the default spec is the gradient the CEU always captured" {
 }
 
 test "an unknown kind and a stray gradient argument are refused" {
-    try std.testing.expectError(error.UnknownCameraSource, registry.parse("webcam:0"));
+    try std.testing.expectError(error.UnknownCameraSource, registry.parse("camera:0"));
     try std.testing.expectError(error.UnknownCameraSource, registry.parse(""));
     try std.testing.expectError(error.BadValue, registry.parse("gradient:x"));
 }
@@ -63,4 +63,12 @@ test "video takes a path, optionally with loop, and is named by it" {
     const named = camera.video.labelled(camera.gradient.source(), "clips/walk.y4m,loop");
     try std.testing.expectEqualStrings("video", named.label);
     try std.testing.expectEqualStrings("clips/walk.y4m,loop", named.detail);
+}
+
+test "webcam takes nothing, a device number or a path, and refuses anything else" {
+    try std.testing.expectEqual(registry.Kind.webcam, (try registry.parse("webcam")).kind);
+    try std.testing.expectEqualStrings("2", (try registry.parse("webcam:2")).arg);
+    try std.testing.expectEqualStrings("/dev/v4l/by-id/cam", (try registry.parse("webcam:/dev/v4l/by-id/cam")).arg);
+    try std.testing.expectError(error.BadValue, registry.parse("webcam:front"));
+    try std.testing.expect(!(try registry.parse("webcam")).allow_webcam);
 }
