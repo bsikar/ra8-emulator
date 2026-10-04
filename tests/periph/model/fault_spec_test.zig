@@ -100,3 +100,12 @@ test "stretch parses and wraps an I2C part that stretches" {
     const faulty = try spec.apply(arena.allocator(), made.device, .{ .stretch_ns = 900 }, &clock);
     try std.testing.expectEqual(@as(u64, 900), faulty.i2c.stretch());
 }
+
+test "a fault with no model name targets the part fitted at that I2C endpoint" {
+    const ask = try spec.parse("@i2c:touch@0x5D=disconnected");
+    try std.testing.expectEqualStrings("", ask.target.name);
+    try std.testing.expectEqual(@as(u7, 0x5D), ask.target.at.i2c.address);
+    try std.testing.expect(ask.target.at.i2c.line == .touch);
+    try std.testing.expect(ask.mode == .disconnected);
+    try std.testing.expectError(spec.Error.WrongBus, spec.parse("@uart:sci3=disconnected"));
+}
