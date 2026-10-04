@@ -18,7 +18,6 @@ const nvic = @import("../periph/nvic.zig");
 const bus_hook = @import("bus_hook.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const sau = @import("../periph/sau.zig");
-const sau_hook = @import("sau_hook.zig");
 const tz = @import("tz.zig");
 const tz_hook = @import("tz_hook.zig");
 const symbols = @import("../debug/symbols.zig");
@@ -213,13 +212,6 @@ pub const Engine = struct {
     /// address the firmware reached for and how wide the access was.
     pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
         bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
-    }
-
-    /// Bank the SAU's RBAR/RLAR through RNR. No guard beside it, unlike the
-    /// MPU: this model keeps the map the firmware programmed but does not
-    /// enforce attribution by it, so there is nothing to arm.
-    pub fn attachPartitions(self: Engine, unit: *sau.Sau) Error!void {
-        sau_hook.attach(self.handle, unit) catch return Error.AttachFailed;
     }
 
     /// End the stretch of execution in which the firmware arms SysTick, so

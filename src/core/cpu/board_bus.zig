@@ -193,7 +193,7 @@ pub const BoardBus = struct {
 /// the Zig twin of the Unicorn store hooks src/board/wiring.zig attaches.
 /// Each is optional: a bus without one leaves that window as plain RAM.
 pub const Scs = struct {
-    /// SAU RBAR/RLAR bank through RNR, as src/core/sau_hook.zig does.
+    /// SAU RBAR/RLAR bank through RNR.
     partitions: ?*sau.Sau = null,
     /// MPU pairs bank through RNR.
     /// Enforcement is not armed from here.
