@@ -55,13 +55,13 @@ test "a compare written back to zero is unarmed again" {
     pair.set(.b, 0x40);
     pair.set(.b, 0);
     try std.testing.expect(!pair.armed(.b));
-    try std.testing.expectEqual(@as(u32, 0), pair.step(0, 0x100, 0));
+    try std.testing.expectEqual(@as(u32, 0), pair.step(0, 0x100, 0, 0xFFFF));
 }
 
 test "a step past an armed compare raises its flag and counts the match" {
     var pair = compare.Pair{};
     pair.set(.a, 0x80);
-    try std.testing.expectEqual(compare.flag.tcfa, pair.step(0, 0x100, 0));
+    try std.testing.expectEqual(compare.flag.tcfa, pair.step(0, 0x100, 0, 0xFFFF));
     try std.testing.expectEqual(@as(u32, 1), pair.matches(.a));
     try std.testing.expectEqual(@as(u32, 0), pair.matches(.b));
 }
@@ -70,13 +70,13 @@ test "both compares inside one chunk raise both flags" {
     var pair = compare.Pair{};
     pair.set(.a, 0x20);
     pair.set(.b, 0x60);
-    try std.testing.expectEqual(compare.flag.both, pair.step(0, 0x100, 0));
+    try std.testing.expectEqual(compare.flag.both, pair.step(0, 0x100, 0, 0xFFFF));
 }
 
 test "a step that stops short of the compare raises nothing" {
     var pair = compare.Pair{};
     pair.set(.a, 0x400);
-    try std.testing.expectEqual(@as(u32, 0), pair.step(0, 0x100, 0));
+    try std.testing.expectEqual(@as(u32, 0), pair.step(0, 0x100, 0, 0xFFFF));
     try std.testing.expectEqual(@as(u32, 0), pair.matches(.a));
 }
 
@@ -159,4 +159,25 @@ test "a channel with a compare programmed is no longer quiet" {
     try std.testing.expect(channel.quiet());
     channel.compares.set(.a, 0x10);
     try std.testing.expect(!channel.quiet());
+}
+
+test "a compare above the period never matches, however often a saw wraps" {
+    var channel = running(0x100);
+    channel.compares.set(.a, 0x180);
+    channel.compares.set(.b, 0x80);
+    // One tick steps far past a 0x100 period, so each one wraps.
+    var ticks: u32 = 0;
+    while (ticks < 4) : (ticks += 1) try std.testing.expect(channel.tick() > 0);
+    try std.testing.expect(channel.st & gpt.status.tcfa == 0);
+    try std.testing.expectEqual(@as(u32, 0), channel.compares.matches(.a));
+    // The in-range compare on the same channel still matches on every tick.
+    try std.testing.expect(channel.st & gpt.status.tcfb != 0);
+    try std.testing.expectEqual(@as(u32, 4), channel.compares.matches(.b));
+}
+
+test "a pair step skips a compare above the period it is given" {
+    var pair = compare.Pair{};
+    pair.set(.a, 0x180);
+    try std.testing.expectEqual(@as(u32, 0), pair.step(0xF0, 0x10, 1, 0x100));
+    try std.testing.expectEqual(compare.flag.tcfa, pair.step(0xF0, 0x10, 1, 0x200));
 }

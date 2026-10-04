@@ -110,14 +110,16 @@ pub const Pair = struct {
     }
 
     /// The flags a chunk of counting from `before` up to `after` raises.
-    /// `wraps` is how many times the chunk went past the period.
-    pub fn step(self: *Pair, before: u32, after: u32, wraps: u32) u32 {
+    /// `wraps` is how many times the chunk went past `period`. A compare set
+    /// above the period is a value GTCNT never holds, so it never matches
+    /// however often the saw wraps (RA8EMU-590).
+    pub fn step(self: *Pair, before: u32, after: u32, wraps: u32, period: u32) u32 {
         var raised: u32 = 0;
-        if (self.armed(.a) and crossed(before, after, wraps, self.a)) {
+        if (self.armed(.a) and self.a <= period and crossed(before, after, wraps, self.a)) {
             self.matches_a +%= 1;
             raised |= flag.tcfa;
         }
-        if (self.armed(.b) and crossed(before, after, wraps, self.b)) {
+        if (self.armed(.b) and self.b <= period and crossed(before, after, wraps, self.b)) {
             self.matches_b +%= 1;
             raised |= flag.tcfb;
         }
