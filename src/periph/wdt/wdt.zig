@@ -127,6 +127,8 @@ pub const Wdt = struct {
     counter: u32 = 0,
     /// Ticks run since the counter last moved.
     pace: u32 = 0,
+    /// Virtual ns toward the next tick, left over from the last boundary.
+    carry_ns: u64 = 0,
     flags: u16 = 0,
     /// Refreshes that reloaded the counter.
     refreshes: u32 = 0,
@@ -170,6 +172,13 @@ pub const Wdt = struct {
         const opens = percentOf(full, window_start_percent[(self.wdtcr & control.rpss) >> control.rpss_shift]);
         const closes = percentOf(full, window_end_percent[(self.wdtcr & control.rpes) >> control.rpes_shift]);
         return self.counter <= opens and self.counter >= closes;
+    }
+
+    /// The ticks `elapsed_ns` of virtual time stands for, so the counter
+    /// follows the time base rather than the number of boundaries.
+    pub fn tickFor(self: *Wdt, elapsed_ns: u64) void {
+        var n = clock.ticksIn(&self.carry_ns, elapsed_ns);
+        while (n > 0) : (n -= 1) self.tick();
     }
 
     /// One run-loop chunk. The counter moves once every

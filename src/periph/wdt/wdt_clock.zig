@@ -25,6 +25,15 @@ const timebase = @import("../time/timebase.zig");
 /// (RA8EMU-179, slice RA8EMU-514) leaves the corpus where it is.
 pub const ns_per_tick: u64 = @as(u64, cadence.instructions) * timebase.ns_per_s / timebase.default_hz;
 
+/// Whole run-loop ticks in `elapsed_ns`, the leftover carried in `carry`
+/// so a run of short (narrowed) boundaries adds up to the ticks one long
+/// boundary would have counted.
+pub fn ticksIn(carry: *u64, elapsed_ns: u64) u64 {
+    const total = carry.* + elapsed_ns;
+    carry.* = total % ns_per_tick;
+    return total / ns_per_tick;
+}
+
 /// The bench reading, and the divider it was taken at.
 pub const bench = struct {
     pub const counts_per_second: u32 = 40;

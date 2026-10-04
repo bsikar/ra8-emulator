@@ -42,3 +42,26 @@ test "a WDT underflow lands on the tick its due time names" {
     unit.tick();
     try std.testing.expectEqual(@as(u32, 1), unit.underflows);
 }
+
+test "short boundaries carry their ns until they add up to one tick" {
+    var carry: u64 = 0;
+    var total: u64 = 0;
+    for (0..24) |_| total += clock.ticksIn(&carry, 2_000);
+    try std.testing.expectEqual(@as(u64, 0), total);
+    try std.testing.expectEqual(@as(u64, 1), clock.ticksIn(&carry, 2_000));
+    try std.testing.expectEqual(@as(u64, 0), carry);
+    try std.testing.expectEqual(@as(u64, 3), clock.ticksIn(&carry, 3 * clock.ns_per_tick + 5));
+    try std.testing.expectEqual(@as(u64, 5), carry);
+}
+
+test "the WDT counts the virtual ns that passed, not the boundaries" {
+    const wdt = ra8.periph.wdt;
+    var unit = wdt.Wdt.init();
+    unit.wdtcr = wdt.controlWord(0, 0x1, 3, 3);
+    unit.armed = true;
+    unit.counter = 3;
+    for (0..25 * 499) |_| unit.tickFor(2_000);
+    try std.testing.expectEqual(@as(u32, 3), unit.counter);
+    unit.tickFor(25 * 2_000);
+    try std.testing.expectEqual(@as(u32, 2), unit.counter);
+}
