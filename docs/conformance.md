@@ -343,7 +343,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_vcmp_fp | 51 |
 | mve_float_fma | missing |
 | mve_float_unary | 26 |
-| mve_float_cvt_half | missing |
+| mve_float_cvt_half | 37 |
 | mve_float_cvt_int | missing |
 | mve_float_cvt_fixed | missing |
 | mve_float_rint | 44 |
