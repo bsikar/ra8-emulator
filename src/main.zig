@@ -225,6 +225,7 @@ fn reportAll(
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = core } });
     try rtos_hook.second.print(out, options, second);
     try report.frame_out.report(out, board, options.frame_out);
+    try cli.usbip_export.run.afterRun(out, options.usbip, &board.usb.script);
 }
 
 /// How the run ended, in one line, and the exit status that goes with it.

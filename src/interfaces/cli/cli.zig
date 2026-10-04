@@ -12,10 +12,8 @@ const cpu_choice = @import("../../core/cpu/choice.zig");
 const rtos_load = @import("../../debug/rtos_load.zig");
 const request = @import("../../periph/model/request.zig");
 pub const ctl_args = @import("ctl_args.zig");
-
 pub const usage = @import("cli_usage.zig").text;
 pub const card_setup = @import("card_setup.zig");
-/// The USB/IP wire format the host bridge speaks (RA8EMU-75).
 pub const usbip_wire = @import("../usbip/usbip_wire.zig");
 pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
@@ -82,6 +80,8 @@ pub const Options = struct {
     sd_save: bool = false,
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
+    /// `--usbip PORT`: offer the FS device to usbip hosts after the run.
+    usbip: ?u16 = null,
     /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
     frame_out: ?[]const u8 = null,
     /// Cable the HS host jack to the board's own FS device jack.

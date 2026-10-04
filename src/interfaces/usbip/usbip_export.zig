@@ -13,6 +13,8 @@ pub const server = @import("usbip_server.zig");
 pub const listen = @import("usbip_listen.zig");
 /// The board device the bridge exports.
 pub const board = @import("usbip_board.zig");
+/// `--usbip PORT`: the bridge after a run.
+pub const run = @import("usbip_run.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
