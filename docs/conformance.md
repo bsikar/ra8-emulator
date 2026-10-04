@@ -317,7 +317,7 @@ table above. A group listed as missing does not fail the build yet.
 | vlldm_vlstm_t2 | 11 |
 | fp_mem | 36 |
 | mve_vpst | 17 |
-| mve_int | missing |
+| mve_int | 27 |
 | mve_int_pair | missing |
 | mve_int_shift | missing |
 | mve_int_mulh | 39 |
