@@ -169,7 +169,7 @@ pub const Channel = struct {
     /// described by its wraps; a triangle one may have turned, so it is
     /// described by the span of counts it covered.
     fn matched(self: *Channel, kind: md.Mode, before: u32, moved: md.Step, period: u32) u32 {
-        if (!kind.symmetric()) return self.compares.step(before, moved.cnt, moved.peaks);
+        if (!kind.symmetric()) return self.compares.step(before, moved.cnt, moved.peaks, period);
         const span = md.visited(before, moved, period);
         return self.compares.stepSpan(before, span.lo, span.hi);
     }
