@@ -10,7 +10,7 @@ const convert = @import("pixel_convert.zig");
 /// cannot ask for gigabytes.
 pub const max_pixels: u64 = 4096 * 4096;
 
-pub const DecodeError = error{ BadHeader, Truncated, Unsupported, TooLarge, OutOfMemory };
+pub const DecodeError = error{ BadHeader, Truncated, Unsupported, TooLarge, OutOfMemory, BadCrc, Interlaced, Corrupt };
 
 pub const Image = struct {
     width: u32,
