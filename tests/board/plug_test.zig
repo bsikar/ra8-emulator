@@ -80,3 +80,25 @@ test "an ask that lands on a fitted Click part is refused" {
     board.asks.keep(arena.allocator(), &.{try model.request.parse("max17048@i2c:touch@0x36")});
     try std.testing.expectError(error.AddressTaken, plug.all(&board));
 }
+
+test "a button on a GPIO pin drives what the firmware reads there" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    const made, const at = try make(arena.allocator(), "button@gpio:P106");
+    try plug.one(&board, made.device, at);
+    const button: *ra8.periph.gpio.parts.Button = @ptrCast(@alignCast(made.state));
+    try std.testing.expect(board.pins.pinLevel(1, 6));
+    button.press();
+    try std.testing.expect(!board.pins.pinLevel(1, 6));
+    const again, _ = try make(arena.allocator(), "led@gpio:P106");
+    try std.testing.expectError(error.PinTaken, plug.one(&board, again.device, at));
+}
+
+test "a model that does not fit the endpoint kind is refused" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ask = try model.request.parse("led@uart:sci3");
+    try std.testing.expectError(error.WrongEndpoint, model.parts.all.make(arena.allocator(), ask.name, ask.at));
+}

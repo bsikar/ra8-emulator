@@ -3,7 +3,7 @@
 //! A model is a part that is not soldered to the board: a sensor on a Click
 //! module, a flash chip, a second fuel gauge. The bus controllers already
 //! take their devices through one seam each (riic_bus.Device, spi.Device,
-//! sci_device.Device), so the catalog adds no seam of its own. It names a
+//! sci_device.Device, gpio_pins.Device), so the catalog adds no seam of its own. It names a
 //! model, says which kind of endpoint it plugs into, and makes an instance
 //! that hands back that bus's Device. The controllers never learn that a
 //! model exists.
@@ -12,12 +12,14 @@ const endpoint = @import("endpoint.zig");
 const riic_bus = @import("../riic/riic_bus.zig");
 const sci_device = @import("../sci/sci_device.zig");
 const spi = @import("../spi/spi.zig");
+const gpio_pins = @import("../gpio/gpio_pins.zig");
 
-/// What an instance offers its bus. GPIO joins with RA8EMU-490.
+/// What an instance offers its bus or pin.
 pub const Device = union(enum) {
     i2c: riic_bus.Device,
     spi: spi.Device,
     uart: sci_device.Device,
+    gpio: gpio_pins.Device,
 };
 
 /// One attached model: the device its bus talks to and the state behind
