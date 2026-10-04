@@ -6,14 +6,18 @@
 //! this is the same hand-on for the debugger. Without it a comparator or
 //! TRCENA set from gdb is in memory but not in the model, and the next
 //! unit sync writes the model's stale view back over it.
+//!
+//! The units are read back through the core the debugger has selected
+//! (src/debug/core_view.zig), so a Zig session with no Unicorn engine
+//! behind it hands its stores on the same way (RA8EMU-483).
 const std = @import("std");
-const engine = @import("../core/engine.zig");
+const core_view = @import("core_view.zig");
 const stop_machine = @import("stop_machine.zig");
 const dwt = @import("dwt.zig");
 const dcb = @import("dcb.zig");
 
 /// Hand a debugger store of `length` bytes at `address` to the models.
-pub fn forward(core: *const engine.Engine, machine: *stop_machine.Machine, address: u32, length: usize) void {
+pub fn forward(core: core_view.View, machine: *stop_machine.Machine, address: u32, length: usize) void {
     const end = @as(u64, address) + length;
     // A debugger store to DWT_CYCCNT is not a count: look again afresh.
     if (overlaps(address, end, dwt.base + dwt.offsets.cyccnt, 4)) machine.dwt.cycles_primed = false;
@@ -29,7 +33,7 @@ pub fn forward(core: *const engine.Engine, machine: *stop_machine.Machine, addre
 
 /// DWT_CTRL.NUMCOMP is read-only to a debugger too, so a store over
 /// DWT_CTRL is put back with this core's comparator count.
-fn keepNumcomp(core: *const engine.Engine, machine: *stop_machine.Machine, address: u32, end: u64) void {
+fn keepNumcomp(core: core_view.View, machine: *stop_machine.Machine, address: u32, end: u64) void {
     if (!overlaps(address, end, dwt.base, 4)) return;
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, machine.dwt.ctrlWord(read(core, dwt.base)), .little);
@@ -40,7 +44,7 @@ fn overlaps(address: u32, end: u64, from: u32, span: u32) bool {
     return address < @as(u64, from) + span and end > from;
 }
 
-fn read(core: *const engine.Engine, address: u32) u32 {
+fn read(core: core_view.View, address: u32) u32 {
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
     core.read(address, &bytes) catch return 0;
     return std.mem.readInt(u32, &bytes, .little);

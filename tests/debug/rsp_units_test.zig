@@ -67,3 +67,13 @@ test "a store outside the units leaves the model alone" {
     try std.testing.expect(!machine.dwt.trcena);
     try std.testing.expectEqual(@as(u32, 0), machine.dwt.comps[0]);
 }
+
+test "a debugger store reaches the models through the selected view with no engine named" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var machine = ra8.core.stop_machine.Machine{};
+    const stub = dispatch.Dispatch{ .core = null, .machine = &machine, .view = .{ .unicorn = &core } };
+    try store(stub, demcr, 1 << 24);
+    try std.testing.expect(machine.dwt.trcena);
+}

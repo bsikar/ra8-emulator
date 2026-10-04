@@ -51,7 +51,9 @@ const memory_error = "E01";
 const request_error = "E00";
 
 pub const Dispatch = struct {
-    core: *const engine.Engine,
+    /// The Unicorn engine behind a Unicorn session; null on a Zig session,
+    /// which always answers through `view` (RA8EMU-483).
+    core: ?*const engine.Engine,
     machine: ?*stop_machine.Machine = null,
     /// With a debugger session attached, run control and threads go to it,
     /// and everything else is answered for the core it has selected.
@@ -95,7 +97,7 @@ pub const Dispatch = struct {
 
     /// The core registers and memory are read from and written to.
     fn target(self: Dispatch) core_view.View {
-        return self.view orelse .{ .unicorn = self.core };
+        return self.view orelse .{ .unicorn = self.core.? };
     }
 
     fn allRegisters(self: Dispatch, out: []u8) Error![]const u8 {
@@ -176,7 +178,7 @@ pub const Dispatch = struct {
             self.target().write(where, bytes) catch return copy(out, memory_error);
             done += take;
         }
-        if (self.machine) |machine| units.forward(self.core, machine, address, length);
+        if (self.machine) |machine| units.forward(self.target(), machine, address, length);
         return copy(out, "OK");
     }
 };
