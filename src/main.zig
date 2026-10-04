@@ -222,7 +222,7 @@ fn reportAll(
     if (!options.report_json) try ra8.board.report.after.text(out, image, options, parts, window);
     try second_core.report(out, second);
     if (!options.report_json) try report_dumps.dumps(out, core, image, options, board, watched);
-    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = core.handle });
+    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = core } });
     try rtos_hook.second.print(out, options, second);
     try report.frame_out.report(out, board, options.frame_out);
 }

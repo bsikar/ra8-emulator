@@ -37,7 +37,7 @@ pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Windo
 pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second) !void {
     const one = second orelse return;
     const tracer = traced orelse return;
-    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .handle = one.core.handle });
+    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = one.core } });
 }
 
 /// CPU1's tracer and the memory its names are read through, for
@@ -45,7 +45,7 @@ pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second)
 pub fn side(second: ?*const second_core.Second) ?rtos_hook.report.Side {
     const one = second orelse return null;
     const tracer = traced orelse return null;
-    return .{ .tracer = tracer, .memory = .{ .handle = one.core.handle } };
+    return .{ .tracer = tracer, .memory = .{ .guest = .{ .engine = one.core } } };
 }
 
 /// `--trace-rtos` on CPU1's Zig core under `--cpu zig --cpu1` (RA8EMU-341).

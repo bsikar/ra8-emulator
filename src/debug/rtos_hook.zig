@@ -19,6 +19,7 @@
 //! tickets under RA8EMU-211.
 const std = @import("std");
 const c = @import("../core/c.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
@@ -197,12 +198,13 @@ fn onWrite(
     owned.onStore(@truncate(address), @intCast(size), @truncate(@as(u64, @bitCast(value))));
 }
 
-/// Target memory read through a Unicorn engine, for the thread names.
+/// Target memory read through the shared guest handle, for the thread names.
 pub const Memory = struct {
-    handle: ?*c.uc.uc_engine,
+    guest: Guest,
 
     pub fn read(self: Memory, address: u32, into: []u8) bool {
-        return c.uc.uc_mem_read(self.handle, address, into.ptr, into.len) == c.uc.UC_ERR_OK;
+        self.guest.read(address, into) catch return false;
+        return true;
     }
 };
 
