@@ -62,7 +62,7 @@ pub const QuietSource = struct {
     pub fn bus(self: *QuietSource) bus_mod.Bus {
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .latch = latch },
+            .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat },
             .direct = self.memory.direct,
         };
     }
@@ -118,6 +118,16 @@ pub const QuietSource = struct {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
         if (address >= peripheral_base and address < ppb_base) self.stir();
         return self.memory.read(address, into);
+    }
+
+    /// A repeat answers as the real bus does, so a watched poll on a
+    /// peripheral still retires its trips (RA8EMU-602). Repeated reads stir
+    /// as the reads themselves would; asking stirs nothing.
+    fn repeat(ctx: *anyopaque, address: u32, len: usize, times: u64) bool {
+        const self: *QuietSource = @ptrCast(@alignCast(ctx));
+        if (!self.memory.repeat(address, len, times)) return false;
+        if (times != 0 and address >= peripheral_base and address < ppb_base) self.stir();
+        return true;
     }
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus_mod.Error!void {
