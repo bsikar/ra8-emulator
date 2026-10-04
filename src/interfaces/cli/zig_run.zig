@@ -122,7 +122,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
     const wrap = if (tracer != null) listener.wrap() else null;
     const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
     var boot_output = out;
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, image, core, &board.bus, vector_base, options.budgetFor(false), &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, image, clock.memory, &board.bus, vector_base, options.budgetFor(false), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,

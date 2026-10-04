@@ -25,7 +25,7 @@ test "a zig run stops on the first unknown encoding and says where" {
     try loadTiny(&core);
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    const status = try boot.run(stream.writer(), &core, memmap.sram_base, 100, null);
+    const status = try boot.run(stream.writer(), .{ .engine = core }, memmap.sram_base, 100, null);
     try std.testing.expectEqual(@as(u8, 1), status);
     var want: [128]u8 = undefined;
     const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xba80 after 2 instructions\n", .{memmap.sram_base + 0xE});
@@ -39,7 +39,7 @@ test "a zig run that spends its budget is clean" {
     try loadTiny(&core);
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), &core, memmap.sram_base, 1, null));
+    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), .{ .engine = core }, memmap.sram_base, 1, null));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 1 instructions clean"));
 }
 
@@ -48,7 +48,7 @@ test "no vector table is said plainly" {
     defer core.close();
     var buf: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), &core, memmap.sram_base, 1, null));
+    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), .{ .engine = core }, memmap.sram_base, 1, null));
     try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: no vector table"));
 }
 
@@ -95,7 +95,7 @@ test "a zig run on the board closes a boundary after every stretch, the short la
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 10, &ran, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, memmap.sram_base, 10, &ran, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 10), ran);
     try std.testing.expectEqual(@as(u32, 4), edges.closes);
@@ -112,7 +112,7 @@ test "a stretch the core stops inside is never closed" {
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 1), status);
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
 }
@@ -130,7 +130,7 @@ test "a console success reached before an unknown encoding ends the Zig run" {
     defer periph.deinit();
     const status = try boot.runOnBoard(
         stream.writer(),
-        &core,
+        .{ .engine = core },
         &periph,
         memmap.sram_base,
         100,
@@ -168,7 +168,7 @@ test "a core asleep in wfi closes every stretch at once without retiring" {
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 20, &ran, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, memmap.sram_base, 20, &ran, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 1), ran);
     try std.testing.expectEqual(@as(u32, 5), edges.closes);
@@ -198,7 +198,7 @@ test "a PACBTI-built firmware image runs through the Zig core" {
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.start(stream.writer(), .zig, image, &core, &periph, vector_base, 100, &retired, .{});
+    const status = try boot.start(stream.writer(), .zig, image, .{ .engine = core }, &periph, vector_base, 100, &retired, .{});
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 100), retired);
     try std.testing.expectEqual(@as(u32, 0x247), try core.readWord(memmap.sram_base));
@@ -227,7 +227,7 @@ test "a board run that took INVSTATE reports CFSR and HFSR.FORCED (RA8EMU-394)" 
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    _ = try boot.runOnBoard(stream.writer(), &core, &periph, memmap.sram_base, 50, null, .{});
+    _ = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, memmap.sram_base, 50, null, .{});
     const line = "faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n";
     std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), line) != null) catch |err| {
         std.debug.print("report was: {s}\n", .{stream.getWritten()});
@@ -274,7 +274,7 @@ test "a reset asked for at a boundary brings the zig core back up on its reset v
     var stream = std.io.fixedBufferStream(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), &core, &periph, base, 3, &ran, .{ .boundary = kick.boundary() });
+    const status = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, base, 3, &ran, .{ .boundary = kick.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u32, 1), reboot.performed);
     try std.testing.expect(!reboot.requested);

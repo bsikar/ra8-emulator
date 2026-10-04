@@ -78,7 +78,7 @@ test "a Zig core run profiles retired function instructions and writes folded ou
     var output: [512]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
     const listener: ra8.core.cpu.cpu.RetireListener = .{ .context = &table, .instructionFn = profileInstruction };
-    const status = try cpu_boot.start(stream.writer(), .zig, image, &core, &board.bus, base, 3, &ran, .{ .retire_listener = listener });
+    const status = try cpu_boot.start(stream.writer(), .zig, image, .{ .engine = core }, &board.bus, base, 3, &ran, .{ .retire_listener = listener });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 3), ran);
     var rows: [profile.limits.functions]profile.Site = undefined;

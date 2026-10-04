@@ -47,7 +47,7 @@ test "a halfword store in the peripheral window reaches the peripheral" {
     defer periph.deinit();
     var probe: Probe = .{};
     try attach(&periph, &probe);
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph };
     try board.view().write(at + 4, &[_]u8{ 0x1A, 0x80 });
     try std.testing.expectEqual(@as(u32, at + 4), probe.address);
     try std.testing.expectEqual(@as(u3, 2), probe.width);
@@ -61,7 +61,7 @@ test "a read in the Non-secure alias comes back from the same peripheral" {
     defer periph.deinit();
     var probe: Probe = .{};
     try attach(&periph, &probe);
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph };
     try std.testing.expectEqual(@as(u32, 0xA1B2_C3D4), try board.view().readWord(at + registry.ns_offset));
     try std.testing.expectEqual(@as(u3, 4), probe.width);
     var byte: [1]u8 = undefined;
@@ -75,7 +75,7 @@ test "memory outside the windows still goes to the engine" {
     try core.mapBoardRam();
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph };
     try board.view().write(memmap.sram_base, &[_]u8{ 1, 2, 3, 4 });
     try std.testing.expectEqual(@as(u32, 0x0403_0201), try core.readWord(memmap.sram_base));
     try std.testing.expectEqual(@as(u32, 0), periph.counters.writes);
@@ -86,7 +86,7 @@ test "an access wider than one register is refused" {
     defer core.close();
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph };
     var wide: [8]u8 = undefined;
     try std.testing.expectError(error.Unmapped, board.view().read(at, &wide));
     try std.testing.expect(!BoardBus.inWindow(registry.base + registry.size - 2, 4));
@@ -106,7 +106,7 @@ test "SAU RBAR and RLAR bank through RNR on the Zig bus" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var partitions = ra8.periph.sau.Sau.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .partitions = &partitions } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .partitions = &partitions } };
     try storeWord(&board, memmap.sau.rnr, 1);
     try storeWord(&board, memmap.sau.rbar, 0x0200_0000);
     try storeWord(&board, memmap.sau.rlar, 0x0207_FFE1);
@@ -125,7 +125,7 @@ test "a bus with no SAU leaves the window as plain RAM" {
     try core.mapBoardRam();
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph };
     try storeWord(&board, memmap.sau.rbar, 0x0200_0000);
     try storeWord(&board, memmap.sau.rnr, 1);
     try std.testing.expectEqual(@as(u32, 0x0200_0000), try board.view().readWord(memmap.sau.rbar));
@@ -138,7 +138,7 @@ test "MPU pairs bank through RNR on the Zig bus, aliases included" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var regions = ra8.periph.mpu.Mpu.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .regions = &regions } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .regions = &regions } };
     try storeWord(&board, memmap.mpu.rnr, 4);
     try storeWord(&board, memmap.mpu.rbar, 0x2200_0000);
     try storeWord(&board, memmap.mpu.rlar_a1, 0x2207_FFE1);
@@ -157,7 +157,7 @@ test "CFSR and HFSR clear the bits a store writes ones to" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .clears = &clears } };
     try core.writeWord(memmap.scb.cfsr, 0x0001_0182);
     try storeWord(&board, memmap.scb.cfsr, 0x0000_0100);
     try std.testing.expectEqual(@as(u32, 0x0001_0082), try board.view().readWord(memmap.scb.cfsr));
@@ -176,7 +176,7 @@ test "a fault the core latches survives the CFSR, HFSR and SFSR write-one-to-cle
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .clears = &clears } };
     const sfsr: u32 = 0xE000_EDE4;
     for ([_][2]u32{ .{ memmap.scb.cfsr, 0x0002_0000 }, .{ memmap.scb.hfsr, 0x4000_0000 }, .{ sfsr, 0x0000_0001 } }) |raise| {
         try core.writeWord(raise[0], 0x0000_0002);
@@ -193,7 +193,7 @@ test "word stores and loads of FPCCR, FPCAR and FPDSCR reach the core's FP state
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var fp: ra8.core.fpu.state.State = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .fp = &fp } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .fp = &fp } };
     const fp_at = ra8.core.fpu.scb.address;
     try storeWord(&board, fp_at.fpccr, 0x0000_0001);
     try storeWord(&board, fp_at.fpcar, 0x2000_0104);
@@ -213,7 +213,7 @@ test "a word store to CPACR on a board run lands in the core's FP state" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var fp: ra8.core.fpu.state.State = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .fp = &fp } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .fp = &fp } };
     const cpacr = ra8.core.fpu.scb.address.cpacr;
     try storeWord(&board, cpacr, ra8.core.fpu.cpacr.full_access | 0x0000_000F);
     try std.testing.expectEqual(ra8.core.fpu.cpacr.full_access, fp.cpacr);
@@ -228,7 +228,7 @@ test "faults reads the latched CFSR, HFSR and SFSR for the run report" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .clears = &clears } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .clears = &clears } };
     try board.view().latch(memmap.scb.cfsr, 0x0002_0000);
     try board.view().latch(memmap.scb.hfsr, 0x4000_0000);
     try board.view().latch(0xE000_EDE4, 0x0000_0001);

@@ -53,7 +53,7 @@ test "Secure and Non-secure MPU programming stay apart on the Zig bus" {
     var ns_mpu = ra8.periph.mpu.Mpu.init();
     var state: Banked = .{};
     var board: BoardBus = .{
-        .memory = .{ .core = &core },
+        .memory = .{ .engine = .{ .core = &core } },
         .periph = &periph,
         .security = &state,
         .scs = .{ .regions = &secure_mpu, .regions_ns = &ns_mpu },
@@ -82,7 +82,7 @@ test "with no Non-secure MPU wired the alias keeps its old path" {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var secure_mpu = ra8.periph.mpu.Mpu.init();
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .scs = .{ .regions = &secure_mpu } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .regions = &secure_mpu } };
     try region(&board, memmap.mpu.rnr, 4, memmap.mpu.rbar, 0x2200_0000);
     try std.testing.expectEqual(@as(u32, 0x2200_0000), secure_mpu.table[4].rbar);
 }

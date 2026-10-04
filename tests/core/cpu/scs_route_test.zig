@@ -69,7 +69,7 @@ fn roundTrip(issuer: registry.Issuer) !void {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var state: Banked = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .issuer = issuer, .security = &state };
     const bus = board.view();
     try put(bus, vtor, 0x0200_0000);
     try put(bus, vtor_alias, 0x0210_0000);
@@ -141,7 +141,7 @@ fn splitRoundTrip(issuer: registry.Issuer) !void {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var state: Banked = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .issuer = issuer, .security = &state };
     const bus = board.view();
     // Secure: SLEEPONEXIT, SLEEPDEEP and SEVONPEND; UNALIGN_TRP; PRIGROUP 5.
     try put(bus, scr, 0x0000_0016);
@@ -182,7 +182,7 @@ fn shcsrRoundTrip(issuer: registry.Issuer) !void {
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var state: Banked = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .issuer = issuer, .security = &state };
     const bus = board.view();
     // Secure: MEMFAULTENA (banked) and BUSFAULTENA (shared).
     try put(bus, shcsr, 0x0003_0000);
@@ -222,7 +222,7 @@ fn cfsrRoundTrip(issuer: registry.Issuer) !void {
     defer periph.deinit();
     var clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
     var state: Banked = .{};
-    var board: BoardBus = .{ .memory = .{ .core = &core }, .periph = &periph, .issuer = issuer, .security = &state, .scs = .{ .clears = &clears } };
+    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .issuer = issuer, .security = &state, .scs = .{ .clears = &clears } };
     const bus = board.view();
     // Secure: UNDEFINSTR (banked) and PRECISERR (shared) latched.
     try bus.latch(cfsr, 0x0001_0200);

@@ -113,4 +113,10 @@ pub const Bus = struct {
         try self.read(address, &bytes);
         return std.mem.readInt(u32, &bytes, .little);
     }
+
+    pub fn writeWord(self: Bus, address: u32, value: u32) Error!void {
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, value, .little);
+        return self.write(address, &bytes);
+    }
 };

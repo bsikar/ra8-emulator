@@ -1,6 +1,7 @@
 //! The Zig core's bus in a full run: the peripheral windows go to the
 //! board's peripheral bus, the same handlers Unicorn's MMIO hooks call, and
-//! everything else goes to memory through the engine.
+//! everything else goes to guest memory, the engine's or the core's own
+//! store (src/core/cpu/memory/guest_bus.zig).
 //!
 //! Both the Secure window and its Non-secure alias route to the one
 //! peripheral bus, which folds the alias itself. A peripheral access is one
@@ -8,7 +9,7 @@
 //! rather than split, since splitting would change what the peripheral sees.
 const std = @import("std");
 const bus = @import("bus.zig");
-const EngineBus = @import("engine_bus.zig").EngineBus;
+const GuestBus = @import("memory/guest_bus.zig").GuestBus;
 const registry = @import("../../periph/registry.zig");
 const memmap = @import("../memmap.zig");
 const sau = @import("../../periph/sau.zig");
@@ -30,7 +31,7 @@ const systick_cut = @import("systick_cut.zig");
 const cfsr_banked: u32 = 0xFFFF_00FF;
 
 pub const BoardBus = struct {
-    memory: EngineBus,
+    memory: GuestBus,
     periph: *registry.Bus,
     /// The core this bus view belongs to, stamped on every peripheral access.
     issuer: registry.Issuer = .cpu0,
@@ -209,8 +210,8 @@ pub const Scs = struct {
 
     /// A store outside the peripheral windows: RAM, then whichever of the
     /// core's own SCS models the address belongs to.
-    pub fn store(self: Scs, engine_memory: EngineBus, address: u32, bytes: []const u8) bus.Error!void {
-        var reach = engine_memory;
+    pub fn store(self: Scs, guest_memory: GuestBus, address: u32, bytes: []const u8) bus.Error!void {
+        var reach = guest_memory;
         const memory = reach.view();
         const owed = if (self.clears) |unit| (if (unit.slot(address) != null) unit else null) else null;
         const standing = if (owed != null) try memory.readWord(address & ~@as(u32, 3)) else 0;
@@ -220,7 +221,7 @@ pub const Scs = struct {
             var padded = [_]u8{0} ** 4;
             @memcpy(padded[0..@min(bytes.len, 4)], bytes[0..@min(bytes.len, 4)]);
             unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
-            unit.apply(engine_memory.core.*) catch return bus.Error.Unmapped;
+            unit.apply(memory) catch return bus.Error.Unmapped;
         }
         if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
         if (self.regions) |unit| try bankRegion(memory, unit, address, bytes, 0);

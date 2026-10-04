@@ -2,4 +2,5 @@
 pub const store = @import("store.zig");
 pub const memory_bus = @import("memory_bus.zig");
 pub const guest = @import("guest.zig");
+pub const guest_bus = @import("guest_bus.zig");
 pub const extra = @import("extra.zig");
