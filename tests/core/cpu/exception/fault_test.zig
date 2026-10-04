@@ -289,6 +289,7 @@ test "a refused coprocessor op latches NOCP and runs the UsageFault handler" {
     ram.putHalf(fixture.code + 2, 0x0A00);
     ram.putHalf(usage_handler, 0x202A); // movs r0, #42
     var cpu = try fixture.boot(&ram);
+    cpu.fp.cpacr = 0;
     cpu.regs.control |= ra8.core.cpu.regs.control_bits.sfpa;
 
     try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());

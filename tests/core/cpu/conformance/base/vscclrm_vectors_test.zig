@@ -10,6 +10,7 @@ const Cpu = cpu_ns.cpu.Cpu;
 
 fn run(in: vectors.In) vectors.Out {
     var cpu: Cpu = .{ .bus = undefined };
+    cpu.fp.cpacr = ra8.core.fpu.cpacr.full_access;
     for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0x5A00_0000 | @as(u32, @intCast(i)) * 0x0101 + 1);
     cpu.fp.vpr = @bitCast(vectors.vpr_reset);
     cpu.fp.context.fpccr.aspen = in.aspen;

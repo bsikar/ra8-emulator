@@ -64,5 +64,8 @@ pub fn boot(ram: *Ram) !Cpu {
     ram.putWord(base + 11 * 4, handler | 1);
     var cpu: Cpu = .{ .bus = ram.view() };
     try cpu.reset(base);
+    // SystemInit's CPACR write: CP10 and CP11 full access, so FP and MVE
+    // run. A test that wants the FPU off clears cpu.fp.cpacr.
+    cpu.fp.cpacr = 0x00F0_0000;
     return cpu;
 }

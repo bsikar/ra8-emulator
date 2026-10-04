@@ -20,7 +20,9 @@ fn run(cpu: *Cpu, hw1: u16, hw2: u16) !void {
 }
 
 fn fresh() Cpu {
-    return .{ .bus = undefined };
+    var cpu: Cpu = .{ .bus = undefined };
+    cpu.fp.cpacr = ra8.core.fpu.cpacr.full_access;
+    return cpu;
 }
 
 test "the gated group keeps its name and claims the same encodings" {
@@ -115,4 +117,64 @@ test "Secure gate reopens context when FPCA is set but SFPA is clear" {
     try std.testing.expectEqual(@as(u32, 1), cpu.fp.context.fpccr.s);
     try std.testing.expectEqual(@as(u32, 0x00C4_0000), cpu.fp.fpscr.bits());
     try std.testing.expectEqual(@as(u32, 0), @as(u32, @bitCast(cpu.fp.vpr)));
+}
+
+const memmap = ra8.core.memmap;
+const usage_handler: u32 = fixture.base + 0x1C0;
+const hard_handler: u32 = fixture.base + 0x1E0;
+const usgfaultena: u32 = 1 << 18;
+const nocp_bit: u32 = 1 << 19;
+const forced: u32 = 1 << 30;
+
+/// vadd.f32 s0, s1, s2 at fixture.code, with the FPU off unless `cpacr`
+/// grants it, and UsageFault enabled when `usage` is set.
+fn faddOn(ram: *fixture.Ram, cpacr: u32, usage: bool) !Cpu {
+    ram.putWord(fixture.base + 3 * 4, hard_handler | 1);
+    ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+    if (usage) ram.putWord(memmap.scb.shcsr, usgfaultena);
+    ram.putHalf(fixture.code, 0xEE30);
+    ram.putHalf(fixture.code + 2, 0x0A81);
+    var cpu = try fixture.boot(ram);
+    cpu.fp.cpacr = cpacr;
+    cpu.fp.bank.writeS(1, 0x3F80_0000);
+    cpu.fp.bank.writeS(2, 0x3F80_0000);
+    return cpu;
+}
+
+test "CPACR.CP10 off: an FP op takes UsageFault.NOCP and touches no FP state" {
+    var ram: fixture.Ram = .{};
+    var cpu = try faddOn(&ram, 0, true);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(nocp_bit, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(fixture.code, ram.word(cpu.regs.sp() + 24));
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.control & fpca);
+}
+
+test "privileged-only CPACR.CP10 refuses unprivileged Thread mode" {
+    var ram: fixture.Ram = .{};
+    var cpu = try faddOn(&ram, 0x0050_0000, true);
+    cpu.regs.control |= 1; // nPRIV
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+    try std.testing.expectEqual(nocp_bit, ram.word(memmap.scb.cfsr));
+}
+
+test "CPACR.CP10 on: the same op runs" {
+    var ram: fixture.Ram = .{};
+    var cpu = try faddOn(&ram, ra8.core.fpu.cpacr.full_access, true);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), cpu.fp.bank.readS(0));
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+}
+
+test "NOCP with USGFAULTENA clear escalates to HardFault with HFSR.FORCED" {
+    var ram: fixture.Ram = .{};
+    var cpu = try faddOn(&ram, 0, false);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(hard_handler, cpu.regs.pc);
+    try std.testing.expectEqual(nocp_bit, ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(forced, ram.word(memmap.scb.hfsr));
 }
