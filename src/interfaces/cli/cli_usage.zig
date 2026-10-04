@@ -126,7 +126,8 @@ pub const text =
     \\                     still accepted
     \\  --camera-source K  where the camera engine's pixels come from:
     \\                     gradient (the default, no argument),
-    \\                     image:PATH, or video:PATH[,loop] (a Y4M clip)
+    \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or
+    \\                     pipe:PATH|-,WxH,rgb24|yuyv|rgb565 (raw frames)
     \\  --no-blocks        the Zig core steps one instruction at a time instead
     \\                     of running formed blocks (the default; --blocks
     \\                     is still accepted)
