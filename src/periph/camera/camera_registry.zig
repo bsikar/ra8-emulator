@@ -3,8 +3,8 @@
 //! `gradient` takes no argument; `image:PATH` captures a still picture
 //! (RA8EMU-529); `video:PATH[,loop]` plays a Y4M clip by emulated time
 //! (RA8EMU-499); `pipe:<path|->,<w>x<h>,<format>` reads raw frames from a
-//! named pipe or stdin (RA8EMU-584). Webcam sources register a kind here as they land,
-//! each reading its own ARG. An unknown kind is refused when the command line is read, not
+//! named pipe or stdin (RA8EMU-584); `webcam[:N|PATH]` captures the Linux
+//! host camera after the consent gate (RA8EMU-506). An unknown kind is refused when the command line is read, not
 //! when the camera first captures, so a typo never runs on the gradient.
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
@@ -12,12 +12,14 @@ const gradient = @import("gradient_source.zig");
 const image = @import("image_source.zig");
 const video = @import("video_source.zig");
 const pipe = @import("pipe_source.zig");
+const webcam = @import("webcam_open.zig");
 
 pub const Kind = enum {
     gradient,
     image,
     video,
     pipe,
+    webcam,
 };
 
 /// One parsed `--camera-source`. The default is the gradient, which is
@@ -25,6 +27,8 @@ pub const Kind = enum {
 pub const Spec = struct {
     kind: Kind = .gradient,
     arg: []const u8 = "",
+    /// `--allow-webcam`: open a webcam without asking on the terminal.
+    allow_webcam: bool = false,
 
     /// The source this spec names, ready to hand to the CEU. A source that
     /// converts reads the sensor's FORMAT CONTROL byte at each capture. A
@@ -44,6 +48,10 @@ pub const Spec = struct {
                 std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
+            .webcam => webcam.open(allocator, self.arg, self.allow_webcam, format_control) catch |err| {
+                std.debug.print("--camera-source webcam:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                return err;
+            },
         };
     }
 };
@@ -62,6 +70,7 @@ pub fn parse(text: []const u8) ParseError!Spec {
         .gradient => if (arg.len != 0) return error.BadValue,
         .image, .video => if (arg.len == 0) return error.BadValue,
         .pipe => _ = pipe.raw.parseArg(arg) catch return error.BadValue,
+        .webcam => _ = webcam.device(arg) catch return error.BadValue,
     }
     return .{ .kind = kind, .arg = arg };
 }

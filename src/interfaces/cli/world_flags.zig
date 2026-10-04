@@ -69,7 +69,11 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
         options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {
+        const allow = options.camera.allow_webcam;
         options.camera = try camera(try next(argv, index));
+        options.camera.allow_webcam = allow;
+    } else if (std.mem.eql(u8, flag, "--allow-webcam")) {
+        options.camera.allow_webcam = true;
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--fault")) {

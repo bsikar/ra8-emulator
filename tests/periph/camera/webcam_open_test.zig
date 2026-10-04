@@ -1,0 +1,36 @@
+//! Covers src/periph/camera/webcam_open.zig without a camera: the gate,
+//! the device name and the refusals from ordinary device nodes.
+const std = @import("std");
+const ra8 = @import("ra8");
+const webcam = ra8.periph.ceu.camera.webcam;
+const opener = webcam.opener;
+
+const allocator = std.testing.allocator;
+var format_control: u8 = 0;
+
+fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.ArrayList(u8)) !ra8.periph.ceu.camera.frame_source.FrameSource {
+    var in = std.io.fixedBufferStream(answer);
+    return opener.openWith(allocator, arg, grant, in.reader(), said.writer(), &format_control);
+}
+
+test "a refused question opens nothing" {
+    var said = std.ArrayList(u8).init(allocator);
+    defer said.deinit();
+    try std.testing.expectError(error.WebcamRefused, openAnswering("/nonexistent/video9", .ask, "n\n", &said));
+    try std.testing.expect(std.mem.indexOf(u8, said.items, "open the host camera /nonexistent/video9?") != null);
+}
+
+test "a yes reaches the device, and a node that is not V4L2 is refused" {
+    if (!webcam.device.supported) return error.SkipZigTest;
+    var said = std.ArrayList(u8).init(allocator);
+    defer said.deinit();
+    try std.testing.expectError(error.QueryFailed, openAnswering("/dev/null", .ask, "y\n", &said));
+    try std.testing.expectError(error.OpenFailed, openAnswering("/nonexistent/video9", .allowed, "", &said));
+    try std.testing.expect(std.mem.indexOf(u8, said.items, "capture started") == null);
+}
+
+test "device names follow the consent gate's rules" {
+    try std.testing.expectEqualStrings("/dev/video0", try opener.device(""));
+    try std.testing.expectEqualStrings("/dev/x", try opener.device("/dev/x"));
+    try std.testing.expectError(error.BadDevice, opener.device("front"));
+}

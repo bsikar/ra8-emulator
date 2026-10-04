@@ -145,7 +145,9 @@ pub const text =
     \\  --camera-source K  where the camera engine's pixels come from:
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or
-    \\                     pipe:PATH|-,WxH,rgb24|yuyv|rgb565 (raw frames)
+    \\                     pipe:PATH|-,WxH,rgb24|yuyv|rgb565 (raw frames),
+    \\                     or webcam[:N|PATH] (Linux; asks before opening)
+    \\  --allow-webcam     open the webcam without asking (unattended runs)
     \\  --no-blocks        the Zig core steps one instruction at a time instead
     \\                     of running formed blocks (the default; --blocks
     \\                     is still accepted)
