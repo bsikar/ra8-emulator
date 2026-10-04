@@ -45,6 +45,8 @@
 //! unknown so the run does not claim to have recognised it. MD, the counter
 //! mode, is still not modelled: every channel counts up in saw mode.
 
+const std = @import("std");
+
 /// The GTCR fields (ra8_gpt.c, HUM Ch 22.2.x p 904..906).
 pub const field = struct {
     pub const cst: u32 = 0x0000_0001;
@@ -99,4 +101,22 @@ pub fn sourceOf(cr: u32) Source {
 pub fn step(per_boundary: u32, source: Source) u32 {
     const divided = per_boundary / source.divider();
     return @max(1, divided) | 1;
+}
+
+/// When a channel's next due time on the virtual queue lives, reached as
+/// `gpt_clock.sched` (RA8EMU-179, slice RA8EMU-513).
+pub const sched = @import("gpt_sched.zig");
+
+/// Virtual ns until a saw or one-shot count at `cnt` passes `period`, on
+/// `source` with PCLKD at `pclkd_hz`. The count wraps on the edge after it
+/// reaches the period, so that is `period - cnt + 1` counts, each one
+/// `divider` PCLKD edges, rounded up so the wrap is never reported early. A
+/// count already past the period wraps on its next edge. A zero clock never
+/// gets there.
+pub fn overflowInNs(cnt: u32, period: u32, source: Source, pclkd_hz: u64) ?u64 {
+    if (pclkd_hz == 0) return null;
+    const counts: u128 = if (cnt <= period) @as(u128, period) - cnt + 1 else 1;
+    const edges = counts * source.divider();
+    const ns = (edges * 1_000_000_000 + pclkd_hz - 1) / pclkd_hz;
+    return @intCast(@min(ns, std.math.maxInt(u64)));
 }

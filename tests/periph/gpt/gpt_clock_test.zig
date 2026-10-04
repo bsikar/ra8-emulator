@@ -166,3 +166,36 @@ test "two channels of one unit can count at different rates" {
     unit.tick();
     try testing.expect(unit.channels[1].cnt < unit.channels[0].cnt);
 }
+
+test "an overflow is due one count past the period, rounded up" {
+    // 0xFFFF - 0xFFF0 + 1 = 16 counts at 1 GHz is 16 ns.
+    try testing.expectEqual(@as(?u64, 16), clk.overflowInNs(0xFFF0, 0xFFFF, .pclkd, 1_000_000_000));
+    // The divider multiplies the edges: one count at PCLKD/1024 is 1024.
+    try testing.expectEqual(@as(?u64, 1024), clk.overflowInNs(0, 0, .pclkd_div1024, 1_000_000_000));
+    // 3 counts at 2 Hz is 1.5 s; one edge at 3 Hz rounds up, never early.
+    try testing.expectEqual(@as(?u64, 1_500_000_000), clk.overflowInNs(5, 7, .pclkd, 2));
+    try testing.expectEqual(@as(?u64, 333_333_334), clk.overflowInNs(9, 9, .pclkd, 3));
+    // Past the period, it wraps on the next edge. No clock, nothing due.
+    try testing.expectEqual(@as(?u64, 1), clk.overflowInNs(20, 9, .pclkd, 1_000_000_000));
+    try testing.expectEqual(@as(?u64, null), clk.overflowInNs(0, 7, .pclkd, 0));
+}
+
+test "a running saw channel is due at its wrap on the derived PCLKD" {
+    const sched = clk.sched;
+    try testing.expectEqual(@as(u64, 327_700_000), sched.pclkd_hz);
+    var channel = ra8.periph.gpt_channel.Channel{};
+    try testing.expectEqual(@as(?u64, null), sched.dueAt(channel, 0));
+    channel.cr = control(0);
+    // GTPR = 0 counts to 0xFFFF: 65536 counts, rounded up to 199988 ns.
+    try testing.expectEqual(@as(?u64, 1_000 + 199_988), sched.dueAt(channel, 1_000));
+    // At PCLKD/4 the same wrap takes four times the edges.
+    channel.cr = control(1);
+    try testing.expectEqual(@as(?u64, 799_952), sched.dueAt(channel, 0));
+}
+
+test "one boundary of steps lands on the derived due time" {
+    // 0x4001 counts at the undivided clock take exactly one 50000 ns
+    // boundary, which is what keeps the later queue switch corpus-identical.
+    const sched = clk.sched;
+    try testing.expectEqual(@as(?u64, 50_000), clk.overflowInNs(0, gpt.step_per_tick - 1, .pclkd, sched.pclkd_hz));
+}
