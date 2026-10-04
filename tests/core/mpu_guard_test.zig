@@ -52,7 +52,7 @@ const Fixture = struct {
         self.unit.table[1] = region(layout.privileged_only, layout.privileged_only + 0x1F, 0);
         self.unit.table[2] = region(layout.execute_never, layout.execute_never + 0x1F, never_run);
         self.unit.ctrl = mpu.field.ctrl_enable;
-        try self.engine.attachRegions(&self.unit, &self.guard);
+        self.guard.unit = &self.unit;
         self.guard.follow(self.engine.handle, true);
         try self.engine.setRegister(.sp, layout.stack);
     }

@@ -15,9 +15,8 @@
 //! store still lands in the RAM underneath, which keeps every register in
 //! the window readable for free; only the banked pair is put back.
 //!
-//! NO GUARD, unlike src/core/mpu_hook.zig: that hook carries a guard because
-//! a store to MPU_CTRL arms or disarms real enforcement traps. This model
-//! does not enforce attribution (src/periph/sau.zig says why), so the block
+//! NO GUARD, unlike the MPU: a store to MPU_CTRL arms or disarms real
+//! enforcement traps. This model does not enforce attribution (src/periph/sau.zig says why), so the block
 //! itself is all the hook needs to carry.
 const c = @import("c.zig");
 const memmap = @import("memmap.zig");
