@@ -242,7 +242,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         // The globals a memory-probe verdict reads, out of the Zig core's
         // own memory, so the line is the Unicorn run's line.
         if (!options.report_json) try report_dumps.dumpSymbols(out, clock.memory, image, options);
-        if (!options.report_json) try mem_dump.printAll(out, clock.memory, image, options.memDumps());
+        if (!options.report_json) try mem_dump.printAll(out, clock.memory, &board.bus, image, options.memDumps());
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
         try finishFrames(out, board, options, &frames);

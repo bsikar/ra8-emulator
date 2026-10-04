@@ -78,6 +78,10 @@ pub const Block = struct {
     /// Counts `times` more reads that answer as the last did; false when
     /// the register cannot promise that. Null repeats nothing (RA8EMU-595).
     repeatFn: ?*const fn (context: *anyopaque, address: u32, width: u3, times: u64) bool = null,
+    /// The stored value with none of a read's side effects, for a report
+    /// looking at a register after the run. Null leaves it unreadable
+    /// rather than risk a clear-on-read or a FIFO pop (RA8EMU-631).
+    peekFn: ?*const fn (context: *anyopaque, address: u32, width: u3) u32 = null,
 
     pub fn end(self: Block) u64 {
         return @as(u64, self.base) + self.size;
@@ -206,6 +210,21 @@ pub const Bus = struct {
         self.counters.reads += times;
         self.counters.modelled += times;
         return true;
+    }
+
+    /// The value at `address` as a report sees it: no counters, no
+    /// clear-on-read, no step of the ready-bit alternation. Unclocked reads
+    /// zero as silicon does. Null when the block keeps no peek or nothing
+    /// was ever written to an unmodelled address (RA8EMU-631).
+    pub fn peek(self: *Bus, address: u32, width: u3) ?u32 {
+        const canonical = canonicalize(address);
+        if (self.gate) |gate| if (gate.stoppedFn(gate.context, canonical)) return 0;
+        if (self.blockFor(canonical)) |block| {
+            const look = block.peekFn orelse return null;
+            return look(block.context, canonical, width);
+        }
+        const cell = self.cells.get(canonical) orelse return null;
+        return if (cell.written) mask(cell.value, width) else null;
     }
 
     pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {

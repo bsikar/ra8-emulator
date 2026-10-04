@@ -82,6 +82,7 @@ test {
     _ = @import("glcdc/glcdc_gamma_test.zig");
     _ = @import("glcdc/glcdc_frame_test.zig");
     _ = @import("glcdc/glcdc_latch_test.zig");
+    _ = @import("glcdc/glcdc_peek_test.zig");
     _ = @import("glcdc/glcdc_mix_test.zig");
     _ = @import("glcdc/glcdc_out_test.zig");
     _ = @import("glcdc/glcdc_pixel_test.zig");
