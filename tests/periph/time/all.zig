@@ -10,4 +10,5 @@ test {
     _ = @import("duration_test.zig");
     _ = @import("soak_test.zig");
     _ = @import("soak_fault_test.zig");
+    _ = @import("rtc_day_test.zig");
 }
