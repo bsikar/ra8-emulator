@@ -21,3 +21,24 @@ test "a prohibited encoding counts at the bench rate" {
     try std.testing.expectEqual(clock.ticksPerCount(0x1), clock.ticksPerCount(0x0));
     try std.testing.expectEqual(clock.ticksPerCount(0x1), clock.ticksPerCount(0x2));
 }
+
+test "a WDT underflow lands on the tick its due time names" {
+    const wdt = ra8.periph.wdt;
+    try std.testing.expectEqual(@as(u64, 50_000), clock.ns_per_tick);
+    var unit = wdt.Wdt.init();
+    try std.testing.expectEqual(@as(?u64, null), unit.underflowDueAt(0));
+    unit.wdtcr = wdt.controlWord(0, 0x1, 3, 3);
+    unit.armed = true;
+    unit.counter = 3;
+    unit.pace = 120;
+    // Four counts of 500 ticks, less the 120 already paced.
+    const due = unit.underflowDueAt(7).?;
+    try std.testing.expectEqual(@as(u64, 7 + (4 * 500 - 120) * 50_000), due);
+    var now: u64 = 7;
+    while (now + clock.ns_per_tick < due) : (now += clock.ns_per_tick) {
+        unit.tick();
+        try std.testing.expectEqual(@as(u32, 0), unit.underflows);
+    }
+    unit.tick();
+    try std.testing.expectEqual(@as(u32, 1), unit.underflows);
+}

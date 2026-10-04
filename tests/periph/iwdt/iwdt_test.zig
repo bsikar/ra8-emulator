@@ -153,3 +153,22 @@ test "an auto-start OFS0 runs the counter from reset without a refresh" {
     try std.testing.expectEqual(@as(u32, 1), unit.refreshes);
     try std.testing.expectEqual(iwdt.full_scale, unit.counter);
 }
+
+test "an IWDT underflow lands on the tick its due time names" {
+    var unit = iwdt.Iwdt.init();
+    try std.testing.expectEqual(@as(?u64, null), unit.underflowDueAt(0));
+    refreshed(&unit);
+    // 0x3FFF counts at 1024 a tick: the 16th tick finds it at or under 1024.
+    const due = unit.underflowDueAt(0).?;
+    try std.testing.expectEqual(@as(u64, 16 * 50_000), due);
+    var ticks: u64 = 1;
+    while (ticks * 50_000 < due) : (ticks += 1) {
+        unit.tick();
+        try std.testing.expectEqual(@as(u32, 0), unit.underflows);
+    }
+    unit.tick();
+    try std.testing.expectEqual(@as(u32, 1), unit.underflows);
+    // A counter already at zero underflows on the next tick.
+    unit.counter = 0;
+    try std.testing.expectEqual(@as(?u64, 9 + 50_000), unit.underflowDueAt(9));
+}

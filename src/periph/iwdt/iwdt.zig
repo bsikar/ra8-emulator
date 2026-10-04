@@ -35,6 +35,7 @@ const iwdt_ofs0 = @import("iwdt_ofs0.zig");
 const iwdt_refresh = @import("iwdt_refresh.zig");
 const iwdt_status = @import("iwdt_status.zig");
 const periph = @import("../registry.zig");
+const wdt_clock = @import("../wdt/wdt_clock.zig");
 
 pub const ofs0 = iwdt_ofs0;
 pub const refresh = iwdt_refresh;
@@ -163,6 +164,16 @@ pub const Iwdt = struct {
         } else {
             self.nmis +%= 1;
         }
+    }
+
+    /// The virtual ns the next underflow lands at, from `now_ns`: the tick
+    /// that finds the counter at or under `counts_per_tick`, so
+    /// ceil(counter / counts_per_tick) ticks and never fewer than one. Null
+    /// while the counter is not running.
+    pub fn underflowDueAt(self: *const Iwdt, now_ns: u64) ?u64 {
+        if (!self.armed) return null;
+        const ticks = @max(1, (@as(u64, self.counter) + counts_per_tick - 1) / counts_per_tick);
+        return now_ns + ticks * wdt_clock.ns_per_tick;
     }
 
     fn refreshWrite(self: *Iwdt, value: u8) void {
