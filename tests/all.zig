@@ -11,6 +11,7 @@ test {
     _ = @import("core/cpu/mve/all_test.zig");
     _ = @import("core/cpu/board_bus_test.zig");
     _ = @import("core/cpu/boot_test.zig");
+    _ = @import("core/cpu/fp_corpus_test.zig");
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
     _ = @import("core/cpu/cortex_test.zig");
