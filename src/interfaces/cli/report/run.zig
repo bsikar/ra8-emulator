@@ -15,6 +15,7 @@ const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
 const report = @import("../report.zig");
 const report_timing = @import("timing.zig");
+const pacing = @import("../../../periph/time/pacing.zig");
 const pend_break = @import("../../../core/pend_break.zig");
 const mask_pace = @import("../../../core/mask_pace.zig");
 const pend_pace = @import("../../../core/pend_pace.zig");
@@ -107,6 +108,7 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report_part.print(out, board.part);
     try report.bus(board, out);
     try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend, of.pacing, of.mask_pacing);
+    try pacing.line(out, &board.time);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);
@@ -159,6 +161,7 @@ pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64
     try report_part.print(out, board.part);
     try report.bus(board, out);
     try report_timing.clock(out, timebase);
+    try pacing.line(out, &board.time);
     try out.print("zig core: pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n", .{});
     try report.blocks(board, out, .{ .elapsed = retired });
 }

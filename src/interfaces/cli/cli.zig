@@ -87,6 +87,8 @@ pub const Options = struct {
     panel_only: bool = false,
     frames: @import("frames_args.zig").Options = .{},
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
+    /// `--realtime`: pace virtual time against the host clock (RA8EMU-181).
+    realtime: bool = false,
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.
@@ -95,8 +97,7 @@ pub const Options = struct {
     console: bool = false,
     /// Print this card block back as hex once the run is over.
     dump_sd: ?u32 = null,
-    /// Contacts to queue on the touch panel, one drained per frame the
-    /// firmware reads.
+    /// Contacts queued on the touch panel, one drained per frame read.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,
     /// `--touch @PATH`: a file or FIFO of live host touches, one per line.
@@ -132,9 +133,8 @@ pub const Options = struct {
     break_arrival: u32 = 1,
     /// Print the core registers after the run.
     dump_regs: bool = false,
-    /// End the run at the first undefined instruction it reaches, before
-    /// that instruction executes. Off by default: the sweep reports, it
-    /// does not decide.
+    /// End the run at the first undefined instruction, before it executes.
+    /// Off by default: the sweep reports, it does not decide.
     stop_on_undefined: bool = false,
     /// `--dump-mem` places read after the run, in order (RA8EMU-488).
     dump_mem: [mem_dump.limit]mem_dump.Ask = undefined,
