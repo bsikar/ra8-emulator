@@ -33,6 +33,7 @@ const FpState = @import("fpu/state.zig").State;
 const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
 const Until = @import("../until.zig").Until;
+const Reboot = @import("../reboot.zig").Reboot;
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
 /// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
@@ -43,6 +44,10 @@ pub const Boundary = struct {
     context: *anyopaque,
     widthFn: *const fn (context: *anyopaque) u32,
     closeFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
+    /// The reset a block asked for at this boundary (a watchdog underflow,
+    /// AIRCR.SYSRESETREQ), performed before the next stretch the way the
+    /// Unicorn run loop performs it (RA8EMU-508).
+    reboot: ?*Reboot = null,
 };
 
 /// A debugger listening to a `--cpu zig` run: handed the bus and the
@@ -192,8 +197,20 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         };
         left -= width;
         try edge.closeFn(edge.context, width);
+        if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
     }
     return .count;
+}
+
+/// A warm reboot of the Zig core, as src/core/reboot.zig performs one on
+/// Unicorn: SP and PC from the vector table, PRIMASK clear, handler frames
+/// abandoned, RAM kept. The retired count is the run's, so it carries on.
+fn rebooted(cpu: *cpu_mod.Cpu, pending: *Reboot) !void {
+    pending.requested = false;
+    pending.performed +%= 1;
+    const retired = cpu.retired;
+    try cpu.reset(pending.vector_base);
+    cpu.retired = retired;
 }
 
 pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {

@@ -133,12 +133,12 @@ pub fn main() !u8 {
     try core.resetFromVectorTable(vector_base);
     const entry = try core.register(.pc);
     const out = try announce(core, written, vector_base, entry, options.ctl_cpu_load);
+    var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
+    board.reboot = &reboot;
     if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     _ = try parts.divide.arm(&core, &interrupts, image);
-    var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
-    board.reboot = &reboot;
     var stop = resolveStop(image, options);
     var point = resolveBreak(image, options);
     if (point) |*one| try core.attachBreak(one);

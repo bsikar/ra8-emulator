@@ -234,3 +234,52 @@ test "a board run that took INVSTATE reports CFSR and HFSR.FORCED (RA8EMU-394)" 
         return err;
     };
 }
+
+/// A boundary that asks for one reset at its first close, the way the
+/// watchdog's underflow does through the board.
+const Kick = struct {
+    reboot: *ra8.core.reboot.Reboot,
+    closes: u32 = 0,
+
+    fn boundary(self: *Kick) boot.Boundary {
+        return .{ .context = self, .widthFn = widthOf, .closeFn = closeOf, .reboot = self.reboot };
+    }
+
+    fn widthOf(_: *anyopaque) u32 {
+        return 3;
+    }
+
+    fn closeOf(context: *anyopaque, _: u32) anyerror!void {
+        const self: *Kick = @ptrCast(@alignCast(context));
+        self.closes += 1;
+        if (self.closes == 1) self.reboot.requested = true;
+    }
+};
+
+test "a reset asked for at a boundary brings the zig core back up on its reset vector" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    // bf00 nop at +8, then e7fe b . at +10.
+    const base = memmap.sram_base;
+    var image: [12]u8 = undefined;
+    std.mem.writeInt(u32, image[0..4], base + 0x1000, .little);
+    std.mem.writeInt(u32, image[4..8], (base + 8) | 1, .little);
+    @memcpy(image[8..12], &[_]u8{ 0x00, 0xBF, 0xFE, 0xE7 });
+    try core.write(base, &image);
+    var reboot: ra8.core.reboot.Reboot = .{ .vector_base = base };
+    var kick: Kick = .{ .reboot = &reboot };
+    var ran: u64 = 0;
+    var buf: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(stream.writer(), &core, &periph, base, 3, &ran, .{ .boundary = kick.boundary() });
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expectEqual(@as(u32, 1), reboot.performed);
+    try std.testing.expect(!reboot.requested);
+    // The stretch ended on `b .` at +10; the reset put it back at +8, and
+    // the instructions it ran before the reset are still counted.
+    try std.testing.expectEqual(@as(u64, 3), ran);
+    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc 0x22000008") != null);
+}
