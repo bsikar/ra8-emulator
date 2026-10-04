@@ -201,3 +201,50 @@ test "a peripheral read the bus cannot repeat still spoils the trip" {
     const stepped = try spin(false);
     try std.testing.expect(stepped.reused > 100);
 }
+
+// head: adds r3, #1; cmp r3, r4; bls head; done: b done. A bounded count.
+const bounded_loop = [_]u16{ 0x3301, 0x42A3, 0xD9FC, 0xE7FE };
+// head: ldr r3, [r0]; adds r3, #1; str r3, [r0]; cmp r3, r4; bls head;
+// done: b done. The count kept in a RAM word, as internal_ns_ipc_recv does.
+const word_loop = [_]u16{ 0x6803, 0x3301, 0x6003, 0x42A3, 0xD9FA, 0xE7FE };
+
+const Counted = struct { retired: u64, pc: u32, r3: u32, word: u32, reused: u64 };
+
+fn counting(code: []const u16, limit: u32, budget: u64, shortcut: bool) !Counted {
+    var rig: Rig = .{};
+    try rig.init(code);
+    defer rig.deinit();
+    if (!shortcut) {
+        rig.cpu.quiet = null;
+        rig.cpu.blocks = null;
+    }
+    rig.cpu.regs.set(4, limit);
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(budget));
+    return .{ .retired = rig.cpu.retired, .pc = rig.cpu.regs.pc, .r3 = rig.cpu.regs.get(3), .word = rig.ram.word(copy), .reused = rig.cache.reused };
+}
+
+test "a bounded count retires the trips before its bound and ends where stepping would" {
+    for ([_]u32{ 7, 3000 }) |limit| {
+        for ([_]u64{ 50, 9001 }) |budget| {
+            const fast = try counting(&bounded_loop, limit, budget, true);
+            const slow = try counting(&bounded_loop, limit, budget, false);
+            try std.testing.expectEqual(slow.retired, fast.retired);
+            try std.testing.expectEqual(slow.pc, fast.pc);
+            try std.testing.expectEqual(slow.r3, fast.r3);
+        }
+    }
+    // Stepped, 3000 trips would start the loop's block about 3000 times.
+    try std.testing.expect((try counting(&bounded_loop, 3000, 9001, true)).reused < 64);
+}
+
+test "a count kept in a RAM word moves on with the word" {
+    for ([_]u64{ 60, 12_001 }) |budget| {
+        const fast = try counting(&word_loop, 2500, budget, true);
+        const slow = try counting(&word_loop, 2500, budget, false);
+        try std.testing.expectEqual(slow.retired, fast.retired);
+        try std.testing.expectEqual(slow.pc, fast.pc);
+        try std.testing.expectEqual(slow.r3, fast.r3);
+        try std.testing.expectEqual(slow.word, fast.word);
+    }
+    try std.testing.expect((try counting(&word_loop, 2500, 12_001, true)).reused < 64);
+}
