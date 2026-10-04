@@ -17,6 +17,22 @@ const engine = @import("../core/engine.zig");
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 
+/// One `--dump-mem` ask: the place as spelled and how many words to read.
+pub const Ask = struct {
+    spec: []const u8,
+    /// Null takes the default count.
+    words: ?u32 = null,
+};
+
+/// How many `--dump-mem` places one run carries. A probe and its failure
+/// word is the case that asked for repeats; the cap leaves room above it.
+pub const limit: usize = 8;
+
+/// Print every asked place in order, nothing when none was asked.
+pub fn printAll(out: anytype, core: engine.Engine, image: elf.Image, asks: []const Ask) !void {
+    for (asks) |ask| try print(out, core, image, ask.spec, ask.words);
+}
+
 /// Print the dump, or nothing at all when no place was asked for.
 pub fn print(
     out: anytype,

@@ -50,7 +50,7 @@ pub const text =
     \\  --sd-size MB       size the card on the SPI line (default 32)
     \\  --trace-sd         write one line per SD command to stderr
     \\  --dump-sd BLOCK    print that card block as hex after the run
-    \\  --dump-mem PLACE [N]
+    \\  --dump-mem PLACE [N] (repeatable, printed in order)
     \\                     print N words (default 4) out of memory at
     \\                     PLACE, which is an address, a symbol, or
     \\                     @symbol to follow the pointer it holds, any of

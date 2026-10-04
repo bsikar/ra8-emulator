@@ -238,3 +238,18 @@ test "ctl cpu-load selects an image, a load window and the requested CPU" {
     try std.testing.expectEqual(@as(?usize, 128), options.instructions);
     try std.testing.expectEqual(ra8.core.cpu.choice.Choice.unicorn, options.cpu);
 }
+
+test "--dump-mem repeats keep every place in order, each with its own count" {
+    const one = try parse(&[_][]const u8{ "emu", "a.elf", "--dump-mem", "0x22100034" });
+    try std.testing.expectEqual(@as(usize, 1), one.memDumps().len);
+    try std.testing.expectEqual(@as(?u32, null), one.memDumps()[0].words);
+
+    const two = try parse(&[_][]const u8{ "emu", "a.elf", "--dump-mem", "0x22100034", "2", "--dump-mem", "0x22100008" });
+    const asks = two.memDumps();
+    try std.testing.expectEqual(@as(usize, 2), asks.len);
+    try std.testing.expectEqualStrings("0x22100034", asks[0].spec);
+    try std.testing.expectEqual(@as(?u32, 2), asks[0].words);
+    try std.testing.expectEqualStrings("0x22100008", asks[1].spec);
+    try std.testing.expectEqual(@as(?u32, null), asks[1].words);
+    try std.testing.expectEqual(@as(usize, 0), (try parse(&[_][]const u8{ "emu", "a.elf" })).memDumps().len);
+}

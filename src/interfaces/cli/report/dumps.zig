@@ -83,7 +83,7 @@ pub fn dumps(
     try dumpSymbols(out, core, image, options);
     try dumpBlock(out, board, options);
     try dumpRegisters(out, core, options);
-    try mem_dump.print(out, core, image, options.dump_mem, options.dump_mem_words);
+    try mem_dump.printAll(out, core, image, options.memDumps());
     try watchpoint.print(out, image, options.watch_place, watched);
 }
 

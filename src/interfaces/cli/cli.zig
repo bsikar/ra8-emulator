@@ -3,6 +3,7 @@ const std = @import("std");
 const part = @import("../../core/part.zig");
 const place = @import("../../debug/place.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
+const mem_dump = @import("../../debug/mem_dump.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
 const world_flags = @import("world_flags.zig");
 const next = world_flags.next;
@@ -133,11 +134,9 @@ pub const Options = struct {
     /// that instruction executes. Off by default: the sweep reports, it
     /// does not decide.
     stop_on_undefined: bool = false,
-    /// A place in memory to read once the run is over, spelled the way
-    /// `place.parse` reads it. Null reads nothing.
-    dump_mem: ?[]const u8 = null,
-    /// How many words that read prints. Null takes the default.
-    dump_mem_words: ?u32 = null,
+    /// `--dump-mem` places read after the run, in order (RA8EMU-488).
+    dump_mem: [mem_dump.limit]mem_dump.Ask = undefined,
+    dump_mem_count: usize = 0,
     /// A place whose stores to record, as the command line spelled it.
     /// Null watches nothing and costs the run nothing.
     watch_place: ?[]const u8 = null,
@@ -198,6 +197,11 @@ pub const Options = struct {
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {
         return self.dump[0..self.dump_count];
+    }
+
+    /// The `--dump-mem` places, in command-line order.
+    pub fn memDumps(self: *const Options) []const mem_dump.Ask {
+        return self.dump_mem[0..self.dump_mem_count];
     }
 
     /// How many instructions this run gets. An explicit `--instructions`
@@ -296,16 +300,17 @@ fn parseRun(argv: []const []const u8) !Options {
         } else if (std.mem.eql(u8, argv[index], "--dump-mem")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
-            options.dump_mem = argv[index];
-            // The count is optional, taken the same way `--break-sym`
-            // takes its arrival: only when the next argument is a number.
+            if (options.dump_mem_count >= options.dump_mem.len) return error.TooManyDumps;
+            var ask: mem_dump.Ask = .{ .spec = argv[index] };
             if (index + 1 < argv.len) {
                 if (std.fmt.parseInt(u32, argv[index + 1], 0) catch null) |count| {
                     if (count == 0) return error.BadValue;
-                    options.dump_mem_words = count;
+                    ask.words = count;
                     index += 1;
                 }
             }
+            options.dump_mem[options.dump_mem_count] = ask;
+            options.dump_mem_count += 1;
         } else return error.UnknownFlag;
     }
     return options;
