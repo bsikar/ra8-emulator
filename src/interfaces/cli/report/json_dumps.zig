@@ -5,7 +5,6 @@
 //! nothing measured. The `--dump-sd` block and the `--watch` log follow
 //! (RA8EMU-391, json_sd.zig and json_watched.zig).
 const std = @import("std");
-const engine = @import("../../../core/engine.zig");
 const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../core/elf.zig");
 const cli = @import("../cli.zig");
@@ -17,17 +16,17 @@ const report_dumps = @import("dumps.zig");
 const watchpoint = @import("../../../debug/watchpoint.zig");
 pub const json_sd = @import("json_sd.zig");
 pub const json_watched = @import("json_watched.zig");
+pub const json_regs = @import("json_regs.zig");
 const Board = @import("../../../board/board.zig").Board;
 
-/// What the dumps read from: the core as the run left it, the image and the
-/// flags that asked.
+/// What the dumps read from: the registers and memory as the run left them,
+/// the image and the flags that asked. A `--cpu zig` run hands over its own
+/// core's registers and store (RA8EMU-579, RA8EMU-580).
 pub const Dumps = struct {
-    core: engine.Engine,
+    registers: json_regs.Reader,
+    memory: Guest,
     image: elf.Image,
     options: *const cli.Options,
-    /// The memory the run left, when it is not the engine's: a `--cpu zig`
-    /// run on its own store (RA8EMU-580). Registers still come from `core`.
-    memory: ?Guest = null,
     /// The `--watch` log as the run left it, null when nothing was watched.
     watched: ?watchpoint.Watched = null,
 };
@@ -37,8 +36,8 @@ pub fn section(j: anytype, board: *Board, found: ?*const Dumps) !void {
     const of = found orelse return j.field("dumps", null);
     try j.open("dumps", '{');
     try globals(j, of);
-    try regs(j, of.core, of.options.dump_regs);
-    try memory(j, of.memory orelse .{ .engine = of.core }, of.image, of.options.memDumps());
+    try regs(j, of.registers, of.memory, of.options.dump_regs);
+    try memory(j, of.memory, of.image, of.options.memDumps());
     try json_sd.block(j, board, of.options.dump_sd);
     try json_watched.log(j, of.image, of.options.watch_place, if (of.watched) |*one| one else null);
     try j.close('}');
@@ -59,8 +58,7 @@ fn globals(j: anytype, of: *const Dumps) !void {
     try j.open("symbols", '[');
     for (of.options.dumps()) |name| {
         const address = symbols.addressInAny(images[0..count], name);
-        const guest: Guest = of.memory orelse .{ .engine = of.core };
-        const value: ?u32 = if (address) |at| guest.readWord(at) catch null else null;
+        const value: ?u32 = if (address) |at| of.memory.readWord(at) catch null else null;
         try j.open(null, '{');
         try j.field("name", name);
         try j.field("address", address);
@@ -70,17 +68,16 @@ fn globals(j: anytype, of: *const Dumps) !void {
     try j.close(']');
 }
 
-fn regs(j: anytype, core: engine.Engine, asked: bool) !void {
+fn regs(j: anytype, from: json_regs.Reader, guest: Guest, asked: bool) !void {
     if (!asked) return j.field("registers", null);
     try j.open("registers", '{');
     for (registers.dumped) |named| {
-        const value: ?u32 = core.register(named.which) catch null;
-        try j.field(named.name, value);
+        try j.field(named.name, from.register(named.which));
     }
-    const sp: ?u32 = core.register(.sp) catch null;
+    const sp: ?u32 = from.register(.sp);
     try j.open("stack", '[');
     for (0..registers.limits.stack_words) |index| {
-        const value: ?u32 = if (sp) |base| core.readWord(registers.stackWord(base, index)) catch null else null;
+        const value: ?u32 = if (sp) |base| guest.readWord(registers.stackWord(base, index)) catch null else null;
         try j.field(null, value);
     }
     try j.close(']');

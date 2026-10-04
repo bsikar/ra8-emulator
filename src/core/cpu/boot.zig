@@ -34,6 +34,8 @@ const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
 const Until = @import("../until.zig").Until;
 const Reboot = @import("../reboot.zig").Reboot;
+/// The register file a `--cpu zig` run hands back when it ends.
+pub const Regs = @import("regs.zig").Regs;
 
 /// Where a `--cpu zig` run hands time back to the board. The core runs
 /// `width` instructions, then `close` charges them: SysTick and DWT_CYCCNT
@@ -92,6 +94,9 @@ pub const Wiring = struct {
     /// The `--ns` half, loaded into lockstep's own engine beside the main
     /// image so both sides start from the same memory (RA8EMU-372).
     ns_image: ?elf.Image = null,
+    /// Filled with the core's registers as the run left them, for the
+    /// `--report json` register dump (RA8EMU-579).
+    final: ?*Regs = null,
 };
 
 /// The hand-off from main for any CPU but Unicorn.
@@ -112,7 +117,7 @@ pub fn start(out: anytype, choice: Choice, image: elf.Image, memory: Guest, peri
 /// the core stopped short of it.
 pub fn run(out: anytype, memory: Guest, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var reach = GuestBus.of(&memory, false);
-    return runOn(out, reach.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null);
+    return runOn(out, reach.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
@@ -123,10 +128,10 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks, wiring.until);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until) !u8 {
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -171,6 +176,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     };
     const stopped = try stretches(&cpu, budget, boundary, until);
     if (ran) |count| count.* = cpu.retired;
+    if (final) |into| into.* = cpu.regs;
     const code = try report(out, cpu, stopped);
     if (until) |wait| if (wait.reached) {
         try out.print("stopped clean on the console line \"{s}\", pc 0x{X:0>8}\n", .{ wait.needle, cpu.regs.pc });

@@ -102,6 +102,21 @@ test "a zig run on the board closes a boundary after every stretch, the short la
     try std.testing.expectEqual(@as(u64, 10), edges.charged);
 }
 
+test "a zig run hands back its registers as it left them (RA8EMU-579)" {
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try loadSpin(&core);
+    var final: boot.Regs = .{};
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    _ = try boot.runOnBoard(stream.writer(), .{ .engine = core }, &periph, memmap.sram_base, 10, null, .{ .final = &final });
+    try std.testing.expectEqual(memmap.sram_base + 8, final.pc);
+    try std.testing.expectEqual(memmap.sram_base + 0x1000, final.get(13));
+}
+
 test "a stretch the core stops inside is never closed" {
     var core = try Engine.open();
     defer core.close();

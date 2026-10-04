@@ -126,6 +126,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
     const wrap = if (tracer != null) listener.wrap() else null;
     const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
     var boot_output = out;
+    var final: boot.Regs = .{};
     const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, image, clock.memory, &board.bus, vector_base, options.budgetFor(false), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
@@ -141,6 +142,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
         .retire_listener = retire_listener,
         .ns_image = if (options.cpu == .lockstep) try report_dumps.nonSecure(std.heap.page_allocator, options) else null,
         .until = if (options.cpu == .zig) until else null,
+        .final = &final,
     });
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
@@ -150,7 +152,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .memory = clock.memory, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, timebase.*, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads, out of the Zig core's
