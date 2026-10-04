@@ -195,7 +195,7 @@ pub const BoardBus = struct {
 pub const Scs = struct {
     /// SAU RBAR/RLAR bank through RNR, as src/core/sau_hook.zig does.
     partitions: ?*sau.Sau = null,
-    /// MPU pairs bank through RNR, as src/core/mpu_hook.zig does.
+    /// MPU pairs bank through RNR.
     /// Enforcement is not armed from here.
     regions: ?*mpu.Mpu = null,
     /// The Non-secure MPU, programmed through its own copy at +0x20000

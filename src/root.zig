@@ -16,7 +16,6 @@ pub const core = struct {
     pub const lob = @import("core/lob.zig");
     pub const memmap = @import("core/memmap.zig");
     pub const mpu_guard = @import("core/mpu_guard.zig");
-    pub const mpu_hook = @import("core/mpu_hook.zig");
     pub const pages = @import("core/pages.zig");
     pub const part = @import("core/part.zig");
     pub const reboot = @import("core/reboot.zig");

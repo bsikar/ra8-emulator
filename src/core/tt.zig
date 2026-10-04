@@ -10,8 +10,8 @@
 //! source answer from it.
 //!
 //! THE MPU HALF IS THE DISABLED-MPU ANSWER: MRVALID clear, R and RW set. The
-//! CPU model's MPU is never programmed either (src/core/mpu_hook.zig keeps
-//! the table the firmware writes), so that is what its TT gave too. Taking
+//! CPU model's MPU was never programmed either (the board keeps the table
+//! the firmware writes), so that is what its TT gave too. Taking
 //! R and RW from the board's MPU table is a later slice.
 const sau = @import("../periph/sau.zig");
 const sau_attr = @import("../periph/sau_attr.zig");
