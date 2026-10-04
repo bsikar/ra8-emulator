@@ -88,7 +88,7 @@ pub const Tally = struct {
         var with = self;
         with.taken_in_spec = options.taken_in_place;
         with.taken_in = window;
-        with.dumps = .{ .core = core, .image = image, .options = options, .watched = watched };
+        with.dumps = .{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = image, .options = options, .watched = watched };
         return with;
     }
 

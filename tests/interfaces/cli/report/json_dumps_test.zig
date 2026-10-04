@@ -35,7 +35,7 @@ test "nothing asked writes an empty list and nulls" {
     var core = try Engine.open();
     defer core.close();
     const options = Options{ .path = "unused.elf" };
-    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -61,7 +61,7 @@ test "registers and memory words read off the core" {
     const spec = try std.fmt.bufPrint(&spec_buf, "0x{X}", .{base});
     var options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem_count = 1 };
     options.dump_mem[0] = .{ .spec = spec, .words = 2 };
-    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -95,7 +95,7 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     options.dump_mem[0] = .{ .spec = first, .words = 1 };
     options.dump_mem[1] = .{ .spec = second, .words = 1 };
     options.dump_mem_count = 2;
-    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -107,4 +107,8 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     try std.testing.expectEqual(@as(usize, 2), places.len);
     try std.testing.expectEqual(@as(i64, 0xBBBB0002), places[0].object.get("words").?.array.items[0].integer);
     try std.testing.expectEqual(@as(i64, 0xAAAA0001), places[1].object.get("words").?.array.items[0].integer);
+}
+
+test {
+    _ = @import("json_regs_test.zig");
 }
