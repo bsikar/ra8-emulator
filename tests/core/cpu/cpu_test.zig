@@ -12,6 +12,7 @@ test {
     _ = @import("park_test.zig");
     _ = @import("fixed_trip_test.zig");
     _ = @import("trip_decode_test.zig");
+    _ = @import("counted_bound_test.zig");
     _ = @import("systick_cut_test.zig");
     _ = @import("bti_test.zig");
     _ = @import("scs_route_test.zig");
