@@ -40,6 +40,17 @@ pub const Watch = struct {
         return self.words[0..self.len];
     }
 
+    /// Stop watching every word of `kind`, keeping the rest in order.
+    pub fn drop(self: *Watch, kind: Kind) void {
+        var kept: usize = 0;
+        for (self.list()) |word| {
+            if (word.kind == kind) continue;
+            self.words[kept] = word;
+            kept += 1;
+        }
+        self.len = kept;
+    }
+
     /// The first word that no longer holds its value, or null when every
     /// readable word does. `memory` is anything with `readWord(address) !u32`.
     pub fn changed(self: *const Watch, memory: anytype) ?Changed {
