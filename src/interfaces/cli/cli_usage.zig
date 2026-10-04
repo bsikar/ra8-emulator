@@ -107,7 +107,8 @@ pub const text =
     \\                     led) at endpoint E: i2c:riic@0x37, spi:spi1@ssl0,
     \\                     uart:sci3, gpio:P006 (up to 4 times)
     \\  --fault M@E=MODE   misbehave an --attach part: disconnected, nack:N,
-    \\                     stuck:0xHH, garbage:SEED, slow:NS, bus_low
+    \\                     stuck:0xHH, garbage:SEED, slow:NS, stretch:NS,
+    \\                     bus_low
     \\  --cms N            Secure code MRAM, 32 KB units (CMSAMON.CMS, 0..0x1FF)
     \\  --sfs N            Secure SiP flash, 32 KB units (SFSAMON.SFS, 0..0x1FF)
     \\  --console          stream SCI lines and read host input as console RX

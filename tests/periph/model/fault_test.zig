@@ -131,3 +131,12 @@ test "a slow gauge stays ready across reads, and without a clock" {
     loose.stop();
     try std.testing.expect(loose.acks());
 }
+
+test "a stretching gauge reports its stretch, and other modes report none" {
+    var gauge = gauge_mod.Gauge{};
+    var wrapper = fault.I2c.wrap(gauge.device());
+    try std.testing.expectEqual(@as(u64, 0), wrapper.device().stretch());
+    wrapper.set(.{ .stretch_ns = 750 });
+    try std.testing.expectEqual(@as(u64, 750), wrapper.device().stretch());
+    try std.testing.expect(wrapper.device().acks());
+}
