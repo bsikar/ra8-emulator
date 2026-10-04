@@ -51,6 +51,15 @@ pub const Device = struct {
     writeFn: *const fn (*anyopaque, u8) void,
     readFn: *const fn (*anyopaque, []u8) usize,
     stopFn: *const fn (*anyopaque) void,
+    /// Whether this address phase is acknowledged. Null is always: a part
+    /// that is on the bus answers. A fault wrapper (model/fault.zig) uses it
+    /// to drop off the bus or NACK some phases (RA8EMU-522).
+    ackFn: ?*const fn (*anyopaque) bool = null,
+
+    pub fn acks(self: Device) bool {
+        const ack = self.ackFn orelse return true;
+        return ack(self.context);
+    }
 
     pub fn write(self: Device, byte: u8) void {
         self.writeFn(self.context, byte);
@@ -99,6 +108,13 @@ pub const Registry = struct {
             }
         }
         return null;
+    }
+
+    /// The device that acknowledges an address phase to `address`, if one
+    /// does. Asked once per phase, so a device counting phases sees each.
+    pub fn answering(self: *Registry, address: u7) ?*Device {
+        const device = self.find(address) orelse return null;
+        return if (device.acks()) device else null;
     }
 
     pub fn count(self: *const Registry) usize {
