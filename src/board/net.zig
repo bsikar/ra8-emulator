@@ -3,7 +3,7 @@
 //!
 //! Which ports exist and where their PHYs answer is a board fact, so the
 //! wiring lives here rather than in the port model.
-const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const eth = @import("../periph/eth/eth.zig");
 const eth_queue = @import("../periph/eth/eth_queue.zig");
 const gateway = @import("../periph/eth/eth_gateway.zig");
@@ -40,7 +40,7 @@ pub const Rswitch = struct {
     pub fn attach(
         self: *Rswitch,
         bus: *periph.Bus,
-        memory: engine.Engine,
+        memory: Guest,
         domain: *const pdctr.Pdctr,
     ) periph.Error!void {
         for (&self.ports) |*port| {
@@ -64,7 +64,7 @@ pub const Rswitch = struct {
         try bus.add(self.pool.block());
         self.gateway.fwpc = &self.forward.fwpc;
         self.queues.mode = &self.gateway.mode;
-        self.queues.rings.memory = .{ .engine = memory };
+        self.queues.rings.memory = memory;
         try bus.add(self.queues.baseBlock());
         try bus.add(self.queues.requestBlock());
         try bus.add(self.queues.configBlock());

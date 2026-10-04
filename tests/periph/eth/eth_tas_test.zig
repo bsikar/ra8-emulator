@@ -58,7 +58,7 @@ test "TAS register window is connected to the powered board bus" {
     guard.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
     var domain = pdctr.Pdctr.init(&guard, .eswm);
     domain.write(pdctr.Domain.eswm.base(), 1, 0);
-    try cluster.attach(&bus, core, &domain);
+    try cluster.attach(&bus, .{ .engine = core }, &domain);
 
     const expected = eth.tas.reg.gate_state | 0x0055_aa55;
     bus.write(base + eth.tas.reg.ram_init, 4, eth.tas.reg.ram_init_request);
