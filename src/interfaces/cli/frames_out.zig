@@ -149,7 +149,8 @@ pub const Armed = struct {
     /// The first error an in-run frame hit; the boundary cannot return one.
     failed: ?anyerror = null,
 
-    /// Null when --frames-out is off.
+    /// Null when --frames-out is off. Call after board.attach: attaching the
+    /// GLCDC rebuilds its output stage, which would drop the Vsync.
     pub fn arm(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !?*Armed {
         const directory = path orelse return null;
         const self = try allocator.create(Armed);
