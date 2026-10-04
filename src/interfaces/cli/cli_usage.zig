@@ -129,6 +129,8 @@ pub const text =
     \\                     now, UTC) and count virtual time
     \\  --realtime         pace virtual time against the host clock at 1x
     \\                     and report achieved speed and drift
+    \\  --speed F          pace at F times real time (0.1, 0.25, 5, 100...),
+    \\                     or max for an unpaced run (the default)
     \\  --camera-source K  where the camera engine's pixels come from:
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or

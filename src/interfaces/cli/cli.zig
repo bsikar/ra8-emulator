@@ -87,8 +87,8 @@ pub const Options = struct {
     panel_only: bool = false,
     frames: @import("frames_args.zig").Options = .{},
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
-    /// `--realtime`: pace virtual time against the host clock (RA8EMU-181).
-    realtime: bool = false,
+    /// `--speed`/`--realtime`: pace in thousandths of 1x; null runs flat out.
+    speed: ?u64 = null,
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.

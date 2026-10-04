@@ -10,6 +10,7 @@ const request = @import("../../periph/model/request.zig");
 const fault_spec = @import("../../periph/model/fault_spec.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 const rtc_start = @import("rtc_start.zig");
+const speed = @import("../../periph/time/speed.zig");
 
 const Options = cli.Options;
 const card_setup = cli.card_setup;
@@ -49,7 +50,9 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--realtime")) {
-        options.realtime = true;
+        options.speed = 1000;
+    } else if (std.mem.eql(u8, flag, "--speed")) {
+        options.speed = try speedArg(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
         options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {
@@ -104,6 +107,14 @@ fn fault(options: *Options, spec: []const u8) !void {
     }
     fault_spec.place(options.attaches[0..options.attach_count], wanted) catch |err| {
         std.debug.print("--fault {s}: no --attach before it names that part\n", .{spec});
+        return err;
+    };
+}
+
+/// One `--speed` factor. A bad one says why before the run starts.
+fn speedArg(text: []const u8) !?u64 {
+    return speed.parse(text) catch |err| {
+        std.debug.print("--speed {s}: {s}\n", .{ text, speed.describe(err) });
         return err;
     };
 }

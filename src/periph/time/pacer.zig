@@ -91,6 +91,18 @@ pub const Pacer = struct {
         self.anchor_virtual = virtual_ns;
     }
 
+    /// Change the factor from here on. The schedule re-anchors at this
+    /// moment, so virtual time carries on from where it is, with no jump.
+    /// A zero factor is ignored; pausing is the session's (RA8EMU-184).
+    pub fn setSpeed(self: *Pacer, clock: Clock, virtual_ns: u64, speed_milli: u64) void {
+        if (speed_milli == 0) return;
+        const at = clock.now();
+        self.written_off_ns += at -| self.dueWall(virtual_ns);
+        self.anchor_wall = at;
+        self.anchor_virtual = virtual_ns;
+        self.speed_milli = speed_milli;
+    }
+
     pub fn report(self: *const Pacer, clock: Clock, virtual_ns: u64) Report {
         const at = clock.now();
         const due = self.dueWall(virtual_ns);
