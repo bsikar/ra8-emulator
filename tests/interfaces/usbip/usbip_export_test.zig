@@ -107,4 +107,5 @@ test "an import of an unknown busid answers status 1 with no record" {
 test {
     _ = @import("usbip_server_test.zig");
     _ = @import("usbip_listen_test.zig");
+    _ = @import("usbip_board_test.zig");
 }
