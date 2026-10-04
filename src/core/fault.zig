@@ -12,8 +12,6 @@
 //! that is a line, not a loop.
 const std = @import("std");
 const disasm = @import("../debug/disasm.zig");
-/// The Unicorn-side CCR.DIV_0_TRP trap (RA8EMU-413).
-pub const divide_hook = @import("divide_hook.zig");
 
 pub const Fault = struct {
     pc: u32,
