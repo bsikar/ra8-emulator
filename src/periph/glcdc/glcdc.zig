@@ -190,7 +190,7 @@ pub const Glcdc = struct {
     /// The whole register at a word-aligned offset. A CLUT entry reads back so
     /// a driver can check the palette it filled, and STMON is the block's own
     /// status rather than the last word written at it, so both answer first.
-    fn readWord(self: *Glcdc, offset: u32) u32 {
+    pub fn readWord(self: *Glcdc, offset: u32) u32 {
         if (clut.slotOf(offset)) |slot| {
             return self.palettes[slot.layer - 1].load(slot.plane, slot.index);
         }
@@ -385,6 +385,7 @@ pub const Glcdc = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
+            .peekFn = @import("glcdc_peek.zig").thunk,
         };
     }
 };
@@ -393,7 +394,6 @@ fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Glcdc = @ptrCast(@alignCast(context));
     return self.read(address, width);
 }
-
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
     const self: *Glcdc = @ptrCast(@alignCast(context));
     self.write(address, width, value);

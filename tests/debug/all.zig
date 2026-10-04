@@ -30,6 +30,7 @@ test {
     _ = @import("tally_test.zig");
     _ = @import("taken_in_test.zig");
     _ = @import("place_test.zig");
+    _ = @import("mem_dump_test.zig");
     _ = @import("registers_test.zig");
     _ = @import("hotspots_test.zig");
     _ = @import("profile_test.zig");

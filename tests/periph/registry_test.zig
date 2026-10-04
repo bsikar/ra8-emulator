@@ -127,3 +127,51 @@ test "each core's port stamps its own issuer on the access" {
     try std.testing.expectEqual(mod.Issuer.cpu0, witness.seen.?);
     try std.testing.expect(bus.port(.cpu1).bus == &bus);
 }
+
+/// A block that keeps a peek: every peek answers `kept`, and reads count.
+const PeekBlock = struct {
+    inner: TestBlock = .{},
+    kept: u32 = 0x0000_00FF,
+
+    fn peek(context: *anyopaque, address: u32, width: u3) u32 {
+        _ = address;
+        _ = width;
+        const self: *PeekBlock = @ptrCast(@alignCast(context));
+        return self.kept;
+    }
+};
+
+test "a block without a peek leaves the word unreadable and counts nothing" {
+    var bus = Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var block = TestBlock{};
+    try bus.add(block.descriptor(base, 0x100));
+    try std.testing.expectEqual(@as(?u32, null), bus.peek(base + 4, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.hits);
+    try std.testing.expectEqual(@as(u64, 0), bus.counters.reads);
+}
+
+test "a block's peek answers without a read reaching the block" {
+    var bus = Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var block = PeekBlock{};
+    var described = block.inner.descriptor(base, 0x100);
+    described.context = &block;
+    described.peekFn = PeekBlock.peek;
+    try bus.add(described);
+    try std.testing.expectEqual(@as(?u32, 0xFF), bus.peek(base + 4, 4));
+    try std.testing.expectEqual(@as(u32, 0), block.inner.hits);
+    try std.testing.expectEqual(@as(u64, 0), bus.counters.reads);
+}
+
+test "an unmodelled register peeks what was written and nothing before" {
+    var bus = Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    const at = base + 0x40;
+    try std.testing.expectEqual(@as(?u32, null), bus.peek(at, 4));
+    // The peek left the ready-bit alternation where it was: first read 0.
+    try std.testing.expectEqual(@as(u32, 0), bus.read(at, 4));
+    bus.write(at, 4, 0x1234_5678);
+    try std.testing.expectEqual(@as(?u32, 0x1234_5678), bus.peek(at, 4));
+    try std.testing.expectEqual(@as(?u32, 0x78), bus.peek(at, 1));
+}

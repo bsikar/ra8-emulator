@@ -14,6 +14,7 @@
 const std = @import("std");
 const elf = @import("../core/elf.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const Bus = @import("../periph/registry.zig").Bus;
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 
@@ -29,14 +30,15 @@ pub const Ask = struct {
 pub const limit: usize = 8;
 
 /// Print every asked place in order, nothing when none was asked.
-pub fn printAll(out: anytype, core: Guest, image: elf.Image, asks: []const Ask) !void {
-    for (asks) |ask| try print(out, core, image, ask.spec, ask.words);
+pub fn printAll(out: anytype, core: Guest, registers: ?*Bus, image: elf.Image, asks: []const Ask) !void {
+    for (asks) |ask| try print(out, core, registers, image, ask.spec, ask.words);
 }
 
 /// Print the dump, or nothing at all when no place was asked for.
 pub fn print(
     out: anytype,
     core: Guest,
+    registers: ?*Bus,
     image: elf.Image,
     spec: ?[]const u8,
     asked: ?u32,
@@ -51,9 +53,9 @@ pub fn print(
     for (0..total) |step| {
         const index: u32 = @intCast(step);
         if (place.startsLine(index)) try out.print("                  +0x{X:0>4}", .{index * 4});
-        if (core.readWord(at +% index * 4)) |value| {
+        if (word(core, registers, at +% index * 4)) |value| {
             try out.print(" 0x{X:0>8}", .{value});
-        } else |_| {
+        } else {
             try out.print(" <unreadable>", .{});
         }
         if (place.endsLine(index, total)) try out.print("\n", .{});
@@ -69,4 +71,14 @@ pub fn resolve(core: Guest, image: elf.Image, spec: []const u8) !u32 {
     if (want.name) |name| base = symbols.addressOf(image, name) orelse return error.Unresolved;
     if (want.deref) base = try core.readWord(base);
     return want.apply(base);
+}
+
+/// One word for the dump: out of memory, or, when memory refuses the
+/// address, out of a peripheral register read without side effects. The
+/// Zig core keeps no registers in memory, so without the second place a
+/// probe on a register reads nothing at all (RA8EMU-631).
+pub fn word(core: Guest, registers: ?*Bus, at: u32) ?u32 {
+    if (core.readWord(at)) |value| return value else |_| {}
+    const bus = registers orelse return null;
+    return bus.peek(at, 4);
 }
