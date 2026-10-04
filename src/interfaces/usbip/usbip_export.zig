@@ -19,6 +19,8 @@ pub const run = @import("usbip_run.zig");
 pub const urb = @import("usbip_urb.zig");
 /// The imported connection's SUBMIT/UNLINK traffic.
 pub const session = @import("usbip_session.zig");
+/// The live bridge a run polls at each board boundary.
+pub const bridge = @import("usbip_bridge.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;

@@ -111,4 +111,5 @@ test {
     _ = @import("usbip_run_test.zig");
     _ = @import("usbip_urb_test.zig");
     _ = @import("usbip_session_test.zig");
+    _ = @import("usbip_bridge_test.zig");
 }
