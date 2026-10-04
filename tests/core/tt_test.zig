@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const sau = ra8.periph.sau;
-const tt = ra8.core.csel.tt_hook.tt;
+const tt = ra8.core.csel.tt;
 const field = tt.field;
 
 const enable: u32 = 1 << 0;

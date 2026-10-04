@@ -109,7 +109,7 @@ test "each address names its HUM Figure 51.5 region" {
 }
 
 test "TT from the Secure state reports IRVALID and IREGION" {
-    const tt = ra8.core.csel.tt_hook.tt;
+    const tt = ra8.core.csel.tt;
     const map = idau.Map{};
     const unit = sau.Sau{ .ctrl = enable };
     const word = tt.respondWith(&unit, map.answer(0x3210_0000), 0x3210_0000, true);
@@ -120,7 +120,7 @@ test "TT from the Secure state reports IRVALID and IREGION" {
 }
 
 test "TT from the Non-secure state hides the IDAU region" {
-    const tt = ra8.core.csel.tt_hook.tt;
+    const tt = ra8.core.csel.tt;
     const map = idau.Map{};
     const unit = sau.Sau{ .ctrl = enable };
     const word = tt.respondWith(&unit, map.answer(0x3210_0000), 0x3210_0000, false);

@@ -6,7 +6,8 @@
 //! CPU model. So its TT said every address was Secure, and
 //! cmse_check_address_range refused every Non-secure buffer a veneer was
 //! handed. This file builds the response word from the board's map instead;
-//! src/core/tt_hook.zig puts it in front of the CPU model.
+//! The Zig core's TT executor (src/core/cpu/ops/tt.zig) and its SAU
+//! source answer from it.
 //!
 //! THE MPU HALF IS THE DISABLED-MPU ANSWER: MRVALID clear, R and RW set. The
 //! CPU model's MPU is never programmed either (src/core/mpu_hook.zig keeps
