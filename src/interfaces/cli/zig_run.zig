@@ -25,6 +25,8 @@ const mem_dump = @import("../../debug/mem_dump.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
 const Until = @import("../../core/until.zig").Until;
+/// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
+pub const cpu0_memory = @import("zig_memory.zig");
 
 const BootWriter = struct {
     output: *std.fs.File.Writer,
@@ -148,11 +150,11 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .memory = clock.memory, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, timebase.*, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
-        // The globals a memory-probe verdict reads. The Zig core's stores land
-        // in the same engine memory, so the line is the Unicorn run's line.
+        // The globals a memory-probe verdict reads, out of the Zig core's
+        // own memory, so the line is the Unicorn run's line.
         if (!options.report_json) try report_dumps.dumpSymbols(out, clock.memory, image, options);
         if (!options.report_json) try mem_dump.printAll(out, clock.memory, image, options.memDumps());
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });

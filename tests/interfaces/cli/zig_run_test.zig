@@ -99,3 +99,7 @@ test "a Zig core run profiles retired function instructions and writes folded ou
     defer std.testing.allocator.free(folded);
     try std.testing.expectEqualStrings("profiled_function 3\n", folded);
 }
+
+test {
+    _ = @import("zig_memory_test.zig");
+}

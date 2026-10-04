@@ -185,7 +185,13 @@ fn attachTransfers(self: *Board) !void {
 
 fn attachCore(self: *Board, core: *engine.Engine) !void {
     try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core, .{
+    try primeCoreWindows(self, core, cpu0Windows(self));
+}
+
+/// CPU0's windows: the board's own SAU, MPU tables, guard, AIRCR and
+/// fault clears. A `--cpu zig` run primes them into its own store.
+pub fn cpu0Windows(self: *Board) CoreWindows {
+    return .{
         .partitions = &self.partitions,
         .regions = &self.regions,
         .regions_ns = &self.regions_ns,
@@ -193,7 +199,7 @@ fn attachCore(self: *Board, core: *engine.Engine) !void {
         .identity = cpuid.cpu0,
         .control = &self.control,
         .clears = &self.clears,
-    });
+    };
 }
 
 /// The state that lives inside one core rather than on the bus: its SAU,

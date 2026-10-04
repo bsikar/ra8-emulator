@@ -45,8 +45,10 @@ fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
 /// addresses for the Secure boot to copy out. It goes in beside the main
 /// image, never instead of it, and its entry point is the Secure side's to
 /// find: nothing here resets into it.
-fn loadNonSecure(allocator: std.mem.Allocator, core: engine.Engine, path: []const u8) !void {
-    _ = try core.loadImage(try openImage(allocator, path));
+fn loadNonSecure(allocator: std.mem.Allocator, core: engine.Engine, cpu0: *ra8.board.zig_run.cpu0_memory.Cpu0, path: []const u8) !void {
+    const ns = try openImage(allocator, path);
+    _ = try core.loadImage(ns);
+    try cpu0.load(ns);
 }
 
 /// Hand the watched place the run's own period counter, then hook it.
@@ -121,12 +123,12 @@ pub fn main() !u8 {
     defer board.deinit();
     fitBoard(&board, allocator, options) catch return 2;
     defer card_setup.saveBack(&board, options.sd_path, options.sd_save);
-    try board.attach(&core);
-
+    var cpu0: ra8.board.zig_run.cpu0_memory.Cpu0 = .{};
+    defer cpu0.close();
+    try cpu0.attach(&board, &core, image, options);
     var parts = Parts{};
     const written = try loadAll(&core, &board, image, &parts, options);
-    if (options.ns_path) |path| loadNonSecure(allocator, core, path) catch return 1;
-
+    if (options.ns_path) |path| loadNonSecure(allocator, core, &cpu0, path) catch return 1;
     const vector_base = image.vectorBase() orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
         return 1;
@@ -136,7 +138,7 @@ pub fn main() !u8 {
     const out = try announce(core, written, vector_base, entry, options.ctl_cpu_load);
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
-    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, .{ .engine = core }, &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
+    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, cpu0.guest(core), &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     _ = try parts.divide.arm(&core, &interrupts, image);
@@ -268,10 +270,7 @@ fn verdict(
         return 0;
     };
     if (watched.reached) {
-        try out.print(
-            "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
-            .{ options.stop_symbol.?, watched.reaches, pc },
-        );
+        try out.print("stopped clean on {s} >= {d}, pc 0x{X:0>8}\n", .{ options.stop_symbol.?, watched.reaches, pc });
         return 0;
     }
     if (spent) {

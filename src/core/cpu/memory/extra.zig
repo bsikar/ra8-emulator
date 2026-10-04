@@ -10,8 +10,11 @@ const std = @import("std");
 
 pub const Error = error{ Mapped, Full, OutOfMemory };
 
-/// More than the two windows the board maps, so a third has room.
-pub const capacity = 8;
+/// Room for every page the board maps. The MRAM option window maps one
+/// window per page (17 of them, mram_window.zig), the TSN page is one more,
+/// and an image's segments outside memmap take the rest. At 8 the option
+/// window alone filled it, so an image page there failed to map (RA8EMU-580).
+pub const capacity = 32;
 
 const Window = struct {
     base: u32,
