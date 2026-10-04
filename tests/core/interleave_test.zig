@@ -248,8 +248,8 @@ test "an event INTSELR hands to CPU1 pends CPU1's NVIC and not CPU0's" {
     board.events.select.write(icu.intsel.wordAddress(0), 4, 1 << 0x12);
     board.events.cpu1[3] = 0x12;
     board.events.links[6] = 0x13;
-    try board.raise(cpu0, 0x12);
-    try board.raise(cpu0, 0x13);
+    try board.raise(.{ .engine = cpu0 }, 0x12);
+    try board.raise(.{ .engine = cpu0 }, 0x13);
 
     try std.testing.expectEqual(@as(u32, 1) << 3, try cpu1.core.readWord(memmap.nvic.ispr));
     try std.testing.expectEqual(@as(u32, 1) << 6, try cpu0.readWord(memmap.nvic.ispr));

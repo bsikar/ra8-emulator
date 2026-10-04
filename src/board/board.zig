@@ -8,6 +8,7 @@
 const std = @import("std");
 
 const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
 const construct = @import("construct.zig");
@@ -365,12 +366,12 @@ pub const Board = struct {
     /// next door in boundary.zig: the order the blocks are stepped in and
     /// where an event goes is its own subject, and this file is the list of
     /// what the board is made of.
-    pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
+    pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
         return boundary.tick(self, core, instructions);
     }
 
     /// One event, offered to the links, the transfer controller and the core.
-    pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
+    pub fn raise(self: *Board, core: Guest, event: u16) !void {
         return boundary.raise(self, core, event);
     }
 
@@ -393,5 +394,5 @@ pub const Board = struct {
 
 fn tickThunk(context: *anyopaque, core: engine.Engine, instructions: u32) anyerror!void {
     const board: *Board = @ptrCast(@alignCast(context));
-    return board.tick(core, instructions);
+    return board.tick(.{ .engine = core }, instructions);
 }
