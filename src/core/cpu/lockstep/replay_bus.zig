@@ -45,7 +45,7 @@ pub const ReplayBus = struct {
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *ReplayBus = @ptrCast(@alignCast(ctx));
-        if (!BoardBus.inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
+        if (!BoardBus.inWindow(address, bytes.len)) return self.scs.store(.{ .engine = self.memory }, address, bytes);
         if (!self.log.armed) return bus.Error.Unmapped;
         var padded = [_]u8{0} ** 4;
         const w = try width(bytes.len);

@@ -50,7 +50,7 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
         std.debug.print("no executable segment, nothing to reset into\n", .{});
         return 1;
     };
-    var memory: BoardBus = .{ .memory = .{ .core = &core }, .periph = &board.bus, .scs = .{ .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears } };
+    var memory: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &board.bus, .scs = .{ .partitions = &board.partitions, .regions = &board.regions, .clears = &board.clears } };
     var machine: stop_machine.Machine = .{};
     var driver: step_hook.Driver = .{ .machine = &machine };
     var watching: watch_bus.WatchBus = .{ .inner = memory.view(), .driver = &driver };

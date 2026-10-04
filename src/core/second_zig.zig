@@ -39,7 +39,7 @@ pub const SecondZig = struct {
     pub fn open(self: *SecondZig, second: *Second, periph: *registry.Bus) !void {
         self.* = .{
             .board = .{
-                .memory = .{ .core = &second.core },
+                .memory = .{ .engine = .{ .core = &second.core } },
                 .periph = periph,
                 .issuer = .cpu1,
                 .scs = .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears },

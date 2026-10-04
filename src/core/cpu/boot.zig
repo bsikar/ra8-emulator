@@ -7,8 +7,8 @@
 //! one line saying which, so a corpus sweep can tell how far each image
 //! gets; main then prints the board's own report (report/run.zig, zigCore).
 const std = @import("std");
-const engine = @import("../engine.zig");
-const EngineBus = @import("engine_bus.zig").EngineBus;
+const Guest = @import("memory/guest.zig").Guest;
+const GuestBus = @import("memory/guest_bus.zig").GuestBus;
 const BoardBus = @import("board_bus.zig").BoardBus;
 const registry = @import("../../periph/registry.zig");
 const cpu_mod = @import("cpu.zig");
@@ -98,25 +98,26 @@ pub const Wiring = struct {
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
 /// `ran` is set to how many instructions a `--cpu zig` run retired.
-pub fn start(out: anytype, choice: Choice, image: elf.Image, core: *const engine.Engine, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
+pub fn start(out: anytype, choice: Choice, image: elf.Image, memory: Guest, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
-        .zig => if (periph) |board| runOnBoard(out, core, board, vector_base, budget, ran, wiring) else run(out, core, vector_base, budget, wiring.retire_listener),
-        .lockstep => lockstep_mode.run(out, .{ .main = image, .ns = wiring.ns_image }, core, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener, wiring.blocks),
+        .zig => if (periph) |board| runOnBoard(out, memory, board, vector_base, budget, ran, wiring) else run(out, memory, vector_base, budget, wiring.retire_listener),
+        // Lockstep compares against Unicorn, so it only runs over the engine.
+        .lockstep => lockstep_mode.run(out, .{ .main = image, .ns = wiring.ns_image }, &memory.engine, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener, wiring.blocks),
     };
 }
 
-/// Run the image already loaded into `core` on the Zig core, print how it
+/// Run the image already loaded into `memory` on the Zig core, print how it
 /// ended, and return the exit status: 0 when the budget was spent, 1 when
 /// the core stopped short of it.
-pub fn run(out: anytype, core: *const engine.Engine, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
-    var memory: EngineBus = .{ .core = core };
-    return runOn(out, memory.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null);
+pub fn run(out: anytype, memory: Guest, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
+    var reach = GuestBus.of(&memory, false);
+    return runOn(out, reach.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
-pub fn runOnBoard(out: anytype, core: *const engine.Engine, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = .{ .core = core, .fast_enabled = wiring.fast_memory }, .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut } };
+pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
+    var board: BoardBus = .{ .memory = GuestBus.of(&memory, wiring.fast_memory), .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut } };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
