@@ -179,6 +179,16 @@ pub const Rtc = struct {
         return reset.running(self.reg[off.rcr2]);
     }
 
+    /// Start counting virtual time from `at`, the way a battery-backed
+    /// clock is already running when the board comes up (--rtc-start).
+    pub fn seed(self: *Rtc, at: clock.Calendar) void {
+        self.now = at;
+        self.pace = .{ .mode = .virtual };
+        self.reg[off.rcr2] |= control.start;
+        self.publish();
+        self.matched = self.alarmMatches();
+    }
+
     /// One geared chunk boundary.
     pub fn tick(self: *Rtc) void {
         self.tickFor(0);
