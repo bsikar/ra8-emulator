@@ -8,6 +8,7 @@
 //! esp-hosted-mcu v2.12.12 common/proto/esp_hosted_rpc.proto.
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
+const scan = @import("esp_scan.zig");
 
 pub const Error = event.Error;
 
@@ -47,7 +48,7 @@ pub fn body(w: *event.Writer, id: u32) Error!bool {
     switch (id) {
         Id.req_mac => try w.field(1, &mac),
         Id.req_ap_info => try apInfo(w),
-        else => return false,
+        else => return scan.body(w, id),
     }
     return true;
 }
@@ -72,12 +73,15 @@ pub fn followUp(id: u32) ?u32 {
     return switch (id) {
         Id.req_start => Id.event_no_args,
         Id.req_connect => Id.event_connected,
+        scan.Id.req_start => scan.Id.event_done,
         else => null,
     };
 }
 
-/// Writes the body of event `id` (WifiEventNoArgs or StaConnected).
+/// Writes the body of event `id` (WifiEventNoArgs, StaConnected or
+/// StaScanDone).
 pub fn eventBody(w: *event.Writer, id: u32) Error!void {
+    if (id == scan.Id.event_done) return scan.eventBody(w);
     if (id == Id.event_no_args) return unsigned(w, 2, sta_start);
     var buf: [48]u8 = undefined;
     var inner: event.Writer = .{ .buf = &buf };
