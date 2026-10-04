@@ -7,6 +7,8 @@
 //! so a host sees the same vendor, product and class it would on silicon.
 const std = @import("std");
 const wire = @import("usbip_wire.zig");
+/// The operation phase built on these exports.
+pub const server = @import("usbip_server.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
