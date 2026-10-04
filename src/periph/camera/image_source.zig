@@ -35,6 +35,14 @@ pub fn formatFor(control: u8) convert.Format {
     return if (control >> 4 == 0x6) .rgb565 else .yuv422;
 }
 
+/// Name a picture source after its file for the end-of-run report.
+pub fn labelled(source: frame_source.FrameSource, path: []const u8) frame_source.FrameSource {
+    var named = source;
+    named.label = "still image";
+    named.detail = path;
+    return named;
+}
+
 pub const ImageSource = struct {
     allocator: std.mem.Allocator,
     image: decoded.Image,

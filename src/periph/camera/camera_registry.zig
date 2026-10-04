@@ -26,10 +26,10 @@ pub const Spec = struct {
     pub fn open(self: Spec, allocator: std.mem.Allocator, format_control: *const u8) !frame_source.FrameSource {
         return switch (self.kind) {
             .gradient => gradient.source(),
-            .image => (image.ImageSource.load(allocator, self.arg, format_control) catch |err| {
+            .image => image.labelled((image.ImageSource.load(allocator, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
-            }).source(),
+            }).source(), self.arg),
         };
     }
 };
