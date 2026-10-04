@@ -326,7 +326,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_vcmp | missing |
 | mve_vpred | 20 |
 | mve_vctp | 24 |
-| mve_lob_tp | missing |
+| mve_lob_tp | 27 |
 | mve_vdup | 18 |
 | mve_lane_move | 26 |
 | mve_lane_pair | 19 |
