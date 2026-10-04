@@ -168,3 +168,37 @@ test "the window answers only its own three registers" {
     // The byte above SCKSCR is outside the window and answers zero.
     try std.testing.expectEqual(@as(u32, 0), fix.tree.read(Fixture.at(sysclk.win_span), 1));
 }
+
+const rate = sysclk.rate;
+
+/// The EK-RA8D2 quickstart PLL1: XTAL 24 MHz, /3 in, x250.00, P /2.
+const quickstart_pll1 = rate.PllConfig{ .ccr = 0xFA02, .ccr2 = 0x451 };
+
+test "the quickstart PLL1 with the bring-up dividers runs CPU0 at 1 GHz and CPU1 at 250 MHz" {
+    const inputs = rate.Inputs{ .source = .pll1, .divcr2 = 0x2020, .pll1 = quickstart_pll1, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, 1_000_000_000), rate.pllP(quickstart_pll1));
+    try std.testing.expectEqual(@as(?u64, 1_000_000_000), rate.coreHz(inputs, .cpu0));
+    try std.testing.expectEqual(@as(?u64, 250_000_000), rate.coreHz(inputs, .cpu1));
+}
+
+test "out of reset the tree runs both cores on HOCO" {
+    const inputs = rate.Inputs{ .source = .hoco, .divcr2 = 0, .pll1 = .{}, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, 20_000_000), rate.coreHz(inputs, .cpu0));
+    try std.testing.expectEqual(@as(?u64, 20_000_000), rate.coreHz(inputs, .cpu1));
+}
+
+test "a divider on MOCO and on the main oscillator divides the cited frequency" {
+    const moco = rate.Inputs{ .source = .moco, .divcr2 = 0x0001, .pll1 = .{}, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, 4_000_000), rate.coreHz(moco, .cpu0));
+    const main = rate.Inputs{ .source = .main, .divcr2 = 0x0080, .pll1 = .{}, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, 8_000_000), rate.coreHz(main, .cpu1));
+}
+
+test "an uncited source, an unconfigured PLL and a prohibited divider leave the rate unknown" {
+    const loco = rate.Inputs{ .source = .loco, .divcr2 = 0, .pll1 = .{}, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, null), rate.coreHz(loco, .cpu0));
+    const bare = rate.Inputs{ .source = .pll2, .divcr2 = 0, .pll1 = quickstart_pll1, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, null), rate.coreHz(bare, .cpu0));
+    const prohibited = rate.Inputs{ .source = .hoco, .divcr2 = 0x0007, .pll1 = .{}, .pll2 = .{} };
+    try std.testing.expectEqual(@as(?u64, null), rate.coreHz(prohibited, .cpu0));
+}

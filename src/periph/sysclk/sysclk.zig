@@ -56,6 +56,8 @@ const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
 const oscsf = @import("../oscsf.zig");
 const div = @import("sysclk_div.zig");
+/// Each core's clock in Hz, from this tree (RA8EMU-515).
+pub const rate = @import("sysclk_rate.zig");
 const hazard = @import("../voltage_hazard.zig");
 
 /// Window geometry: SCKDIVCR (+0x020) through SCKSCR (+0x026) inclusive.
