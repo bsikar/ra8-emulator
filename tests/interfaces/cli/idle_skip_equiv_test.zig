@@ -2,6 +2,7 @@
 //! same state at the same virtual time with and without idle fast-forward.
 const std = @import("std");
 const ra8 = @import("ra8");
+const store_board = @import("store_board.zig");
 
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
@@ -47,21 +48,21 @@ const Counted = struct {
 };
 
 fn runIdler(skip: bool) !Ended {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     try idler.load(core);
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try store_board.attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .idle_skip = skip };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .idle_skip = skip };
     var counted: Counted = .{ .clock = &clock };
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
-    const status = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, idler.base, budget, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
+    const status = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, budget, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
     return .{
         .status = status,
         .ran = ran,
