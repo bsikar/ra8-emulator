@@ -3,4 +3,5 @@ test {
     _ = @import("timebase_test.zig");
     _ = @import("event_queue_test.zig");
     _ = @import("systick_due_test.zig");
+    _ = @import("pacer_test.zig");
 }
