@@ -66,4 +66,5 @@ test "SCI2 receives the C6 idle header in Simple-SPI mode" {
 
 test {
     _ = @import("esp_hosted/esp_frame_test.zig");
+    _ = @import("esp_hosted/esp_event_test.zig");
 }
