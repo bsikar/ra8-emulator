@@ -9,7 +9,6 @@ pub const core = struct {
     pub const cli = @import("interfaces/cli/cli.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
-    pub const csel_hook = @import("core/csel_hook.zig");
     pub const disasm = @import("debug/disasm.zig");
     pub const elf = @import("core/elf.zig");
     pub const long_shift = @import("core/long_shift.zig");

@@ -95,7 +95,10 @@ test {
     _ = @import("core/fault_test.zig");
     _ = @import("core/engine_test.zig");
     _ = @import("core/csel_test.zig");
-    _ = @import("core/csel_hook_test.zig");
+    _ = @import("core/clrm_test.zig");
+    _ = @import("core/fp_context_test.zig");
+    _ = @import("core/fpcxt_resume_test.zig");
+    _ = @import("core/tt_test.zig");
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/long_shift_test.zig");

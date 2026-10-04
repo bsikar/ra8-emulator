@@ -1,6 +1,6 @@
 //! Covers src/core/csel.zig.
 //!
-//! The half that needs a live core is covered in tests/core/csel_hook_test.zig.
+//! The Zig core's executor is covered in tests/core/cpu/ops/csel_test.zig.
 //! What is worth checking here is the decode and the four tails, against the
 //! encodings arm-none-eabi-as 13.3.rel1 produced for armv8.1-m.main.
 const std = @import("std");

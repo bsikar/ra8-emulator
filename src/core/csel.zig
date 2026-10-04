@@ -39,13 +39,10 @@ const std = @import("std");
 /// CLRM, the other Armv8.1-M gap the CMSE entry stub hits. Reached from here
 /// because src/root.zig is at its 400-line limit (RA8EMU-63).
 pub const clrm = @import("clrm.zig");
-pub const clrm_hook = @import("clrm_hook.zig");
 pub const fp_context = @import("fp_context.zig");
 pub const fpcxt_resume = @import("fpcxt_resume.zig");
 /// TT from the board's SAU rather than the CPU model's (RA8EMU-348).
 pub const tt = @import("tt.zig");
-/// VSCCLRM as Armv8.1-M has it, not as a VLDM (RA8EMU-372).
-pub const vscclrm_hook = @import("vscclrm_hook.zig");
 
 /// Which tail runs when the condition fails.
 pub const Kind = enum { sel, inc, inv, neg };
