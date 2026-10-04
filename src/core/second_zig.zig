@@ -1,11 +1,10 @@
 //! CPU1 on the Zig core (RA8EMU-234). Its memory is a memory.Guest
-//! (RA8EMU-535): the engine CPU1 already has for Unicorn, which shares
-//! CPU0's SRAM, or a Store with no engine at all (RA8EMU-572). A second Zig Cpu reads and writes through a BoardBus
+//! (RA8EMU-535) over CPU1's own Store, which borrows CPU0's SRAM
+//! (RA8EMU-572). A second Zig Cpu reads and writes through a BoardBus
 //! over that Guest, so it reaches the same shared SRAM and the same
 //! peripheral blocks as CPU0. The bus names CPU1 as the issuer, so a
 //! block that answers per core (IPCSEM, the ICU's per-core view) sees the
-//! right one. The SAU, MPU and fault-clear units are CPU1's own, the ones
-//! `Second.open` wired for Unicorn.
+//! right one. The SAU, MPU and fault-clear units are CPU1's own.
 //!
 //! The core carries the M33's profile (src/core/part.zig), so an Armv8.1-M
 //! encoding takes UsageFault UNDEFINSTR here, where CPU0 would run it.
@@ -62,15 +61,10 @@ pub const SecondZig = struct {
     /// CPU1's formed blocks, when the run uses them (RA8EMU-408).
     formed: ?*BlockCache = null,
 
-    /// CPU1's Zig core over `second`'s memory, reset from its vector table.
-    /// Built in storage the caller holds: the core keeps pointers to this
-    /// struct's bus, quiet source, interrupt source and decode cache.
-    pub fn open(self: *SecondZig, second: *Second, periph: *registry.Bus) !void {
-        try self.openOn(.{ .engine = second.core }, Units.of(second), periph);
-    }
-
-    /// The same core over any `memory`, a Store included, so CPU1 runs with
-    /// no engine open (RA8EMU-572).
+    /// CPU1's Zig core over `memory` (its own store), reset from its vector
+    /// table, so CPU1 runs with no engine open (RA8EMU-572). Built in storage
+    /// the caller holds: the core keeps pointers to this struct's bus, quiet
+    /// source, interrupt source and decode cache.
     pub fn openOn(self: *SecondZig, memory: Guest, units: Units, periph: *registry.Bus) !void {
         self.* = .{ .memory = memory, .board = undefined, .cpu = undefined };
         self.board = .{
