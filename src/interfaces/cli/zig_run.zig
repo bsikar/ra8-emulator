@@ -128,17 +128,15 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 }
 
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
-/// `memory` is CPU0's: the caller picks its backend (RA8EMU-577). `core` is
-/// CPU0's engine, or null when nothing opened one (RA8EMU-593); only an
-/// engine-backed CPU1 needs it.
-pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
+/// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
+pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
     if (path) |named| {
-        pair.open(std.heap.page_allocator, core, board, named, memory) catch |err| {
+        pair.open(std.heap.page_allocator, board, named, memory) catch |err| {
             std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
             return 1;
         };

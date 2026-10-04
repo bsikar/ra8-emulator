@@ -9,8 +9,8 @@
 //! `attachStore` and reads everything back off the store.
 //!
 //! A run with a second core goes on the store too: CPU1 gets a store of its
-//! own that borrows this one's shared SRAM (RA8EMU-588).
-const engine = @import("../../core/engine.zig");
+//! own that borrows this one's shared SRAM (RA8EMU-588). Since RA8EMU-607
+//! there is no engine arm left here: every run is on the store.
 const elf = @import("../../core/elf.zig");
 const Store = @import("../../core/cpu/memory/store.zig").Store;
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
@@ -19,22 +19,9 @@ const wiring = @import("../../board/wiring.zig");
 const Board = @import("../../board/board.zig").Board;
 const cli = @import("cli.zig");
 
-/// Whether this run's CPU0 runs on its own store.
-pub fn wanted(options: cli.Options) bool {
-    return options.cpu == .zig;
-}
-
 pub const Cpu0 = struct {
-    /// Null when the run stays on the engine.
+    /// Null until `attachStore` makes it.
     store: ?Store = null,
-
-    /// Attach the board. A run that wants a store gets its blocks, its
-    /// windows and the image there; any other run attaches to the engine
-    /// exactly as before.
-    pub fn attach(self: *Cpu0, board: *Board, core: *engine.Engine, image: elf.Image, options: cli.Options) !void {
-        if (!wanted(options)) return board.attach(core);
-        _ = try self.attachStore(board, image);
-    }
 
     /// Put CPU0 on a store of its own: the board's blocks, its windows, then
     /// the image. Returns the bytes the image wrote, for the opening line.
@@ -54,12 +41,6 @@ pub const Cpu0 = struct {
     /// Load a second image (the `--ns` half) into the store, if there is one.
     pub fn load(self: *Cpu0, image: elf.Image) !void {
         if (self.store) |*held| _ = try loader.image(.{ .store = held }, image);
-    }
-
-    /// CPU0's memory: the store when there is one, else the engine's.
-    pub fn guest(self: *Cpu0, core: engine.Engine) Guest {
-        if (self.store) |*held| return .{ .store = held };
-        return .{ .engine = core };
     }
 
     pub fn close(self: *Cpu0) void {

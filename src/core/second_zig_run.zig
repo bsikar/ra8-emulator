@@ -1,15 +1,14 @@
-//! CPU1's half of a --cpu zig run (RA8EMU-234). When CPU0 runs on its own
-//! store, CPU1 gets a store of its own that borrows CPU0's shared SRAM, and
-//! no engine is opened for it (RA8EMU-588); its `Second` then only carries
-//! its run state and units. Otherwise CPU1 still gets the engine-backed
-//! `Second` that Unicorn runs use. Either way the Zig half reads and writes
-//! only through CPU1's memory.Guest (RA8EMU-535). The instructions themselves run on CPU1's Zig core
+//! CPU1's half of a --cpu zig run (RA8EMU-234). CPU0 runs on its own store,
+//! so CPU1 gets a store of its own that borrows CPU0's shared SRAM, and no
+//! engine is opened for it (RA8EMU-588); its `Second` only carries its run
+//! state and units. The engine arm is gone (RA8EMU-607). The Zig half reads
+//! and writes only through CPU1's memory.Guest (RA8EMU-535). The
+//! instructions themselves run on CPU1's Zig core
 //! (src/core/second_zig.zig), which takes one turn per CPU0 round. Turns
 //! are sized by CPUCLK1 against CPUCLK0 (src/core/core_rate.zig), exactly as
 //! on Unicorn. CPU1's own timebase (its SysTick) advances by what it ran.
 const std = @import("std");
 const elf = @import("elf.zig");
-const engine = @import("engine.zig");
 const second_core = @import("second_core.zig");
 const SecondZig = @import("second_zig.zig").SecondZig;
 const Board = @import("../board/board.zig").Board;
@@ -25,17 +24,18 @@ pub const Driver = struct {
     /// CPU1's Non-secure SysTick (RA8EMU-449); `second.state.timebase` is its
     /// Secure one and keeps DWT_CYCCNT.
     ns_timebase: clocks.Clocks,
-    /// CPU1's own store when CPU0 runs on one; `second`'s engine is then
-    /// never opened (RA8EMU-588).
+    /// CPU1's own store; `second`'s engine is never opened (RA8EMU-588).
+    /// Null only for a driver a test built by hand on an engine.
     store: ?Store,
 
-    /// CPU1 from the image at `path`, on `owner`'s board, ready to take
-    /// turns. `memory` is CPU0's: on a store, CPU1 borrows its shared SRAM.
-    /// Built in storage the caller holds: both halves keep pointers into it.
-    /// `owner` is CPU0's engine; only the engine arm needs it, so a run on
-    /// stores passes null and opens no engine (RA8EMU-593).
-    pub fn open(self: *Driver, allocator: std.mem.Allocator, owner: ?*engine.Engine, board: *Board, path: []const u8, memory: Guest) !void {
-        if (memory == .engine and owner == null) return error.NoEngine;
+    /// CPU1 from the image at `path`, on `board`, ready to take
+    /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
+    /// in storage the caller holds: both halves keep pointers into it.
+    pub fn open(self: *Driver, allocator: std.mem.Allocator, board: *Board, path: []const u8, memory: Guest) !void {
+        const lender = switch (memory) {
+            .store => |lent| lent,
+            .engine => return error.NoStore,
+        };
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
         const bytes = try file.readToEndAlloc(allocator, second_core.limits.image_bytes);
@@ -43,13 +43,7 @@ pub const Driver = struct {
         const image = try elf.Image.init(bytes);
         self.ns_timebase = .{ .words = systick_bank.non_secure_words };
         self.store = null;
-        switch (memory) {
-            .store => |lender| return self.openOwn(lender, board, image),
-            .engine => {},
-        }
-        try self.second.open(owner.?, board, image);
-        errdefer self.second.close();
-        try self.core.open(&self.second, &board.bus);
+        return self.openOwn(lender, board, image);
     }
 
     fn openOwn(self: *Driver, lender: *const Store, board: *Board, image: elf.Image) !void {
