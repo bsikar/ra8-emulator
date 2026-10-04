@@ -1,6 +1,8 @@
 //! A small deterministic GIF89a writer for sampled panel frames.
 const std = @import("std");
 
+pub const lzw = @import("gif_lzw.zig");
+
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     file: std.fs.File,
@@ -69,21 +71,13 @@ pub const Writer = struct {
         try self.word(self.width);
         try self.word(self.height);
         try self.file.writer().writeByte(0);
-        try self.file.writer().writeByte(8);
+        try self.file.writer().writeByte(lzw.min_code_size);
+        const indices = try self.allocator.alloc(u8, pixels.len);
+        defer self.allocator.free(indices);
+        for (pixels, indices) |pixel, *index| index.* = quantize(pixel);
         var compressed = std.ArrayList(u8).init(self.allocator);
         defer compressed.deinit();
-        var bits: u32 = 0;
-        var bit_count: u5 = 0;
-        const codes = compressed.writer();
-        const values = [_]u16{256};
-        for (values) |code| try writeCode(codes, &bits, &bit_count, code);
-        for (pixels) |pixel| {
-            const quantized: u8 = @truncate((pixel >> 16 & 0xE0) | (pixel >> 11 & 0x1C) | (pixel >> 6 & 0x03));
-            try writeCode(codes, &bits, &bit_count, quantized);
-            try writeCode(codes, &bits, &bit_count, 256);
-        }
-        try writeCode(codes, &bits, &bit_count, 257);
-        if (bit_count != 0) try compressed.append(@truncate(bits));
+        try lzw.encode(self.allocator, indices, &compressed);
         var offset: usize = 0;
         while (offset < compressed.items.len) {
             const count = @min(255, compressed.items.len - offset);
@@ -95,14 +89,9 @@ pub const Writer = struct {
         self.wrote += 1;
     }
 
-    fn writeCode(writer: anytype, bits: *u32, bit_count: *u5, code: u16) !void {
-        bits.* |= @as(u32, code) << bit_count.*;
-        bit_count.* += 9;
-        while (bit_count.* >= 8) {
-            try writer.writeByte(@truncate(bits.*));
-            bits.* >>= 8;
-            bit_count.* -= 8;
-        }
+    /// RGB 3-3-2 index into the fixed palette written by `header`.
+    fn quantize(pixel: u32) u8 {
+        return @truncate((pixel >> 16 & 0xE0) | (pixel >> 11 & 0x1C) | (pixel >> 6 & 0x03));
     }
 
     pub fn finish(self: *Writer) !void {

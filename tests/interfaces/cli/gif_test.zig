@@ -2,6 +2,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const gif = ra8.board.report.gif;
+const lzw_decode = @import("gif_lzw_decode.zig");
 
 const Decoded = struct {
     pixels: []u8,
@@ -32,20 +33,9 @@ fn decodeFrame(bytes: []const u8, allocator: std.mem.Allocator, requested: usize
         }
         cursor += 1;
 
-        var decoded = std.ArrayList(u8).init(allocator);
-        defer decoded.deinit();
-        var bit: usize = 0;
-        while (bit + 9 <= compressed.items.len * 8) {
-            var code: u16 = 0;
-            for (0..9) |shift| {
-                code |= @as(u16, (compressed.items[(bit + shift) / 8] >> @intCast((bit + shift) % 8)) & 1) << @intCast(shift);
-            }
-            bit += 9;
-            if (code == 256) continue;
-            if (code == 257) break;
-            try decoded.append(@intCast(code));
-        }
-        if (frame == requested) return .{ .pixels = try decoded.toOwnedSlice(), .delay = delay };
+        const decoded = try lzw_decode.decode(allocator, compressed.items);
+        if (frame == requested) return .{ .pixels = decoded, .delay = delay };
+        allocator.free(decoded);
         frame += 1;
     }
     return error.NoFrame;
