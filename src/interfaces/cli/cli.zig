@@ -83,12 +83,12 @@ pub const Options = struct {
     usbip: ?u16 = null,
     /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
     frame_out: ?[]const u8 = null,
-    /// `--panel-only`: save only the glass at its own dimensions.
-    panel_only: bool = false,
+    panel_only: bool = false, // `--panel-only`: only the glass, at its own size
     frames: @import("frames_args.zig").Options = .{},
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
     /// `--speed`/`--realtime`: pace in thousandths of 1x; null runs flat out.
     speed: ?u64 = null,
+    idle_skip: bool = false, // `--idle-skip`: a sleeping core runs to its next edge
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.

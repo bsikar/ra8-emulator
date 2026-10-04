@@ -12,6 +12,7 @@ const GuestBus = @import("memory/guest_bus.zig").GuestBus;
 const BoardBus = @import("board_bus.zig").BoardBus;
 const registry = @import("../../periph/registry.zig");
 const cpu_mod = @import("cpu.zig");
+const sleep_pace = @import("../sleep_pace.zig");
 const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
@@ -51,6 +52,10 @@ pub const Boundary = struct {
     /// Asked after each closed stretch whether the run is over, which is
     /// how `--stop-sym` ends a Zig run on its counter (RA8EMU-603).
     doneFn: ?*const fn (context: *anyopaque) bool = null,
+    /// Handed the width a stretch would get while the core sleeps with
+    /// nothing to wake it, and returns the width it gets (`--idle-skip`,
+    /// RA8EMU-185). Null keeps every stretch at `widthFn`.
+    sleepFn: ?*const fn (context: *anyopaque, normal: u32) u32 = null,
 };
 
 /// A debugger listening to a `--cpu zig` run: handed the bus and the
@@ -191,7 +196,7 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
     const edge = boundary orelse return cpu.run(budget);
     var left = budget;
     while (left > 0) {
-        const width: u32 = @intCast(@min(left, @max(1, edge.widthFn(edge.context))));
+        const width: u32 = @intCast(@min(left, widthOf(cpu, edge)));
         const stopped = cpu.run(width);
         if (until) |wait| if (wait.reached) return .count;
         if (stopped != .count) return stopped;
@@ -208,6 +213,15 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
     }
     return .count;
+}
+
+/// The next stretch's width: the boundary's, reached to the next edge by
+/// its `sleepFn` while the core sleeps with nothing to wake it.
+fn widthOf(cpu: *cpu_mod.Cpu, edge: Boundary) u32 {
+    const normal = @max(1, edge.widthFn(edge.context));
+    const reach = edge.sleepFn orelse return normal;
+    if (!sleep_pace.still(cpu)) return normal;
+    return @max(normal, reach(edge.context, normal));
 }
 
 /// A warm reboot of the Zig core, as src/core/reboot.zig performs one on

@@ -53,6 +53,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.speed = 1000;
     } else if (std.mem.eql(u8, flag, "--speed")) {
         options.speed = try speedArg(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--idle-skip")) {
+        options.idle_skip = true;
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
         options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {

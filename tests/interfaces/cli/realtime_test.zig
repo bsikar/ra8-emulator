@@ -53,3 +53,10 @@ test "--speed sets the factor, and max leaves the run unpaced" {
     try std.testing.expectError(error.NotPositive, parse(&[_][]const u8{ "emu", "a.elf", "--speed", "0" }));
     try std.testing.expectError(error.NotANumber, parse(&[_][]const u8{ "emu", "a.elf", "--speed", "fast" }));
 }
+
+test "a run skips idle stretches only when it asks for --idle-skip" {
+    const plain = try parse(&[_][]const u8{ "emu", "a.elf" });
+    try std.testing.expect(!plain.idle_skip);
+    const skipping = try parse(&[_][]const u8{ "emu", "a.elf", "--idle-skip" });
+    try std.testing.expect(skipping.idle_skip);
+}
