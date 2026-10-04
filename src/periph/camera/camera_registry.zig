@@ -1,17 +1,20 @@
 //! The camera sources `--camera-source KIND[:ARG]` can name (RA8EMU-525).
 //!
 //! `gradient` takes no argument; `image:PATH` captures a still picture
-//! (RA8EMU-529). Video, pipe and webcam sources register a kind here as
-//! they land, each reading its own ARG. An unknown kind is refused when the command line is read, not
+//! (RA8EMU-529); `video:PATH[,loop]` plays a Y4M clip by emulated time
+//! (RA8EMU-499). Pipe and webcam sources register a kind here as they land,
+//! each reading its own ARG. An unknown kind is refused when the command line is read, not
 //! when the camera first captures, so a typo never runs on the gradient.
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const gradient = @import("gradient_source.zig");
 const image = @import("image_source.zig");
+const video = @import("video_source.zig");
 
 pub const Kind = enum {
     gradient,
     image,
+    video,
 };
 
 /// One parsed `--camera-source`. The default is the gradient, which is
@@ -30,6 +33,10 @@ pub const Spec = struct {
                 std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
+            .video => video.labelled((video.VideoSource.load(allocator, self.arg, format_control) catch |err| {
+                std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                return err;
+            }).source(), self.arg),
         };
     }
 };
@@ -37,7 +44,7 @@ pub const Spec = struct {
 pub const ParseError = error{ UnknownCameraSource, BadValue };
 
 /// `KIND` or `KIND:ARG`. A kind that takes no argument refuses one, and
-/// `image` refuses to go without its path.
+/// `image` and `video` refuse to go without their path.
 pub fn parse(text: []const u8) ParseError!Spec {
     const colon = std.mem.indexOfScalar(u8, text, ':');
     const name = if (colon) |at| text[0..at] else text;
@@ -45,7 +52,7 @@ pub fn parse(text: []const u8) ParseError!Spec {
     const kind = std.meta.stringToEnum(Kind, name) orelse return error.UnknownCameraSource;
     switch (kind) {
         .gradient => if (arg.len != 0) return error.BadValue,
-        .image => if (arg.len == 0) return error.BadValue,
+        .image, .video => if (arg.len == 0) return error.BadValue,
     }
     return .{ .kind = kind, .arg = arg };
 }
