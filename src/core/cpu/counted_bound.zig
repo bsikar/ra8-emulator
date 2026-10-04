@@ -6,8 +6,8 @@
 //! trip's head and the last one's (its delta). This follows each moving
 //! value through the trip. MOV, ADD and SUB keep a value affine, and so
 //! does a whole-word load or store of it. Anything else that touches one
-//! refuses the trip: an opaque op, a byte access, an address base, CBZ, BX,
-//! a push, or an instruction the table does not know. A value that stood
+//! refuses the trip: an opaque op, a byte access, an address base, BX, a
+//! push, or an instruction the table does not know. A value that stood
 //! still for two trips is not proof it never moves (an LSR of a counter
 //! does that), which is why the trip is followed and not just compared.
 //!
@@ -17,7 +17,8 @@
 //! value against a still one; its flags then stay put until the value
 //! reaches one of a few points around that still value or the sign and
 //! carry boundaries. The answer is the whole trips strictly before the
-//! nearest such point.
+//! nearest such point. CBZ and CBNZ on a moving value decide the same way
+//! as a compare of it with zero, with no flags to follow (RA8EMU-610).
 //!
 //! This only checks that the deltas hang together through the trip's code;
 //! the watch checks the concrete ones (three heads, two equal steps)
@@ -115,7 +116,7 @@ fn step(self: *State, i: usize) bool {
         .unknown => return false,
         .hint, .branch, .cond_branch => {},
         .call => self.taint[14] = 0,
-        .cbz => return self.of(s.rn) == 0,
+        .cbz => return zeroTest(self, s, now),
         .bx => return self.of(s.rm) == 0,
         .opaque_alu => {
             if (self.of(s.rn) != 0 or self.of(s.rm) != 0) return false;
@@ -153,6 +154,15 @@ fn arithmetic(self: *State, i: usize, s: td.Step, now: [16]u32) bool {
         self.bound = @min(self.bound, limit(x, moving, still));
     }
     if (s.form != .compare) self.taint[s.rd.?] = result;
+    return true;
+}
+
+/// CBZ or CBNZ: a moving value's branch can only flip near zero.
+fn zeroTest(self: *State, s: td.Step, now: [16]u32) bool {
+    const moving = self.of(s.rn);
+    if (moving == 0) return true;
+    if (moving > max_delta or moving < -max_delta) return false;
+    self.bound = @min(self.bound, limit(now[s.rn.?], moving, 0));
     return true;
 }
 

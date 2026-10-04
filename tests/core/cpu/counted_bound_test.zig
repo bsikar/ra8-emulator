@@ -85,7 +85,7 @@ test "a poll whose decisions read nothing that moves is unbounded" {
     try std.testing.expectEqual(@as(?u64, cb.unbounded), trip.trips(&.{}));
 }
 
-test "a shift of the counter, CBZ on it, or a moving base is refused" {
+test "a shift of the counter or a moving base is refused" {
     var shifted = Trip{};
     shifted.head[0] = 1;
     shifted.add(0x3001, regs(&.{.{ 0, 5 }}));
@@ -97,7 +97,8 @@ test "a shift of the counter, CBZ on it, or a moving base is refused" {
     tested.head[0] = 1;
     tested.add(0x3001, regs(&.{.{ 0, 5 }}));
     tested.add(0xB900, regs(&.{.{ 0, 6 }})); // cbnz r0
-    try std.testing.expectEqual(@as(?u64, null), tested.trips(&.{}));
+    // A CBNZ on the counter is bounded like a compare with zero (RA8EMU-610).
+    try std.testing.expectEqual(@as(?u64, cb.limit(6, 1, 0)), tested.trips(&.{}));
 
     var walked = Trip{};
     walked.head[0] = 4;
@@ -129,4 +130,39 @@ test "limit stops before the still value, the sign boundary and the wrap" {
     try std.testing.expectEqual(@as(u64, 4), cb.limit(10, -2, 0));
     try std.testing.expectEqual(@as(u64, 1), cb.limit(0xFFFF_FFFD, 1, 3));
     try std.testing.expectEqual(cb.unbounded, cb.limit(5, 0, 5));
+}
+
+test "a CBZ on the down-counter, as txm_fault_cpu1's main polls" {
+    // cbz r1,out ; ldr r5,[r2] ; cmp r5,r4 ; bne skip ; skip: subs r1,#1 ; b loop
+    const shared: u32 = 0x2210_0000;
+    const mark: u32 = 0x5A5A_0001;
+    var trip = Trip{};
+    trip.head[1] = -1;
+    trip.add(0xB181, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
+    trip.add(0x6815, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
+    trip.add(0x42A5, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
+    trip.add(0xD109, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
+    trip.add(0x3901, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
+    trip.add(0xE7EF, regs(&.{ .{ 1, 999 }, .{ 2, shared }, .{ 4, mark } }));
+    // Zero is 1000 trips off and one is 999, so 998 are safe.
+    try std.testing.expectEqual(@as(?u64, 998), trip.trips(&.{}));
+}
+
+test "a CBNZ on a moving value sitting at zero allows no trips" {
+    // cbnz r0,out ; adds r0,#1 ; b loop
+    var trip = Trip{};
+    trip.head[0] = 1;
+    trip.add(0xB908, regs(&.{.{ 0, 0 }}));
+    trip.add(0x3001, regs(&.{.{ 0, 0 }}));
+    trip.add(0xE7FC, regs(&.{.{ 0, 1 }}));
+    try std.testing.expectEqual(@as(?u64, 0), trip.trips(&.{}));
+}
+
+test "a CBZ on a value faster than the followed pace is refused" {
+    // cbz r0,out ; b loop, with the head saying r0 moves 0x10000 a trip
+    var trip = Trip{};
+    trip.head[0] = 0x1_0000;
+    trip.add(0xB108, regs(&.{.{ 0, 5 }}));
+    trip.add(0xE7FD, regs(&.{.{ 0, 5 }}));
+    try std.testing.expectEqual(@as(?u64, null), trip.trips(&.{}));
 }
