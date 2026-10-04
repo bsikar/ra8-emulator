@@ -18,7 +18,6 @@ const active = @import("active.zig");
 const dispatch = @import("dispatch.zig");
 const fault = @import("fault.zig");
 const Cpu = @import("../cpu.zig").Cpu;
-const Stop = @import("../cpu.zig").Stop;
 
 pub const Error = fault.Error;
 
@@ -30,18 +29,6 @@ pub fn data(cpu: *Cpu, pc: u32, mmfar: u32) Error!void {
 /// Raise MemManage for the refused fetch of the instruction at `pc`.
 pub fn instruction(cpu: *Cpu, pc: u32) Error!void {
     return take(cpu, pc, status.Cause.iaccviol.bit(), null);
-}
-
-/// Raise MemManage MLSPERR: the MPU refused the deferred FP push the
-/// instruction at `pc` triggered (RA8EMU-621). MMFAR is not valid.
-pub fn lazyPreserve(cpu: *Cpu, pc: u32) Error!void {
-    return take(cpu, pc, status.Cause.mlsperr.bit(), null);
-}
-
-/// lazyPreserve for the core's step, or a bus-fault stop on lockup.
-pub fn lazyOrStop(cpu: *Cpu, pc: u32) ?Stop {
-    lazyPreserve(cpu, pc) catch return .{ .bus_fault = pc };
-    return null;
 }
 
 fn take(cpu: *Cpu, pc: u32, cause: u32, mmfar: ?u32) Error!void {
