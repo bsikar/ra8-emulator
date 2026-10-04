@@ -26,5 +26,6 @@ test {
     _ = @import("target_test.zig");
     _ = @import("cross_test.zig");
     _ = @import("eci_test.zig");
+    _ = @import("fp_switch_test.zig");
     _ = @import("ts_frame_test.zig");
 }
