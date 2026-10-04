@@ -1,0 +1,63 @@
+//! RA8EMU-186's done condition: a soak catches a stack overflow at the
+//! virtual hour it happens, and a clean image sleeps through a virtual week
+//! with no events. Both run with idle fast-forward, at a 1 MHz core clock so
+//! SysTick's longest period is 16.8 virtual seconds.
+const std = @import("std");
+const ra8 = @import("ra8");
+
+const zig_run = ra8.board.zig_run;
+const cpu_boot = ra8.core.cpu.boot;
+const soak = ra8.periph.clocks.soak;
+
+const soaker = @import("soaker.zig");
+const hz: u64 = 1_000_000;
+const ns_per_hour: u64 = 3600 * 1_000_000_000;
+const week_cycles: u64 = 7 * 24 * 3600 * hz;
+
+/// What one soak ended with.
+const Ended = struct {
+    event: ?soak.Event,
+    now_ns: u64,
+    count: u32,
+};
+
+fn runSoak(overflow: bool) !Ended {
+    var core = try ra8.core.engine.Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try soaker.load(core, overflow);
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.attach(&core);
+    board.time.base.setRate(hz);
+    board.time.soak.armed = true;
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
+    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .idle_skip = true };
+    var ran: u64 = 0;
+    var final: cpu_boot.Regs = .{};
+    var output: [1024]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&output);
+    _ = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
+    clock.soakFaults();
+    return .{ .event = board.time.soak.event, .now_ns = board.time.base.now(), .count = try core.readWord(soaker.counter_at) };
+}
+
+test "a soak catches a stack overflow in the virtual hour it happens" {
+    const ended = try runSoak(true);
+    const event = ended.event orelse return error.NoEvent;
+    try std.testing.expectEqual(soak.Kind.stack_overflow, event.kind);
+    try std.testing.expectEqual(@as(u32, soaker.wakes), ended.count);
+    const due_ns = soaker.wakes * soaker.period * (1_000_000_000 / hz);
+    try std.testing.expect(event.at_ns >= due_ns);
+    try std.testing.expect(event.at_ns - due_ns < 1_000_000_000);
+    try std.testing.expectEqual(@as(u64, 1), event.at_ns / ns_per_hour);
+}
+
+test "a clean image sleeps through a virtual week with no events" {
+    const ended = try runSoak(false);
+    try std.testing.expect(ended.event == null);
+    try std.testing.expect(ended.now_ns >= 7 * 24 * ns_per_hour);
+    // The handler really ran all week. The exact wrap count (36,048) waits on
+    // RA8EMU-618: idle fast-forward drops a few wraps over a long run.
+    try std.testing.expect(ended.count > 36_000);
+}
