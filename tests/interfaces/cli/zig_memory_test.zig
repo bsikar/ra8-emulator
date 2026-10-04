@@ -69,22 +69,6 @@ test "a single-core zig run loads CPU0 into its own store, not the engine" {
     try std.testing.expectEqual(@as(u32, 0), core.readWord(vectors) catch 0);
 }
 
-test "a Unicorn run stays on the engine" {
-    for ([_]Options{.{ .path = "cpu0.elf", .cpu = .unicorn }}) |options| {
-        var core = try ra8.core.engine.Engine.open();
-        defer core.close();
-        try core.mapBoardRam();
-        var board = ra8.board.Board.init(std.testing.allocator);
-        defer board.deinit();
-        var file = image();
-        var cpu0: Cpu0 = .{};
-        defer cpu0.close();
-        try cpu0.attach(&board, &core, try elf.Image.init(&file), options);
-        try std.testing.expect(cpu0.guest(core) == .engine);
-        try std.testing.expectEqual(@as(u32, 0), core.readWord(vectors) catch 0);
-    }
-}
-
 test "a zig run with a second core puts CPU0 on its own store too (RA8EMU-588)" {
     try std.testing.expect(ra8.board.zig_run.cpu0_memory.wanted(.{ .path = "cpu0.elf", .cpu = .zig, .cpu1_path = "cpu1.elf" }));
     try std.testing.expect(ra8.board.zig_run.cpu0_memory.wanted(.{ .path = "cpu0.elf", .cpu = .zig }));

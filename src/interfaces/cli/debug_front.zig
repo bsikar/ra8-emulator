@@ -29,24 +29,13 @@ const cli = @import("cli.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
 const zig_debug_front = @import("zig_debug_front.zig");
 const elf = @import("../../core/elf.zig");
-const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
-const rsp_poll = @import("../../debug/rsp_poll.zig");
-const engine = @import("../../core/engine.zig");
-const Board = @import("../../board/board.zig").Board;
-const clocks = @import("../../periph/clocks.zig");
-const nvic = @import("../../periph/nvic.zig");
-const reboot = @import("../../core/reboot.zig");
 const script = @import("../../debug/script.zig");
-const session = @import("../../debug/session.zig");
-const second_core = @import("../../core/second_core.zig");
-const step_hook = @import("../../debug/step_hook.zig");
-const stop_machine = @import("../../debug/stop_machine.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug-script FILE
     \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug
     \\       ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --gdb PORT
-    \\       --cpu unicorn|zig may go anywhere; zig takes the first two forms
+    \\       --cpu zig may go anywhere
     \\
 ;
 
@@ -154,105 +143,12 @@ pub fn refused(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     return run(allocator, argv, request);
 }
 
-/// One CPU's stop machine and the hook driver feeding it. Kept in the
-/// caller's frame, because the hook holds a pointer to the driver.
-const Cpu = struct {
-    machine: stop_machine.Machine = .{},
-    driver: step_hook.Driver = undefined,
-
-    fn attach(self: *Cpu, core: *const engine.Engine) !void {
-        self.driver = .{ .machine = &self.machine };
-        try step_hook.attach(core.handle, &self.driver, true);
-    }
-};
-
-/// Load the images, open a session on CPU0 with CPU1 parked beside it when
-/// one was named, and run the mode asked for.
+/// Load the image and hand the request to the Zig core's debugger
+/// (src/interfaces/cli/zig_debug_front.zig).
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Request) !u8 {
     _ = argv;
     const image = readImage(allocator, request.image) orelse return 1;
-    if (request.cpu != .unicorn) return zig_debug_front.run(allocator, image, request, std.io.getStdOut().writer());
-    var core = try engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    var board = Board.init(allocator);
-    defer board.deinit();
-    try board.attach(&core);
-    _ = try core.loadImage(image);
-    const vector_base = image.vectorBase() orelse {
-        std.debug.print("no executable segment, nothing to reset into\n", .{});
-        return 1;
-    };
-    try core.resetFromVectorTable(vector_base);
-    var clock = clocks.Clocks{};
-    try core.attachTimebase(&clock);
-    var interrupts = nvic.Nvic{ .vector_base = vector_base };
-    var restart = reboot.Reboot{ .vector_base = vector_base };
-    board.reboot = &restart;
-    var cpu0 = Cpu{};
-    try cpu0.attach(&core);
-    var target = session.Session{ .core = &core, .driver = &cpu0.driver, .entry = try core.register(.pc), .image = image, .loop = .{
-        .timebase = &clock,
-        .interrupts = &interrupts,
-        .board = board.ticker(),
-        .reboot = &restart,
-        .protection = &board.guard,
-    } };
-    var second: second_core.Second = undefined;
-    var cpu1 = Cpu{};
-    if (request.cpu1) |path| {
-        const image1 = readImage(allocator, path) orelse return 1;
-        second.open(&core, &board, image1) catch |err| {
-            std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ path, @errorName(err) });
-            return 1;
-        };
-        try cpu1.attach(&second.core);
-        target.other = .{ .core = &second.core, .driver = &cpu1.driver, .entry = second.state.pc, .image = image1, .loop = .{
-            .watch = &second.watch,
-            .interrupts = &second.state.interrupts,
-        } };
-    }
-    defer if (request.cpu1 != null) second.close();
-    return drive(allocator, &target, request.mode);
-}
-
-/// Play the script or talk to the terminal.
-fn drive(allocator: std.mem.Allocator, target: *session.Session, mode: Mode) !u8 {
-    const out = std.io.getStdOut().writer();
-    switch (mode) {
-        .script => |path| {
-            const text = std.fs.cwd().readFileAlloc(allocator, path, limits.max_file) catch |err| {
-                std.debug.print("cannot read {s}: {s}\n", .{ path, @errorName(err) });
-                return 1;
-            };
-            _ = try script.play(target, text, out, true);
-        },
-        .interactive => try converse(target, out),
-        .gdb => |port| return listen(target, port),
-    }
-    try target.driver.machine.itm.flush(out, true);
-    return 0;
-}
-
-/// Wait for gdb on the loopback port, serve it, and stop when it leaves.
-fn listen(target: *session.Session, port: u16) !u8 {
-    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
-    var server = address.listen(.{ .reuse_address = true }) catch |err| {
-        std.debug.print("cannot listen on 127.0.0.1:{d}: {s}\n", .{ port, @errorName(err) });
-        return 1;
-    };
-    defer server.deinit();
-    std.debug.print("gdb: listening on 127.0.0.1:{d}\n", .{port});
-    const connection = try server.accept();
-    defer connection.stream.close();
-    var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
-    target.poll = socket.poll();
-    target.console = true;
-    target.budget = rsp_poll.chunk;
-    const stub = rsp_dispatch.Dispatch{ .core = target.core, .session = target };
-    const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
-    std.debug.print("gdb: {s}\n", .{@tagName(end)});
-    return 0;
+    return zig_debug_front.run(allocator, image, request, std.io.getStdOut().writer());
 }
 
 /// An image read and checked, or null after saying why it could not be.

@@ -1,10 +1,9 @@
-//! Which CPU runs the image. The Zig core is the default (RA8EMU-471): its
-//! example table, dual-core corpus and gdb corpus match Unicorn's. Unicorn
-//! stays selectable until RA8EMU-255 removes it.
+//! Which CPU runs the image. The Zig core is the only one left: Unicorn was
+//! dropped as a choice by RA8EMU-606, so `--cpu unicorn` is refused like any
+//! other unknown name. `--cpu zig` stays accepted for scripts that pass it.
 const std = @import("std");
 
 pub const Choice = enum {
-    unicorn,
     zig,
 
     /// The value `--cpu` takes, spelled as the enum is.

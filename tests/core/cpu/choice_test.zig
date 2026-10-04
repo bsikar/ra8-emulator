@@ -3,9 +3,9 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const Choice = ra8.core.cpu.choice.Choice;
 
-test "--cpu takes the two names and nothing else" {
-    try std.testing.expectEqual(Choice.unicorn, Choice.parse("unicorn").?);
+test "--cpu takes zig and nothing else; unicorn is gone (RA8EMU-606)" {
     try std.testing.expectEqual(Choice.zig, Choice.parse("zig").?);
+    try std.testing.expect(Choice.parse("unicorn") == null);
     try std.testing.expect(Choice.parse("lockstep") == null);
     try std.testing.expect(Choice.parse("Zig") == null);
     try std.testing.expect(Choice.parse("") == null);

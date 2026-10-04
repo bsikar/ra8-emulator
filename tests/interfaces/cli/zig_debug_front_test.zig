@@ -59,8 +59,7 @@ test "--cpu zig is taken anywhere on a debugger command line" {
     try std.testing.expectEqual(@as(u16, 3333), last.mode.gdb);
     const plain = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug" }).?;
     try std.testing.expectEqual(.zig, plain.cpu);
-    const old = try debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug", "--cpu", "unicorn" }).?;
-    try std.testing.expectEqual(.unicorn, old.cpu);
+    try std.testing.expectError(error.BadUsage, debug_front.wanted(&.{ "ra8_emulator", "fw.elf", "--debug", "--cpu", "unicorn" }).?);
 }
 
 test "an unknown --cpu is bad usage for the debugger and left alone for a run" {
@@ -73,7 +72,6 @@ test "--gdb runs on the Zig core; what its debugger does not take yet says so" {
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig }));
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .zig, .cpu1 = "c.elf" }));
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig, .cpu1 = "c.elf" }));
-    try std.testing.expect(zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .unicorn }) != null);
 }
 
 test "a --cpu zig --debug-script command line plays the script on the Zig core" {

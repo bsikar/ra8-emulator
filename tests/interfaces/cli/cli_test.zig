@@ -73,7 +73,7 @@ test "--sd selects a raw card image" {
 test "--cpu picks the CPU, defaulting to the Zig core" {
     const Choice = ra8.core.cpu.choice.Choice;
     try std.testing.expectEqual(Choice.zig, (try parse(&[_][]const u8{ "emu", "a.elf" })).cpu);
-    try std.testing.expectEqual(Choice.unicorn, (try parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "unicorn" })).cpu);
+    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "unicorn" }));
     try std.testing.expectEqual(Choice.zig, (try parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "zig" })).cpu);
     try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "arm" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu" }));
@@ -235,14 +235,14 @@ test "--attach queues catalog models in the order asked" {
 }
 
 test "ctl cpu-load selects an image, a load window and the requested CPU" {
-    const options = try parse(&.{ "emu", "ctl", "cpu-load", "blink.elf", "--from", "0x10", "--to", "32", "--instructions", "128", "--cpu", "unicorn" });
+    const options = try parse(&.{ "emu", "ctl", "cpu-load", "blink.elf", "--from", "0x10", "--to", "32", "--instructions", "128", "--cpu", "zig" });
     try std.testing.expectEqualStrings("blink.elf", options.path);
     try std.testing.expect(options.ctl_cpu_load);
     try std.testing.expect(options.cpu_load);
     try std.testing.expectEqual(@as(u64, 16), options.cpu_load_window.from);
     try std.testing.expectEqual(@as(u64, 32), options.cpu_load_window.to);
     try std.testing.expectEqual(@as(?usize, 128), options.instructions);
-    try std.testing.expectEqual(ra8.core.cpu.choice.Choice.unicorn, options.cpu);
+    try std.testing.expectEqual(ra8.core.cpu.choice.Choice.zig, options.cpu);
 }
 
 test "--dump-mem repeats keep every place in order, each with its own count" {

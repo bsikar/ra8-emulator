@@ -1,4 +1,4 @@
-//! A `--cpu zig` run from main with no Unicorn engine opened at all
+//! Every run from main, on the Zig core with no Unicorn engine opened
 //! (RA8EMU-592, slice 4e-2 of RA8EMU-481).
 //!
 //! CPU0 goes on its own store (src/interfaces/cli/zig_memory.zig), the
@@ -18,11 +18,6 @@ const Cpu0 = @import("zig_memory.zig").Cpu0;
 
 /// Fitting the board is shared with main's engine path.
 pub const fit = @import("board_fit.zig").fit;
-
-/// Whether main should hand this run here rather than open an engine.
-pub fn wanted(options: cli.Options) bool {
-    return options.cpu == .zig;
-}
 
 /// The whole run, in the order main's engine path takes it: fit the board,
 /// load, announce, then run on the Zig core.
