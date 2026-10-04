@@ -88,7 +88,7 @@ pub const Options = struct {
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
     /// `--speed`/`--realtime`: pace in thousandths of 1x; null runs flat out.
     speed: ?u64 = null,
-    idle_skip: bool = false, // `--idle-skip`: a sleeping core runs to its next edge
+    idle_skip: bool = true, // a sleeping core runs to its next edge; `--no-idle-skip` steps it
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.

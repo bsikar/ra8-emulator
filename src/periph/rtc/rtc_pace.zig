@@ -3,9 +3,9 @@
 //! `boundary` is the geared clock the corpus was recorded on: one second
 //! and one R64CNT step per boundary, whatever the virtual time. `virtual`
 //! counts the virtual nanoseconds the time base reports, so the date and
-//! time firmware reads match the run at any speed. The boundary gear stays
-//! the default until idle fast-forward (RA8EMU-185) makes a multi-second
-//! alarm reachable inside a corpus run's instruction budget.
+//! time firmware reads match the run at any speed. A run fits its board
+//! with the virtual clock (RA8EMU-185, board_fit.zig); a bare `Rtc.init()`
+//! keeps the boundary gear so the RTC's own tests stay one second a tick.
 const std = @import("std");
 
 pub const ns_per_second: u64 = 1_000_000_000;

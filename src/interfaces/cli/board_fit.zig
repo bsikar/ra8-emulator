@@ -13,6 +13,10 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     board.part = options.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
+    // A run's RTC counts virtual time (RA8EMU-185): with idle fast-forward a
+    // sleeping core reaches the next second edge, so the geared clock the
+    // corpus was first recorded on is only kept for the RTC's own tests.
+    board.clock.pace.mode = .virtual;
     if (options.rtc_start) |at| board.clock.seed(at);
     if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);

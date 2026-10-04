@@ -131,8 +131,10 @@ pub const text =
     \\                     and report achieved speed and drift
     \\  --speed F          pace at F times real time (0.1, 0.25, 5, 100...),
     \\                     or max for an unpaced run (the default)
-    \\  --idle-skip        a core asleep in WFI/WFE with nothing pending
-    \\                     runs straight to the next SysTick or timer event
+    \\  --no-idle-skip     a core asleep in WFI/WFE with nothing pending
+    \\                     crosses every boundary instead of running
+    \\                     straight to its next edge (the default;
+    \\                     --idle-skip is still accepted)
     \\  --camera-source K  where the camera engine's pixels come from:
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or
