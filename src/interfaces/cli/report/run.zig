@@ -39,7 +39,6 @@ const pc_hits = @import("../../../debug/pc_hits.zig");
 const tally_mod = @import("../../../debug/tally.zig");
 const watchpoint = @import("../../../debug/watchpoint.zig");
 const taken_in = @import("../../../debug/taken_in.zig");
-const engine = @import("../../../core/engine.zig");
 const cli = @import("../cli.zig");
 const rtos_report = @import("../../../debug/rtos_report.zig");
 
@@ -82,16 +81,6 @@ pub const Tally = struct {
     dumps: ?json_run.json_dumps.Dumps = null,
     /// The `--cpu-load` tracers (RA8EMU-266), `--report json` only.
     load: ?json_run.json_load.Load = null,
-
-    /// This tally with the `--taken-in` window it resolved and the core the
-    /// dump flags read from.
-    pub fn within(self: Tally, core: engine.Engine, image: elf.Image, options: *const cli.Options, window: ?taken_in.Window, watched: ?watchpoint.Watched) Tally {
-        var with = self;
-        with.taken_in_spec = options.taken_in_place;
-        with.taken_in = window;
-        with.dumps = .{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = image, .options = options, .watched = watched };
-        return with;
-    }
 
     /// This tally with the traced cores `--cpu-load` reads, when it asked.
     pub fn loaded(self: Tally, wanted: bool, cpu0: ?rtos_report.Side, cpu1: ?rtos_report.Side) Tally {

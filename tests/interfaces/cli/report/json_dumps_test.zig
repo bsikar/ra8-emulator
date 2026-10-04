@@ -1,11 +1,12 @@
 //! Covers src/interfaces/cli/report/json_dumps.zig: the `dumps` object of
-//! `--report json`, read off a real engine and parsed back with std.json.
+//! `--report json`, read off the Zig core's store and registers and parsed
+//! back with std.json.
 const std = @import("std");
 const ra8 = @import("ra8");
 
 const json_run = ra8.board.report.json_run;
 const json_dumps = json_run.json_dumps;
-const Engine = ra8.core.engine.Engine;
+const Regs = ra8.core.cpu.regs.Regs;
 const Options = ra8.core.cli.Options;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
@@ -32,10 +33,9 @@ test "nothing asked writes an empty list and nulls" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var core = try Engine.open();
-    defer core.close();
+    const regs: Regs = .{};
     const options = Options{ .path = "unused.elf" };
-    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = fix.memory(), .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -50,18 +50,17 @@ test "registers and memory words read off the core" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    const core = fix.memory();
     try core.writeWord(base, 0x11223344);
     try core.writeWord(base + 4, 0x55667788);
-    try core.setRegister(.r0, 42);
-    try core.setRegister(.sp, base);
+    var file: Regs = .{};
+    file.set(0, 42);
+    file.setSp(base);
     var spec_buf: [16]u8 = undefined;
     const spec = try std.fmt.bufPrint(&spec_buf, "0x{X}", .{base});
     var options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem_count = 1 };
     options.dump_mem[0] = .{ .spec = spec, .words = 2 };
-    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &file }, .memory = core, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -82,9 +81,8 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    const core = fix.memory();
+    const regs: Regs = .{};
     try core.writeWord(base, 0xAAAA0001);
     try core.writeWord(base + 0x40, 0xBBBB0002);
     var first_buf: [16]u8 = undefined;
@@ -95,7 +93,7 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     options.dump_mem[0] = .{ .spec = first, .words = 1 };
     options.dump_mem[1] = .{ .spec = second, .words = 1 };
     options.dump_mem_count = 2;
-    const of = json_dumps.Dumps{ .registers = .{ .engine = core }, .memory = .{ .engine = core }, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = core, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);

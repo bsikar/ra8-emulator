@@ -1,18 +1,15 @@
 //! Where the `--dump-regs` rows of `--report json` read from (RA8EMU-579):
-//! the Unicorn engine on a Unicorn run, or the Zig core's registers as a
-//! `--cpu zig` run left them. Before this a Zig run read the engine, which
-//! still held the reset values.
+//! the Zig core's registers as the run left them. The Unicorn engine's
+//! reader went with the engine run (RA8EMU-607).
 const engine = @import("../../../core/engine.zig");
 const Regs = @import("../../../core/cpu/regs.zig").Regs;
 
 pub const Reader = union(enum) {
-    engine: engine.Engine,
     zig: *const Regs,
 
     /// The register's value, or null when its source will not give it.
     pub fn register(self: Reader, which: engine.Cortex) ?u32 {
         return switch (self) {
-            .engine => |core| core.register(which) catch null,
             .zig => |regs| fromRegs(regs, which),
         };
     }

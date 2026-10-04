@@ -2,25 +2,25 @@
 //! line a memory-probe verdict reads, printed the same on either backend.
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const store_board = @import("../store_board.zig");
 const elf = ra8.core.elf;
 const cli = ra8.core.cli;
 const report_dumps = ra8.board.report_dumps;
 const Builder = @import("../../../debug/symbol_image.zig").Builder;
 
-fn dumped(core: engine.Engine, image: elf.Image, names: []const []const u8, into: []u8) ![]const u8 {
+fn dumped(core: store_board.Guest, image: elf.Image, names: []const []const u8, into: []u8) ![]const u8 {
     var options: cli.Options = .{ .path = "probe.elf" };
     for (names, 0..) |name, index| options.dump[index] = name;
     options.dump_count = names.len;
     var stream = std.io.fixedBufferStream(into);
-    try report_dumps.dumpSymbols(stream.writer(), .{ .engine = core }, image, options);
+    try report_dumps.dumpSymbols(stream.writer(), core, image, options);
     return stream.getWritten();
 }
 
 test "a dumped global prints its address and value, a missing one says so" {
-    var core = try engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     try core.writeWord(0x2200_0100, 216662);
     var buffer: [1024]u8 = undefined;
     const image = try elf.Image.init(Builder.build(&buffer, &.{"g_alive"}, &.{0x2200_0100}));
@@ -34,8 +34,9 @@ test "a dumped global prints its address and value, a missing one says so" {
 }
 
 test "no dump asked for prints nothing" {
-    var core = try engine.Engine.open();
-    defer core.close();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     var buffer: [1024]u8 = undefined;
     const image = try elf.Image.init(Builder.build(&buffer, &.{"g_alive"}, &.{0x2200_0100}));
     var out: [64]u8 = undefined;
