@@ -82,6 +82,9 @@ pub const Host = struct {
     /// GET_CONFIGURATION's one byte and GET_STATUS's two, once configured.
     config_value: [1]u8 = .{0},
     status: [2]u8 = .{ 0, 0 },
+    /// Set to stall when the device refused GET_CONFIGURATION or GET_STATUS.
+    config_answer: Answer = .none,
+    status_answer: Answer = .none,
     /// String descriptor 0 (the language IDs) and the iProduct string, as sent.
     languages: [255]u8 = .{0} ** 255,
     product: [255]u8 = .{0} ** 255,
@@ -196,6 +199,7 @@ pub const Host = struct {
     fn read(self: *Host, device: *usbfs.Device, packet: [8]u8, into: []u8, next: Step) void {
         if (!self.send(device, packet)) return;
         if (!self.patient()) return;
+        if (stalled(device)) return self.refused(next);
         var chunk: [max_packet]u8 = undefined;
         if (device.control.hostTake(&chunk)) |len| {
             const n = @min(len, into.len - self.got);
@@ -210,6 +214,19 @@ pub const Host = struct {
             return;
         }
         if (idle(device)) self.advance(next);
+    }
+
+    /// GET_CONFIGURATION, GET_STATUS and the string reads are probes: a
+    /// device may STALL them, and the host notes it and moves on. A STALL
+    /// on a descriptor read the host needs ends the script.
+    fn refused(self: *Host, next: Step) void {
+        switch (self.step) {
+            .get_configuration => self.config_answer = .stall,
+            .get_status => self.status_answer = .stall,
+            .string_languages, .string_product => {},
+            else => return self.advance(.failed),
+        }
+        self.advance(next);
     }
 
     /// A no-data request: SETUP, then the driver's CCPL or a STALL. Null
