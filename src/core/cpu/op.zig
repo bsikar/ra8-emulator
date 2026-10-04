@@ -15,7 +15,7 @@ pub const Undefined = error{Undefined};
 /// BKPT: a debug event the core takes once the instruction has decoded.
 pub const Debug = error{Breakpoint};
 
-pub const Error = bus.Error || alignment.Error || Undefined || Debug || error{ StackOverflow, InvalidState, InvalidEntry, NoCoprocessor, LazyStateError, LazyPreserveError, LazyMemManage };
+pub const Error = bus.Error || alignment.Error || Undefined || Debug || error{ StackOverflow, InvalidState, InvalidEntry, NoCoprocessor, LazyStateError, LazyPreserveError, LazyMemManage, LazyBusFault };
 
 /// Runs one decoded instruction. The PC already points past it when this is
 /// called; a branch writes the PC, everything else leaves it alone.

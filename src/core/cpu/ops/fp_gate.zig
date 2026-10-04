@@ -15,6 +15,7 @@
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const mpu_check = @import("../mpu_check.zig");
 const lazy = @import("../fpu/lazy.zig");
 const fp_mem = @import("fp_mem.zig");
 const cpacr = @import("../fpu/cpacr.zig");
@@ -71,7 +72,7 @@ pub fn check(cpu: *Cpu) op.Error!void {
 /// FPCCR.USER says and at negative priority while FPCCR.HFRDY is clear
 /// (DDI0553 AccType_LAZYFP). A refusal is MemManage MLSPERR (RA8EMU-621).
 fn preserve(cpu: *Cpu) op.Error!void {
-    const m = cpu.mpu orelse return lazy.preserve(cpu.bus, &cpu.fp);
+    const m = cpu.mpu orelse return push(cpu, null);
     const armed = m.armed;
     const privileged = m.privileged;
     defer {
@@ -80,8 +81,17 @@ fn preserve(cpu: *Cpu) op.Error!void {
     }
     const fpccr = cpu.fp.context.fpccr;
     m.arm(fpccr.user == 0, fpccr.hfrdy == 0);
+    return push(cpu, m);
+}
+
+/// The push itself: an MPU refusal is MLSPERR, a Security Attribution
+/// refusal SecureFault LSPERR, any other bus error BusFault LSPERR.
+fn push(cpu: *Cpu, m: ?*mpu_check.Check) op.Error!void {
     lazy.preserve(cpu.bus, &cpu.fp) catch |err| {
-        if (m.take() != null) return error.LazyMemManage;
-        return err;
+        if (m) |c| if (c.take() != null) return error.LazyMemManage;
+        return switch (err) {
+            error.LazyPreserveError, error.SecurityViolation => error.LazyPreserveError,
+            error.Unmapped => error.LazyBusFault,
+        };
     };
 }

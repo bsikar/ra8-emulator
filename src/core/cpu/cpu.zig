@@ -209,7 +209,7 @@ pub const Cpu = struct {
                     error.InvalidEntry => self.secureFault(.invep, address, 0, .{ .invalid_state = address }),
                     error.NoCoprocessor => self.usageFault(.nocp, address, .{ .unknown = instr }),
                     error.LazyStateError => self.secureFault(.lserr, address, 0, .{ .invalid_state = address }),
-                    error.LazyMemManage => exception.mem_manage.lazyOrStop(self, address),
+                    error.LazyMemManage, error.LazyBusFault => |e| exception.lazy_fault.orStop(self, e, address),
                     error.LazyPreserveError => self.secureFault(.lsperr, address, self.fp.context.fpcar, .{ .invalid_state = address }),
                     error.SecurityViolation => self.secureFault(.auviol, address, self.bus.gate.?.refused, .{ .bus_fault = address }),
                     else => self.refusedOr(address),
