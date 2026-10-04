@@ -39,19 +39,16 @@ const Driver = ra8.core.second_core.zig_run.Driver;
 const vectors: u32 = memmap.sram_base + 0x1000;
 const zig_code: u32 = vectors + 0x200;
 
-/// CPU1 on its Zig core, reset into STR r1, [r0] then B . from shared SRAM.
-fn bring(driver: *Driver, cpu0: *Engine, board: *Board) !void {
-    cpu0.* = try Engine.open();
-    errdefer cpu0.close();
-    try cpu0.mapBoardRam();
-    driver.second = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
-    driver.store = null;
+/// CPU1 on its Zig core, reset into STR r1, [r0] then B . from its own store.
+fn bring(driver: *Driver, board: *Board) !void {
+    driver.second = .{ .core = undefined, .state = .{ .vector_base = vectors } };
+    driver.store = try ra8.core.cpu.memory.store.Store.init(null);
     errdefer driver.close();
-    try driver.second.core.shareBoardRamWith(cpu0);
-    try driver.second.core.writeWord(vectors, vectors + 0x800);
-    try driver.second.core.writeWord(vectors + 4, zig_code | 1);
-    try driver.second.core.write(zig_code, &store_then_park);
-    try driver.core.open(&driver.second, &board.bus);
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &driver.store.? };
+    try memory.writeWord(vectors, vectors + 0x800);
+    try memory.writeWord(vectors + 4, zig_code | 1);
+    try memory.write(zig_code, &store_then_park);
+    try driver.core.openOn(memory, ra8.core.second_core.zig.Units.of(&driver.second), &board.bus);
     driver.core.cpu.regs.set(0, pointer);
     driver.core.cpu.regs.set(1, thread);
 }
@@ -59,10 +56,8 @@ fn bring(driver: *Driver, cpu0: *Engine, board: *Board) !void {
 test "a core-1 tracer in front of CPU1's Zig core records its switch as cpu1" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
-    var cpu0: Engine = undefined;
     var driver: Driver = undefined;
-    try bring(&driver, &cpu0, &board);
-    defer cpu0.close();
+    try bring(&driver, &board);
     defer driver.close();
     var tracer: rtos_hook.Tracer = .{ .address = pointer, .core = 1 };
     rtos_hook.second.listenZig(&driver, &tracer);

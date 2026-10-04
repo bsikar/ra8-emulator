@@ -5,6 +5,9 @@ const ra8 = @import("ra8");
 const second_core = ra8.core.second_core;
 const Driver = second_core.zig_run.Driver;
 const Engine = ra8.core.engine.Engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
+const Units = second_core.zig.Units;
 const memmap = ra8.core.memmap;
 const Board = ra8.board.Board;
 
@@ -13,33 +16,28 @@ const code: u32 = vectors + 0x200;
 const stack: u32 = vectors + 0x800;
 
 /// A driver whose CPU1 runs `program` from reset, built the way `open`
-/// builds it but from words in shared SRAM instead of an ELF on disk.
-fn bring(driver: *Driver, cpu0: *Engine, board: *Board, program: []const u16) !void {
-    cpu0.* = try Engine.open();
-    errdefer cpu0.close();
-    try cpu0.mapBoardRam();
-    driver.second = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
-    driver.store = null;
+/// builds it but from words in its own store instead of an ELF on disk.
+fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
+    driver.second = .{ .core = undefined, .state = .{ .vector_base = vectors } };
+    driver.store = try Store.init(null);
     errdefer driver.close();
-    try driver.second.core.shareBoardRamWith(cpu0);
-    try driver.second.core.writeWord(vectors, stack);
-    try driver.second.core.writeWord(vectors + 4, code | 1);
+    const memory: Guest = .{ .store = &driver.store.? };
+    try memory.writeWord(vectors, stack);
+    try memory.writeWord(vectors + 4, code | 1);
     for (program, 0..) |half, i| {
         var bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &bytes, half, .little);
-        try driver.second.core.write(code + @as(u32, @intCast(2 * i)), &bytes);
+        try memory.write(code + @as(u32, @intCast(2 * i)), &bytes);
     }
-    try driver.core.open(&driver.second, &board.bus);
+    try driver.core.openOn(memory, Units.of(&driver.second), &board.bus);
 }
 
 test "a round runs CPU1's share on its Zig core and counts it the Unicorn way" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
-    var cpu0: Engine = undefined;
     var driver: Driver = undefined;
     // B . : a core that runs every instruction it is given.
-    try bring(&driver, &cpu0, &board, &.{0xE7FE});
-    defer cpu0.close();
+    try bring(&driver, &board, &.{0xE7FE});
     defer driver.close();
 
     // No divider word on the board: CPU1 runs as many as CPU0 did.
@@ -54,12 +52,10 @@ test "a round runs CPU1's share on its Zig core and counts it the Unicorn way" {
 test "a CPU1 that stops is reported where it stopped and takes no more turns" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
-    var cpu0: Engine = undefined;
     var driver: Driver = undefined;
     // MOVS r0, #1, then UDF with no fault handlers in the table: the
     // UsageFault escalates and the core cannot carry on.
-    try bring(&driver, &cpu0, &board, &.{ 0x2001, 0xDE00 });
-    defer cpu0.close();
+    try bring(&driver, &board, &.{ 0x2001, 0xDE00 });
     defer driver.close();
 
     driver.round(50);
