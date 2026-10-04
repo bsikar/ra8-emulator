@@ -19,7 +19,6 @@ const bus_hook = @import("bus_hook.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const sau = @import("../periph/sau.zig");
 const tz = @import("tz.zig");
-const tz_hook = @import("tz_hook.zig");
 const symbols = @import("../debug/symbols.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
@@ -220,22 +219,6 @@ pub const Engine = struct {
     /// src/core/systick_hook.zig says what is swallowed without this.
     pub fn attachTimebase(self: Engine, clock: *clocks.Clocks) Error!void {
         systick_hook.attach(self.handle, clock) catch return Error.AttachFailed;
-    }
-
-    /// Perform the secure boot's one BLXNS by hand, so the Non-Secure world
-    /// runs; src/core/tz.zig says why the CPU model cannot be left to. An
-    /// image whose secure boot is not linked in, or whose jump routine holds
-    /// no BLXNS, keeps the all-Secure path it already had. The instruction
-    /// is found in the image as loaded, so the bytes scanned are the bytes
-    /// that will execute.
-    pub fn attachWorlds(self: Engine, image: elf.Image, worlds: *tz.Worlds) Error!void {
-        const found = symbols.extentOf(image, tz.jump_routine) orelse return;
-        if (found.size > tz.limits.routine_bytes) return;
-        var body: [tz.limits.routine_bytes]u8 = undefined;
-        const code = body[0..found.size];
-        self.read(found.address, code) catch return;
-        const offset = tz.findBlxns(code) orelse return;
-        tz_hook.attach(self.handle, worlds, found.address +% offset) catch return Error.AttachFailed;
     }
 
     /// Watch every store a closure probe makes, so a loop that stores can
