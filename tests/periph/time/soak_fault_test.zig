@@ -58,5 +58,5 @@ test "an armed soak stops on a fault and names it" {
     var buffer: [96]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
     try state.line(stream.writer());
-    try std.testing.expectEqualStrings("soak: stopped on stack overflow (UsageFault STKOF) at 7200.000000000 s virtual\n", stream.getWritten());
+    try std.testing.expectEqualStrings("soak: stopped on stack overflow (UsageFault STKOF) at 7200.000000000 s virtual, core 0\n", stream.getWritten());
 }

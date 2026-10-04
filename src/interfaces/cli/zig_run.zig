@@ -220,6 +220,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .final = &final,
     });
     clock.soakFaults();
+    board.time.soak.place(final.pc, if (board.clock.running()) board.clock.now else null);
     const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, budget);

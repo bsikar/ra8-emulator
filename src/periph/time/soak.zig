@@ -8,6 +8,7 @@
 //! or SFSR is an event too (slice 2b, src/periph/time/soak_fault.zig).
 const std = @import("std");
 const timebase = @import("timebase.zig");
+const Calendar = @import("../rtc/rtc_clock.zig").Calendar;
 
 pub const Kind = enum {
     watchdog_reset,
@@ -37,6 +38,11 @@ pub const Event = struct {
     kind: Kind,
     /// Virtual nanoseconds since reset when it happened.
     at_ns: u64,
+    /// Where the run stopped (slice 3): the core whose fault or reset it
+    /// was, its PC, and the RTC's date when the clock was running.
+    core: u8 = 0,
+    pc: ?u32 = null,
+    date: ?Calendar = null,
 };
 
 pub const Soak = struct {
@@ -47,6 +53,15 @@ pub const Soak = struct {
     pub fn note(self: *Soak, kind: Kind, at_ns: u64) void {
         if (!self.armed or self.event != null) return;
         self.event = .{ .kind = kind, .at_ns = at_ns };
+    }
+
+    /// Say where the run stopped, once it has: the PC the core ended on and
+    /// the RTC date, null when the clock was not running.
+    pub fn place(self: *Soak, pc: u32, date: ?Calendar) void {
+        if (self.event) |*event| {
+            event.pc = pc;
+            event.date = date;
+        }
     }
 
     /// Has an event ended the run?
@@ -60,6 +75,9 @@ pub const Soak = struct {
         const event = self.event orelse return out.print("soak: no events\n", .{});
         const s = event.at_ns / timebase.ns_per_s;
         const ns = event.at_ns % timebase.ns_per_s;
-        try out.print("soak: stopped on {s} at {d}.{d:0>9} s virtual\n", .{ event.kind.text(), s, ns });
+        try out.print("soak: stopped on {s} at {d}.{d:0>9} s virtual, core {d}", .{ event.kind.text(), s, ns, event.core });
+        if (event.pc) |pc| try out.print(", pc 0x{X:0>8}", .{pc});
+        if (event.date) |d| try out.print(", rtc 20{d:0>2}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{ d.year, d.month, d.day, d.hour, d.minute, d.second });
+        try out.print("\n", .{});
     }
 };
