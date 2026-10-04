@@ -298,4 +298,6 @@ test "a line refused halfway books the bytes before the refused chunk" {
 test {
     _ = @import("camera/frame_source_test.zig");
     _ = @import("camera/gradient_source_test.zig");
+    _ = @import("camera/pixel_convert_test.zig");
+    _ = @import("camera/converted_source_test.zig");
 }
