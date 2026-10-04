@@ -26,6 +26,15 @@ test "a stalled step names itself and how long it waited" {
     );
 }
 
+test "a failed script names the step it gave up on" {
+    var host = Host{ .step = .failed, .failed_on = .get_status, .waited = 21 };
+    const text = try render(&host);
+    try std.testing.expectEqualStrings(
+        "USBFS host: enumeration failed on get_status after 21 boundary(ies) on that step\n",
+        text.constSlice(),
+    );
+}
+
 test "a configured device prints both descriptors" {
     var host = Host{ .step = .configured };
     host.device[0] = 0x12;

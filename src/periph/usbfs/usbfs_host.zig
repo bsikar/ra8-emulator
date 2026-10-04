@@ -64,6 +64,8 @@ pub const max_packet: usize = 64;
 
 pub const Host = struct {
     step: Step = .waiting,
+    /// The step the script was on when it ended in failed, for the report.
+    failed_on: Step = .waiting,
     /// Whether the current step's SETUP has gone out.
     sent: bool = false,
     /// Whether the current step's status-stage token has gone out.
@@ -171,6 +173,7 @@ pub const Host = struct {
     }
 
     fn advance(self: *Host, next: Step) void {
+        if (next == .failed) self.failed_on = self.step;
         self.step = next;
         self.sent = false;
         self.acked = false;
@@ -182,6 +185,7 @@ pub const Host = struct {
     fn patient(self: *Host) bool {
         self.waited += 1;
         if (self.waited <= self.patience) return true;
+        self.failed_on = self.step;
         self.step = .failed;
         return false;
     }
