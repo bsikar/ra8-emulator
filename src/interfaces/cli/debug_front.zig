@@ -207,9 +207,9 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Requ
             return 1;
         };
         try cpu1.attach(&second.core);
-        target.other = .{ .core = &second.core, .driver = &cpu1.driver, .entry = second.pc, .image = image1, .loop = .{
+        target.other = .{ .core = &second.core, .driver = &cpu1.driver, .entry = second.state.pc, .image = image1, .loop = .{
             .watch = &second.watch,
-            .interrupts = &second.interrupts,
+            .interrupts = &second.state.interrupts,
         } };
     }
     defer if (request.cpu1 != null) second.close();

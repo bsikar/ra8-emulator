@@ -42,11 +42,11 @@ test "a second core takes a turn between the first core's rounds" {
     // Both cores sit on nops in shared SRAM, at addresses of their own.
     try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF00_BF00);
     try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0xBF00_BF00);
-    cpu1.pc = memmap.sram_base + 0x2000;
+    cpu1.state.pc = memmap.sram_base + 0x2000;
 
     _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 2 * second_core.limits.round, .{}, &cpu1);
-    try std.testing.expect(cpu1.turns >= 1);
-    try std.testing.expect(cpu1.ran >= second_core.limits.round);
+    try std.testing.expect(cpu1.state.turns >= 1);
+    try std.testing.expect(cpu1.state.ran >= second_core.limits.round);
 }
 
 test "a CPU1 clocked at a quarter of CPU0 runs a quarter of each round" {
@@ -57,14 +57,14 @@ test "a CPU1 clocked at a quarter of CPU0 runs a quarter of each round" {
 
     // The bring-up dividers: CPUCLK0 /1, CPUCLK1 /4 (SCKDIVCR2 0x2020).
     const dividers: u16 = 0x2020;
-    cpu1.dividers = &dividers;
+    cpu1.state.dividers = &dividers;
     try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF00_BF00);
     try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0xBF00_BF00);
-    cpu1.pc = memmap.sram_base + 0x2000;
+    cpu1.state.pc = memmap.sram_base + 0x2000;
 
     _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 2 * second_core.limits.round, .{}, &cpu1);
-    try std.testing.expectEqual(@as(usize, 2), cpu1.turns);
-    try std.testing.expectEqual(@as(usize, second_core.limits.round / 2), cpu1.ran);
+    try std.testing.expectEqual(@as(usize, 2), cpu1.state.turns);
+    try std.testing.expectEqual(@as(usize, second_core.limits.round / 2), cpu1.state.ran);
 }
 
 test "a core that faults is halted rather than restarted every round" {
@@ -75,11 +75,11 @@ test "a core that faults is halted rather than restarted every round" {
 
     try cpu0.writeWord(memmap.sram_base + 0x1000, 0xBF00_BF00);
     // Nothing is mapped here, so the first turn faults.
-    cpu1.pc = 0x1000_0000;
+    cpu1.state.pc = 0x1000_0000;
 
     _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 4 * second_core.limits.round, .{}, &cpu1);
-    try std.testing.expect(cpu1.fault != null);
-    try std.testing.expectEqual(@as(usize, 1), cpu1.turns);
+    try std.testing.expect(cpu1.state.fault != null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.state.turns);
 }
 
 /// One interleaved run of two counting loops (`adds r0, #1; b` back), three
@@ -104,14 +104,14 @@ const Race = struct {
         var cpu0 = try pair(&cpu1);
         defer cpu0.close();
         defer cpu1.close();
-        cpu1.dividers = &dividers;
+        cpu1.state.dividers = &dividers;
         for ([_]Engine{ cpu0, cpu1.core }) |core| {
             try core.writeWord(memmap.syst.rvr, 499);
             try core.writeWord(memmap.syst.cvr, 0);
             try core.writeWord(memmap.syst.csr, 0b101);
         }
         try cpu1.core.writeWord(cpu1_entry, loop);
-        cpu1.pc = cpu1_entry;
+        cpu1.state.pc = cpu1_entry;
         try cpu0.writeWord(cpu0_entry, loop);
         var cpu0_clock = clocks.Clocks{};
         const session: engine.Session = .{ .timebase = &cpu0_clock };
@@ -120,10 +120,10 @@ const Race = struct {
             .cpu0_count = try cpu0.register(.r0),
             .cpu1_count = try cpu1.core.register(.r0),
             .cpu0_charged = cpu0_clock.elapsed,
-            .cpu1_charged = cpu1.timebase.elapsed,
-            .turns = cpu1.turns,
+            .cpu1_charged = cpu1.state.timebase.elapsed,
+            .turns = cpu1.state.turns,
             .cpu0_ticks = cpu0_clock.ticks,
-            .cpu1_ticks = cpu1.timebase.ticks,
+            .cpu1_ticks = cpu1.state.timebase.ticks,
         };
     }
 };
@@ -207,14 +207,14 @@ test "a message CPU0 sends over IPC comes back from CPU1 answered" {
 
     try Mailbox.load(cpu0, Mailbox.cpu0_entry, &Mailbox.cpu0_image);
     try Mailbox.load(cpu1.core, Mailbox.cpu1_entry, &Mailbox.cpu1_image);
-    cpu1.pc = Mailbox.cpu1_entry;
+    cpu1.state.pc = Mailbox.cpu1_entry;
 
     const round = second_core.limits.round;
     _ = try mod.interleave(cpu0, Mailbox.cpu0_entry, 3 * round, .{}, &cpu1);
 
     try std.testing.expectEqual(@as(u32, 42), try cpu0.register(.r0));
     try std.testing.expectEqual(@as(u32, 42), try cpu1.core.register(.r0));
-    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expect(cpu1.state.fault == null);
     const to_cpu1 = board.mailbox.channels[2];
     const to_cpu0 = board.mailbox.channels[0];
     try std.testing.expectEqual(@as(u32, 1), to_cpu1.pushes);
@@ -263,7 +263,7 @@ fn parkedPair(cpu1: *second_core.Second, rounds: usize) !void {
     try cpu0.writeWord(memmap.sram_base + 0x1004, 0xE7FC_BF00);
     try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0x2007_BF20);
     try cpu1.core.writeWord(memmap.sram_base + 0x2004, 0xE7FE_E7FE);
-    cpu1.pc = memmap.sram_base + 0x2000;
+    cpu1.state.pc = memmap.sram_base + 0x2000;
     _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, rounds * second_core.limits.round, .{}, cpu1);
 }
 
@@ -271,20 +271,20 @@ test "a CPU1 in WFE with no event parks and its turns still pass time" {
     var cpu1: second_core.Second = undefined;
     try parkedPair(&cpu1, 4);
     defer cpu1.close();
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.parks);
-    try std.testing.expect(cpu1.wait.parked());
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.state.wait.parks);
+    try std.testing.expect(cpu1.state.wait.parked());
     try std.testing.expectEqual(@as(u32, 0), try cpu1.core.register(.r0));
-    try std.testing.expectEqual(@as(usize, 4), cpu1.turns);
-    try std.testing.expect(cpu1.timebase.elapsed >= 3 * second_core.limits.round);
+    try std.testing.expectEqual(@as(usize, 4), cpu1.state.turns);
+    try std.testing.expect(cpu1.state.timebase.elapsed >= 3 * second_core.limits.round);
 }
 
 test "a parked CPU1 wakes on its own and carries on past the WFE" {
     var cpu1: second_core.Second = undefined;
     try parkedPair(&cpu1, second_core.parking.limits.spurious_after + 3);
     defer cpu1.close();
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.wakes.spurious);
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.state.wait.wakes.spurious);
     try std.testing.expectEqual(@as(u32, 7), try cpu1.core.register(.r0));
 }
 
@@ -304,13 +304,13 @@ test "CPU0 posts to a mailbox and runs SEV, and a parked CPU1 wakes to read it" 
     try cpu1.core.writeWord(memmap.sram_base + 0x2000, 0x6818_BF20);
     try cpu1.core.writeWord(memmap.sram_base + 0x2004, 0xE7FE_E7FE);
     try cpu1.core.setRegister(.r3, mail);
-    cpu1.pc = memmap.sram_base + 0x2000;
+    cpu1.state.pc = memmap.sram_base + 0x2000;
 
     _ = try mod.interleave(cpu0, memmap.sram_base + 0x1000, 4 * second_core.limits.round, .{}, &cpu1);
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.parks);
-    try std.testing.expectEqual(@as(usize, 1), cpu1.wait.wakes.event);
-    try std.testing.expectEqual(@as(usize, 0), cpu1.wait.wakes.spurious);
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.state.wait.parks);
+    try std.testing.expectEqual(@as(usize, 1), cpu1.state.wait.wakes.event);
+    try std.testing.expectEqual(@as(usize, 0), cpu1.state.wait.wakes.spurious);
     try std.testing.expectEqual(@as(u32, 0x2A), try cpu1.core.register(.r0));
 }
 

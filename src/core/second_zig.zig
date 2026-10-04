@@ -46,7 +46,7 @@ pub const Units = struct {
     vector_base: u32,
 
     pub fn of(second: *Second) Units {
-        return .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears, .vector_base = second.vector_base };
+        return .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears, .vector_base = second.state.vector_base };
     }
 };
 

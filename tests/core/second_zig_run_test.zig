@@ -18,7 +18,7 @@ fn bring(driver: *Driver, cpu0: *Engine, board: *Board, program: []const u16) !v
     cpu0.* = try Engine.open();
     errdefer cpu0.close();
     try cpu0.mapBoardRam();
-    driver.second = .{ .core = try Engine.open(), .vector_base = vectors };
+    driver.second = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
     errdefer driver.close();
     try driver.second.core.shareBoardRamWith(cpu0);
     try driver.second.core.writeWord(vectors, stack);
@@ -44,10 +44,10 @@ test "a round runs CPU1's share on its Zig core and counts it the Unicorn way" {
     // No divider word on the board: CPU1 runs as many as CPU0 did.
     driver.round(100);
     driver.round(100);
-    try std.testing.expectEqual(@as(usize, 2), driver.second.turns);
-    try std.testing.expectEqual(@as(usize, 200), driver.second.ran);
-    try std.testing.expectEqual(code, driver.second.pc);
-    try std.testing.expectEqual(@as(?ra8.core.engine.Fault, null), driver.second.fault);
+    try std.testing.expectEqual(@as(usize, 2), driver.second.state.turns);
+    try std.testing.expectEqual(@as(usize, 200), driver.second.state.ran);
+    try std.testing.expectEqual(code, driver.second.state.pc);
+    try std.testing.expectEqual(@as(?ra8.core.engine.Fault, null), driver.second.state.fault);
 }
 
 test "a CPU1 that stops is reported where it stopped and takes no more turns" {
@@ -62,12 +62,12 @@ test "a CPU1 that stops is reported where it stopped and takes no more turns" {
     defer driver.close();
 
     driver.round(50);
-    const fault = driver.second.fault orelse return error.NoFault;
-    try std.testing.expectEqual(driver.second.pc, fault.pc);
+    const fault = driver.second.state.fault orelse return error.NoFault;
+    try std.testing.expectEqual(driver.second.state.pc, fault.pc);
     try std.testing.expect(fault.detail.len > 0);
-    const ran = driver.second.ran;
+    const ran = driver.second.state.ran;
     try std.testing.expect(ran < 50);
     driver.round(50);
-    try std.testing.expectEqual(@as(usize, 1), driver.second.turns);
-    try std.testing.expectEqual(ran, driver.second.ran);
+    try std.testing.expectEqual(@as(usize, 1), driver.second.state.turns);
+    try std.testing.expectEqual(ran, driver.second.state.ran);
 }
