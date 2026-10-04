@@ -47,11 +47,12 @@ const Counted = struct {
     }
 };
 
-fn runIdler(skip: bool) !Ended {
+fn runIdler(skip: bool, reload: ?u32, cycles: u64) !Ended {
     var store = try store_board.Store.init(null);
     defer store.deinit();
     const core: store_board.Guest = .{ .store = &store };
     try idler.load(core);
+    if (reload) |value| try core.writeWord(ra8.core.memmap.syst.rvr, value);
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
@@ -62,7 +63,7 @@ fn runIdler(skip: bool) !Ended {
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
-    const status = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, budget, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
+    const status = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, cycles, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
     return .{
         .status = status,
         .ran = ran,
@@ -75,8 +76,8 @@ fn runIdler(skip: bool) !Ended {
 }
 
 test "an idle image ends in the same state at the same virtual time with and without the skip" {
-    const stepped = try runIdler(false);
-    const skipped = try runIdler(true);
+    const stepped = try runIdler(false, null, budget);
+    const skipped = try runIdler(true, null, budget);
     try std.testing.expect(stepped.count > 0);
     try std.testing.expectEqual(stepped.status, skipped.status);
     try std.testing.expectEqual(stepped.ran, skipped.ran);
@@ -87,7 +88,22 @@ test "an idle image ends in the same state at the same virtual time with and wit
 }
 
 test "the skip closes fewer boundaries on an idle image" {
-    const stepped = try runIdler(false);
-    const skipped = try runIdler(true);
+    const stepped = try runIdler(false, null, budget);
+    const skipped = try runIdler(true, null, budget);
     try std.testing.expect(skipped.closes < stepped.closes);
+}
+
+test "with a period that is not a whole number of stretches, the skip delivers every wrap the stepped run does" {
+    // 50 wraps of a 200,003-cycle period: each wake starts part way down the
+    // counter, so a stretch sized by the full period would overshoot the next
+    // wrap and in time swallow one (RA8EMU-618).
+    const reload: u32 = 200_002;
+    const stepped = try runIdler(false, reload, 50 * 200_003);
+    const skipped = try runIdler(true, reload, 50 * 200_003);
+    try std.testing.expect(stepped.count >= 49);
+    try std.testing.expectEqual(stepped.ticks, skipped.ticks);
+    try std.testing.expectEqual(stepped.count, skipped.count);
+    try std.testing.expectEqual(stepped.elapsed, skipped.elapsed);
+    try std.testing.expectEqual(stepped.pc, skipped.pc);
+    try std.testing.expectEqual(@as(u32, @intCast(skipped.ticks)), skipped.count);
 }

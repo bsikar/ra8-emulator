@@ -159,6 +159,18 @@ pub const Clocks = struct {
         return reload + 1;
     }
 
+    /// How many instructions until the armed counter next wraps, or zero
+    /// when it never will. A counter at CVR wraps on its CVR + 1st tick
+    /// (`wrap`), so this, not `period()`, is the edge a sleeping stretch may
+    /// widen to: a stretch sized by the full period from a counter already
+    /// part way down overshoots the next wrap and, run after run, swallows
+    /// one (RA8EMU-618).
+    pub fn untilWrap(self: *const Clocks, core: anytype) u32 {
+        if (self.period(core) == 0) return 0;
+        const current = (core.readWord(self.words.cvr) catch return 0) & counter_mask;
+        return current + 1;
+    }
+
     /// Charge `instructions` worth of time. `core` is anything that can read
     /// and write a PPB word; the engine is one.
     ///
