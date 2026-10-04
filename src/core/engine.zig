@@ -335,8 +335,14 @@ pub const Engine = struct {
     /// image share pages, and the CPU model refuses a page it already holds.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
         const written = try guest_load.image(.{ .engine = self }, image);
-        _ = long_shift_hook.attach(self.handle, image) catch return Error.AttachFailed;
+        try self.attachImageHooks(image);
         return written;
+    }
+
+    /// The engine-only half of a load: the hooks an image's own code needs,
+    /// for a caller that wrote the image through a Guest (RA8EMU-571).
+    pub fn attachImageHooks(self: Engine, image: elf.Image) Error!void {
+        _ = long_shift_hook.attach(self.handle, image) catch return Error.AttachFailed;
     }
 
     /// Reset the core the way the silicon does: SP and PC out of the vector
