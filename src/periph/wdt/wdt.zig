@@ -197,7 +197,7 @@ pub const Wdt = struct {
     fn reachesAt(self: *const Wdt, value: u32, now_ns: u64) u64 {
         const per = clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift));
         const ticks = @as(u64, self.counter - value) * per - self.pace;
-        return now_ns + ticks * clock.ns_per_tick;
+        return now_ns + ticks * clock.ns_per_tick - self.carry_ns;
     }
 
     /// The ticks `elapsed_ns` of virtual time stands for, so the counter
@@ -219,12 +219,13 @@ pub const Wdt = struct {
 
     /// The virtual ns the next underflow lands at, from `now_ns`, at the
     /// per-tick pacing: `counter + 1` counts, each `ticksPerCount` ticks, less
-    /// the ticks already paced toward the first. Null while disarmed.
+    /// the ticks already paced toward the first and the ns already carried
+    /// toward the next tick. Null while disarmed.
     pub fn underflowDueAt(self: *const Wdt, now_ns: u64) ?u64 {
         if (!self.armed) return null;
         const per = clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift));
         const ticks = (@as(u64, self.counter) + 1) * per - self.pace;
-        return now_ns + ticks * clock.ns_per_tick;
+        return now_ns + ticks * clock.ns_per_tick - self.carry_ns;
     }
 
     /// Put the next underflow on `queue` under `clock.queue_id.wdt`, and the

@@ -183,7 +183,7 @@ pub const Iwdt = struct {
     pub fn underflowDueAt(self: *const Iwdt, now_ns: u64) ?u64 {
         if (!self.armed) return null;
         const ticks = @max(1, (@as(u64, self.counter) + counts_per_tick - 1) / counts_per_tick);
-        return now_ns + ticks * wdt_clock.ns_per_tick;
+        return now_ns + ticks * wdt_clock.ns_per_tick - self.carry_ns;
     }
 
     /// Put the next underflow on `queue` under `wdt_clock.queue_id.iwdt`,

@@ -216,3 +216,31 @@ test "an AGT underflow is raised on the boundary that closes at its due time" {
     try std.testing.expectEqual(@as(usize, 3), boundary);
     try std.testing.expect(unit.time.base.now() % 50_000 != 0);
 }
+
+test "a WDT underflow lands on the boundary that closes at its due time, carry included" {
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var unit = board();
+    defer unit.deinit();
+    try ra8.board.wiring.attachBlocks(&unit, memory);
+    // Three ticks from underflow, 20000 ns already carried toward the
+    // first: due at 130000 ns, off the 50000 grid.
+    unit.watchdog.wdtcr = wdt.controlWord(0, 0x1, 3, 3);
+    unit.watchdog.wdtrcr = 0;
+    unit.watchdog.armed = true;
+    unit.watchdog.counter = 0;
+    unit.watchdog.pace = wdt.clock.ticksPerCount(0x1) - 3;
+    unit.watchdog.carry_ns = 20_000;
+    try unit.watchdog.arm(&unit.time.queue, 0);
+    try std.testing.expectEqual(@as(?u64, 130_000), unit.time.queue.next());
+    var boundary: usize = 0;
+    while (unit.watchdog.underflows == 0) : (boundary += 1) {
+        try std.testing.expect(boundary < 8);
+        const pace = ra8.core.run_pace.forStretch(memory, .{ .per_boundary = 50_000 }, .{ .board = unit.ticker() });
+        try unit.tick(memory, pace.per_boundary);
+        if (unit.watchdog.underflows == 0) try std.testing.expect(unit.time.base.now() < 130_000);
+    }
+    try std.testing.expectEqual(@as(usize, 3), boundary);
+    try std.testing.expectEqual(@as(u64, 130_000), unit.time.base.now());
+}
