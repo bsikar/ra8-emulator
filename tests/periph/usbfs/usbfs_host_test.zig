@@ -296,3 +296,23 @@ test "a device that names no strings skips string descriptor 0" {
     try std.testing.expectEqual(usbfs.host.Step.set_interface, host.step);
     try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.usbreq), 2));
 }
+
+test "a STALL on GET_CONFIGURATION is noted and the host moves on" {
+    var device = attached();
+    var host = Host{ .step = .get_configuration };
+    host.tick(&device);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.get_status, host.step);
+    try std.testing.expectEqual(usbfs.host.Answer.stall, host.config_answer);
+}
+
+test "a STALL on a descriptor read ends the script in failed" {
+    var device = attached();
+    var host = Host{ .step = .device_descriptor };
+    host.tick(&device);
+    device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
+    try std.testing.expectEqual(usbfs.host.Step.device_descriptor, host.failed_on);
+}

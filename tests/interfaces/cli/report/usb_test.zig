@@ -54,6 +54,12 @@ test "a configured device prints its configuration value and status" {
     try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "configuration value 1, status 01 00, SET_INTERFACE stall\n") != null);
 }
 
+test "a refused GET_CONFIGURATION and GET_STATUS print as stall" {
+    var host = Host{ .step = .configured, .config_answer = .stall, .status_answer = .stall, .interface = .ack };
+    const text = try render(&host);
+    try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "configuration value stall, status stall, SET_INTERFACE ack\n") != null);
+}
+
 test "a step short of configured prints no configuration value" {
     var host = Host{ .step = .get_status, .waited = 3 };
     const text = try render(&host);

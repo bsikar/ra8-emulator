@@ -14,9 +14,11 @@ pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
     try descriptor("config", host.configuration(), out);
     try text("product", &host.product, out);
     if (host.step != .configured) return;
-    try out.print("USBFS host: configuration value {d}, status {x:0>2} {x:0>2}, SET_INTERFACE {s}\n", .{
-        host.config_value[0], host.status[0], host.status[1], @tagName(host.interface),
-    });
+    try out.writeAll("USBFS host: configuration value ");
+    if (host.config_answer == .stall) try out.writeAll("stall") else try out.print("{d}", .{host.config_value[0]});
+    try out.writeAll(", status ");
+    if (host.status_answer == .stall) try out.writeAll("stall") else try out.print("{x:0>2} {x:0>2}", .{ host.status[0], host.status[1] });
+    try out.print(", SET_INTERFACE {s}\n", .{@tagName(host.interface)});
     if (host.halt_set == .none) return;
     try out.print("USBFS host: ENDPOINT_HALT set {s}, clear {s}\n", .{
         @tagName(host.halt_set), @tagName(host.halt_clear),
