@@ -103,6 +103,7 @@ pub const groups = [_]op.Group{
     beatWise(@import("mve_lane_move.zig").group),
     beatWise(@import("mve_lane_pair.zig").group),
     beatWise(@import("mve_vmaxv.zig").group),
+    beatWise(@import("mve_reduce.zig").group),
     beatWise(@import("mve_int_vqdmlah.zig").group),
     beatWise(@import("mve_vldr.zig").group),
     beatWise(@import("mve_vldr_wide.zig").group),

@@ -95,6 +95,7 @@ test {
     _ = @import("mve_vldr_vectors_test.zig");
     _ = @import("mve_vldr_wide_vectors_test.zig");
     _ = @import("mve_vmaxv_vectors_test.zig");
+    _ = @import("mve_reduce_vectors_test.zig");
     _ = @import("mve_vpred_vectors_test.zig");
     _ = @import("mve_vpst_vectors_test.zig");
     _ = @import("pac_vectors_test.zig");
