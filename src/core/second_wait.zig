@@ -5,7 +5,7 @@
 //! counting, but none of its instructions run. It wakes when:
 //!
 //! - an exception is taken on it (exception entry is an event), or
-//! - the other core runs SEV, seen by src/core/sev_hook.zig, or
+//! - the other core runs SEV, or
 //! - it has idled `limits.spurious_after` turns. Armv8-M lets a WFE
 //!   complete for no architectural reason at all, and firmware loops around
 //!   it for exactly that, so this is a legal wake. It covers events the
