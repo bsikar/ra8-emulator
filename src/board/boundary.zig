@@ -14,6 +14,15 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 const agt_sched = @import("../periph/agt/agt_sched.zig");
 const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
 
+/// Cycles at the time base's rate until the next event on the board's
+/// queue, zero when nothing is queued or it is already due. The pace reads
+/// this to close a boundary on it (src/core/queue_pace.zig).
+pub fn cyclesToDue(context: *anyopaque) u64 {
+    const board: *const Board = @ptrCast(@alignCast(context));
+    const at = board.time.queue.next() orelse return 0;
+    return board.time.base.cyclesUntil(at);
+}
+
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
 /// any line still latched re-pends. The controller picks straight
