@@ -4,6 +4,7 @@
 //! SysTick's longest period is 16.8 virtual seconds.
 const std = @import("std");
 const ra8 = @import("ra8");
+const store_board = @import("store_board.zig");
 
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
@@ -22,22 +23,22 @@ const Ended = struct {
 };
 
 fn runSoak(overflow: bool) !Ended {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     try soaker.load(core, overflow);
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try store_board.attach(&board, core);
     board.time.base.setRate(hz);
     board.time.soak.armed = true;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .idle_skip = true };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
+    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
     clock.soakFaults();
     return .{ .event = board.time.soak.event, .now_ns = board.time.base.now(), .count = try core.readWord(soaker.counter_at) };
 }

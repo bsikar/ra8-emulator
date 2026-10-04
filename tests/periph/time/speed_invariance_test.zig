@@ -4,6 +4,7 @@
 //! entry must land on the same instruction and the same virtual cycle.
 const std = @import("std");
 const ra8 = @import("ra8");
+const store_board = @import("../../interfaces/cli/store_board.zig");
 const idler = @import("../../interfaces/cli/idler.zig");
 
 const zig_run = ra8.board.zig_run;
@@ -51,23 +52,23 @@ const Timeline = struct {
 const Run = struct { timeline: Timeline, wall_ns: u64 };
 
 fn runAt(speed_milli: ?u64) !Run {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
     try idler.load(core);
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try store_board.attach(&board, core);
     var wall: FakeWall = .{};
     if (speed_milli) |factor| board.time.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), factor);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
     var timeline: Timeline = .{ .timebase = &timebase };
     const listener: ra8.core.cpu.cpu.RetireListener = .{ .context = &timeline, .instructionFn = Timeline.retire };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, idler.base, budget, &ran, .{ .boundary = clock.boundary(), .retire_listener = listener });
+    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, budget, &ran, .{ .boundary = clock.boundary(), .retire_listener = listener });
     return .{ .timeline = timeline, .wall_ns = wall.ns };
 }
 

@@ -10,16 +10,10 @@ const profile_report = ra8.board.report.profile;
 const cpu_boot = ra8.core.cpu.boot;
 const symbols = ra8.core.symbols;
 const Builder = @import("../../debug/symbol_image.zig").Builder;
-const wiring = ra8.board.wiring;
-const Store = ra8.core.cpu.memory.store.Store;
-const Guest = ra8.core.cpu.memory.guest.Guest;
-
-/// The board a `--cpu zig` run attaches: every block over CPU0's store,
-/// then CPU0's windows primed into it (zig_memory.Cpu0.attachStore).
-fn attach(board: *ra8.board.Board, core: Guest) !void {
-    try wiring.attachBlocks(board, core);
-    try wiring.primeWindows(board, core, wiring.cpu0Windows(board));
-}
+const store_board = @import("store_board.zig");
+const Store = store_board.Store;
+const Guest = store_board.Guest;
+const attach = store_board.attach;
 
 test "a boundary is the chunk until SysTick is armed, then its period" {
     var store = try Store.init(null);
