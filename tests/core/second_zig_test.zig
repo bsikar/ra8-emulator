@@ -189,3 +189,22 @@ test "CPU1's Zig core resets and runs over a store with no engine open" {
     try std.testing.expectEqual(ra8.core.cpu.cpu.Stop.count, core.turn(2));
     try std.testing.expectEqual(@as(u32, 6), core.cpu.regs.get(0));
 }
+
+test "CPU1 on its own store shares CPU0's SRAM and answers as an M33" {
+    var lender = try ra8.core.cpu.memory.store.Store.init(null);
+    defer lender.deinit();
+    const shared_word: u32 = memmap.sram_base + 0x3000;
+    try (ra8.core.cpu.memory.guest.Guest{ .store = &lender }).writeWord(shared_word, 0x5EED_CAFE);
+    var file = cpu1Image();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var own: second_core.zig.Own = undefined;
+    try own.open(&lender, &board, try ra8.core.elf.Image.init(&file));
+    defer own.close();
+    const memory = own.core.memory;
+    try std.testing.expectEqual(@as(u32, 0x5EED_CAFE), try memory.readWord(shared_word));
+    try std.testing.expectEqual(ra8.periph.cpuid.cpu1, try memory.readWord(ra8.periph.cpuid.address));
+    try std.testing.expectEqual(store_stack, own.core.cpu.regs.sp());
+    try std.testing.expectEqual(ra8.core.cpu.cpu.Stop.count, own.core.turn(2));
+    try std.testing.expectEqual(@as(u32, 6), own.core.cpu.regs.get(0));
+}
