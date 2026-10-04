@@ -91,6 +91,7 @@ test {
     _ = @import("ops/fp_mem_test.zig");
     _ = @import("ops/mve_vpst_test.zig");
     _ = @import("ops/mve_int_test.zig");
+    _ = @import("ops/mve_bitwise_test.zig");
     _ = @import("ops/mve_int_pair_test.zig");
     _ = @import("ops/mve_int_shift_test.zig");
     _ = @import("ops/mve_int_mulh_test.zig");

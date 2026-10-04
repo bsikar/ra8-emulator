@@ -23,6 +23,8 @@ test {
     _ = @import("compare_vectors_test.zig");
     _ = @import("bit_reverse_test.zig");
     _ = @import("bit_reverse_vectors_test.zig");
+    _ = @import("bitwise_test.zig");
+    _ = @import("bitwise_vectors_test.zig");
     _ = @import("contiguous_test.zig");
     _ = @import("contiguous_vectors_test.zig");
     _ = @import("contiguous_wide_vectors_test.zig");

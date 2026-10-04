@@ -89,6 +89,7 @@ pub const groups = [_]op.Group{
     eciBy(eci_use.fpMem, gate.gatedFpMemory(@import("fp_mem.zig").group)),
     beatWise(@import("mve_vpst.zig").group),
     beatWise(@import("mve_int.zig").group),
+    beatWise(@import("mve_bitwise.zig").group),
     beatWise(@import("mve_int_pair.zig").group),
     beatWise(@import("mve_int_shift.zig").group),
     beatWise(@import("mve_int_mulh.zig").group),

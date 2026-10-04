@@ -120,6 +120,11 @@ is stale or a semantics encoding is missing. Regenerate with
 | VMAXAV T1 | 2 |
 | VMINAV T1 | 2 |
 | VBRSR T1 | 9 |
+| VAND T1 | 3 |
+| VBIC (register) T1 | 3 |
+| VORR (register) T1 | 3 |
+| VORN T1 | 3 |
+| VEOR T1 | 3 |
 | VLDRB.8 | 2 |
 | VLDRH.16 | 2 |
 | VLDRW.32 | 4 |
@@ -318,6 +323,7 @@ table above. A group with no vector fails `zig build test`.
 | fp_mem | 36 |
 | mve_vpst | 17 |
 | mve_int | 27 |
+| mve_bitwise | 20 |
 | mve_int_pair | 68 |
 | mve_int_shift | 52 |
 | mve_int_mulh | 39 |
