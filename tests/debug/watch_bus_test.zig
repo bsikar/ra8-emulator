@@ -167,3 +167,57 @@ test "the core's fault latch passes through as a latch, not a store" {
     try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
     try std.testing.expectEqual(@as(u32, 0), under.writes);
 }
+
+/// A board bus over engine RAM with the write-one-to-clear SCS words wired,
+/// which is how zig_run builds it, so a lost latch shows up here.
+const Board = struct {
+    core: ra8.core.engine.Engine = undefined,
+    periph: ra8.periph.registry.Bus = undefined,
+    clears: ra8.core.cpu.board_bus.fault_clear.Clears = undefined,
+    board: ra8.core.cpu.board_bus.BoardBus = undefined,
+
+    fn open(self: *Board) !void {
+        self.core = try ra8.core.engine.Engine.open();
+        try self.core.mapBoardRam();
+        self.periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+        self.clears = ra8.core.cpu.board_bus.fault_clear.Clears.init();
+        self.board = .{ .memory = .{ .engine = .{ .core = &self.core } }, .periph = &self.periph, .scs = .{ .clears = &self.clears } };
+    }
+
+    fn close(self: *Board) void {
+        self.periph.deinit();
+        self.core.close();
+    }
+};
+
+test "a trapped divide by zero reads DIVBYZERO back at CFSR through the watched board bus" {
+    var rig: Board = .{};
+    try rig.open();
+    defer rig.close();
+    var machine: stop_machine.Machine = .{};
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .inner = rig.board.view(), .driver = &driver };
+    const base = memmap.sram_base;
+    const code = base + 0x100;
+    const usage = base + 0x1C0;
+    try rig.core.writeWord(base, base + 0x1F00);
+    try rig.core.writeWord(base + 4, code | 1);
+    try rig.core.writeWord(base + 6 * 4, usage | 1);
+    try rig.core.writeWord(code, 0xF2F1_FB90); // sdiv r2, r0, r1
+    try rig.core.writeWord(usage, 0xBF00_6823); // ldr r3, [r4]; nop
+    var cpu: Cpu = .{ .bus = watching.view() };
+    try cpu.reset(base);
+    try rig.core.writeWord(memmap.scb.ccr, 1 << 4); // DIV_0_TRP
+    try rig.core.writeWord(memmap.scb.shcsr, 1 << 18); // USGFAULTENA
+    cpu.regs.low[0] = 100;
+    cpu.regs.low[1] = 0;
+    cpu.regs.low[4] = memmap.scb.cfsr;
+    machine.begin();
+    watching.arm(code, 4);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(usage, cpu.regs.pc);
+    watching.arm(usage, 2);
+    try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
+    try std.testing.expectEqual(@as(u32, 1 << 25), cpu.regs.low[3] & (1 << 25));
+    try std.testing.expectEqual(@as(u32, 1 << 25), rig.board.faults().cfsr);
+}
