@@ -149,7 +149,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         // in the same engine memory, so the line is the Unicorn run's line.
         if (!options.report_json) try report_dumps.dumpSymbols(out, .{ .engine = core.* }, image, options);
         if (!options.report_json) try mem_dump.printAll(out, .{ .engine = core.* }, image, options.memDumps());
-        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .handle = core.handle });
+        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = .{ .engine = core.* } });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
         try frame_out.report(out, board, options.frame_out);
     } else if (options.ctl_cpu_load) return ctlLoad(out, .{}, status);
@@ -165,7 +165,7 @@ fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !
 /// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
 fn loadOf(core: *engine.Engine, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
     return .{
-        .cpu0 = rtos_hook.report.sideOf(tracer, .{ .handle = core.handle }),
+        .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = .{ .engine = core.* } }),
         .cpu1 = rtos_hook.second.side(if (cpu1) |pair| &pair.second else null),
     };
 }
