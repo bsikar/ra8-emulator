@@ -91,6 +91,7 @@ test "a driver that never answers ends the script in failed" {
     var i: u32 = 0;
     while (i < 20) : (i += 1) host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
+    try std.testing.expectEqual(usbfs.host.Step.device_descriptor, host.failed_on);
     try std.testing.expect(!host.done());
 }
 
@@ -241,6 +242,7 @@ test "a STALL on SET_CONFIGURATION ends the script in failed" {
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
     host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.failed, host.step);
+    try std.testing.expectEqual(usbfs.host.Step.set_configuration, host.failed_on);
 }
 
 test "the halt requests name the feature and the endpoint" {

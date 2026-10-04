@@ -7,6 +7,7 @@ const usbfs_host = @import("../../../periph/usbfs/usbfs_host.zig");
 pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
     if (host.step == .waiting) return;
     try out.print("USBFS host: enumeration {s}", .{@tagName(host.step)});
+    if (host.step == .failed) try out.print(" on {s}", .{@tagName(host.failed_on)});
     if (host.step != .configured) try out.print(" after {d} boundary(ies) on that step", .{host.waited});
     try out.writeAll("\n");
     try descriptor("device", &host.device, out);
