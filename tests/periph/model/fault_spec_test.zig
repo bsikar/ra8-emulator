@@ -74,3 +74,19 @@ test "bus_low leaves an I2C part as it was, for the caller to hold the bus" {
     const same = try spec.apply(arena.allocator(), made.device, .bus_low, &clock);
     try std.testing.expectEqual(made.device.i2c.context, same.i2c.context);
 }
+
+test "a fault lands on the --attach ask that names the same part" {
+    var asks = [_]model.request.Request{
+        try model.request.parse("max17048@i2c:riic@0x37"),
+        try model.request.parse("modem@uart:sci3"),
+    };
+    try spec.place(&asks, try spec.parse("modem@uart:sci3=garbage:9"));
+    try std.testing.expect(asks[0].fault == null);
+    try std.testing.expectEqual(@as(u32, 9), asks[1].fault.?.garbage);
+}
+
+test "a fault with no matching --attach is refused" {
+    var asks = [_]model.request.Request{try model.request.parse("max17048@i2c:riic@0x37")};
+    try std.testing.expectError(spec.Error.NoSuchAttach, spec.place(&asks, try spec.parse("max17048@i2c:riic@0x36=disconnected")));
+    try std.testing.expectError(spec.Error.NoSuchAttach, spec.place(asks[0..0], try spec.parse("max17048@i2c:riic@0x37=disconnected")));
+}

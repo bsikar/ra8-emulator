@@ -7,6 +7,7 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const touch_spec = @import("touch_spec.zig");
 const request = @import("../../periph/model/request.zig");
+const fault_spec = @import("../../periph/model/fault_spec.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 
 const Options = cli.Options;
@@ -48,6 +49,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.camera = try camera(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--fault")) {
+        try fault(options, try next(argv, index));
     } else if (touch_spec.claims(flag)) {
         try touch_spec.take(options, flag, try next(argv, index));
     } else return false;
@@ -74,6 +77,19 @@ fn attach(options: *Options, spec: []const u8) !void {
         return err;
     };
     options.attach_count += 1;
+}
+
+/// One `--fault` ask, put on the `--attach` ask before it that names the
+/// same part. A bad spec, or one with no such ask, says why.
+fn fault(options: *Options, spec: []const u8) !void {
+    const wanted = fault_spec.parse(spec) catch |err| {
+        std.debug.print("--fault {s}: {s}\n", .{ spec, @errorName(err) });
+        return err;
+    };
+    fault_spec.place(options.attaches[0..options.attach_count], wanted) catch |err| {
+        std.debug.print("--fault {s}: no --attach before it names that part\n", .{spec});
+        return err;
+    };
 }
 
 /// One `--camera-source` spec. A bad one says why before the run starts.

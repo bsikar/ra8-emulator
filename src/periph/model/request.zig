@@ -7,6 +7,7 @@
 const std = @import("std");
 const endpoint = @import("endpoint.zig");
 const parts = @import("parts.zig");
+const fault_spec = @import("fault_spec.zig");
 
 /// How many extra models one run may attach: the RIIC registry's own
 /// depth per line (riic_bus.max_devices).
@@ -15,6 +16,8 @@ pub const max: usize = 4;
 pub const Request = struct {
     name: []const u8,
     at: endpoint.Endpoint,
+    /// What `--fault` asked this part to do wrong; null runs it clean.
+    fault: ?fault_spec.Mode = null,
 };
 
 pub const Error = error{ NoModelName, UnknownModel } || endpoint.Error;
