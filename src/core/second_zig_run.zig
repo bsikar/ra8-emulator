@@ -25,7 +25,7 @@ pub const Driver = struct {
     /// Secure one and keeps DWT_CYCCNT.
     ns_timebase: clocks.Clocks,
     /// CPU1's own store; `second`'s engine is never opened (RA8EMU-588).
-    /// Null only for a driver a test built by hand on an engine.
+    /// Null only once `close` has dropped it.
     store: ?Store,
 
     /// CPU1 from the image at `path`, on `board`, ready to take
@@ -76,8 +76,7 @@ pub const Driver = struct {
 
     pub fn close(self: *Driver) void {
         self.core.dropBlocks();
-        if (self.store != null) return self.dropStore();
-        self.second.close();
+        self.dropStore();
     }
 
     /// CPU1's memory, for what reads it after the run.
@@ -86,8 +85,7 @@ pub const Driver = struct {
     }
 
     fn held(self: *Driver) bool {
-        if (self.store != null) return self.second.state.heldInReset(self.core.memory);
-        return self.second.heldInReset();
+        return self.second.state.heldInReset(self.core.memory);
     }
 
     /// CPU1's turn for one CPU0 round of `round` instructions. A core that
