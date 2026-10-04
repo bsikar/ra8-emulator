@@ -49,3 +49,12 @@ VMUL, VDIV, VSQRT and VFMA plus FZ16. Each operation stores its result and
 `FPSCR & 0x03C0009F`, including the control mode. Build it the same way,
 swapping in `fp_modes`. `fp_modes_corpus_test.zig` boots it and compares
 against the DDI0553 words in `fp_modes_vectors.zig`.
+
+`lob.zig` is the low-overhead-loop corpus (RA8EMU-232). For trip counts 0,
+1, 3, 4, 5, 16, 17, 37 and 64 (read back from SRAM so nothing folds) it runs
+word and byte sums, a word add, a halfword scale, a halfword dot product and
+a word hash. LLVM only turns these into DLSTP.8/.16/.32 with LETP, plain LE
+loops and Helium bodies at `-O ReleaseFast` with MVE on, so build it with
+`M=cortex_m85+mve_fp+fp_armv8d16+fullfp16` and `-O ReleaseFast` in the
+second command, swapping in `lob`. `lob_corpus_test.zig` boots it on the
+Zig core and compares against the host-worked words in `lob_vectors.zig`.
