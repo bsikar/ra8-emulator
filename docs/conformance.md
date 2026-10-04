@@ -333,7 +333,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_vmaxv | 30 |
 | mve_int_vqdmlah | 43 |
 | mve_vldr | 35 |
-| mve_vldr_wide | missing |
+| mve_vldr_wide | 34 |
 | mve_gather | missing |
 | mve_gather64 | missing |
 | mve_gather_imm | missing |
