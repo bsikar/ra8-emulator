@@ -1,8 +1,8 @@
 //! `--trace-rtos` on CPU1, as core 1 (RA8EMU-262).
 //!
-//! CPU1 runs its own image on its own engine, with its own NVIC model and
-//! its own clock, so it gets its own tracer: the symbol is looked up in the
-//! CPU1 image, the stores and exceptions are hooked on CPU1's engine, and
+//! CPU1 runs its own image on its own Zig core and store, with its own
+//! clock, so it gets its own tracer: the symbol is looked up in the CPU1
+//! image, a listener sits in front of CPU1's bus and exception source, and
 //! every event is tagged cpu1. CPU0's tracer is untouched.
 //!
 //! The tracer is kept here because the run holds CPU1 as a bare
@@ -18,26 +18,10 @@ var traced: ?*rtos_hook.Tracer = null;
 var zig_tracer: rtos_hook.Tracer = undefined;
 var zig_listener: rtos_hook.zig.Listener = undefined;
 
-/// Pass CPU1 through, tracing it when the flag asked and its image (read
-/// again from `path`) has ThreadX. Bringing CPU1 up failing is passed on
-/// as it was; a trace that cannot be armed leaves the run as it would be.
-pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Window, path: ?[]const u8) anyerror!?*second_core.Second {
-    const one = (try started) orelse return null;
-    const window = wanted orelse return one;
-    const named = path orelse return one;
-    const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, named, second_core.limits.image_bytes) catch return one;
-    const image = elf.Image.init(bytes) catch return one;
-    const found = rtos_hook.resolveOn(image, window, 1) orelse return one;
-    traced = rtos_hook.attach(one.core.handle, found, &one.state.timebase.ticks, &one.state.interrupts) catch null;
-    if (traced) |tracer| tracer.elapsed = &one.state.timebase.elapsed;
-    return one;
-}
-
-/// CPU1's trace and load, names read through CPU1's engine. Nothing when CPU1 was
-/// not traced.
-pub fn print(out: anytype, options: anytype, second: ?*const second_core.Second) !void {
-    const one = second orelse return;
-    try printOn(out, options, .{ .engine = one.core });
+/// CPU1's trace and load, names read through CPU1's memory. Nothing when
+/// there is no CPU1 or it was not traced.
+pub fn print(out: anytype, options: anytype, second: ?Guest) !void {
+    try printOn(out, options, second orelse return);
 }
 
 /// `print` for a CPU1 whose memory is `memory`, engine or store (RA8EMU-588).
@@ -47,13 +31,7 @@ pub fn printOn(out: anytype, options: anytype, memory: Guest) !void {
 }
 
 /// CPU1's tracer and the memory its names are read through, for
-/// `--report json` (RA8EMU-266). Null when CPU1 was not traced.
-pub fn side(second: ?*const second_core.Second) ?rtos_hook.report.Side {
-    const one = second orelse return null;
-    return sideOn(.{ .engine = one.core });
-}
-
-/// `side` for a CPU1 whose memory is `memory` (RA8EMU-588).
+/// `--report json` (RA8EMU-266, RA8EMU-588). Null when CPU1 was not traced.
 pub fn sideOn(memory: Guest) ?rtos_hook.report.Side {
     const tracer = traced orelse return null;
     return .{ .tracer = tracer, .memory = .{ .guest = memory } };

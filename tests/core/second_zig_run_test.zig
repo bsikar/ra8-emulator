@@ -18,7 +18,7 @@ const stack: u32 = vectors + 0x800;
 /// A driver whose CPU1 runs `program` from reset, built the way `open`
 /// builds it but from words in its own store instead of an ELF on disk.
 fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
-    driver.second = .{ .core = undefined, .state = .{ .vector_base = vectors } };
+    driver.second = .{ .state = .{ .vector_base = vectors } };
     driver.store = try Store.init(null);
     errdefer driver.close();
     const memory: Guest = .{ .store = &driver.store.? };

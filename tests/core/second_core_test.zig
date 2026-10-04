@@ -54,7 +54,7 @@ test "a second core carries an SAU of its own, not the board's" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
 
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
@@ -62,7 +62,7 @@ test "a second core carries an SAU of its own, not the board's" {
 }
 
 test "a fresh second core's SAU is quiet, so it prints no line" {
-    var cpu1 = mod.Second{ .core = undefined };
+    var cpu1 = mod.Second{};
     try std.testing.expect(cpu1.partitions.quiet());
 }
 
@@ -93,7 +93,7 @@ test "a second core carries an MPU and guard of its own, not the board's" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     cpu1.regions = mpu.Mpu.init();
     cpu1.guard = ra8.core.mpu_guard.Guard.init();
 
@@ -126,7 +126,7 @@ test "programming one core's MPU leaves the other's table alone" {
 }
 
 test "a fresh second core's MPU is empty and off" {
-    const cpu1 = mod.Second{ .core = undefined };
+    const cpu1 = mod.Second{};
     try std.testing.expectEqual(@as(u32, 0), cpu1.regions.ctrl);
     try std.testing.expect(cpu1.guard.unit == null);
 }
@@ -158,7 +158,7 @@ test "each core's AIRCR model keeps the PRIGROUP that core programmed" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     cpu1.control = scb.Scb.init();
     var cpu0_control = scb.Scb.init();
     try cpu0_control.prime(pair.first());
@@ -178,7 +178,7 @@ test "a reset CPU1 asks for is counted on CPU1's model, not CPU0's" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     cpu1.control = scb.Scb.init();
     const cpu0_control = scb.Scb.init();
     try cpu1.control.prime(pair.second());
@@ -214,7 +214,7 @@ fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
 }
 
 test "the report says how often CPU1 parked in WFE and what woke it" {
-    var second: mod.Second = .{ .core = undefined };
+    var second: mod.Second = .{};
     second.state.wait.parks = 3;
     second.state.wait.wakes = .{ .interrupt = 1, .event = 1, .spurious = 1 };
     var buffer: [1024]u8 = undefined;
@@ -227,7 +227,7 @@ test "the report says how often CPU1 parked in WFE and what woke it" {
 }
 
 test "a CPU1 that never waited reports no parking line" {
-    const second: mod.Second = .{ .core = undefined };
+    const second: mod.Second = .{};
     var buffer: [1024]u8 = undefined;
     const text = try reported(&second, &buffer);
     try std.testing.expect(std.mem.indexOf(u8, text, "parked in WFE") == null);

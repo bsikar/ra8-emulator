@@ -41,7 +41,7 @@ test "a reset CPU1 asks for latches SWRF and reboots the part, as CPU0's does" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
@@ -64,7 +64,7 @@ test "a reset the board performs holds CPU1 until it is released" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
@@ -81,7 +81,7 @@ test "a fresh release after a reset brings CPU1 up out of CPU1INITVTOR" {
     var pair: Pair = undefined;
     try pair.open();
     defer pair.part();
-    var cpu1: mod.Second = .{ .core = undefined };
+    var cpu1: mod.Second = .{};
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
