@@ -8,11 +8,13 @@
 //! stays high until the host clocks it out. With nothing queued the model
 //! sends esp-hosted's idle filler. After the boot event, an RPC request on
 //! the serial interface gets its answer queued the same way, followed by
-//! any event the request raises (station start, station connected).
+//! any event the request raises (station start, station connected). A
+//! station data frame carrying a DHCP request gets the AP's DHCP answer.
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
 const rpc = @import("esp_rpc.zig");
 const station = @import("esp_station.zig");
+const dhcp = @import("esp_dhcp.zig");
 const Queue = @import("esp_queue.zig").Queue;
 
 /// Octets of the host capabilities announcement kept for inspection.
@@ -67,6 +69,7 @@ pub const Link = struct {
         const got = frame.parse(&self.rx) catch return;
         if (got.header.interface == .priv) self.announce(got.payload);
         if (got.header.interface == .serial) self.serve(got.payload);
+        if (got.header.interface == .sta) self.forward(got.payload);
     }
 
     fn announce(self: *Link, payload: []const u8) void {
@@ -88,5 +91,12 @@ pub const Link = struct {
         const id = station.followUp(req.id) orelse return;
         station.eventFrame(&out, id) catch return;
         _ = self.queue.push(&out);
+    }
+
+    /// Answers the station's DHCP traffic as the AP would; other data drops.
+    fn forward(self: *Link, payload: []const u8) void {
+        if (!self.caps_seen) return;
+        var out: [frame.frame_size]u8 = undefined;
+        if (dhcp.answerFrame(&out, payload)) _ = self.queue.push(&out);
     }
 };
