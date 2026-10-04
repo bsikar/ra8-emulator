@@ -69,6 +69,7 @@ fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts,
     _ = try ra8.core.csel.tt_hook.attach(core.handle, image, &board.partitions);
     _ = try ra8.core.csel.vscclrm_hook.attach(core.handle, image);
     ra8.board.option_memory.apply(board, core.*);
+    _ = try report.frames_out.Armed.arm(std.heap.page_allocator, board, options.frames.frames_out, options.frames.frames_every);
     return written;
 }
 
@@ -361,7 +362,6 @@ fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
-    _ = try report.frames_out.Armed.arm(allocator, board, options.frames.frames_out, options.frames.frames_every);
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(path);
