@@ -101,6 +101,39 @@ test "no lazy preservation pending leaves memory alone" {
     try std.testing.expectEqual(@as(u32, 0), ram.word(at));
 }
 
+/// A Secure lazy context pending at `at` while Non-secure code runs.
+fn secureLazy(ram: *fixture.Ram, ts: u1) !Cpu {
+    var cpu = try fixture.boot(ram);
+    const at = fixture.msp_top - 0x88;
+    cpu.fp.context.writeFpcar(at);
+    cpu.fp.context.fpccr.lspact = 1;
+    cpu.fp.context.fpccr.s = 1;
+    cpu.fp.context.fpccr.ts = ts;
+    cpu.banked.current = .non_secure;
+    for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0x3F80_0000 + @as(u32, @intCast(i)));
+    try run(&cpu, 0xEE30, 0x0A81); // vadd.f32 s0, s1, s2
+    return cpu;
+}
+
+test "a Secure context saved from Non-secure code is cleared before the op runs" {
+    var ram: fixture.Ram = .{};
+    const cpu = try secureLazy(&ram, 0);
+    const at = fixture.msp_top - 0x88;
+    try std.testing.expectEqual(@as(u32, 0x3F80_0001), ram.word(at + 4));
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(0)); // 0 + 0
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(15));
+    try std.testing.expectEqual(@as(u32, 0x3F80_0010), cpu.fp.bank.readS(16));
+}
+
+test "with FPCCR.TS the Secure S16-S31 are saved and cleared too" {
+    var ram: fixture.Ram = .{};
+    const cpu = try secureLazy(&ram, 1);
+    const at = fixture.msp_top - 0x88;
+    try std.testing.expectEqual(@as(u32, 0x3F80_0010), ram.word(at + 0x48));
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(16));
+    try std.testing.expectEqual(@as(u32, 0), cpu.fp.bank.readS(31));
+}
+
 test "Secure gate reopens context when FPCA is set but SFPA is clear" {
     var cpu = fresh();
     cpu.regs.control = fpca;
