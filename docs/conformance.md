@@ -337,6 +337,7 @@ table above. A group with no vector fails `zig build test`.
 | mve_lane_move | 26 |
 | mve_lane_pair | 19 |
 | mve_vmaxv | 30 |
+| mve_reduce | 44 |
 | mve_int_vqdmlah | 43 |
 | mve_vldr | 35 |
 | mve_vldr_wide | 34 |
