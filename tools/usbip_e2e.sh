@@ -4,11 +4,14 @@
 # does: list, import, read the device descriptor, loop 64 bytes through the
 # vendor interface. Exit 0 on a pass, 1 on a failure, 77 when the ELF or
 # zig is missing.
-# usage: tools/usbip_e2e.sh EMULATOR ELF [MS]
+# usage: tools/usbip_e2e.sh EMULATOR ELF [MS [TOOL ARGS...]]
+# TOOL ARGS go to usbip_attach: [VID:PID] [LEN] [--tty].
 # ZIG_BUILD_FLAGS passes options to zig build (e.g. -Ddeps-prefix=...).
 emu=$1
 elf=$2
 ms=${3:-5000}
+shift 2
+[ $# -gt 0 ] && shift
 zig=${ZIG:-zig}
 [ -f "$elf" ] || { echo "usbip_e2e: no $elf"; exit 77; }
 command -v "$zig" >/dev/null 2>&1 || { echo "usbip_e2e: no zig"; exit 77; }
@@ -25,7 +28,7 @@ while [ -z "$port" ]; do
     port=$(sed -n 's/^usbip: exporting .* on 127\.0\.0\.1:\([0-9]*\)$/\1/p' "$log")
 done
 echo "usbip_e2e: exported on port $port"
-(cd "$here" && "$zig" build usbip-attach $ZIG_BUILD_FLAGS -- "$port")
+(cd "$here" && "$zig" build usbip-attach $ZIG_BUILD_FLAGS -- "$port" "$@")
 status=$?
 grep '^usbip:' "$log"
 [ "$status" -eq 0 ] && echo "usbip_e2e: passed" || echo "usbip_e2e: failed"
