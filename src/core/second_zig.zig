@@ -28,6 +28,14 @@ const Second = @import("second_core.zig").Second;
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
+const mpu_guard = @import("mpu_guard.zig");
+const scb = @import("../periph/scb.zig");
+const cpuid = @import("../periph/cpuid.zig");
+const elf = @import("elf.zig");
+const Store = @import("cpu/memory/store.zig").Store;
+const Board = @import("../board/board.zig").Board;
+const wiring = @import("../board/wiring.zig");
+const second_core = @import("second_core.zig");
 
 /// What CPU1's Zig core reads from outside its memory: its own SAU, MPU
 /// table and fault clears, and the table it resets from.
@@ -104,5 +112,43 @@ pub const SecondZig = struct {
     /// One turn of `instructions`, as the interleave hands them out.
     pub fn turn(self: *SecondZig, instructions: u64) cpu_mod.Stop {
         return self.cpu.run(instructions);
+    }
+};
+
+/// CPU1 with memory of its own (RA8EMU-574): a Store that borrows CPU0's
+/// shared regions from `lender`, and its own SAU, MPU table, guard, AIRCR
+/// model and fault clears, so it comes up with no engine open. Built in
+/// storage the caller holds: the core keeps pointers into it.
+pub const Own = struct {
+    store: Store,
+    partitions: sau.Sau = sau.Sau.init(),
+    regions: mpu.Mpu = mpu.Mpu.init(),
+    guard: mpu_guard.Guard = mpu_guard.Guard.init(),
+    control: scb.Scb = scb.Scb.init(),
+    clears: fault_clear.Clears = fault_clear.Clears.init(),
+    core: SecondZig = undefined,
+
+    /// Prime CPU1's PPB windows as an M33, load `image`, and reset the core
+    /// from the image's vector table.
+    pub fn open(self: *Own, lender: *const Store, board: *Board, image: elf.Image) !void {
+        self.* = .{ .store = try Store.init(lender) };
+        errdefer self.store.deinit();
+        const memory: Guest = .{ .store = &self.store };
+        try wiring.primeWindows(board, memory, .{
+            .partitions = &self.partitions,
+            .regions = &self.regions,
+            .guard = &self.guard,
+            .identity = cpuid.cpu1,
+            .control = &self.control,
+            .clears = &self.clears,
+        });
+        const seeded = try second_core.seedImage(memory, image);
+        const units: Units = .{ .partitions = &self.partitions, .regions = &self.regions, .clears = &self.clears, .vector_base = seeded.vector_base };
+        try self.core.openOn(memory, units, &board.bus);
+    }
+
+    pub fn close(self: *Own) void {
+        self.core.dropBlocks();
+        self.store.deinit();
     }
 };
