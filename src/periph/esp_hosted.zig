@@ -13,6 +13,8 @@ pub const frame = @import("esp_hosted/esp_frame.zig");
 pub const event = @import("esp_hosted/esp_event.zig");
 pub const link = @import("esp_hosted/esp_link.zig");
 pub const rpc = @import("esp_hosted/esp_rpc.zig");
+pub const station = @import("esp_hosted/esp_station.zig");
+pub const queue = @import("esp_hosted/esp_queue.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;

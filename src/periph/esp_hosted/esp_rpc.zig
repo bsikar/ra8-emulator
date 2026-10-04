@@ -8,6 +8,7 @@
 //! version reported is the co-processor firmware the bench runs, 2.12.11.
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
+const station = @import("esp_station.zig");
 
 pub const Error = error{ Truncated, NotRequest } || event.Error;
 
@@ -150,15 +151,15 @@ pub fn fwVersion(w: *event.Writer) Error!void {
 
 /// Builds the frame answering `req`; false when the model has no answer.
 pub fn answerFrame(out: *[frame.frame_size]u8, req: Request) Error!bool {
-    var body_buf: [32]u8 = undefined;
+    var body_buf: [64]u8 = undefined;
     var body: event.Writer = .{ .buf = &body_buf };
     if (req.id == Id.req_fw_version) {
         try fwVersion(&body);
-    } else if (!isBare(req.id)) return false;
-    var proto_buf: [64]u8 = undefined;
+    } else if (!isBare(req.id) and !try station.body(&body, req.id)) return false;
+    var proto_buf: [96]u8 = undefined;
     var proto: event.Writer = .{ .buf = &proto_buf };
     try response(&proto, Id.responseTo(req.id), req.uid, body.written());
-    var payload_buf: [96]u8 = undefined;
+    var payload_buf: [128]u8 = undefined;
     var payload: event.Writer = .{ .buf = &payload_buf };
     try event.envelope(&payload, event.endpoint_response, proto.written());
     try frame.build(out, .{ .interface = .serial, .if_num = 0 }, payload.written());

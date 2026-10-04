@@ -7,10 +7,13 @@
 //! RPC before it. The answer waits in the transmit queue and DATA_READY
 //! stays high until the host clocks it out. With nothing queued the model
 //! sends esp-hosted's idle filler. After the boot event, an RPC request on
-//! the serial interface gets its answer queued the same way.
+//! the serial interface gets its answer queued the same way, followed by
+//! any event the request raises (station start, station connected).
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
 const rpc = @import("esp_rpc.zig");
+const station = @import("esp_station.zig");
+const Queue = @import("esp_queue.zig").Queue;
 
 /// Octets of the host capabilities announcement kept for inspection.
 pub const caps_capacity: usize = 17;
@@ -24,8 +27,7 @@ pub const Link = struct {
     caps_len: u8 = 0,
     boot_queued: bool = false,
     boots_sent: u32 = 0,
-    reply: [frame.frame_size]u8 = undefined,
-    reply_queued: bool = false,
+    queue: Queue = .{},
     replies_sent: u32 = 0,
 
     /// Clocks one byte in from the host and returns the byte clocked out.
@@ -43,7 +45,7 @@ pub const Link = struct {
 
     /// DATA_READY: high while the transmit queue holds a frame.
     pub fn dataReady(self: *const Link) bool {
-        return self.boot_queued or self.reply_queued;
+        return self.boot_queued or !self.queue.isEmpty();
     }
 
     fn load(self: *Link) void {
@@ -54,9 +56,7 @@ pub const Link = struct {
                 return;
             } else |_| {}
         }
-        if (self.reply_queued) {
-            self.reply_queued = false;
-            @memcpy(&self.tx, &self.reply);
+        if (self.queue.pop(&self.tx)) {
             self.replies_sent += 1;
             return;
         }
@@ -79,9 +79,14 @@ pub const Link = struct {
 
     /// Answers a known RPC request; none before the host has announced itself.
     fn serve(self: *Link, payload: []const u8) void {
-        if (!self.caps_seen or self.reply_queued) return;
+        if (!self.caps_seen) return;
         const proto = rpc.tlvData(payload) orelse return;
         const req = rpc.request(proto) catch return;
-        self.reply_queued = rpc.answerFrame(&self.reply, req) catch false;
+        var out: [frame.frame_size]u8 = undefined;
+        if (!(rpc.answerFrame(&out, req) catch false)) return;
+        _ = self.queue.push(&out);
+        const id = station.followUp(req.id) orelse return;
+        station.eventFrame(&out, id) catch return;
+        _ = self.queue.push(&out);
     }
 };
