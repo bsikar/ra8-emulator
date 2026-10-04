@@ -98,6 +98,9 @@ pub const freq = frequency;
 /// Boundary-geared or virtual-time counting.
 pub const pace = rtc_pace;
 
+/// The second edge a virtual-time clock queues.
+pub const sched = @import("rtc_sched.zig");
+
 /// RCR1 interrupt enables and the RCR2 run bit.
 pub const control = struct {
     pub const aie: u8 = 0x01;

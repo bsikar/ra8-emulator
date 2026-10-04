@@ -14,6 +14,7 @@ const reset = @import("../periph/reset.zig");
 const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 const agt_sched = @import("../periph/agt/agt_sched.zig");
 const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
+const rtc_sched = @import("../periph/rtc/rtc_sched.zig");
 
 /// Cycles at the time base's rate until the next event on the board's
 /// queue, zero when nothing is queued or it is already due. The pace reads
@@ -40,6 +41,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.lowpower.tick();
     self.microphone.tick();
     self.clock.tickFor(elapsed_ns);
+    try rtc_sched.arm(&self.clock, &self.time.queue, self.time.base.now());
     agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
     try agt_sched.arm(&self.interval, &self.time.queue, self.time.base.now());
     gpt_sched.tickFor(&self.pwm, before_ns, self.time.base.now());
