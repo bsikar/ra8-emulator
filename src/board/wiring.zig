@@ -262,21 +262,36 @@ pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
 /// caller's. Shared, a CTRL store from either core rebuilt the traps from
 /// one table on whichever engine made it, and CPU0's regions were CPU1's.
 fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
-    const guest: Guest = .{ .engine = core.* };
+    try primeWindows(self, .{ .engine = core.* }, windows);
+    try hookWindows(core, windows);
+}
+
+/// The reset values a core's own PPB windows read as, written into
+/// `memory`, whichever backend holds it (RA8EMU-550). The writes fire no
+/// hooks, so seeding them all before `hookWindows` is the old order.
+pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     // CPUID read as zero on both cores, so neither said what it was.
-    try cpuid.prime(guest, windows.identity);
+    try cpuid.prime(memory, windows.identity);
     // DWT_CTRL.NUMCOMP read as zero, so the core claimed no comparators.
-    try guest.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
+    try memory.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
     // AIRCR: the first read of it is 0 rather than the key status.
-    try windows.control.prime(guest);
+    try windows.control.prime(memory);
     // CTR read as zero, so the firmware computed a four-byte line and
     // walked every range eight times over.
-    try self.caches.prime(guest);
+    try self.caches.prime(memory);
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
-    try windows.regions.prime(guest);
+    try windows.regions.prime(memory);
     // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
-    try mpu.ns.prime(guest, mpu.geometry.type_value);
+    try mpu.ns.prime(memory, mpu.geometry.type_value);
+    // SAU_TYPE read as zero, so the secure boot's capability check failed
+    // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
+    // error, parking the run in the Secure fallback main() forever.
+    try windows.partitions.prime(memory);
+}
+
+/// The engine's half: the hooks that bank and guard a core's windows.
+fn hookWindows(core: *engine.Engine, windows: CoreWindows) !void {
     // RBAR/RLAR are one word each in RAM, so without this every region a
     // driver programs overwrites the last and the table reads back empty.
     // The guard goes on with it: the same hook that banks the table is the
@@ -284,10 +299,6 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     try core.attachRegions(windows.regions, windows.guard);
     // Secure code programs the Non-secure MPU through the MPU_NS alias.
     if (windows.regions_ns) |ns| try mpu_ns_hook.attach(core.handle, ns);
-    // SAU_TYPE read as zero, so the secure boot's capability check failed
-    // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
-    // error, parking the run in the Secure fallback main() forever.
-    try windows.partitions.prime(guest);
     // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
     // the five regions the boot map programs need the same hook to keep
     // from collapsing onto one entry.
