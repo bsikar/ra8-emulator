@@ -26,6 +26,7 @@ const fault_status = @import("../../periph/fault_status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
 const systick_cut = @import("systick_cut.zig");
+const itm_port = @import("../../debug/itm.zig");
 
 /// CFSR's banked bits, UFSR and MMFSR (src/periph/scb_bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;
@@ -209,6 +210,9 @@ pub const Scs = struct {
     /// The SysTick timers a store can arm, and the stretch cut it latches
     /// (RA8EMU-464). Null leaves every SysTick store to RAM alone.
     cut: ?*systick_cut.Cut = null,
+    /// The ITM a plain run keeps port 0's text in (RA8EMU-629). Null
+    /// leaves the ITM window as plain RAM.
+    itm: ?*itm_port.Itm = null,
 
     /// A word read of FPCCR, FPCAR or FPDSCR answered from the FP state;
     /// false leaves the read to RAM.
@@ -241,6 +245,7 @@ pub const Scs = struct {
             try bankRegion(memory, unit, normal, bytes, mpu_ns.offset);
         };
         if (self.fp) |state| try fileFp(memory, state, address, bytes);
+        if (self.itm) |port| try fileItm(memory, port, address, bytes);
     }
 };
 
@@ -283,6 +288,19 @@ fn fileFp(memory: bus.Bus, state: *fp_state.State, address: u32, bytes: []const 
     if (bytes.len != fp_scb.width) return;
     if (!fp_scb.write(state, address, std.mem.readInt(u32, bytes[0..4], .little))) return;
     try putWord(memory, address, fp_scb.read(state, address).?);
+}
+
+/// File a store into the ITM's registers and put back what a read of the
+/// register sees, so a stimulus port polled after a character still reads
+/// FIFOREADY rather than the character (RA8EMU-629).
+fn fileItm(memory: bus.Bus, port: *itm_port.Itm, address: u32, bytes: []const u8) bus.Error!void {
+    if (address < itm_port.base or address - itm_port.base >= itm_port.limits.span) return;
+    const offset = address - itm_port.base;
+    const width = @min(bytes.len, 4);
+    var padded = [_]u8{0} ** 4;
+    @memcpy(padded[0..width], bytes[0..width]);
+    if (!port.write(offset, std.mem.readInt(u32, &padded, .little), @intCast(width))) return;
+    if (port.peek(offset)) |word| try putWord(memory, address, word);
 }
 
 fn putWord(memory: bus.Bus, address: u32, value: u32) bus.Error!void {
