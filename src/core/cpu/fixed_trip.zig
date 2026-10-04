@@ -21,6 +21,10 @@
 //! ends the watch with no skip. A loop that fails waits `backoff` arrivals
 //! before it is watched again, so a counting loop costs one slow trip in
 //! that many.
+//!
+//! A trip that only moves R0..R12 and whole RAM words is handed to
+//! counted_trip.zig instead (RA8EMU-602): a bounded poll that counts its
+//! tries retires the trips its bound allows once two trips moved the same.
 const std = @import("std");
 const bus = @import("bus.zig");
 const memmap = @import("../memmap.zig");
@@ -31,6 +35,8 @@ const Regs = @import("regs.zig").Regs;
 const FpState = @import("fpu/state.zig").State;
 const Banked = @import("../banked.zig").Banked;
 const Active = @import("exception/all.zig").active.Active;
+const counted = @import("counted_trip.zig");
+const td = @import("trip_decode.zig");
 
 pub const max_trip: u32 = 64;
 pub const backoff: u16 = 256;
@@ -58,20 +64,32 @@ const Snapshot = struct {
             bytesEqual(&self.banked, &cpu.banked) and bytesEqual(&self.active, &cpu.active) and
             self.exclusive == cpu.exclusive and self.event == cpu.event;
     }
+
+    /// Everything but R0..R12 unchanged: what a counted trip may move.
+    fn sameButLow(self: *const Snapshot, cpu: *const Cpu) bool {
+        var regs = cpu.regs;
+        regs.low = self.regs.low;
+        return std.meta.eql(self.regs, regs) and bytesEqual(&self.fp, &cpu.fp) and
+            bytesEqual(&self.banked, &cpu.banked) and bytesEqual(&self.active, &cpu.active) and
+            self.exclusive == cpu.exclusive and self.event == cpu.event;
+    }
 };
 
 pub const Watch = struct {
     on: bool = false,
     head: u32 = 0,
     steps: u32 = 0,
-    /// A store changed a byte, or an access left flash and RAM.
+    /// An access left flash and RAM, or a store no recorder can follow.
     spoiled: bool = false,
+    /// A store changed a RAM word this trip.
+    changed: bool = false,
     inner: bus.Bus = undefined,
     before: Snapshot = undefined,
     miss_pc: u32 = 0,
     miss_wait: u16 = 0,
     repeated: [max_repeats]Repeat = undefined,
     repeats: usize = 0,
+    rec: counted.Recorder = .{},
 
     /// Called before each instruction `run` executes: instructions to retire
     /// at once from the PC, or 0 to step as usual.
@@ -83,20 +101,67 @@ pub const Watch = struct {
         }
         if (pc != self.head) {
             self.steps += 1;
-            if (self.steps > max_trip or self.spoiled) self.miss(cpu);
+            if (self.steps > max_trip or self.spoiled) {
+                self.miss(cpu);
+                return 0;
+            }
+            self.record(cpu);
             return 0;
         }
         const trip: u64 = self.steps;
-        const fixed = !self.spoiled and trip != 0 and self.before.same(cpu) and park.calmHead(cpu) != null;
-        if (!fixed) {
-            self.miss(cpu);
-            return 0;
+        if (self.spoiled or trip == 0 or park.calmHead(cpu) == null) return self.missed(cpu);
+        if (!self.changed and self.before.same(cpu)) {
+            self.drop(cpu);
+            if (left < trip) return 0;
+            return self.retire(left / trip) * trip;
         }
-        self.drop(cpu);
-        if (left < trip) return 0;
-        const retired = left - left % trip;
-        for (self.repeated[0..self.repeats]) |one| _ = self.inner.repeat(one.address, one.len, retired / trip);
-        return retired;
+        if (!self.before.sameButLow(cpu)) return self.missed(cpu);
+        switch (self.rec.atHead(&cpu.regs, self.inner)) {
+            .refuse => return self.missed(cpu),
+            .again => {
+                self.next(cpu);
+                return 0;
+            },
+            .retire => |bound| {
+                const trips = @min(bound, left / trip);
+                if (trips != 0) self.rec.apply(&cpu.regs, self.inner, trips) catch return self.missed(cpu);
+                self.drop(cpu);
+                return self.retire(trips) * trip;
+            },
+        }
+    }
+
+    /// Counts the trip's repeatable reads once per retired trip.
+    fn retire(self: *Watch, trips: u64) u64 {
+        if (trips == 0) return 0;
+        for (self.repeated[0..self.repeats]) |one| _ = self.inner.repeat(one.address, one.len, trips);
+        return trips;
+    }
+
+    fn missed(self: *Watch, cpu: *Cpu) u64 {
+        self.miss(cpu);
+        return 0;
+    }
+
+    /// A new trip from the head, for the recorder.
+    fn next(self: *Watch, cpu: *Cpu) void {
+        self.steps = 1;
+        self.changed = false;
+        self.repeats = 0;
+        self.before = Snapshot.take(cpu);
+        self.record(cpu);
+    }
+
+    /// The instruction at the PC, as the step about to run fetches it.
+    fn record(self: *Watch, cpu: *const Cpu) void {
+        const pc = cpu.regs.pc;
+        const hw1 = self.inner.readHalf(pc) catch return self.spoil();
+        const hw2 = if (td.wide(hw1)) self.inner.readHalf(pc +% 2) catch return self.spoil() else 0;
+        self.rec.step(&cpu.regs, hw1, hw2);
+    }
+
+    fn spoil(self: *Watch) void {
+        self.spoiled = true;
     }
 
     /// Asked before the read runs, so a free semaphore (which the read
@@ -120,6 +185,8 @@ pub const Watch = struct {
         // The head instruction is the trip's first.
         self.* = .{ .on = true, .head = found.start, .steps = 1, .inner = cpu.bus, .before = Snapshot.take(cpu), .miss_pc = self.miss_pc };
         cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate };
+        self.rec.start(&cpu.regs);
+        self.record(cpu);
     }
 
     fn miss(self: *Watch, cpu: *Cpu) void {
@@ -151,9 +218,18 @@ pub const Watch = struct {
             self.spoiled = true;
         } else {
             try self.inner.read(address, old[0..bytes.len]);
-            if (!std.mem.eql(u8, old[0..bytes.len], bytes)) self.spoiled = true;
+            if (!std.mem.eql(u8, old[0..bytes.len], bytes)) try self.change(address, bytes.len);
         }
         return self.inner.write(address, bytes);
+    }
+
+    /// A store inside one aligned RAM word changes it: the recorder keeps
+    /// the word's value before the trip's first change.
+    fn change(self: *Watch, address: u32, len: usize) bus.Error!void {
+        const aligned = address & ~@as(u32, 3);
+        if (address - aligned + len > 4) return self.spoil();
+        self.rec.store(aligned, try self.inner.readWord(aligned));
+        self.changed = true;
     }
 };
 
