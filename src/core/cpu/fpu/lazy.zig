@@ -34,8 +34,14 @@ pub fn pending(state: *const State) bool {
 /// not Non-secure; the core takes it as SecureFault LSPERR.
 pub const Error = bus.Error || error{LazyPreserveError};
 
-/// Write the FP context into the space FPCAR names and clear LSPACT.
+/// Write the FP context into the space FPCAR names and clear LSPACT. When
+/// the entry that armed it hit the stack limit (FPCCR.SPLIMVIOL) nothing is
+/// written: the space was never reserved (RA8EMU-621).
 pub fn preserve(to: bus.Bus, state: *State) Error!void {
+    if (state.context.fpccr.splimviol == 1) {
+        state.context.fpccr.lspact = 0;
+        return;
+    }
     const gate = to.gate orelse return write(to, state);
     if (state.context.fpccr.s == 0 and !nonSecure(gate.source, state.context.fpcar))
         return error.LazyPreserveError;

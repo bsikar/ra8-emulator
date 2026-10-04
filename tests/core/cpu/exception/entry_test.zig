@@ -269,3 +269,27 @@ test "higher-priority original exception leaves STKOF UsageFault pending" {
     try std.testing.expectEqual(@as(u32, 1), pending.taken_count);
     try std.testing.expect(ram.word(memmap.scb.shcsr) & shcsr_usage_pending != 0);
 }
+
+test "a lazy FP entry over the stack limit records SPLIMVIOL and writes no frame" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= regs.control_bits.fpca;
+    const limit = fixture.msp_top - 16;
+    cpu.regs.msplim = limit;
+    try std.testing.expect(try entry.take(&cpu, 11, 0x2000_0102));
+    try std.testing.expectEqual(limit, cpu.regs.msp);
+    const ctx = cpu.fp.context;
+    try std.testing.expectEqual(@as(u1, 1), ctx.fpccr.lspact);
+    try std.testing.expectEqual(@as(u1, 1), ctx.fpccr.splimviol);
+    try std.testing.expectEqual(fixture.msp_top - 0x68 + 0x20, ctx.fpcar);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(fixture.msp_top - 0x68 + 0x18));
+}
+
+test "a lazy FP entry inside the limit leaves SPLIMVIOL clear" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.control |= regs.control_bits.fpca;
+    cpu.fp.context.fpccr.splimviol = 1;
+    try std.testing.expect(!try entry.take(&cpu, 11, 0x2000_0102));
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.splimviol);
+}

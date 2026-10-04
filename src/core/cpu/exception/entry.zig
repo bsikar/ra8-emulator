@@ -50,7 +50,10 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         // DDI0553 B3.21: exception entry sets SP to the limit and does not
         // push frame words below it. The derived STKOF UsageFault is selected
         // by dispatch after the original entry has established its context.
+        // A lazy FP entry still records its context, with SPLIMVIOL set so
+        // the deferred push writes nothing (RA8EMU-621).
         r.setSp(limit);
+        if (fp and cpu.fp.context.fpccr.lspen == 1) armLazy(cpu, at, from_secure, true);
     } else {
         const pushed = if (fp)
             try pushFp(cpu, stacked, from_secure)
@@ -91,13 +94,22 @@ fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool) bus.Error!u32 {
     const ctx = &cpu.fp.context;
     if (ctx.fpccr.lspen == 0) return fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu));
     const at = try fp_frame.reserve(cpu.bus, r.sp(), stacked);
+    armLazy(cpu, at, secure, false);
+    return at;
+}
+
+/// UpdateFPCCR for a lazy entry whose frame starts at `at`: FPCAR, LSPACT,
+/// USER, THREAD, S, SPLIMVIOL and the *RDY bits.
+fn armLazy(cpu: *Cpu, at: u32, secure: bool, violated: bool) void {
+    const r = &cpu.regs;
+    const ctx = &cpu.fp.context;
     ctx.writeFpcar(at +% frame.size);
     ctx.fpccr.lspact = 1;
     ctx.fpccr.user = @intFromBool(!sysreg.privileged(r));
     ctx.fpccr.thread = @intFromBool(!r.handlerMode());
     ctx.fpccr.s = @intFromBool(secure);
+    ctx.fpccr.splimviol = @intFromBool(violated);
     fp_ready.record(cpu, &ctx.fpccr);
-    return at;
 }
 
 /// S0-S15, FPSCR and, with MVE, VPR as the eager extended frame stacks them.
