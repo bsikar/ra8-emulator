@@ -6,7 +6,8 @@
 //! P0 bits of its bytes, ANDed with the element mask (VPT P0, the loop
 //! tail); P0 bytes of beats EPSR.ECI marks done keep their value. A VCMP
 //! inside a block advances it; a VPT then opens its mask in each pair whose
-//! odd beat has not run. Qn and Qm are written in that order. Size 11, Rm
+//! odd beat has not run. Qn is written, then Qm for the vector forms only
+//! (in the scalar forms those bits are Rm's). Size 11, Rm
 //! of SP or PC, fixed bits flipped and the 16-bit space are left unclaimed.
 const vector = @import("../vector.zig");
 
@@ -68,23 +69,23 @@ const by_vector = [_]V{
 };
 
 const by_scalar = [_]V{
-    vec("vcmp.i16 eq against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0F42, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000000 }),
-    vec("vcmp.i16 ne against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0FC2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000FFFF }),
-    vec("vcmp.u16 cs against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0F62, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000000 }),
-    vec("vcmp.u16 hi against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0FE2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000000 }),
-    vec("vcmp.s16 ge against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1F42, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000000 }),
-    vec("vcmp.s16 lt against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1FC2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000FFFF }),
-    vec("vcmp.s16 gt against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1F62, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000000 }),
-    vec("vcmp.s16 le against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1FE2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000FFFF }),
+    vec("vcmp.i16 eq against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0F42, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000F00 }),
+    vec("vcmp.i16 ne against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0FC2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000F0FF }),
+    vec("vcmp.u16 cs against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0F62, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00003FFC }),
+    vec("vcmp.u16 hi against r2", .{ .hw1 = 0xFE13, .hw2 = 0x0FE2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x000030FC }),
+    vec("vcmp.s16 ge against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1F42, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x00000F0C }),
+    vec("vcmp.s16 lt against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1FC2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000F0F3 }),
+    vec("vcmp.s16 gt against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1F62, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000000C }),
+    vec("vcmp.s16 le against r2", .{ .hw1 = 0xFE13, .hw2 = 0x1FE2, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .rm = 0x1234 }, .{ .vpr = 0x0000FFF3 }),
     vec("vcmp.s8 ge against r12 uses its low bits", .{ .hw1 = 0xFE03, .hw2 = 0x1F4C, .qn = 0xC040FF00_807F5555_F0901001_FF807F00, .rm = 0xAB80 }, .{ .vpr = 0x0000FFFF }),
     vec("vcmp.s32 ge against r12 uses its low bits", .{ .hw1 = 0xFE23, .hw2 = 0x1F4C, .qn = 0xFFFFFFFF_12345678_80000000_7FFFFFFF, .rm = 0x80000000 }, .{ .vpr = 0x0000FFFF }),
-    vec("vcmp.i32 ne q7 against lr", .{ .hw1 = 0xFE2F, .hw2 = 0x0FCE, .qn = 0xFFFFFFFF_12345678_80000000_7FFFFFFF, .rm = 0x12345678 }, .{ .vpr = 0x0000FFFF }),
+    vec("vcmp.i32 ne q7 against lr", .{ .hw1 = 0xFE2F, .hw2 = 0x0FCE, .qn = 0xFFFFFFFF_12345678_80000000_7FFFFFFF, .rm = 0x12345678 }, .{ .vpr = 0x0000F0FF }),
 };
 
 const blocks = [_]V{
     vec("vpt.s32 ge opens a one-instruction block", .{ .hw1 = 0xFE63, .hw2 = 0x1F04, .qn = 0xFFFFFFFF_12345678_80000000_7FFFFFFF, .qm = 0x00000001_12345678_7FFFFFFF_80000000 }, .{ .vpr = 0x00880F0F }),
     vec("vptt.i16 ne opens a two-instruction block", .{ .hw1 = 0xFE13, .hw2 = 0x8F84, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .qm = 0xF0000F00_12351234_00017FFF_80000000 }, .{ .vpr = 0x0044FCFC }),
-    vec("vpteee.u8 hi against r2", .{ .hw1 = 0xFE43, .hw2 = 0xCFE2, .qn = 0xC040FF00_807F5555_F0901001_FF807F00, .rm = 0x40 }, .{ .vpr = 0x00EE0000 }),
+    vec("vpteee.u8 hi against r2", .{ .hw1 = 0xFE43, .hw2 = 0xCFE2, .qn = 0xC040FF00_807F5555_F0901001_FF807F00, .rm = 0x40 }, .{ .vpr = 0x00EEAFCE }),
     vec("vpttte.u32 cs keeps mask 0001", .{ .hw1 = 0xFE23, .hw2 = 0x2F05, .qn = 0xFFFFFFFF_12345678_80000000_7FFFFFFF, .qm = 0x00000001_12345678_7FFFFFFF_80000000 }, .{ .vpr = 0x0011FFF0 }),
     vec("vcmp in a vpt block ands the compare with p0", .{ .hw1 = 0xFE13, .hw2 = 0x0F04, .qn = 0x0F00F000_12341234_FFFF8000_7FFF0000, .qm = 0xF0000F00_12351234_00017FFF_80000000, .vpr = 0x00880FF0 }, .{ .vpr = 0x00000300 }),
     vec("the loop tail clears p0 past the tail", .{ .hw1 = 0xFE03, .hw2 = 0x1F05, .qn = 0xC040FF00_807F5555_F0901001_FF807F00, .qm = 0x40C000FF_807F5456_0F101002_FF7F8000, .vpr = 0x0000FFFF, .ltpsize = 0, .lr = 6 }, .{ .vpr = 0x00000002 }),

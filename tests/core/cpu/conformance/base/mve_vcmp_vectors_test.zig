@@ -1,6 +1,7 @@
 //! Covers src/core/cpu/conformance/base/mve_vcmp_vectors.zig: each vector
-//! runs through the `mve_vcmp` group with Qn, Qm, Rm, VPR, the IT byte, LR
-//! and FPSCR.LTPSIZE set first, then reads VPR and the IT byte back.
+//! runs through the `mve_vcmp` group with Qn, Qm (vector forms only), Rm,
+//! VPR, the IT byte, LR and FPSCR.LTPSIZE set first, then reads VPR and the
+//! IT byte back.
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
@@ -16,7 +17,7 @@ fn writeQ(cpu: *Cpu, n: u3, value: u128) void {
 fn run(in: vectors.In) vectors.Out {
     var cpu: Cpu = .{ .bus = undefined };
     writeQ(&cpu, @intCast(in.hw1 >> 1 & 7), in.qn);
-    writeQ(&cpu, @intCast(in.hw2 >> 1 & 7), in.qm);
+    if (in.hw2 & 0x40 == 0) writeQ(&cpu, @intCast(in.hw2 >> 1 & 7), in.qm);
     cpu.fp.vpr = @bitCast(in.vpr);
     cpu.fp.fpscr.ltpsize = in.ltpsize;
     cpu.regs.xpsr = it_state.put(cpu.regs.xpsr, in.it);
