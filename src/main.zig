@@ -192,9 +192,8 @@ fn announce(core: engine.Engine, written: u32, vector_base: u32, entry: u32, qui
     return out;
 }
 
-/// Everything a finished run prints, in the order it prints it. The order is
-/// the contract: the board's own report first, then where the run spent
-/// itself, then the second core, then whatever was dumped by request.
+/// Everything a finished run prints, in contract order: the board's report,
+/// where the run spent itself, the second core, then the requested dumps.
 fn reportAll(
     out: anytype,
     core: engine.Engine,
@@ -362,6 +361,7 @@ fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
+    _ = try report.frames_out.Armed.arm(allocator, board, options.frames.frames_out, options.frames.frames_every);
     try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(path);

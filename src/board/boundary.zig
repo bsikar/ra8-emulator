@@ -30,6 +30,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.trace.tick();
     self.rswitch.tick();
     self.usb.tick();
+    if (self.display.output.vsync) |*frame| frame.tick(self.time.base.now());
     try takeResetRequests(self, core);
     self.c6.tick(&self.pins);
     self.console_input.poll(&self.serial);

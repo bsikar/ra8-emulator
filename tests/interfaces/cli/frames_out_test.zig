@@ -104,3 +104,45 @@ fn expectIndex(sequence: frames_out.Sequence, expected: []const u8) !void {
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualStrings(expected, bytes);
 }
+
+test "an armed run keeps one frame per period with its emulated time" {
+    var core = try engine.Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.attach(&core);
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
+    defer std.testing.allocator.free(path);
+
+    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    defer armed.deinit();
+    const period = ra8.periph.glcdc_out.vsync.default_period_ns;
+    board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
+    board.domains.graphics.write(pdctr.Domain.graphics.base(), 1, 0);
+    board.display.write(glcdc.win_base + tcon.off.sthb1, 4, 2);
+    board.display.write(glcdc.win_base + tcon.off.stvb1, 4, 1);
+    board.display.write(glcdc.win_base + glcdc.off.bg_en, 4, glcdc.field.bg_en);
+    board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF11_2233);
+    board.display.write(glcdc.win_base + glcdc_sys.off.panel_clk, 4, glcdc_sys.clock.enable);
+
+    board.display.output.vsync.?.tick(period);
+    board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF44_5566);
+    board.display.output.vsync.?.tick(2 * period);
+    try std.testing.expect(frames_out.Armed.of(&board) == armed);
+
+    var report = try frames_out.Run.init(std.testing.allocator, &board, path, 1);
+    try report.finish(&board);
+    try std.testing.expectEqual(@as(usize, 2), armed.sequence.written);
+    try expectIndex(armed.sequence, "frame_00000.ppm 16666667\nframe_00001.ppm 33333334\n");
+    var file = try armed.sequence.directory.openFile("frame_00001.ppm", .{});
+    defer file.close();
+    const bytes = try file.readToEndAlloc(std.testing.allocator, 64);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, "P6\n2 1\n255\n\x44\x55\x66\x44\x55\x66", bytes);
+}

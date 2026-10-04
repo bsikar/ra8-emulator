@@ -16,6 +16,8 @@
 //! the driver's own bring-up. A stage programmed and never latched still
 //! shows the old picture, and that is counted here rather than smoothed over.
 const gam = @import("glcdc_gamma.zig");
+/// The frame boundary a viewer installs on the stage (RA8EMU-573).
+pub const vsync = @import("glcdc_vsync.zig");
 
 /// Register byte offsets inside the GLCDC window.
 pub const off = struct {
@@ -168,6 +170,8 @@ pub const Stage = struct {
     clipped: u32 = 0,
     /// Where the pixels are copied while a frame is saved (RA8EMU-73).
     capture: ?Capture = null,
+    /// Set only while a viewer wants every frame scanned during the run.
+    vsync: ?vsync.Vsync = null,
 
     pub fn quiet(self: *const Stage) bool {
         return self.writes == 0 and self.pixels == 0;
