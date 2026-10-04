@@ -323,7 +323,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_int_mulh | 39 |
 | mve_int_vmla | 23 |
 | mve_int_scalar | 42 |
-| mve_vcmp | missing |
+| mve_vcmp | 55 |
 | mve_vpred | 20 |
 | mve_vctp | 24 |
 | mve_lob_tp | 27 |
