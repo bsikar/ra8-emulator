@@ -3,16 +3,19 @@
 const std = @import("std");
 const sci_line = @import("../../periph/sci/sci_line.zig");
 const until = @import("../../core/until.zig");
+const sci_reply = @import("../../periph/sci/sci_reply.zig");
 
 /// Where each finished console line goes: stdout when `--console` asked
 /// for it, and the `--until` wait when one is set.
 pub const Tap = struct {
     echo: bool = false,
     wait: ?until.Until = null,
+    /// The `--console-reply` that watches for its prompt (RA8EMU-626).
+    reply: ?*sci_reply.Reply = null,
 
     /// Whether the line needs a sink at all.
     pub fn wanted(self: Tap) bool {
-        return self.echo or self.wait != null;
+        return self.echo or self.wait != null or self.reply != null;
     }
 
     /// The `--until` wait the run loop checks, held here so it lives as
@@ -31,6 +34,7 @@ pub fn configure(line: *sci_line.Line, tap: *Tap) void {
 pub fn tapLine(context: ?*anyopaque, text: []const u8) anyerror!void {
     const tap: *Tap = @ptrCast(@alignCast(context.?));
     if (tap.waiting()) |wait| wait.line(text);
+    if (tap.reply) |reply| reply.line(text);
     if (tap.echo) try writeLine(text);
 }
 

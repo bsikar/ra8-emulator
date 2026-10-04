@@ -122,6 +122,7 @@ pub const text =
     \\  --cms N            Secure code MRAM, 32 KB units (CMSAMON.CMS, 0..0x1FF)
     \\  --sfs N            Secure SiP flash, 32 KB units (SFSAMON.SFS, 0..0x1FF)
     \\  --console          stream SCI lines and read host input as console RX
+    \\  --console-reply P=LINE  type LINE on the console after a line with P
     \\  --usb-loop         cable the HS host jack to the board's own FS
     \\                     device jack, in place of the stand-in device
     \\  --usbip PORT       export the FS device to usbip hosts on

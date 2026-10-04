@@ -24,6 +24,14 @@ test "--console streams finished SCI lines when requested" {
     try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--console" })).console);
 }
 
+test "--console-reply takes PROMPT=LINE and refuses an empty prompt" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--console-reply", "READY v1=RA8NET1:61:" });
+    try std.testing.expectEqualStrings("READY v1", options.console_reply.prompt);
+    try std.testing.expectEqualStrings("RA8NET1:61:", options.console_reply.text);
+    try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).console_reply.armed());
+    try std.testing.expectError(error.BadReply, parse(&[_][]const u8{ "emu", "a.elf", "--console-reply", "=x" }));
+}
+
 test "the part defaults to the RA8D2 and is named, never guessed" {
     const defaults = try parse(&[_][]const u8{ "emu", "a.elf" });
     try std.testing.expectEqual(Part.ra8d2, defaults.part);

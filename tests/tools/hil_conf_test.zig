@@ -123,3 +123,11 @@ test "a uart_scrape conf ends its run on the expected line, other modes on none"
     const bare = hil_conf.parse("HIL_MODE=uart_scrape\n");
     try std.testing.expectEqual(@as(?[]const u8, null), bare.untilLine());
 }
+
+test "HIL_PROVISION_WIFI=1 asks for the bench's Wi-Fi reply" {
+    const wifi = hil_conf.parse("HIL_MODE=uart_scrape\nHIL_PROVISION_WIFI=1\n");
+    try std.testing.expect(wifi.provision_wifi);
+    try std.testing.expectEqualStrings(hil_conf.Conf.bench_wifi_reply, wifi.consoleReply().?);
+    try std.testing.expect(hil_conf.parse(uart).consoleReply() == null);
+    try std.testing.expect(hil_conf.parse("HIL_PROVISION_WIFI=0\n").consoleReply() == null);
+}

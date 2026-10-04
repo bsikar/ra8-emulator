@@ -55,7 +55,9 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options)
 pub fn prepare(cpu0: *Cpu0, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
     const written = try cpu0.attachStore(board, image);
     if (options.console) board.console_input.enabled = true;
+    board.console_input.reply = options.console_reply;
     parts.tap = .{ .echo = options.console, .wait = if (options.until) |text| .{ .needle = text } else null };
+    if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;
     cli.console_output.configure(&board.serial.line, &parts.tap);
     if (options.profile) parts.prepareProfile(image);
     option_memory.apply(board, cpu0.own());
