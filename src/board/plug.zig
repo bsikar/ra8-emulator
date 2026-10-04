@@ -15,6 +15,7 @@ const catalog = @import("../periph/model/catalog.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
 const parts = @import("../periph/model/parts.zig");
 const request = @import("../periph/model/request.zig");
+const fault_spec = @import("../periph/model/fault_spec.zig");
 const Board = @import("board.zig").Board;
 
 pub const Error = error{ChannelTaken};
@@ -39,11 +40,30 @@ pub fn all(board: *Board) !void {
     const arena = board.asks.arena orelse return;
     for (board.asks.asked[0..board.asks.count]) |wanted| {
         const made = try parts.all.make(arena, wanted.name, wanted.at);
-        one(board, made.device, wanted.at) catch |err| {
+        const device = faulted(board, arena, made.device, wanted) catch |err| {
+            std.debug.print("--fault {s}: not applied ({s})\n", .{ wanted.name, @errorName(err) });
+            return err;
+        };
+        one(board, device, wanted.at) catch |err| {
             std.debug.print("--attach {s}: nothing put on the line ({s})\n", .{ wanted.name, @errorName(err) });
             return err;
         };
     }
+}
+
+/// The device as `--fault` asked it to misbehave, timed on the run's clock.
+/// bus_low leaves the part alone and holds its I2C line low instead.
+fn faulted(board: *Board, arena: std.mem.Allocator, device: catalog.Device, wanted: request.Request) !catalog.Device {
+    const mode = wanted.fault orelse return device;
+    const out = try fault_spec.apply(arena, device, mode, &board.time.base);
+    if (mode == .bus_low) {
+        if (wanted.at != .i2c) return catalog.Error.WrongEndpoint;
+        switch (wanted.at.i2c.line) {
+            .riic => board.wire.controller.devices.hold(true),
+            .touch => board.wire.touchline.devices.hold(true),
+        }
+    }
+    return out;
 }
 
 /// Put one device on the line its endpoint names.

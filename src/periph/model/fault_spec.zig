@@ -31,7 +31,7 @@ pub const Fault = struct {
     mode: Mode,
 };
 
-pub const Error = error{ NoMode, UnknownMode, BadArgument, WrongBus } ||
+pub const Error = error{ NoMode, UnknownMode, BadArgument, WrongBus, NoSuchAttach } ||
     request.Error || std.mem.Allocator.Error;
 
 pub fn parse(text: []const u8) Error!Fault {
@@ -40,6 +40,18 @@ pub fn parse(text: []const u8) Error!Fault {
         .target = try request.parse(text[0..split]),
         .mode = try parseMode(text[split + 1 ..]),
     };
+}
+
+/// Put a fault on the `--attach` ask it names, same model at the same
+/// endpoint. The ask has to come first; a later fault replaces an earlier.
+pub fn place(asks: []request.Request, wanted: Fault) Error!void {
+    for (asks) |*ask| {
+        if (!std.mem.eql(u8, ask.name, wanted.target.name)) continue;
+        if (!std.meta.eql(ask.at, wanted.target.at)) continue;
+        ask.fault = wanted.mode;
+        return;
+    }
+    return Error.NoSuchAttach;
 }
 
 pub fn parseMode(text: []const u8) Error!Mode {
