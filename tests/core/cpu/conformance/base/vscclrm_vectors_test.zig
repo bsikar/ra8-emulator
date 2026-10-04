@@ -14,14 +14,18 @@ fn run(in: vectors.In) vectors.Out {
     cpu.fp.vpr = @bitCast(vectors.vpr_reset);
     cpu.fp.context.fpccr.aspen = in.aspen;
     cpu.regs.control = in.control;
+    if (!in.secure) cpu.banked.current = .non_secure;
     const instr: cpu_ns.instr.Instr = .{ .address = 0x100, .hw1 = in.hw1, .hw2 = in.hw2, .size = @intCast(in.size) };
     const exec = cpu_ns.ops.vscclrm.group.decode(instr) orelse return vectors.none;
-    exec(&cpu, instr) catch unreachable;
+    const fault: vectors.Fault = if (exec(&cpu, instr)) .none else |err| switch (err) {
+        error.Undefined => .undefined_instr,
+        else => unreachable,
+    };
     var cleared: u32 = 0;
     for (0..32) |i| {
         if (cpu.fp.bank.readS(@intCast(i)) == 0) cleared |= @as(u32, 1) << @intCast(i);
     }
-    return .{ .cleared = cleared, .vpr = @bitCast(cpu.fp.vpr), .control = cpu.regs.control };
+    return .{ .fault = fault, .cleared = cleared, .vpr = @bitCast(cpu.fp.vpr), .control = cpu.regs.control };
 }
 
 test "vscclrm matches the Arm ARM" {

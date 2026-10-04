@@ -10,9 +10,9 @@
 //! A veneer whose Secure callee used no FP reaches its VSCCLRM this way, and
 //! CONTROL has to come out unchanged (RA8EMU-372).
 //!
-//! Not modelled yet: the UNDEFINED check in Non-secure state (the Zig core
-//! carries no current Security state, RA8EMU-41) and the CPACR NOCP check
-//! (RA8EMU-145), the same gap the other FP groups have.
+//! VSCCLRM is UNDEFINED in Non-secure state (RA8EMU-549); that check comes
+//! before the NOP case. The CPACR NOCP check is RA8EMU-145, the same gap
+//! the other FP groups have.
 //!
 //! Left unclaimed (UNPREDICTABLE): a run past S31 or D15, and an odd imm8
 //! in the double form.
@@ -67,6 +67,7 @@ pub fn idle(cpu: *const Cpu) bool {
 }
 
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (cpu.banked.current != .secure) return error.Undefined;
     if (idle(cpu)) return;
     try fp_gate.check(cpu);
     const r = run(instr).?;

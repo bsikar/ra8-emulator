@@ -312,7 +312,7 @@ table above. A group listed as missing does not fail the build yet.
 | fp_convert | 39 |
 | fp_directed | 48 |
 | fp_move | 26 |
-| vscclrm | 22 |
+| vscclrm | 24 |
 | vlldm_vlstm | missing |
 | vlldm_vlstm_t2 | missing |
 | fp_mem | 36 |
