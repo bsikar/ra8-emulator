@@ -12,6 +12,9 @@
 //! routing onto the emulated device come in later slices.
 const std = @import("std");
 
+/// The client side of the same records (RA8EMU-75 slice 5).
+pub const client = @import("usbip_client.zig");
+
 pub const version: u16 = 0x0111;
 
 /// Operation codes, sent before a device is imported.

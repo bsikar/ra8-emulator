@@ -123,3 +123,7 @@ test "an unlink reply carries a negative errno as status" {
     try std.testing.expectEqual(wire.cmd.ret_unlink, try wire.command(&out));
     try std.testing.expectEqual(@as(i32, -104), std.mem.readInt(i32, out[20..24], .big));
 }
+
+test {
+    _ = @import("usbip_client_test.zig");
+}
