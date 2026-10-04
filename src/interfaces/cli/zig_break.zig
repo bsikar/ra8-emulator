@@ -1,0 +1,60 @@
+//! The address `--break-sym` names, for a Zig run (RA8EMU-603).
+//!
+//! Resolved the way the Unicorn path in src/main.zig resolves it. Arrivals
+//! are counted on each retired instruction; the run ends at the next
+//! boundary after the wanted one, and the verdict names that arrival's own
+//! address, which is where the Unicorn run stops.
+const std = @import("std");
+const elf = @import("../../core/elf.zig");
+const breakpoint = @import("../../debug/breakpoint.zig");
+const profile = @import("../../debug/profile.zig");
+const cpu = @import("../../core/cpu/cpu.zig");
+const cli = @import("cli.zig");
+
+pub const Break = breakpoint.Break;
+
+/// The break, or null. A place the image does not carry is reported and the
+/// run goes to its instruction budget, as `--stop-sym` does.
+pub fn resolve(image: elf.Image, options: cli.Options) ?Break {
+    const spec = options.break_place orelse return null;
+    return breakpoint.resolve(image, spec, options.break_arrival) catch |err| {
+        std.debug.print("--break-sym {s}: {s}\n", .{ spec, @errorName(err) });
+        return null;
+    };
+}
+
+/// What each retired instruction is shown to: the profile table, the break,
+/// or both.
+pub const Retire = struct {
+    table: ?*profile.Table = null,
+    point: ?*Break = null,
+    /// The address of the wanted arrival, once it happened.
+    at: u32 = 0,
+
+    /// The core's listener, or null when nothing listens.
+    pub fn listener(self: *Retire) ?cpu.RetireListener {
+        if (self.table == null and self.point == null) return null;
+        return .{ .context = self, .instructionFn = instructionThunk };
+    }
+
+    /// Count an arrival at the break. Counting stops once the wanted one
+    /// is met, so the report says the arrival the Unicorn run stopped on.
+    pub fn instruction(self: *Retire, address: u32) void {
+        if (self.table) |table| table.instruction(address);
+        const point = self.point orelse return;
+        if (point.reached) return;
+        if (@as(u64, address & ~breakpoint.limits.thumb_bit) != point.watchedAddress()) return;
+        if (point.count()) self.at = address;
+    }
+};
+
+fn instructionThunk(context: *anyopaque, address: u32) void {
+    const self: *Retire = @ptrCast(@alignCast(context));
+    self.instruction(address);
+}
+
+/// The verdict line, worded as src/main.zig words it.
+pub fn verdict(out: anytype, place: []const u8, point: Break, at: u32, pc: u32, budget: usize) !void {
+    if (point.reached) return out.print("reached {s} arrival {d}, pc 0x{X:0>8}\n", .{ place, point.seen, at });
+    try out.print("ran {d} instructions, reached {s} {d} time(s) of {d}, pc 0x{X:0>8}\n", .{ budget, place, point.seen, point.arrival, pc });
+}
