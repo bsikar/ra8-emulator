@@ -32,6 +32,7 @@ const Stop = @import("../../core/stop.zig").Stop;
 const Deadline = @import("../../core/deadline.zig").Deadline;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
+const soak_symbols = @import("soak_symbols.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
 pub const break_sym = @import("zig_break.zig");
 /// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
@@ -193,6 +194,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }
     defer if (clock.cpu1) |second| second.close();
+    if (board.time.soak.armed) soak_symbols.resolve(image, &board.time.soak.threads);
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;

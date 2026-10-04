@@ -76,3 +76,11 @@ test "an unarmed soak reads nothing" {
     state.check(&memory, 1);
     try std.testing.expect(!state.ended());
 }
+
+test "drop forgets one kind and keeps the rest in order" {
+    var watch = try watchTwo();
+    try watch.add(.{ .address = 0x2000_0000, .expected = 0xEFEF_EFEF, .kind = .stack_canary });
+    watch.drop(.stack_canary);
+    try std.testing.expectEqual(@as(usize, 1), watch.list().len);
+    try std.testing.expectEqual(soak.Kind.heap_guard, watch.list()[0].kind);
+}

@@ -12,6 +12,7 @@ const std = @import("std");
 const timebase = @import("timebase.zig");
 const Calendar = @import("../rtc/rtc_clock.zig").Calendar;
 pub const soak_watch = @import("soak_watch.zig");
+pub const soak_threads = @import("soak_threads.zig");
 
 pub const Kind = enum {
     watchdog_reset,
@@ -59,6 +60,8 @@ pub const Soak = struct {
     event: ?Event = null,
     /// Canary and guard words read at each boundary while armed.
     watch: soak_watch.Watch = .{},
+    /// ThreadX's created-thread list, whose stack canaries join `watch`.
+    threads: soak_threads.Threads = .{},
 
     /// Keep the first event of an armed run; anything else is ignored.
     pub fn note(self: *Soak, kind: Kind, at_ns: u64) void {
@@ -66,12 +69,16 @@ pub const Soak = struct {
         self.event = .{ .kind = kind, .at_ns = at_ns };
     }
 
-    /// Note the first watched word found changed as the event, naming it.
+    /// Note the first watched word found changed as the event, naming it;
+    /// with none changed, pick up threads ThreadX created since the last look.
     pub fn check(self: *Soak, memory: anytype, at_ns: u64) void {
         if (!self.armed or self.event != null) return;
-        const found = self.watch.changed(memory) orelse return;
-        self.note(found.kind, at_ns);
-        self.event.?.word = found.address;
+        if (self.watch.changed(memory)) |found| {
+            self.note(found.kind, at_ns);
+            self.event.?.word = found.address;
+            return;
+        }
+        self.threads.refresh(&self.watch, memory);
     }
 
     /// Say where the run stopped, once it has: the PC the core ended on and
