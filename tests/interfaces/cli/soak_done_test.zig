@@ -20,6 +20,8 @@ const Ended = struct {
     event: ?soak.Event,
     now_ns: u64,
     count: u32,
+    ticks: u64,
+    collapsed: u64,
 };
 
 fn runSoak(overflow: bool) !Ended {
@@ -40,7 +42,7 @@ fn runSoak(overflow: bool) !Ended {
     var stream = std.io.fixedBufferStream(&output);
     _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
     clock.soakFaults();
-    return .{ .event = board.time.soak.event, .now_ns = board.time.base.now(), .count = try core.readWord(soaker.counter_at) };
+    return .{ .event = board.time.soak.event, .now_ns = board.time.base.now(), .count = try core.readWord(soaker.counter_at), .ticks = timebase.ticks, .collapsed = timebase.collapsed };
 }
 
 test "a soak catches a stack overflow in the virtual hour it happens" {
@@ -58,7 +60,9 @@ test "a clean image sleeps through a virtual week with no events" {
     const ended = try runSoak(false);
     try std.testing.expect(ended.event == null);
     try std.testing.expect(ended.now_ns >= 7 * 24 * ns_per_hour);
-    // The handler really ran all week. The exact wrap count (36,048) waits on
-    // RA8EMU-618: idle fast-forward drops a few wraps over a long run.
+    // Every wrap of the week reached the handler: none collapsed into a
+    // widened stretch (RA8EMU-618).
     try std.testing.expect(ended.count > 36_000);
+    try std.testing.expectEqual(@as(u64, 0), ended.collapsed);
+    try std.testing.expectEqual(ended.ticks, ended.count);
 }

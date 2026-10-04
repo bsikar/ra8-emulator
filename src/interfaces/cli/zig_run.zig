@@ -96,7 +96,7 @@ pub const Clock = struct {
     /// it keeps the normal width, as does a board with a block mid-work.
     pub fn asleepWidth(self: *Clock, normal: u32) u32 {
         if (self.cpu1 != null or !quiet_due.quietUntilDue(self.board)) return normal;
-        const edges = [_]u64{ self.timebase.period(self.memory), self.ns_timebase.period(self.memory), board_edge.cyclesToDue(self.board), quiet_due.vsyncDue(self.board), quiet_due.gptDue(self.board) };
+        const edges = [_]u64{ self.timebase.untilWrap(self.memory), self.ns_timebase.untilWrap(self.memory), board_edge.cyclesToDue(self.board), quiet_due.vsyncDue(self.board), quiet_due.gptDue(self.board) };
         return sleep_pace.width(normal, true, &edges);
     }
 
