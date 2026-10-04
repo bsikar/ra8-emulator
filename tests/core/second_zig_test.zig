@@ -27,7 +27,7 @@ const Pair = struct {
         errdefer self.cpu0.deinit();
         self.cpu1 = try Store.init(&self.cpu0);
         errdefer self.cpu1.deinit();
-        self.second = .{ .core = undefined, .state = .{ .vector_base = vectors } };
+        self.second = .{ .state = .{ .vector_base = vectors } };
         const memory = self.guest();
         try memory.writeWord(vectors, stack);
         try memory.writeWord(vectors + 4, code | 1);

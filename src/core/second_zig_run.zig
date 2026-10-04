@@ -47,7 +47,7 @@ pub const Driver = struct {
     }
 
     fn openOwn(self: *Driver, lender: *const Store, board: *Board, image: elf.Image) !void {
-        self.second = .{ .core = undefined };
+        self.second = .{};
         self.store = try Store.init(lender);
         errdefer self.dropStore();
         const units = &self.second;

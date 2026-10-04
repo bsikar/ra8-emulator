@@ -8,13 +8,13 @@
 //! times on a semaphore nobody was ever going to release, and the run called
 //! that a clean pass.
 //!
-//! TWO ENGINES, ONE BOARD, and that is the whole design. The second engine
-//! is mapped onto the board RAM the first already owns
-//! (`Engine.shareBoardRamWith`), so a store CPU1 makes in shared SRAM is
-//! there for CPU0 with nothing in between, and it is attached to the SAME
-//! peripheral bus, so IPCSEM and the IPC channels are one block that both
-//! cores reach rather than two models kept in step. That is the point of the
-//! pingpong app and it is what the silicon does.
+//! TWO STORES, ONE BOARD, and that is the whole design. CPU1's memory is
+//! a store that borrows the board RAM CPU0's store already owns
+//! (`Store.init(&cpu0)`), so a store CPU1 makes in shared SRAM is there for
+//! CPU0 with nothing in between, and it is attached to the SAME peripheral
+//! bus, so IPCSEM and the IPC channels are one block that both cores reach
+//! rather than two models kept in step. That is the point of the pingpong
+//! app and it is what the silicon does.
 //!
 //! WHAT CPU0 KEEPS. Modelled time is charged once, by CPU0: it owns the time
 //! base, the board tick and the interrupt controller, and CPU1 runs with
@@ -69,7 +69,6 @@ const pend_break = @import("pend_break.zig");
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
 const report_cores = @import("../interfaces/cli/report/cores.zig");
-const Engine = engine.Engine;
 const Guest = @import("cpu/memory/guest.zig").Guest;
 const guest_load = @import("cpu/memory/load.zig");
 
@@ -79,7 +78,7 @@ pub const rate = @import("core_rate.zig");
 pub const State = @import("second_state.zig").State;
 
 /// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
-/// to zero. The PPB is per-engine RAM here, so the word written lands in this
+/// to zero. The PPB is per-store RAM here, so the word written lands in this
 /// core's System Control Space only and CPU0's VTOR is left as it was.
 pub fn primeVectorTable(memory: Guest, base: u32) !void {
     try memory.writeWord(memmap.scb.vtor, base);
@@ -108,10 +107,9 @@ pub const limits = struct {
 };
 
 /// CPU1's per-core state beside CPU0's board. Its turns run on the Zig
-/// core (second_zig_run.zig); `core` is only the engine a test lends it.
+/// core (second_zig_run.zig), over its own store.
 pub const Second = struct {
-    core: Engine,
-    /// What CPU1 has done and where it stands, apart from its engine.
+    /// What CPU1 has done and where it stands.
     state: State = .{},
     watch: engine.Watch = .{},
     /// This core's own Security Attribution Unit. Core-private state, not a
@@ -137,10 +135,6 @@ pub const Second = struct {
     /// five-instruction `__tx_ts_wait`) meets every boundary masked and
     /// never takes its SysTick. src/core/unmask.zig.
     release: unmask.Release = .{},
-
-    pub fn close(self: *Second) void {
-        self.core.close();
-    }
 
     /// A SYSRESETREQ from CPU1 is the part's one software reset: R01AN7883
     /// Table 11 lists a per-core watchdog, lockup and local-memory reset but
