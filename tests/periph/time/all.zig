@@ -9,4 +9,5 @@ test {
     _ = @import("speed_invariance_test.zig");
     _ = @import("duration_test.zig");
     _ = @import("soak_test.zig");
+    _ = @import("soak_fault_test.zig");
 }
