@@ -35,6 +35,7 @@ const eink = @import("../periph/eink/eink.zig");
 const elc = @import("../periph/elc/elc.zig");
 const glcdc = @import("../periph/glcdc/glcdc.zig");
 const gpio = @import("../periph/gpio/gpio.zig");
+const clocks = @import("../periph/clocks.zig");
 const pfs = @import("../periph/pfs/pfs.zig");
 const gpt = @import("../periph/gpt/gpt.zig");
 const gptp = @import("../periph/gptp/gptp.zig");
@@ -104,6 +105,7 @@ pub const Board = struct {
     attribution: pscu.Unit = .{},
     /// GTCLKCR, the GPT bank's clock domain, writable only while stopped.
     gpt_clock: gtclkcr.Unit,
+    time: clocks.Time = .{}, // RA8EMU-179 virtual time and its event queue
     events: icu.Icu,
     /// The event link controller: the other half of the event path, where a
     /// source event drives a peripheral rather than an NVIC line, and the
