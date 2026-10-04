@@ -290,6 +290,7 @@ test {
     _ = @import("periph/rtc/rtc_clock_test.zig");
     _ = @import("periph/rtc/rtc_frequency_test.zig");
     _ = @import("periph/rtc/rtc_pace_test.zig");
+    _ = @import("periph/rtc/rtc_sched_test.zig");
     _ = @import("periph/rtc/rtc_reset_test.zig");
     _ = @import("periph/rtc/rtc_source_test.zig");
     _ = @import("periph/rtc/rtc_test.zig");
