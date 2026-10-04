@@ -42,3 +42,33 @@ pub const Pacing = struct {
         return self.pacer.report(self.clock, now_ns);
     }
 };
+
+/// The host clock a `--realtime` run paces against. It lives as long as the
+/// process because the board's pacing points at it; a run attaches one board
+/// at most (RA8EMU-181, slice 3).
+var host: pacer.HostClock = undefined;
+
+/// Pace `time` against the host's monotonic clock from where it stands.
+pub fn attachHost(time: anytype, speed_milli: u64) !void {
+    host = try pacer.HostClock.init();
+    time.pacing = Pacing.start(host.clock(), time.base.now(), speed_milli);
+}
+
+/// The end-of-run line, only when the run was paced, so an unpaced run's
+/// report is unchanged.
+pub fn line(out: anytype, time: anytype) !void {
+    const paced = time.pacing orelse return;
+    try write(out, paced.report(time.base.now()));
+}
+
+pub fn write(out: anytype, r: pacer.Report) !void {
+    try out.print("pace: requested {d}.{d:0>3}x, achieved {d}.{d:0>3}x, drift {d}.{d:0>3} ms, {d} slips\n", .{
+        r.requested_milli / 1000,
+        r.requested_milli % 1000,
+        r.achieved_milli / 1000,
+        r.achieved_milli % 1000,
+        r.drift_ns / std.time.ns_per_ms,
+        (r.drift_ns % std.time.ns_per_ms) / std.time.ns_per_us,
+        r.slips,
+    });
+}

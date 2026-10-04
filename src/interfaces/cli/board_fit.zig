@@ -7,12 +7,14 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const usb_plug = @import("../../board/usb_plug.zig");
+const pacing = @import("../../periph/time/pacing.zig");
 
 pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
     board.part = options.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
     if (options.rtc_start) |at| board.clock.seed(at);
+    if (options.realtime) try pacing.attachHost(&board.time, 1000);
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);

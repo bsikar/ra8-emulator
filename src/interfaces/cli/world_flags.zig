@@ -48,6 +48,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--realtime")) {
+        options.realtime = true;
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
         options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {
