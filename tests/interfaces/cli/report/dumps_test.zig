@@ -1,5 +1,5 @@
-//! Covers src/interfaces/cli/report/dumps.zig dumpSymbols: the `--dump-sym`
-//! line a memory-probe verdict reads, printed the same on either backend.
+//! Covers src/interfaces/cli/report/dumps.zig: the `--dump-sym` line a
+//! memory-probe verdict reads, the `--dump-regs` line and the `--dump-sd` block.
 const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("../store_board.zig");
@@ -41,4 +41,82 @@ test "no dump asked for prints nothing" {
     const image = try elf.Image.init(Builder.build(&buffer, &.{"g_alive"}, &.{0x2200_0100}));
     var out: [64]u8 = undefined;
     try std.testing.expectEqualStrings("", try dumped(core, image, &.{}, &out));
+}
+
+const Regs = ra8.core.cpu.regs.Regs;
+
+fn registerLine(regs: *const Regs, core: store_board.Guest, into: []u8) ![]const u8 {
+    const options: cli.Options = .{ .path = "probe.elf", .dump_regs = true };
+    var stream = std.io.fixedBufferStream(into);
+    try report_dumps.dumpRegisters(stream.writer(), .{ .zig = regs }, core, options);
+    return stream.getWritten();
+}
+
+test "--dump-regs prints the engine run's register line and the words at sp" {
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
+    var regs: Regs = .{ .msp = 0x2200_0200, .lr = 0x0200_0101, .pc = 0x0200_0040 };
+    for (0..4) |n| regs.set(@intCast(n), 0x10 + @as(u32, @intCast(n)));
+    regs.set(12, 0xC);
+    for (0..4) |n| try core.writeWord(0x2200_0200 + @as(u32, @intCast(n * 4)), 0xA0 + @as(u32, @intCast(n)));
+    var out: [512]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "  dump-regs     : r0 0x00000010 r1 0x00000011 r2 0x00000012 r3 0x00000013\n" ++
+            "                  r12 0x0000000C sp 0x22000200 lr 0x02000101 pc 0x02000040\n" ++
+            "                  [sp+0] 0x000000A0 [sp+4] 0x000000A1 [sp+8] 0x000000A2 [sp+12] 0x000000A3\n",
+        try registerLine(&regs, core, &out),
+    );
+}
+
+test "--dump-regs says a stack word it cannot read is unreadable" {
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
+    const regs: Regs = .{ .msp = 0xFFFF_FFF8 };
+    var out: [512]u8 = undefined;
+    const text = try registerLine(&regs, core, &out);
+    try std.testing.expect(std.mem.indexOf(u8, text, "[sp+0] <unreadable>") != null);
+}
+
+test "no --dump-regs prints nothing" {
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const regs: Regs = .{};
+    var out: [64]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&out);
+    try report_dumps.dumpRegisters(stream.writer(), .{ .zig = &regs }, .{ .store = &store }, .{ .path = "probe.elf" });
+    try std.testing.expectEqualStrings("", stream.getWritten());
+}
+
+const Block = ra8.periph.sd_image.Block;
+
+const OneBlockCard = struct {
+    sd: struct { img: Img } = .{ .img = .{} },
+    const Img = struct {
+        pub fn read(_: *const Img, index: u32, out: *Block) bool {
+            if (index != 2) return false;
+            @memset(out, 0);
+            @memcpy(out[16..20], "FAT3");
+            return true;
+        }
+    };
+};
+
+test "--dump-sd prints the block's non-zero rows and counts the rest" {
+    var card: OneBlockCard = .{};
+    var out: [512]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&out);
+    try report_dumps.dumpBlock(stream.writer(), &card, .{ .path = "probe.elf", .dump_sd = 2 });
+    const text = stream.getWritten();
+    try std.testing.expect(std.mem.startsWith(u8, text, "  dump-sd       : block 2 (0x2)\n  0010  46 41 54 33 "));
+    try std.testing.expect(std.mem.endsWith(u8, text, "  dump-sd       : 31 zero row(s) not shown\n"));
+}
+
+test "--dump-sd on a block the card does not hold says so" {
+    var card: OneBlockCard = .{};
+    var out: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&out);
+    try report_dumps.dumpBlock(stream.writer(), &card, .{ .path = "probe.elf", .dump_sd = 9 });
+    try std.testing.expectEqualStrings("  dump-sd       : block 9 is not on this card\n", stream.getWritten());
 }

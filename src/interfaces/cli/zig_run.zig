@@ -241,8 +241,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads, out of the Zig core's
         // own memory, so the line is the Unicorn run's line.
-        if (!options.report_json) try report_dumps.dumpSymbols(out, clock.memory, image, options);
-        if (!options.report_json) try mem_dump.printAll(out, clock.memory, &board.bus, image, options.memDumps());
+        if (!options.report_json) try textDumps(out, board, clock.memory, &final, image, options);
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
         try finishFrames(out, board, options, &frames);
@@ -265,6 +264,15 @@ fn openSecond(pair: *second_core.zig_run.Driver, board: *Board, named: []const u
         return false;
     };
     return true;
+}
+
+/// The flag-asked dumps of a text run, in the engine report's order
+/// (RA8EMU-638): globals, the card block, registers, memory words.
+fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options) !void {
+    try report_dumps.dumpSymbols(out, memory, image, options);
+    try report_dumps.dumpBlock(out, board, options);
+    try report_dumps.dumpRegisters(out, .{ .zig = final }, memory, options);
+    try mem_dump.printAll(out, memory, &board.bus, image, options.memDumps());
 }
 
 fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run) !void {
