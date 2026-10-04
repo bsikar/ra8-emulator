@@ -35,7 +35,8 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
         at = hidden.sp;
     }
     const popped: frame.Popped = if (target.fp) blk: {
-        const ext = try fp_frame.pop(cpu.bus, at);
+        const ts = target.secure_stack and cpu.fp.context.fpccr.ts == 1;
+        const ext = try fp_frame.pop(cpu.bus, at, ts);
         if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
         if (cpu.fp.context.fpccr.lspact == 1) {
             // Lazy stacking never triggered: the handler ran no FP
@@ -64,6 +65,7 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
 
 fn restoreFp(cpu: *Cpu, fp: fp_frame.Fp) void {
     for (fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
+    if (fp.high) |high| for (high, 16..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
     cpu.fp.fpscr = Fpscr.fromBits(fp.fpscr);
     if (cpu.profile.mve) cpu.fp.vpr = vprFrom(fp.vpr);
 }
