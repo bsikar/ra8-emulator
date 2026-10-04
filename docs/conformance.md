@@ -321,7 +321,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_int_pair | missing |
 | mve_int_shift | missing |
 | mve_int_mulh | missing |
-| mve_int_vmla | missing |
+| mve_int_vmla | 23 |
 | mve_int_scalar | missing |
 | mve_vcmp | missing |
 | mve_vpred | 20 |
