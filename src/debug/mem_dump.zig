@@ -13,7 +13,7 @@
 //! this exists to settle exactly the questions a wrong value confuses.
 const std = @import("std");
 const elf = @import("../core/elf.zig");
-const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 
@@ -29,14 +29,14 @@ pub const Ask = struct {
 pub const limit: usize = 8;
 
 /// Print every asked place in order, nothing when none was asked.
-pub fn printAll(out: anytype, core: engine.Engine, image: elf.Image, asks: []const Ask) !void {
+pub fn printAll(out: anytype, core: Guest, image: elf.Image, asks: []const Ask) !void {
     for (asks) |ask| try print(out, core, image, ask.spec, ask.words);
 }
 
 /// Print the dump, or nothing at all when no place was asked for.
 pub fn print(
     out: anytype,
-    core: engine.Engine,
+    core: Guest,
     image: elf.Image,
     spec: ?[]const u8,
     asked: ?u32,
@@ -63,7 +63,7 @@ pub fn print(
 /// The address a place resolves to: its symbol or its literal, then one
 /// optional dereference, then its offset. The order matters: the offset is
 /// into the struct the pointer found, not into the pointer.
-pub fn resolve(core: engine.Engine, image: elf.Image, spec: []const u8) !u32 {
+pub fn resolve(core: Guest, image: elf.Image, spec: []const u8) !u32 {
     const want = try place.parse(spec);
     var base = want.address;
     if (want.name) |name| base = symbols.addressOf(image, name) orelse return error.Unresolved;

@@ -6,6 +6,7 @@
 //! (RA8EMU-391, json_sd.zig and json_watched.zig).
 const std = @import("std");
 const engine = @import("../../../core/engine.zig");
+const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../core/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");
@@ -34,7 +35,7 @@ pub fn section(j: anytype, board: *Board, found: ?*const Dumps) !void {
     try j.open("dumps", '{');
     try globals(j, of);
     try regs(j, of.core, of.options.dump_regs);
-    try memory(j, of.core, of.image, of.options.memDumps());
+    try memory(j, .{ .engine = of.core }, of.image, of.options.memDumps());
     try json_sd.block(j, board, of.options.dump_sd);
     try json_watched.log(j, of.image, of.options.watch_place, if (of.watched) |*one| one else null);
     try j.close('}');
@@ -55,7 +56,8 @@ fn globals(j: anytype, of: *const Dumps) !void {
     try j.open("symbols", '[');
     for (of.options.dumps()) |name| {
         const address = symbols.addressInAny(images[0..count], name);
-        const value: ?u32 = if (address) |at| of.core.readWord(at) catch null else null;
+        const guest: Guest = .{ .engine = of.core };
+        const value: ?u32 = if (address) |at| guest.readWord(at) catch null else null;
         try j.open(null, '{');
         try j.field("name", name);
         try j.field("address", address);
@@ -85,7 +87,7 @@ fn regs(j: anytype, core: engine.Engine, asked: bool) !void {
 /// `memory` is the first `--dump-mem` place, as it always was, so a
 /// one-place report reads the same. Two or more places also list every one
 /// in order under `memory_places` (RA8EMU-488).
-fn memory(j: anytype, core: engine.Engine, image: elf.Image, asks: []const mem_dump.Ask) !void {
+fn memory(j: anytype, core: Guest, image: elf.Image, asks: []const mem_dump.Ask) !void {
     if (asks.len == 0) return j.field("memory", null);
     try placeObject(j, "memory", core, image, asks[0].spec, asks[0].words);
     if (asks.len < 2) return;
@@ -94,7 +96,7 @@ fn memory(j: anytype, core: engine.Engine, image: elf.Image, asks: []const mem_d
     try j.close(']');
 }
 
-fn placeObject(j: anytype, key: ?[]const u8, core: engine.Engine, image: elf.Image, named: []const u8, asked: ?u32) !void {
+fn placeObject(j: anytype, key: ?[]const u8, core: Guest, image: elf.Image, named: []const u8, asked: ?u32) !void {
     try j.open(key, '{');
     try j.field("place", named);
     const at = mem_dump.resolve(core, image, named) catch |err| {

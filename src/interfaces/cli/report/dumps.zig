@@ -12,6 +12,7 @@
 //! run live.
 const std = @import("std");
 const engine = @import("../../../core/engine.zig");
+const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../core/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");
@@ -30,7 +31,7 @@ const Board = @import("../../../board/board.zig").Board;
 /// the decimal value and something after it all have to be there. A symbol
 /// the image does not carry, or an address that will not read, says so
 /// plainly instead of printing a number nothing measured.
-pub fn dumpSymbols(out: anytype, core: engine.Engine, image: elf.Image, options: cli.Options) !void {
+pub fn dumpSymbols(out: anytype, core: Guest, image: elf.Image, options: cli.Options) !void {
     if (options.dumps().len == 0) return;
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -80,10 +81,10 @@ pub fn dumps(
     board: *Board,
     watched: ?watchpoint.Watched,
 ) !void {
-    try dumpSymbols(out, core, image, options);
+    try dumpSymbols(out, .{ .engine = core }, image, options);
     try dumpBlock(out, board, options);
     try dumpRegisters(out, core, options);
-    try mem_dump.printAll(out, core, image, options.memDumps());
+    try mem_dump.printAll(out, .{ .engine = core }, image, options.memDumps());
     try watchpoint.print(out, image, options.watch_place, watched);
 }
 
