@@ -5,7 +5,10 @@
 //! FPCCR.ASPEN set and CONTROL.FPCA clear, FPSCR loads from FPDSCR and FPCA
 //! is set.
 //!
-//! The NOCP check (RA8EMU-145) belongs here too when it lands.
+//! Before any of that, CheckCPEnabled(10) (RA8EMU-145): with CPACR.CP10
+//! refusing the access the instruction raises UsageFault.NOCP and touches no
+//! FP state. NSACR is not modelled, so the check reads the CPACR the core
+//! holds as the Secure one, as VLLDM/VLSTM already do.
 //!
 //! The wrapper decodes the instruction a second time when it runs, because
 //! a group's decode hands back a bare function with nothing to close over.
@@ -14,6 +17,8 @@ const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const lazy = @import("../fpu/lazy.zig");
 const fp_mem = @import("fp_mem.zig");
+const cpacr = @import("../fpu/cpacr.zig");
+const sysreg = @import("../sysreg.zig");
 
 /// The same group, with ExecuteFPCheck() ahead of every instruction it runs.
 pub fn gated(comptime inner: op.Group) op.Group {
@@ -51,6 +56,8 @@ pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
 
 /// The checks an FP or MVE instruction makes before it touches FP state.
 pub fn check(cpu: *Cpu) op.Error!void {
+    const verdict = cpacr.check(.{ .cpacr = cpu.fp.cpacr, .privileged = sysreg.privileged(&cpu.regs) });
+    if (!verdict.enabled) return error.NoCoprocessor;
     if (lazy.pending(&cpu.fp)) try lazy.preserve(cpu.bus, &cpu.fp);
     cpu.regs.control = cpu.fp.context.touch(
         cpu.regs.control,
