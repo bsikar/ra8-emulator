@@ -86,8 +86,10 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 }
 
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
-/// `memory` is CPU0's: the caller picks its backend (RA8EMU-577).
-pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
+/// `memory` is CPU0's: the caller picks its backend (RA8EMU-577). `core` is
+/// CPU0's engine, or null when nothing opened one (RA8EMU-593); only an
+/// engine-backed CPU1 or a lockstep run needs it.
+pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
@@ -110,7 +112,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, memory: Guest, board: 
     var checked: lockstep_dual.Cpu1 = undefined;
     const checked_path = if (options.cpu == .lockstep) options.cpu1_path else null;
     if (checked_path) |named| {
-        checked.open(std.heap.page_allocator, core, board, named) catch |err| {
+        checked.open(std.heap.page_allocator, core orelse return noEngine(named), board, named) catch |err| {
             std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
             return 1;
         };
@@ -186,6 +188,12 @@ fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !
 }
 
 /// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
+/// A lockstep run checks CPU1 against Unicorn, so it needs CPU0's engine.
+fn noEngine(named: []const u8) u8 {
+    std.debug.print("cannot bring up the second core from {s}: lockstep needs CPU0's engine\n", .{named});
+    return 1;
+}
+
 fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
     return .{
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
