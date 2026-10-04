@@ -107,7 +107,8 @@ pub const limits = struct {
     pub const image_bytes: usize = 64 * 1024 * 1024;
 };
 
-/// CPU1: its own engine and image, sharing CPU0's board.
+/// CPU1's per-core state beside CPU0's board. Its turns run on the Zig
+/// core (second_zig_run.zig); `core` is only the engine a test lends it.
 pub const Second = struct {
     core: Engine,
     /// What CPU1 has done and where it stands, apart from its engine.
@@ -137,97 +138,8 @@ pub const Second = struct {
     /// never takes its SysTick. src/core/unmask.zig.
     release: unmask.Release = .{},
 
-    /// Open CPU1 against the board `owner` already holds, load its image and
-    /// reset it out of its own vector table.
-    ///
-    /// IN PLACE, into the caller's storage, because two of this core's own
-    /// fields are handed to Unicorn as pointers and have to keep the address
-    /// they were registered at for the rest of the run.
-    ///
-    /// The order here is the order `main` brings CPU0 up in: share the
-    /// board RAM, go on the bus, then write the image on top. The board is
-    /// joined with `attachSecond`, which repeats the per-core wiring only:
-    /// the blocks are registered once, on the one bus, so both cores reach
-    /// the same IPCSEM and the same IPC channels, while the SAU this core
-    /// carries stays its own.
-    pub fn open(self: *Second, owner: *Engine, board: *Board, image: elf.Image) !void {
-        self.* = .{ .core = try Engine.open() };
-        errdefer self.core.close();
-        try self.core.shareBoardRamWith(owner);
-        try self.core.attachWatch(&self.watch);
-        try self.core.attachTimebase(&self.state.timebase);
-        try self.core.attachPend(&self.pend);
-        try wiring.attachSecond(board, &self.core, .{
-            .partitions = &self.partitions,
-            .regions = &self.regions,
-            .guard = &self.guard,
-            .identity = cpuid.cpu1,
-            .control = &self.control,
-            .clears = &self.clears,
-        });
-        const seeded = try seedImage(.{ .engine = self.core }, image);
-        try self.core.attachImageHooks(image);
-        self.state.written = seeded.written;
-        self.state.vector_base = seeded.vector_base;
-        self.state.interrupts.vector_base = self.state.vector_base;
-        self.state.dividers = &board.tree.divcr2;
-        self.state.board = board;
-        if (board.reboot) |pending| self.state.resets_seen = pending.performed;
-        try self.core.resetFromVectorTable(self.state.vector_base);
-        self.state.pc = try self.core.register(.pc);
-    }
-
     pub fn close(self: *Second) void {
         self.core.close();
-    }
-
-    /// One turn. A core that has faulted stays halted rather than being
-    /// restarted into the same fault every round.
-    pub fn step(self: *Second, instructions: usize) void {
-        if (self.state.fault != null or self.heldInReset()) return;
-        self.state.turns += 1;
-        if (self.state.wait.parked()) return self.idle(instructions);
-        const outcome = self.core.run(self.state.pc, instructions, self.session()) catch |err| {
-            self.state.fault = .{ .pc = self.state.pc, .detail = @errorName(err), .access = null, .instruction = null };
-            return;
-        };
-        self.state.ran += instructions;
-        if (outcome) |taken| {
-            if (hint_resume.stoppedOn(self.core, taken) != hint_resume.wfe) {
-                self.state.ran -= instructions;
-                self.state.fault = taken;
-                return;
-            }
-            // The WFE completed or parked; either way the PC is past it.
-            _ = self.state.wait.arrive();
-        }
-        self.boundary();
-    }
-
-    /// What CPU1's run loop works from. `protection` is CPU1's own guard: the
-    /// loop takes a trapped access as MemManage only through it, and without
-    /// it a refused store on CPU1 was counted and dropped (RA8EMU-313).
-    pub fn session(self: *Second) engine.Session {
-        return .{
-            .watch = &self.watch,
-            .interrupts = &self.state.interrupts,
-            .protection = &self.guard,
-            .timebase = &self.state.timebase,
-            .unmask = &self.release,
-            .pend = &self.pend,
-            .park_on_wfe = true,
-        };
-    }
-
-    /// A parked turn: time passes and the boundary is offered, nothing runs.
-    fn idle(self: *Second, instructions: usize) void {
-        self.state.ran += instructions;
-        self.state.timebase.advance(self.core, @intCast(instructions)) catch {};
-        self.clears.apply(self.core) catch {};
-        self.takeResetRequest();
-        const entered = self.state.interrupts.dispatch(self.core) catch null;
-        self.state.wait.idled(entered != null);
-        self.state.pc = self.core.register(.pc) catch self.state.pc;
     }
 
     /// A SYSRESETREQ from CPU1 is the part's one software reset: R01AN7883
@@ -256,20 +168,6 @@ pub const Second = struct {
             return;
         };
         self.state.pc = self.core.register(.pc) catch base;
-    }
-
-    /// The boundary between two of CPU1's turns. A turn is exactly one
-    /// boundary wide, so the run loop spends it before it would service
-    /// one; this is where CPU1's own pends are offered to its own NVIC.
-    fn boundary(self: *Second) void {
-        self.clears.apply(self.core) catch {};
-        // A turn ends on its budget, where the run loop never serves, so a
-        // pend held by PRIMASK is stepped out of the mask here, before the
-        // dispatch below, and the steps are charged as run.
-        self.state.ran += run_loop.liftMask(self.core, &self.state.interrupts, self.session(), unmask.limits.steps) catch 0;
-        self.takeResetRequest();
-        _ = self.state.interrupts.dispatch(self.core) catch null;
-        self.state.pc = self.core.register(.pc) catch self.state.pc;
     }
 };
 

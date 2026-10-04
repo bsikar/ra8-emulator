@@ -100,15 +100,6 @@ test "a second core carries an MPU and guard of its own, not the board's" {
     try std.testing.expect(board.guard.unit == null);
 }
 
-test "CPU1's run session carries CPU1's own guard, so a refused access becomes MemManage" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    cpu1.guard = ra8.core.mpu_guard.Guard.init();
-    try std.testing.expect(cpu1.session().protection.? == &cpu1.guard);
-}
-
 test "programming one core's MPU leaves the other's table alone" {
     var cpu0_regions = mpu.Mpu.init();
     const cpu1_regions = mpu.Mpu.init();
@@ -205,121 +196,6 @@ test "CCR, SHCSR and the fault status words are each core's own" {
     }
 }
 
-/// CPU1 parked in a `b .` spin over a vector table whose PendSV entry is a
-/// second spin, so where it ends up says whether the exception was taken.
-const Spins = struct {
-    const table: u32 = memmap.sram_base + 0x1000;
-    const spin: u32 = table + 0x100;
-    const handler: u32 = table + 0x200;
-    const stack: u32 = memmap.sram_base + 0x8000;
-
-    fn lay(core: Engine) !void {
-        try core.writeWord(table, stack);
-        try core.writeWord(table + 4, spin | 1);
-        try core.writeWord(table + 4 * nvic.pendsv, handler | 1);
-        try core.writeWord(table + 4 * nvic.systick, handler | 1);
-        try core.writeWord(spin, 0xE7FE_E7FE);
-        try core.writeWord(handler, 0xE7FE_E7FE);
-    }
-
-    fn boot(cpu1: *mod.Second) !void {
-        try lay(cpu1.core);
-        cpu1.state.interrupts = .{ .vector_base = table };
-        try mod.primeVectorTable(.{ .engine = cpu1.core }, table);
-        try cpu1.core.resetFromVectorTable(table);
-        cpu1.state.pc = try cpu1.core.register(.pc);
-    }
-};
-
-test "a PendSV pended on CPU1 is taken by CPU1's own NVIC" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try Spins.boot(&cpu1);
-
-    try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
-    cpu1.step(1000);
-    try std.testing.expect(cpu1.state.fault == null);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
-
-    // CPU0 saw none of it: nothing is pended in its own ICSR.
-    var cpu0_interrupts = nvic.Nvic{ .vector_base = Spins.table };
-    try std.testing.expect(try cpu0_interrupts.dispatch(cpu0) == null);
-}
-
-test "a PendSV CPU1's own code stores ends CPU1's stretch" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try Spins.boot(&cpu1);
-    // ldr r0, =ICSR; ldr r1, =PENDSVSET; str r1, [r0]; b .
-    try cpu1.core.writeWord(Spins.spin, 0x4902_4801);
-    try cpu1.core.writeWord(Spins.spin + 4, 0xE7FE_6001);
-    try cpu1.core.writeWord(Spins.spin + 8, memmap.scb.icsr);
-    try cpu1.core.writeWord(Spins.spin + 12, nvic.icsr_pendsvset);
-
-    cpu1.step(1000);
-    try std.testing.expect(cpu1.state.fault == null);
-    // The store cut the stretch, so PendSV landed where the architecture
-    // puts it rather than at the end of the turn.
-    try std.testing.expectEqual(@as(usize, 1), cpu1.pend.cuts);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
-}
-
-test "a PendSV pended on CPU0 is never taken by CPU1" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try Spins.boot(&cpu1);
-
-    try cpu0.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
-    cpu1.step(1000);
-    try std.testing.expect(cpu1.state.fault == null);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.state.interrupts.taken);
-    try std.testing.expectEqual(Spins.spin, cpu1.state.pc & ~@as(u32, 1));
-}
-
-test "CPU1's SysTick counts on CPU1 and pends into CPU1's own NVIC" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try Spins.boot(&cpu1);
-
-    try cpu1.core.writeWord(memmap.syst.rvr, 99);
-    try cpu1.core.writeWord(memmap.syst.cvr, 0);
-    try cpu1.core.writeWord(memmap.syst.csr, 0b111);
-    cpu1.step(1000);
-    try std.testing.expect(cpu1.state.fault == null);
-    try std.testing.expect(cpu1.state.timebase.ticks > 0);
-    try std.testing.expect(cpu1.state.interrupts.taken >= 1);
-    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
-
-    // CPU0's SysTick was never armed and nothing was pended on it.
-    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.syst.csr));
-    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.icsr) & nvic.icsr_pendstset);
-}
-
-test "CPU0's SysTick never ticks CPU1's time base" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try Spins.boot(&cpu1);
-
-    try cpu0.writeWord(memmap.syst.rvr, 99);
-    try cpu0.writeWord(memmap.syst.csr, 0b111);
-    cpu1.step(1000);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.state.timebase.ticks);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.state.interrupts.taken);
-    try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(memmap.syst.csr));
-}
-
 /// Through a real file, because the SAU half of the report writes to a
 /// file writer rather than any writer.
 fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
@@ -350,38 +226,4 @@ test "a CPU1 that never waited reports no parking line" {
     var buffer: [1024]u8 = undefined;
     const text = try reported(&second, &buffer);
     try std.testing.expect(std.mem.indexOf(u8, text, "parked in WFE") == null);
-}
-
-/// A masked spin three instructions wide, entered at its `cpsie i`, so a
-/// turn of a multiple of three meets every boundary with PRIMASK set: the
-/// shape of the module port's `__tx_ts_wait` against CPU1's turn.
-const MaskedSpin = struct {
-    const loop: u32 = Spins.table + 0x300;
-
-    fn boot(cpu1: *mod.Second) !void {
-        try Spins.lay(cpu1.core);
-        // cpsid i; cpsie i; b loop
-        try cpu1.core.writeWord(loop, 0xB662_B672);
-        try cpu1.core.writeWord(loop + 4, 0xE7FE_E7FC);
-        try cpu1.core.writeWord(Spins.table + 4, (loop + 2) | 1);
-        cpu1.state.interrupts = .{ .vector_base = Spins.table };
-        try mod.primeVectorTable(.{ .engine = cpu1.core }, Spins.table);
-        try cpu1.core.resetFromVectorTable(Spins.table);
-        cpu1.state.pc = try cpu1.core.register(.pc);
-    }
-};
-
-test "a SysTick held by CPU1's mask is taken when the mask clears" {
-    var cpu1: mod.Second = undefined;
-    var cpu0 = try pair(&cpu1);
-    defer cpu0.close();
-    defer cpu1.close();
-    try MaskedSpin.boot(&cpu1);
-
-    try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendstset);
-    cpu1.step(999);
-    try std.testing.expect(cpu1.state.fault == null);
-    try std.testing.expect(cpu1.release.lifted >= 1);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
 }
