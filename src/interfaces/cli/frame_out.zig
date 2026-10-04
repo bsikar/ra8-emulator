@@ -14,7 +14,7 @@ pub const board_view = @import("board_view.zig");
 
 /// The panel's size, the size of the view that was written, and whether
 /// the GLCDC gave a frame (when it did not, the panel is drawn dark).
-pub const Saved = struct { width: u32, height: u32, view: board_view.Size, frame: bool };
+pub const Saved = struct { width: u32, height: u32, view: board_view.Size, frame: bool, eink: bool = false };
 
 /// A panel has no transparency: what reaches the glass is the colour, so
 /// every pixel goes out opaque. `rgba` holds four bytes per pixel.
@@ -38,6 +38,8 @@ pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8, panel
     @memset(pixels, 0);
     const frame = scanned and scan(board, pixels, width, height);
     if (!frame) @memset(pixels, 0);
+    // No GLCDC frame: the board's own e-ink panel, once refreshed (RA8EMU-591).
+    if (!frame and board.panel.refreshes != 0) return saveEink(allocator, &board.panel, path);
     const view = if (panel_only) board_view.Size{ .width = width, .height = height } else board_view.size(width, height);
     if (panel_only) {
         try write(allocator, pixels, view, path);
@@ -72,7 +74,7 @@ fn saveEink(allocator: std.mem.Allocator, panel: *const eink.Panel, path: []cons
     var buffered = std.io.bufferedWriter(file.writer());
     try png.encode(allocator, buffered.writer(), width, height, rgba);
     try buffered.flush();
-    return .{ .width = width, .height = height, .view = view, .frame = panel.refreshes != 0 };
+    return .{ .width = width, .height = height, .view = view, .frame = panel.refreshes != 0, .eink = true };
 }
 
 /// Expand 8-bit glass samples into opaque, equal-channel RGB pixels.
@@ -109,7 +111,7 @@ fn write(allocator: std.mem.Allocator, canvas: []const u32, view: board_view.Siz
 pub fn report(out: anytype, board: *Board, path: ?[]const u8, panel_only: bool) !void {
     const target = path orelse return;
     const saved = try save(std.heap.page_allocator, board, target, panel_only);
-    if (board.asks.attached_eink != null) {
+    if (saved.eink) {
         if (!saved.frame) return out.print("frame-out: no e-ink refresh, the {d}x{d} grey glass written to {s}\n", .{
             saved.width, saved.height, target,
         });

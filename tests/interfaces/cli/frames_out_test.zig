@@ -187,6 +187,29 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
     }
 }
 
+test "with no attach, the board's own e-ink refreshes become the sequence" {
+    const proto = ra8.periph.eink_wire;
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.panel.planes.resize(.{ .width = 16, .height = 8 });
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
+    defer std.testing.allocator.free(path);
+    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    eInkRefresh(&board.panel, proto, 0x2211);
+    eInkRefresh(&board.panel, proto, 0x4433);
+    try armed.finish();
+    try std.testing.expectEqual(@as(usize, 2), armed.sequence.written);
+    try std.testing.expectEqual(@as(u32, 2), armed.board_eink_frames);
+    try expectIndex(armed.sequence, "frame_00000.ppm 0\nframe_00001.ppm 0\n");
+    armed.deinit();
+    try std.testing.expect(board.panel.refresh_hook == null);
+}
+
 fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void {
     panelWord(panel, proto.preamble.command);
     panelWord(panel, @intFromEnum(proto.Command.load_area));

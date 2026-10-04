@@ -121,3 +121,49 @@ fn word(panel: anytype, value: u16) void {
     _ = panel.exchange(@intCast(value >> 8));
     _ = panel.exchange(@intCast(value & 0xFF));
 }
+
+test "with no attach and no GLCDC frame, frame-out saves the board's refreshed e-ink glass" {
+    const proto = ra8.periph.eink_wire;
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.panel.planes.resize(.{ .width = 16, .height = 8 });
+    const panel = &board.panel;
+    word(panel, proto.preamble.command);
+    word(panel, @intFromEnum(proto.Command.load_area));
+    for ([_]u16{ 0x0030, 0, 0, 2, 1, 0x2211 }) |value| {
+        word(panel, proto.preamble.write);
+        word(panel, value);
+    }
+    word(panel, proto.preamble.command);
+    word(panel, @intFromEnum(proto.Command.display_area));
+    for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
+        word(panel, proto.preamble.write);
+        word(panel, value);
+    }
+
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "board_eink.png" });
+    defer std.testing.allocator.free(path);
+    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    try std.testing.expect(saved.eink);
+    try std.testing.expect(saved.frame);
+    try std.testing.expectEqual(@as(u32, 16), saved.width);
+    try std.testing.expectEqual(@as(u32, 8), saved.height);
+}
+
+test "an unrefreshed board panel leaves frame-out on the board view" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "view.png" });
+    defer std.testing.allocator.free(path);
+    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    try std.testing.expect(!saved.eink);
+    try std.testing.expect(!saved.frame);
+}

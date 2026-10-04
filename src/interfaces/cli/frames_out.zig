@@ -184,6 +184,11 @@ pub const Armed = struct {
     failed: ?anyerror = null,
     eink_panel: ?*eink.Panel = null,
     eink_pixels: ?[]u32 = null,
+    /// Frames kept from each source: the GLCDC, or the board's own e-ink
+    /// panel when no --attach panel was asked for (RA8EMU-591). The first
+    /// source to give a frame owns the sequence.
+    glcdc_frames: u32 = 0,
+    board_eink_frames: u32 = 0,
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
@@ -205,6 +210,8 @@ pub const Armed = struct {
             self.eink_panel = panel;
             self.eink_pixels = try allocator.alloc(u32, panel.planes.geometry.pixels());
             panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
+        } else if (board.panel.refresh_hook == null) {
+            board.panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
         }
         board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame } };
         return self;
@@ -225,16 +232,23 @@ pub const Armed = struct {
     }
 
     fn frameAt(self: *Armed, when: u64) !void {
-        if (self.eink_panel != null) return;
         const capture = (try self.fit()) orelse return;
         if (self.board.display.scanOut() == null) return;
         try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+        self.glcdc_frames += 1;
         capture.before = self.board.display.system.frames;
     }
 
     fn onEinkRefresh(context: *anyopaque) void {
         const self: *Armed = @ptrCast(@alignCast(context));
-        const panel = self.eink_panel.?;
+        const panel = self.eink_panel orelse board: {
+            if (self.glcdc_frames != 0) return;
+            break :board &self.board.panel;
+        };
+        if (self.eink_pixels == null) self.eink_pixels = self.allocator.alloc(u32, panel.planes.geometry.pixels()) catch |err| {
+            if (self.failed == null) self.failed = err;
+            return;
+        };
         const pixels = self.eink_pixels.?;
         if (panel.planes.glass.pixels.len != pixels.len) return;
         for (panel.planes.glass.pixels, pixels) |gray, *pixel| {
@@ -243,11 +257,12 @@ pub const Armed = struct {
         self.sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, pixels, self.board.time.base.now()) catch |err| {
             if (self.failed == null) self.failed = err;
         };
+        if (self.eink_panel == null) self.board_eink_frames += 1;
     }
 
     /// The capture buffer, sized to the panel as the firmware has it now.
     pub fn fit(self: *Armed) !?*FrameCapture {
-        if (self.eink_panel != null) return null;
+        if (self.eink_panel != null or self.board_eink_frames != 0) return null;
         if (self.capture) |*capture| {
             const same = capture.width == self.board.display.panelWidth() and
                 capture.height == self.board.display.panelHeight();
@@ -264,16 +279,17 @@ pub const Armed = struct {
 
     pub fn finish(self: *Armed) !void {
         if (self.failed) |err| return err;
-        if (self.capture) |*capture| try capture.finish(self.board, &self.sequence);
+        if (self.capture) |*capture| {
+            if (self.board_eink_frames == 0) try capture.finish(self.board, &self.sequence);
+        }
         try self.sequence.finish();
     }
 
     pub fn deinit(self: *Armed) void {
         self.board.display.output.vsync = null;
-        if (self.eink_panel) |panel| {
-            if (panel.refresh_hook) |hook| {
-                if (hook.context == @as(*anyopaque, @ptrCast(self))) panel.refresh_hook = null;
-            }
+        const hooked = self.eink_panel orelse &self.board.panel;
+        if (hooked.refresh_hook) |hook| {
+            if (hook.context == @as(*anyopaque, @ptrCast(self))) hooked.refresh_hook = null;
         }
         if (self.eink_pixels) |pixels| self.allocator.free(pixels);
         if (self.capture) |*capture| capture.deinit(self.board);
