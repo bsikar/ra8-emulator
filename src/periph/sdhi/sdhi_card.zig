@@ -10,9 +10,10 @@
 //! The store is sparse, the same shape xspi_flash.zig takes: a block is held
 //! from the first time something writes to it, and a block nobody has
 //! written reads as zeros, which is what a freshly formatted card gives.
-//! dev shares a real `--sd` image with board_periph_sd.c; that file is not
-//! ported yet, so the card here is RAM-backed and its capacity is the
-//! model's own choice, stated below rather than implied.
+//! `--sd-image PATH` loads a raw host image into that store (RA8EMU-568), so
+//! the store is the copy-on-write overlay: firmware writes land here and the
+//! file is only rewritten by `saveTo`, which `--sd-writable` asks for. With
+//! no image the capacity is the model's own choice, stated below.
 const std = @import("std");
 
 pub const geometry = struct {
@@ -58,10 +59,14 @@ pub const State = enum {
 
 const Block = [geometry.block_bytes]u8;
 
+pub const LoadError = error{ BadImageSize, CardNotBlank, OutOfMemory };
+
 pub const Card = struct {
     allocator: std.mem.Allocator,
     blocks: std.AutoHashMap(u32, *Block),
     state: State = .idle,
+    /// How big the card is: the model's default, or the loaded image's size.
+    capacity_blocks: u32 = geometry.capacity_blocks,
     /// Blocks written that were past the end of the card.
     past_end: u32 = 0,
 
@@ -93,8 +98,47 @@ pub const Card = struct {
         return self.blocks.count();
     }
 
-    pub fn holds(lba: u32) bool {
-        return lba < geometry.capacity_blocks;
+    pub fn holds(self: *const Card, lba: u32) bool {
+        return lba < self.capacity_blocks;
+    }
+
+    /// Back the card with a raw image: whole C_SIZE units, so the CSD can
+    /// state it exactly. Zero blocks stay sparse. Refused on a card that
+    /// already holds data.
+    pub fn loadBytes(self: *Card, bytes: []const u8) LoadError!void {
+        const unit: usize = geometry.block_bytes * geometry.csize_unit;
+        if (bytes.len == 0 or bytes.len % unit != 0) return error.BadImageSize;
+        if (bytes.len / geometry.block_bytes > std.math.maxInt(u32)) return error.BadImageSize;
+        if (self.held() != 0) return error.CardNotBlank;
+        const blocks: u32 = @intCast(bytes.len / geometry.block_bytes);
+        self.capacity_blocks = blocks;
+        var index: u32 = 0;
+        while (index < blocks) : (index += 1) {
+            const start = @as(usize, index) * geometry.block_bytes;
+            const source = bytes[start..][0..geometry.block_bytes];
+            if (std.mem.allEqual(u8, source, 0)) continue;
+            if (!self.write(index, source)) {
+                self.release();
+                self.capacity_blocks = geometry.capacity_blocks;
+                return error.OutOfMemory;
+            }
+        }
+    }
+
+    /// Write every block of the card over `path` (temp file, fsync, rename).
+    pub fn saveTo(self: *Card, dir: std.fs.Dir, path: []const u8) !void {
+        var atomic = try dir.atomicFile(path, .{});
+        defer atomic.deinit();
+        var buffered = std.io.bufferedWriter(atomic.file.writer());
+        var block: Block = undefined;
+        var index: u32 = 0;
+        while (index < self.capacity_blocks) : (index += 1) {
+            _ = self.read(index, &block);
+            try buffered.writer().writeAll(&block);
+        }
+        try buffered.flush();
+        try atomic.file.sync();
+        try atomic.finish();
     }
 
     /// A block command is only legal from the transfer state, which is
@@ -106,7 +150,7 @@ pub const Card = struct {
     /// One block out of the card. A block nobody wrote reads as zeros.
     pub fn read(self: *Card, lba: u32, out: *Block) bool {
         @memset(out, 0);
-        if (!holds(lba)) {
+        if (!self.holds(lba)) {
             self.past_end += 1;
             return false;
         }
@@ -116,7 +160,7 @@ pub const Card = struct {
 
     /// One block into the card, held from here on.
     pub fn write(self: *Card, lba: u32, data: *const Block) bool {
-        if (!holds(lba)) {
+        if (!self.holds(lba)) {
             self.past_end += 1;
             return false;
         }
@@ -164,8 +208,7 @@ pub const Card = struct {
 
     /// The CSD v2 response words for this card's capacity, low word first.
     pub fn csd(self: *const Card) [4]u32 {
-        _ = self;
-        const size = @max(geometry.capacity_blocks, geometry.csize_unit);
+        const size = @max(self.capacity_blocks, geometry.csize_unit);
         const c_size = (size / geometry.csize_unit) - 1;
         return .{
             0,

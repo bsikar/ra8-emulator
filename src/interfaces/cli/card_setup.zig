@@ -15,6 +15,36 @@ pub fn newSpec(spec: []const u8) !struct { sd_format.Kind, []const u8 } {
     return .{ kind, if (split < spec.len) spec[split + 1 ..] else default_label };
 }
 
+/// `--sd-image PATH` backs the SDHI card with a raw host image; the card's
+/// RAM store is the overlay, written back over PATH only with `--sd-writable`.
+pub const Sdhi = struct {
+    image: ?[]const u8 = null,
+    writable: bool = false,
+};
+
+/// Load the `--sd-image` file into the SDHI card.
+pub fn prepareSdhi(board: *Board, sdhi: Sdhi) !void {
+    const path = sdhi.image orelse return;
+    const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, std.math.maxInt(usize)) catch |err| {
+        std.debug.print("cannot read SD image {s}: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+    defer std.heap.page_allocator.free(bytes);
+    board.card.card.loadBytes(bytes) catch |err| {
+        std.debug.print("--sd-image {s}: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+}
+
+/// Write the SDHI card back over its image when `--sd-writable` asked.
+pub fn saveSdhi(board: *Board, sdhi: Sdhi) void {
+    if (!sdhi.writable) return;
+    const path = sdhi.image orelse return;
+    board.card.card.saveTo(std.fs.cwd(), path) catch |err| {
+        std.debug.print("--sd-image {s}: not saved: {s}\n", .{ path, @errorName(err) });
+    };
+}
+
 /// Write the card back over its `--sd-save` image when the run ends. A
 /// failed write is reported and leaves the image file as it was.
 pub fn saveBack(board: *const Board, sd_path: ?[]const u8, save: bool) void {

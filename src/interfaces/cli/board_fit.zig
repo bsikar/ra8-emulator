@@ -23,6 +23,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
+    try cli.card_setup.prepareSdhi(board, options.sdhi);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(path);
     try setBattery(board, options);

@@ -26,6 +26,7 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options)
     defer board.deinit();
     fit(&board, allocator, options) catch return 2;
     defer cli.card_setup.saveBack(&board, options.sd_path, options.sd_save);
+    defer cli.card_setup.saveSdhi(&board, options.sdhi);
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};

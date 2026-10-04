@@ -26,6 +26,9 @@ pub const text =
     \\  --sd-save IMAGE    the same card, written back over IMAGE when the
     \\                     run ends (temp file, fsync, rename); --sd
     \\                     leaves IMAGE untouched
+    \\  --sd-image IMAGE   back the SDHI card with a raw image (whole 512 KiB
+    \\                     units); writes stay in memory unless --sd-writable,
+    \\                     which writes the card back over IMAGE at the end
     \\  --device NAME      the same thing, spelled the way the firmware's
     \\                     own emulator-in-the-loop suite spells it
     \\  --dump-sym NAME    read that global out of RAM after the run and
