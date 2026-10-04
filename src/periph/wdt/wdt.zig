@@ -54,6 +54,7 @@
 pub const clock = @import("wdt_clock.zig");
 const periph = @import("../registry.zig");
 const write_once = @import("wdt_write_once.zig");
+const event_queue = @import("../time/event_queue.zig");
 
 /// WDT0 geometry (ra8_wdt_regs.h, r_wdt_regs_t; HUM Ch 27.2 p 1070).
 pub const win_base: u32 = 0x4020_2600;
@@ -199,6 +200,15 @@ pub const Wdt = struct {
         const per = clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift));
         const ticks = (@as(u64, self.counter) + 1) * per - self.pace;
         return now_ns + ticks * clock.ns_per_tick;
+    }
+
+    /// Put the next underflow on `queue` under `clock.queue_id.wdt`, dropping
+    /// whatever was there. Called every boundary, so a refresh, a start and
+    /// an underflow all re-arm, and a disarmed counter leaves nothing queued.
+    pub fn arm(self: *const Wdt, queue: *event_queue.EventQueue, now_ns: u64) event_queue.Error!void {
+        _ = queue.cancel(clock.queue_id.wdt);
+        const at = self.underflowDueAt(now_ns) orelse return;
+        try queue.schedule(at, clock.queue_id.wdt);
     }
 
     /// One watchdog count. An armed counter that reaches zero underflows

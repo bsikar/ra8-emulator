@@ -184,3 +184,16 @@ test "the IWDT counts the virtual ns that passed, not the boundaries" {
     unit.tickFor(100_000);
     try std.testing.expectEqual(@as(u32, 1), unit.underflows);
 }
+
+test "an armed IWDT puts its underflow on the queue, and only once" {
+    var queue = ra8.periph.clocks.event_queue.EventQueue{};
+    var unit = iwdt.Iwdt.init();
+    try unit.arm(&queue, 0);
+    try std.testing.expectEqual(@as(?u64, null), queue.next());
+    refreshed(&unit);
+    try unit.arm(&queue, 1_000);
+    try unit.arm(&queue, 1_000);
+    try std.testing.expectEqual(@as(usize, 1), queue.count);
+    try std.testing.expectEqual(unit.underflowDueAt(1_000), queue.next());
+    try std.testing.expectEqual(ra8.periph.wdt.clock.queue_id.iwdt, queue.items[0].id);
+}

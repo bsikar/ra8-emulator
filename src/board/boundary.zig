@@ -34,6 +34,8 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     const elapsed_ns = self.time.base.now() - before_ns;
     self.watchdog.tickFor(elapsed_ns);
     self.heartbeat.tickFor(elapsed_ns);
+    try self.watchdog.arm(&self.time.queue, self.time.base.now());
+    try self.heartbeat.arm(&self.time.queue, self.time.base.now());
     self.lowpower.tick();
     self.microphone.tick();
     self.clock.tick();

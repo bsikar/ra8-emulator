@@ -65,3 +65,25 @@ test "the WDT counts the virtual ns that passed, not the boundaries" {
     unit.tickFor(25 * 2_000);
     try std.testing.expectEqual(@as(u32, 2), unit.counter);
 }
+
+test "an armed WDT puts its underflow on the queue under its own id, a disarmed one takes it off" {
+    const wdt = ra8.periph.wdt;
+    var queue = ra8.periph.clocks.event_queue.EventQueue{};
+    var unit = wdt.Wdt.init();
+    try unit.arm(&queue, 0);
+    try std.testing.expectEqual(@as(?u64, null), queue.next());
+    unit.wdtcr = wdt.controlWord(0, 0x1, 3, 3);
+    unit.armed = true;
+    unit.counter = 3;
+    try unit.arm(&queue, 100);
+    try std.testing.expectEqual(unit.underflowDueAt(100), queue.next());
+    try std.testing.expectEqual(clock.queue_id.wdt, queue.items[0].id);
+    // A refresh moves it rather than stacking a second entry.
+    unit.counter = 9;
+    try unit.arm(&queue, 200);
+    try std.testing.expectEqual(@as(usize, 1), queue.count);
+    try std.testing.expectEqual(unit.underflowDueAt(200), queue.next());
+    unit.armed = false;
+    try unit.arm(&queue, 300);
+    try std.testing.expectEqual(@as(usize, 0), queue.count);
+}

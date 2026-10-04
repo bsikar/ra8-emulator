@@ -36,6 +36,7 @@ const iwdt_refresh = @import("iwdt_refresh.zig");
 const iwdt_status = @import("iwdt_status.zig");
 const periph = @import("../registry.zig");
 const wdt_clock = @import("../wdt/wdt_clock.zig");
+const event_queue = @import("../time/event_queue.zig");
 
 pub const ofs0 = iwdt_ofs0;
 pub const refresh = iwdt_refresh;
@@ -183,6 +184,14 @@ pub const Iwdt = struct {
         if (!self.armed) return null;
         const ticks = @max(1, (@as(u64, self.counter) + counts_per_tick - 1) / counts_per_tick);
         return now_ns + ticks * wdt_clock.ns_per_tick;
+    }
+
+    /// Put the next underflow on `queue` under `wdt_clock.queue_id.iwdt`,
+    /// the same every-boundary re-arm the WDT makes.
+    pub fn arm(self: *const Iwdt, queue: *event_queue.EventQueue, now_ns: u64) event_queue.Error!void {
+        _ = queue.cancel(wdt_clock.queue_id.iwdt);
+        const at = self.underflowDueAt(now_ns) orelse return;
+        try queue.schedule(at, wdt_clock.queue_id.iwdt);
     }
 
     fn refreshWrite(self: *Iwdt, value: u8) void {
