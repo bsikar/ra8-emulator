@@ -146,28 +146,10 @@ pub const Second = struct {
     /// Table 11 lists a per-core watchdog, lockup and local-memory reset but
     /// a single "Software reset" (AIRCR.SYSRESETREQ), and 6.9 latches it in
     /// RSTSR1.SWRF. So it goes to the board exactly as CPU0's does
-    /// (RA8EMU-59).
-    pub fn takeResetRequest(self: *Second) void {
-        const asked = self.control.poll(self.core) catch false;
+    /// (RA8EMU-59). `memory` is CPU1's own, where its AIRCR lives.
+    pub fn takeResetRequest(self: *Second, memory: Guest) void {
+        const asked = self.control.poll(memory) catch false;
         if (asked) if (self.state.board) |board| board.requestReset(.software);
-    }
-
-    /// Whether CPU1 sits in reset (State.heldInReset); when it leaves,
-    /// the engine restarts from the vector table there.
-    pub fn heldInReset(self: *Second) bool {
-        const restarts = self.state.restarts;
-        const held = self.state.heldInReset(.{ .engine = self.core });
-        if (self.state.restarts != restarts) self.resetEngine();
-        return held;
-    }
-
-    fn resetEngine(self: *Second) void {
-        const base = self.state.vector_base;
-        self.core.resetFromVectorTable(base) catch |err| {
-            self.state.fault = .{ .pc = base, .detail = @errorName(err), .access = null, .instruction = null };
-            return;
-        };
-        self.state.pc = self.core.register(.pc) catch base;
     }
 };
 

@@ -109,6 +109,7 @@ pub const Driver = struct {
         second.state.timebase.advance(self.core.memory, @intCast(ran)) catch {};
         self.ns_timebase.advanceSysTick(self.core.memory, @intCast(ran)) catch {};
         second.state.pc = self.core.cpu.regs.pc;
+        second.takeResetRequest(self.core.memory);
         if (stopped != .count) second.state.fault = .{ .pc = second.state.pc, .detail = @tagName(stopped) };
     }
 };
