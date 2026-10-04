@@ -95,3 +95,17 @@ pub fn step(per_boundary: u16, source: Source) u16 {
     const divided = per_boundary / source.divider();
     return @max(1, divided);
 }
+
+/// Virtual ns until a counter at `count` underflows, with PCLKB at
+/// `pclkb_hz` (RA8EMU-512). Reaching zero is not the underflow, the borrow
+/// on the next count is, so it takes count + 1 counts, each `divider()`
+/// PCLKB edges long. Rounded up, so the event never lands before the count
+/// would have. A cascaded channel has no clock of its own and a stopped
+/// PCLKB never counts: both answer null.
+pub fn underflowInNs(count: u16, source: Source, pclkb_hz: u64) ?u64 {
+    if (source.cascaded() or pclkb_hz == 0) return null;
+    const edges: u64 = (@as(u64, count) + 1) * source.divider();
+    return (edges * ns_per_s + pclkb_hz - 1) / pclkb_hz;
+}
+
+const ns_per_s: u64 = 1_000_000_000;

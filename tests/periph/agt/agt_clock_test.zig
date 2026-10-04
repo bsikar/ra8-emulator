@@ -134,3 +134,22 @@ test "cascading is what the channel reports as its source" {
     try std.testing.expectEqual(clk.Source.agt0_underflow, unit.channels[1].source(1));
     try std.testing.expectEqual(clk.Source.pclkb, unit.channels[0].source(0));
 }
+
+test "an underflow is count + 1 counts away, each one divider of PCLKB edges" {
+    // 100 MHz PCLKB is 10 ns an edge; a count of 9 underflows on the 10th.
+    try std.testing.expectEqual(@as(?u64, 100), clk.underflowInNs(9, .pclkb, 100_000_000));
+    try std.testing.expectEqual(@as(?u64, 200), clk.underflowInNs(9, .pclkb_div2, 100_000_000));
+    try std.testing.expectEqual(@as(?u64, 800), clk.underflowInNs(9, .pclkb_div8, 100_000_000));
+    // At zero the next count is the borrow.
+    try std.testing.expectEqual(@as(?u64, 10), clk.underflowInNs(0, .pclkb, 100_000_000));
+}
+
+test "an underflow time rounds up, and a channel with no clock has none" {
+    // 3 edges at 120 MHz is 25 ns exactly; 1 edge is 8.33 ns, rounded to 9.
+    try std.testing.expectEqual(@as(?u64, 25), clk.underflowInNs(2, .pclkb, 120_000_000));
+    try std.testing.expectEqual(@as(?u64, 9), clk.underflowInNs(0, .pclkb, 120_000_000));
+    try std.testing.expectEqual(@as(?u64, null), clk.underflowInNs(5, .agt0_underflow, 120_000_000));
+    try std.testing.expectEqual(@as(?u64, null), clk.underflowInNs(5, .pclkb, 0));
+    // The full 16-bit span at PCLKB/8 does not overflow the arithmetic.
+    try std.testing.expectEqual(@as(?u64, 65536 * 8 * 10), clk.underflowInNs(0xFFFF, .pclkb_div8, 100_000_000));
+}
