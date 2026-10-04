@@ -306,7 +306,7 @@ table above. A group listed as missing does not fail the build yet.
 | ldst_wide | 47 |
 | ldr_literal_wide | 33 |
 | preload | 29 |
-| fp_arith | missing |
+| fp_arith | 40 |
 | fp_unary | 44 |
 | fp_system | 38 |
 | fp_convert | missing |
