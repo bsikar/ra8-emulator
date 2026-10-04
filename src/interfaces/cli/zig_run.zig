@@ -27,6 +27,15 @@ const Until = @import("../../core/until.zig").Until;
 const Stop = @import("../../core/stop.zig").Stop;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
+/// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
+pub const break_sym = @import("zig_break.zig");
+
+/// What ends a Zig run before its budget: the `--stop-sym` counter and the
+/// `--break-sym` arrival (RA8EMU-603).
+pub const Ends = struct {
+    stop: ?*Stop = null,
+    point: ?*break_sym.Break = null,
+};
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
 /// A `--cpu zig` run from main, with no engine opened: RA8EMU-592.
@@ -58,6 +67,8 @@ pub const Clock = struct {
     cpu1: ?*second_core.zig_run.Driver = null,
     /// The `--stop-sym` counter, read at each boundary (RA8EMU-603).
     stop: ?*Stop = null,
+    /// The `--break-sym` arrival, which ends the run once met.
+    point: ?*break_sym.Break = null,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk };
@@ -66,6 +77,7 @@ pub const Clock = struct {
     /// Has the watched counter climbed to its floor? An unreadable word is
     /// not a stop, as on the Unicorn path (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
+        if (self.point) |point| if (point.reached) return true;
         const watch = self.stop orelse return false;
         return watch.met(self.memory.readWord(watch.address) catch null);
     }
@@ -107,9 +119,9 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// `memory` is CPU0's: the caller picks its backend (RA8EMU-577). `core` is
 /// CPU0's engine, or null when nothing opened one (RA8EMU-593); only an
 /// engine-backed CPU1 needs it.
-pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, stop: ?*Stop) !u8 {
+pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = stop };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
@@ -135,10 +147,10 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         listener = .{ .tracer = found };
     }
     const wrap = if (tracer != null) listener.wrap() else null;
-    const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
+    var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
     var boot_output = out;
     var final: boot.Regs = .{};
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, options.budgetFor(stop != null), &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, options.budgetFor(ends.stop != null), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -149,11 +161,13 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         .fast_memory = options.watch_place == null and wrap == null,
         .blocks = options.blocks,
         .wrap = wrap,
-        .retire_listener = retire_listener,
+        .retire_listener = retire.listener(),
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
     });
-    if (stop) |watch| if (watch.reached) try (BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }).print("stopped clean on {s} >= {d}, pc 0x{X:0>8}\n", .{ options.stop_symbol.?, watch.reaches, final.pc });
+    const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
+    if (ends.stop) |watch| if (watch.reached) try said.print("stopped clean on {s} >= {d}, pc 0x{X:0>8}\n", .{ options.stop_symbol.?, watch.reaches, final.pc });
+    if (ends.point) |point| try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, options.budgetFor(ends.stop != null));
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
@@ -201,9 +215,4 @@ fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.z
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
         .cpu1 = if (cpu1) |pair| rtos_hook.second.sideOn(pair.guest()) else null,
     };
-}
-
-fn profileInstruction(context: *anyopaque, address: u32) void {
-    const table: *profile.Table = @ptrCast(@alignCast(context));
-    table.instruction(address);
 }
