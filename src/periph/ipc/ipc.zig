@@ -65,6 +65,7 @@ const lanes = @import("../lanes.zig");
 const prcr = @import("../prcr.zig");
 const sync = @import("ipc_sync.zig");
 const attr = @import("ipc_attr.zig");
+const repeating = @import("ipc_repeat.zig");
 
 /// IPC geometry (ra8_ipc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -383,8 +384,7 @@ fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
 
 fn repeatThunk(context: *anyopaque, address: u32, width: u3, times: u64) bool {
     const self: *Ipc = @ptrCast(@alignCast(context));
-    const offset = address -% win_base;
-    return self.locks.repeat(offset, lanes.named(offset % 4, width), times);
+    return repeating.repeat(self, address -% win_base, width, times);
 }
 
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
