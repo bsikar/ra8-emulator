@@ -11,6 +11,7 @@ const memmap = @import("../../memmap.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const frame = @import("frame.zig");
 const fp_frame = @import("fp_frame.zig");
+const fp_ready = @import("fp_ready.zig");
 const exc_return = @import("exc_return.zig");
 const target = @import("target.zig");
 const callee = @import("callee.zig");
@@ -82,9 +83,9 @@ fn frameAddress(sp: u32, size: u32) u32 {
 
 /// The extended frame. With FPCCR.LSPEN clear it goes out whole. With it
 /// set only the basic words are written: FPCAR names the reserved FP space
-/// and UpdateFPCCR records LSPACT, USER, THREAD and S, so the first FP
-/// instruction in the handler writes the context (fpu/lazy.zig, RA8EMU-163).
-/// The *RDY bits are not modelled yet.
+/// and UpdateFPCCR records LSPACT, USER, THREAD, S and the *RDY bits
+/// (fp_ready.zig), so the first FP instruction in the handler writes the
+/// context (fpu/lazy.zig, RA8EMU-163).
 fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool) bus.Error!u32 {
     const r = &cpu.regs;
     const ctx = &cpu.fp.context;
@@ -95,6 +96,7 @@ fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool) bus.Error!u32 {
     ctx.fpccr.user = @intFromBool(!sysreg.privileged(r));
     ctx.fpccr.thread = @intFromBool(!r.handlerMode());
     ctx.fpccr.s = @intFromBool(secure);
+    fp_ready.record(cpu, &ctx.fpccr);
     return at;
 }
 
