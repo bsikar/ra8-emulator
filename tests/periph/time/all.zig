@@ -6,4 +6,5 @@ test {
     _ = @import("pacer_test.zig");
     _ = @import("pacing_test.zig");
     _ = @import("speed_test.zig");
+    _ = @import("speed_invariance_test.zig");
 }

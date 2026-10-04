@@ -1,21 +1,12 @@
-//! RA8EMU-185's done condition: an idle-heavy image reaches the same state
-//! at the same virtual time with and without idle fast-forward. The image is
-//! built here: a reset handler that sleeps in WFI forever and a SysTick
-//! handler that counts its ticks in RAM, with SysTick slower than a chunk so
-//! the skip really widens the sleeping stretches.
+//! RA8EMU-185's done condition: an idle-heavy image (idler.zig) reaches the
+//! same state at the same virtual time with and without idle fast-forward.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const memmap = ra8.core.memmap;
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
 
-const base = memmap.sram_base;
-const reset_at = base + 0x40;
-const handler_at = base + 0x48;
-const counter_at = base + 0x100;
-const chunk: u32 = 5_000;
-const period: u32 = 200_000;
+const idler = @import("idler.zig");
 const budget: u64 = 1_000_000;
 
 /// What one run ended with.
@@ -55,44 +46,28 @@ const Counted = struct {
     }
 };
 
-/// Vectors, `wfi; b .-2`, and a handler that adds one to the counter.
-fn load(core: anytype) !void {
-    try core.writeWord(base, memmap.sram_end);
-    try core.writeWord(base + 4, reset_at | 1);
-    try core.writeWord(base + 15 * 4, handler_at | 1);
-    try core.writeWord(reset_at, 0xE7FD_BF30);
-    try core.writeWord(handler_at, 0x6801_4802);
-    try core.writeWord(handler_at + 4, 0x6001_3101);
-    try core.writeWord(handler_at + 8, 0xBF00_4770);
-    try core.writeWord(handler_at + 12, counter_at);
-    try core.writeWord(counter_at, 0);
-    try core.writeWord(memmap.syst.rvr, period - 1);
-    try core.writeWord(memmap.syst.cvr, 0);
-    try core.writeWord(memmap.syst.csr, 0x7);
-}
-
 fn runIdler(skip: bool) !Ended {
     var core = try ra8.core.engine.Engine.open();
     defer core.close();
     try core.mapBoardRam();
-    try load(core);
+    try idler.load(core);
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try board.attach(&core);
-    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = chunk };
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
     var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .idle_skip = skip };
     var counted: Counted = .{ .clock = &clock };
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
-    const status = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, base, budget, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
+    const status = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, idler.base, budget, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
     return .{
         .status = status,
         .ran = ran,
         .elapsed = timebase.elapsed,
         .ticks = timebase.ticks,
-        .count = try core.readWord(counter_at),
+        .count = try core.readWord(idler.counter_at),
         .pc = final.pc,
         .closes = counted.closes,
     };
