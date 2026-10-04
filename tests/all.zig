@@ -179,6 +179,7 @@ test {
     _ = @import("periph/dtc/dtc_xfer_test.zig");
     _ = @import("periph/eink/eink_busy_test.zig");
     _ = @import("periph/eink/eink_test.zig");
+    _ = @import("periph/eink/eink_image_test.zig");
     _ = @import("periph/eink/eink_wire_test.zig");
     _ = @import("periph/elc/elc_regs_test.zig");
     _ = @import("periph/elc/elc_route_test.zig");

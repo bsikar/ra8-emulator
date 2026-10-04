@@ -34,9 +34,15 @@ pub const arg = struct {
     pub const reg_value: u16 = 1;
     /// LD_IMG_AREA arg0: endianness, pixel format and rotation.
     pub const load_mode: u16 = 0;
+    pub const load_x: u16 = 1;
+    pub const load_y: u16 = 2;
     pub const load_width: u16 = 3;
     pub const load_height: u16 = 4;
     pub const load_first_pixel: u16 = 5;
+    pub const display_x: u16 = 0;
+    pub const display_y: u16 = 1;
+    pub const display_width: u16 = 2;
+    pub const display_height: u16 = 3;
     pub const display_waveform: u16 = 4;
     pub const vcom_direction: u16 = 0;
     pub const vcom_value: u16 = 1;
@@ -72,6 +78,8 @@ pub const wire = struct {
     pub const word_bits: u16 = 16;
     pub const format_shift: u4 = 4;
     pub const format_mask: u16 = 0x3;
+    pub const rotation_mask: u16 = 0x3;
+    pub const endian_mask: u16 = 0x0100;
     /// The line when the controller is not driving it.
     pub const idle_byte: u8 = 0x00;
     /// Bytes in a read burst: the dummy word, then the value word.
@@ -80,13 +88,17 @@ pub const wire = struct {
 
 /// Pixels one 16-bit data word carries, by the mode word's format field:
 /// 2 bpp = 0, 3 bpp = 1, 4 bpp = 2, 8 bpp = 3.
-pub fn pixelsPerWord(code: u16) u16 {
+pub fn bitsPerPixel(code: u16) u5 {
     return switch (code & wire.format_mask) {
-        0 => wire.word_bits / 2,
-        1 => wire.word_bits / 3,
-        2 => wire.word_bits / 4,
-        else => wire.word_bits / 8,
+        0 => 2,
+        1 => 3,
+        2 => 4,
+        else => 8,
     };
+}
+
+pub fn pixelsPerWord(code: u16) u16 {
+    return wire.word_bits / bitsPerPixel(code);
 }
 
 /// The forty-byte GET_DEV_INFO block, as twenty words. The driver drains and

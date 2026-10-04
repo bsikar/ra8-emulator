@@ -54,14 +54,15 @@
 //! puts it. The card is on SCI0 in Simple-SPI mode, not on SPI_B, so
 //! nothing else shares the line and no chip select is needed.
 //!
-//! NOT MODELLED, AND NOT GUESSED: the waveform modes themselves (a refresh
-//! is counted and its waveform recorded, no pixels are transformed), the
-//! image buffer address, rotation and endianness from the mode word, the
-//! panel's own busy timing (HRDY is driven ready and stays there), and every
-//! register besides LUTAFSR, which are shadowed and never interpreted.
+//! NOT MODELLED, AND NOT GUESSED: physical waveform transformations (a
+//! refresh copies the requested area from the input buffer to the glass),
+//! the image-buffer address, the panel's own busy timing (HRDY is driven
+//! ready and stays there), and every register besides LUTAFSR, which are
+//! shadowed and never interpreted.
 const std = @import("std");
 const proto = @import("eink_wire.zig");
 const busy = @import("eink_busy.zig");
+const image = @import("eink_image.zig");
 const spi = @import("../spi/spi.zig");
 
 /// The LUT busy model, re-exported so a caller reaches it through the
@@ -114,8 +115,15 @@ pub const Panel = struct {
     /// The rectangle the load in flight declared, and the pixels left in it.
     load_width: u16 = 0,
     load_height: u16 = 0,
+    load_x: u16 = 0,
+    load_y: u16 = 0,
     load_left: u32 = 0,
     pixels_per_word: u16 = 2,
+    load_mode: u16 = 0,
+    image_buffer: image.Buffer = .{},
+    glass_buffer: image.Buffer = .{},
+    loaded_pixels: u32 = 0,
+    display_args: [5]u16 = .{0} ** 5,
     /// The film: busy while a refresh is still being driven.
     film: busy.Lut = .{},
     /// Commands the panel took.
@@ -249,34 +257,75 @@ pub const Panel = struct {
 
     fn takeLoadArg(self: *Panel, word: u16) void {
         switch (self.data_index) {
-            proto.arg.load_mode => self.pixels_per_word =
-                proto.pixelsPerWord(word >> proto.wire.format_shift),
+            proto.arg.load_mode => {
+                self.load_mode = word;
+                self.pixels_per_word = proto.pixelsPerWord(word >> proto.wire.format_shift);
+                self.loaded_pixels = 0;
+            },
+            proto.arg.load_x => self.load_x = word,
+            proto.arg.load_y => self.load_y = word,
             proto.arg.load_width => self.load_width = word,
             proto.arg.load_height => {
                 self.load_height = word;
                 self.load_left = @as(u32, self.load_width) * @as(u32, word);
             },
             else => {
-                if (self.data_index >= proto.arg.load_first_pixel) self.takePixels();
+                if (self.data_index >= proto.arg.load_first_pixel) self.takePixels(word);
             },
         }
     }
 
     /// One data word of image. The rectangle bounds it: past the area the
     /// load declared, the word moves nothing.
-    fn takePixels(self: *Panel) void {
+    fn takePixels(self: *Panel, word: u16) void {
         if (self.load_left == 0) {
             self.overrun +%= 1;
             return;
         }
         const taken = @min(@as(u32, self.pixels_per_word), self.load_left);
+        const bits_per_pixel = proto.bitsPerPixel(self.load_mode >> proto.wire.format_shift);
+        const is_big_endian = (self.load_mode & proto.wire.endian_mask) != 0;
+        var index: u32 = 0;
+        while (index < taken) : (index += 1) {
+            const offset = image.pixelBitOffset(index, bits_per_pixel, is_big_endian);
+            const mask = (@as(u32, 1) << @intCast(bits_per_pixel)) - 1;
+            const sample: u8 = @intCast((@as(u32, word) >> @intCast(offset)) & mask);
+            const max_value = (@as(u32, 1) << @intCast(bits_per_pixel)) - 1;
+            const grey: u8 = @intCast((@as(u32, sample) * 255 + max_value / 2) / max_value);
+            const ordinal = self.loaded_pixels + index;
+            const row = ordinal / self.load_width;
+            const column = ordinal % self.load_width;
+            const target = image.rotate(
+                self.load_mode & proto.wire.rotation_mask,
+                column,
+                row,
+                self.load_width,
+                self.load_height,
+            );
+            self.image_buffer.set(
+                @as(u32, self.load_x) + target.x,
+                @as(u32, self.load_y) + target.y,
+                grey,
+            );
+        }
+        self.loaded_pixels += taken;
         self.load_left -= taken;
         self.pixels += taken;
     }
 
     fn takeDisplayArg(self: *Panel, word: u16) void {
+        if (self.data_index < @as(u16, @intCast(self.display_args.len))) {
+            self.display_args[self.data_index] = word;
+        }
         if (self.data_index != proto.arg.display_waveform) return;
         self.last_waveform = word;
+        self.glass_buffer.copyRectFrom(
+            &self.image_buffer,
+            self.display_args[proto.arg.display_x],
+            self.display_args[proto.arg.display_y],
+            self.display_args[proto.arg.display_width],
+            self.display_args[proto.arg.display_height],
+        );
         self.refreshes +%= 1;
         self.film.start();
     }

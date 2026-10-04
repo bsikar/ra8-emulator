@@ -43,6 +43,70 @@ fn openLoad(panel: *eink.Panel, width: u16, height: u16) void {
     data(panel, height);
 }
 
+fn refresh(panel: *eink.Panel, x: u16, y: u16, width: u16, height: u16) void {
+    command(panel, .display_area);
+    data(panel, x);
+    data(panel, y);
+    data(panel, width);
+    data(panel, height);
+    data(panel, 0x0002);
+}
+
+test "4 bpp pixels reach a separate glass buffer on refresh" {
+    var panel = eink.Panel.init();
+    command(&panel, .load_area);
+    data(&panel, 0x0020);
+    data(&panel, 0);
+    data(&panel, 0);
+    data(&panel, 2);
+    data(&panel, 2);
+    data(&panel, 0xF321);
+
+    try std.testing.expectEqual(@as(u8, 17), panel.image_buffer.pixel(0, 0));
+    try std.testing.expectEqual(@as(u8, 0), panel.glass_buffer.pixel(0, 0));
+    refresh(&panel, 0, 0, 2, 2);
+    const expected = [_]u8{ 17, 34, 51, 255 };
+    for (0..2) |y| {
+        for (0..2) |x| {
+            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x), @intCast(y)));
+        }
+    }
+}
+
+test "8 bpp pixels reach the glass plane pixel for pixel" {
+    var panel = eink.Panel.init();
+    openLoad(&panel, 2, 2);
+    data(&panel, 0x2211);
+    data(&panel, 0x4433);
+    refresh(&panel, 0, 0, 2, 2);
+
+    const expected = [_]u8{ 0x11, 0x22, 0x33, 0x44 };
+    for (0..2) |y| {
+        for (0..2) |x| {
+            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x), @intCast(y)));
+        }
+    }
+}
+
+test "big endian rotated pixels map into the declared panel area" {
+    var panel = eink.Panel.init();
+    command(&panel, .load_area);
+    data(&panel, 0x0121); // big endian, 4 bpp, rotate 90 degrees
+    data(&panel, 4);
+    data(&panel, 5);
+    data(&panel, 2);
+    data(&panel, 2);
+    data(&panel, 0x1234);
+    refresh(&panel, 4, 5, 2, 2);
+
+    const expected = [_]u8{ 51, 17, 68, 34 };
+    for (0..2) |y| {
+        for (0..2) |x| {
+            try std.testing.expectEqual(expected[y * 2 + x], panel.glass_buffer.pixel(@intCast(x + 4), @intCast(y + 5)));
+        }
+    }
+}
+
 test "a panel nothing touched stays out of the report" {
     var panel = eink.Panel.init();
     try std.testing.expect(panel.quiet());
