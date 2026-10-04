@@ -226,3 +226,43 @@ test "a GPT overflow is raised on the boundary its due time falls in" {
     try testing.expect(timer.pending);
     try testing.expectEqual(@as(u32, 1), timer.channels[0].overflows);
 }
+
+test "a compare match is due where GTCNT reaches GTCCRA, this cycle or after the wrap" {
+    const sched = clk.sched;
+    var channel = ra8.periph.gpt_channel.Channel{};
+    channel.cr = control(0);
+    try testing.expectEqual(@as(?u64, null), sched.compareDueAt(channel, .a, 0));
+    // 0x4001 counts ahead is exactly one 50000 ns boundary.
+    channel.compares.a = gpt.step_per_tick;
+    try testing.expectEqual(@as(?u64, 50_000), sched.compareDueAt(channel, .a, 0));
+    // Behind the count, a saw matches after the wrap: 0x10000 - 0x5000 + 0x4001.
+    channel.cnt = 0x5000;
+    const wrapped = sched.compareDueAt(channel, .a, 0).?;
+    try testing.expectEqual(sched.countsBetween(0, wrapped, 1), 0x10000 - 0x5000 + 0x4001);
+    try testing.expect(sched.countsBetween(0, wrapped - 1, 1) < 0x10000 - 0x5000 + 0x4001);
+    // A one-shot never comes back round, and above GTPR is never reached.
+    channel.cr = control(0) | 0x0001_0000;
+    try testing.expectEqual(@as(?u64, null), sched.compareDueAt(channel, .a, 0));
+    channel.cr = control(0);
+    channel.period.live = 0x3000;
+    try testing.expectEqual(@as(?u64, null), sched.compareDueAt(channel, .a, 0));
+}
+
+test "a compare-A match is flagged on the boundary that reaches its due time" {
+    var timer = gpt.Gpt.init();
+    const channel = &timer.channels[0];
+    channel.cr = control(1);
+    channel.cnt = 0x9000;
+    channel.compares.a = 0x2345;
+    const start: u64 = 7_777;
+    const due = clk.sched.compareDueAt(channel.*, .a, start).?;
+    var at = start;
+    while (at + 3_001 < due) : (at += 3_001) {
+        clk.sched.tickFor(&timer, at, at + 3_001);
+        try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfa == 0);
+    }
+    clk.sched.tickFor(&timer, at, due - 1);
+    try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfa == 0);
+    clk.sched.tickFor(&timer, due - 1, due);
+    try testing.expect(channel.st & ra8.periph.gpt_channel.status.tcfa != 0);
+}

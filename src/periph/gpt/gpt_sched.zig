@@ -15,12 +15,17 @@
 //! of the old step nudged odd; the sum over four boundaries is 16385, odd,
 //! so the count still walks every value of a power-of-two period.
 //!
+//! A compare match is due when GTCNT next reaches GTCCRA or GTCCRB
+//! (`compareDueAt`, RA8EMU-578), worked out from the same absolute counts
+//! `tickFor` uses, so it is exact whatever width the boundaries are.
+//!
 //! A triangle (GTCR.MD symmetric) has nothing due here yet: its peak is a
 //! fold of the phase, not a wrap, and it gets its own slice.
 const std = @import("std");
 const gpt = @import("gpt.zig");
 const ch = @import("gpt_channel.zig");
 const clk = @import("gpt_clock.zig");
+const cmp = @import("gpt_compare.zig");
 const cadence = @import("../../core/cadence.zig");
 const timebase = @import("../time/timebase.zig");
 
@@ -59,4 +64,40 @@ pub fn countsBetween(from_ns: u64, to_ns: u64, divider: u32) u32 {
 
 fn countsAt(at_ns: u64, divider: u32) u128 {
     return @as(u128, at_ns) * pclkd_hz / (timebase.ns_per_s * @as(u128, divider));
+}
+
+/// The virtual ns GTCNT next reaches compare `side` at, from `now_ns`, in
+/// saw and one-shot. Null when the channel is stopped or a triangle, or the
+/// compare is never reached.
+pub fn compareDueAt(channel: ch.Channel, side: cmp.Which, now_ns: u64) ?u64 {
+    if (!channel.running() or channel.shape().symmetric()) return null;
+    const counts = compareCounts(channel, side) orelse return null;
+    const divider = channel.source().divider();
+    return nsAtCount(countsAt(now_ns, divider) + counts, divider);
+}
+
+/// Counts from GTCNT to the match. A live compare ahead of the count and
+/// inside the period matches this cycle. Otherwise a saw matches after the
+/// wrap, against the value GTBER's single buffer hands over at the cycle
+/// end, as `Channel.reload` does. A one-shot never comes back round. Zero
+/// is disarmed, and a compare above GTPR is never reached by GTCNT.
+fn compareCounts(channel: ch.Channel, side: cmp.Which) ?u64 {
+    const period = channel.periodOrDefault();
+    const cnt = channel.cnt;
+    const live = channel.compares.value(side);
+    if (live != 0 and live > cnt and live <= period) return live - cnt;
+    if (channel.shape().once()) return null;
+    const next = if (channel.buffered.single(side)) channel.buffered.value(side) else live;
+    if (next == 0 or next > period) return null;
+    const to_wrap: u64 = if (cnt <= period) @as(u64, period) - cnt + 1 else 1;
+    return to_wrap + next;
+}
+
+/// The first virtual ns at which `count` edges of PCLKD / `divider` have
+/// passed since time zero: the inverse of `countsAt`, rounded up.
+fn nsAtCount(count: u128, divider: u32) ?u64 {
+    const num = count * timebase.ns_per_s * @as(u128, divider);
+    const ns = (num + pclkd_hz - 1) / pclkd_hz;
+    if (ns > std.math.maxInt(u64)) return null;
+    return @intCast(ns);
 }
