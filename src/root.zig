@@ -119,6 +119,7 @@ pub const core = struct {
     };
 };
 pub const periph = @import("periph.zig");
+pub const gui = @import("gui.zig");
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const boundary = @import("board/boundary.zig");

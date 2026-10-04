@@ -31,6 +31,9 @@ test {
     _ = @import("core/cpu/ops_test.zig");
     _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
+    _ = @import("gui/draw_list_test.zig");
+    _ = @import("gui/raster_test.zig");
+    _ = @import("gui/headless_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");
