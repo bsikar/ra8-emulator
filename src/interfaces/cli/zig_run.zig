@@ -10,6 +10,7 @@ const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
+const scs_route = @import("../../core/cpu/scs_route.zig");
 const sleep_pace = @import("../../core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
 const quiet_due = @import("../../board/quiet_due.zig");
@@ -99,16 +100,27 @@ pub const Clock = struct {
         return sleep_pace.width(normal, true, &edges);
     }
 
-    /// Has a soak event ended the run, or the watched counter climbed to its
-    /// floor? An unreadable word is not a stop, as on the Unicorn path
+    /// Has a soak event (a watchdog reset, or a fault latched since the last
+    /// boundary) ended the run, or the watched counter climbed to its floor? An unreadable word is not a stop, as on the Unicorn path
     /// (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
+        self.soakFaults();
         if (self.board.time.soak.ended()) return true;
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
         if (self.undefined_sites) |found| if (found.stoppedAt() != null) return true;
         const watch = self.stop orelse return false;
         return watch.met(self.memory.readWord(watch.address) catch null);
+    }
+
+    /// Note a fault the core latched as the soak's event, when it is armed and
+    /// has none yet. Also asked once after the run, for a core that stopped
+    /// inside a stretch and never reached its boundary.
+    pub fn soakFaults(self: *Clock) void {
+        const soak = &self.board.time.soak;
+        if (!soak.armed or soak.ended()) return;
+        const latched = clocks.soak_fault.words(self.memory, &landScs);
+        if (clocks.soak_fault.kind(latched)) |fault| soak.note(fault, self.board.time.base.now());
     }
 
     /// The chunk the Unicorn path uses, cut down to the armed SysTick period
@@ -128,6 +140,14 @@ pub const Clock = struct {
         if (self.cpu1) |second| second.round(instructions);
     }
 };
+
+/// Where the Zig core keeps an SCB word, read as Secure (src/core/cpu/scs_route.zig).
+fn landScs(address: u32) ?u32 {
+    return switch (scs_route.land(null, address)) {
+        .at => |at| at,
+        .res0 => null,
+    };
+}
 
 fn widthThunk(context: *anyopaque) u32 {
     const self: *Clock = @ptrCast(@alignCast(context));
@@ -199,6 +219,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
     });
+    clock.soakFaults();
     const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, budget);

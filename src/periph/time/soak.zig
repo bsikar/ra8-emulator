@@ -4,18 +4,31 @@
 //! event: the run ends at the boundary that asked for it, before the reboot,
 //! so the report says when the firmware stopped feeding the dog rather than
 //! carrying on into a second boot. The first event is the one kept; whatever
-//! follows from it is not news. Faults join in a later slice.
+//! follows from it is not news. A fault the core latched into CFSR, HFSR
+//! or SFSR is an event too (slice 2b, src/periph/time/soak_fault.zig).
 const std = @import("std");
 const timebase = @import("timebase.zig");
 
 pub const Kind = enum {
     watchdog_reset,
     iwdt_reset,
+    stack_overflow,
+    mem_manage,
+    bus_fault,
+    usage_fault,
+    secure_fault,
+    hard_fault,
 
     pub fn text(self: Kind) []const u8 {
         return switch (self) {
             .watchdog_reset => "watchdog reset (WDT)",
             .iwdt_reset => "watchdog reset (IWDT)",
+            .stack_overflow => "stack overflow (UsageFault STKOF)",
+            .mem_manage => "MemManage fault (MPU)",
+            .bus_fault => "BusFault",
+            .usage_fault => "UsageFault",
+            .secure_fault => "SecureFault",
+            .hard_fault => "HardFault",
         };
     }
 };

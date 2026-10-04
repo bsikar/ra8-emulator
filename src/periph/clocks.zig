@@ -28,6 +28,7 @@ pub const pacing = @import("time/pacing.zig");
 pub const speed = @import("time/speed.zig");
 pub const duration = @import("time/duration.zig");
 pub const soak = @import("time/soak.zig");
+pub const soak_fault = @import("time/soak_fault.zig");
 
 /// The machine's clock and what is scheduled on it, as the board holds them.
 pub const Time = struct {
