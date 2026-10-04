@@ -15,8 +15,7 @@
 //! sign-extended into the pair. RdaHi = 0b1111 is the single-register
 //! space (long_shift_sat.zig).
 //!
-//! Run on the Unicorn path by src/core/long_shift_hook.zig and checked in
-//! lockstep, like the other long shifts (RA8EMU-138).
+//! Claimed ahead of ORRS like the other long shifts (RA8EMU-138).
 //! Left unclaimed: RdaHi of SP, hw2 bit 15 in the immediate form, hw2 bit 6
 //! or type 01 and 11 in the register form, and Rm of SP, PC, RdaLo or
 //! RdaHi.

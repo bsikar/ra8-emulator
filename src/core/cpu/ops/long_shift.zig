@@ -4,8 +4,7 @@
 //! pair and writes it back to the same pair. They sit in what Armv8-M left
 //! as ORRS with the PC as the shifted operand (hw2[3:0] = 0b1111), so a core
 //! without MVE, Unicorn included, reads them as that UNPREDICTABLE ORRS.
-//! src/core/long_shift_hook.zig runs this arithmetic on the Unicorn path
-//! instead, so lockstep checks the group like any other (RA8EMU-138).
+//! This group claims them before ORRS gets the chance (RA8EMU-138).
 //!
 //! The fields, from the encoding:
 //!   hw1 = 1110 1010 0101 RdaLo[3:1] 0

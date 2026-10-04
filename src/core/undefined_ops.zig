@@ -148,8 +148,8 @@ pub fn isWide(halfword: u16) bool {
 /// Armv8.1-M takes part of that space back: the long shifts (LSLL, LSRL,
 /// ASRL and the saturating forms) are ORRS-with-PC encodings to Armv7-M, and
 /// the `orrs.w r3, r2, pc, lsl #2` that started this file was really
-/// `lsll r2, r3, #2`. They are defined, src/core/long_shift_hook.zig runs
-/// them on the Unicorn path, and they are not reported here.
+/// `lsll r2, r3, #2`. They are defined, the Zig core runs them
+/// (src/core/cpu/ops/long_shift*.zig), and they are not reported here.
 pub fn shiftedPc(first: u16, second: u16) bool {
     if (long_shift.decode(first, second) != null) return false;
     if (first >> 9 != 0b1110101) return false;

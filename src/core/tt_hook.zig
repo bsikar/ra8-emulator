@@ -8,9 +8,8 @@
 //! decode as TT gets a code hook one instruction wide, which writes the
 //! board's answer into Rd and moves the PC past the encoding.
 //!
-//! Every halfword offset is tried, as src/core/long_shift_hook.zig does and
-//! for the same reason: a hook on data, or on the second half of another
-//! instruction, never fires. The hook re-reads the live bytes before it
+//! Every halfword offset is tried, because a hook on data, or on the
+//! second half of another instruction, never fires. The hook re-reads the live bytes before it
 //! acts. Inside an IT block, and for TTA from the Non-secure state (which
 //! is UNDEFINED), it declines and the CPU model runs the encoding.
 const std = @import("std");
