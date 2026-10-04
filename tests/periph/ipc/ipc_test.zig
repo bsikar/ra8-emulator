@@ -230,3 +230,7 @@ test "a refused narrow access leaves the channel quiet on neither counter" {
     try std.testing.expectEqual(@as(u32, 1), mailbox.channels[1].narrow_reads);
     try std.testing.expectEqual(@as(u32, 1), mailbox.channels[1].narrow_writes);
 }
+
+test {
+    _ = @import("ipc_repeat_test.zig");
+}
