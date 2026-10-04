@@ -31,6 +31,7 @@ test {
     _ = @import("extend_wide_vectors_test.zig");
     _ = @import("fp_move_vectors_test.zig");
     _ = @import("fp_system_vectors_test.zig");
+    _ = @import("fp_unary_vectors_test.zig");
     _ = @import("hint_vectors_test.zig");
     _ = @import("imm_arith_vectors_test.zig");
     _ = @import("imm_logic_vectors_test.zig");
