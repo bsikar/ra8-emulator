@@ -236,6 +236,7 @@ test {
     _ = @import("sd/sd_trace_test.zig");
     _ = @import("sd/sd_write_test.zig");
     _ = @import("sdhi/sdhi_card_test.zig");
+    _ = @import("sdhi/sdhi_card_image_test.zig");
     _ = @import("sdhi/sdhi_fifo_test.zig");
     _ = @import("sdhi/sdhi_test.zig");
     _ = @import("sdhi/sdhi_xfer_test.zig");

@@ -75,8 +75,8 @@ pub const Options = struct {
     sd_size_mb: ?u32 = null,
     /// Raw SDHC image file to attach to the SPI card.
     sd_path: ?[]const u8 = null,
-    /// `--sd-save`: write the card back over sd_path when the run ends.
-    sd_save: bool = false,
+    sd_save: bool = false, // `--sd-save`: write the card back over sd_path at the end
+    sdhi: card_setup.Sdhi = .{}, // `--sd-image PATH` [`--sd-writable`]: the SDHI card
     /// A disk in the HS jack's USB stick: "blank" or a raw image path.
     usb_disk: ?[]const u8 = null,
     /// `--usbip PORT`: export the FS device to usbip hosts during the run.
