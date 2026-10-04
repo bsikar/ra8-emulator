@@ -12,9 +12,9 @@
 # iic_b_facade_demo.elf). That demo reads the GT911 the board fits at
 # i2c:touch@0x5D and prints `ctrl=OK|NAK id0=0xHH`, so faulting the fitted
 # part (`--fault @i2c:touch@0x5D=MODE`, RA8EMU-536) shows the firmware's own
-# NACK and bad-data paths. The clean row is the control: a run without
-# --fault must not move. bus_low joins once the touch line honours a held
-# bus (RA8EMU-537).
+# NACK, bad-data and bus-busy paths. The clean row is the control: a run
+# without --fault must not move. bus_low holds the touch line low, which the
+# I3C model shows as a bus that never reads free (RA8EMU-537).
 #
 # CPU is the backend (zig, the default, or unicorn); both are expected to
 # give the same rows. Exits 1 on any difference. Update the expected file in
@@ -50,7 +50,7 @@ row() {
 actual=$(
     echo '| fault | console | I3C |'
     echo '|---|---|---|'
-    for mode in none disconnected nack:1 stuck:0xA5 garbage:7; do
+    for mode in none disconnected nack:1 stuck:0xA5 garbage:7 bus_low; do
         row "$mode"
     done
 )
