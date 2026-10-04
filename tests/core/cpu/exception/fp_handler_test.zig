@@ -44,8 +44,31 @@ test "with FPCCR at reset the handler's FP write is undone by the return" {
     var ram: fixture.Ram = .{};
     var cpu = try setup(&ram);
     try enter(&cpu);
+    // Lazy entry: S0 waits in the registers, not the frame.
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.context.fpccr.lspact);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(cpu.regs.sp() + 0x20));
+    _ = cpu.run(1); // the handler's VMOV triggers the lazy push first
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+    try std.testing.expectEqual(one, ram.word(cpu.regs.sp() + 0x20));
+    cpu.regs.pc = fixture.handler; // replay the handler from its start
     try finish(&cpu);
     try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+}
+
+test "lazy stacking never triggers when the handler runs no FP op" {
+    var ram: fixture.Ram = .{};
+    var cpu = try setup(&ram);
+    ram.putHalf(fixture.handler, 0x2403); // movs r4, #3
+    ram.putHalf(fixture.handler + 2, 0x4770); // bx lr
+    try enter(&cpu);
+    const frame_at = cpu.regs.sp();
+    _ = cpu.run(2); // the handler and its return
+    try std.testing.expect(!cpu.regs.handlerMode());
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+    try std.testing.expectEqual(@as(u32, 0), ram.word(frame_at + 0x20));
+    _ = cpu.run(1); // VMOV R6, S0 back in Thread mode
+    try std.testing.expectEqual(one, cpu.regs.get(6));
+    try std.testing.expectEqual(fixture.msp_top, cpu.regs.sp());
 }
 
 test "eager stacking: S0 is in the frame before the handler runs" {

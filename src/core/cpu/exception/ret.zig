@@ -37,9 +37,12 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     const popped: frame.Popped = if (target.fp) blk: {
         const ext = try fp_frame.pop(cpu.bus, at);
         if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
-        for (ext.fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
-        cpu.fp.fpscr = Fpscr.fromBits(ext.fp.fpscr);
-        if (cpu.profile.mve) cpu.fp.vpr = vprFrom(ext.fp.vpr);
+        if (cpu.fp.context.fpccr.lspact == 1) {
+            // Lazy stacking never triggered: the handler ran no FP
+            // instruction, so the registers still hold this context and the
+            // reserved words were never written (RA8EMU-163).
+            cpu.fp.context.fpccr.lspact = 0;
+        } else restoreFp(cpu, ext.fp);
         break :blk .{ .frame = ext.frame, .sp = ext.sp };
     } else try frame.pop(cpu.bus, at);
     const f = popped.frame;
@@ -57,6 +60,12 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     r.pc = f[frame.slot.return_address] & ~@as(u32, 1);
     r.xpsr = f[frame.slot.xpsr] & restored;
     cpu.event = true;
+}
+
+fn restoreFp(cpu: *Cpu, fp: fp_frame.Fp) void {
+    for (fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
+    cpu.fp.fpscr = Fpscr.fromBits(fp.fpscr);
+    if (cpu.profile.mve) cpu.fp.vpr = vprFrom(fp.vpr);
 }
 
 /// VPR as an extended-frame return restores it: bits 31:24 are reserved.
