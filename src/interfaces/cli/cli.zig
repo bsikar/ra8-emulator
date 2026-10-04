@@ -93,8 +93,8 @@ pub const Options = struct {
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.
     trace_sd: bool = false,
-    /// Stream completed SCI console lines to stdout as they arrive.
-    console: bool = false,
+    console: bool = false, // `--console`: stream finished SCI console lines to stdout
+    console_reply: @import("../../periph/sci/sci_reply.zig").Reply = .{}, // RA8EMU-626
     /// Print this card block back as hex once the run is over.
     dump_sd: ?u32 = null,
     /// Contacts queued on the touch panel, one drained per frame read.

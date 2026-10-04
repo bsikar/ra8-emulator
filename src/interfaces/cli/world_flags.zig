@@ -9,6 +9,7 @@ const touch_spec = @import("touch_spec.zig");
 const request = @import("../../periph/model/request.zig");
 const fault_spec = @import("../../periph/model/fault_spec.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const sci_reply = @import("../../periph/sci/sci_reply.zig");
 const rtc_start = @import("rtc_start.zig");
 const speed = @import("../../periph/time/speed.zig");
 const duration = @import("../../periph/time/duration.zig");
@@ -24,6 +25,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--console")) {
         options.console = true;
+    } else if (std.mem.eql(u8, flag, "--console-reply")) {
+        options.console_reply = try sci_reply.Reply.parse(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--trace-sd")) {
         options.trace_sd = true;
     } else if (std.mem.eql(u8, flag, "--charge")) {

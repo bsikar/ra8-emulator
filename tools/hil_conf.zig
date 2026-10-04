@@ -24,6 +24,7 @@ pub const Conf = struct {
     emu_args: ?[]const u8 = null,
     probe_seconds: ?u32 = null,
     probe_boot_s: ?u32 = null,
+    provision_wifi: bool = false,
 
     /// The longest modelled time the table gives a conf row: the 60 s scrape
     /// the bench gives wdt_reset_recovery_demo (a 25 s watchdog countdown and
@@ -65,6 +66,17 @@ pub const Conf = struct {
         if (!std.mem.eql(u8, conf.mode orelse return null, "uart_scrape")) return null;
         const text = conf.expect orelse return null;
         return if (text.len == 0) null else text;
+    }
+
+    /// HIL_PROVISION_WIFI=1: the bench answers ra8_net_provision's "READY v1"
+    /// with its Wi-Fi credentials. The table types the same RA8NET1 line
+    /// (ssid "bench", password "emulator", hex-encoded) back through
+    /// `--console-reply`; the C6 model's AP takes any (RA8EMU-626).
+    pub const bench_wifi_reply = "READY v1=RA8NET1:62656e63:656d756c61746f72:";
+
+    /// The `--console-reply` spec this conf asks for, if any.
+    pub fn consoleReply(conf: Conf) ?[]const u8 {
+        return if (conf.provision_wifi) bench_wifi_reply else null;
     }
 
     pub fn isAlive(conf: Conf) bool {
@@ -113,6 +125,7 @@ fn put(conf: *Conf, key: []const u8, value: []const u8) void {
     if (eql(u8, key, "HIL_EMU_ARGS")) conf.emu_args = value;
     if (eql(u8, key, "HIL_PROBE_SECONDS")) conf.probe_seconds = number(value);
     if (eql(u8, key, "HIL_PROBE_BOOT_S")) conf.probe_boot_s = number(value);
+    if (eql(u8, key, "HIL_PROVISION_WIFI")) conf.provision_wifi = eql(u8, value, "1");
 }
 
 fn unquote(value: []const u8) []const u8 {
