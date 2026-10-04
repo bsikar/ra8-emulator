@@ -182,7 +182,7 @@ pub const Channel = struct {
         _ = self.restart.observe();
         var kept = value;
         if (value & flag.iccr2.st != 0) {
-            if (self.busy) self.st_busy += 1 else self.openTransfer();
+            if (self.busy or registry.held_low) self.st_busy += 1 else self.openTransfer();
             kept &= ~flag.iccr2.st;
         } else if (value & flag.iccr2.rs != 0) {
             if (self.busy) {
@@ -236,7 +236,7 @@ pub const Channel = struct {
             },
             flag.reg.iccr2 => blk: {
                 const base = self.shadow[offset] & ~flag.iccr2.bbsy;
-                const answer = if (self.busy) base | flag.iccr2.bbsy else base;
+                const answer = if (self.busy or registry.held_low) base | flag.iccr2.bbsy else base;
                 // This is the look the driver spins on.
                 if (self.restart.observe()) {
                     self.shadow[flag.reg.iccr2] =
