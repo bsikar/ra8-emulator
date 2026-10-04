@@ -59,7 +59,8 @@ test "registers and memory words read off the core" {
     try core.setRegister(.sp, base);
     var spec_buf: [16]u8 = undefined;
     const spec = try std.fmt.bufPrint(&spec_buf, "0x{X}", .{base});
-    const options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem = spec, .dump_mem_words = 2 };
+    var options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem_count = 1 };
+    options.dump_mem[0] = .{ .spec = spec, .words = 2 };
     const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
@@ -75,4 +76,35 @@ test "registers and memory words read off the core" {
     const words = memory.get("words").?.array.items;
     try std.testing.expectEqual(@as(usize, 2), words.len);
     try std.testing.expectEqual(@as(i64, 0x55667788), words[1].integer);
+}
+
+test "two --dump-mem places keep memory as the first and list both in order" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var core = try Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    try core.writeWord(base, 0xAAAA0001);
+    try core.writeWord(base + 0x40, 0xBBBB0002);
+    var first_buf: [16]u8 = undefined;
+    var second_buf: [16]u8 = undefined;
+    const first = try std.fmt.bufPrint(&first_buf, "0x{X}", .{base + 0x40});
+    const second = try std.fmt.bufPrint(&second_buf, "0x{X}", .{base});
+    var options = Options{ .path = "unused.elf" };
+    options.dump_mem[0] = .{ .spec = first, .words = 1 };
+    options.dump_mem[1] = .{ .spec = second, .words = 1 };
+    options.dump_mem_count = 2;
+    const of = json_dumps.Dumps{ .core = core, .image = undefined, .options = &options };
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+    const doc = try render(&fix.board, &of, &buf);
+    defer doc.deinit();
+    const dumps = doc.value.object.get("dumps").?.object;
+    const memory = dumps.get("memory").?.object;
+    try std.testing.expectEqual(@as(i64, base + 0x40), memory.get("address").?.integer);
+    const places = dumps.get("memory_places").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), places.len);
+    try std.testing.expectEqual(@as(i64, 0xBBBB0002), places[0].object.get("words").?.array.items[0].integer);
+    try std.testing.expectEqual(@as(i64, 0xAAAA0001), places[1].object.get("words").?.array.items[0].integer);
 }

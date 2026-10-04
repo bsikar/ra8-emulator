@@ -34,7 +34,7 @@ pub fn section(j: anytype, board: *Board, found: ?*const Dumps) !void {
     try j.open("dumps", '{');
     try globals(j, of);
     try regs(j, of.core, of.options.dump_regs);
-    try memory(j, of.core, of.image, of.options.dump_mem, of.options.dump_mem_words);
+    try memory(j, of.core, of.image, of.options.memDumps());
     try json_sd.block(j, board, of.options.dump_sd);
     try json_watched.log(j, of.image, of.options.watch_place, if (of.watched) |*one| one else null);
     try j.close('}');
@@ -82,9 +82,20 @@ fn regs(j: anytype, core: engine.Engine, asked: bool) !void {
     try j.close('}');
 }
 
-fn memory(j: anytype, core: engine.Engine, image: elf.Image, spec: ?[]const u8, asked: ?u32) !void {
-    const named = spec orelse return j.field("memory", null);
-    try j.open("memory", '{');
+/// `memory` is the first `--dump-mem` place, as it always was, so a
+/// one-place report reads the same. Two or more places also list every one
+/// in order under `memory_places` (RA8EMU-488).
+fn memory(j: anytype, core: engine.Engine, image: elf.Image, asks: []const mem_dump.Ask) !void {
+    if (asks.len == 0) return j.field("memory", null);
+    try placeObject(j, "memory", core, image, asks[0].spec, asks[0].words);
+    if (asks.len < 2) return;
+    try j.open("memory_places", '[');
+    for (asks) |ask| try placeObject(j, null, core, image, ask.spec, ask.words);
+    try j.close(']');
+}
+
+fn placeObject(j: anytype, key: ?[]const u8, core: engine.Engine, image: elf.Image, named: []const u8, asked: ?u32) !void {
+    try j.open(key, '{');
     try j.field("place", named);
     const at = mem_dump.resolve(core, image, named) catch |err| {
         try j.field("address", null);
