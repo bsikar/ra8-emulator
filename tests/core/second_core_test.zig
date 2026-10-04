@@ -151,7 +151,7 @@ test "each core reads its own VTOR, primed to its own vector base" {
     defer cpu1.close();
     const base: u32 = memmap.sram_base + 0x0010_0000;
 
-    try mod.primeVectorTable(cpu1.core, base);
+    try mod.primeVectorTable(.{ .engine = cpu1.core }, base);
     try std.testing.expectEqual(base, try cpu1.core.readWord(memmap.scb.vtor));
     try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.scb.vtor));
 }
@@ -162,7 +162,7 @@ test "moving CPU0's vector table leaves CPU1's VTOR where it was" {
     defer cpu0.close();
     defer cpu1.close();
     const base: u32 = memmap.sram_base + 0x0010_0000;
-    try mod.primeVectorTable(cpu1.core, base);
+    try mod.primeVectorTable(.{ .engine = cpu1.core }, base);
 
     try cpu0.writeWord(memmap.scb.vtor, memmap.sram_base);
     try std.testing.expectEqual(memmap.sram_base, try cpu0.readWord(memmap.scb.vtor));
@@ -237,7 +237,7 @@ const Spins = struct {
     fn boot(cpu1: *mod.Second) !void {
         try lay(cpu1.core);
         cpu1.interrupts = .{ .vector_base = table };
-        try mod.primeVectorTable(cpu1.core, table);
+        try mod.primeVectorTable(.{ .engine = cpu1.core }, table);
         try cpu1.core.resetFromVectorTable(table);
         cpu1.pc = try cpu1.core.register(.pc);
     }
@@ -377,7 +377,7 @@ const MaskedSpin = struct {
         try cpu1.core.writeWord(loop + 4, 0xE7FE_E7FC);
         try cpu1.core.writeWord(Spins.table + 4, (loop + 2) | 1);
         cpu1.interrupts = .{ .vector_base = Spins.table };
-        try mod.primeVectorTable(cpu1.core, Spins.table);
+        try mod.primeVectorTable(.{ .engine = cpu1.core }, Spins.table);
         try cpu1.core.resetFromVectorTable(Spins.table);
         cpu1.pc = try cpu1.core.register(.pc);
     }

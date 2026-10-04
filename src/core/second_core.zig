@@ -70,6 +70,8 @@ const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
 const report_cores = @import("../interfaces/cli/report/cores.zig");
 const Engine = engine.Engine;
+const Guest = @import("cpu/memory/guest.zig").Guest;
+const guest_load = @import("cpu/memory/load.zig");
 
 /// CPU1's turn length against CPU0's round, from the CPU clock dividers.
 pub const rate = @import("core_rate.zig");
@@ -77,8 +79,20 @@ pub const rate = @import("core_rate.zig");
 /// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
 /// to zero. The PPB is per-engine RAM here, so the word written lands in this
 /// core's System Control Space only and CPU0's VTOR is left as it was.
-pub fn primeVectorTable(core: Engine, base: u32) !void {
-    try core.writeWord(memmap.scb.vtor, base);
+pub fn primeVectorTable(memory: Guest, base: u32) !void {
+    try memory.writeWord(memmap.scb.vtor, base);
+}
+
+/// What seeding CPU1's image left behind: bytes written and its table.
+pub const Seeded = struct { written: u32, vector_base: u32 };
+
+/// CPU1's image and VTOR, written into `memory` whichever backend holds it
+/// (RA8EMU-571). The engine's own hooks for the image are the caller's.
+pub fn seedImage(memory: Guest, image: elf.Image) !Seeded {
+    const written = try guest_load.image(memory, image);
+    const vector_base = image.vectorBase() orelse return error.NoVectorTable;
+    try primeVectorTable(memory, vector_base);
+    return .{ .written = written, .vector_base = vector_base };
 }
 
 pub const limits = struct {
@@ -183,9 +197,10 @@ pub const Second = struct {
             .control = &self.control,
             .clears = &self.clears,
         });
-        self.written = try self.core.loadImage(image);
-        self.vector_base = image.vectorBase() orelse return error.NoVectorTable;
-        try primeVectorTable(self.core, self.vector_base);
+        const seeded = try seedImage(.{ .engine = self.core }, image);
+        try self.core.attachImageHooks(image);
+        self.written = seeded.written;
+        self.vector_base = seeded.vector_base;
         self.interrupts.vector_base = self.vector_base;
         self.dividers = &board.tree.divcr2;
         self.board = board;
@@ -288,7 +303,7 @@ pub const Second = struct {
         self.vector_base = base;
         self.interrupts = .{ .vector_base = base };
         self.wait = .{};
-        primeVectorTable(self.core, base) catch {};
+        primeVectorTable(.{ .engine = self.core }, base) catch {};
         self.core.resetFromVectorTable(base) catch |err| {
             self.fault = .{ .pc = base, .detail = @errorName(err), .access = null, .instruction = null };
             return;
