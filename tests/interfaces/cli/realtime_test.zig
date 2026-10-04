@@ -1,4 +1,4 @@
-//! Tests for --realtime and the pace line (src/periph/time/pacing.zig).
+//! Tests for --realtime, --speed and the pace line (src/periph/time/pacing.zig).
 const std = @import("std");
 const ra8 = @import("ra8");
 const parse = ra8.core.cli.parse;
@@ -7,9 +7,9 @@ const realtime = clocks.pacing;
 
 test "a run is unpaced unless it asks for --realtime" {
     const plain = try parse(&[_][]const u8{ "emu", "a.elf" });
-    try std.testing.expect(!plain.realtime);
+    try std.testing.expect(plain.speed == null);
     const paced = try parse(&[_][]const u8{ "emu", "a.elf", "--realtime" });
-    try std.testing.expect(paced.realtime);
+    try std.testing.expectEqual(@as(?u64, 1000), paced.speed);
 }
 
 test "an unpaced run prints no pace line" {
@@ -43,4 +43,13 @@ test "attaching paces the board's time from where it stands" {
     const paced = time.pacing.?;
     try std.testing.expectEqual(@as(u64, 3_000), paced.last_ns);
     try std.testing.expectEqual(@as(u64, 1000), paced.pacer.speed_milli);
+}
+
+test "--speed sets the factor, and max leaves the run unpaced" {
+    const quarter = try parse(&[_][]const u8{ "emu", "a.elf", "--speed", "0.25" });
+    try std.testing.expectEqual(@as(?u64, 250), quarter.speed);
+    const flat = try parse(&[_][]const u8{ "emu", "a.elf", "--speed", "max" });
+    try std.testing.expect(flat.speed == null);
+    try std.testing.expectError(error.NotPositive, parse(&[_][]const u8{ "emu", "a.elf", "--speed", "0" }));
+    try std.testing.expectError(error.NotANumber, parse(&[_][]const u8{ "emu", "a.elf", "--speed", "fast" }));
 }

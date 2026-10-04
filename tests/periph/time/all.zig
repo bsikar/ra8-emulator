@@ -5,4 +5,5 @@ test {
     _ = @import("systick_due_test.zig");
     _ = @import("pacer_test.zig");
     _ = @import("pacing_test.zig");
+    _ = @import("speed_test.zig");
 }

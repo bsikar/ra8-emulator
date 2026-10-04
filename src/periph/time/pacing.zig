@@ -38,6 +38,11 @@ pub const Pacing = struct {
         self.pacer.pace(self.clock, now_ns);
     }
 
+    pub fn setSpeed(self: *Pacing, now_ns: u64, speed_milli: u64) void {
+        self.last_ns = now_ns;
+        self.pacer.setSpeed(self.clock, now_ns, speed_milli);
+    }
+
     pub fn report(self: *const Pacing, now_ns: u64) pacer.Report {
         return self.pacer.report(self.clock, now_ns);
     }
