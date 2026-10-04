@@ -40,9 +40,9 @@ const Queued = struct {
         return self.cycles;
     }
 
-    fn tick(_: *anyopaque, _: ra8.core.engine.Engine, _: u32) anyerror!void {}
+    fn tick(_: *anyopaque, _: ra8.core.cpu.memory.guest.Guest, _: u32) anyerror!void {}
 
-    fn ticker(self: *Queued) ra8.core.engine.Tick {
+    fn ticker(self: *Queued) ra8.core.tick.Tick {
         return .{ .context = self, .tickFn = tick, .dueFn = due };
     }
 };

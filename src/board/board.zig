@@ -7,7 +7,7 @@
 //! narration that reads this state lives next door in report.zig.
 const std = @import("std");
 
-const engine = @import("../core/engine.zig");
+const Tick = @import("../core/tick.zig").Tick;
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
@@ -383,12 +383,12 @@ pub const Board = struct {
         boundary.resetFor(self, source);
     }
 
-    pub fn ticker(self: *Board) engine.Tick {
+    pub fn ticker(self: *Board) Tick {
         return .{ .context = self, .tickFn = tickThunk, .dueFn = boundary.cyclesToDue };
     }
 };
 
-fn tickThunk(context: *anyopaque, core: engine.Engine, instructions: u32) anyerror!void {
+fn tickThunk(context: *anyopaque, core: Guest, instructions: u32) anyerror!void {
     const board: *Board = @ptrCast(@alignCast(context));
-    return board.tick(.{ .engine = core }, instructions);
+    return board.tick(core, instructions);
 }
