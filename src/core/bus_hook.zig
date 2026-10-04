@@ -3,9 +3,8 @@
 //! src/periph/registry.zig knows what a peripheral read means and nothing
 //! about Unicorn; src/core/fault.zig knows what a bad access looks like once
 //! it has been recorded. This file is the other half of both: the only place
-//! in the emulator besides src/core/c.zig, src/core/lob_hook.zig and
-//! src/core/csel_hook.zig that handles a C calling convention or a raw
-//! pointer. Keeping it apart is what lets the bus be tested without a live
+//! in the emulator besides src/core/c.zig and src/core/lob_hook.zig that
+//! handles a C calling convention or a raw pointer. Keeping it apart is what lets the bus be tested without a live
 //! engine.
 const c = @import("c.zig");
 const periph = @import("../periph/registry.zig");

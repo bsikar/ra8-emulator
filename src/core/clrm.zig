@@ -5,7 +5,7 @@
 //! leaks back to the Non-Secure caller. The pinned Unicorn rejects CLRM as an
 //! invalid instruction, which stopped the TrustZone examples on their first
 //! Non-Secure to Secure call. This file knows the encoding and nothing about
-//! Unicorn; src/core/clrm_hook.zig is the half that touches the core.
+//! Unicorn; the Zig core runs it in src/core/cpu/ops/clrm.zig.
 //!
 //! Encoding T1: hw1 0xE89F, hw2 = P M 0 register_list. Bits 0..12 name r0 to
 //! r12, bit 14 names LR and bit 15 names the APSR. Bit 13 (SP) must be clear

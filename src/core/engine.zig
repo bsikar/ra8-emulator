@@ -28,7 +28,6 @@ const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const lob_hook = @import("lob_hook.zig");
 const csel = @import("csel.zig");
-const csel_hook = @import("csel_hook.zig");
 const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("../debug/break_hook.zig");
 const hits_hook = @import("../debug/hits_hook.zig");
@@ -270,14 +269,6 @@ pub const Engine = struct {
     /// what a store outside ordinary RAM costs.
     pub fn attachIdle(self: Engine, seam: *idle.Seam) Error!void {
         idle_hook.attach(self.handle, seam) catch return Error.AttachFailed;
-    }
-
-    /// Step the Armv8.1-M conditional selects the CPU model cannot decode.
-    /// Its own hook rather than a branch inside the loop one: Unicorn walks
-    /// every invalid-instruction hook until one claims the encoding, so the
-    /// two decoders stay independent of each other.
-    pub fn attachSelects(self: Engine, selects: *csel.Selects) Error!void {
-        csel_hook.attach(self.handle, selects) catch return Error.AttachFailed;
     }
 
     /// Arm the break: one instruction is hooked, and reaching it the
