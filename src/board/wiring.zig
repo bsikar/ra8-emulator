@@ -227,31 +227,6 @@ pub const CoreWindows = struct {
 /// at zero. Every one of these is a register the firmware reads before it
 /// writes anything, so a zero is not a neutral starting value: it is a wrong
 /// answer the firmware then believes. Seed each with what the core reports.
-/// Put a SECOND core in front of the board the first already owns.
-///
-/// Only the per-core wiring is repeated. The blocks themselves are
-/// registered once, on the one bus the board owns, and both cores dispatch
-/// into that same registry: that is what makes IPCSEM and the IPC channels
-/// ONE block both cores reach rather than two models kept in step, which is
-/// the whole point of the pingpong apps. Adding them a second time is what
-/// `registry.Error.OverlappingBlock` is there to catch.
-///
-/// The blocks that hold a core of their own (the rasterizer, the capture
-/// unit, the DMA engines, the NPU) keep CPU0's. They read and write memory
-/// on behalf of whoever programmed them, and in this model CPU0 is the core
-/// that owns the clocks and the interrupt controller; handing them CPU1
-/// instead would move the asymmetry, not remove it.
-///
-/// THE SAU AND THE MPU ARE NOT SHARED BLOCKS. They are taken as parameters
-/// because they live inside the core rather than on the bus: see
-/// `primeCoreWindows`.
-pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
-    try core.attachPeriphAs(&self.bus, .cpu1);
-    self.cpu1 = core.*;
-    try primeCoreWindows(self, core, windows);
-    self.second_core.mapped = true;
-}
-
 /// The windows that live inside a core rather than on the bus, seeded and
 /// hooked for the core in front of them.
 ///
