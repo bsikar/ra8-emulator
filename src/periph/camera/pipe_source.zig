@@ -7,7 +7,8 @@
 //! black. A FIFO with no writer yet reads 0 bytes, so a 0-byte read only
 //! counts as the writer closing once data has arrived; after that the last
 //! frame is held and one line says so. The run never waits on the writer.
-//! Windows named pipes are RA8EMU-585; until then the kind refuses there.
+//! On Windows the emulator serves `\\.\pipe\NAME` itself (pipe_windows.zig,
+//! RA8EMU-585).
 const std = @import("std");
 const builtin = @import("builtin");
 const posix = std.posix;
@@ -16,6 +17,9 @@ const converted = @import("converted_source.zig");
 const decoded = @import("decoded_image.zig");
 const still = @import("image_source.zig");
 pub const raw = @import("pipe_frame.zig");
+pub const pipe_windows = @import("pipe_windows.zig");
+const win = pipe_windows;
+const is_windows = builtin.os.tag == .windows;
 
 /// The most whole frames one capture drains, so a writer faster than the
 /// run (`cat /dev/zero`) cannot hold a capture forever.
@@ -33,6 +37,8 @@ pub const PipeSource = struct {
     allocator: std.mem.Allocator,
     fd: posix.fd_t,
     owns_fd: bool,
+    /// Windows only: `fd` is inherited standard input, peeked before reads.
+    stdin: bool = false,
     arg: raw.Arg,
     /// The frame being received, and the newest whole one.
     pending: []u8,
@@ -49,16 +55,18 @@ pub const PipeSource = struct {
 
     /// Open the named pipe, or standard input for "-", without blocking.
     pub fn load(allocator: std.mem.Allocator, text: []const u8, format_control: *const u8) !*PipeSource {
-        if (builtin.os.tag == .windows) {
-            std.debug.print("--camera-source pipe: Windows named pipes are not supported yet\n", .{});
-            return error.Unsupported;
-        } else {
-            const arg = try raw.parseArg(text);
-            const stdin = std.mem.eql(u8, arg.path, "-");
-            const fd = if (stdin) posix.STDIN_FILENO else try posix.open(arg.path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
-            errdefer if (!stdin) posix.close(fd);
-            return fromFd(allocator, fd, !stdin, arg, format_control);
+        const arg = try raw.parseArg(text);
+        const stdin = std.mem.eql(u8, arg.path, "-");
+        if (is_windows) {
+            const handle = if (stdin) std.io.getStdIn().handle else try win.serve(arg.path, arg.frameBytes());
+            errdefer if (!stdin) posix.close(handle);
+            const self = try make(allocator, handle, !stdin, arg, format_control);
+            self.stdin = stdin;
+            return self;
         }
+        const fd = if (stdin) posix.STDIN_FILENO else try posix.open(arg.path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
+        errdefer if (!stdin) posix.close(fd);
+        return fromFd(allocator, fd, !stdin, arg, format_control);
     }
 
     /// Read frames from `fd`, which is made non-blocking; closed at the end
@@ -67,6 +75,10 @@ pub const PipeSource = struct {
         const flags = try posix.fcntl(fd, posix.F.GETFL, 0);
         const nonblock: usize = @as(u32, @bitCast(posix.O{ .NONBLOCK = true }));
         _ = try posix.fcntl(fd, posix.F.SETFL, flags | nonblock);
+        return make(allocator, fd, owns_fd, arg, format_control);
+    }
+
+    fn make(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg, format_control: *const u8) !*PipeSource {
         const image = try decoded.Image.alloc(allocator, arg.width, arg.height);
         errdefer image.deinit(allocator);
         const pending = try allocator.alloc(u8, arg.frameBytes());
@@ -97,7 +109,7 @@ pub const PipeSource = struct {
     pub fn drain(self: *PipeSource) void {
         var whole: usize = 0;
         while (!self.closed and whole < max_frames_per_capture) {
-            const got = posix.read(self.fd, self.pending[self.filled..]) catch |err| switch (err) {
+            const got = self.readNow() catch |err| switch (err) {
                 error.WouldBlock => return,
                 else => return self.hangUp(),
             };
@@ -111,6 +123,12 @@ pub const PipeSource = struct {
             self.frames += 1;
             whole += 1;
         }
+    }
+
+    fn readNow(self: *PipeSource) !usize {
+        const into = self.pending[self.filled..];
+        if (is_windows) return win.readNow(self.fd, self.stdin, into);
+        return posix.read(self.fd, into);
     }
 
     fn hangUp(self: *PipeSource) void {

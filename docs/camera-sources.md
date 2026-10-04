@@ -25,7 +25,20 @@ Before the first frame the capture is black. When the writer closes, the
 last frame is held and the run logs it once. One capture drains at most 64
 whole frames, so a writer faster than the run cannot hold it.
 
-Linux and macOS only for now; Windows named pipes are tracked separately.
+On Linux and macOS `PATH` is a FIFO (`mkfifo`) or `-` for standard input.
+On Windows the emulator creates the named pipe itself: `PATH` is
+`\\.\pipe\NAME`, or just `NAME`, and the writer opens it as its output
+file once the run has started. The pipe is non-blocking, takes local
+writers only, and holds one writer at a time.
+
+### Windows: ffmpeg into a named pipe
+
+```bat
+ra8_emulator.exe camera_capture.elf --camera-source pipe:ra8cam,640x480,rgb24
+ffmpeg -re -i clip.mp4 -vf scale=640:480 -pix_fmt rgb24 -f rawvideo -y \\.\pipe\ra8cam
+```
+
+Start the emulator first so the pipe exists, then ffmpeg in a second window.
 
 ### An mp4 file through a named pipe
 
