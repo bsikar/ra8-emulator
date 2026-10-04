@@ -48,6 +48,9 @@ pub const Boundary = struct {
     /// AIRCR.SYSRESETREQ), performed before the next stretch the way the
     /// Unicorn run loop performs it (RA8EMU-508).
     reboot: ?*Reboot = null,
+    /// Asked after each closed stretch whether the run is over, which is
+    /// how `--stop-sym` ends a Zig run on its counter (RA8EMU-603).
+    doneFn: ?*const fn (context: *anyopaque) bool = null,
 };
 
 /// A debugger listening to a `--cpu zig` run: handed the bus and the
@@ -195,6 +198,7 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         };
         left -= width;
         try edge.closeFn(edge.context, width);
+        if (edge.doneFn) |done| if (done(edge.context)) return .count;
         if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
     }
     return .count;

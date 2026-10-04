@@ -104,3 +104,22 @@ test {
     _ = @import("zig_memory_test.zig");
     _ = @import("zig_main_test.zig");
 }
+
+test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-603)" {
+    var core = try ra8.core.engine.Engine.open();
+    defer core.close();
+    try core.mapBoardRam();
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.attach(&core);
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
+    var watch: ra8.core.stop.Stop = .{ .address = 0x2200_0100, .reaches = 3 };
+    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .stop = &watch };
+    try core.writeWord(0x2200_0100, 2);
+    try std.testing.expect(!clock.done());
+    try core.writeWord(0x2200_0100, 4);
+    try std.testing.expect(clock.done());
+    try std.testing.expect(watch.reached);
+    const edge = clock.boundary();
+    try std.testing.expect(edge.doneFn.?(edge.context));
+}
