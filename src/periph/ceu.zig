@@ -60,6 +60,11 @@ const std = @import("std");
 
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const periph = @import("registry.zig");
+/// The pixel sources the CEU captures from (RA8EMU-505).
+pub const camera = struct {
+    pub const frame_source = @import("camera/frame_source.zig");
+    pub const gradient = @import("camera/gradient_source.zig");
+};
 
 pub const win_base: u32 = 0x4034_8000;
 pub const win_span: u32 = 0x100;
@@ -105,13 +110,8 @@ pub const bound = struct {
     pub const lines: u32 = 4096;
 };
 
-/// The stand-in image: a diagonal gradient, so a real grab always varies and
-/// a min/max/mean over it is never degenerate.
-pub const pattern = struct {
-    pub const mask: u32 = 0xFF;
-    /// The gradient repeats every 256 bytes, so one chunk fills any line.
-    pub const chunk: u32 = 256;
-};
+/// The default source's gradient; one chunk is also the line write size.
+pub const pattern = camera.gradient.pattern;
 
 /// Why an armed capture wrote nothing. Every one of them fails safe: no
 /// frame, no CETCR.CPE, so a firmware relying on it waits rather than
@@ -149,6 +149,10 @@ pub const Ceu = struct {
     /// Where the frame goes. A board built by a test that never captures
     /// leaves it null and the arm is declined as unbacked.
     memory: ?Guest = null,
+    /// Where the pixels come from; the gradient unless a source is chosen.
+    source: camera.frame_source.FrameSource = camera.gradient.source(),
+    /// Emulated time handed to the source per arm; 0 until a clock sets it.
+    now: u64 = 0,
     shadow: [win_span / 4]u32 = [_]u32{0} ** (win_span / 4),
 
     arms: u32 = 0,
@@ -265,6 +269,7 @@ pub const Ceu = struct {
         if (self.declineReason()) |reason| return self.decline(reason);
         const shape = self.geometry();
         const destination = self.word(off.cdayr);
+        self.source.frame(self.now, .{ .width = shape.width, .lines = shape.lines });
         var landed = Landed{};
         var row: u32 = 0;
         while (row < shape.lines) : (row += 1) {
@@ -286,9 +291,7 @@ pub const Ceu = struct {
         while (column < width) {
             const span = @min(pattern.chunk, width - column);
             const slice = scratch[0..span];
-            for (slice, 0..) |*byte, index| {
-                byte.* = @truncate((column + row + @as(u32, @intCast(index))) & pattern.mask);
-            }
+            self.source.fill(row, column, slice);
             const at = line + column;
             if (at > std.math.maxInt(u32)) {
                 self.faults +%= 1;
