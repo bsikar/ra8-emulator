@@ -315,7 +315,7 @@ table above. A group listed as missing does not fail the build yet.
 | vscclrm | missing |
 | vlldm_vlstm | missing |
 | vlldm_vlstm_t2 | missing |
-| fp_mem | missing |
+| fp_mem | 36 |
 | mve_vpst | missing |
 | mve_int | missing |
 | mve_int_pair | missing |
