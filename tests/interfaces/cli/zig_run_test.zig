@@ -102,4 +102,5 @@ test "a Zig core run profiles retired function instructions and writes folded ou
 
 test {
     _ = @import("zig_memory_test.zig");
+    _ = @import("zig_main_test.zig");
 }

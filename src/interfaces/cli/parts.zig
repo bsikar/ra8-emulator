@@ -58,10 +58,15 @@ pub const Parts = struct {
     /// it off for Zig and lockstep runs, which feed the table from the Zig
     /// core's retire path, or lockstep would count each instruction twice.
     pub fn attachProfile(self: *Parts, core: engine.Engine, image: elf.Image, hook: bool) !void {
-        self.profile = .{ .image = image };
-        self.profile.?.prepare();
+        self.prepareProfile(image);
         if (!hook) return;
         profile_hook.attach(core.handle, &self.profile.?) catch return engine.Error.AttachFailed;
+    }
+
+    /// The profile table alone, for a run with no engine to hook (RA8EMU-592).
+    pub fn prepareProfile(self: *Parts, image: elf.Image) void {
+        self.profile = .{ .image = image };
+        self.profile.?.prepare();
     }
 };
 
