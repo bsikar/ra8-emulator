@@ -91,3 +91,12 @@ test "the core's retired count is lent as the load clock" {
     try seen.write(0x2200_1ABC, &word);
     try std.testing.expectEqual(@as(u64, 42), tracer.trace.loadNow(0));
 }
+
+test "the listener passes the core's fault latch through as a latch" {
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
+    var listener = Listener{ .tracer = &tracer };
+    var under = @import("latch_bus.zig").Latches{};
+    try listener.onBus(under.view()).latch(0xE000_ED28, 1 << 25);
+    try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
+    try std.testing.expectEqual(@as(u32, 0), under.writes);
+}

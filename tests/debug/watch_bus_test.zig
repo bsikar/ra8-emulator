@@ -159,3 +159,11 @@ test "an instruction's own fetch is not an access" {
     rig.machine.begin();
     try std.testing.expectEqual(.count, std.meta.activeTag(zig_drive.runWatched(core, &rig.machine, 3, &rig.watching)));
 }
+
+test "the core's fault latch passes through as a latch, not a store" {
+    var under = @import("latch_bus.zig").Latches{};
+    var watching = watch_bus.WatchBus{ .inner = under.view(), .driver = undefined };
+    try watching.view().latch(0xE000_ED28, 1 << 25);
+    try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
+    try std.testing.expectEqual(@as(u32, 0), under.writes);
+}

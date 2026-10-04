@@ -259,3 +259,14 @@ test "the poll borrows the real bus only from a watch that is on" {
     try std.testing.expectEqual(before.ctx, rig.cpu.bus.ctx);
     try std.testing.expect(!rig.cpu.trip.on);
 }
+
+test "a fault latched mid-trip reaches the bus as a latch and spoils the trip" {
+    var under = @import("latch_bus.zig").Latches{};
+    var cpu: Cpu = .{ .bus = under.view() };
+    var watch = fixed_trip.Watch{ .on = true, .inner = under.view() };
+    watch.reclaim(&cpu, true, false);
+    try cpu.bus.latch(0xE000_ED28, 1 << 25);
+    try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
+    try std.testing.expectEqual(@as(u32, 0), under.writes);
+    try std.testing.expect(watch.spoiled);
+}

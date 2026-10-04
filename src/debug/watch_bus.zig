@@ -20,7 +20,7 @@ pub const WatchBus = struct {
     fetch_len: u32 = 0,
 
     pub fn view(self: *WatchBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
     }
 
     /// Listen to the instruction at `pc`, `size` bytes wide.
@@ -44,6 +44,13 @@ pub const WatchBus = struct {
         if (!self.armed or self.fetching(address)) return;
         self.driver.loaded(address);
         self.driver.machine.onAccess(address, width(into.len), .read, value(into));
+    }
+
+    /// The core raising a fault status bit is not a guest access: no
+    /// watchpoint sees it, and it stays a latch underneath (RA8EMU-634).
+    fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
+        const self: *WatchBus = @ptrCast(@alignCast(ctx));
+        return self.inner.latch(address, bits);
     }
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
