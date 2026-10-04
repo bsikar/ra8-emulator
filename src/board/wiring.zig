@@ -9,6 +9,7 @@
 //! paint into or read out of RAM need the engine handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
 const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const tsn_cal = @import("../periph/adc/adc_tsn_cal.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
@@ -60,9 +61,9 @@ fn attachGate(self: *Board) !void {
 
 /// The ADC, and the TSN factory calibration words its die-temperature line
 /// is converted against (adc_tsn_cal.zig).
-fn attachAdc(self: *Board, core: engine.Engine) !void {
+fn attachAdc(self: *Board, core: Guest) !void {
     try self.bus.add(self.adc.block());
-    _ = tsn_cal.map(.{ .engine = core }) catch false;
+    _ = tsn_cal.map(core) catch false;
 }
 
 /// The I2C lines with their fitted parts, then the run's `--attach` asks,
@@ -84,7 +85,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.capture.memory = .{ .engine = core.* };
     try self.bus.add(self.capture.block());
     try self.bus.add(self.analog.block());
-    try attachAdc(self, core.*);
+    try attachAdc(self, .{ .engine = core.* });
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
     try attachProtected(self);
@@ -246,20 +247,21 @@ pub fn attachSecond(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
 /// caller's. Shared, a CTRL store from either core rebuilt the traps from
 /// one table on whichever engine made it, and CPU0's regions were CPU1's.
 fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
+    const guest: Guest = .{ .engine = core.* };
     // CPUID read as zero on both cores, so neither said what it was.
-    try cpuid.prime(core.*, windows.identity);
+    try cpuid.prime(guest, windows.identity);
     // DWT_CTRL.NUMCOMP read as zero, so the core claimed no comparators.
-    try core.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
+    try guest.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
     // AIRCR: the first read of it is 0 rather than the key status.
-    try windows.control.prime(core.*);
+    try windows.control.prime(guest);
     // CTR read as zero, so the firmware computed a four-byte line and
     // walked every range eight times over.
-    try self.caches.prime(core.*);
+    try self.caches.prime(guest);
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
-    try windows.regions.prime(core.*);
+    try windows.regions.prime(guest);
     // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
-    try mpu.ns.prime(core.*, mpu.geometry.type_value);
+    try mpu.ns.prime(guest, mpu.geometry.type_value);
     // RBAR/RLAR are one word each in RAM, so without this every region a
     // driver programs overwrites the last and the table reads back empty.
     // The guard goes on with it: the same hook that banks the table is the
@@ -270,7 +272,7 @@ fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !v
     // SAU_TYPE read as zero, so the secure boot's capability check failed
     // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
     // error, parking the run in the Secure fallback main() forever.
-    try windows.partitions.prime(core.*);
+    try windows.partitions.prime(guest);
     // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
     // the five regions the boot map programs need the same hook to keep
     // from collapsing onto one entry.
