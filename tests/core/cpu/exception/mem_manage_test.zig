@@ -345,6 +345,7 @@ fn lazyStep(rig: *Rig, fpcar: u32, user: u1) !Cpu {
     cpu.fp.context.fpccr.lspact = 1;
     cpu.fp.context.fpccr.user = user;
     cpu.fp.context.fpccr.hfrdy = 1;
+    cpu.fp.context.fpccr.mmrdy = 1;
     try std.testing.expectEqual(@as(?Stop, null), cpu.step());
     return cpu;
 }
