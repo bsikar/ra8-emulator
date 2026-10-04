@@ -55,3 +55,37 @@ test "a stopped or cascaded channel has nothing due" {
     const undivided = ra8.periph.agt_clock.underflowInNs(100, .pclkb, sched.pclkb_hz).?;
     try std.testing.expectEqual(@as(?u64, 2_000_000 + undivided), sched.dueAt(timer.channels[0], 0, 2_000_000));
 }
+
+test "a full boundary of virtual time counts exactly the old step" {
+    for ([_]u8{ 0x00, 0x30, 0x10 }) |mr1| {
+        var timed = started(60_000, mr1);
+        var stepped = started(60_000, mr1);
+        var at: u64 = 0;
+        while (at < 20 * boundary_ns) : (at += boundary_ns) {
+            sched.tickFor(&timed, at, at + boundary_ns);
+            stepped.tick();
+            try std.testing.expectEqual(stepped.channels[0].counter, timed.channels[0].counter);
+        }
+    }
+}
+
+test "a narrowed boundary counts its own stretch, and nothing is lost across them" {
+    var timer = started(60_000, 0x00);
+    // 25 boundaries of 2000 ns are one 50000 ns boundary: 2048 counts.
+    var at: u64 = 0;
+    while (at < boundary_ns) : (at += 2_000) sched.tickFor(&timer, at, at + 2_000);
+    try std.testing.expectEqual(@as(u16, 60_000 - 2048), timer.channels[0].counter);
+    try std.testing.expectEqual(@as(u16, 81), sched.countsBetween(0, 2_000, 1));
+    try std.testing.expectEqual(@as(u16, 82), sched.countsBetween(2_000, 4_000, 1));
+}
+
+test "an AGT underflow fires at its virtual time" {
+    var timer = started(999, 0x00);
+    const due = sched.dueAt(timer.channels[0], 0, 0).?;
+    // One ns-wide boundary at a time around the due time.
+    var at: u64 = 0;
+    while (at < due - 1) : (at += 1) sched.tickFor(&timer, at, at + 1);
+    try std.testing.expectEqual(@as(u32, 0), timer.pending);
+    sched.tickFor(&timer, due - 1, due);
+    try std.testing.expectEqual(@as(u32, 1), timer.pending);
+}
