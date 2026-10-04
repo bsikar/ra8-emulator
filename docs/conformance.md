@@ -335,7 +335,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_vldr | 35 |
 | mve_vldr_wide | 34 |
 | mve_gather | 43 |
-| mve_gather64 | missing |
+| mve_gather64 | 32 |
 | mve_gather_imm | missing |
 | mve_vld_il | missing |
 | mve_float | 56 |
