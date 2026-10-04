@@ -41,7 +41,6 @@ const fault_clear = @import("../periph/fault_clear.zig");
 const pend_break = @import("pend_break.zig");
 const cpu_reset = @import("cpu/reset.zig");
 const undefined_hook = @import("undefined_hook.zig");
-pub const long_shift_hook = @import("long_shift_hook.zig");
 const undefined_ops_mod = @import("undefined_ops.zig");
 const reboot = @import("reboot.zig");
 const breakpoint = @import("../debug/breakpoint.zig");
@@ -329,15 +328,7 @@ pub const Engine = struct {
     /// The pages are merged before any of them is mapped: segments of one
     /// image share pages, and the CPU model refuses a page it already holds.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
-        const written = try guest_load.image(.{ .engine = self }, image);
-        try self.attachImageHooks(image);
-        return written;
-    }
-
-    /// The engine-only half of a load: the hooks an image's own code needs,
-    /// for a caller that wrote the image through a Guest (RA8EMU-571).
-    pub fn attachImageHooks(self: Engine, image: elf.Image) Error!void {
-        _ = long_shift_hook.attach(self.handle, image) catch return Error.AttachFailed;
+        return guest_load.image(.{ .engine = self }, image);
     }
 
     /// Reset the core the way the silicon does: SP and PC out of the vector

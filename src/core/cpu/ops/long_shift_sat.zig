@@ -11,9 +11,8 @@
 //! right with rounding, and left with saturation when the amount is
 //! negative. A saturating clamp sets APSR.Q; no other flag changes.
 //!
-//! An Armv8.0-M core, Unicorn included, reads these as ORRS with PC as Rd,
-//! so src/core/long_shift_hook.zig runs them there and lockstep checks the
-//! group, like the other long shifts (RA8EMU-138). Left unclaimed: Rda of SP or PC, Rm of SP, PC or Rda,
+//! An Armv8.0-M core reads these as ORRS with PC as Rd; this core claims
+//! them first, like the other long shifts (RA8EMU-138). Left unclaimed: Rda of SP or PC, Rm of SP, PC or Rda,
 //! hw2 bit 15 set in the immediate form, hw2 bits 7:6 set or type 01 and 11
 //! in the register form.
 const op = @import("../op.zig");

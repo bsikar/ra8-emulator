@@ -12,6 +12,7 @@ pub const core = struct {
     pub const csel_hook = @import("core/csel_hook.zig");
     pub const disasm = @import("debug/disasm.zig");
     pub const elf = @import("core/elf.zig");
+    pub const long_shift = @import("core/long_shift.zig");
     pub const engine = @import("core/engine.zig");
     pub const lob = @import("core/lob.zig");
     pub const lob_hook = @import("core/lob_hook.zig");

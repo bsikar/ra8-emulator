@@ -99,7 +99,6 @@ test {
     _ = @import("core/csel_hook_test.zig");
     _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
-    _ = @import("core/long_shift_hook_test.zig");
     _ = @import("core/long_shift_test.zig");
     _ = @import("core/memmap_test.zig");
     _ = @import("core/mpu_guard_test.zig");
