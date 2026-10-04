@@ -62,6 +62,7 @@ test {
     _ = @import("mve_float_cvt_fixed_vectors_test.zig");
     _ = @import("mve_float_cvt_half_vectors_test.zig");
     _ = @import("mve_float_cvt_int_vectors_test.zig");
+    _ = @import("mve_float_fma_vectors_test.zig");
     _ = @import("mve_float_maxnm_vectors_test.zig");
     _ = @import("mve_float_maxnma_vectors_test.zig");
     _ = @import("mve_float_maxnmv_vectors_test.zig");
