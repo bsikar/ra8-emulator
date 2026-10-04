@@ -73,19 +73,8 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| table.addArgs(args);
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
-    // tools/disasm_parity.zig compares our disassembler with Capstone over
-    // ELFs (RA8EMU-325); the tests drive its walker through the same module.
-    const parity_mod = b.createModule(.{
-        .root_source_file = b.path("tools/disasm_parity.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    parity_mod.addImport("ra8", emu);
-    const parity_exe = b.addExecutable(.{ .name = "disasm_parity", .root_module = parity_mod });
-    link(b, parity_exe, prefix);
-    const parity = b.addRunArtifact(parity_exe);
-    if (b.args) |args| parity.addArgs(args);
-    b.step("parity", "Compare our disassembler with Capstone: -- ELF...").dependOn(&parity.step);
+    const parity_mod = disasmParity(b, target, optimize, emu, prefix);
+    usbipAttach(b, target, optimize);
 
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/all.zig"),
@@ -134,4 +123,35 @@ fn link(b: *std.Build, c: *std.Build.Step.Compile, prefix: ?[]const u8) void {
     c.linkLibC();
     c.linkSystemLibrary("unicorn");
     c.linkSystemLibrary("capstone");
+}
+
+/// tools/usbip_attach.zig attaches `--usbip PORT` the way usbip does and
+/// checks the descriptor and the vendor loopback (RA8EMU-75 slice 5c).
+fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const usbip_mod = b.createModule(.{
+        .root_source_file = b.path("tools/usbip_attach.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    usbip_mod.addImport("usbip_client", b.createModule(.{ .root_source_file = b.path("src/interfaces/usbip/usbip_client.zig") }));
+    const usbip = b.addRunArtifact(b.addExecutable(.{ .name = "usbip_attach", .root_module = usbip_mod }));
+    if (b.args) |args| usbip.addArgs(args);
+    b.step("usbip-attach", "Attach --usbip PORT and check it end to end: -- PORT").dependOn(&usbip.step);
+}
+
+/// tools/disasm_parity.zig compares our disassembler with Capstone over
+/// ELFs (RA8EMU-325); the tests drive its walker through the same module.
+fn disasmParity(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, prefix: ?[]const u8) *std.Build.Module {
+    const parity_mod = b.createModule(.{
+        .root_source_file = b.path("tools/disasm_parity.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    parity_mod.addImport("ra8", emu);
+    const parity_exe = b.addExecutable(.{ .name = "disasm_parity", .root_module = parity_mod });
+    link(b, parity_exe, prefix);
+    const parity = b.addRunArtifact(parity_exe);
+    if (b.args) |args| parity.addArgs(args);
+    b.step("parity", "Compare our disassembler with Capstone: -- ELF...").dependOn(&parity.step);
+    return parity_mod;
 }
