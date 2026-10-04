@@ -10,16 +10,26 @@ const profile_report = ra8.board.report.profile;
 const cpu_boot = ra8.core.cpu.boot;
 const symbols = ra8.core.symbols;
 const Builder = @import("../../debug/symbol_image.zig").Builder;
+const wiring = ra8.board.wiring;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
+
+/// The board a `--cpu zig` run attaches: every block over CPU0's store,
+/// then CPU0's windows primed into it (zig_memory.Cpu0.attachStore).
+fn attach(board: *ra8.board.Board, core: Guest) !void {
+    try wiring.attachBlocks(board, core);
+    try wiring.primeWindows(board, core, wiring.cpu0Windows(board));
+}
 
 test "a boundary is the chunk until SysTick is armed, then its period" {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
     try std.testing.expectEqual(@as(u32, 5000), clock.width());
     try core.writeWord(memmap.syst.rvr, 999);
     try core.writeWord(memmap.syst.csr, 0x7);
@@ -29,14 +39,14 @@ test "a boundary is the chunk until SysTick is armed, then its period" {
 }
 
 test "closing a boundary charges the clocks and wraps SysTick into ICSR" {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
     try clock.close(7);
     try std.testing.expectEqual(@as(u64, 7), timebase.elapsed);
     try core.writeWord(memmap.syst.rvr, 9);
@@ -54,9 +64,9 @@ fn profileInstruction(context: *anyopaque, address: u32) void {
 
 test "a Zig core run profiles retired function instructions and writes folded output" {
     const base = memmap.sram_base;
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
     try core.writeWord(base, memmap.sram_end);
     try core.writeWord(base + 4, base + 9);
     try core.writeWord(base + 8, 0xBF00_BF00);
@@ -73,12 +83,12 @@ test "a Zig core run profiles retired function instructions and writes folded ou
 
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try attach(&board, core);
     var ran: u64 = 0;
     var output: [512]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
     const listener: ra8.core.cpu.cpu.RetireListener = .{ .context = &table, .instructionFn = profileInstruction };
-    const status = try cpu_boot.start(stream.writer(), .zig, .{ .engine = core }, &board.bus, base, 3, &ran, .{ .retire_listener = listener });
+    const status = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, base, 3, &ran, .{ .retire_listener = listener });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 3), ran);
     var rows: [profile.limits.functions]profile.Site = undefined;
@@ -107,15 +117,15 @@ test {
 }
 
 test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-603)" {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
     var watch: ra8.core.stop.Stop = .{ .address = 0x2200_0100, .reaches = 3 };
-    var clock: zig_run.Clock = .{ .memory = .{ .engine = core }, .board = &board, .timebase = &timebase, .stop = &watch };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .stop = &watch };
     try core.writeWord(0x2200_0100, 2);
     try std.testing.expect(!clock.done());
     try core.writeWord(0x2200_0100, 4);
