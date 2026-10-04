@@ -5,6 +5,9 @@
 const std = @import("std");
 const wire = @import("usbip_wire.zig");
 
+/// The list, import and URB steps built on these records (slice 5b).
+pub const attach = @import("usbip_attach.zig");
+
 pub const import_len = wire.op_header_len + wire.busid_len;
 
 /// OP_REQ_DEVLIST: the operation header alone.
