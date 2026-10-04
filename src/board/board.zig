@@ -358,12 +358,6 @@ pub const Board = struct {
         self.panel.deinit();
     }
 
-    /// Put every block on the bus. The order is load-bearing and lives
-    /// next door in wiring.zig.
-    pub fn attach(self: *Board, core: *engine.Engine) !void {
-        return wiring.attach(self, core);
-    }
-
     /// The chunk boundary, peripheral side. What actually happens there is
     /// next door in boundary.zig: the order the blocks are stepped in and
     /// where an event goes is its own subject, and this file is the list of

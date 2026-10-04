@@ -6,15 +6,13 @@
 //! shadow goes on first and then becomes the gate the rest of the bus is
 //! filtered through; PORT follows it because PORT has no module-stop bit on
 //! this part and has to answer regardless of MSTPCRx; and the blocks that
-//! paint into or read out of RAM need the engine handed to them as they go
+//! paint into or read out of RAM need guest memory handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
-const engine = @import("../core/engine.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const tsn_cal = @import("../periph/adc/adc_tsn_cal.zig");
 const sau = @import("../periph/sau.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("../core/mpu_guard.zig");
-const mpu_ns_hook = @import("../core/mpu_ns_hook.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const dwt = @import("../debug/dwt.zig");
 const scb = @import("../periph/scb.zig");
@@ -82,15 +80,9 @@ fn attachWire(self: *Board) !void {
     try plug.all(self);
 }
 
-/// Put every block on the bus, in the order that works.
-pub fn attach(self: *Board, core: *engine.Engine) !void {
-    try attachBlocks(self, .{ .engine = core.* });
-    try attachCore(self, core);
-}
-
-/// Every block onto the bus, with no core behind it yet. The blocks that
-/// paint or read RAM get `memory`, whichever backend holds it, so a
-/// `--cpu zig` run hands its own store here and skips `attachCore`.
+/// Every block onto the bus, in the order that works. The blocks that
+/// paint or read RAM get `memory`: the Zig core's store, whose own PPB
+/// windows `primeWindows` seeds.
 pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try attachGate(self);
     try self.bus.add(self.pins.block());
@@ -105,7 +97,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
     try attachProtected(self);
-    // The panel is scanned out of the same RAM the engine paints into.
+    // The panel is scanned out of the same RAM the core paints into.
     try self.display.attach(&self.bus, &self.domains.graphics, memory);
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
@@ -170,8 +162,6 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.causes.causeBlock());
 }
 
-/// Last step of `attach`: hand the finished bus to the engine, then prime
-/// CPU0's own SAU and MPU windows.
 /// DTC0 and DTC1 share one window, served by whichever core is on the bus;
 /// DTC1 starts on the DTCE bits of CPU1's ICU table.
 fn attachTransfers(self: *Board) !void {
@@ -181,11 +171,6 @@ fn attachTransfers(self: *Board) !void {
     try self.bus.add(self.transfers.block());
     self.transfer_attribution = dtc.attribution.Unit.init(&self.protection);
     try self.bus.add(self.transfer_attribution.block());
-}
-
-fn attachCore(self: *Board, core: *engine.Engine) !void {
-    try core.attachPeriph(&self.bus);
-    try primeCoreWindows(self, core, cpu0Windows(self));
 }
 
 /// CPU0's windows: the board's own SAU, MPU tables, guard, AIRCR and
@@ -241,15 +226,10 @@ pub const CoreWindows = struct {
 /// THE MPU BESIDE IT IS CORE-PRIVATE IN EXACTLY THE SAME WAY, so it comes
 /// in with the SAU: the table and the guard that enforces it are the
 /// caller's. Shared, a CTRL store from either core rebuilt the traps from
-/// one table on whichever engine made it, and CPU0's regions were CPU1's.
-fn primeCoreWindows(self: *Board, core: *engine.Engine, windows: CoreWindows) !void {
-    try primeWindows(self, .{ .engine = core.* }, windows);
-    try hookWindows(core, windows);
-}
-
+/// one table on whichever core made it, and CPU0's regions were CPU1's.
+///
 /// The reset values a core's own PPB windows read as, written into
-/// `memory`, whichever backend holds it (RA8EMU-550). The writes fire no
-/// hooks, so seeding them all before `hookWindows` is the old order.
+/// `memory` (RA8EMU-550).
 pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     // CPUID read as zero on both cores, so neither said what it was.
     try cpuid.prime(memory, windows.identity);
@@ -269,23 +249,6 @@ pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
     // error, parking the run in the Secure fallback main() forever.
     try windows.partitions.prime(memory);
-}
-
-/// The engine's half: the hooks that bank and guard a core's windows.
-fn hookWindows(core: *engine.Engine, windows: CoreWindows) !void {
-    // RBAR/RLAR are one word each in RAM, so without this every region a
-    // driver programs overwrites the last and the table reads back empty.
-    // The guard goes on with it: the same hook that banks the table is the
-    // one that sees CTRL and arms the read-only traps.
-    try core.attachRegions(windows.regions, windows.guard);
-    // Secure code programs the Non-secure MPU through the MPU_NS alias.
-    if (windows.regions_ns) |ns| try mpu_ns_hook.attach(core.handle, ns);
-    // The SAU's own RBAR/RLAR bank through RNR exactly like the MPU's, so
-    // the five regions the boot map programs need the same hook to keep
-    // from collapsing onto one entry.
-    try core.attachPartitions(windows.partitions);
-    // CFSR and HFSR are write-one-to-clear, and RAM is not.
-    try core.attachFaultClears(windows.clears);
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
