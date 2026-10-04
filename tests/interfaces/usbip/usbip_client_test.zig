@@ -53,3 +53,7 @@ test "a RET_SUBMIT decodes to seqnum, status and actual length" {
     wire.retUnlink(&out, 7, 0);
     try std.testing.expectError(error.BadCommand, client.Returned.decode(&out));
 }
+
+test {
+    _ = @import("usbip_attach_test.zig");
+}
