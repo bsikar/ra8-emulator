@@ -4,6 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const report_run = ra8.board.report_run;
+const Store = ra8.core.cpu.memory.store.Store;
 
 /// Run `zigCore` on a fresh board into a scratch file and return what it wrote.
 fn zigReport(buf: []u8) ![]const u8 {
@@ -12,13 +13,13 @@ fn zigReport(buf: []u8) ![]const u8 {
 
 /// The same, with a timebase the caller has already charged.
 fn zigReportWith(buf: []u8, timebase: ra8.periph.clocks.Clocks) ![]const u8 {
-    // attach() wires the blocks to their power domains, which the report reads.
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    // Attaching wires the blocks to their power domains, which the report
+    // reads; a zig run attaches them over CPU0's own store.
+    var store = try Store.init(null);
+    defer store.deinit();
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.attach(&core);
+    try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
     const file = try dir.dir.createFile("report.txt", .{ .read = true });
