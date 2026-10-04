@@ -17,6 +17,12 @@ pub const event = struct {
     pub const usbfs_int: u16 = 0x09A;
 };
 
+/// Something outside the board polled on the device jack each boundary.
+pub const Hook = struct {
+    context: *anyopaque,
+    pollFn: *const fn (*anyopaque, *usbfs.Device, *const usbfs.host.Host) void,
+};
+
 pub const Usb = struct {
     host: usbhs.Host = .{},
     /// The device half of the loop, with VBUS from the host jack.
@@ -27,6 +33,9 @@ pub const Usb = struct {
     /// the HS host talks to the firmware's own USBFS device, and the
     /// scripted host is unplugged: one jack carries one host.
     cable: ?usbhs.loop.Loop = null,
+    /// A usbip bridge (`--usbip`, RA8EMU-75), polled after the scripted
+    /// host so it sees the device as the firmware has just left it.
+    bridge: ?Hook = null,
 
     pub fn attach(self: *Usb, bus: *periph.Bus) periph.Error!void {
         self.host.attachDevice();
@@ -45,6 +54,7 @@ pub const Usb = struct {
     pub fn tick(self: *Usb) void {
         if (self.cable != null) return;
         self.script.tick(&self.device);
+        if (self.bridge) |hook| hook.pollFn(hook.context, &self.device, &self.script);
     }
 
     /// USBFS_INT while the device's line is up, so a handler that returns

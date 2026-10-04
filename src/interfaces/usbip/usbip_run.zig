@@ -1,34 +1,49 @@
-//! `--usbip PORT` (RA8EMU-75 slice 3d): once the run is over, offer the
-//! board's FS device to usbip hosts on 127.0.0.1:PORT until one imports
-//! it. Both backends call `afterRun` after their report, so the bridge
-//! sees the same enumeration whichever core ran the firmware.
+//! `--usbip PORT` (RA8EMU-75 slice 4d): the live bridge rides the board's
+//! USB tick, so it is polled at every boundary on both backends while the
+//! firmware runs. It binds once the FS device has enumerated, serves the
+//! host that imports it, and keeps listening after that host leaves.
+//! Its events go to stderr, beside the gdb listener's.
+const std = @import("std");
+const usb = @import("../../board/usb.zig");
 const usbfs = @import("../../periph/usbfs/usbfs.zig");
-const exp = @import("usbip_export.zig");
-const board = @import("usbip_board.zig");
-const listen = @import("usbip_listen.zig");
+const bridge = @import("usbip_bridge.zig");
 
-/// Serve the FS device when `port` is set. A device that never finished
-/// enumerating, or answered with something that is not a descriptor, is
-/// reported and nothing is served.
-pub fn afterRun(out: anytype, port: ?u16, script: *const usbfs.host.Host) !void {
+pub const Live = struct {
+    link: bridge.Bridge,
+    stopped: bool = false,
+
+    fn poll(context: *anyopaque, device: *usbfs.Device, script: *const usbfs.host.Host) void {
+        const self: *Live = @ptrCast(@alignCast(context));
+        if (self.stopped) return;
+        const stderr = std.io.getStdErr().writer();
+        const event = self.link.poll(device, script) catch |err| {
+            self.stopped = true;
+            stderr.print("usbip: the bridge stopped ({s})\n", .{@errorName(err)}) catch {};
+            return;
+        };
+        report(stderr, event, &self.link) catch {};
+    }
+};
+
+/// Put a bridge on the board's USB tick when `port` is set. The bridge
+/// lives as long as `allocator`; the run's arena outlives the run.
+pub fn install(target: *usb.Usb, allocator: std.mem.Allocator, port: ?u16) !void {
     const wanted = port orelse return;
-    const found = board.fsExport(script) catch |err| {
-        return out.print("usbip: the FS device's descriptors are unusable ({s}); nothing exported\n", .{@errorName(err)});
-    };
-    const item = found orelse {
-        return out.print("usbip: the FS device never finished enumerating; nothing exported\n", .{});
-    };
-    var listener = try listen.open(wanted);
-    defer listener.deinit();
-    try offer(out, &listener, item);
+    const live = try allocator.create(Live);
+    live.* = .{ .link = try bridge.Bridge.init(allocator, wanted) };
+    target.bridge = .{ .context = live, .pollFn = Live.poll };
 }
 
-/// Announce the export on a bound listener and wait for a host to import
-/// it. URB traffic is not routed yet, so the imported connection closes.
-pub fn offer(out: anytype, listener: *@import("std").net.Server, item: exp.Export) !void {
-    try out.print("usbip: exporting {s} ({x:0>4}:{x:0>4}) on 127.0.0.1:{d}\n", .{ item.device.busid, item.device.vendor, item.device.product, listen.port(listener) });
-    const exports = [_]exp.Export{item};
-    const attached = try listen.attach(listener, &exports);
-    defer attached.stream.close();
-    try out.print("usbip: a host imported {s}; URB traffic is not routed yet\n", .{attached.item.device.busid});
+/// One line for each event that changed something a user would see.
+pub fn report(out: anytype, event: bridge.Event, link: *const bridge.Bridge) !void {
+    switch (event) {
+        .none => {},
+        .listening => {
+            const item = link.exported().?;
+            try out.print("usbip: exporting {s} ({x:0>4}:{x:0>4}) on 127.0.0.1:{d}\n", .{ item.device.busid, item.device.vendor, item.device.product, link.port().? });
+        },
+        .attached => try out.print("usbip: a host imported {s}\n", .{link.exported().?.device.busid}),
+        .hung_up => try out.print("usbip: the host detached; still listening on 127.0.0.1:{d}\n", .{link.port().?}),
+        .unusable => try out.print("usbip: the FS device's descriptors are unusable; nothing exported\n", .{}),
+    }
 }

@@ -1,5 +1,5 @@
-//! Covers src/interfaces/usbip/usbip_run.zig: `--usbip` offers the FS device
-//! after a run, and says so plainly when there is nothing to offer.
+//! Covers src/interfaces/usbip/usbip_run.zig: `--usbip` puts a live bridge
+//! on the board's USB tick and reports what it does in plain lines.
 const std = @import("std");
 const ra8 = @import("ra8");
 const wire = ra8.core.cli.usbip_wire;
@@ -34,50 +34,39 @@ fn enumerated() usbfs.host.Host {
     return script;
 }
 
-test "no port asked for means nothing printed and nothing bound" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
+test "no port asked for leaves the USB tick alone" {
+    var board = ra8.board.usb.Usb{};
+    try run.install(&board, std.testing.allocator, null);
+    try std.testing.expect(board.bridge == null);
+}
+
+test "a port puts a bridge on the tick that waits for enumeration" {
+    var board = ra8.board.usb.Usb{};
+    try run.install(&board, std.testing.allocator, 0);
+    const hook = board.bridge.?;
+    const live: *run.Live = @ptrCast(@alignCast(hook.context));
+    defer {
+        live.link.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(live);
+    }
+    board.tick();
+    try std.testing.expectEqual(@as(?u16, null), live.link.port());
+    try std.testing.expect(!live.stopped);
+}
+
+test "the events read as plain lines" {
+    var link = try exp.bridge.Bridge.init(std.testing.allocator, 0);
+    defer link.deinit(std.testing.allocator);
+    var board = usbfs.Device{};
     const script = enumerated();
-    try run.afterRun(out.writer(), null, &script);
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
-}
-
-test "a device that never enumerated is reported, not served" {
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    const script = usbfs.host.Host{};
-    try run.afterRun(out.writer(), 1, &script);
-    try std.testing.expectEqualStrings("usbip: the FS device never finished enumerating; nothing exported\n", out.items);
-}
-
-/// A host that imports 1-1 straight away.
-fn importer(port: u16, status: *?u32) void {
-    const address = std.net.Address.parseIp4("127.0.0.1", port) catch return;
-    const stream = std.net.tcpConnectToAddress(address) catch return;
-    defer stream.close();
-    var header: [wire.op_header_len]u8 = undefined;
-    (wire.OpHeader{ .code = wire.op.req_import }).encode(&header);
-    var body = [_]u8{0} ** wire.busid_len;
-    @memcpy(body[0..3], "1-1");
-    stream.writeAll(&header) catch return;
-    stream.writeAll(&body) catch return;
-    var reply: [wire.op_header_len]u8 = undefined;
-    stream.reader().readNoEof(&reply) catch return;
-    status.* = (wire.OpHeader.decode(&reply) catch return).status;
-}
-
-test "an enumerated device is announced and handed to the importing host" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
-    defer out.deinit();
-    const script = enumerated();
-    const item = (try exp.board.fsExport(&script)).?;
-    var listener = try exp.listen.open(0);
-    defer listener.deinit();
-    var status: ?u32 = null;
-    const thread = try std.Thread.spawn(.{}, importer, .{ exp.listen.port(&listener), &status });
-    try run.offer(out.writer(), &listener, item);
-    thread.join();
-    try std.testing.expectEqual(@as(?u32, 0), status);
+    try run.report(out.writer(), try link.poll(&board, &script), &link);
     try std.testing.expect(std.mem.startsWith(u8, out.items, "usbip: exporting 1-1 (045b:5310) on 127.0.0.1:"));
-    try std.testing.expect(std.mem.endsWith(u8, out.items, "usbip: a host imported 1-1; URB traffic is not routed yet\n"));
+    out.clearRetainingCapacity();
+    try run.report(out.writer(), .attached, &link);
+    try std.testing.expectEqualStrings("usbip: a host imported 1-1\n", out.items);
+    out.clearRetainingCapacity();
+    try run.report(out.writer(), .none, &link);
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
