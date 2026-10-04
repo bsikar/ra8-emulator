@@ -23,7 +23,6 @@ const symbols = @import("../debug/symbols.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const csel = @import("csel.zig");
-const systick_hook = @import("systick_hook.zig");
 const break_hook = @import("../debug/break_hook.zig");
 const hits_hook = @import("../debug/hits_hook.zig");
 const watchpoint = @import("../debug/watchpoint.zig");
@@ -209,14 +208,6 @@ pub const Engine = struct {
     /// address the firmware reached for and how wide the access was.
     pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
         bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
-    }
-
-    /// End the stretch of execution in which the firmware arms SysTick, so
-    /// the boundary after it is cut from the period just asked for rather
-    /// than from the nothing that was armed when the stretch began.
-    /// src/core/systick_hook.zig says what is swallowed without this.
-    pub fn attachTimebase(self: Engine, clock: *clocks.Clocks) Error!void {
-        systick_hook.attach(self.handle, clock) catch return Error.AttachFailed;
     }
 
     /// Arm the break: one instruction is hooked, and reaching it the

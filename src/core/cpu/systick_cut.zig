@@ -1,8 +1,8 @@
 //! A store that arms SysTick ends the stretch in flight (RA8EMU-464).
 //!
-//! The Zig core's twin of src/core/systick_hook.zig. A `--cpu zig` run cuts
-//! each stretch from the SysTick period armed when the stretch begins, and
-//! at reset nothing is armed, so the first stretch is a whole boundary wide.
+//! A `--cpu zig` run cuts each stretch from the SysTick period armed when
+//! the stretch begins, and at reset nothing is armed, so the first stretch
+//! is a whole boundary wide.
 //! `ra8_time_init` arms SysTick inside it, and the periods that stretch then
 //! covers collapse into one pend: blink_hal ran 5 ms behind Unicorn from
 //! boot that way. Seeing the store, and ending the stretch after the
@@ -24,7 +24,7 @@ pub const Cut = struct {
     fired: bool = false,
 
     /// Look at a store before it lands: the rule needs the two registers as
-    /// they stand. Only word stores count, as on the Unicorn hook.
+    /// they stand. Only word stores count.
     pub fn see(self: *Cut, memory: bus.Bus, address: u32, bytes: []const u8) bus.Error!void {
         if (bytes.len != 4) return;
         for (self.clocks) |slot| {

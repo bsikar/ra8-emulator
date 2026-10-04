@@ -91,7 +91,6 @@ test {
     _ = @import("core/run_loop_test.zig");
     _ = @import("core/run_pace_test.zig");
     _ = @import("core/sleep_pace_test.zig");
-    _ = @import("core/systick_hook_test.zig");
     _ = @import("core/tz_test.zig");
     _ = @import("core/undefined_ops_test.zig");
     _ = @import("interfaces/cli/debug_front_test.zig");

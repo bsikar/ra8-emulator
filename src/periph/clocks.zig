@@ -119,7 +119,7 @@ pub const Clocks = struct {
     /// inside them. Each one is a stretch of execution whose time is not
     /// charged, which is the price of not swallowing the periods it covered.
     rearms: u64 = 0,
-    /// Set by src/core/systick_hook.zig when one of those stores lands, and
+    /// Set by src/core/cpu/systick_cut.zig when one of those stores lands, and
     /// taken by the run loop at the boundary it caused.
     restart: bool = false,
 
