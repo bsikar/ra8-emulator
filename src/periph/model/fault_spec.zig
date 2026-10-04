@@ -6,7 +6,8 @@
 //! the one place the two halves can meet. The left half is an `--attach`
 //! ask and goes through that parser, so a typo fails the same way.
 //!
-//! Modes: disconnected, nack:N, stuck:0xHH, garbage:SEED, slow:NS, bus_low.
+//! Modes: disconnected, nack:N, stuck:0xHH, garbage:SEED, slow:NS,
+//! stretch:NS, bus_low.
 //! A mode that does not fit the device's bus is refused here, before the
 //! run starts, rather than quietly doing nothing.
 const std = @import("std");
@@ -22,6 +23,7 @@ pub const Mode = union(enum) {
     stuck: u8,
     garbage: u32,
     slow_ns: u64,
+    stretch_ns: u64,
     /// Holds the shared I2C bus low rather than wrapping the part.
     bus_low,
 };
@@ -69,6 +71,7 @@ pub fn parseMode(text: []const u8) Error!Mode {
     if (std.mem.eql(u8, word, "stuck")) return .{ .stuck = try number(u8, arg) };
     if (std.mem.eql(u8, word, "garbage")) return .{ .garbage = try number(u32, arg) };
     if (std.mem.eql(u8, word, "slow")) return .{ .slow_ns = try number(u64, arg) };
+    if (std.mem.eql(u8, word, "stretch")) return .{ .stretch_ns = try number(u64, arg) };
     return Error.UnknownMode;
 }
 
@@ -137,6 +140,7 @@ fn i2cMode(mode: Mode) fault.Mode {
         .stuck => |v| .{ .stuck = v },
         .garbage => |s| .{ .garbage = s },
         .slow_ns => |ns| .{ .slow_ns = ns },
+        .stretch_ns => |ns| .{ .stretch_ns = ns },
         .bus_low => .none,
     };
 }

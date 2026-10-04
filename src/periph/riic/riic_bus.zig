@@ -55,6 +55,14 @@ pub const Device = struct {
     /// that is on the bus answers. A fault wrapper (model/fault.zig) uses it
     /// to drop off the bus or NACK some phases (RA8EMU-522).
     ackFn: ?*const fn (*anyopaque) bool = null,
+    /// Virtual ns the part holds SCL low before each byte it sends: clock
+    /// stretching (RA8EMU-532). Null is none.
+    stretchFn: ?*const fn (*anyopaque) u64 = null,
+
+    pub fn stretch(self: Device) u64 {
+        const hold = self.stretchFn orelse return 0;
+        return hold(self.context);
+    }
 
     pub fn acks(self: Device) bool {
         const ack = self.ackFn orelse return true;

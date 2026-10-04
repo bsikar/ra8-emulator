@@ -144,7 +144,7 @@ pub const Channel = struct {
         self.acked = true;
         self.status |= flag.icsr2.tend | flag.icsr2.tdre;
         if (!self.reading) return;
-        self.rx.stage(device.read(self.rx.staged[0..]));
+        self.rx.stage(device.read(self.rx.staged[0..]), device.stretch());
         if (self.rx.holding()) self.status |= flag.icsr2.rdrf;
     }
 
@@ -226,7 +226,7 @@ pub const Channel = struct {
         }
         if (self.target.armed) return self.targetRead(offset);
         return switch (offset) {
-            flag.reg.icsr2 => self.status,
+            flag.reg.icsr2 => self.rx.visible(self.status),
             flag.reg.icdrr => blk: {
                 const byte = self.readData();
                 // The last byte of the frame is what a requested STOP was

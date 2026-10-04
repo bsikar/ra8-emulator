@@ -70,6 +70,7 @@ fn attachAdc(self: *Board, core: Guest) !void {
 /// so a clash with a fitted part is reported against the ask.
 fn attachWire(self: *Board) !void {
     try self.wire.attach(&self.bus);
+    self.wire.clock(&self.time.base);
     try plug.all(self);
 }
 

@@ -90,3 +90,13 @@ test "a fault with no matching --attach is refused" {
     try std.testing.expectError(spec.Error.NoSuchAttach, spec.place(&asks, try spec.parse("max17048@i2c:riic@0x36=disconnected")));
     try std.testing.expectError(spec.Error.NoSuchAttach, spec.place(asks[0..0], try spec.parse("max17048@i2c:riic@0x37=disconnected")));
 }
+
+test "stretch parses and wraps an I2C part that stretches" {
+    try std.testing.expectEqual(@as(u64, 900), (try spec.parseMode("stretch:900")).stretch_ns);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var clock = TimeBase{};
+    const made = try parts.all.make(arena.allocator(), "max17048", try endpoint.parse("i2c:riic@0x37"));
+    const faulty = try spec.apply(arena.allocator(), made.device, .{ .stretch_ns = 900 }, &clock);
+    try std.testing.expectEqual(@as(u64, 900), faulty.i2c.stretch());
+}

@@ -25,6 +25,9 @@ pub const Mode = union(enum) {
     /// NACK every address phase until then: the ACK polling a driver does
     /// on a slow part (RA8EMU-517). Needs the wrapper's clock.
     slow_ns: u64,
+    /// Hold SCL low this many virtual ns before each byte read back: clock
+    /// stretching (RA8EMU-532). The controller waits on the board clock.
+    stretch_ns: u64,
 };
 
 pub const I2c = struct {
@@ -63,7 +66,13 @@ pub const I2c = struct {
             .readFn = read,
             .stopFn = stop,
             .ackFn = ack,
+            .stretchFn = stretch,
         };
+    }
+
+    fn stretch(context: *anyopaque) u64 {
+        const self: *I2c = @ptrCast(@alignCast(context));
+        return if (self.mode == .stretch_ns) self.mode.stretch_ns else 0;
     }
 
     fn ack(context: *anyopaque) bool {

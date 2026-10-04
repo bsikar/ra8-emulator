@@ -23,6 +23,7 @@ const parts = @import("../periph/model/parts.zig");
 const periph = @import("../periph/registry.zig");
 const pi4ioe = @import("../periph/riic/riic_pi4ioe.zig");
 const riic = @import("../periph/riic/riic.zig");
+const timebase = @import("../periph/time/timebase.zig");
 
 pub const Wire = struct {
     controller: riic.Riic = riic.Riic.init(),
@@ -51,6 +52,12 @@ pub const Wire = struct {
             try self.fit(parts.imu_name, &self.imu, lsm6dso.address);
             try self.fit(parts.gauge_name, &self.gauge, max17048.address);
         }
+    }
+
+    /// Point every RIIC channel's receive path at the board's virtual time,
+    /// so a part that stretches the clock lands its bytes on it.
+    pub fn clock(self: *Wire, base: *const timebase.TimeBase) void {
+        for (&self.controller.channels) |*channel| channel.rx.clock = base;
     }
 
     /// Bind a Click part this struct holds through the model catalog, at its
