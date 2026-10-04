@@ -20,6 +20,8 @@ const memmap = @import("../core/memmap.zig");
 /// The machine's virtual time and its event queue (RA8EMU-179).
 pub const timebase = @import("time/timebase.zig");
 pub const event_queue = @import("time/event_queue.zig");
+/// When each core's SysTick next wraps (RA8EMU-515).
+pub const systick_due = @import("time/systick_due.zig");
 
 /// The machine's clock and what is scheduled on it, as the board holds them.
 pub const Time = struct {
