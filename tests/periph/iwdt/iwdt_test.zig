@@ -197,3 +197,11 @@ test "an armed IWDT puts its underflow on the queue, and only once" {
     try std.testing.expectEqual(unit.underflowDueAt(1_000), queue.next());
     try std.testing.expectEqual(ra8.periph.wdt.clock.queue_id.iwdt, queue.items[0].id);
 }
+
+test "the IWDT's due time takes off the ns already carried toward its next tick" {
+    var unit = iwdt.Iwdt.init();
+    refreshed(&unit);
+    const plain = unit.underflowDueAt(0).?;
+    unit.carry_ns = 20_000;
+    try std.testing.expectEqual(plain - 20_000, unit.underflowDueAt(0).?);
+}
