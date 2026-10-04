@@ -61,6 +61,7 @@ test {
     _ = @import("drw/drw_texel_test.zig");
     _ = @import("drw/drw_test.zig");
     _ = @import("dtc/dtc_test.zig");
+    _ = @import("dtc/dtc_core_test.zig");
     _ = @import("dtc/dtc_regs_test.zig");
     _ = @import("dtc/dtc_sar_test.zig");
     _ = @import("dtc/dtc_skip_test.zig");
