@@ -350,7 +350,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_float_maxnm | 29 |
 | mve_float_maxnma | 29 |
 | mve_float_maxnmv | 43 |
-| mve_float_vcadd | missing |
+| mve_float_vcadd | 34 |
 | mve_float_vcmla | missing |
 | mve_float_vcmul | missing |
 | ldrd_strd | 33 |
