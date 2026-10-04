@@ -68,9 +68,8 @@ pub fn writeDocument(writer: anytype, claimed: []const []const u8, covered: []co
 
 /// The decode-table section: one row per group the Zig decode table
 /// registers, in decode order, with how many vectors name the group. A group
-/// with none reads "missing" but does not fail the build yet (RA8EMU-270);
-/// the per-group vector tickets fill the gaps, and the last one makes a gap
-/// fail as the semantics table does.
+/// with none reads "missing", and the suite test fails the build on it as it
+/// does for a semantics encoding (RA8EMU-278).
 pub fn writeDecoded(writer: anytype, decoded: []const []const u8, covered: []const []const u8) !void {
     try writer.writeAll(
         \\
@@ -79,7 +78,7 @@ pub fn writeDecoded(writer: anytype, decoded: []const []const u8, covered: []con
         \\Every instruction group the Zig decode table registers
         \\(src/core/cpu/ops/table.zig), and how many conformance vectors name it.
         \\The FP and MVE groups' semantics are covered encoding by encoding in the
-        \\table above. A group listed as missing does not fail the build yet.
+        \\table above. A group with no vector fails `zig build test`.
         \\
         \\
     );
