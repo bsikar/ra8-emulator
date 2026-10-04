@@ -9,6 +9,7 @@
 //! (src/core/mask_pace.zig). Each only ever narrows.
 const cadence = @import("cadence.zig");
 const Session = @import("session.zig").Session;
+const queue_pace = @import("queue_pace.zig");
 
 /// The boundary this stretch gets. The armed period is read every time
 /// round rather than once: the firmware arms SysTick well after reset,
@@ -16,6 +17,7 @@ const Session = @import("session.zig").Session;
 pub fn forStretch(core: anytype, configured: cadence.Cadence, session: Session) cadence.Cadence {
     var pace = configured;
     if (session.timebase) |clock| pace = pace.narrowedTo(clock.period(core));
+    pace = queue_pace.narrowed(pace, session);
     pace = whileStanding(pace, session);
     // Narrowed again while a masked pend keeps coming back stuck, so the
     // mask is re-tested within a couple of thousand instructions instead

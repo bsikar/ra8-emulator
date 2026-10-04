@@ -390,7 +390,7 @@ pub const Board = struct {
     }
 
     pub fn ticker(self: *Board) engine.Tick {
-        return .{ .context = self, .tickFn = tickThunk };
+        return .{ .context = self, .tickFn = tickThunk, .dueFn = boundary.cyclesToDue };
     }
 };
 

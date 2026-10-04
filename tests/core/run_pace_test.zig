@@ -30,3 +30,39 @@ test "a stuck mask narrows the stretch only when mask pacing is on" {
     const unpaced = run_pace.forStretch(&core, .{ .per_boundary = 50_000 }, .{ .unmask = &seam });
     try std.testing.expectEqual(@as(u32, 50_000), unpaced.per_boundary);
 }
+
+/// A board stand-in whose queue has something due `cycles` from now.
+const Queued = struct {
+    cycles: u64,
+
+    fn due(context: *anyopaque) u64 {
+        const self: *const Queued = @ptrCast(@alignCast(context));
+        return self.cycles;
+    }
+
+    fn tick(_: *anyopaque, _: ra8.core.engine.Engine, _: u32) anyerror!void {}
+
+    fn ticker(self: *Queued) ra8.core.engine.Tick {
+        return .{ .context = self, .tickFn = tick, .dueFn = due };
+    }
+};
+
+test "a queued event closer than the stretch ends the stretch on it" {
+    var core = NoCore{};
+    var queued = Queued{ .cycles = 12_345 };
+    const pace = run_pace.forStretch(&core, .{ .per_boundary = 50_000 }, .{ .board = queued.ticker() });
+    try std.testing.expectEqual(@as(u32, 12_345), pace.per_boundary);
+}
+
+test "a queued event is floored, ignored when further out or absent" {
+    var core = NoCore{};
+    var queued = Queued{ .cycles = 10 };
+    var pace = run_pace.forStretch(&core, .{ .per_boundary = 50_000 }, .{ .board = queued.ticker() });
+    try std.testing.expectEqual(cadence.floor, pace.per_boundary);
+    queued.cycles = 80_000;
+    pace = run_pace.forStretch(&core, .{ .per_boundary = 50_000 }, .{ .board = queued.ticker() });
+    try std.testing.expectEqual(@as(u32, 50_000), pace.per_boundary);
+    queued.cycles = 0;
+    pace = run_pace.forStretch(&core, .{ .per_boundary = 50_000 }, .{ .board = queued.ticker() });
+    try std.testing.expectEqual(@as(u32, 50_000), pace.per_boundary);
+}
