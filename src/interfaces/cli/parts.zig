@@ -20,10 +20,6 @@ const mask_pace = @import("../../core/mask_pace.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 const clocks = @import("../../periph/clocks.zig");
 const lob = @import("../../core/lob.zig");
-const nvic = @import("../../periph/nvic.zig");
-const reboot_mod = @import("../../core/reboot.zig");
-const undefined_ops = @import("../../core/undefined_ops.zig");
-const report_run = @import("report/run.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
 const console_output = @import("console_output.zig");
 
@@ -54,36 +50,3 @@ pub const Parts = struct {
         self.profile.?.prepare();
     }
 };
-
-/// What the run counted, gathered off the parts for the report.
-///
-/// Its own function so `main` stays inside the gate's 80 lines: this is a
-/// transcription, not a decision, and it grows every time a slice adds a
-/// counter.
-pub fn tallyOf(
-    parts: Parts,
-    interrupts: nvic.Nvic,
-    reboot: reboot_mod.Reboot,
-    undefined_found: undefined_ops.Found,
-) report_run.Tally {
-    return .{
-        .timebase = parts.timebase,
-        .idle = parts.idle,
-        .release = parts.release,
-        .pend = parts.pend,
-        .pacing = parts.pacing,
-        .mask_pacing = parts.mask_pacing,
-        .interrupts = interrupts,
-        .reboot = reboot,
-        .loops = parts.loops,
-        .selects = parts.selects,
-        .worlds = parts.worlds,
-        .undefined_found = undefined_found,
-        .bus_errors = parts.bus_tally,
-        .pcs = parts.pcs,
-        .fns = parts.fns,
-        .profile = parts.profile,
-        .hits = parts.hits,
-        .taken = parts.taken,
-    };
-}
