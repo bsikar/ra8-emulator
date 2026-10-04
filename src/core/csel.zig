@@ -43,7 +43,7 @@ pub const clrm_hook = @import("clrm_hook.zig");
 pub const fp_context = @import("fp_context.zig");
 pub const fpcxt_resume = @import("fpcxt_resume.zig");
 /// TT from the board's SAU rather than the CPU model's (RA8EMU-348).
-pub const tt_hook = @import("tt_hook.zig");
+pub const tt = @import("tt.zig");
 /// VSCCLRM as Armv8.1-M has it, not as a VLDM (RA8EMU-372).
 pub const vscclrm_hook = @import("vscclrm_hook.zig");
 

@@ -10,9 +10,8 @@
 //! core's MPU through src/core/cpu/tt_mpu.zig (RA8EMU-276); the T bit checks
 //! it unprivileged.
 //!
-//! Checked against Unicorn in lockstep (RA8EMU-352): the oracle's TT hook
-//! (src/core/tt_hook.zig) answers from the board's SAU, and lockstep's core
-//! from its own SAU and the RA8 IDAU (lockstep/attribution.zig).
+//! The answer comes from the core's own SAU and the RA8 IDAU
+//! (src/core/cpu/attribution.zig), RA8EMU-352.
 const op = @import("../op.zig");
 const attribution = @import("../attribution.zig");
 const sysreg = @import("../sysreg.zig");

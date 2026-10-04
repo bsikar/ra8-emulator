@@ -10,9 +10,8 @@
 //! Like src/core/fp_context.zig, ASPEN is taken as its reset value 1, since
 //! the Unicorn backend cannot see FPCCR, and a fresh context's FPSCR as
 //! FPDSCR's reset value 0. VPR has no Unicorn register and is left alone.
-//! Every halfword offset of an executable segment is tried, as
-//! src/core/tt_hook.zig does; the hook re-reads the live bytes and declines
-//! inside an IT block.
+//! Every halfword offset of an executable segment is tried; the hook
+//! re-reads the live bytes and declines inside an IT block.
 const std = @import("std");
 const c = @import("c.zig");
 const elf = @import("elf.zig");
