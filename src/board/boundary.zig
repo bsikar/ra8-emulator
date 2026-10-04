@@ -15,6 +15,8 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 const agt_sched = @import("../periph/agt/agt_sched.zig");
 const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
 const rtc_sched = @import("../periph/rtc/rtc_sched.zig");
+/// Whether a sleeping core may run to the next queued event: src/board/quiet_due.zig.
+pub const quiet_due = @import("quiet_due.zig");
 
 /// Cycles at the time base's rate until the next event on the board's
 /// queue, zero when nothing is queued or it is already due. The pace reads
