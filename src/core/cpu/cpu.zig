@@ -21,6 +21,7 @@ const banked_mod = @import("../banked.zig");
 const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
 const park = @import("park.zig");
+pub const fixed_trip = @import("fixed_trip.zig");
 const Until = @import("../until.zig").Until;
 /// Public so its tests reach it without a root export.
 pub const systick_cut = @import("systick_cut.zig");
@@ -127,6 +128,8 @@ pub const Cpu = struct {
     /// Which encodings this core implements: an M85's unless the board
     /// says otherwise (src/core/part.zig, RA8EMU-233).
     profile: decode.profile.Profile = decode.profile.Profile.m85,
+    /// One trip of a calm loop under watch (RA8EMU-463).
+    trip: fixed_trip.Watch = .{},
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
         try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
@@ -306,6 +309,7 @@ pub const Cpu = struct {
 
     pub fn run(self: *Cpu, count: u64) Stop {
         if (self.quiet) |q| q.stir();
+        defer self.trip.drop(self);
         var left = count;
         while (left > 0) : (left -= 1) {
             const taken = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
@@ -317,8 +321,10 @@ pub const Cpu = struct {
                 if (!up) return .count;
                 self.waiting = null;
             }
-            // A park loop's whole trips go by at once (RA8EMU-450).
-            const trips = park.skippable(self, left);
+            // Whole trips of a park loop (RA8EMU-450) or of a loop whose
+            // trip changes nothing (RA8EMU-463) go by at once.
+            var trips = park.skippable(self, left);
+            if (trips == 0) trips = self.trip.observe(self, left);
             if (trips != 0) {
                 self.retired += trips;
                 left -= trips - 1;
