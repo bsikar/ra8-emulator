@@ -308,6 +308,8 @@ test {
     _ = @import("camera/y4m_header_test.zig");
     _ = @import("camera/y4m_frame_test.zig");
     _ = @import("camera/video_source_test.zig");
+    _ = @import("camera/pipe_frame_test.zig");
+    _ = @import("camera/pipe_source_test.zig");
 }
 
 /// A source that records the emulated instant each capture asked for.
