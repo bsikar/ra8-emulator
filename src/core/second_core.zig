@@ -273,31 +273,6 @@ pub const Second = struct {
     }
 };
 
-/// CPU1, when a path was named for it, read and reset and ready for its
-/// first turn, built into `into` and handed back as a pointer to it. Null
-/// when the run is a single-core one, which is every image that does not
-/// name a second ELF, and then `into` is left untouched.
-///
-/// The caller owns the storage so the core keeps one address: see `open`.
-pub fn start(
-    allocator: std.mem.Allocator,
-    owner: *Engine,
-    board: *Board,
-    path: ?[]const u8,
-    into: *Second,
-) !?*Second {
-    const named = path orelse return null;
-    const file = try std.fs.cwd().openFile(named, .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(allocator, limits.image_bytes);
-    try into.open(owner, board, try elf.Image.init(bytes));
-    return into;
-}
-
-/// The round robin between the two cores lives in interleave.zig; it is
-/// re-exported here because `main` reaches it through this file.
-pub const interleave = @import("interleave.zig").interleave;
-
 /// CPU1 on the Zig core, for --cpu zig (RA8EMU-234).
 pub const zig = @import("second_zig.zig");
 
