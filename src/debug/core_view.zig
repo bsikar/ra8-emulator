@@ -2,12 +2,12 @@
 //! src/debug/zig_core.zig. The session and its views read registers and
 //! memory through this. The Unicorn arm went with RA8EMU-605; the union
 //! stays so a second kind of core can join without touching the callers.
-const engine = @import("../core/engine.zig");
 const bus = @import("../core/cpu/bus.zig");
 const zig_core = @import("zig_core.zig");
 
-pub const Cortex = engine.Cortex;
-pub const Error = engine.Error || bus.Error;
+pub const Cortex = @import("../core/cpu/cortex.zig").Cortex;
+/// Only memory can fail: the Zig core's register file always answers.
+pub const Error = bus.Error;
 
 pub const View = union(enum) {
     zig: zig_core.ZigCore,
