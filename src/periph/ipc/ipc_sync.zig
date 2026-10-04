@@ -240,6 +240,23 @@ pub const Sync = struct {
         };
     }
 
+    /// Whether `times` more reads like this one would each find the same
+    /// semaphore held and change only its contended count; when so, they
+    /// are counted. Times 0 only asks (RA8EMU-595). A free semaphore does
+    /// not repeat (the read takes it), nor does NMI status, which the other
+    /// core can set.
+    pub fn repeat(self: *Sync, offset: u32, named: u32, times: u64) bool {
+        const target = decode(offset) orelse return false;
+        const index = switch (target) {
+            .semaphore => |at| at,
+            else => return false,
+        };
+        const one = &self.semaphores[index];
+        if (named & sem.lock == 0 or !one.locked) return false;
+        one.contentions +%= @truncate(times);
+        return true;
+    }
+
     /// The write side. Returns whether this file took the store.
     pub fn write(self: *Sync, offset: u32, value: u32) bool {
         const target = decode(offset) orelse return false;

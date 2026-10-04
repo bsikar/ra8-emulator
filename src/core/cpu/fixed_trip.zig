@@ -11,8 +11,13 @@
 //! starts from the same state and memory, so every one after it is the same.
 //! `run` then retires the whole trips that fit, as 450 does.
 //!
-//! Any access outside flash or RAM (a peripheral could answer differently
-//! next time), a trip longer than `max_trip`, or a head that stops being calm
+//! A peripheral read spoils the trip unless the bus says it repeats: a
+//! contended IPC semaphore answers the same until the other core releases
+//! it, which it can only do at a stretch boundary (RA8EMU-595). Those reads
+//! are kept and, on a skip, counted once per retired trip, so the run report
+//! reads as if each was made. Any other access outside flash or RAM (a
+//! peripheral could answer differently next time), a trip longer than
+//! `max_trip`, or a head that stops being calm
 //! ends the watch with no skip. A loop that fails waits `backoff` arrivals
 //! before it is watched again, so a counting loop costs one slow trip in
 //! that many.
@@ -29,6 +34,10 @@ const Active = @import("exception/all.zig").active.Active;
 
 pub const max_trip: u32 = 64;
 pub const backoff: u16 = 256;
+/// Repeatable peripheral reads one trip may make.
+pub const max_repeats: usize = 4;
+
+const Repeat = struct { address: u32, len: usize };
 
 /// What one trip may not change.
 const Snapshot = struct {
@@ -61,6 +70,8 @@ pub const Watch = struct {
     before: Snapshot = undefined,
     miss_pc: u32 = 0,
     miss_wait: u16 = 0,
+    repeated: [max_repeats]Repeat = undefined,
+    repeats: usize = 0,
 
     /// Called before each instruction `run` executes: instructions to retire
     /// at once from the PC, or 0 to step as usual.
@@ -83,7 +94,20 @@ pub const Watch = struct {
         }
         self.drop(cpu);
         if (left < trip) return 0;
-        return left - left % trip;
+        const retired = left - left % trip;
+        for (self.repeated[0..self.repeats]) |one| _ = self.inner.repeat(one.address, one.len, retired / trip);
+        return retired;
+    }
+
+    /// Asked before the read runs, so a free semaphore (which the read
+    /// would take) is refused.
+    fn note(self: *Watch, address: u32, len: usize) void {
+        if (self.repeats == max_repeats or !self.inner.repeat(address, len, 0)) {
+            self.spoiled = true;
+            return;
+        }
+        self.repeated[self.repeats] = .{ .address = address, .len = len };
+        self.repeats += 1;
     }
 
     fn begin(self: *Watch, cpu: *Cpu) void {
@@ -116,7 +140,7 @@ pub const Watch = struct {
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *Watch = @ptrCast(@alignCast(ctx));
-        if (!readable(address, into.len)) self.spoiled = true;
+        if (!readable(address, into.len)) self.note(address, into.len);
         return self.inner.read(address, into);
     }
 

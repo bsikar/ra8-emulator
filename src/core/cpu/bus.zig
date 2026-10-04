@@ -73,7 +73,17 @@ pub const Bus = struct {
         /// Sets bits in a status word without a store; null reads and
         /// writes the word back instead.
         latch: ?*const fn (ctx: *anyopaque, address: u32, bits: u32) Error!void = null,
+        /// Counts `times` more reads at `address` that would each answer as
+        /// the last did and change nothing but a counter; false, having done
+        /// nothing, when such a read is not repeatable. Times 0 only asks
+        /// (RA8EMU-595). Null repeats nothing.
+        repeat: ?*const fn (ctx: *anyopaque, address: u32, len: usize, times: u64) bool = null,
     };
+
+    pub fn repeat(self: Bus, address: u32, len: usize, times: u64) bool {
+        const answer = self.vtable.repeat orelse return false;
+        return answer(self.ctx, address, len, times);
+    }
 
     pub inline fn read(self: Bus, address: u32, into: []u8) Error!void {
         if (self.gate) |gate| if (gate.refuses(address, into.len)) return error.SecurityViolation;

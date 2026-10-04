@@ -361,6 +361,7 @@ pub const Ipc = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
+            .repeatFn = repeatThunk,
         };
     }
 };
@@ -378,6 +379,12 @@ fn decode(offset: u32) ?Slot {
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Ipc = @ptrCast(@alignCast(context));
     return self.read(address, width);
+}
+
+fn repeatThunk(context: *anyopaque, address: u32, width: u3, times: u64) bool {
+    const self: *Ipc = @ptrCast(@alignCast(context));
+    const offset = address -% win_base;
+    return self.locks.repeat(offset, lanes.named(offset % 4, width), times);
 }
 
 fn writeThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {

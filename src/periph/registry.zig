@@ -75,6 +75,9 @@ pub const Block = struct {
     context: *anyopaque,
     readFn: *const fn (context: *anyopaque, address: u32, width: u3) u32,
     writeFn: *const fn (context: *anyopaque, address: u32, width: u3, value: u32) void,
+    /// Counts `times` more reads that answer as the last did; false when
+    /// the register cannot promise that. Null repeats nothing (RA8EMU-595).
+    repeatFn: ?*const fn (context: *anyopaque, address: u32, width: u3, times: u64) bool = null,
 
     pub fn end(self: Block) u64 {
         return @as(u64, self.base) + self.size;
@@ -188,6 +191,21 @@ pub const Bus = struct {
         cell.reads += 1;
         // Alternate so a ready-bit poll of either polarity completes.
         return if (cell.reads % 2 == 0) mask(0xFFFF_FFFF, width) else 0;
+    }
+
+    /// `times` more reads of `address`, counted without asking the block for
+    /// a value, when its block says each would answer as the last did. Times
+    /// 0 only asks. An unclocked or unmodelled address never repeats.
+    pub fn repeat(self: *Bus, address: u32, width: u3, times: u64) bool {
+        const canonical = canonicalize(address);
+        if (self.gate) |gate| if (gate.stoppedFn(gate.context, canonical)) return false;
+        const block = self.blockFor(canonical) orelse return false;
+        const answer = block.repeatFn orelse return false;
+        self.nonsecure = canonical != address;
+        if (!answer(block.context, canonical, width, times)) return false;
+        self.counters.reads += times;
+        self.counters.modelled += times;
+        return true;
     }
 
     pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {
