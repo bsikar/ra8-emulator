@@ -29,3 +29,16 @@ test "the panel's next vsync is an edge ahead of now" {
     defer board.deinit();
     try std.testing.expect(quiet_due.vsyncDue(&board) > 0);
 }
+
+test "stopped GPT channels give no edge" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try std.testing.expectEqual(@as(u64, 0), quiet_due.gptDue(&board));
+}
+
+test "a running GPT channel's next wrap is an edge ahead of now" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.pwm.channels[0].cr |= ra8.periph.gpt.control.cst;
+    try std.testing.expect(quiet_due.gptDue(&board) > 0);
+}

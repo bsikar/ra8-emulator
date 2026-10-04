@@ -38,7 +38,12 @@ test "an edge inside the width never narrows it" {
 }
 
 test "an edge past the counter's reach stops at the largest stretch" {
-    try std.testing.expectEqual(@as(u32, std.math.maxInt(u32)), sleep_pace.width(50_000, true, &.{1 << 40}));
+    try std.testing.expectEqual(@as(u32, 4_294_950_000), sleep_pace.width(50_000, true, &.{1 << 40}));
+}
+
+test "an edge between boundaries rounds up to the next whole stretch" {
+    try std.testing.expectEqual(@as(u32, 300_000), sleep_pace.width(50_000, true, &.{260_000}));
+    try std.testing.expectEqual(@as(u32, 250_000), sleep_pace.width(50_000, true, &.{250_000}));
 }
 
 test "a core in wfi with nothing pending is still" {

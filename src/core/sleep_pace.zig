@@ -14,7 +14,9 @@
 //! the two known today. An edge of zero is no edge. With no edge known, or
 //! the core awake, the width is left as it was. It only ever widens, so a
 //! narrower pace chosen elsewhere still has the final say when it applies
-//! after this.
+//! after this. It widens by whole stretches (RA8EMU-185, slice 4), so a run
+//! with the skip crosses the same boundary grid as one without and its
+//! output is the same.
 const std = @import("std");
 const Cpu = @import("cpu/cpu.zig").Cpu;
 
@@ -40,5 +42,10 @@ pub fn width(normal: u32, asleep: bool, edges: []const u64) u32 {
         if (nearest == 0 or edge < nearest) nearest = edge;
     }
     if (nearest <= normal) return normal;
-    return @intCast(@min(nearest, std.math.maxInt(u32)));
+    // Whole stretches only: the boundary lands where an unskipped run's
+    // would, the first one at or after the edge, so skipping changes speed
+    // and nothing else.
+    const most = std.math.maxInt(u32) / normal;
+    const stretches = @min(std.math.divCeil(u64, nearest, normal) catch unreachable, most);
+    return @intCast(stretches * normal);
 }
