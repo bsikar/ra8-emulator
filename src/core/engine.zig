@@ -7,11 +7,10 @@
 const std = @import("std");
 const c = @import("c.zig");
 const elf = @import("elf.zig");
-const pages = @import("pages.zig");
+const guest_load = @import("cpu/memory/load.zig");
 const memmap = @import("memmap.zig");
 const code_lines = @import("cpu/code_lines.zig");
 const board_ram = @import("board_ram.zig");
-const option_window = @import("../periph/mram/mram_window.zig");
 const periph = @import("../periph/registry.zig");
 const disasm = @import("../debug/disasm.zig");
 const cadence = @import("cadence.zig");
@@ -335,20 +334,7 @@ pub const Engine = struct {
     /// The pages are merged before any of them is mapped: segments of one
     /// image share pages, and the CPU model refuses a page it already holds.
     pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
-        const needed = pages.forImage(image) catch return Error.MapFailed;
-        for (needed.items()) |range| {
-            if (board_ram.covers(range.base, range.size())) continue;
-            if (option_window.claim(.{ .engine = self }, range.base, range.size())) continue;
-            try self.map(range.base, range.size());
-        }
-        var written: u32 = 0;
-        var index: u16 = 0;
-        while (index < image.segmentCount()) : (index += 1) {
-            const segment = image.loadSegment(index) orelse continue;
-            try self.write(segment.paddr, segment.bytes);
-            written += @intCast(segment.bytes.len);
-        }
-        if (written == 0) return Error.WriteFailed;
+        const written = try guest_load.image(.{ .engine = self }, image);
         _ = long_shift_hook.attach(self.handle, image) catch return Error.AttachFailed;
         return written;
     }
