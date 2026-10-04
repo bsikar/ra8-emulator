@@ -50,3 +50,24 @@ test "every part's blocks attach over a store, as many as an engine attach puts 
         try std.testing.expectEqual(try attachedBlocks(which), try storeBlocks(which));
     }
 }
+
+test "CPU0's PPB windows are seeded into a store with no engine open" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.primeWindows(&board, memory, .{
+        .partitions = &board.partitions,
+        .regions = &board.regions,
+        .regions_ns = &board.regions_ns,
+        .guard = &board.guard,
+        .identity = ra8.periph.cpuid.cpu0,
+        .control = &board.control,
+        .clears = &board.clears,
+    });
+    const memmap = ra8.core.memmap;
+    try std.testing.expectEqual(ra8.periph.cpuid.cpu0, try memory.readWord(ra8.periph.cpuid.address));
+    try std.testing.expectEqual(ra8.periph.mpu.geometry.type_value, try memory.readWord(memmap.mpu.type_));
+    try std.testing.expectEqual(ra8.periph.sau.geometry.type_value, try memory.readWord(memmap.sau.type_));
+}
