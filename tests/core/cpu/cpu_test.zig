@@ -10,6 +10,7 @@ test {
     _ = @import("data_gate_test.zig");
     _ = @import("tt_mpu_test.zig");
     _ = @import("park_test.zig");
+    _ = @import("fetch_guard_test.zig");
     _ = @import("fixed_trip_test.zig");
     _ = @import("trip_decode_test.zig");
     _ = @import("counted_bound_test.zig");

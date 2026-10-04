@@ -30,6 +30,8 @@ const Deadline = @import("../../core/deadline.zig").Deadline;
 pub const stop_sym = @import("zig_stop.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
 pub const break_sym = @import("zig_break.zig");
+/// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
+pub const undefined_sites = @import("zig_undefined.zig");
 
 /// What ends a Zig run before its budget: the `--stop-sym` counter and the
 /// `--break-sym` arrival (RA8EMU-603).
@@ -38,6 +40,8 @@ pub const Ends = struct {
     point: ?*break_sym.Break = null,
     /// The `--ms` window, read against the clocks' SysTick periods.
     timed: ?*Deadline = null,
+    /// The swept sites `--stop-on-undefined` ends the run on.
+    undefined_sites: ?*undefined_sites.Found = null,
 };
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
@@ -74,6 +78,7 @@ pub const Clock = struct {
     point: ?*break_sym.Break = null,
     /// The `--ms` window, which ends the run once modelled time runs out.
     timed: ?*Deadline = null,
+    undefined_sites: ?*undefined_sites.Found = null,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk };
@@ -84,6 +89,7 @@ pub const Clock = struct {
     pub fn done(self: *Clock) bool {
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
+        if (self.undefined_sites) |found| if (found.stoppedAt() != null) return true;
         const watch = self.stop orelse return false;
         return watch.met(self.memory.readWord(watch.address) catch null);
     }
@@ -127,7 +133,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// engine-backed CPU1 needs it.
 pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
@@ -169,6 +175,7 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         .blocks = options.blocks,
         .wrap = wrap,
         .retire_listener = retire.listener(),
+        .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
     });
@@ -176,6 +183,7 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, budget);
     } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
+    if (ends.undefined_sites) |found| try undefined_sites.print(said, image, found.*);
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
