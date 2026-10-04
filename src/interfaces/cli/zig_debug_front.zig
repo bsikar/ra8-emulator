@@ -6,7 +6,7 @@
 //! carries the commands out. `--gdb` serves gdb from the same Zig session
 //! (RA8EMU-118). `--cpu1` beside it brings CPU1 up on its own Zig core,
 //! and `core 0|1` switches between them (RA8EMU-337); `--gdb` serves it as
-//! thread 2 (RA8EMU-338). `--cpu lockstep` is not a debugger target and says so.
+//! thread 2 (RA8EMU-338).
 //! Since RA8EMU-483 no Unicorn engine is opened: CPU0 runs on its own store
 //! (src/interfaces/cli/zig_memory.zig) and CPU1 on one that borrows its SRAM.
 const std = @import("std");

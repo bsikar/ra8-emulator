@@ -106,9 +106,9 @@ Non-secure, CPU0 and CPU1 stay coherent with no write hook in the store path.
 All work is focused on making the emulator complete, in four parallel tracks:
 
 - **Our own Zig CPU core.** One Armv8-M decoder and executor behind
-  `src/core/engine.zig`, run in lockstep against Unicorn on every example image
-  until there is zero divergence, then Unicorn and Capstone are removed
-  entirely.
+  `src/core/engine.zig`. It reached zero divergence from Unicorn in lockstep
+  across the example corpus, so lockstep is gone and Unicorn and Capstone are
+  being removed entirely.
 - **Cortex-M85 and Cortex-M33, complete.** FPv5, MVE (Helium), tail
   predication, PACBTI and stack limits on CPU0; CPU1 with its own NVIC,
   SysTick, MPU and SCB; TrustZone enforced on both, and the full fault model.
@@ -133,7 +133,6 @@ src/periph/           everything that answers on the peripheral bus
 tests/                one test file per source file, on the mirrored path
 tools/gate.zig        the light build gate (file and function length)
 tools/eil_set.sh      re-derives the EIL app set from a ra8-firmware tree
-tools/lockstep_corpus.sh  runs a directory of ELFs under --cpu lockstep, one table
 docs/                 notes: EIL parity, a GCC miscompile, a ThreadX caller error
 ```
 

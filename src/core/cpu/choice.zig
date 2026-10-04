@@ -6,8 +6,6 @@ const std = @import("std");
 pub const Choice = enum {
     unicorn,
     zig,
-    /// Both, one instruction at a time, compared after each.
-    lockstep,
 
     /// The value `--cpu` takes, spelled as the enum is.
     pub fn parse(text: []const u8) ?Choice {

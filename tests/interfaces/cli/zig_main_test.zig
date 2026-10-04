@@ -47,11 +47,10 @@ fn image() [page * 2]u8 {
     return file;
 }
 
-test "only a --cpu zig run skips the engine; Unicorn and lockstep keep it" {
+test "only a --cpu zig run skips the engine; Unicorn keeps it" {
     try std.testing.expect(main_path.wanted(.{ .path = "cpu0.elf", .cpu = .zig }));
     try std.testing.expect(main_path.wanted(.{ .path = "cpu0.elf", .cpu = .zig, .cpu1_path = "cpu1.elf" }));
     try std.testing.expect(!main_path.wanted(.{ .path = "cpu0.elf", .cpu = .unicorn }));
-    try std.testing.expect(!main_path.wanted(.{ .path = "cpu0.elf", .cpu = .lockstep }));
 }
 
 test "prepare loads CPU0 onto its own store with no engine behind it" {

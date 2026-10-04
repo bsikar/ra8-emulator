@@ -1,4 +1,4 @@
-//! A `--cpu zig` (or `--cpu lockstep`) run started from main, with the
+//! A `--cpu zig` run started from main, with the
 //! board's time wired in. The Unicorn run loop charges SysTick, DWT_CYCCNT
 //! and the blocks at every chunk boundary; this gives the Zig core the same
 //! boundary, so a ThreadX image gets its tick and the peripherals that count
@@ -19,7 +19,6 @@ const frame_out = @import("frame_out.zig");
 const frames_out = @import("report.zig").frames_out;
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
-const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
 const profile = @import("../../debug/profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
@@ -90,7 +89,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// Run off Unicorn, then, for a Zig run, print what the board has to say.
 /// `memory` is CPU0's: the caller picks its backend (RA8EMU-577). `core` is
 /// CPU0's engine, or null when nothing opened one (RA8EMU-593); only an
-/// engine-backed CPU1 or a lockstep run needs it.
+/// engine-backed CPU1 needs it.
 pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase };
@@ -111,15 +110,6 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }
     defer if (clock.cpu1) |second| second.close();
-    var checked: lockstep_dual.Cpu1 = undefined;
-    const checked_path = if (options.cpu == .lockstep) options.cpu1_path else null;
-    if (checked_path) |named| {
-        checked.open(std.heap.page_allocator, core orelse return noEngine(named), board, named) catch |err| {
-            std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
-            return 1;
-        };
-    }
-    defer if (checked_path != null) checked.close();
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
@@ -131,7 +121,7 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
     const retire_listener: ?cpu.RetireListener = if (profile_table) |table| .{ .context = table, .instructionFn = profileInstruction } else null;
     var boot_output = out;
     var final: boot.Regs = .{};
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, image, clock.memory, &board.bus, vector_base, options.budgetFor(false), &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, options.budgetFor(false), &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -142,9 +132,7 @@ pub fn run(out: std.fs.File.Writer, core: ?*engine.Engine, memory: Guest, board:
         .fast_memory = options.watch_place == null and wrap == null,
         .blocks = options.blocks,
         .wrap = wrap,
-        .cpu1 = if (checked_path != null) &checked else null,
         .retire_listener = retire_listener,
-        .ns_image = if (options.cpu == .lockstep) try report_dumps.nonSecure(std.heap.page_allocator, options) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
     });
@@ -190,12 +178,6 @@ fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !
 }
 
 /// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
-/// A lockstep run checks CPU1 against Unicorn, so it needs CPU0's engine.
-fn noEngine(named: []const u8) u8 {
-    std.debug.print("cannot bring up the second core from {s}: lockstep needs CPU0's engine\n", .{named});
-    return 1;
-}
-
 fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig_run.Driver) json_run.json_load.Load {
     return .{
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),

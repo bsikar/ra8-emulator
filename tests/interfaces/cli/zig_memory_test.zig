@@ -69,8 +69,8 @@ test "a single-core zig run loads CPU0 into its own store, not the engine" {
     try std.testing.expectEqual(@as(u32, 0), core.readWord(vectors) catch 0);
 }
 
-test "a Unicorn or lockstep run stays on the engine" {
-    for ([_]Options{ .{ .path = "cpu0.elf", .cpu = .unicorn }, .{ .path = "cpu0.elf", .cpu = .lockstep } }) |options| {
+test "a Unicorn run stays on the engine" {
+    for ([_]Options{.{ .path = "cpu0.elf", .cpu = .unicorn }}) |options| {
         var core = try ra8.core.engine.Engine.open();
         defer core.close();
         try core.mapBoardRam();

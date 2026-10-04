@@ -12,7 +12,7 @@ pub const text =
     \\                    [--watch PLACE] [--stop-on-undefined]
     \\                    [--count-pc ADDR] [--trace-rtos] [--cpu-load]
     \\                    [--profile] [--profile-folded FILE]
-    \\                    [--cpu1 IMAGE.elf] [--cpu zig|unicorn|lockstep]
+    \\                    [--cpu1 IMAGE.elf] [--cpu zig|unicorn]
     \\                    [--ns IMAGE.elf] [--no-bus-errors]
     \\                    [--camera-source KIND[:ARG]]
     \\
