@@ -69,6 +69,7 @@ pub const text =
     \\  --frame-out PATH   write what the panel shows at the end as a PNG
     \\  --panel-only       write just the panel, at its own size
     \\  --frames-out DIR   write numbered P6 panel frames
+    \\  --gif-out PATH     write sampled panel frames as an animated GIF
     \\  --frames-every N   consider every Nth scanned frame (default 1)
     \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each

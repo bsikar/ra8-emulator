@@ -92,6 +92,7 @@ test {
     _ = @import("frame_out_test.zig");
     _ = @import("frames_args_test.zig");
     _ = @import("frames_out_test.zig");
+    _ = @import("gif_test.zig");
     _ = @import("ctl_args_test.zig");
 }
 

@@ -119,8 +119,10 @@ test "an armed run keeps one frame per period with its emulated time" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
+    const gif_path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
+    defer std.testing.allocator.free(gif_path);
 
-    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    const armed = (try frames_out.Armed.armOutputs(std.testing.allocator, &board, path, gif_path, 1)).?;
     defer armed.deinit();
     const period = ra8.periph.glcdc_out.vsync.default_period_ns;
     board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
@@ -139,6 +141,7 @@ test "an armed run keeps one frame per period with its emulated time" {
     var report = try frames_out.Run.init(std.testing.allocator, &board, path, 1);
     try report.finish(&board);
     try std.testing.expectEqual(@as(usize, 2), armed.sequence.written);
+    try std.testing.expectEqual(@as(usize, 2), armed.sequence.gif_writer.?.wrote);
     try expectIndex(armed.sequence, "frame_00000.ppm 16666667\nframe_00001.ppm 33333334\n");
     var file = try armed.sequence.directory.openFile("frame_00001.ppm", .{});
     defer file.close();
@@ -201,4 +204,28 @@ fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void 
 fn panelWord(panel: *ra8.periph.eink.Panel, value: u16) void {
     _ = panel.exchange(@intCast(value >> 8));
     _ = panel.exchange(@intCast(value & 0xFF));
+}
+
+test "GIF output follows the sampled sequence when no PPM directory is requested" {
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
+    defer std.testing.allocator.free(path);
+
+    var sequence = try frames_out.Sequence.initOutputs(std.testing.allocator, null, path, 1);
+    defer sequence.deinit();
+    const first = [_]u32{0xFF00_0000};
+    const second = [_]u32{0xFFFF_FFFF};
+    try sequence.record(1, 1, &first, 0);
+    try sequence.record(1, 1, &second, 20_000_000);
+    try sequence.finish();
+    try std.testing.expectEqual(@as(usize, 2), sequence.written);
+
+    var file = try temp.dir.openFile("movie.gif", .{});
+    defer file.close();
+    var header: [6]u8 = undefined;
+    try file.reader().readNoEof(&header);
+    try std.testing.expectEqualSlices(u8, "GIF89a", &header);
 }

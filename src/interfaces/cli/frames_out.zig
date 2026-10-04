@@ -6,11 +6,15 @@ const Board = @import("../../board/board.zig").Board;
 const frame_args = @import("frames_args.zig");
 const eink = @import("../../periph/eink/eink.zig");
 const eink_wire = @import("../../periph/eink/eink_wire.zig");
+const gif = @import("gif.zig");
 
 pub const Sequence = struct {
     allocator: std.mem.Allocator,
     directory: std.fs.Dir,
-    index: std.fs.File,
+    owns_directory: bool,
+    index: ?std.fs.File,
+    gif_path: ?[]const u8,
+    gif_writer: ?gif.Writer = null,
     every: usize,
     scanned: usize = 0,
     written: usize = 0,
@@ -19,16 +23,34 @@ pub const Sequence = struct {
     previous_height: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator, path: []const u8, every: usize) !Sequence {
+        return initOutputs(allocator, path, null, every);
+    }
+
+    pub fn initOutputs(allocator: std.mem.Allocator, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !Sequence {
         if (every == 0) return error.BadInterval;
-        try std.fs.cwd().makePath(path);
-        var directory = try std.fs.cwd().openDir(path, .{ .iterate = true });
-        errdefer directory.close();
-        var entries = directory.iterate();
-        while (try entries.next()) |entry| {
-            if (isFrameName(entry.name)) try directory.deleteFile(entry.name);
+        if (frames_path == null and gif_path == null) return error.NoOutput;
+        var directory = std.fs.cwd();
+        var owns_directory = false;
+        var index: ?std.fs.File = null;
+        errdefer if (owns_directory) directory.close();
+        if (frames_path) |path| {
+            try std.fs.cwd().makePath(path);
+            directory = try std.fs.cwd().openDir(path, .{ .iterate = true });
+            owns_directory = true;
+            var entries = directory.iterate();
+            while (try entries.next()) |entry| {
+                if (isFrameName(entry.name)) try directory.deleteFile(entry.name);
+            }
+            index = try directory.createFile("frames.txt", .{});
         }
-        const index = try directory.createFile("frames.txt", .{});
-        return .{ .allocator = allocator, .directory = directory, .index = index, .every = every };
+        return .{
+            .allocator = allocator,
+            .directory = directory,
+            .owns_directory = owns_directory,
+            .index = index,
+            .gif_path = gif_path,
+            .every = every,
+        };
     }
 
     fn isFrameName(name: []const u8) bool {
@@ -39,8 +61,9 @@ pub const Sequence = struct {
 
     pub fn deinit(self: *Sequence) void {
         if (self.previous) |pixels| self.allocator.free(pixels);
-        self.index.close();
-        self.directory.close();
+        if (self.gif_writer) |*writer| writer.deinit();
+        if (self.index) |file| file.close();
+        if (self.owns_directory) self.directory.close();
     }
 
     /// Record one complete ARGB8888 panel. Every Nth scan is considered,
@@ -76,9 +99,19 @@ pub const Sequence = struct {
         const index = self.scanned;
         self.scanned += 1;
         if (same or index % self.every != 0) return;
-        try self.write(width, height, pixels);
-        try self.index.writer().print("frame_{d:0>5}.ppm {d}\n", .{ self.written, when });
+        if (self.gif_path) |path| {
+            if (self.gif_writer == null) self.gif_writer = try gif.Writer.init(self.allocator, path, width, height);
+            try self.gif_writer.?.record(width, height, pixels, when);
+        }
+        if (self.index != null) {
+            try self.write(width, height, pixels);
+            try self.index.?.writer().print("frame_{d:0>5}.ppm {d}\n", .{ self.written, when });
+        }
         self.written += 1;
+    }
+
+    pub fn finish(self: *Sequence) !void {
+        if (self.gif_writer) |*writer| try writer.finish();
     }
 
     fn write(self: *Sequence, width: u32, height: u32, pixels: []const u32) !void {
@@ -152,13 +185,21 @@ pub const Armed = struct {
     eink_panel: ?*eink.Panel = null,
     eink_pixels: ?[]u32 = null,
 
-    /// Null when --frames-out is off. Call after board.attach: attaching the
-    /// GLCDC rebuilds its output stage, which would drop the Vsync.
+    /// Null when both sequence outputs are off. Call after board.attach:
+    /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
     pub fn arm(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !?*Armed {
-        const directory = path orelse return null;
+        return armOutputs(allocator, board, path, null, every);
+    }
+
+    pub fn armOutputs(allocator: std.mem.Allocator, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !?*Armed {
+        if (frames_path == null and gif_path == null) return null;
         const self = try allocator.create(Armed);
         errdefer allocator.destroy(self);
-        self.* = .{ .allocator = allocator, .board = board, .sequence = try Sequence.init(allocator, directory, every) };
+        self.* = .{
+            .allocator = allocator,
+            .board = board,
+            .sequence = try Sequence.initOutputs(allocator, frames_path, gif_path, every),
+        };
         errdefer self.sequence.deinit();
         if (board.asks.attached_eink) |panel| {
             self.eink_panel = panel;
@@ -222,8 +263,8 @@ pub const Armed = struct {
 
     pub fn finish(self: *Armed) !void {
         if (self.failed) |err| return err;
-        if (self.eink_panel != null) return;
         if (self.capture) |*capture| try capture.finish(self.board, &self.sequence);
+        try self.sequence.finish();
     }
 
     pub fn deinit(self: *Armed) void {
@@ -251,7 +292,15 @@ pub const Run = struct {
     }
 
     pub fn initForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !Run {
-        return init(allocator, board, options.frames_out, options.frames_every);
+        const armed = Armed.of(board) orelse try Armed.armOutputs(
+            allocator,
+            board,
+            options.frames_out,
+            options.gif_out,
+            options.frames_every,
+        ) orelse return .{ .armed = null };
+        _ = try armed.fit();
+        return .{ .armed = armed };
     }
 
     pub fn finish(self: *Run, board: *Board) !void {

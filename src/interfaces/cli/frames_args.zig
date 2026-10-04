@@ -5,12 +5,15 @@ const world_flags = @import("world_flags.zig");
 pub const Options = struct {
     frames_out: ?[]const u8 = null,
     frames_every: usize = 1,
+    gif_out: ?[]const u8 = null,
 };
 
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--frames-out")) {
         options.frames_out = try world_flags.next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--gif-out")) {
+        options.gif_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--frames-every")) {
         options.frames_every = try std.fmt.parseInt(usize, try world_flags.next(argv, index), 10);
         if (options.frames_every == 0) return error.BadValue;

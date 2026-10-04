@@ -396,3 +396,5 @@ pub fn fault(out: Writer, taken: engine.Fault) !void {
         .{ @tagName(access.kind), access.size, access.address },
     );
 }
+
+pub const gif = @import("gif.zig");
