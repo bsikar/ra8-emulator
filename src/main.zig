@@ -69,7 +69,7 @@ fn loadAll(core: *engine.Engine, board: *Board, image: elf.Image, parts: *Parts,
     _ = try ra8.core.csel.tt_hook.attach(core.handle, image, &board.partitions);
     _ = try ra8.core.csel.vscclrm_hook.attach(core.handle, image);
     ra8.board.option_memory.apply(board, core.*);
-    _ = try report.frames_out.Armed.arm(std.heap.page_allocator, board, options.frames.frames_out, options.frames.frames_every);
+    _ = try report.frames_out.Armed.arm(std.heap.page_allocator, board, if (options.ctl_cpu_load) null else options.frames.frames_out, options.frames.frames_every);
     return written;
 }
 

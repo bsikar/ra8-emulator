@@ -1,10 +1,11 @@
-//! Numbered P6 frames for `--frames-out`. Frames arrive only after a GLCDC
-//! scan completed; this module handles sampling, duplicate suppression, and
-//! deterministic file output. Each written frame gets a line in frames.txt
-//! beside it: the file name and the emulated time it was scanned, in ns.
+//! Numbered P6 frames for `--frames-out`. GLCDC frames arrive after scans;
+//! e-ink frames arrive after glass refreshes. Sampling and duplicate
+//! suppression are shared, and frames.txt records emulated time in ns.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const frame_args = @import("frames_args.zig");
+const eink = @import("../../periph/eink/eink.zig");
+const eink_wire = @import("../../periph/eink/eink_wire.zig");
 
 pub const Sequence = struct {
     allocator: std.mem.Allocator,
@@ -148,6 +149,8 @@ pub const Armed = struct {
     capture: ?FrameCapture = null,
     /// The first error an in-run frame hit; the boundary cannot return one.
     failed: ?anyerror = null,
+    eink_panel: ?*eink.Panel = null,
+    eink_pixels: ?[]u32 = null,
 
     /// Null when --frames-out is off. Call after board.attach: attaching the
     /// GLCDC rebuilds its output stage, which would drop the Vsync.
@@ -156,6 +159,12 @@ pub const Armed = struct {
         const self = try allocator.create(Armed);
         errdefer allocator.destroy(self);
         self.* = .{ .allocator = allocator, .board = board, .sequence = try Sequence.init(allocator, directory, every) };
+        errdefer self.sequence.deinit();
+        if (board.asks.attached_eink) |panel| {
+            self.eink_panel = panel;
+            self.eink_pixels = try allocator.alloc(u32, panel.glass_buffer.pixels.len);
+            panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
+        }
         board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame } };
         return self;
     }
@@ -175,14 +184,28 @@ pub const Armed = struct {
     }
 
     fn frameAt(self: *Armed, when: u64) !void {
+        if (self.eink_panel != null) return;
         const capture = (try self.fit()) orelse return;
         if (self.board.display.scanOut() == null) return;
         try self.sequence.record(capture.width, capture.height, capture.pixels, when);
         capture.before = self.board.display.system.frames;
     }
 
+    fn onEinkRefresh(context: *anyopaque) void {
+        const self: *Armed = @ptrCast(@alignCast(context));
+        const panel = self.eink_panel.?;
+        const pixels = self.eink_pixels.?;
+        for (panel.glass_buffer.pixels, pixels) |gray, *pixel| {
+            pixel.* = 0xFF00_0000 | (@as(u32, gray) << 16) | (@as(u32, gray) << 8) | gray;
+        }
+        self.sequence.record(eink_wire.panel.width, eink_wire.panel.height, pixels, self.board.time.base.now()) catch |err| {
+            if (self.failed == null) self.failed = err;
+        };
+    }
+
     /// The capture buffer, sized to the panel as the firmware has it now.
     pub fn fit(self: *Armed) !?*FrameCapture {
+        if (self.eink_panel != null) return null;
         if (self.capture) |*capture| {
             const same = capture.width == self.board.display.panelWidth() and
                 capture.height == self.board.display.panelHeight();
@@ -199,19 +222,25 @@ pub const Armed = struct {
 
     pub fn finish(self: *Armed) !void {
         if (self.failed) |err| return err;
+        if (self.eink_panel != null) return;
         if (self.capture) |*capture| try capture.finish(self.board, &self.sequence);
     }
 
     pub fn deinit(self: *Armed) void {
         self.board.display.output.vsync = null;
+        if (self.eink_panel) |panel| {
+            if (panel.refresh_hook) |hook| {
+                if (hook.context == @as(*anyopaque, @ptrCast(self))) panel.refresh_hook = null;
+            }
+        }
+        if (self.eink_pixels) |pixels| self.allocator.free(pixels);
         if (self.capture) |*capture| capture.deinit(self.board);
         self.sequence.deinit();
         self.allocator.destroy(self);
     }
 };
 
-/// Report-side handle: the armed run, armed now if the run started without
-/// one. A disabled run is a no-op.
+/// Report-side handle for an already armed frame sequence.
 pub const Run = struct {
     armed: ?*Armed,
 

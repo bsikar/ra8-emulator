@@ -16,6 +16,7 @@ const endpoint = @import("../periph/model/endpoint.zig");
 const parts = @import("../periph/model/parts.zig");
 const request = @import("../periph/model/request.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
+const eink = @import("../periph/eink/eink.zig");
 const Board = @import("board.zig").Board;
 
 pub const Error = error{ ChannelTaken, NothingFitted };
@@ -26,6 +27,7 @@ pub const Asks = struct {
     asked: [request.max]request.Request = undefined,
     count: usize = 0,
     arena: ?std.mem.Allocator = null,
+    attached_eink: ?*eink.Panel = null,
 
     /// `asks` is at most `request.max` long, as the command line allows.
     pub fn keep(self: *Asks, arena: std.mem.Allocator, asks: []const request.Request) void {
@@ -55,6 +57,9 @@ pub fn all(board: *Board) !void {
             std.debug.print("--attach {s}: nothing put on the line ({s})\n", .{ wanted.name, @errorName(err) });
             return err;
         };
+        if (std.mem.eql(u8, wanted.name, parts.panel_name)) {
+            board.asks.attached_eink = @ptrCast(@alignCast(made.state));
+        }
     }
 }
 

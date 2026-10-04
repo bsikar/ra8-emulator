@@ -72,3 +72,51 @@ test "--panel-only writes the dark fallback panel at its own size" {
     try std.testing.expectEqual(@as(u32, 1024), std.mem.readInt(u32, header[16..20], .big));
     try std.testing.expectEqual(@as(u32, 600), std.mem.readInt(u32, header[20..24], .big));
 }
+
+test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
+    const proto = ra8.periph.eink_wire;
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.asks.attached_eink = &board.panel;
+
+    const panel = board.asks.attached_eink.?;
+    word(panel, proto.preamble.command);
+    word(panel, @intFromEnum(proto.Command.load_area));
+    for ([_]u16{ 0x0030, 0, 0, 2, 1, 0x2211 }) |value| {
+        word(panel, proto.preamble.write);
+        word(panel, value);
+    }
+    word(panel, proto.preamble.command);
+    word(panel, @intFromEnum(proto.Command.display_area));
+    for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
+        word(panel, proto.preamble.write);
+        word(panel, value);
+    }
+
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "eink.png" });
+    defer std.testing.allocator.free(path);
+    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    try std.testing.expect(saved.frame);
+    try std.testing.expectEqual(@as(u32, 128), saved.width);
+
+    const bytes = try std.fs.cwd().readFileAlloc(std.testing.allocator, path, 1024 * 1024);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, &ra8.board.report.png.signature, bytes[0..8]);
+    const idat_len = std.mem.readInt(u32, bytes[33..37], .big);
+    try std.testing.expectEqualStrings("IDAT", bytes[37..41]);
+    var compressed = std.io.fixedBufferStream(bytes[41 .. 41 + idat_len]);
+    var raw = std.ArrayList(u8).init(std.testing.allocator);
+    defer raw.deinit();
+    try std.compress.zlib.decompress(compressed.reader(), raw.writer());
+    try std.testing.expectEqual(@as(u8, 0), raw.items[0]);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0x11, 0x11, 0x11, 0xFF, 0x22, 0x22, 0x22, 0xFF }, raw.items[1..9]);
+}
+
+fn word(panel: anytype, value: u16) void {
+    _ = panel.exchange(@intCast(value >> 8));
+    _ = panel.exchange(@intCast(value & 0xFF));
+}
