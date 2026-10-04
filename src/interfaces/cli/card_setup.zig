@@ -4,6 +4,7 @@ const Board = @import("../../board/board.zig").Board;
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const sd_advice = @import("../../periph/sd/sd_format_advice.zig");
 const sd_image = @import("../../periph/sd/sd_image.zig");
+const sd_mkimage = @import("../../periph/sd/sd_mkimage.zig");
 
 /// The label a `--sd-new` format gives the card when the spec names none.
 pub const default_label = "RA8";
@@ -19,11 +20,20 @@ pub fn newSpec(spec: []const u8) !struct { sd_format.Kind, []const u8 } {
 /// RAM store is the overlay, written back over PATH only with `--sd-writable`.
 pub const Sdhi = struct {
     image: ?[]const u8 = null,
+    /// `--sd-dir DIR`: a FAT32 image built from DIR (RA8EMU-563) instead.
+    dir: ?[]const u8 = null,
     writable: bool = false,
 };
 
 /// Load the `--sd-image` file into the SDHI card.
 pub fn prepareSdhi(board: *Board, sdhi: Sdhi) !void {
+    if (sdhi.dir) |dir| {
+        if (sdhi.image != null) {
+            std.debug.print("--sd-dir and --sd-image both name the SDHI card; pick one\n", .{});
+            return error.ConflictingCardOptions;
+        }
+        return fromDir(board, dir);
+    }
     const path = sdhi.image orelse return;
     const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, std.math.maxInt(usize)) catch |err| {
         std.debug.print("cannot read SD image {s}: {s}\n", .{ path, @errorName(err) });
@@ -34,6 +44,30 @@ pub fn prepareSdhi(board: *Board, sdhi: Sdhi) !void {
         std.debug.print("--sd-image {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
+}
+
+/// Build the `--sd-dir` image and hand its bytes to the SDHI card.
+fn fromDir(board: *Board, path: []const u8) !void {
+    const allocator = std.heap.page_allocator;
+    var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+        std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+    defer dir.close();
+    var img = sd_image.Image.init(allocator);
+    defer img.deinit();
+    const built = sd_mkimage.build(allocator, &img, dir, default_label) catch |err| {
+        std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
+        return err;
+    };
+    const bytes = try allocator.alloc(u8, @as(usize, img.capacity_blocks) * 512);
+    defer allocator.free(bytes);
+    var index: u32 = 0;
+    while (index < img.capacity_blocks) : (index += 1) {
+        _ = img.read(index, bytes[@as(usize, index) * 512 ..][0..512]);
+    }
+    try board.card.card.loadBytes(bytes);
+    std.debug.print("sd-dir: {s} -> FAT32 {d} MiB, {d} files, {d} dirs\n", .{ path, img.capacity_blocks / 2048, built.files, built.dirs });
 }
 
 /// Write the SDHI card back over its image when `--sd-writable` asked.
