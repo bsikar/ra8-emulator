@@ -94,7 +94,7 @@ const Other = struct {
     fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, cpu0: Guest, board: *Board, path: []const u8, target: *zig_script.ZigScript) !void {
         self.bytes = try std.fs.cwd().readFileAlloc(allocator, path, second_core.limits.image_bytes);
         errdefer allocator.free(self.bytes);
-        try pair.open(allocator, null, board, path, cpu0);
+        try pair.open(allocator, board, path, cpu0);
         target.other_image = try elf.Image.init(self.bytes);
         self.driver = .{ .machine = &self.machine };
         self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };

@@ -47,17 +47,14 @@ fn image() [page * 2]u8 {
     return file;
 }
 
-test "a single-core zig run loads CPU0 into its own store, not the engine" {
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+test "a single-core zig run loads CPU0 into its own store" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var file = image();
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
-    try cpu0.attach(&board, &core, try elf.Image.init(&file), .{ .path = "cpu0.elf", .cpu = .zig });
-    const memory = cpu0.guest(core);
+    _ = try cpu0.attachStore(&board, try elf.Image.init(&file));
+    const memory = cpu0.own();
     try std.testing.expect(memory == .store);
     try std.testing.expectEqual(stack, try memory.readWord(vectors));
     try std.testing.expectEqual(ra8.periph.cpuid.cpu0, try memory.readWord(ra8.periph.cpuid.address));
@@ -65,11 +62,4 @@ test "a single-core zig run loads CPU0 into its own store, not the engine" {
     // left for an image page outside memmap.
     _ = try memory.readWord(0x02E1_79F0);
     try memory.map(0x02C9_F000, 0x1000);
-    // The engine was never written: it holds none of the image.
-    try std.testing.expectEqual(@as(u32, 0), core.readWord(vectors) catch 0);
-}
-
-test "a zig run with a second core puts CPU0 on its own store too (RA8EMU-588)" {
-    try std.testing.expect(ra8.board.zig_run.cpu0_memory.wanted(.{ .path = "cpu0.elf", .cpu = .zig, .cpu1_path = "cpu1.elf" }));
-    try std.testing.expect(ra8.board.zig_run.cpu0_memory.wanted(.{ .path = "cpu0.elf", .cpu = .zig }));
 }
