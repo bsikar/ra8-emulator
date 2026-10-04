@@ -103,6 +103,7 @@ test "a Zig core run profiles retired function instructions and writes folded ou
 test {
     _ = @import("zig_memory_test.zig");
     _ = @import("zig_main_test.zig");
+    _ = @import("idle_skip_equiv_test.zig");
 }
 
 test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-603)" {
