@@ -192,6 +192,7 @@ test "a string read asks for up to 255 bytes of the index in that language" {
 test "a short packet ends a read before the requested length" {
     var device = attached();
     var host = Host{ .step = .string_languages };
+    host.device[15] = 2;
     host.tick(&device);
     send(&device, &languages);
     host.tick(&device);
@@ -282,4 +283,14 @@ test "a set with no endpoints skips the halt requests" {
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.ccpl);
     host.tick(&device);
     try std.testing.expectEqual(usbfs.host.Step.configured, host.step);
+}
+
+test "a device that names no strings skips string descriptor 0" {
+    var device = attached();
+    var host = Host{ .step = .string_languages };
+    @memcpy(&host.device, &device_descriptor);
+    @memset(host.device[14..17], 0);
+    host.tick(&device);
+    try std.testing.expectEqual(usbfs.host.Step.set_interface, host.step);
+    try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.usbreq), 2));
 }
