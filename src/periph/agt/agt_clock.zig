@@ -109,3 +109,6 @@ pub fn underflowInNs(count: u16, source: Source, pclkb_hz: u64) ?u64 {
 }
 
 const ns_per_s: u64 = 1_000_000_000;
+
+/// When a channel's next underflow is due on the virtual time base.
+pub const sched = @import("agt_sched.zig");

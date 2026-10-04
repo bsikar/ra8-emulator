@@ -124,6 +124,7 @@ test {
     _ = @import("periph/adc/adc_test.zig");
     _ = @import("periph/agt/agt_test.zig");
     _ = @import("periph/agt/agt_clock_test.zig");
+    _ = @import("periph/agt/agt_sched_test.zig");
     _ = @import("periph/agt/agt_compare_test.zig");
     _ = @import("periph/bkup/bkup_test.zig");
     _ = @import("periph/bkup/bkup_ctrl_test.zig");
