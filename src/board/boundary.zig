@@ -18,6 +18,7 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 /// afterwards, so an interrupt raised here is entered in the same boundary
 /// rather than a chunk later.
 pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
+    self.time.base.advance(instructions);
     self.watchdog.tick();
     self.heartbeat.tick();
     self.lowpower.tick();
