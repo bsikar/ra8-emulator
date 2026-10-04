@@ -311,7 +311,7 @@ table above. A group listed as missing does not fail the build yet.
 | fp_system | missing |
 | fp_convert | missing |
 | fp_directed | missing |
-| fp_move | missing |
+| fp_move | 26 |
 | vscclrm | missing |
 | vlldm_vlstm | missing |
 | vlldm_vlstm_t2 | missing |
