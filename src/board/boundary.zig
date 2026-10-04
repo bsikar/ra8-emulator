@@ -39,7 +39,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     try self.heartbeat.arm(&self.time.queue, self.time.base.now());
     self.lowpower.tick();
     self.microphone.tick();
-    self.clock.tick();
+    self.clock.tickFor(elapsed_ns);
     agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
     try agt_sched.arm(&self.interval, &self.time.queue, self.time.base.now());
     gpt_sched.tickFor(&self.pwm, before_ns, self.time.base.now());

@@ -58,6 +58,7 @@ const clock = @import("rtc_clock.zig");
 const reset = @import("rtc_reset.zig");
 const frequency = @import("rtc_frequency.zig");
 const rtc_source = @import("rtc_source.zig");
+const rtc_pace = @import("rtc_pace.zig");
 
 /// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -94,6 +95,9 @@ pub const software_reset = reset;
 /// The RFRH/RFRL pair and the two ordering rules that govern it.
 pub const freq = frequency;
 
+/// Boundary-geared or virtual-time counting.
+pub const pace = rtc_pace;
+
 /// RCR1 interrupt enables and the RCR2 run bit.
 pub const control = struct {
     pub const aie: u8 = 0x01;
@@ -127,9 +131,11 @@ pub const Due = std.BoundedArray(u16, 2);
 pub const Rtc = struct {
     reg: [win_span]u8 = .{0} ** win_span,
     now: clock.Calendar = .{},
-    /// The sub-second counter. No real 64 Hz time base here, so it is a
-    /// count that moves rather than one that measures.
+    /// The sub-second counter: one step a boundary when geared, 64 Hz of
+    /// virtual time otherwise.
     r64: u8 = 0,
+    /// The gear the counters move in.
+    pace: rtc_pace.Pace = .{},
     /// The alarm edge: whether the time matched at the last evaluation.
     matched: bool = false,
     /// Modelled seconds the clock has counted.
@@ -170,19 +176,27 @@ pub const Rtc = struct {
         return reset.running(self.reg[off.rcr2]);
     }
 
-    /// One chunk boundary. A stopped clock holds its time, which is what
-    /// lets firmware write the counters at all.
+    /// One geared chunk boundary.
     pub fn tick(self: *Rtc) void {
+        self.tickFor(0);
+    }
+
+    /// One chunk boundary `elapsed_ns` of virtual time after the last. A
+    /// stopped clock holds its time, which is what lets firmware write the
+    /// counters at all.
+    pub fn tickFor(self: *Rtc, elapsed_ns: u64) void {
         if (!self.running()) return;
-        self.r64 = (self.r64 +% 1) & r64_mask;
-        var elapsed: u8 = 0;
-        while (elapsed < seconds_per_tick) : (elapsed += 1) {
+        const owed = self.pace.step(elapsed_ns, seconds_per_tick);
+        self.r64 = @intCast((@as(u64, self.r64) + (owed.r64 & r64_mask)) & r64_mask);
+        var elapsed: u64 = 0;
+        while (elapsed < owed.seconds) : (elapsed += 1) {
             self.now.advance();
             self.seconds +%= 1;
         }
+        if (owed.seconds == 0 and owed.r64 == 0) return;
         self.publish();
         self.checkAlarm();
-        if (self.reg[off.rcr1] & control.pie != 0) {
+        if (owed.seconds != 0 and self.reg[off.rcr1] & control.pie != 0) {
             self.periodics +%= 1;
             self.due_periodic = true;
         }
