@@ -9,3 +9,5 @@
 | threadx_cpu1.elf | pass | budget | threadx_cpu1: 10 ticks PASS | - | 0 |
 | txm_fault_cpu1.elf | pass | budget | txm_fault_cpu1: module faulted, manager ran 10 more ticks PASS | - | 0 |
 | txm_manager_cpu1.elf | pass | budget | txm_manager_cpu1: module ran 10 times PASS | - | 0 |
+| txm_rpc_cpu1.elf | pass | budget | txm_rpc_cpu1: add returned 101 202 303 404 PASS | - | 0 |
+| txm_table_cpu1.elf | pass | budget | txm_table_cpu1: table returned 10 100 200 40000 PASS | - | 0 |
