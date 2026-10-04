@@ -6,7 +6,7 @@ pub const text =
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
     \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
-    \\                    [--usb-loop] [--cms N] [--sfs N]
+    \\                    [--usb-loop] [--usbip PORT] [--cms N] [--sfs N]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--until TEXT] [--ms N]
     \\                    [--break-sym PLACE [N]] [--dump-mem PLACE [N]]
     \\                    [--watch PLACE] [--stop-on-undefined]
@@ -113,6 +113,8 @@ pub const text =
     \\  --console          stream SCI lines and read host input as console RX
     \\  --usb-loop         cable the HS host jack to the board's own FS
     \\                     device jack, in place of the stand-in device
+    \\  --usbip PORT       after the run, offer the FS device to usbip hosts
+    \\                     on 127.0.0.1:PORT (3240 is usbip's own)
     \\  --no-bus-errors    end the run with a fault report on an access
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is

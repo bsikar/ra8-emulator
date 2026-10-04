@@ -41,6 +41,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.usb_loop = true;
     } else if (std.mem.eql(u8, flag, "--usb-disk")) {
         options.usb_disk = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--usbip")) {
+        options.usbip = try std.fmt.parseInt(u16, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--battery")) {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {

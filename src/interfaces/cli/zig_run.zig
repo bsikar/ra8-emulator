@@ -154,6 +154,7 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
         try frame_out.report(out, board, options.frame_out);
+        try cli.usbip_export.run.afterRun(out, options.usbip, &board.usb.script);
     } else if (options.ctl_cpu_load) return ctlLoad(out, .{}, status);
     return status;
 }
