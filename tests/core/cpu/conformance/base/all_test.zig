@@ -67,6 +67,7 @@ test {
     _ = @import("mve_float_maxnma_vectors_test.zig");
     _ = @import("mve_float_maxnmv_vectors_test.zig");
     _ = @import("mve_float_rint_vectors_test.zig");
+    _ = @import("mve_float_scalar_vectors_test.zig");
     _ = @import("mve_float_unary_vectors_test.zig");
     _ = @import("mve_float_vcadd_vectors_test.zig");
     _ = @import("mve_float_vcmla_vectors_test.zig");
