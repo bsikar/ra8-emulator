@@ -308,7 +308,7 @@ table above. A group listed as missing does not fail the build yet.
 | preload | 29 |
 | fp_arith | missing |
 | fp_unary | missing |
-| fp_system | missing |
+| fp_system | 38 |
 | fp_convert | missing |
 | fp_directed | missing |
 | fp_move | 26 |
