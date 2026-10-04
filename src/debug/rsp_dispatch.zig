@@ -11,7 +11,7 @@
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
-const engine = @import("../core/engine.zig");
+const Cortex = @import("../core/cpu/cortex.zig").Cortex;
 const features = @import("rsp_features.zig");
 const stop_machine = @import("stop_machine.zig");
 
@@ -31,7 +31,7 @@ pub const console = @import("rsp_console.zig");
 const core_view = @import("core_view.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
-pub const registers = [_]engine.Cortex{
+pub const registers = [_]Cortex{
     .r0, .r1,  .r2,  .r3,  .r4, .r5, .r6, .r7,   .r8,
     .r9, .r10, .r11, .r12, .sp, .lr, .pc, .xpsr,
 };

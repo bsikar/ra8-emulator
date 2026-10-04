@@ -67,42 +67,37 @@ pub const Error = error{
 pub const Fault = fault.Fault;
 pub const Watch = fault.Watch;
 
-pub const Cortex = enum(c_int) {
-    pc = c.uc.UC_ARM_REG_PC,
-    sp = c.uc.UC_ARM_REG_SP,
-    lr = c.uc.UC_ARM_REG_LR,
-    r0 = c.uc.UC_ARM_REG_R0,
-    r1 = c.uc.UC_ARM_REG_R1,
-    r2 = c.uc.UC_ARM_REG_R2,
-    // The rest of the caller-saved set, plus the two status registers:
-    // exception entry stacks them and the controller reads them.
-    r3 = c.uc.UC_ARM_REG_R3,
-    r12 = c.uc.UC_ARM_REG_R12,
-    xpsr = c.uc.UC_ARM_REG_XPSR,
-    primask = c.uc.UC_ARM_REG_PRIMASK,
-    // The Process stack pointer. A scheduler's handler reads it to find the
-    // frame it has to save and writes it to name the thread it picked, so
-    // exception entry and return both keep it current.
-    psp = c.uc.UC_ARM_REG_PSP,
-    // The callee-saved half of the file, the Main stack pointer and the
-    // three remaining words that mask or select interrupts. None of them is
-    // an argument at a call boundary, which is why the dump above leaves
-    // them out; src/core/idle.zig needs the WHOLE architectural state,
-    // because a loop that walks any one of these is making progress.
-    r4 = c.uc.UC_ARM_REG_R4,
-    r5 = c.uc.UC_ARM_REG_R5,
-    r6 = c.uc.UC_ARM_REG_R6,
-    r7 = c.uc.UC_ARM_REG_R7,
-    r8 = c.uc.UC_ARM_REG_R8,
-    r9 = c.uc.UC_ARM_REG_R9,
-    r10 = c.uc.UC_ARM_REG_R10,
-    r11 = c.uc.UC_ARM_REG_R11,
-    msp = c.uc.UC_ARM_REG_MSP,
-    basepri = c.uc.UC_ARM_REG_BASEPRI,
-    faultmask = c.uc.UC_ARM_REG_FAULTMASK,
-    control = c.uc.UC_ARM_REG_CONTROL,
-    fpscr = c.uc.UC_ARM_REG_FPSCR,
-};
+pub const Cortex = @import("cpu/cortex.zig").Cortex;
+
+/// Unicorn's id for one register.
+fn ucId(which: Cortex) c_int {
+    return switch (which) {
+        .pc => c.uc.UC_ARM_REG_PC,
+        .sp => c.uc.UC_ARM_REG_SP,
+        .lr => c.uc.UC_ARM_REG_LR,
+        .r0 => c.uc.UC_ARM_REG_R0,
+        .r1 => c.uc.UC_ARM_REG_R1,
+        .r2 => c.uc.UC_ARM_REG_R2,
+        .r3 => c.uc.UC_ARM_REG_R3,
+        .r12 => c.uc.UC_ARM_REG_R12,
+        .xpsr => c.uc.UC_ARM_REG_XPSR,
+        .primask => c.uc.UC_ARM_REG_PRIMASK,
+        .psp => c.uc.UC_ARM_REG_PSP,
+        .r4 => c.uc.UC_ARM_REG_R4,
+        .r5 => c.uc.UC_ARM_REG_R5,
+        .r6 => c.uc.UC_ARM_REG_R6,
+        .r7 => c.uc.UC_ARM_REG_R7,
+        .r8 => c.uc.UC_ARM_REG_R8,
+        .r9 => c.uc.UC_ARM_REG_R9,
+        .r10 => c.uc.UC_ARM_REG_R10,
+        .r11 => c.uc.UC_ARM_REG_R11,
+        .msp => c.uc.UC_ARM_REG_MSP,
+        .basepri => c.uc.UC_ARM_REG_BASEPRI,
+        .faultmask => c.uc.UC_ARM_REG_FAULTMASK,
+        .control => c.uc.UC_ARM_REG_CONTROL,
+        .fpscr => c.uc.UC_ARM_REG_FPSCR,
+    };
+}
 
 /// What a run is allowed to do, re-exported so `engine.Session` resolves.
 pub const Session = @import("session.zig").Session;
@@ -172,14 +167,14 @@ pub const Engine = struct {
 
     pub fn setRegister(self: Engine, which: Cortex, value: u32) Error!void {
         var scratch = value;
-        if (c.uc.uc_reg_write(self.handle, @intFromEnum(which), &scratch) != c.uc.UC_ERR_OK) {
+        if (c.uc.uc_reg_write(self.handle, ucId(which), &scratch) != c.uc.UC_ERR_OK) {
             return Error.RegisterFailed;
         }
     }
 
     pub fn register(self: Engine, which: Cortex) Error!u32 {
         var value: u32 = 0;
-        if (c.uc.uc_reg_read(self.handle, @intFromEnum(which), &value) != c.uc.UC_ERR_OK) {
+        if (c.uc.uc_reg_read(self.handle, ucId(which), &value) != c.uc.UC_ERR_OK) {
             return Error.RegisterFailed;
         }
         return value;

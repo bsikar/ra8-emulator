@@ -1,14 +1,14 @@
 //! Where the `--dump-regs` rows of `--report json` read from (RA8EMU-579):
 //! the Zig core's registers as the run left them. The Unicorn engine's
 //! reader went with the engine run (RA8EMU-607).
-const engine = @import("../../../core/engine.zig");
+const Cortex = @import("../../../core/cpu/cortex.zig").Cortex;
 const Regs = @import("../../../core/cpu/regs.zig").Regs;
 
 pub const Reader = union(enum) {
     zig: *const Regs,
 
     /// The register's value, or null when its source will not give it.
-    pub fn register(self: Reader, which: engine.Cortex) ?u32 {
+    pub fn register(self: Reader, which: Cortex) ?u32 {
         return switch (self) {
             .zig => |regs| fromRegs(regs, which),
         };
@@ -17,7 +17,7 @@ pub const Reader = union(enum) {
 
 /// The dumped registers out of the Zig core's file. SP is the active
 /// stack pointer, the one the core's R13 names right now.
-fn fromRegs(regs: *const Regs, which: engine.Cortex) ?u32 {
+fn fromRegs(regs: *const Regs, which: Cortex) ?u32 {
     return switch (which) {
         .r0 => regs.get(0),
         .r1 => regs.get(1),
