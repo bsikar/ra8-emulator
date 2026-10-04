@@ -88,6 +88,7 @@ pub const fp_mem = @import("ops/fp_mem.zig");
 pub const mve_vpst = @import("ops/mve_vpst.zig");
 pub const mve_int = @import("ops/mve_int.zig");
 pub const mve_bitwise = @import("ops/mve_bitwise.zig");
+pub const mve_modimm = @import("ops/mve_modimm.zig");
 pub const mve_int_pair = @import("ops/mve_int_pair.zig");
 pub const mve_int_shift = @import("ops/mve_int_shift.zig");
 pub const mve_int_mulh = @import("ops/mve_int_mulh.zig");
