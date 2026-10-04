@@ -30,7 +30,7 @@ const World = struct {
         self.cpu1.allocator = std.testing.allocator;
         self.cpu1.bytes = try std.testing.allocator.alloc(u8, 0);
         self.cpu1.attached = false;
-        self.cpu1.second = .{ .core = try Engine.open(), .vector_base = base };
+        self.cpu1.second = .{ .core = try Engine.open(), .state = .{ .vector_base = base } };
         try self.cpu1.second.core.shareBoardRamWith(&self.theirs0);
         try self.cpu1.attachWith(&self.mine0, null);
     }
@@ -49,9 +49,9 @@ test "each round checks CPU1's share and counts it the Unicorn way" {
     defer world.close();
     try world.cpu1.round(100);
     try world.cpu1.round(100);
-    try std.testing.expectEqual(@as(usize, 2), world.cpu1.second.turns);
-    try std.testing.expectEqual(@as(usize, 200), world.cpu1.second.ran);
-    try std.testing.expectEqual(base + 8, world.cpu1.second.pc);
+    try std.testing.expectEqual(@as(usize, 2), world.cpu1.second.state.turns);
+    try std.testing.expectEqual(@as(usize, 200), world.cpu1.second.state.ran);
+    try std.testing.expectEqual(base + 8, world.cpu1.second.state.pc);
     try std.testing.expect(world.cpu1.clean());
 }
 
@@ -75,7 +75,7 @@ test "a CPU1 whose Zig core stops is not clean and takes no more" {
     defer world.close();
     try world.cpu1.round(100);
     try std.testing.expect(!world.cpu1.clean());
-    const ran = world.cpu1.second.ran;
+    const ran = world.cpu1.second.state.ran;
     try world.cpu1.round(100);
-    try std.testing.expectEqual(ran, world.cpu1.second.ran);
+    try std.testing.expectEqual(ran, world.cpu1.second.state.ran);
 }

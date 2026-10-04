@@ -44,7 +44,7 @@ fn bring(driver: *Driver, cpu0: *Engine, board: *Board) !void {
     cpu0.* = try Engine.open();
     errdefer cpu0.close();
     try cpu0.mapBoardRam();
-    driver.second = .{ .core = try Engine.open(), .vector_base = vectors };
+    driver.second = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
     errdefer driver.close();
     try driver.second.core.shareBoardRamWith(cpu0);
     try driver.second.core.writeWord(vectors, vectors + 0x800);

@@ -27,8 +27,8 @@ pub fn arm(started: anyerror!?*second_core.Second, wanted: ?rtos_hook.load.Windo
     const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, named, second_core.limits.image_bytes) catch return one;
     const image = elf.Image.init(bytes) catch return one;
     const found = rtos_hook.resolveOn(image, window, 1) orelse return one;
-    traced = rtos_hook.attach(one.core.handle, found, &one.timebase.ticks, &one.interrupts) catch null;
-    if (traced) |tracer| tracer.elapsed = &one.timebase.elapsed;
+    traced = rtos_hook.attach(one.core.handle, found, &one.state.timebase.ticks, &one.state.interrupts) catch null;
+    if (traced) |tracer| tracer.elapsed = &one.state.timebase.elapsed;
     return one;
 }
 
@@ -63,7 +63,7 @@ pub fn armZig(pair: *second_core.zig_run.Driver, wanted: ?rtos_hook.load.Window,
 
 /// Put `tracer` in front of CPU1's Zig core and make it the one `print` reports.
 pub fn listenZig(pair: *second_core.zig_run.Driver, tracer: *rtos_hook.Tracer) void {
-    tracer.now = &pair.second.timebase.ticks;
+    tracer.now = &pair.second.state.timebase.ticks;
     tracer.trace.fine = &pair.core.cpu.retired;
     zig_listener = .{ .tracer = tracer };
     const cpu = &pair.core.cpu;

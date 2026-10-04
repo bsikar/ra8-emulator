@@ -37,7 +37,7 @@ test "a reset CPU1 asks for latches SWRF and reboots the part, as CPU0's does" {
     cpu1.takeResetRequest();
     try std.testing.expect(!pending.requested);
 
-    cpu1.board = &board;
+    cpu1.state.board = &board;
     const keyed: u32 = scb.key.write << scb.key.shift;
     try cpu1.core.writeWord(memmap.scb.aircr, keyed | scb.field.sysresetreq);
     cpu1.takeResetRequest();
@@ -55,14 +55,14 @@ test "a reset the board performs holds CPU1, which then retires nothing" {
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
     board.reboot = &pending;
-    cpu1.board = &board;
+    cpu1.state.board = &board;
     try std.testing.expect(!cpu1.heldInReset());
 
     pending.performed = 1;
     try std.testing.expect(cpu1.heldInReset());
     cpu1.step(100);
-    try std.testing.expectEqual(@as(usize, 0), cpu1.ran);
-    try std.testing.expectEqual(@as(u32, 0), cpu1.turns);
+    try std.testing.expectEqual(@as(usize, 0), cpu1.state.ran);
+    try std.testing.expectEqual(@as(u32, 0), cpu1.state.turns);
     try std.testing.expect(cpu1.heldInReset());
 }
 
@@ -83,7 +83,7 @@ test "a fresh release after a reset brings CPU1 up out of CPU1INITVTOR" {
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
     board.reboot = &pending;
-    cpu1.board = &board;
+    cpu1.state.board = &board;
     const table: u32 = memmap.sram_base + 0x400;
     try cpu0.writeWord(table, memmap.sram_base + 0x8000);
     try cpu0.writeWord(table + 4, memmap.sram_base + 0x101);
@@ -95,9 +95,9 @@ test "a fresh release after a reset brings CPU1 up out of CPU1INITVTOR" {
     page.write(cpu_ctrl.win_base + cpu_ctrl.regs.initvtor, 4, table);
     page.write(cpu_ctrl.win_base + cpu_ctrl.regs.actcsr, 2, cpu_ctrl.key.value | cpu_ctrl.bits.actreq);
     try std.testing.expect(!cpu1.heldInReset());
-    try std.testing.expectEqual(@as(u32, 1), cpu1.restarts);
-    try std.testing.expectEqual(table, cpu1.vector_base);
-    try std.testing.expectEqual(memmap.sram_base + 0x100, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expectEqual(@as(u32, 1), cpu1.state.restarts);
+    try std.testing.expectEqual(table, cpu1.state.vector_base);
+    try std.testing.expectEqual(memmap.sram_base + 0x100, cpu1.state.pc & ~@as(u32, 1));
     try std.testing.expectEqual(table, try cpu1.core.readWord(memmap.scb.vtor));
 }
 
@@ -158,4 +158,8 @@ test "CPU1's image and VTOR are seeded into a store with no engine open" {
     try std.testing.expectEqual(memmap.mram_base, try memory.readWord(memmap.scb.vtor));
     try std.testing.expectEqual(memmap.sram_base + 0x8000, try memory.readWord(memmap.mram_base));
     try std.testing.expectEqual(memmap.mram_base + 0x5, try memory.readWord(memmap.mram_base + 4));
+}
+
+test {
+    _ = @import("second_state_test.zig");
 }

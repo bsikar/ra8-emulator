@@ -42,7 +42,7 @@ pub const Cpu1 = struct {
     /// `attach` with the image named, or none when CPU1's code is already
     /// in shared SRAM.
     pub fn attachWith(self: *Cpu1, mine0: *engine.Engine, image: ?elf.Image) !void {
-        try self.pair.open(mine0, self.second.core, image, self.second.vector_base);
+        try self.pair.open(mine0, self.second.core, image, self.second.state.vector_base);
         self.attached = true;
     }
 
@@ -58,12 +58,12 @@ pub const Cpu1 = struct {
 
     /// Check CPU1's share of a CPU0 round of `instructions`.
     pub fn round(self: *Cpu1, instructions: u32) !void {
-        const share = self.second.turn(instructions);
-        self.second.turns += 1;
+        const share = self.second.state.turn(instructions);
+        self.second.state.turns += 1;
         const before = self.pair.cpu.retired;
         try self.pair.turn(share);
-        self.second.ran += @intCast(self.pair.cpu.retired - before);
-        self.second.pc = self.pair.cpu.regs.pc;
+        self.second.state.ran += @intCast(self.pair.cpu.retired - before);
+        self.second.state.pc = self.pair.cpu.regs.pc;
     }
 
     /// True when CPU1's check found nothing wrong.
@@ -72,7 +72,7 @@ pub const Cpu1 = struct {
     }
 
     pub fn write(self: *const Cpu1, out: anytype) !void {
-        try out.print("cpu1: {d} instructions checked over {d} turns\n", .{ self.second.ran, self.second.turns });
+        try out.print("cpu1: {d} instructions checked over {d} turns\n", .{ self.second.state.ran, self.second.state.turns });
         try out.writeAll("cpu1 ");
         try report.write(out, &self.pair.lock, self.pair.ended orelse .budget);
         try out.print("cpu1 lockstep: {d} peripheral access(es) replayed and matched\n", .{self.pair.log.matched});

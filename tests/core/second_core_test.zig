@@ -48,10 +48,10 @@ test "no path named means no second core, and the storage is left alone" {
     try cpu0.mapBoardRam();
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
-    var storage = mod.Second{ .core = undefined, .turns = 7 };
+    var storage = mod.Second{ .core = undefined, .state = .{ .turns = 7 } };
     const none = try mod.start(std.testing.allocator, &cpu0, &board, null, &storage);
     try std.testing.expect(none == null);
-    try std.testing.expectEqual(@as(usize, 7), storage.turns);
+    try std.testing.expectEqual(@as(usize, 7), storage.state.turns);
 }
 
 test "a second core carries an SAU of its own, not the board's" {
@@ -236,10 +236,10 @@ const Spins = struct {
 
     fn boot(cpu1: *mod.Second) !void {
         try lay(cpu1.core);
-        cpu1.interrupts = .{ .vector_base = table };
+        cpu1.state.interrupts = .{ .vector_base = table };
         try mod.primeVectorTable(.{ .engine = cpu1.core }, table);
         try cpu1.core.resetFromVectorTable(table);
-        cpu1.pc = try cpu1.core.register(.pc);
+        cpu1.state.pc = try cpu1.core.register(.pc);
     }
 };
 
@@ -252,9 +252,9 @@ test "a PendSV pended on CPU1 is taken by CPU1's own NVIC" {
 
     try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
     cpu1.step(1000);
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
 
     // CPU0 saw none of it: nothing is pended in its own ICSR.
     var cpu0_interrupts = nvic.Nvic{ .vector_base = Spins.table };
@@ -274,12 +274,12 @@ test "a PendSV CPU1's own code stores ends CPU1's stretch" {
     try cpu1.core.writeWord(Spins.spin + 12, nvic.icsr_pendsvset);
 
     cpu1.step(1000);
-    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expect(cpu1.state.fault == null);
     // The store cut the stretch, so PendSV landed where the architecture
     // puts it rather than at the end of the turn.
     try std.testing.expectEqual(@as(usize, 1), cpu1.pend.cuts);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
 }
 
 test "a PendSV pended on CPU0 is never taken by CPU1" {
@@ -291,9 +291,9 @@ test "a PendSV pended on CPU0 is never taken by CPU1" {
 
     try cpu0.writeWord(memmap.scb.icsr, nvic.icsr_pendsvset);
     cpu1.step(1000);
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
-    try std.testing.expectEqual(Spins.spin, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.state.interrupts.taken);
+    try std.testing.expectEqual(Spins.spin, cpu1.state.pc & ~@as(u32, 1));
 }
 
 test "CPU1's SysTick counts on CPU1 and pends into CPU1's own NVIC" {
@@ -307,10 +307,10 @@ test "CPU1's SysTick counts on CPU1 and pends into CPU1's own NVIC" {
     try cpu1.core.writeWord(memmap.syst.cvr, 0);
     try cpu1.core.writeWord(memmap.syst.csr, 0b111);
     cpu1.step(1000);
-    try std.testing.expect(cpu1.fault == null);
-    try std.testing.expect(cpu1.timebase.ticks > 0);
-    try std.testing.expect(cpu1.interrupts.taken >= 1);
-    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expect(cpu1.state.fault == null);
+    try std.testing.expect(cpu1.state.timebase.ticks > 0);
+    try std.testing.expect(cpu1.state.interrupts.taken >= 1);
+    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
 
     // CPU0's SysTick was never armed and nothing was pended on it.
     try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.syst.csr));
@@ -327,8 +327,8 @@ test "CPU0's SysTick never ticks CPU1's time base" {
     try cpu0.writeWord(memmap.syst.rvr, 99);
     try cpu0.writeWord(memmap.syst.csr, 0b111);
     cpu1.step(1000);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.timebase.ticks);
-    try std.testing.expectEqual(@as(u64, 0), cpu1.interrupts.taken);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.state.timebase.ticks);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.state.interrupts.taken);
     try std.testing.expectEqual(@as(u32, 0), try cpu1.core.readWord(memmap.syst.csr));
 }
 
@@ -346,8 +346,8 @@ fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
 
 test "the report says how often CPU1 parked in WFE and what woke it" {
     var second: mod.Second = .{ .core = undefined };
-    second.wait.parks = 3;
-    second.wait.wakes = .{ .interrupt = 1, .event = 1, .spurious = 1 };
+    second.state.wait.parks = 3;
+    second.state.wait.wakes = .{ .interrupt = 1, .event = 1, .spurious = 1 };
     var buffer: [1024]u8 = undefined;
     const text = try reported(&second, &buffer);
     try std.testing.expect(std.mem.indexOf(
@@ -376,10 +376,10 @@ const MaskedSpin = struct {
         try cpu1.core.writeWord(loop, 0xB662_B672);
         try cpu1.core.writeWord(loop + 4, 0xE7FE_E7FC);
         try cpu1.core.writeWord(Spins.table + 4, (loop + 2) | 1);
-        cpu1.interrupts = .{ .vector_base = Spins.table };
+        cpu1.state.interrupts = .{ .vector_base = Spins.table };
         try mod.primeVectorTable(.{ .engine = cpu1.core }, Spins.table);
         try cpu1.core.resetFromVectorTable(Spins.table);
-        cpu1.pc = try cpu1.core.register(.pc);
+        cpu1.state.pc = try cpu1.core.register(.pc);
     }
 };
 
@@ -392,8 +392,8 @@ test "a SysTick held by CPU1's mask is taken when the mask clears" {
 
     try cpu1.core.writeWord(memmap.scb.icsr, nvic.icsr_pendstset);
     cpu1.step(999);
-    try std.testing.expect(cpu1.fault == null);
+    try std.testing.expect(cpu1.state.fault == null);
     try std.testing.expect(cpu1.release.lifted >= 1);
-    try std.testing.expectEqual(@as(u64, 1), cpu1.interrupts.taken);
-    try std.testing.expectEqual(Spins.handler, cpu1.pc & ~@as(u32, 1));
+    try std.testing.expectEqual(@as(u64, 1), cpu1.state.interrupts.taken);
+    try std.testing.expectEqual(Spins.handler, cpu1.state.pc & ~@as(u32, 1));
 }

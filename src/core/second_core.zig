@@ -76,6 +76,8 @@ const guest_load = @import("cpu/memory/load.zig");
 /// CPU1's turn length against CPU0's round, from the CPU clock dividers.
 pub const rate = @import("core_rate.zig");
 
+pub const State = @import("second_state.zig").State;
+
 /// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
 /// to zero. The PPB is per-engine RAM here, so the word written lands in this
 /// core's System Control Space only and CPU0's VTOR is left as it was.
@@ -108,16 +110,8 @@ pub const limits = struct {
 /// CPU1: its own engine and image, sharing CPU0's board.
 pub const Second = struct {
     core: Engine,
-    /// Where this core resumes on its next turn.
-    pc: u32 = 0,
-    /// Instructions handed to it so far, which is what it was offered
-    /// rather than what it retired: a turn that faults is still charged.
-    ran: usize = 0,
-    /// Turns taken, so a report can say whether it ever got going.
-    turns: usize = 0,
-    /// What stopped it, once. A faulted core takes no further turns: it is
-    /// halted, the way a core that has taken an unrecoverable fault is.
-    fault: ?engine.Fault = null,
+    /// What CPU1 has done and where it stands, apart from its engine.
+    state: State = .{},
     watch: engine.Watch = .{},
     /// This core's own Security Attribution Unit. Core-private state, not a
     /// block on the shared bus: the header says what sharing one cost.
@@ -132,42 +126,16 @@ pub const Second = struct {
     control: scb.Scb = scb.Scb.init(),
     /// CPU1's own owed CFSR/HFSR clears, applied after each of its turns.
     clears: fault_clear.Clears = fault_clear.Clears.init(),
-    /// CPU1's own NVIC: its own pends, priorities and active stack. CPU0's
-    /// is the one `main` builds; neither ever dispatches the other's.
-    interrupts: nvic.Nvic = .{},
-    /// CPU1's own time base: its SysTick counts down on CPU1's own PPB
-    /// words and pends into CPU1's own ICSR, charged for CPU1's own turns.
-    timebase: clocks.Clocks = .{},
     /// A PendSV CPU1's own firmware writes ends CPU1's stretch, as CPU0's
     /// does: a suspend that lost its PendSV returned to the thread and
     /// `tx_thread_sleep` gave up with TX_CALLER_ERROR (RA8EMU-302).
     pend: pend_break.Pend = .{},
-    /// The board's SCKDIVCR2, read each round to size CPU1's turn against
-    /// CPU0's (`rate.turn`). Null outside a board, where a turn is a round.
-    dividers: ?*const u16 = null,
     /// CPU1's own mask release: a pend held by PRIMASK at a boundary is
     /// stepped to the instant the mask clears, as CPU0's is. Without it a
     /// masked spin whose length divides the turn (the module port's
     /// five-instruction `__tx_ts_wait`) meets every boundary masked and
     /// never takes its SysTick. src/core/unmask.zig.
     release: unmask.Release = .{},
-    /// Parked in WFE, and what woke it: src/core/second_wait.zig.
-    wait: second_wait.Wait = .{},
-    /// The board a SYSRESETREQ from CPU1 resets, or null outside one.
-    board: ?*Board = null,
-    /// System resets already seen: once the board performs another, CPU1 is
-    /// held in reset and retires nothing (RA8EMU-467).
-    resets_seen: u32 = 0,
-    held: bool = false,
-    /// Releases out of a held reset (RA8EMU-468).
-    restarts: u32 = 0,
-    /// Set by a release, cleared by the Zig backend once it has reset its
-    /// own core onto the new table.
-    unvectored: bool = false,
-    /// Where its vectors were found, for the report.
-    vector_base: u32 = 0,
-    /// Bytes its image put in memory.
-    written: u32 = 0,
 
     /// Open CPU1 against the board `owner` already holds, load its image and
     /// reset it out of its own vector table.
@@ -187,7 +155,7 @@ pub const Second = struct {
         errdefer self.core.close();
         try self.core.shareBoardRamWith(owner);
         try self.core.attachWatch(&self.watch);
-        try self.core.attachTimebase(&self.timebase);
+        try self.core.attachTimebase(&self.state.timebase);
         try self.core.attachPend(&self.pend);
         try wiring.attachSecond(board, &self.core, .{
             .partitions = &self.partitions,
@@ -199,45 +167,39 @@ pub const Second = struct {
         });
         const seeded = try seedImage(.{ .engine = self.core }, image);
         try self.core.attachImageHooks(image);
-        self.written = seeded.written;
-        self.vector_base = seeded.vector_base;
-        self.interrupts.vector_base = self.vector_base;
-        self.dividers = &board.tree.divcr2;
-        self.board = board;
-        if (board.reboot) |pending| self.resets_seen = pending.performed;
-        try self.core.resetFromVectorTable(self.vector_base);
-        self.pc = try self.core.register(.pc);
+        self.state.written = seeded.written;
+        self.state.vector_base = seeded.vector_base;
+        self.state.interrupts.vector_base = self.state.vector_base;
+        self.state.dividers = &board.tree.divcr2;
+        self.state.board = board;
+        if (board.reboot) |pending| self.state.resets_seen = pending.performed;
+        try self.core.resetFromVectorTable(self.state.vector_base);
+        self.state.pc = try self.core.register(.pc);
     }
 
     pub fn close(self: *Second) void {
         self.core.close();
     }
 
-    /// CPU1's turn, in instructions, for one CPU0 round of `round`.
-    pub fn turn(self: *const Second, round: u32) u32 {
-        const word = if (self.dividers) |at| at.* else 0;
-        return rate.turn(round, word);
-    }
-
     /// One turn. A core that has faulted stays halted rather than being
     /// restarted into the same fault every round.
     pub fn step(self: *Second, instructions: usize) void {
-        if (self.fault != null or self.heldInReset()) return;
-        self.turns += 1;
-        if (self.wait.parked()) return self.idle(instructions);
-        const outcome = self.core.run(self.pc, instructions, self.session()) catch |err| {
-            self.fault = .{ .pc = self.pc, .detail = @errorName(err), .access = null, .instruction = null };
+        if (self.state.fault != null or self.heldInReset()) return;
+        self.state.turns += 1;
+        if (self.state.wait.parked()) return self.idle(instructions);
+        const outcome = self.core.run(self.state.pc, instructions, self.session()) catch |err| {
+            self.state.fault = .{ .pc = self.state.pc, .detail = @errorName(err), .access = null, .instruction = null };
             return;
         };
-        self.ran += instructions;
+        self.state.ran += instructions;
         if (outcome) |taken| {
             if (hint_resume.stoppedOn(self.core, taken) != hint_resume.wfe) {
-                self.ran -= instructions;
-                self.fault = taken;
+                self.state.ran -= instructions;
+                self.state.fault = taken;
                 return;
             }
             // The WFE completed or parked; either way the PC is past it.
-            _ = self.wait.arrive();
+            _ = self.state.wait.arrive();
         }
         self.boundary();
     }
@@ -248,9 +210,9 @@ pub const Second = struct {
     pub fn session(self: *Second) engine.Session {
         return .{
             .watch = &self.watch,
-            .interrupts = &self.interrupts,
+            .interrupts = &self.state.interrupts,
             .protection = &self.guard,
-            .timebase = &self.timebase,
+            .timebase = &self.state.timebase,
             .unmask = &self.release,
             .pend = &self.pend,
             .park_on_wfe = true,
@@ -259,13 +221,13 @@ pub const Second = struct {
 
     /// A parked turn: time passes and the boundary is offered, nothing runs.
     fn idle(self: *Second, instructions: usize) void {
-        self.ran += instructions;
-        self.timebase.advance(self.core, @intCast(instructions)) catch {};
+        self.state.ran += instructions;
+        self.state.timebase.advance(self.core, @intCast(instructions)) catch {};
         self.clears.apply(self.core) catch {};
         self.takeResetRequest();
-        const entered = self.interrupts.dispatch(self.core) catch null;
-        self.wait.idled(entered != null);
-        self.pc = self.core.register(.pc) catch self.pc;
+        const entered = self.state.interrupts.dispatch(self.core) catch null;
+        self.state.wait.idled(entered != null);
+        self.state.pc = self.core.register(.pc) catch self.state.pc;
     }
 
     /// A SYSRESETREQ from CPU1 is the part's one software reset: R01AN7883
@@ -275,40 +237,25 @@ pub const Second = struct {
     /// (RA8EMU-59).
     pub fn takeResetRequest(self: *Second) void {
         const asked = self.control.poll(self.core) catch false;
-        if (asked) if (self.board) |board| board.requestReset(.software);
+        if (asked) if (self.state.board) |board| board.requestReset(.software);
     }
 
-    /// A system reset goes to CPU1 too: on silicon it comes back held, and
-    /// only CPU0's release sequence runs it again. Seen here as a reboot the
-    /// board performed since the last look, so both backends park on it.
+    /// Whether CPU1 sits in reset (State.heldInReset); when it leaves,
+    /// the engine restarts from the vector table there.
     pub fn heldInReset(self: *Second) bool {
-        const board = self.board orelse return self.held;
-        const pending = board.reboot orelse return self.held;
-        if (pending.performed != self.resets_seen) {
-            self.resets_seen = pending.performed;
-            self.held = true;
-        }
-        if (self.held and board.second_core.running()) self.leaveReset(board.second_core.initvtor);
-        return self.held;
+        const restarts = self.state.restarts;
+        const held = self.state.heldInReset(.{ .engine = self.core });
+        if (self.state.restarts != restarts) self.resetEngine();
+        return held;
     }
 
-    /// CPU0 ran the release sequence again: CPU1 comes up out of
-    /// CPU1INITVTOR, or its image's table when that was never written, with
-    /// a fresh NVIC and no WFE park, the way a core leaving reset does.
-    fn leaveReset(self: *Second, initvtor: u32) void {
-        const base = if (initvtor != 0) initvtor else self.vector_base;
-        self.held = false;
-        self.restarts +%= 1;
-        self.unvectored = true;
-        self.vector_base = base;
-        self.interrupts = .{ .vector_base = base };
-        self.wait = .{};
-        primeVectorTable(.{ .engine = self.core }, base) catch {};
+    fn resetEngine(self: *Second) void {
+        const base = self.state.vector_base;
         self.core.resetFromVectorTable(base) catch |err| {
-            self.fault = .{ .pc = base, .detail = @errorName(err), .access = null, .instruction = null };
+            self.state.fault = .{ .pc = base, .detail = @errorName(err), .access = null, .instruction = null };
             return;
         };
-        self.pc = self.core.register(.pc) catch base;
+        self.state.pc = self.core.register(.pc) catch base;
     }
 
     /// The boundary between two of CPU1's turns. A turn is exactly one
@@ -319,10 +266,10 @@ pub const Second = struct {
         // A turn ends on its budget, where the run loop never serves, so a
         // pend held by PRIMASK is stepped out of the mask here, before the
         // dispatch below, and the steps are charged as run.
-        self.ran += run_loop.liftMask(self.core, &self.interrupts, self.session(), unmask.limits.steps) catch 0;
+        self.state.ran += run_loop.liftMask(self.core, &self.state.interrupts, self.session(), unmask.limits.steps) catch 0;
         self.takeResetRequest();
-        _ = self.interrupts.dispatch(self.core) catch null;
-        self.pc = self.core.register(.pc) catch self.pc;
+        _ = self.state.interrupts.dispatch(self.core) catch null;
+        self.state.pc = self.core.register(.pc) catch self.state.pc;
     }
 };
 
@@ -365,19 +312,19 @@ pub fn report(out: anytype, second: ?*const Second) !void {
     const other = second orelse return;
     try out.print(
         "CPU1: loaded {d} bytes, vectors at 0x{X:0>8}, ran {d} instructions over {d} turn(s), pc 0x{X:0>8}\n",
-        .{ other.written, other.vector_base, other.ran, other.turns, other.pc },
+        .{ other.state.written, other.state.vector_base, other.state.ran, other.state.turns, other.state.pc },
     );
-    if (other.fault) |taken| {
+    if (other.state.fault) |taken| {
         try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
     }
-    if (other.held) try out.writeAll("CPU1: held in reset since a system reset\n");
+    if (other.state.held) try out.writeAll("CPU1: held in reset since a system reset\n");
     // Silent on a core that never waited, which is every image in the
     // corpus today, so their reports stay as they were.
-    if (other.wait.parks > 0) {
-        const woke = other.wait.wakes;
+    if (other.state.wait.parks > 0) {
+        const woke = other.state.wait.wakes;
         try out.print(
             "CPU1: parked in WFE {d} time(s), woken {d} by an exception, {d} by SEV, {d} spuriously\n",
-            .{ other.wait.parks, woke.interrupt, woke.event, woke.spurious },
+            .{ other.state.wait.parks, woke.interrupt, woke.event, woke.spurious },
         );
     }
     // Under its own name, because this is a second map rather than more

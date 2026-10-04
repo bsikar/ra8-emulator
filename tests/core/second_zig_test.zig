@@ -20,7 +20,7 @@ fn pair(cpu1: *second_core.Second) !Engine {
     var cpu0 = try Engine.open();
     errdefer cpu0.close();
     try cpu0.mapBoardRam();
-    cpu1.* = .{ .core = try Engine.open(), .vector_base = vectors };
+    cpu1.* = .{ .core = try Engine.open(), .state = .{ .vector_base = vectors } };
     errdefer cpu1.close();
     try cpu1.core.shareBoardRamWith(&cpu0);
     try cpu1.core.writeWord(vectors, stack);

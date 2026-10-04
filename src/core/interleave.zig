@@ -31,14 +31,14 @@ pub fn interleave(
     while (remaining > 0) {
         const round = @min(@as(usize, second_core.limits.round), remaining);
         // A parked CPU1 is watching for CPU0's SEV: src/core/sev_hook.zig.
-        const armed = if (other.wait.parked()) try sev_hook.arm(cpu0.handle, &other.wait) else null;
+        const armed = if (other.state.wait.parked()) try sev_hook.arm(cpu0.handle, &other.state.wait) else null;
         const outcome = cpu0.run(pc, round, session);
         if (armed) |watch| watch.disarm();
         if (try outcome) |taken| return taken;
         remaining -= round;
         pc = try cpu0.register(.pc);
         if (ended(cpu0, session)) break;
-        other.step(other.turn(second_core.limits.round));
+        other.step(other.state.turn(second_core.limits.round));
     }
     return null;
 }

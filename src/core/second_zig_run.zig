@@ -18,7 +18,7 @@ const systick_bank = @import("systick_bank.zig");
 pub const Driver = struct {
     second: second_core.Second,
     core: SecondZig,
-    /// CPU1's Non-secure SysTick (RA8EMU-449); `second.timebase` is its
+    /// CPU1's Non-secure SysTick (RA8EMU-449); `second.state.timebase` is its
     /// Secure one and keeps DWT_CYCCNT.
     ns_timebase: clocks.Clocks,
 
@@ -45,23 +45,23 @@ pub const Driver = struct {
     /// has stopped stays stopped, the way a faulted Unicorn CPU1 does.
     pub fn round(self: *Driver, round_size: u32) void {
         const second = &self.second;
-        if (second.fault != null or second.heldInReset()) return;
-        if (second.unvectored) {
-            second.unvectored = false;
-            self.core.cpu.reset(second.vector_base) catch |err| {
-                second.fault = .{ .pc = second.vector_base, .detail = @errorName(err) };
+        if (second.state.fault != null or second.heldInReset()) return;
+        if (second.state.unvectored) {
+            second.state.unvectored = false;
+            self.core.cpu.reset(second.state.vector_base) catch |err| {
+                second.state.fault = .{ .pc = second.state.vector_base, .detail = @errorName(err) };
                 return;
             };
         }
-        const share = second.turn(round_size);
-        second.turns += 1;
+        const share = second.state.turn(round_size);
+        second.state.turns += 1;
         const before = self.core.cpu.retired;
         const stopped = self.core.turn(share);
         const ran = self.core.cpu.retired - before;
-        second.ran += @intCast(ran);
-        second.timebase.advance(self.core.memory, @intCast(ran)) catch {};
+        second.state.ran += @intCast(ran);
+        second.state.timebase.advance(self.core.memory, @intCast(ran)) catch {};
         self.ns_timebase.advanceSysTick(self.core.memory, @intCast(ran)) catch {};
-        second.pc = self.core.cpu.regs.pc;
-        if (stopped != .count) second.fault = .{ .pc = second.pc, .detail = @tagName(stopped) };
+        second.state.pc = self.core.cpu.regs.pc;
+        if (stopped != .count) second.state.fault = .{ .pc = second.state.pc, .detail = @tagName(stopped) };
     }
 };
