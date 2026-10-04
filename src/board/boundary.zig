@@ -11,6 +11,7 @@ const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const Board = @import("board.zig").Board;
 const reset = @import("../periph/reset.zig");
 const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
+const agt_sched = @import("../periph/agt/agt_sched.zig");
 
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
@@ -18,13 +19,14 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 /// afterwards, so an interrupt raised here is entered in the same boundary
 /// rather than a chunk later.
 pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
+    const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
     self.watchdog.tick();
     self.heartbeat.tick();
     self.lowpower.tick();
     self.microphone.tick();
     self.clock.tick();
-    self.interval.tick();
+    agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
     self.pwm.tick();
     self.ptp.tick(instructions);
     self.trace.tick();

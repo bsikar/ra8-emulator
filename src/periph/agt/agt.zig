@@ -182,7 +182,7 @@ pub const Channel = struct {
     }
 
     /// Step the count down by `step`, flagging whatever it passed.
-    fn advance(self: *Channel, step: u16) bool {
+    pub fn advance(self: *Channel, step: u16) bool {
         if (!self.running() or step == 0) return false;
         const before = self.counter;
         if (before >= step) {
