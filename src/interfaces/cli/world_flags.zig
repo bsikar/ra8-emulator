@@ -7,6 +7,7 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const touch_spec = @import("touch_spec.zig");
 const request = @import("../../periph/model/request.zig");
+const camera_registry = @import("../../periph/camera/camera_registry.zig");
 
 const Options = cli.Options;
 const card_setup = cli.card_setup;
@@ -43,6 +44,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.battery.soc_pct = try std.fmt.parseInt(u8, try next(argv, index), 10);
     } else if (std.mem.eql(u8, flag, "--sd-new")) {
         options.sd_new, options.sd_label = try card_setup.newSpec(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--camera-source")) {
+        options.camera = try camera(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
     } else if (touch_spec.claims(flag)) {
@@ -71,6 +74,14 @@ fn attach(options: *Options, spec: []const u8) !void {
         return err;
     };
     options.attach_count += 1;
+}
+
+/// One `--camera-source` spec. A bad one says why before the run starts.
+fn camera(spec: []const u8) !camera_registry.Spec {
+    return camera_registry.parse(spec) catch |err| {
+        std.debug.print("--camera-source {s}: {s}\n", .{ spec, @errorName(err) });
+        return err;
+    };
 }
 
 /// A nine-bit area, decimal or 0x-prefixed; anything past 0x1FF is refused.

@@ -6,7 +6,6 @@ const pc_hits = @import("../../debug/pc_hits.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const gt911 = @import("../../periph/i3c/i3c_gt911.zig");
 const world_flags = @import("world_flags.zig");
-const next = world_flags.next;
 const max17048 = @import("../../periph/i3c/i3c_max17048.zig");
 const sd_format = @import("../../periph/sd/sd_format.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
@@ -193,6 +192,8 @@ pub const Options = struct {
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
+    /// `--camera-source KIND[:ARG]`: where the CEU's pixels come from (RA8EMU-525).
+    camera: @import("../../periph/camera/camera_registry.zig").Spec = .{},
 
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {
@@ -216,7 +217,6 @@ pub const Options = struct {
     /// A timed run sizes its own ceiling from the deadline it was given, so
     /// asking for more milliseconds buys more instructions to spend them in
     /// rather than running into a number set for some other app.
-    /// Whether the ThreadX hook is armed: either flag reads it.
     /// The load window when a flag asked for the RTOS trace, else null.
     pub fn rtosWanted(self: *const Options) ?rtos_load.Window {
         if (!self.trace_rtos and !self.cpu_load) return null;
@@ -338,46 +338,46 @@ fn parseCtl(argv: []const []const u8) !Options {
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
-        options.cpu1_path = try next(argv, index);
+        options.cpu1_path = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--ns")) {
-        options.ns_path = try next(argv, index);
+        options.ns_path = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--watch")) {
-        options.watch_place = try next(argv, index);
+        options.watch_place = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--frame-out")) {
-        options.frame_out = try next(argv, index);
+        options.frame_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--trace-rtos")) {
         options.trace_rtos = true;
     } else if (std.mem.eql(u8, flag, "--trace-rtos-out")) {
         options.trace_rtos = true;
-        options.trace_rtos_out = try next(argv, index);
+        options.trace_rtos_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--report")) {
-        options.report_json = try reportForm(try next(argv, index));
+        options.report_json = try reportForm(try world_flags.next(argv, index));
     } else if (std.mem.eql(u8, flag, "--cpu-load")) {
         options.cpu_load = true;
     } else if (std.mem.eql(u8, flag, "--profile")) {
         options.profile = true;
     } else if (std.mem.eql(u8, flag, "--profile-folded")) {
         options.profile = true;
-        options.profile_folded = try next(argv, index);
+        options.profile_folded = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--cpu-load-from")) {
         options.cpu_load = true;
-        options.cpu_load_window.from = try std.fmt.parseInt(u64, try next(argv, index), 0);
+        options.cpu_load_window.from = try std.fmt.parseInt(u64, try world_flags.next(argv, index), 0);
     } else if (std.mem.eql(u8, flag, "--cpu-load-to")) {
         options.cpu_load = true;
-        options.cpu_load_window.to = try std.fmt.parseInt(u64, try next(argv, index), 0);
+        options.cpu_load_window.to = try std.fmt.parseInt(u64, try world_flags.next(argv, index), 0);
     } else if (std.mem.eql(u8, flag, "--taken-in")) {
-        options.taken_in_place = try next(argv, index);
+        options.taken_in_place = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--count-pc")) {
-        const at = try std.fmt.parseInt(u32, try next(argv, index), 0);
+        const at = try std.fmt.parseInt(u32, try world_flags.next(argv, index), 0);
         if (options.count_pc_len >= options.count_pc.len) return error.BadValue;
         options.count_pc[options.count_pc_len] = at;
         options.count_pc_len += 1;
     } else if (std.mem.eql(u8, flag, "--chunk")) {
-        const width = try std.fmt.parseInt(u32, try next(argv, index), 0);
+        const width = try std.fmt.parseInt(u32, try world_flags.next(argv, index), 0);
         if (width == 0) return error.BadValue;
         options.chunk_instructions = width;
     } else if (std.mem.eql(u8, flag, "--cpu")) {
-        options.cpu = cpu_choice.Choice.parse(try next(argv, index)) orelse return error.BadValue;
+        options.cpu = cpu_choice.Choice.parse(try world_flags.next(argv, index)) orelse return error.BadValue;
     } else if (std.mem.eql(u8, flag, "--drain-pends")) {
         options.drain_pends = true;
     } else if (std.mem.eql(u8, flag, "--look-per-rise")) {

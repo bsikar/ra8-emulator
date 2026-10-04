@@ -300,4 +300,5 @@ test {
     _ = @import("camera/gradient_source_test.zig");
     _ = @import("camera/pixel_convert_test.zig");
     _ = @import("camera/converted_source_test.zig");
+    _ = @import("camera/camera_registry_test.zig");
 }
