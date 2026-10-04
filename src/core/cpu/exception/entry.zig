@@ -42,7 +42,9 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         .secure = to_secure,
         .secure_stack = from_secure,
     };
-    const size = if (fp) fp_frame.size else frame.size;
+    // FPCCR.TS: a Secure FP context also stacks S16-S31 (RA8EMU-165).
+    const ts = fp and from_secure and cpu.fp.context.fpccr.ts == 1;
+    const size = if (fp) fp_frame.sizeFor(ts) else frame.size;
     const at = frameAddress(r.sp(), size);
     const limit = r.spLimit();
     const overflow = limit != 0 and at < limit;
@@ -56,11 +58,11 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
         if (fp and cpu.fp.context.fpccr.lspen == 1) armLazy(cpu, at, from_secure, true);
     } else {
         const pushed = if (fp)
-            try pushFp(cpu, stacked, from_secure)
+            try pushFp(cpu, stacked, from_secure, ts)
         else
             try frame.push(cpu.bus, r.sp(), stacked);
         r.setSp(pushed);
-        if (from_secure and !to_secure) try hideSecure(cpu, fp);
+        if (from_secure and !to_secure) try hideSecure(cpu, fp, ts);
     }
     r.lr = exc_return.forEntry(from);
     cpu.banked.switchTo(r, if (to_secure) .secure else .non_secure);
@@ -72,12 +74,18 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
 /// A Non-secure exception over Secure code: stack R4-R11 under the
 /// integrity signature on the Secure stack, then clear R0-R12 so the
 /// Non-secure handler sees none of them (DDI0553 B3.19).
-fn hideSecure(cpu: *Cpu, fp: bool) bus.Error!void {
+/// With FPCCR.TS an eagerly stacked Secure FP context is cleared too:
+/// S0-S31 and FPSCR (RA8EMU-165).
+fn hideSecure(cpu: *Cpu, fp: bool, ts: bool) bus.Error!void {
     const r = &cpu.regs;
     var saved: callee.Callee = undefined;
     for (&saved, 4..) |*word, i| word.* = r.low[i];
     r.setSp(try callee.push(cpu.bus, r.sp(), saved, fp));
     for (0..13) |i| r.low[i] = 0;
+    if (ts and cpu.fp.context.fpccr.lspact == 0) {
+        for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+        cpu.fp.fpscr = @TypeOf(cpu.fp.fpscr).fromBits(0);
+    }
 }
 
 fn frameAddress(sp: u32, size: u32) u32 {
@@ -89,11 +97,11 @@ fn frameAddress(sp: u32, size: u32) u32 {
 /// and UpdateFPCCR records LSPACT, USER, THREAD, S and the *RDY bits
 /// (fp_ready.zig), so the first FP instruction in the handler writes the
 /// context (fpu/lazy.zig, RA8EMU-163).
-fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool) bus.Error!u32 {
+fn pushFp(cpu: *Cpu, stacked: frame.Frame, secure: bool, ts: bool) bus.Error!u32 {
     const r = &cpu.regs;
     const ctx = &cpu.fp.context;
-    if (ctx.fpccr.lspen == 0) return fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu));
-    const at = try fp_frame.reserve(cpu.bus, r.sp(), stacked);
+    if (ctx.fpccr.lspen == 0) return fp_frame.push(cpu.bus, r.sp(), stacked, fpContext(cpu, ts));
+    const at = try fp_frame.reserve(cpu.bus, r.sp(), stacked, ts);
     armLazy(cpu, at, secure, false);
     return at;
 }
@@ -112,11 +120,17 @@ fn armLazy(cpu: *Cpu, at: u32, secure: bool, violated: bool) void {
     fp_ready.record(cpu, &ctx.fpccr);
 }
 
-/// S0-S15, FPSCR and, with MVE, VPR as the eager extended frame stacks them.
-fn fpContext(cpu: *const Cpu) fp_frame.Fp {
+/// S0-S15, FPSCR and, with MVE, VPR as the eager extended frame stacks
+/// them, and S16-S31 when `ts`.
+fn fpContext(cpu: *const Cpu, ts: bool) fp_frame.Fp {
     const vpr: u32 = if (cpu.profile.mve) @bitCast(cpu.fp.vpr) else 0;
     var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits(), .vpr = vpr };
     for (&fp.s, 0..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
+    if (ts) {
+        var high: [16]u32 = undefined;
+        for (&high, 16..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
+        fp.high = high;
+    }
     return fp;
 }
 

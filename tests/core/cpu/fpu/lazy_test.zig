@@ -69,6 +69,21 @@ test "an unmapped FPCAR is a bus error and LSPACT stays set" {
     try std.testing.expect(lazy.pending(&s));
 }
 
+test "a Secure context with FPCCR.TS also writes S16-S31 from 0x48" {
+    var ram: fixture.Ram = .{};
+    var s = sample();
+    for (16..32) |i| s.bank.writeS(@intCast(i), 0x4000_0000 + @as(u32, @intCast(i)));
+    const at = fixture.msp_top - 0x88;
+    s.context.writeFpcar(at);
+    s.context.fpccr.lspact = 1;
+    s.context.fpccr.s = 1;
+    s.context.fpccr.ts = 1;
+    try lazy.preserve(ram.view(), &s);
+    try std.testing.expectEqual(@as(u32, 0x0021_00FF), ram.word(at + 0x44));
+    try std.testing.expectEqual(@as(u32, 0x4000_0010), ram.word(at + 0x48));
+    try std.testing.expectEqual(@as(u32, 0x4000_001F), ram.word(at + 0x84));
+}
+
 const cpu_mod = ra8.core.cpu.cpu;
 const Gate = cpu_mod.data_gate.Gate;
 /// Everything from here up is Secure; below it is Non-secure.

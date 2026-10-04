@@ -14,7 +14,8 @@
 //!
 //! Not modelled yet: the privilege and MPU checks PreserveFPState makes
 //! with FPCCR.USER/THREAD, faults during lazy stacking (the *RDY bits),
-//! SPLIMVIOL, and the Secure S16-S31 words (RA8EMU-165).
+//! SPLIMVIOL. A Secure context (FPCCR.S) with FPCCR.TS set also writes
+//! S16-S31 from 0x48 (RA8EMU-165).
 const std = @import("std");
 const bus = @import("../bus.zig");
 const State = @import("state.zig").State;
@@ -23,6 +24,7 @@ pub const offset = struct {
     pub const s0: u32 = 0x00;
     pub const fpscr: u32 = 0x40;
     pub const vpr: u32 = 0x44;
+    pub const s16: u32 = 0x48;
 };
 
 /// Lazy preservation is pending: entry reserved the space, nothing wrote it.
@@ -68,6 +70,12 @@ fn write(to: bus.Bus, state: *State) bus.Error!void {
     }
     try putWord(to, at +% offset.fpscr, state.fpscr.bits());
     try putWord(to, at +% offset.vpr, @bitCast(state.vpr));
+    if (state.context.fpccr.ts == 1 and state.context.fpccr.s == 1) {
+        for (16..32) |i| {
+            const n: u5 = @intCast(i);
+            try putWord(to, at +% offset.s16 +% @as(u32, n - 16) * 4, state.bank.readS(n));
+        }
+    }
     state.context.fpccr.lspact = 0;
 }
 
