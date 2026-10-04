@@ -253,3 +253,12 @@ test "--dump-mem repeats keep every place in order, each with its own count" {
     try std.testing.expectEqual(@as(?u32, null), asks[1].words);
     try std.testing.expectEqual(@as(usize, 0), (try parse(&[_][]const u8{ "emu", "a.elf" })).memDumps().len);
 }
+
+test "--camera-source picks the CEU's source; unknown kinds are refused" {
+    const plain = try parse(&.{ "ra8", "app.elf" });
+    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.gradient, plain.camera.kind);
+    const chosen = try parse(&.{ "ra8", "app.elf", "--camera-source", "gradient" });
+    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.gradient, chosen.camera.kind);
+    try std.testing.expectError(error.UnknownCameraSource, parse(&.{ "ra8", "app.elf", "--camera-source", "webcam:0" }));
+    try std.testing.expectError(error.MissingValue, parse(&.{ "ra8", "app.elf", "--camera-source" }));
+}

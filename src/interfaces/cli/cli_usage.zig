@@ -14,6 +14,7 @@ pub const text =
     \\                    [--profile] [--profile-folded FILE]
     \\                    [--cpu1 IMAGE.elf] [--cpu zig|unicorn|lockstep]
     \\                    [--ns IMAGE.elf] [--no-bus-errors]
+    \\                    [--camera-source KIND[:ARG]]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -114,6 +115,8 @@ pub const text =
     \\                     nothing maps, instead of the precise BusFault
     \\                     the part raises (the default); --bus-errors is
     \\                     still accepted
+    \\  --camera-source K  where the camera engine's pixels come from:
+    \\                     gradient (the default, no argument)
     \\  --no-blocks        the Zig core steps one instruction at a time instead
     \\                     of running formed blocks (the default; --blocks
     \\                     is still accepted)
