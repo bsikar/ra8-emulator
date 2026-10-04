@@ -68,6 +68,8 @@ pub const text =
     \\                     to FILE.cpu1) as text a reader can take back
     \\  --frame-out PATH   write what the panel shows at the end as a PNG
     \\  --panel-only       write just the panel, at its own size
+    \\  --frames-out DIR   write numbered P6 panel frames
+    \\  --frames-every N   consider every Nth scanned frame (default 1)
     \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run

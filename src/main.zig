@@ -192,11 +192,8 @@ fn announce(core: engine.Engine, written: u32, vector_base: u32, entry: u32, qui
     return out;
 }
 
-/// Everything a finished run prints, in the order it prints it.
-///
-/// Lifted out of `main` so the run's setup and the run's report are two
-/// functions rather than one over the length gate. The order is the
-/// contract: the board's own report first, then where the run spent
+/// Everything a finished run prints, in the order it prints it. The order is
+/// the contract: the board's own report first, then where the run spent
 /// itself, then the second core, then whatever was dumped by request.
 fn reportAll(
     out: anytype,
@@ -217,8 +214,11 @@ fn reportAll(
         try report.json_run.json_load.document(out, &load);
         return;
     }
+    var frames = try report.frames_out.Run.initForCli(std.heap.page_allocator, board, options.frames);
+    defer frames.deinit(board);
     const tally = run.within(core, image, &options, window, watched).loaded(options.cpu_load, cpu0, rtos_hook.second.side(second));
     try report_run.pick(out, board, image, tally, options.report_json);
+    try frames.finish(board);
     if (!options.report_json) try ra8.board.report.after.text(out, image, options, parts, window);
     try second_core.report(out, second);
     if (!options.report_json) try report_dumps.dumps(out, core, image, options, board, watched);

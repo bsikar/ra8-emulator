@@ -7,6 +7,7 @@ pub const after = @import("report/after.zig");
 /// The board view's PNG writer (RA8EMU-73).
 pub const png = @import("png.zig");
 pub const frame_out = @import("frame_out.zig");
+pub const frames_out = @import("frames_out.zig");
 
 const Board = @import("../../board/board.zig").Board;
 const elc = @import("../../periph/elc/elc.zig");
