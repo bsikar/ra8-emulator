@@ -224,7 +224,7 @@ fn reportAll(
     if (!options.report_json) try report_dumps.dumps(out, core, image, options, board, watched);
     try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = .{ .engine = core } });
     try rtos_hook.second.print(out, options, second);
-    try report.frame_out.report(out, board, options.frame_out);
+    try report.frame_out.report(out, board, options.frame_out, options.panel_only);
     try cli.usbip_export.run.afterRun(out, options.usbip, &board.usb.script);
 }
 
