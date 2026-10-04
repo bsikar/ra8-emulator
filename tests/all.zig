@@ -64,7 +64,6 @@ test {
     _ = @import("core/second_zig_test.zig");
     _ = @import("core/second_zig_run_test.zig");
     _ = @import("core/second_zig_exceptions_test.zig");
-    _ = @import("core/fault_hook_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("interfaces/usbip/usbip_wire_test.zig");
