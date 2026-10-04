@@ -49,7 +49,7 @@ pub const Clock = struct {
     cpu1: ?*second_core.zig_run.Driver = null,
 
     pub fn boundary(self: *Clock) boot.Boundary {
-        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk };
+        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot };
     }
 
     /// The chunk the Unicorn path uses, cut down to the armed SysTick period
