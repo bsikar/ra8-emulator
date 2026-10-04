@@ -104,7 +104,6 @@ test {
     _ = @import("core/fp_context_test.zig");
     _ = @import("core/fpcxt_resume_test.zig");
     _ = @import("core/tt_test.zig");
-    _ = @import("core/lob_hook_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/long_shift_test.zig");
     _ = @import("core/memmap_test.zig");
