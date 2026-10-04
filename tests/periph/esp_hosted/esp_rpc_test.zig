@@ -126,3 +126,18 @@ test "the link answers the request only after the host announces itself" {
     try std.testing.expectEqual(@as(u64, 606), envelope[2]);
     try std.testing.expectEqual(@as(u64, 1), envelope[3]);
 }
+
+test "station requests get a bare acknowledgement echoing the uid" {
+    for (rpc.bare) |id| {
+        var out: [frame.frame_size]u8 = undefined;
+        try std.testing.expect(try rpc.answerFrame(&out, .{ .id = id, .uid = 5 }));
+        const proto = rpc.tlvData((try frame.parse(&out)).payload).?;
+        var envelope = [_]u64{0} ** 4;
+        try varints(proto, &envelope);
+        try std.testing.expectEqual(@as(u64, 2), envelope[1]);
+        try std.testing.expectEqual(@as(u64, id + 256), envelope[2]);
+        try std.testing.expectEqual(@as(u64, 5), envelope[3]);
+    }
+    try std.testing.expectEqual(@as(u32, 536), rpc.Id.responseTo(280));
+    try std.testing.expect(!rpc.isBare(rpc.Id.req_fw_version));
+}
