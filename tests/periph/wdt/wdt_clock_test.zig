@@ -87,3 +87,54 @@ test "an armed WDT puts its underflow on the queue under its own id, a disarmed 
     try unit.arm(&queue, 300);
     try std.testing.expectEqual(@as(usize, 0), queue.count);
 }
+
+fn windowed(pace: u32) ra8.periph.wdt.Wdt {
+    const wdt = ra8.periph.wdt;
+    var unit = wdt.Wdt.init();
+    // wdt_window_demo's window: 1024 counts, /4, open 768 down to 256.
+    unit.wdtcr = wdt.controlWord(0, 0x1, 2, 2);
+    unit.armed = true;
+    unit.counter = unit.reload();
+    unit.pace = pace;
+    return unit;
+}
+
+test "the WDT window opens and closes at the virtual ns its edges name" {
+    var unit = windowed(120);
+    const edges = unit.windowEdgesAt(9);
+    try std.testing.expectEqual(@as(?u64, 9 + ((1023 - 768) * 500 - 120) * 50_000), edges.opens_at);
+    try std.testing.expectEqual(@as(?u64, 9 + ((1023 - 255) * 500 - 120) * 50_000), edges.closes_at);
+    var now: u64 = 9;
+    while (now < edges.closes_at.?) : (now += clock.ns_per_tick) {
+        const inside = now >= edges.opens_at.?;
+        try std.testing.expectEqual(inside, unit.windowOpen());
+        unit.tick();
+    }
+    try std.testing.expect(!unit.windowOpen());
+}
+
+test "a window open to underflow has no closing edge, and a disarmed WDT has neither" {
+    const wdt = ra8.periph.wdt;
+    var unit = windowed(0);
+    unit.wdtcr = wdt.controlWord(0, 0x1, 2, 3);
+    try std.testing.expect(unit.windowEdgesAt(0).opens_at != null);
+    try std.testing.expectEqual(@as(?u64, null), unit.windowEdgesAt(0).closes_at);
+    unit.counter = 700;
+    try std.testing.expectEqual(@as(?u64, null), unit.windowEdgesAt(0).opens_at);
+    unit.armed = false;
+    try std.testing.expectEqual(wdt.WindowEdges{}, unit.windowEdgesAt(0));
+}
+
+test "the WDT queues its next window edge beside its underflow" {
+    var queue = ra8.periph.clocks.event_queue.EventQueue{};
+    var unit = windowed(0);
+    try unit.arm(&queue, 0);
+    try std.testing.expectEqual(@as(usize, 2), queue.count);
+    try std.testing.expectEqual(unit.windowEdgesAt(0).opens_at, queue.next());
+    try std.testing.expectEqual(clock.queue_id.wdt_window, queue.items[0].id);
+    // Inside the window the next edge is where it closes.
+    unit.counter = 500;
+    try unit.arm(&queue, 0);
+    try std.testing.expectEqual(@as(usize, 2), queue.count);
+    try std.testing.expectEqual(unit.windowEdgesAt(0).closes_at, queue.next());
+}

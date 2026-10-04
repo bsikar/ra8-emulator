@@ -169,10 +169,35 @@ pub const Wdt = struct {
     /// of 1024, 256 and 768. Taken against the 1023 reload, 75% came out at
     /// 767 and the demo's refresh at 768 was refused. Both edges inclusive.
     pub fn windowOpen(self: *const Wdt) bool {
+        const edges = self.windowCounts();
+        return self.counter <= edges.opens and self.counter >= edges.closes;
+    }
+
+    /// The counter values the window opens and closes at, both inclusive.
+    pub fn windowCounts(self: *const Wdt) struct { opens: u32, closes: u32 } {
         const full = tops_cycles[self.wdtcr & control.tops];
-        const opens = percentOf(full, window_start_percent[(self.wdtcr & control.rpss) >> control.rpss_shift]);
-        const closes = percentOf(full, window_end_percent[(self.wdtcr & control.rpes) >> control.rpes_shift]);
-        return self.counter <= opens and self.counter >= closes;
+        return .{
+            .opens = percentOf(full, window_start_percent[(self.wdtcr & control.rpss) >> control.rpss_shift]),
+            .closes = percentOf(full, window_end_percent[(self.wdtcr & control.rpes) >> control.rpes_shift]),
+        };
+    }
+
+    /// The virtual ns the window next opens and closes at, from `now_ns`.
+    /// Null for an edge already passed, for a window that stays open to
+    /// underflow (RPES 0%), and for both while disarmed. The counter
+    /// reaches `v` after `counter - v` counts, less the ticks already paced.
+    pub fn windowEdgesAt(self: *const Wdt, now_ns: u64) WindowEdges {
+        if (!self.armed) return .{};
+        const edges = self.windowCounts();
+        const opens_at = if (self.counter > edges.opens) self.reachesAt(edges.opens, now_ns) else null;
+        const closes_at = if (edges.closes > 0 and self.counter >= edges.closes) self.reachesAt(edges.closes - 1, now_ns) else null;
+        return .{ .opens_at = opens_at, .closes_at = closes_at };
+    }
+
+    fn reachesAt(self: *const Wdt, value: u32, now_ns: u64) u64 {
+        const per = clock.ticksPerCount(@truncate((self.wdtcr & control.cks) >> control.cks_shift));
+        const ticks = @as(u64, self.counter - value) * per - self.pace;
+        return now_ns + ticks * clock.ns_per_tick;
     }
 
     /// The ticks `elapsed_ns` of virtual time stands for, so the counter
@@ -202,13 +227,17 @@ pub const Wdt = struct {
         return now_ns + ticks * clock.ns_per_tick;
     }
 
-    /// Put the next underflow on `queue` under `clock.queue_id.wdt`, dropping
-    /// whatever was there. Called every boundary, so a refresh, a start and
-    /// an underflow all re-arm, and a disarmed counter leaves nothing queued.
+    /// Put the next underflow on `queue` under `clock.queue_id.wdt`, and the
+    /// next window edge under `clock.queue_id.wdt_window`, dropping whatever
+    /// was there. Called every boundary, so a refresh, a start and an
+    /// underflow all re-arm, and a disarmed counter leaves nothing queued.
     pub fn arm(self: *const Wdt, queue: *event_queue.EventQueue, now_ns: u64) event_queue.Error!void {
         _ = queue.cancel(clock.queue_id.wdt);
+        _ = queue.cancel(clock.queue_id.wdt_window);
         const at = self.underflowDueAt(now_ns) orelse return;
         try queue.schedule(at, clock.queue_id.wdt);
+        const edges = self.windowEdgesAt(now_ns);
+        if (edges.opens_at orelse edges.closes_at) |edge| try queue.schedule(edge, clock.queue_id.wdt_window);
     }
 
     /// One watchdog count. An armed counter that reaches zero underflows
@@ -317,6 +346,12 @@ pub const Wdt = struct {
             .writeFn = writeThunk,
         };
     }
+};
+
+/// When the refresh window next opens and closes, in virtual ns.
+pub const WindowEdges = struct {
+    opens_at: ?u64 = null,
+    closes_at: ?u64 = null,
 };
 
 fn percentOf(full: u32, percent: u8) u32 {

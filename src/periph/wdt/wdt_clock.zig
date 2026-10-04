@@ -25,11 +25,12 @@ const timebase = @import("../time/timebase.zig");
 /// (RA8EMU-179, slice RA8EMU-514) leaves the corpus where it is.
 pub const ns_per_tick: u64 = @as(u64, cadence.instructions) * timebase.ns_per_s / timebase.default_hz;
 
-/// The event-queue ids the two watchdogs schedule their underflow under
-/// (RA8EMU-587).
+/// The event-queue ids the two watchdogs schedule their underflow under,
+/// and the WDT its next refresh-window edge (RA8EMU-587).
 pub const queue_id = struct {
     pub const wdt: u16 = 0x0B00;
     pub const iwdt: u16 = 0x0B01;
+    pub const wdt_window: u16 = 0x0B02;
 };
 
 /// Whole run-loop ticks in `elapsed_ns`, the leftover carried in `carry`
