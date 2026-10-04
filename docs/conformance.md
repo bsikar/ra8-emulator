@@ -341,7 +341,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_float | missing |
 | mve_float_scalar | missing |
 | mve_vcmp_fp | 51 |
-| mve_float_fma | missing |
+| mve_float_fma | 35 |
 | mve_float_unary | 26 |
 | mve_float_cvt_half | 37 |
 | mve_float_cvt_int | 56 |
