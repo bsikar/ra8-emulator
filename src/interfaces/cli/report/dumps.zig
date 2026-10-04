@@ -1,8 +1,8 @@
 //! Everything a command-line flag asked to be printed once the run is over.
 //!
 //! These are the reader's own questions, not the board's account of itself:
-//! a named global read out of RAM, one card block as hex, the core
-//! registers as the run left them. They come after the block reports and
+//! a named global read out of RAM, one card block as hex. The core
+//! registers go out through report/json_regs.zig. They come after the block reports and
 //! they answer to a flag, so a run that passed none of those flags prints
 //! nothing from this file at all.
 //!
@@ -11,17 +11,12 @@
 //! rather than the board decides, and src/board is where the words about a
 //! run live.
 const std = @import("std");
-const engine = @import("../../../core/engine.zig");
 const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../core/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");
-const mem_dump = @import("../../../debug/mem_dump.zig");
-const registers = @import("../../../debug/registers.zig");
-const watchpoint = @import("../../../debug/watchpoint.zig");
 const sd_dump = @import("../../../periph/sd/sd_dump.zig");
 const sd_image = @import("../../../periph/sd/sd_image.zig");
-const Board = @import("../../../board/board.zig").Board;
 
 /// Read each `--dump-sym` global out of RAM and print it.
 ///
@@ -67,63 +62,13 @@ pub fn nonSecure(allocator: std.mem.Allocator, options: cli.Options) !?elf.Image
     return try elf.Image.init(bytes);
 }
 
-/// Everything a flag asked to be printed once the run is over.
-///
-/// These are the reader's own questions rather than the board's account of
-/// itself, so they come after the block reports and stay together: a run
-/// with no flags prints none of them and this is one call that does
-/// nothing.
-pub fn dumps(
-    out: anytype,
-    core: engine.Engine,
-    image: elf.Image,
-    options: cli.Options,
-    board: *Board,
-    watched: ?watchpoint.Watched,
-) !void {
-    try dumpSymbols(out, .{ .engine = core }, image, options);
-    try dumpBlock(out, board, options);
-    try dumpRegisters(out, core, options);
-    try mem_dump.printAll(out, .{ .engine = core }, image, options.memDumps());
-    try watchpoint.print(out, image, options.watch_place, watched);
-}
-
-/// The core registers as the run left them, when `--dump-regs` asked.
-///
-/// At a break this is the function's own call boundary, so r0-r3 and the
-/// words at the stack pointer are still its arguments. A register the
-/// core refuses to hand back is printed as unreadable rather than as a
-/// zero that would read like a real value.
-fn dumpRegisters(out: anytype, core: engine.Engine, options: cli.Options) !void {
-    if (!options.dump_regs) return;
-    try out.print("  dump-regs     :", .{});
-    for (registers.dumped, 0..) |named, index| {
-        if (core.register(named.which)) |value| {
-            try out.print(" {s} 0x{X:0>8}", .{ named.name, value });
-        } else |_| {
-            try out.print(" {s} <unreadable>", .{named.name});
-        }
-        if (registers.endsLine(index)) try out.print("\n                 ", .{});
-    }
-    const sp = core.register(.sp) catch return out.print("sp unreadable\n", .{});
-    for (0..registers.limits.stack_words) |index| {
-        const at = registers.stackWord(sp, index);
-        if (core.readWord(at)) |value| {
-            try out.print(" [sp+{d}] 0x{X:0>8}", .{ index * 4, value });
-        } else |_| {
-            try out.print(" [sp+{d}] <unreadable>", .{index * 4});
-        }
-    }
-    try out.print("\n", .{});
-}
-
 /// One card block back as hex, when `--dump-sd` asked for it.
 ///
 /// Rows of nothing but zeros are dropped: a block of a freshly formatted
 /// volume is mostly zeros, and the few rows carrying a directory entry or a
 /// boot field are the whole reason to look. The count of dropped rows is
 /// printed so a reader can tell an elided block from a short one.
-fn dumpBlock(out: anytype, board: anytype, options: cli.Options) !void {
+pub fn dumpBlock(out: anytype, board: anytype, options: cli.Options) !void {
     const index = options.dump_sd orelse return;
     var block: sd_image.Block = undefined;
     if (!board.sd.img.read(index, &block)) {
