@@ -137,20 +137,87 @@ pub const FrameCapture = struct {
     }
 };
 
-/// Run-scoped wiring for the CLI. A disabled run is a no-op; an enabled run
-/// captures the successful report scan, asking for one only if needed.
+/// --frames-out armed before the run (RA8EMU-573). It installs a Vsync on
+/// the GLCDC output stage, so each frame period the board boundary scans the
+/// panel and the frame is kept with its emulated time. The end-of-run report
+/// scan is kept too, unless it repeats the last frame.
+pub const Armed = struct {
+    allocator: std.mem.Allocator,
+    board: *Board,
+    sequence: Sequence,
+    capture: ?FrameCapture = null,
+    /// The first error an in-run frame hit; the boundary cannot return one.
+    failed: ?anyerror = null,
+
+    /// Null when --frames-out is off.
+    pub fn arm(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !?*Armed {
+        const directory = path orelse return null;
+        const self = try allocator.create(Armed);
+        errdefer allocator.destroy(self);
+        self.* = .{ .allocator = allocator, .board = board, .sequence = try Sequence.init(allocator, directory, every) };
+        board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame } };
+        return self;
+    }
+
+    /// The run armed on this board, if any.
+    pub fn of(board: *Board) ?*Armed {
+        const vsync = board.display.output.vsync orelse return null;
+        if (vsync.sink.frame != onFrame) return null;
+        return @ptrCast(@alignCast(vsync.sink.context));
+    }
+
+    fn onFrame(context: *anyopaque, when: u64) void {
+        const self: *Armed = @ptrCast(@alignCast(context));
+        self.frameAt(when) catch |err| {
+            if (self.failed == null) self.failed = err;
+        };
+    }
+
+    fn frameAt(self: *Armed, when: u64) !void {
+        const capture = (try self.fit()) orelse return;
+        if (self.board.display.scanOut() == null) return;
+        try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+        capture.before = self.board.display.system.frames;
+    }
+
+    /// The capture buffer, sized to the panel as the firmware has it now.
+    pub fn fit(self: *Armed) !?*FrameCapture {
+        if (self.capture) |*capture| {
+            const same = capture.width == self.board.display.panelWidth() and
+                capture.height == self.board.display.panelHeight();
+            if (same) {
+                self.board.display.output.capture = .{ .pixels = capture.pixels, .width = capture.width, .height = capture.height };
+                return capture;
+            }
+            capture.deinit(self.board);
+            self.capture = null;
+        }
+        self.capture = try FrameCapture.init(self.allocator, self.board);
+        return if (self.capture) |*capture| capture else null;
+    }
+
+    pub fn finish(self: *Armed) !void {
+        if (self.failed) |err| return err;
+        if (self.capture) |*capture| try capture.finish(self.board, &self.sequence);
+    }
+
+    pub fn deinit(self: *Armed) void {
+        self.board.display.output.vsync = null;
+        if (self.capture) |*capture| capture.deinit(self.board);
+        self.sequence.deinit();
+        self.allocator.destroy(self);
+    }
+};
+
+/// Report-side handle: the armed run, armed now if the run started without
+/// one. A disabled run is a no-op.
 pub const Run = struct {
-    sequence: ?Sequence,
-    capture: ?FrameCapture,
+    armed: ?*Armed,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !Run {
-        var sequence: ?Sequence = if (path) |directory|
-            try Sequence.init(allocator, directory, every)
-        else
-            null;
-        errdefer if (sequence) |*one| one.deinit();
-        const capture = if (sequence != null) try FrameCapture.init(allocator, board) else null;
-        return .{ .sequence = sequence, .capture = capture };
+        const armed = Armed.of(board) orelse try Armed.arm(allocator, board, path, every) orelse return .{ .armed = null };
+        _ = try armed.fit();
+        return .{ .armed = armed };
     }
 
     pub fn initForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !Run {
@@ -158,11 +225,12 @@ pub const Run = struct {
     }
 
     pub fn finish(self: *Run, board: *Board) !void {
-        if (self.capture) |*capture| try capture.finish(board, &self.sequence.?);
+        _ = board;
+        if (self.armed) |armed| try armed.finish();
     }
 
     pub fn deinit(self: *Run, board: *Board) void {
-        if (self.capture) |*capture| capture.deinit(board);
-        if (self.sequence) |*sequence| sequence.deinit();
+        _ = board;
+        if (self.armed) |armed| armed.deinit();
     }
 };

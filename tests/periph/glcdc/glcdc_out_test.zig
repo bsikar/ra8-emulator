@@ -217,3 +217,7 @@ test "an armed capture keeps exactly what leaves the stage and drops what falls 
     _ = stage.apply(white, 0, 0);
     try std.testing.expectEqual(@as(u32, 0), pixels[0]);
 }
+
+test {
+    _ = @import("glcdc_vsync_test.zig");
+}
