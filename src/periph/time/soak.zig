@@ -5,10 +5,13 @@
 //! so the report says when the firmware stopped feeding the dog rather than
 //! carrying on into a second boot. The first event is the one kept; whatever
 //! follows from it is not news. A fault the core latched into CFSR, HFSR
-//! or SFSR is an event too (slice 2b, src/periph/time/soak_fault.zig).
+//! or SFSR is an event too (slice 2b, src/periph/time/soak_fault.zig), and so
+//! is a watched stack canary or heap guard word that changed (RA8EMU-619,
+//! src/periph/time/soak_watch.zig).
 const std = @import("std");
 const timebase = @import("timebase.zig");
 const Calendar = @import("../rtc/rtc_clock.zig").Calendar;
+pub const soak_watch = @import("soak_watch.zig");
 
 pub const Kind = enum {
     watchdog_reset,
@@ -19,6 +22,8 @@ pub const Kind = enum {
     usage_fault,
     secure_fault,
     hard_fault,
+    stack_canary,
+    heap_guard,
 
     pub fn text(self: Kind) []const u8 {
         return switch (self) {
@@ -30,6 +35,8 @@ pub const Kind = enum {
             .usage_fault => "UsageFault",
             .secure_fault => "SecureFault",
             .hard_fault => "HardFault",
+            .stack_canary => "stack canary overwritten",
+            .heap_guard => "heap guard word changed",
         };
     }
 };
@@ -43,16 +50,28 @@ pub const Event = struct {
     core: u8 = 0,
     pc: ?u32 = null,
     date: ?Calendar = null,
+    /// The watched word that changed, for a canary or guard event.
+    word: ?u32 = null,
 };
 
 pub const Soak = struct {
     armed: bool = false,
     event: ?Event = null,
+    /// Canary and guard words read at each boundary while armed.
+    watch: soak_watch.Watch = .{},
 
     /// Keep the first event of an armed run; anything else is ignored.
     pub fn note(self: *Soak, kind: Kind, at_ns: u64) void {
         if (!self.armed or self.event != null) return;
         self.event = .{ .kind = kind, .at_ns = at_ns };
+    }
+
+    /// Note the first watched word found changed as the event, naming it.
+    pub fn check(self: *Soak, memory: anytype, at_ns: u64) void {
+        if (!self.armed or self.event != null) return;
+        const found = self.watch.changed(memory) orelse return;
+        self.note(found.kind, at_ns);
+        self.event.?.word = found.address;
     }
 
     /// Say where the run stopped, once it has: the PC the core ended on and
@@ -76,6 +95,7 @@ pub const Soak = struct {
         const s = event.at_ns / timebase.ns_per_s;
         const ns = event.at_ns % timebase.ns_per_s;
         try out.print("soak: stopped on {s} at {d}.{d:0>9} s virtual, core {d}", .{ event.kind.text(), s, ns, event.core });
+        if (event.word) |word| try out.print(", word 0x{X:0>8}", .{word});
         if (event.pc) |pc| try out.print(", pc 0x{X:0>8}", .{pc});
         if (event.date) |d| try out.print(", rtc 20{d:0>2}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{ d.year, d.month, d.day, d.hour, d.minute, d.second });
         try out.print("\n", .{});

@@ -113,14 +113,16 @@ pub const Clock = struct {
         return watch.met(self.memory.readWord(watch.address) catch null);
     }
 
-    /// Note a fault the core latched as the soak's event, when it is armed and
-    /// has none yet. Also asked once after the run, for a core that stopped
+    /// Note a fault the core latched, or a watched canary or guard word that
+    /// changed (RA8EMU-619), as the soak's event, when it is armed and has
+    /// none yet. Also asked once after the run, for a core that stopped
     /// inside a stretch and never reached its boundary.
     pub fn soakFaults(self: *Clock) void {
         const soak = &self.board.time.soak;
         if (!soak.armed or soak.ended()) return;
         const latched = clocks.soak_fault.words(self.memory, &landScs);
         if (clocks.soak_fault.kind(latched)) |fault| soak.note(fault, self.board.time.base.now());
+        soak.check(self.memory, self.board.time.base.now());
     }
 
     /// The chunk the Unicorn path uses, cut down to the armed SysTick period
