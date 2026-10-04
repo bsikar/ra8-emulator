@@ -91,11 +91,15 @@ pub const I3c = struct {
     /// responder take the data buffer out from under a live transfer, so the
     /// transfer moved nothing and said nothing about it.
     role_clash: u32 = 0,
+    /// START requests while a part held the line low (`--fault ...=bus_low`,
+    /// RA8EMU-537). No START can be put on a held bus, so none opens.
+    held_starts: u32 = 0,
 
     pub fn quiet(self: *const I3c) bool {
         return self.transfers == 0 and self.nacks == 0 and self.reserved == 0 and
             self.no_start == 0 and self.st_busy == 0 and self.rs_idle == 0 and
             self.overdrain == 0 and self.role_clash == 0 and self.resets == 0 and
+            self.held_starts == 0 and
             self.responder.quiet();
     }
 
@@ -237,6 +241,12 @@ pub const I3c = struct {
             return;
         }
         if (value & flag.cndctl.stcnd != 0) {
+            if (self.devices.held_low) {
+                // SCL/SDA held low: no START condition, and the request
+                // bit stays set, so a driver spinning on it times out.
+                self.held_starts += 1;
+                return;
+            }
             if (self.busy) self.st_busy += 1 else self.openTransfer();
         } else if (value & flag.cndctl.srcnd != 0) {
             if (self.busy) self.openTransfer() else self.rs_idle += 1;
@@ -263,7 +273,8 @@ pub const I3c = struct {
         return switch (access.word) {
             flag.reg.ntst => if (self.responder.armed) self.responder.status() else self.ntst,
             flag.reg.bst => self.bst,
-            flag.reg.bcst => if (self.busy) 0 else flag.bcst.bfref,
+            // A held line is never free (BCST.BFREF stays 0).
+            flag.reg.bcst => if (self.busy or self.devices.held_low) 0 else flag.bcst.bfref,
             // The port moves a byte, and only for an access that reaches it.
             flag.reg.ntdtbp0 => if (access.carriesData()) self.readData() else 0,
             else => self.shadow[access.index()],
