@@ -86,6 +86,7 @@ pub const Options = struct {
     frame_out: ?[]const u8 = null,
     /// `--panel-only`: save only the glass at its own dimensions.
     panel_only: bool = false,
+    frames: @import("frames_args.zig").Options = .{},
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,
     /// Write one line per SD command to stderr.
@@ -332,6 +333,7 @@ fn parseCtl(argv: []const []const u8) !Options {
 /// `parse` to keep each chain inside the length gate. True when the flag was
 /// one of these and `index` has been walked past any value it took.
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    if (try @import("frames_args.zig").parse(&options.frames, argv, index)) return true;
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
         options.cpu1_path = try world_flags.next(argv, index);

@@ -16,6 +16,7 @@ const report_run = @import("report/run.zig");
 const json_run = @import("report/json_run.zig");
 const report_dumps = @import("report/dumps.zig");
 const frame_out = @import("frame_out.zig");
+const frames_out = @import("report.zig").frames_out;
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const lockstep_dual = @import("../../core/cpu/lockstep/dual.zig");
@@ -142,6 +143,8 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
         if (options.ctl_cpu_load) return ctlLoad(out, loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1), status);
+        var frames = try frames_out.Run.initForCli(std.heap.page_allocator, board, options.frames);
+        defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
             try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .core = core.*, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
@@ -153,9 +156,22 @@ pub fn run(out: std.fs.File.Writer, core: *engine.Engine, board: *Board, timebas
         if (!options.report_json) try mem_dump.printAll(out, clock.memory, image, options.memDumps());
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.print(out, options, &second.second);
-        try frame_out.report(out, board, options.frame_out, options.panel_only);
-    } else if (options.ctl_cpu_load) return ctlLoad(out, .{}, status);
+        try finishFrames(out, board, options, &frames);
+    } else if (options.ctl_cpu_load) {
+        return ctlLoad(out, .{}, status);
+    } else try captureFrames(board, options);
     return status;
+}
+
+fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run) !void {
+    try frames.finish(board);
+    try frame_out.report(out, board, options.frame_out, options.panel_only);
+}
+
+fn captureFrames(board: *Board, options: cli.Options) !void {
+    var frames = try frames_out.Run.initForCli(std.heap.page_allocator, board, options.frames);
+    defer frames.deinit(board);
+    try frames.finish(board);
 }
 
 /// `ctl cpu-load` prints only the load object, then the run's status.

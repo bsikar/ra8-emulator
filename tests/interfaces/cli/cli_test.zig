@@ -90,6 +90,8 @@ test {
     _ = @import("touch_spec_test.zig");
     _ = @import("png_test.zig");
     _ = @import("frame_out_test.zig");
+    _ = @import("frames_args_test.zig");
+    _ = @import("frames_out_test.zig");
     _ = @import("ctl_args_test.zig");
 }
 
