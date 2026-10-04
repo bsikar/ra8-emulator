@@ -211,7 +211,7 @@ fn reportAll(
     window: ?taken_in.Window,
     tracer: ?*const rtos_hook.Tracer,
 ) !void {
-    const cpu0 = rtos_hook.report.sideOf(tracer, .{ .handle = core.handle });
+    const cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = .{ .engine = core } });
     if (options.ctl_cpu_load) {
         const load = report.json_run.json_load.Load{ .cpu0 = cpu0, .cpu1 = rtos_hook.second.side(second) };
         try report.json_run.json_load.document(out, &load);
