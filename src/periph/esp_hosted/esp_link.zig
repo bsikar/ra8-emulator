@@ -15,6 +15,7 @@ const event = @import("esp_event.zig");
 const rpc = @import("esp_rpc.zig");
 const station = @import("esp_station.zig");
 const dhcp = @import("esp_dhcp.zig");
+const gateway = @import("esp_gateway.zig");
 const Queue = @import("esp_queue.zig").Queue;
 
 /// Octets of the host capabilities announcement kept for inspection.
@@ -93,10 +94,12 @@ pub const Link = struct {
         _ = self.queue.push(&out);
     }
 
-    /// Answers the station's DHCP traffic as the AP would; other data drops.
+    /// Answers the station's DHCP, ARP and gateway ping traffic as the AP
+    /// would; other data drops.
     fn forward(self: *Link, payload: []const u8) void {
         if (!self.caps_seen) return;
         var out: [frame.frame_size]u8 = undefined;
-        if (dhcp.answerFrame(&out, payload)) _ = self.queue.push(&out);
+        if (dhcp.answerFrame(&out, payload) or gateway.answerFrame(&out, payload))
+            _ = self.queue.push(&out);
     }
 };

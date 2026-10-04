@@ -74,5 +74,6 @@ test {
     _ = @import("esp_hosted/esp_queue_test.zig");
     _ = @import("esp_hosted/esp_eth_test.zig");
     _ = @import("esp_hosted/esp_dhcp_test.zig");
+    _ = @import("esp_hosted/esp_gateway_test.zig");
     _ = @import("esp_hosted/esp_scan_test.zig");
 }
