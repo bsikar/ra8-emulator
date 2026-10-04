@@ -74,6 +74,7 @@ test {
     _ = @import("mve_float_vcmul_vectors_test.zig");
     _ = @import("mve_float_vectors_test.zig");
     _ = @import("mve_gather64_vectors_test.zig");
+    _ = @import("mve_gather_imm_vectors_test.zig");
     _ = @import("mve_gather_vectors_test.zig");
     _ = @import("mve_int_mulh_vectors_test.zig");
     _ = @import("mve_int_pair_vectors_test.zig");
