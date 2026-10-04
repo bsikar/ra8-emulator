@@ -1,5 +1,6 @@
 //! The parts the catalog knows: the Click module's LSM6DSO IMU and MAX17048
-//! fuel gauge on I2C, the e-paper panel on SPI and the AT modem on a UART.
+//! fuel gauge on I2C, the e-paper panel on SPI, the AT modem on a UART, and
+//! a push button and an LED on GPIO pins.
 //!
 //! The part files stay about the part. This file only says how one is made,
 //! freed, and put on a line at an address, so a second gauge at 0x37 is the
@@ -8,6 +9,7 @@ const std = @import("std");
 const catalog = @import("catalog.zig");
 const endpoint = @import("endpoint.zig");
 const eink = @import("../eink/eink.zig");
+const gpio_parts = @import("../gpio/gpio_parts.zig");
 const lsm6dso = @import("../i3c/i3c_lsm6dso.zig");
 const max17048 = @import("../i3c/i3c_max17048.zig");
 const modem = @import("../modem/modem.zig");
@@ -16,6 +18,8 @@ pub const imu_name = "lsm6dso";
 pub const gauge_name = "max17048";
 pub const panel_name = "eink";
 pub const modem_name = "modem";
+pub const button_name = "button";
+pub const led_name = "led";
 
 /// Every model a run can name.
 pub const all: catalog.Catalog = .{ .models = &models };
@@ -25,10 +29,13 @@ const models = [_]catalog.Model{
     I2cPart(max17048.Gauge).model(gauge_name),
     ChannelPart(eink.Panel, .spi).model(panel_name),
     ChannelPart(modem.Modem, .uart).model(modem_name),
+    ChannelPart(gpio_parts.Button, .gpio).model(button_name),
+    ChannelPart(gpio_parts.Led, .gpio).model(led_name),
 };
 
-/// A part with a default state and a `device()` on the SPI or SCI seam. The
-/// channel is the board's business (src/board/plug.zig), so bind only wraps.
+/// A part with a default state and a `device()` on the SPI, SCI or pin seam.
+/// The channel or pin is the board's business (src/board/plug.zig), so bind
+/// only wraps.
 fn ChannelPart(comptime State: type, comptime kind: endpoint.Kind) type {
     return struct {
         fn model(comptime name: []const u8) catalog.Model {

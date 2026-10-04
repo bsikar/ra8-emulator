@@ -29,6 +29,10 @@ const std = @import("std");
 const periph = @import("../registry.zig");
 const regs = @import("gpio_regs.zig");
 
+/// Pin models (RA8EMU-497), reached through here because root.zig is full.
+pub const pins = @import("gpio_pins.zig");
+pub const parts = @import("gpio_parts.zig");
+
 /// PORT geometry (HUM Ch 20.2 p 730). The Non-secure alias is folded onto this
 /// base by the bus before anything here sees it.
 pub const win_base: u32 = 0x4040_0000;
@@ -103,6 +107,8 @@ pub const Gpio = struct {
     /// Stores into PCNTR2, which the pads drive and firmware does not.
     refused: u32 = 0,
     observer: ?Observer = null,
+    /// Device models wired to single pins with --attach.
+    wired: pins.Pins = .{},
 
     pub fn init() Gpio {
         var self = Gpio{};
@@ -120,6 +126,7 @@ pub const Gpio = struct {
         self.refused = 0;
         self.setInput(sw_port, sw1_pin, true);
         self.setInput(sw_port, sw2_pin, true);
+        self.wired.reconnect(self);
     }
 
     /// Drive a pin from outside the firmware: a button press, or a peripheral
@@ -129,6 +136,7 @@ pub const Gpio = struct {
     }
 
     fn notify(self: *Gpio, port: u8) void {
+        self.wired.portChanged(self, port);
         if (self.observer) |listener| listener.changedFn(listener.context, self, port);
     }
 

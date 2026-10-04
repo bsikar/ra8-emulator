@@ -199,6 +199,7 @@ test {
     _ = @import("periph/glcdc/glcdc_tcon_test.zig");
     _ = @import("periph/gpio/gpio_regs_test.zig");
     _ = @import("periph/gpio/gpio_test.zig");
+    _ = @import("periph/gpio/gpio_pins_test.zig");
     _ = @import("periph/gtclkcr_test.zig");
     _ = @import("periph/gpt/gpt_test.zig");
     _ = @import("periph/gpt/gpt_pdg_test.zig");

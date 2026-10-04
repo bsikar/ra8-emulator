@@ -8,7 +8,8 @@
 //! refused rather than replaced: SPI0 holds the e-ink panel, SCI0 the
 //! microSD line and SCI7 the modem. The SPI select is kept on the endpoint,
 //! but the channel has no per-select routing yet, so it does not change
-//! which device answers.
+//! which device answers. GPIO goes to the port block's pin table, one model
+//! per pin.
 const std = @import("std");
 const catalog = @import("../periph/model/catalog.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
@@ -60,6 +61,10 @@ pub fn one(board: *Board, device: catalog.Device, at: endpoint.Endpoint) !void {
             const unit = &board.serial.channels[at.uart.channel];
             if (unit.device != null) return Error.ChannelTaken;
             board.serial.attachDevice(at.uart.channel, part);
+        },
+        .gpio => |part| {
+            if (at != .gpio) return catalog.Error.WrongEndpoint;
+            try board.pins.wired.attach(&board.pins, at.gpio.port, at.gpio.pin, part);
         },
     }
 }
