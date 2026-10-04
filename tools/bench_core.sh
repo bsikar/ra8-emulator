@@ -108,13 +108,14 @@ fi
 for image in "${images[@]}"; do
     name=$(basename "$image")
     end=$(ending "$image")
-    case $end in
-    "ran $budget instructions"*) ;;
-    *)
+    # The Zig core ends at a stretch boundary, and a skipped loop retires
+    # whole trips, so a full run can go a little past the budget
+    # (RA8EMU-594). Fewer than the budget means it stopped early.
+    ran=$(printf '%s\n' "$end" | sed -n 's/^ran \([0-9][0-9]*\) instructions.*/\1/p')
+    if [ -z "$ran" ] || [ "$ran" -lt "$budget" ]; then
         echo "| $name | not timed: ${end:-no summary line} | | | | |"
         continue
-        ;;
-    esac
+    fi
     read -r zig uc < <(timed "$image")
     [ "$zig" -lt 1 ] && zig=1
     [ "$uc" -lt 1 ] && uc=1
