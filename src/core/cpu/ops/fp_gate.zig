@@ -58,11 +58,30 @@ pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
 pub fn check(cpu: *Cpu) op.Error!void {
     const verdict = cpacr.check(.{ .cpacr = cpu.fp.cpacr, .privileged = sysreg.privileged(&cpu.regs) });
     if (!verdict.enabled) return error.NoCoprocessor;
-    if (lazy.pending(&cpu.fp)) try lazy.preserve(cpu.bus, &cpu.fp);
+    if (lazy.pending(&cpu.fp)) try preserve(cpu);
     cpu.regs.control = cpu.fp.context.touch(
         cpu.regs.control,
         cpu.banked.current,
         &cpu.fp.fpscr,
         &cpu.fp.vpr,
     );
+}
+
+/// PreserveFPState under the MPU as the lazy entry saw it: privileged as
+/// FPCCR.USER says and at negative priority while FPCCR.HFRDY is clear
+/// (DDI0553 AccType_LAZYFP). A refusal is MemManage MLSPERR (RA8EMU-621).
+fn preserve(cpu: *Cpu) op.Error!void {
+    const m = cpu.mpu orelse return lazy.preserve(cpu.bus, &cpu.fp);
+    const armed = m.armed;
+    const privileged = m.privileged;
+    defer {
+        m.armed = armed;
+        m.privileged = privileged;
+    }
+    const fpccr = cpu.fp.context.fpccr;
+    m.arm(fpccr.user == 0, fpccr.hfrdy == 0);
+    lazy.preserve(cpu.bus, &cpu.fp) catch |err| {
+        if (m.take() != null) return error.LazyMemManage;
+        return err;
+    };
 }

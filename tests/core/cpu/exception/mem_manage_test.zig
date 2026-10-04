@@ -333,3 +333,42 @@ test "a privileged STRT or LDRT is checked as unprivileged; STR.W and LDR.W are 
         }
     }
 }
+
+const mlsperr: u32 = 1 << 5;
+
+/// VADD.F32 with a deferred FP push pending into `fpcar`, the lazy entry
+/// having been `user` (FPCCR.USER) with HardFault ready.
+fn lazyStep(rig: *Rig, fpcar: u32, user: u1) !Cpu {
+    rig.ram.putHalf(fixture.code + 2, 0x0A81);
+    var cpu = try rig.boot(Profile.m85, 0xEE30, 0, false);
+    cpu.fp.context.writeFpcar(fpcar);
+    cpu.fp.context.fpccr.lspact = 1;
+    cpu.fp.context.fpccr.user = user;
+    cpu.fp.context.fpccr.hfrdy = 1;
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    return cpu;
+}
+
+test "a deferred FP push the MPU refuses is MemManage MLSPERR without MMFAR" {
+    var rig: Rig = undefined;
+    rig.init(on, true);
+    const cpu = try lazyStep(&rig, window, 0);
+    try std.testing.expectEqual(mem_handler, cpu.regs.pc);
+    try std.testing.expectEqual(mlsperr, rig.ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.mmfar));
+    try std.testing.expectEqual(before, rig.ram.word(window));
+    try std.testing.expectEqual(@as(u1, 1), cpu.fp.context.fpccr.lspact);
+    try std.testing.expectEqual(fixture.code, rig.ram.word(fixture.msp_top - 8));
+}
+
+test "FPCCR.USER, not the running code, decides the deferred push's privilege" {
+    var rig: Rig = undefined;
+    rig.init(on, true);
+    var cpu = try lazyStep(&rig, no_access, 1);
+    try std.testing.expectEqual(mlsperr, rig.ram.word(memmap.scb.cfsr));
+    rig.init(on, true);
+    cpu = try lazyStep(&rig, no_access, 0);
+    try std.testing.expectEqual(fixture.code + 4, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u1, 0), cpu.fp.context.fpccr.lspact);
+}
