@@ -2,7 +2,7 @@
 //! an explicit yes or --allow-webcam.
 const std = @import("std");
 const ra8 = @import("ra8");
-const consent = ra8.periph.ceu.camera.consent;
+const consent = ra8.periph.ceu.camera.webcam.consent;
 
 fn ask(answer: []const u8, out: []u8) consent.Decision {
     var in = std.io.fixedBufferStream(answer);

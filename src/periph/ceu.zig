@@ -75,7 +75,7 @@ pub const camera = struct {
     pub const still = @import("camera/image_source.zig");
     pub const video = @import("camera/video_source.zig");
     pub const pipe = @import("camera/pipe_source.zig");
-    pub const consent = @import("camera/webcam_consent.zig");
+    pub const webcam = @import("camera/webcam.zig");
 };
 
 pub const win_base: u32 = 0x4034_8000;
