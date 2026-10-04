@@ -48,7 +48,7 @@
 //! is the only thing the firmware actually needs: neither core can spin
 //! forever without the other getting a turn, so a handshake completes.
 const std = @import("std");
-const engine = @import("engine.zig");
+const fault = @import("fault.zig");
 const elf = @import("elf.zig");
 const memmap = @import("memmap.zig");
 const cadence = @import("cadence.zig");
@@ -111,7 +111,7 @@ pub const limits = struct {
 pub const Second = struct {
     /// What CPU1 has done and where it stands.
     state: State = .{},
-    watch: engine.Watch = .{},
+    watch: fault.Watch = .{},
     /// This core's own Security Attribution Unit. Core-private state, not a
     /// block on the shared bus: the header says what sharing one cost.
     partitions: sau.Sau = sau.Sau.init(),

@@ -2,7 +2,7 @@
 //! Unicorn's `Second` embeds one beside its engine; a Zig CPU1 on its own
 //! store (RA8EMU-588) carries one with no engine at all. Everything here
 //! reads and writes CPU1's memory only through a memory.Guest.
-const engine = @import("engine.zig");
+const fault = @import("fault.zig");
 const memmap = @import("memmap.zig");
 const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
@@ -19,7 +19,7 @@ pub const State = struct {
     /// Turns CPU1 has been given, including ones it spent parked.
     turns: usize = 0,
     /// Set once CPU1 stops on a fault; it stays halted from then on.
-    fault: ?engine.Fault = null,
+    fault: ?fault.Fault = null,
     /// CPU1's own NVIC, vectored from its own table.
     interrupts: nvic.Nvic = .{},
     /// CPU1's Secure SysTick, which also keeps its DWT_CYCCNT.
