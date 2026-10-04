@@ -27,6 +27,8 @@ const systick_cut = cpu.systick_cut;
 const Until = @import("../../core/until.zig").Until;
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
+/// A `--cpu zig` run from main, with no engine opened: RA8EMU-592.
+pub const main_path = @import("zig_main.zig");
 
 const BootWriter = struct {
     output: *std.fs.File.Writer,

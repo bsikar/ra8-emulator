@@ -114,6 +114,8 @@ pub fn main() !u8 {
     const argv = try std.process.argsAlloc(allocator);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
     const image = openImage(allocator, options.path) catch return 1;
+    // A `--cpu zig` run never opens Unicorn: src/interfaces/cli/zig_main.zig.
+    if (ra8.board.zig_run.main_path.wanted(options)) return ra8.board.zig_run.main_path.run(allocator, image, options);
 
     var core = try engine.Engine.open();
     defer core.close();
@@ -121,7 +123,7 @@ pub fn main() !u8 {
 
     var board = Board.init(allocator);
     defer board.deinit();
-    fitBoard(&board, allocator, options) catch return 2;
+    ra8.board.zig_run.main_path.fit(&board, allocator, options) catch return 2;
     defer card_setup.saveBack(&board, options.sd_path, options.sd_save);
     var cpu0: ra8.board.zig_run.cpu0_memory.Cpu0 = .{};
     defer cpu0.close();
@@ -129,16 +131,13 @@ pub fn main() !u8 {
     var parts = Parts{};
     const written = try loadAll(&core, &board, image, &parts, options);
     if (options.ns_path) |path| loadNonSecure(allocator, core, &cpu0, path) catch return 1;
-    const vector_base = image.vectorBase() orelse {
-        std.debug.print("no executable segment, nothing to reset into\n", .{});
-        return 1;
-    };
+    const vector_base = ra8.board.zig_run.main_path.vectorBase(image) catch return 1;
     try core.resetFromVectorTable(vector_base);
     const entry = try core.register(.pc);
     const out = try announce(core, written, vector_base, entry, options.ctl_cpu_load);
     var reboot = ra8.core.reboot.Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
-    if (options.cpu != .unicorn) return ra8.board.zig_run.run(out, &core, cpu0.guest(core), &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, if (options.cpu == .zig) parts.tap.waiting() else null);
+    if (options.cpu == .lockstep) return ra8.board.zig_run.run(out, &core, cpu0.guest(core), &board, &parts.timebase, image, options, vector_base, if (parts.profile) |*table| table else null, null);
 
     var interrupts = nvic.Nvic{ .vector_base = vector_base };
     _ = try parts.divide.arm(&core, &interrupts, image);
@@ -348,42 +347,6 @@ fn resolveStop(image: elf.Image, options: cli.Options) ?stop_watch.Stop {
         return null;
     };
     return .{ .address = address, .reaches = options.stop_at };
-}
-
-/// Put the world the command line described onto the board: the part it is,
-/// the card in its slot, the contacts queued on its panel, the charge in
-/// its cell and the stick in its USB jack. Each piece refuses on its own
-/// terms and says so; this only puts them in order.
-fn fitBoard(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
-    board.part = options.part;
-    board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
-    board.wire.click = options.click;
-    board.asks.keep(allocator, options.attaches[0..options.attach_count]);
-    if (options.usb_loop) board.usb.loopBack();
-    board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
-    try card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
-    queueTouches(board, options);
-    if (options.touch_in) |path| try board.touch_input.open(path);
-    try setBattery(board, options);
-    try ra8.board.usb_plug.apply(&board.usb, allocator, options.usb_disk);
-    try cli.usbip_export.run.install(&board.usb, allocator, options.usbip);
-}
-
-/// Put the contacts the command line asked for on the touch panel. The queue
-/// is the same depth as the flag allows, so nothing here can overflow it.
-fn queueTouches(board: *Board, options: cli.Options) void {
-    for (options.touches[0..options.touch_count]) |contact| {
-        board.wire.panel.queue(contact) catch return;
-    }
-}
-
-/// Tell the fuel gauge what is in the battery. A state-of-charge over full
-/// is refused here rather than clamped into a number nothing measured.
-fn setBattery(board: *Board, options: cli.Options) !void {
-    board.wire.gauge.setBattery(options.battery) catch |err| {
-        std.debug.print("--battery {d}: not a state-of-charge a cell can hold\n", .{options.battery.soc_pct});
-        return err;
-    };
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused
