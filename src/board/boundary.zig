@@ -70,6 +70,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     try drain(self, core, self.links.takeEvents());
     try self.events.repend(core);
     if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
+    if (self.time.pacing) |*paced| paced.after(self.time.base.now());
 }
 
 /// Host switch edges reach the event path only through a pin whose PFS ISEL

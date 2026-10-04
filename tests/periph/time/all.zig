@@ -4,4 +4,5 @@ test {
     _ = @import("event_queue_test.zig");
     _ = @import("systick_due_test.zig");
     _ = @import("pacer_test.zig");
+    _ = @import("pacing_test.zig");
 }
