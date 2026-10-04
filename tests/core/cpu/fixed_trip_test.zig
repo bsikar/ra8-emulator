@@ -137,3 +137,67 @@ test "only RAM is writable, and flash and the ITCM are readable too" {
     try std.testing.expect(!fixed_trip.readable(0x4000_0000, 4));
     try std.testing.expect(!fixed_trip.readable(0xE000_E010, 4));
 }
+
+/// A peripheral word that reads zero and counts every read: a semaphore
+/// held by the other core. `repeats` says whether its bus offers RA8EMU-595's
+/// repeat; without it every trip is stepped.
+const Held = struct {
+    inner: ra8.core.cpu.bus.Bus,
+    reads: u64 = 0,
+
+    const at: u32 = 0x4040_0000;
+    const with = ra8.core.cpu.bus.Bus.VTable{ .read = read, .write = write, .repeat = repeat };
+    const without = ra8.core.cpu.bus.Bus.VTable{ .read = read, .write = write };
+
+    fn view(self: *Held, repeats: bool) ra8.core.cpu.bus.Bus {
+        return .{ .ctx = self, .vtable = if (repeats) &with else &without };
+    }
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) ra8.core.cpu.bus.Error!void {
+        const self: *Held = @ptrCast(@alignCast(ctx));
+        if (address != at) return self.inner.read(address, into);
+        self.reads += 1;
+        @memset(into, 0);
+    }
+
+    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) ra8.core.cpu.bus.Error!void {
+        const self: *Held = @ptrCast(@alignCast(ctx));
+        return self.inner.write(address, bytes);
+    }
+
+    fn repeat(ctx: *anyopaque, address: u32, len: usize, times: u64) bool {
+        const self: *Held = @ptrCast(@alignCast(ctx));
+        _ = len;
+        if (address != at) return false;
+        self.reads += times;
+        return true;
+    }
+};
+
+const Spun = struct { retired: u64, reads: u64, reused: u64, pc: u32 };
+
+fn spin(repeats: bool) !Spun {
+    var rig: Rig = .{};
+    try rig.init(&ts_wait);
+    defer rig.deinit();
+    var held: Held = .{ .inner = rig.cpu.bus };
+    rig.cpu.bus = held.view(repeats);
+    rig.cpu.regs.set(2, Held.at);
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(1003));
+    return .{ .retired = rig.cpu.retired, .reads = held.reads, .reused = rig.cache.reused, .pc = rig.cpu.regs.pc };
+}
+
+test "a spin on a repeatable peripheral read retires at once and counts every read" {
+    const skipped = try spin(true);
+    const stepped = try spin(false);
+    try std.testing.expectEqual(stepped.retired, skipped.retired);
+    try std.testing.expectEqual(stepped.reads, skipped.reads);
+    try std.testing.expectEqual(stepped.pc, skipped.pc);
+    try std.testing.expect(stepped.reads > 100);
+    try std.testing.expect(skipped.reused < 16);
+}
+
+test "a peripheral read the bus cannot repeat still spoils the trip" {
+    const stepped = try spin(false);
+    try std.testing.expect(stepped.reused > 100);
+}

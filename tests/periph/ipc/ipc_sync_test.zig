@@ -203,3 +203,36 @@ test "a semaphore reached only by unnamed reads is not quiet" {
     _ = unit.read(semAddress(12) + 1, 1);
     try std.testing.expect(!unit.locks.semaphores[12].quiet());
 }
+
+test "a held semaphore repeats and counts each repeated read as contended" {
+    var unit = ipc.Ipc.init();
+    _ = unit.read(semAddress(2), 4);
+    try std.testing.expect(unit.locks.repeat(sync.semOffset(2), sem_lock, 0));
+    try std.testing.expectEqual(@as(u32, 0), unit.locks.semaphores[2].contentions);
+    try std.testing.expect(unit.locks.repeat(sync.semOffset(2), sem_lock, 40));
+    try std.testing.expectEqual(@as(u32, 40), unit.locks.semaphores[2].contentions);
+    try std.testing.expect(unit.locks.semaphores[2].locked);
+}
+
+test "a free semaphore, an unnamed lane and NMI status never repeat" {
+    var unit = ipc.Ipc.init();
+    try std.testing.expect(!unit.locks.repeat(sync.semOffset(1), sem_lock, 5));
+    try std.testing.expect(!unit.locks.semaphores[1].locked);
+    _ = unit.read(semAddress(1), 4);
+    try std.testing.expect(!unit.locks.repeat(sync.semOffset(1), 0, 5));
+    try std.testing.expect(!unit.locks.repeat(sync.nmiOffset(0, 0), nmi_bit, 5));
+    try std.testing.expectEqual(@as(u32, 0), unit.locks.semaphores[1].contentions);
+}
+
+test "the IPC block's repeat reaches the semaphore through the peripheral bus" {
+    var unit = ipc.Ipc.init();
+    var bus = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    try bus.add(unit.block());
+    try std.testing.expect(!bus.repeat(semAddress(4), 4, 0));
+    _ = bus.read(semAddress(4), 4);
+    const reads = bus.counters.reads;
+    try std.testing.expect(bus.repeat(semAddress(4), 4, 9));
+    try std.testing.expectEqual(reads + 9, bus.counters.reads);
+    try std.testing.expectEqual(@as(u32, 9), unit.locks.semaphores[4].contentions);
+}

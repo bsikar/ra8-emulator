@@ -45,7 +45,7 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch }, .direct = memory.direct };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat }, .direct = memory.direct };
     }
 
     /// Whether the whole access sits in either peripheral window.
@@ -78,6 +78,18 @@ pub const BoardBus = struct {
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, value, .little);
         @memcpy(into, bytes[0..into.len]);
+    }
+
+    /// Only a peripheral register repeats, and only when its block says so.
+    fn repeat(ctx: *anyopaque, given: u32, len: usize, times: u64) bool {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (scs_route.wired(self.security, given) != null) return false;
+        const address = self.landing(given) orelse return false;
+        if (!inWindow(address, len)) return false;
+        if (self.check) |c| if (!c.allows(given, .load)) return false;
+        const w = width(len) catch return false;
+        self.periph.issuer = self.issuer;
+        return self.periph.repeat(address, w, times);
     }
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
