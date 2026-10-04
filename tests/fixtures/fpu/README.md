@@ -41,3 +41,11 @@ positions. Compares store `FPSCR & 0xF000009F` (NZCV and flags); min and max
 store the result too. Build it the same way, swapping in `fp_cmp`.
 `tests/core/cpu/fp_cmp_corpus_test.zig` boots it; `fp_cmp_vectors.zig` holds
 the DDI0553 FPCompare, FPMaxNum and FPMinNum words.
+
+`fp_modes.zig` checks the remaining architectural modes. It runs RNE, RP,
+RM and RZ over half-ULP addition, division and VCVTR; fixed-point VCVT;
+FZ on an F32 subnormal; DN on quiet and signalling NaNs; and F16 VADD,
+VMUL, VDIV, VSQRT and VFMA plus FZ16. Each operation stores its result and
+`FPSCR & 0x03C0009F`, including the control mode. Build it the same way,
+swapping in `fp_modes`. `fp_modes_corpus_test.zig` boots it and compares
+against the DDI0553 words in `fp_modes_vectors.zig`.
