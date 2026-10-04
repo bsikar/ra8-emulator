@@ -1,8 +1,8 @@
 //! Everything a command-line flag asked to be printed once the run is over.
 //!
 //! These are the reader's own questions, not the board's account of itself:
-//! a named global read out of RAM, one card block as hex. The core
-//! registers go out through report/json_regs.zig. They come after the block reports and
+//! a named global read out of RAM, one card block as hex, the core
+//! registers as the run left them. They come after the block reports and
 //! they answer to a flag, so a run that passed none of those flags prints
 //! nothing from this file at all.
 //!
@@ -17,6 +17,8 @@ const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");
 const sd_dump = @import("../../../periph/sd/sd_dump.zig");
 const sd_image = @import("../../../periph/sd/sd_image.zig");
+const registers = @import("../../../debug/registers.zig");
+const json_regs = @import("json_regs.zig");
 
 /// Read each `--dump-sym` global out of RAM and print it.
 ///
@@ -89,4 +91,30 @@ pub fn dumpBlock(out: anytype, board: anytype, options: cli.Options) !void {
         try out.print("{s}\n", .{sd_dump.row(&buf, offset, bytes)});
     }
     if (dropped > 0) try out.print("  dump-sd       : {d} zero row(s) not shown\n", .{dropped});
+}
+
+/// The core registers as the run left them, when `--dump-regs` asked.
+///
+/// At a break this is the function's own call boundary, so r0-r3 and the
+/// words at the stack pointer are still its arguments. The registers come
+/// from the same reader `--report json` uses; the line keeps the engine
+/// run's layout, which the firmware's regexes parse (RA8EMU-638). A value
+/// the source will not give is printed as unreadable, never as a zero.
+pub fn dumpRegisters(out: anytype, reader: json_regs.Reader, core: Guest, options: cli.Options) !void {
+    if (!options.dump_regs) return;
+    try out.print("  dump-regs     :", .{});
+    for (registers.dumped, 0..) |named, index| {
+        if (reader.register(named.which)) |value| {
+            try out.print(" {s} 0x{X:0>8}", .{ named.name, value });
+        } else try out.print(" {s} <unreadable>", .{named.name});
+        if (registers.endsLine(index)) try out.print("\n                 ", .{});
+    }
+    const sp = reader.register(.sp) orelse return out.print("sp unreadable\n", .{});
+    for (0..registers.limits.stack_words) |index| {
+        const at = registers.stackWord(sp, index);
+        if (core.readWord(at)) |value| {
+            try out.print(" [sp+{d}] 0x{X:0>8}", .{ index * 4, value });
+        } else |_| try out.print(" [sp+{d}] <unreadable>", .{index * 4});
+    }
+    try out.print("\n", .{});
 }
