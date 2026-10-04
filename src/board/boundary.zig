@@ -6,6 +6,7 @@
 //! one of them has raised it. The two are separated because the order here
 //! is load-bearing in a way the field list is not, the same reason the bus
 //! order sits in wiring.zig rather than beside the blocks it attaches.
+const core_clock = @import("core_clock.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 
 const Board = @import("board.zig").Board;
@@ -47,6 +48,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.rswitch.tick();
     self.usb.tick();
     if (self.display.output.vsync) |*frame| frame.tick(self.time.base.now());
+    core_clock.retune(self);
     try takeResetRequests(self, core);
     self.c6.tick(&self.pins);
     self.console_input.poll(&self.serial);

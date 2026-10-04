@@ -244,3 +244,39 @@ test "a WDT underflow lands on the boundary that closes at its due time, carry i
     try std.testing.expectEqual(@as(usize, 3), boundary);
     try std.testing.expectEqual(@as(u64, 130_000), unit.time.base.now());
 }
+
+/// A bare board with its blocks attached, ready for one boundary.
+fn attached(unit: *Board, memory: ra8.core.cpu.memory.guest.Guest) !void {
+    try ra8.board.wiring.attachBlocks(unit, memory);
+}
+
+test "a boundary retunes the time base to CPU0's clock from the tree" {
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var unit = board();
+    defer unit.deinit();
+    try attached(&unit, memory);
+    // The EK-RA8D2 quickstart: PLL1 at 1 GHz, CPU0 /2 and CPU1 /4.
+    unit.plls.pll1 = .{ .ccr = 0xFA02, .ccr2 = 0x451 };
+    unit.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.pll1);
+    unit.tree.divcr2 = 0x2021;
+    unit.tree.selects = 1;
+    try unit.tick(memory, 1_000);
+    try std.testing.expectEqual(@as(u64, 500_000_000), unit.time.base.hz);
+}
+
+test "an untouched tree and one the rate table cannot price leave the time base alone" {
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var unit = board();
+    defer unit.deinit();
+    try attached(&unit, memory);
+    try unit.tick(memory, 1_000);
+    try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, unit.time.base.hz);
+    unit.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.loco);
+    unit.tree.selects = 1;
+    try unit.tick(memory, 1_000);
+    try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, unit.time.base.hz);
+}
