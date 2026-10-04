@@ -12,6 +12,7 @@ const clocks = @import("../../periph/clocks.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
 const sleep_pace = @import("../../core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
+const quiet_due = @import("../../board/quiet_due.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
@@ -88,12 +89,12 @@ pub const Clock = struct {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
     }
 
-    /// A sleeping CPU0's width: to the nearest armed SysTick period or the
-    /// board's next queued event. CPU1 shares each boundary, so a run with
-    /// it keeps the normal width.
+    /// A sleeping CPU0's width: to the nearest armed SysTick period, the
+    /// board's next queued event or the panel's next vsync. CPU1 shares each boundary, so a run with
+    /// it keeps the normal width, as does a board with a block mid-work.
     pub fn asleepWidth(self: *Clock, normal: u32) u32 {
-        if (self.cpu1 != null) return normal;
-        const edges = [_]u64{ self.timebase.period(self.memory), self.ns_timebase.period(self.memory), board_edge.cyclesToDue(self.board) };
+        if (self.cpu1 != null or !quiet_due.quietUntilDue(self.board)) return normal;
+        const edges = [_]u64{ self.timebase.period(self.memory), self.ns_timebase.period(self.memory), board_edge.cyclesToDue(self.board), quiet_due.vsyncDue(self.board) };
         return sleep_pace.width(normal, true, &edges);
     }
 
