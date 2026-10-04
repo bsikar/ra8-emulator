@@ -17,6 +17,8 @@ pub const board = @import("usbip_board.zig");
 pub const run = @import("usbip_run.zig");
 /// Bulk URBs on the FS device's pipes.
 pub const urb = @import("usbip_urb.zig");
+/// The imported connection's SUBMIT/UNLINK traffic.
+pub const session = @import("usbip_session.zig");
 
 /// A composite CDC device has two interfaces; room for a few more.
 pub const max_interfaces: usize = 8;
