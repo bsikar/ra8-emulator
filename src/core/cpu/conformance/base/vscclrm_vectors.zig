@@ -5,7 +5,8 @@
 //! empty list clearing VPR alone. With FPCCR.ASPEN set and CONTROL.SFPA
 //! clear there is no Secure FP context and the instruction does nothing;
 //! otherwise ExecuteFPCheck runs first, so SFPA with FPCA clear creates
-//! the context. `cleared` is the mask of S registers that read zero after
+//! the context. Non-secure state is UNDEFINED, before the NOP case.
+//! `cleared` is the mask of S registers that read zero after
 //! a bank where every register starts non-zero. A run past S31 or D15, an
 //! odd imm8 in the double form, a base other than PC, W set, hw2[11:9]
 //! not 101 and the 16-bit space are left unclaimed.
@@ -21,10 +22,14 @@ pub const In = struct {
     size: u8 = 4,
     aspen: u1 = 1,
     control: u32 = fpca | sfpa,
+    secure: bool = true,
 };
+
+pub const Fault = enum { none, undefined_instr };
 
 pub const Out = struct {
     claimed: bool = true,
+    fault: Fault = .none,
     cleared: u32,
     vpr: u32 = 0,
     control: u32 = fpca | sfpa,
@@ -64,6 +69,8 @@ const doubles = [_]V{
 const context = [_]V{
     vec("no secure fp context is a nop", .{ .hw2 = 0x0A04, .control = 0 }, .{ .cleared = 0, .vpr = vpr_reset, .control = 0 }),
     vec("sfpa without fpca creates the context then clears", .{ .hw2 = 0x0A04, .control = sfpa }, .{ .cleared = 0x0000_000F }),
+    vec("non-secure is undefined", .{ .hw2 = 0x0A04, .secure = false }, .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset }),
+    vec("non-secure with no fp context is still undefined", .{ .hw2 = 0x0A04, .secure = false, .control = 0 }, .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset, .control = 0 }),
     vec("aspen clear always clears", .{ .hw2 = 0x0A04, .aspen = 0, .control = 0 }, .{ .cleared = 0x0000_000F, .control = 0 }),
 };
 
