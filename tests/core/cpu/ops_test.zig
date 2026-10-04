@@ -94,6 +94,7 @@ test {
     _ = @import("ops/mve_bitwise_test.zig");
     _ = @import("ops/mve_modimm_test.zig");
     _ = @import("ops/mve_widen_test.zig");
+    _ = @import("ops/mve_shift_imm_test.zig");
     _ = @import("ops/mve_int_pair_test.zig");
     _ = @import("ops/mve_int_shift_test.zig");
     _ = @import("ops/mve_int_mulh_test.zig");

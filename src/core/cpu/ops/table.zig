@@ -92,6 +92,7 @@ pub const groups = [_]op.Group{
     beatWise(@import("mve_bitwise.zig").group),
     beatWise(@import("mve_modimm.zig").group),
     beatWise(@import("mve_widen.zig").group),
+    beatWise(@import("mve_shift_imm.zig").group),
     beatWise(@import("mve_int_pair.zig").group),
     beatWise(@import("mve_int_shift.zig").group),
     beatWise(@import("mve_int_mulh.zig").group),
