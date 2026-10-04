@@ -11,6 +11,8 @@ const fault_spec = @import("../../periph/model/fault_spec.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 const rtc_start = @import("rtc_start.zig");
 const speed = @import("../../periph/time/speed.zig");
+const duration = @import("../../periph/time/duration.zig");
+const timebase = @import("../../periph/time/timebase.zig");
 
 const Options = cli.Options;
 const card_setup = cli.card_setup;
@@ -53,6 +55,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.speed = 1000;
     } else if (std.mem.eql(u8, flag, "--speed")) {
         options.speed = try speedArg(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--run-for")) {
+        options.instructions = try runFor(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--idle-skip") or std.mem.eql(u8, flag, "--no-idle-skip")) {
         options.idle_skip = flag[2] == 'i';
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
@@ -119,6 +123,16 @@ fn speedArg(text: []const u8) !?u64 {
         std.debug.print("--speed {s}: {s}\n", .{ text, speed.describe(err) });
         return err;
     };
+}
+
+/// One `--run-for` duration as a cycle budget at the timebase's rate. A bad
+/// one says why before the run starts.
+fn runFor(text: []const u8) !usize {
+    const ns = duration.parse(text) catch |err| {
+        std.debug.print("--run-for {s}: {s}\n", .{ text, duration.describe(err) });
+        return err;
+    };
+    return @intCast(duration.cycles(ns, timebase.default_hz));
 }
 
 /// One `--rtc-start` value. A bad one says why before the run starts.

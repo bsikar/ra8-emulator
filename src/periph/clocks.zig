@@ -26,6 +26,7 @@ pub const systick_due = @import("time/systick_due.zig");
 pub const pacer = @import("time/pacer.zig");
 pub const pacing = @import("time/pacing.zig");
 pub const speed = @import("time/speed.zig");
+pub const duration = @import("time/duration.zig");
 
 /// The machine's clock and what is scheduled on it, as the board holds them.
 pub const Time = struct {
