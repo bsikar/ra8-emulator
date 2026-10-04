@@ -25,6 +25,9 @@ pub const Dumps = struct {
     core: engine.Engine,
     image: elf.Image,
     options: *const cli.Options,
+    /// The memory the run left, when it is not the engine's: a `--cpu zig`
+    /// run on its own store (RA8EMU-580). Registers still come from `core`.
+    memory: ?Guest = null,
     /// The `--watch` log as the run left it, null when nothing was watched.
     watched: ?watchpoint.Watched = null,
 };
@@ -35,7 +38,7 @@ pub fn section(j: anytype, board: *Board, found: ?*const Dumps) !void {
     try j.open("dumps", '{');
     try globals(j, of);
     try regs(j, of.core, of.options.dump_regs);
-    try memory(j, .{ .engine = of.core }, of.image, of.options.memDumps());
+    try memory(j, of.memory orelse .{ .engine = of.core }, of.image, of.options.memDumps());
     try json_sd.block(j, board, of.options.dump_sd);
     try json_watched.log(j, of.image, of.options.watch_place, if (of.watched) |*one| one else null);
     try j.close('}');
@@ -56,7 +59,7 @@ fn globals(j: anytype, of: *const Dumps) !void {
     try j.open("symbols", '[');
     for (of.options.dumps()) |name| {
         const address = symbols.addressInAny(images[0..count], name);
-        const guest: Guest = .{ .engine = of.core };
+        const guest: Guest = of.memory orelse .{ .engine = of.core };
         const value: ?u32 = if (address) |at| guest.readWord(at) catch null else null;
         try j.open(null, '{');
         try j.field("name", name);
