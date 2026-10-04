@@ -1,7 +1,8 @@
 //! CPU1's half of a --cpu zig run (RA8EMU-234). CPU1 still gets the
 //! `Second` that Unicorn runs use, because that brings up its engine (the
 //! memory it shares with CPU0), its per-core wiring on the board, and its
-//! loaded image. The instructions themselves run on CPU1's Zig core
+//! loaded image. Past that the Zig half reads and writes only through
+//! CPU1's memory.Guest (RA8EMU-535). The instructions themselves run on CPU1's Zig core
 //! (src/core/second_zig.zig), which takes one turn per CPU0 round. Turns
 //! are sized by CPUCLK1 against CPUCLK0 (src/core/core_rate.zig), exactly as
 //! on Unicorn. CPU1's own timebase (its SysTick) advances by what it ran.
@@ -58,8 +59,8 @@ pub const Driver = struct {
         const stopped = self.core.turn(share);
         const ran = self.core.cpu.retired - before;
         second.ran += @intCast(ran);
-        second.timebase.advance(second.core, @intCast(ran)) catch {};
-        self.ns_timebase.advanceSysTick(second.core, @intCast(ran)) catch {};
+        second.timebase.advance(self.core.memory, @intCast(ran)) catch {};
+        self.ns_timebase.advanceSysTick(self.core.memory, @intCast(ran)) catch {};
         second.pc = self.core.cpu.regs.pc;
         if (stopped != .count) second.fault = .{ .pc = second.pc, .detail = @tagName(stopped) };
     }

@@ -1,7 +1,8 @@
-//! CPU1 on the Zig core (RA8EMU-234). The engine CPU1 already has for
-//! Unicorn stays as its memory: a second Zig Cpu reads and writes through a
-//! BoardBus over that engine, so it reaches the same shared SRAM and the
-//! same peripheral blocks as CPU0. The bus names CPU1 as the issuer, so a
+//! CPU1 on the Zig core (RA8EMU-234). Its memory is a memory.Guest
+//! (RA8EMU-535): for now the engine CPU1 already has for Unicorn, which
+//! shares CPU0's SRAM. A second Zig Cpu reads and writes through a BoardBus
+//! over that Guest, so it reaches the same shared SRAM and the same
+//! peripheral blocks as CPU0. The bus names CPU1 as the issuer, so a
 //! block that answers per core (IPCSEM, the ICU's per-core view) sees the
 //! right one. The SAU, MPU and fault-clear units are CPU1's own, the ones
 //! `Second.open` wired for Unicorn.
@@ -14,6 +15,8 @@ const std = @import("std");
 const registry = @import("../periph/registry.zig");
 const cpu_mod = @import("cpu/cpu.zig");
 const BoardBus = @import("cpu/board_bus.zig").BoardBus;
+const Guest = @import("cpu/memory/guest.zig").Guest;
+const GuestBus = @import("cpu/memory/guest_bus.zig").GuestBus;
 const mpu_check = @import("cpu/mpu_check.zig");
 const NvicSource = @import("cpu/exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("cpu/exception/quiet_source.zig").QuietSource;
@@ -24,6 +27,8 @@ const part = @import("part.zig");
 const Second = @import("second_core.zig").Second;
 
 pub const SecondZig = struct {
+    /// CPU1's memory. The board bus points into it, so it lives here.
+    memory: Guest,
     board: BoardBus,
     pending: NvicSource = .{},
     quiet: QuietSource = undefined,
@@ -33,18 +38,16 @@ pub const SecondZig = struct {
     /// CPU1's formed blocks, when the run uses them (RA8EMU-408).
     formed: ?*BlockCache = null,
 
-    /// CPU1's Zig core over `second`'s engine, reset from its vector table.
+    /// CPU1's Zig core over `second`'s memory, reset from its vector table.
     /// Built in storage the caller holds: the core keeps pointers to this
     /// struct's bus, quiet source, interrupt source and decode cache.
     pub fn open(self: *SecondZig, second: *Second, periph: *registry.Bus) !void {
-        self.* = .{
-            .board = .{
-                .memory = .{ .engine = .{ .core = &second.core } },
-                .periph = periph,
-                .issuer = .cpu1,
-                .scs = .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears },
-            },
-            .cpu = undefined,
+        self.* = .{ .memory = .{ .engine = second.core }, .board = undefined, .cpu = undefined };
+        self.board = .{
+            .memory = GuestBus.of(&self.memory, false),
+            .periph = periph,
+            .issuer = .cpu1,
+            .scs = .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears },
         };
         self.quiet = .{ .inner = self.pending.source(), .memory = self.board.view() };
         self.cpu = .{ .bus = self.quiet.bus(), .source = self.quiet.source(), .quiet = &self.quiet, .profile = part.cpu1_profile };

@@ -111,3 +111,20 @@ test "CPU1's Zig core polls through its own quiet source (RA8EMU-440)" {
     core.cpu.bus.write(0x4000_0000, &.{ 0, 0, 0, 0 }) catch {};
     try std.testing.expect(!core.quiet.settled);
 }
+
+test "CPU1's Zig core stores through its Guest into CPU1's memory (RA8EMU-535)" {
+    var cpu1: second_core.Second = undefined;
+    var cpu0 = try pair(&cpu1);
+    defer cpu0.close();
+    defer cpu1.close();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var core: SecondZig = undefined;
+    try core.open(&cpu1, &board.bus);
+    try std.testing.expect(core.memory == .engine);
+    try core.cpu.bus.write(code + 0x40, &.{ 0xEF, 0xBE, 0xAD, 0xDE });
+    var bytes: [4]u8 = undefined;
+    try cpu1.core.read(code + 0x40, &bytes);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), std.mem.readInt(u32, &bytes, .little));
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), try core.memory.readWord(code + 0x40));
+}
