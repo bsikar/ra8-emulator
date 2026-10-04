@@ -66,6 +66,14 @@ fn attachAdc(self: *Board, core: Guest) !void {
     _ = tsn_cal.map(core) catch false;
 }
 
+/// The CEU, with the memory its frames land in and the virtual time its
+/// camera source reads at each arm (RA8EMU-540).
+fn attachCapture(self: *Board, memory: Guest) !void {
+    self.capture.memory = memory;
+    self.capture.clock = &self.time.base;
+    try self.bus.add(self.capture.block());
+}
+
 /// The I2C lines with their fitted parts, then the run's `--attach` asks,
 /// so a clash with a fitted part is reported against the ask.
 fn attachWire(self: *Board) !void {
@@ -91,8 +99,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.dataops.block());
     try self.bus.add(self.accuracy.block());
     try self.bus.add(self.comparators.block());
-    self.capture.memory = memory;
-    try self.bus.add(self.capture.block());
+    try attachCapture(self, memory);
     try self.bus.add(self.analog.block());
     try attachAdc(self, memory);
     try self.bus.add(self.shutoff.block());

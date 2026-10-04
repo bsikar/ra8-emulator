@@ -59,6 +59,7 @@
 const std = @import("std");
 
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const TimeBase = @import("time/timebase.zig").TimeBase;
 const periph = @import("registry.zig");
 /// The pixel sources the CEU captures from (RA8EMU-505).
 pub const camera = struct {
@@ -159,8 +160,9 @@ pub const Ceu = struct {
     memory: ?Guest = null,
     /// Where the pixels come from; the gradient unless a source is chosen.
     source: camera.frame_source.FrameSource = camera.gradient.source(),
-    /// Emulated time handed to the source per arm; 0 until a clock sets it.
-    now: u64 = 0,
+    /// The board's virtual time, read at each arm and handed to the source
+    /// (RA8EMU-540). A bare test CEU has none and its source sees 0.
+    clock: ?*const TimeBase = null,
     shadow: [win_span / 4]u32 = [_]u32{0} ** (win_span / 4),
 
     arms: u32 = 0,
@@ -277,7 +279,8 @@ pub const Ceu = struct {
         if (self.declineReason()) |reason| return self.decline(reason);
         const shape = self.geometry();
         const destination = self.word(off.cdayr);
-        self.source.frame(self.now, .{ .width = shape.width, .lines = shape.lines });
+        const when = if (self.clock) |time| time.now() else 0;
+        self.source.frame(when, .{ .width = shape.width, .lines = shape.lines });
         var landed = Landed{};
         var row: u32 = 0;
         while (row < shape.lines) : (row += 1) {

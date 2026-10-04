@@ -306,3 +306,57 @@ test {
     _ = @import("camera/png_decode_test.zig");
     _ = @import("camera/image_source_test.zig");
 }
+
+/// A source that records the emulated instant each capture asked for.
+const Stamp = struct {
+    seen: [2]u64 = .{ 0, 0 },
+    frames: usize = 0,
+
+    fn source(self: *Stamp) ceu.camera.frame_source.FrameSource {
+        return .{ .context = self, .vtable = &vtable };
+    }
+
+    const vtable = ceu.camera.frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
+
+    fn frame(context: *anyopaque, when: u64, _: ceu.camera.frame_source.Shape) void {
+        const self: *Stamp = @ptrCast(@alignCast(context));
+        if (self.frames < self.seen.len) self.seen[self.frames] = when;
+        self.frames += 1;
+    }
+
+    fn fill(_: *anyopaque, _: u32, _: u32, out: []u8) void {
+        @memset(out, 0);
+    }
+
+    fn close(_: *anyopaque) void {}
+};
+
+test "each arm hands the source the board's virtual time at that moment" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    var clock = ra8.periph.clocks.timebase.TimeBase{};
+    var stamp = Stamp{};
+    bench.unit.source = stamp.source();
+    bench.unit.clock = &clock;
+    bench.program(16, 2, 16, frame_base);
+    clock.advance(2_000);
+    bench.arm();
+    clock.advance(40_000_000);
+    bench.arm();
+    try std.testing.expectEqual(@as(usize, 2), stamp.frames);
+    try std.testing.expectEqual(@as(u64, 2_000), stamp.seen[0]);
+    try std.testing.expectEqual(@as(u64, 40_002_000), stamp.seen[1]);
+}
+
+test "a CEU with no clock hands its source time 0" {
+    var bench = Bench{};
+    try bench.open();
+    defer bench.close();
+    var stamp = Stamp{};
+    bench.unit.source = stamp.source();
+    bench.program(16, 2, 16, frame_base);
+    bench.arm();
+    try std.testing.expectEqual(@as(usize, 1), stamp.frames);
+    try std.testing.expectEqual(@as(u64, 0), stamp.seen[0]);
+}
