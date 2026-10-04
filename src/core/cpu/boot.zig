@@ -76,6 +76,8 @@ pub const Wiring = struct {
     wrap: ?Wrap = null,
     /// A listener called with the address of each retired instruction.
     retire_listener: ?cpu_mod.RetireListener = null,
+    /// Asked before each instruction (`--stop-on-undefined`).
+    fetch_guard: ?cpu_mod.FetchGuard = null,
     partitions: ?*sau.Sau = null,
     /// The part's IDAU map beside the SAU (RA8EMU-277).
     idau: ?*const sau.idau.Map = null,
@@ -111,7 +113,7 @@ pub fn start(out: anytype, choice: Choice, memory: Guest, periph: ?*registry.Bus
 /// the core stopped short of it.
 pub fn run(out: anytype, memory: Guest, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var reach = GuestBus.of(&memory, false);
-    return runOn(out, reach.view(), vector_base, budget, null, null, null, retire_listener, null, null, false, null, null);
+    return runOn(out, reach.view(), vector_base, budget, null, null, null, .{ .retire = retire_listener }, null, null, false, null, null);
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
@@ -122,10 +124,14 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, wiring.retire_listener, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard }, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, retire_listener: ?cpu_mod.RetireListener, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
+/// What the core reports to, per instruction: after it retires and before
+/// it is fetched.
+const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null };
+
+fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -144,7 +150,8 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     }
     defer if (formed) |cache| code_lines.unwatch(&cache.lines);
     cpu.blocks = formed;
-    cpu.retire_listener = retire_listener;
+    cpu.retire_listener = watch.retire;
+    cpu.fetch_guard = watch.fetch;
     cpu.until = until;
     cpu.attribution = source;
     var check: mpu_check.Check = undefined;

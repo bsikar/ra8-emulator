@@ -64,6 +64,9 @@ pub const Stop = union(enum) {
     stack_overflow: u32,
 };
 
+/// Asked before each instruction: src/core/cpu/fetch_guard.zig.
+pub const FetchGuard = @import("fetch_guard.zig").FetchGuard;
+
 /// A listener called once for each instruction that retires.
 pub const RetireListener = struct {
     context: *anyopaque,
@@ -83,6 +86,8 @@ pub const Cpu = struct {
     retired: u64 = 0,
     /// Optional observer for each retired instruction (profiling/debugging).
     retire_listener: ?RetireListener = null,
+    /// Optional check before each instruction; a held one ends the stretch.
+    fetch_guard: ?FetchGuard = null,
     /// The vector table the core reset from, for exception entry while
     /// nothing answers at VTOR.
     vtor: u32 = 0,
@@ -326,8 +331,10 @@ pub const Cpu = struct {
             }
             // Whole trips of a park loop (RA8EMU-450) or of a loop whose
             // trip changes nothing (RA8EMU-463) go by at once.
-            var trips = park.skippable(self, left);
-            if (trips == 0) trips = self.trip.observe(self, left);
+            // A guard sees every arrival, so no trips are skipped under one.
+            if (self.fetch_guard) |guard| if (guard.holds(self.regs.pc)) return .count;
+            var trips = if (self.fetch_guard == null) park.skippable(self, left) else 0;
+            if (trips == 0 and self.fetch_guard == null) trips = self.trip.observe(self, left);
             if (trips != 0) {
                 self.retired += trips;
                 left -= trips - 1;

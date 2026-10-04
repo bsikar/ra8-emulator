@@ -49,6 +49,7 @@ test {
     _ = @import("interfaces/cli/zig_run_test.zig");
     _ = @import("interfaces/cli/zig_stop_test.zig");
     _ = @import("interfaces/cli/zig_break_test.zig");
+    _ = @import("interfaces/cli/zig_undefined_test.zig");
     _ = @import("periph/standing_test.zig");
     _ = @import("periph/esp_hosted_test.zig");
     _ = @import("core/banked_test.zig");
