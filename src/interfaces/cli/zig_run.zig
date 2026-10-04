@@ -99,9 +99,11 @@ pub const Clock = struct {
         return sleep_pace.width(normal, true, &edges);
     }
 
-    /// Has the watched counter climbed to its floor? An unreadable word is
-    /// not a stop, as on the Unicorn path (src/core/stop.zig).
+    /// Has a soak event ended the run, or the watched counter climbed to its
+    /// floor? An unreadable word is not a stop, as on the Unicorn path
+    /// (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
+        if (self.board.time.soak.ended()) return true;
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
         if (self.undefined_sites) |found| if (found.stoppedAt() != null) return true;

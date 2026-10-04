@@ -280,3 +280,26 @@ test "an untouched tree and one the rate table cannot price leave the time base 
     try unit.tick(memory, 1_000);
     try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, unit.time.base.hz);
 }
+
+test "a soak run notes a watchdog reset as its event at the virtual time it came" {
+    var unit = board();
+    defer unit.deinit();
+    var ppb = Ppb{};
+    unit.time.soak.armed = true;
+    unit.time.base.advance(2_500_000_000);
+    unit.watchdog.reset_requested = true;
+    try unit.takeResetRequests(&ppb);
+    const event = unit.time.soak.event.?;
+    try std.testing.expectEqual(@TypeOf(event.kind).watchdog_reset, event.kind);
+    try std.testing.expectEqual(unit.time.base.now(), event.at_ns);
+    try std.testing.expect(unit.causes.latched(reset.cause.wdtrf));
+}
+
+test "a run without --run-for keeps no soak event for a watchdog reset" {
+    var unit = board();
+    defer unit.deinit();
+    var ppb = Ppb{};
+    unit.heartbeat.reset_requested = true;
+    try unit.takeResetRequests(&ppb);
+    try std.testing.expect(!unit.time.soak.ended());
+}

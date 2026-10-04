@@ -66,6 +66,9 @@ test "a run skips idle stretches unless it asks for --no-idle-skip" {
 test "--run-for budgets the run in virtual time at the core's rate" {
     const week = try parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "7d" });
     try std.testing.expectEqual(@as(?usize, 7 * 24 * 3600 * 1_000_000_000), week.instructions);
+    try std.testing.expect(week.run_for);
+    const plain = try parse(&[_][]const u8{ "emu", "a.elf", "--instructions", "100" });
+    try std.testing.expect(!plain.run_for);
     const short = try parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "90m" });
     try std.testing.expectEqual(@as(?usize, 90 * 60 * 1_000_000_000), short.instructions);
     try std.testing.expectError(error.NoUnit, parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "90" }));

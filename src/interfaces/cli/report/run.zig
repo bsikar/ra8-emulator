@@ -109,6 +109,7 @@ pub fn all(out: Writer, board: *Board, image: elf.Image, of: Tally) !void {
     try report.bus(board, out);
     try report_timing.timing(out, of.timebase, of.idle, of.interrupts, of.release, of.pend, of.pacing, of.mask_pacing);
     try pacing.line(out, &board.time);
+    try board.time.soak.line(out);
     try report.reboots(out, of.reboot);
     try report_steps.loops(out, of.loops);
     try report_steps.selects(out, of.selects);
@@ -162,6 +163,7 @@ pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64
     try report.bus(board, out);
     try report_timing.clock(out, timebase);
     try pacing.line(out, &board.time);
+    try board.time.soak.line(out);
     try out.print("zig core: pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n", .{});
     try report.blocks(board, out, .{ .elapsed = retired });
 }

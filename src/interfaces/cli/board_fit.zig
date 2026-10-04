@@ -19,6 +19,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     board.clock.pace.mode = .virtual;
     if (options.rtc_start) |at| board.clock.seed(at);
     if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
+    board.time.soak.armed = options.run_for;
     board.asks.keep(allocator, options.attaches[0..options.attach_count]);
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
