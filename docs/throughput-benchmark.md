@@ -57,3 +57,43 @@ The RA8EMU-12 speed budget (no slower than 2x Unicorn) is read from the total
 row of that table over a directory holding the corpus images and their
 companions.
 
+## Which speed factors are reachable (RA8EMU-180)
+
+`tools/bench_speed.sh` runs each image unpaced on the Zig core for the same
+virtual time, with idle fast-forward on (the default) and off, and prints wall
+time, the effective speed factor (virtual seconds per wall second) and CPU0
+instructions retired per wall second. CPU0's clock is 1 GHz virtual, so a core
+that never sleeps needs 1e9 instructions per wall second to keep up at 1x.
+
+```sh
+zig build -Doptimize=ReleaseFast -p /tmp/rf
+tools/bench_speed.sh /tmp/rf/bin/ra8_emulator 1s corpus/elf/IMAGE.elf...
+```
+
+The numbers below are for `--run-for 1s`, on a ReleaseFast build of main at
+6e55a993 (RA8EMU-618), on a Linux x86_64 build sandbox with 2 vCPUs. They are
+not lab VM numbers. Each image name drops the
+`ek_ra8d2_hil_needs_revalidation_` prefix:
+
+| image | skip | stepped | instr/s (skip) |
+|---|---|---|---|
+| rtc_alarm (idle) | 9.67x | 4.67x | 0.2 M |
+| lpm_periodic_idle (idle) | 9.25x | 4.24x | 0.3 M |
+| gpt_irq_demo (mixed) | 3.55x | 2.51x | 1.2 M |
+| compress_demo (busy) | 0.01x | 0.01x | 10.1 M |
+
+`cpu1_pingpong_ipc` is left out: without its CPU1 companion it stops on its
+SecureFault soak event before the second is up, so its 11x is not a full
+second.
+
+What this means today:
+
+- An idle-heavy image reaches 1x and 5x on this host, and about 10x unpaced.
+  Idle fast-forward roughly doubles it. RA8EMU-184 measured 12.7x on
+  rtc_alarm over 10 s on the same kind of host.
+- A busy image runs at about 10 M instructions per second, which is 0.01x of
+  a 1 GHz core. `--realtime` and `--speed 1` cannot keep up while firmware
+  computes. The pacer reports the slip and does not burst afterwards
+  (RA8EMU-181).
+- `--speed` values below the unpaced figure are honoured exactly. Above it,
+  the run goes as fast as the host allows.
