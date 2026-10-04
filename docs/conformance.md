@@ -345,7 +345,7 @@ table above. A group listed as missing does not fail the build yet.
 | mve_float_unary | 26 |
 | mve_float_cvt_half | 37 |
 | mve_float_cvt_int | 56 |
-| mve_float_cvt_fixed | missing |
+| mve_float_cvt_fixed | 64 |
 | mve_float_rint | 44 |
 | mve_float_maxnm | 29 |
 | mve_float_maxnma | 29 |
