@@ -8,6 +8,7 @@
 //!
 //! Garbage is seeded, so a run with a fault on it repeats exactly.
 const riic_bus = @import("../riic/riic_bus.zig");
+const timebase = @import("../time/timebase.zig");
 
 pub const Mode = union(enum) {
     /// Behave like the part.
@@ -20,6 +21,10 @@ pub const Mode = union(enum) {
     stuck: u8,
     /// Every byte read back is noise from this seed.
     garbage: u32,
+    /// Busy this many virtual ns after each write transaction ends, and
+    /// NACK every address phase until then: the ACK polling a driver does
+    /// on a slow part (RA8EMU-517). Needs the wrapper's clock.
+    slow_ns: u64,
 };
 
 pub const I2c = struct {
@@ -29,9 +34,19 @@ pub const I2c = struct {
     phases: u32 = 0,
     refused: u32 = 0,
     noise: u32 = 0,
+    /// The board's virtual time, for the slow mode. Without it a slow part
+    /// is never busy, since there is no time to be busy for.
+    clock: ?*const timebase.TimeBase = null,
+    /// When a slow part answers again, and whether this transaction wrote.
+    ready_at: u64 = 0,
+    wrote: bool = false,
 
     pub fn wrap(inner: riic_bus.Device) I2c {
         return .{ .inner = inner };
+    }
+
+    pub fn timed(inner: riic_bus.Device, clock: *const timebase.TimeBase) I2c {
+        return .{ .inner = inner, .clock = clock };
     }
 
     /// Put the device into `mode`. A garbage seed restarts its noise.
@@ -57,6 +72,7 @@ pub const I2c = struct {
         const answers = switch (self.mode) {
             .disconnected => false,
             .nack_every => |every| every == 0 or self.phases % every != 0,
+            .slow_ns => self.now() >= self.ready_at,
             else => true,
         } and self.inner.acks();
         if (!answers) self.refused += 1;
@@ -65,6 +81,7 @@ pub const I2c = struct {
 
     fn write(context: *anyopaque, byte: u8) void {
         const self: *I2c = @ptrCast(@alignCast(context));
+        self.wrote = true;
         self.inner.write(byte);
     }
 
@@ -83,7 +100,16 @@ pub const I2c = struct {
 
     fn stop(context: *anyopaque) void {
         const self: *I2c = @ptrCast(@alignCast(context));
+        if (self.mode == .slow_ns and self.wrote and self.clock != null) {
+            self.ready_at = self.now() + self.mode.slow_ns;
+        }
+        self.wrote = false;
         self.inner.stop();
+    }
+
+    fn now(self: *const I2c) u64 {
+        const clock = self.clock orelse return 0;
+        return clock.now();
     }
 
     fn nextNoise(self: *I2c) u8 {
