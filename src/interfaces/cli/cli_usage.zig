@@ -29,6 +29,8 @@ pub const text =
     \\  --sd-image IMAGE   back the SDHI card with a raw image (whole 512 KiB
     \\                     units); writes stay in memory unless --sd-writable,
     \\                     which writes the card back over IMAGE at the end
+    \\  --sd-dir DIR       back the SDHI card with a FAT32 image built from DIR,
+    \\                     the same bytes every build (dotfiles skipped)
     \\  --device NAME      the same thing, spelled the way the firmware's
     \\                     own emulator-in-the-loop suite spells it
     \\  --dump-sym NAME    read that global out of RAM after the run and

@@ -41,6 +41,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.sd_save = flag.len > "--sd".len;
     } else if (std.mem.eql(u8, flag, "--sd-image")) {
         options.sdhi.image = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--sd-dir")) {
+        options.sdhi.dir = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--sd-writable")) {
         options.sdhi.writable = true;
     } else if (std.mem.eql(u8, flag, "--dump-sd")) {

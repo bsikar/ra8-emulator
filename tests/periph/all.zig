@@ -233,6 +233,8 @@ test {
     _ = @import("sd/sd_fat_test.zig");
     _ = @import("sd/sd_format_test.zig");
     _ = @import("sd/sd_image_test.zig");
+    _ = @import("sd/sd_dirent_test.zig");
+    _ = @import("sd/sd_mkimage_test.zig");
     _ = @import("sd/sd_trace_test.zig");
     _ = @import("sd/sd_write_test.zig");
     _ = @import("sdhi/sdhi_card_test.zig");
