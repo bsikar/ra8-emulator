@@ -309,7 +309,7 @@ table above. A group listed as missing does not fail the build yet.
 | fp_arith | 40 |
 | fp_unary | 44 |
 | fp_system | 38 |
-| fp_convert | missing |
+| fp_convert | 39 |
 | fp_directed | missing |
 | fp_move | 26 |
 | vscclrm | missing |
