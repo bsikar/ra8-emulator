@@ -61,6 +61,7 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.speed = try speedArg(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--run-for")) {
         options.instructions = try runFor(try next(argv, index));
+        options.run_for = true;
     } else if (std.mem.eql(u8, flag, "--idle-skip") or std.mem.eql(u8, flag, "--no-idle-skip")) {
         options.idle_skip = flag[2] == 'i';
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {

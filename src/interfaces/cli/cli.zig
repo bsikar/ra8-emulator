@@ -86,8 +86,8 @@ pub const Options = struct {
     panel_only: bool = false, // `--panel-only`: only the glass, at its own size
     frames: @import("frames_args.zig").Options = .{},
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
-    /// `--speed`/`--realtime`: pace in thousandths of 1x; null runs flat out.
-    speed: ?u64 = null,
+    speed: ?u64 = null, // `--speed`/`--realtime`: thousandths of 1x; null runs flat out
+    run_for: bool = false, // `--run-for`: a watchdog reset ends the run (RA8EMU-186)
     idle_skip: bool = true, // a sleeping core runs to its next edge; `--no-idle-skip` steps it
     /// Cable the HS host jack to the board's own FS device jack.
     usb_loop: bool = false,

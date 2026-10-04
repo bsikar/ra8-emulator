@@ -127,10 +127,12 @@ pub fn raise(self: *Board, core: Guest, event: u16) !void {
 pub fn takeResetRequests(self: *Board, core: anytype) !void {
     if (self.watchdog.reset_requested) {
         self.watchdog.reset_requested = false;
+        self.time.soak.note(.watchdog_reset, self.time.base.now());
         resetFor(self, .watchdog);
     }
     if (self.heartbeat.reset_requested) {
         self.heartbeat.reset_requested = false;
+        self.time.soak.note(.iwdt_reset, self.time.base.now());
         resetFor(self, .iwdt);
     }
     try self.clears.apply(core);

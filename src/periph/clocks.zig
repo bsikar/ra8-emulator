@@ -27,6 +27,7 @@ pub const pacer = @import("time/pacer.zig");
 pub const pacing = @import("time/pacing.zig");
 pub const speed = @import("time/speed.zig");
 pub const duration = @import("time/duration.zig");
+pub const soak = @import("time/soak.zig");
 
 /// The machine's clock and what is scheduled on it, as the board holds them.
 pub const Time = struct {
@@ -34,6 +35,8 @@ pub const Time = struct {
     queue: event_queue.EventQueue = .{},
     /// Real-time pacing, when the run asked for it (RA8EMU-181).
     pacing: ?pacing.Pacing = null,
+    /// What ends a `--run-for` run early (RA8EMU-186).
+    soak: soak.Soak = .{},
 };
 
 /// The SDRAM controller and the SDCLK output control: sdramc.zig.
