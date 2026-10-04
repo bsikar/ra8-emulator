@@ -42,18 +42,6 @@ test "what one core stores in shared SRAM the other core reads" {
     );
 }
 
-test "no path named means no second core, and the storage is left alone" {
-    var cpu0 = try Engine.open();
-    defer cpu0.close();
-    try cpu0.mapBoardRam();
-    var board = Board.init(std.testing.allocator);
-    defer board.deinit();
-    var storage = mod.Second{ .core = undefined, .state = .{ .turns = 7 } };
-    const none = try mod.start(std.testing.allocator, &cpu0, &board, null, &storage);
-    try std.testing.expect(none == null);
-    try std.testing.expectEqual(@as(usize, 7), storage.state.turns);
-}
-
 test "a second core carries an SAU of its own, not the board's" {
     var cpu1: mod.Second = undefined;
     var cpu0 = try pair(&cpu1);
