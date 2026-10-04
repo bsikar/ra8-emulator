@@ -53,3 +53,14 @@ test "the report names each source: the gradient by default, a picture by its pa
     try std.testing.expectEqualStrings("shots/frame.png", named.detail);
     try std.testing.expectEqual(camera.gradient.source().vtable, named.vtable);
 }
+
+test "video takes a path, optionally with loop, and is named by it" {
+    const spec = try registry.parse("video:clips/walk.y4m,loop");
+    try std.testing.expectEqual(registry.Kind.video, spec.kind);
+    try std.testing.expectEqualStrings("clips/walk.y4m,loop", spec.arg);
+    try std.testing.expectError(error.BadValue, registry.parse("video"));
+    try std.testing.expectError(error.FileNotFound, (try registry.parse("video:/nonexistent/ra8.y4m")).open(allocator, &format_control));
+    const named = camera.video.labelled(camera.gradient.source(), "clips/walk.y4m,loop");
+    try std.testing.expectEqualStrings("video", named.label);
+    try std.testing.expectEqualStrings("clips/walk.y4m,loop", named.detail);
+}
