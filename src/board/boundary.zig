@@ -6,7 +6,7 @@
 //! one of them has raised it. The two are separated because the order here
 //! is load-bearing in a way the field list is not, the same reason the bus
 //! order sits in wiring.zig rather than beside the blocks it attaches.
-const engine = @import("../core/engine.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 
 const Board = @import("board.zig").Board;
 const reset = @import("../periph/reset.zig");
@@ -17,7 +17,7 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 /// any line still latched re-pends. The controller picks straight
 /// afterwards, so an interrupt raised here is entered in the same boundary
 /// rather than a chunk later.
-pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
+pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.watchdog.tick();
     self.heartbeat.tick();
     self.lowpower.tick();
@@ -52,14 +52,14 @@ pub fn tick(self: *Board, core: engine.Engine, instructions: u32) !void {
 
 /// Host switch edges reach the event path only through a pin whose PFS ISEL
 /// is set, and only in the sense its IRQCR picked (RA8EMU-375).
-fn raisePinEdges(self: *Board, core: engine.Engine) !void {
+fn raisePinEdges(self: *Board, core: Guest) !void {
     for (self.touch_input.edges.take()) |edge| {
         if (pin_irq.fires(&self.pinfunc, &self.events.pins, edge)) try raise(self, core, pin_irq.eventOf(edge));
     }
 }
 
 /// Every event one block has due this boundary, offered one at a time.
-fn drain(self: *Board, core: engine.Engine, events: anytype) !void {
+fn drain(self: *Board, core: Guest, events: anytype) !void {
     for (events.constSlice()) |event| try raise(self, core, event);
 }
 
@@ -68,7 +68,7 @@ fn drain(self: *Board, core: engine.Engine, events: anytype) !void {
 /// out to the ICU and the ELC at once, and a link conducts without consuming
 /// it. Then the transfer controller, before the core: a DTCE slot belongs to
 /// the DTC until its descriptor runs out.
-pub fn raise(self: *Board, core: engine.Engine, event: u16) !void {
+pub fn raise(self: *Board, core: Guest, event: u16) !void {
     _ = self.links.conduct(event);
     // INTSELR hands the event to CPU1's ICU. With no CPU1 attached it stays
     // CPU0's, which keeps a single-core run what it was.
