@@ -59,12 +59,14 @@ fn scan(board: *Board, pixels: []u32, width: u32, height: u32) bool {
 
 /// Save the requested e-ink panel's refreshed glass, as grey pixels.
 fn saveEink(allocator: std.mem.Allocator, panel: *const eink.Panel, path: []const u8) !Saved {
-    const width: u32 = eink_wire.panel.width;
-    const height: u32 = eink_wire.panel.height;
+    const width: u32 = panel.planes.geometry.width;
+    const height: u32 = panel.planes.geometry.height;
     const view = board_view.Size{ .width = width, .height = height };
     const rgba = try allocator.alloc(u8, @as(usize, width) * height * png.bytes_per_pixel);
     defer allocator.free(rgba);
-    try grayRgba(&panel.glass_buffer.pixels, rgba);
+    if (panel.planes.glass.pixels.len == 0) {
+        for (0..@as(usize, width) * height) |at| @memcpy(rgba[at * png.bytes_per_pixel ..][0..png.bytes_per_pixel], &[_]u8{ 0, 0, 0, 0xFF });
+    } else try grayRgba(panel.planes.glass.pixels, rgba);
     var file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
     var buffered = std.io.bufferedWriter(file.writer());

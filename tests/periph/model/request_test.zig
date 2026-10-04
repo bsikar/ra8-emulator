@@ -20,3 +20,18 @@ test "a bad endpoint keeps the endpoint's own reason" {
     try std.testing.expectError(error.ReservedAddress, request.parse("lsm6dso@i2c:riic@0x7A"));
     try std.testing.expectError(error.UnknownKind, request.parse("lsm6dso@can:0"));
 }
+
+test "an eink ask may carry WxH; no size keeps the default panel" {
+    const plain = try request.parse("eink@spi:spi0@ssl0");
+    try std.testing.expect(plain.geometry == null);
+    const sized = try request.parse("eink:1872x1404@spi:spi0@ssl0");
+    try std.testing.expectEqualStrings("eink", sized.name);
+    try std.testing.expectEqual(@as(u16, 1872), sized.geometry.?.width);
+    try std.testing.expectEqual(@as(u16, 1404), sized.geometry.?.height);
+}
+
+test "a size on another part, or a bad size, is refused" {
+    try std.testing.expectError(request.Error.NoSizeOption, request.parse("lsm6dso:10x10@i2c:riic@0x6B"));
+    try std.testing.expectError(request.Error.BadGeometry, request.parse("eink:0x10@spi:spi0@ssl0"));
+    try std.testing.expectError(request.Error.NoModelName, request.parse(":10x10@spi:spi0@ssl0"));
+}

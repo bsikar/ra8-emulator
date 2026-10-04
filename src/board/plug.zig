@@ -58,7 +58,9 @@ pub fn all(board: *Board) !void {
             return err;
         };
         if (std.mem.eql(u8, wanted.name, parts.panel_name)) {
-            board.asks.attached_eink = @ptrCast(@alignCast(made.state));
+            const panel: *eink.Panel = @ptrCast(@alignCast(made.state));
+            if (wanted.geometry) |geometry| panel.planes.resize(geometry);
+            board.asks.attached_eink = panel;
         }
     }
 }

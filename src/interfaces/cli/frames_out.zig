@@ -203,7 +203,7 @@ pub const Armed = struct {
         errdefer self.sequence.deinit();
         if (board.asks.attached_eink) |panel| {
             self.eink_panel = panel;
-            self.eink_pixels = try allocator.alloc(u32, panel.glass_buffer.pixels.len);
+            self.eink_pixels = try allocator.alloc(u32, panel.planes.geometry.pixels());
             panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
         }
         board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame } };
@@ -236,10 +236,11 @@ pub const Armed = struct {
         const self: *Armed = @ptrCast(@alignCast(context));
         const panel = self.eink_panel.?;
         const pixels = self.eink_pixels.?;
-        for (panel.glass_buffer.pixels, pixels) |gray, *pixel| {
+        if (panel.planes.glass.pixels.len != pixels.len) return;
+        for (panel.planes.glass.pixels, pixels) |gray, *pixel| {
             pixel.* = 0xFF00_0000 | (@as(u32, gray) << 16) | (@as(u32, gray) << 8) | gray;
         }
-        self.sequence.record(eink_wire.panel.width, eink_wire.panel.height, pixels, self.board.time.base.now()) catch |err| {
+        self.sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, pixels, self.board.time.base.now()) catch |err| {
             if (self.failed == null) self.failed = err;
         };
     }
