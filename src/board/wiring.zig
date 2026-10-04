@@ -108,7 +108,7 @@ pub fn attach(self: *Board, core: *engine.Engine) !void {
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());
     try attachWire(self);
-    try self.rswitch.attach(&self.bus, core.*, &self.domains.eswm);
+    try self.rswitch.attach(&self.bus, .{ .engine = core.* }, &self.domains.eswm);
     try self.usb.attach(&self.bus);
     self.trace.memory = .{ .engine = core.* };
     try self.bus.add(self.flash.block());
