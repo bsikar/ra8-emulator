@@ -23,3 +23,13 @@ zig cc -target thumb-freestanding-eabihf -mcpu=$M -nostdlib -Wl,--build-id=none 
 through the Zig core. Its expected words come from the Arm ARM (DDI0553)
 FPAdd, FPSub, FPMul, FPDiv, FPSqrt and FPMulAdd pseudocode, rounding to
 nearest even. FPSCR is compared on its cumulative flag bits.
+
+`fp_cvt.zig` covers the scalar conversions and round-to-integral ops:
+VCVT/VCVTR/VCVTA/VCVTN/VCVTP/VCVTM to S32 and U32, VCVT between F32, F64 and
+S32/U32, VCVTB between F16 and F32, and VRINTA/N/P/M/Z/X/R. Inputs include
+ties, negatives, values out of integer range, NaNs (quiet and signalling),
+half-precision overflow and subnormals. It stores each result with
+`FPSCR & 0x9F`. Build it with the same three commands, swapping `fp_basic`
+for `fp_cvt`. `tests/core/cpu/fp_cvt_corpus_test.zig` boots it; the expected
+words in `fp_cvt_vectors.zig` come from the DDI0553 FPToFixed, FixedToFP,
+FPRoundInt and FPConvert pseudocode.
