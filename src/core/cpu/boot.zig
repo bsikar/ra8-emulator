@@ -14,8 +14,6 @@ const registry = @import("../../periph/registry.zig");
 const cpu_mod = @import("cpu.zig");
 const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
-const lockstep_mode = @import("lockstep/mode.zig");
-const lockstep_dual = @import("lockstep/dual.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const DecodeCache = @import("decode_cache.zig").DecodeCache;
@@ -89,11 +87,6 @@ pub const Wiring = struct {
     fast_memory: bool = false,
     /// `--blocks`: run from formed blocks (RA8EMU-405).
     blocks: bool = false,
-    /// CPU1 under `--cpu lockstep --cpu1` (RA8EMU-235).
-    cpu1: ?*lockstep_dual.Cpu1 = null,
-    /// The `--ns` half, loaded into lockstep's own engine beside the main
-    /// image so both sides start from the same memory (RA8EMU-372).
-    ns_image: ?elf.Image = null,
     /// Filled with the core's registers as the run left them, for the
     /// `--report json` register dump (RA8EMU-579).
     final: ?*Regs = null,
@@ -103,12 +96,10 @@ pub const Wiring = struct {
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
 /// `ran` is set to how many instructions a `--cpu zig` run retired.
-pub fn start(out: anytype, choice: Choice, image: elf.Image, memory: Guest, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
+pub fn start(out: anytype, choice: Choice, memory: Guest, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
     return switch (choice) {
         .unicorn => unreachable,
         .zig => if (periph) |board| runOnBoard(out, memory, board, vector_base, budget, ran, wiring) else run(out, memory, vector_base, budget, wiring.retire_listener),
-        // Lockstep compares against Unicorn, so it only runs over the engine.
-        .lockstep => lockstep_mode.run(out, .{ .main = image, .ns = wiring.ns_image }, &memory.engine, vector_base, budget, wiring.clears, wiring.cpu1, wiring.retire_listener, wiring.blocks),
     };
 }
 

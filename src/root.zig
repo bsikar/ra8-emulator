@@ -114,7 +114,6 @@ pub const core = struct {
         pub const reset = @import("core/cpu/reset.zig");
         pub const shift = @import("core/cpu/shift.zig");
         pub const sysreg = @import("core/cpu/sysreg.zig");
-        pub const lockstep = @import("core/cpu/lockstep/all.zig");
         pub const ops = @import("core/cpu/ops.zig");
         pub const exception = @import("core/cpu/exception/all.zig");
     };

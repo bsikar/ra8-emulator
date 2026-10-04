@@ -213,7 +213,7 @@ test "a PACBTI-built firmware image runs through the Zig core" {
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.start(stream.writer(), .zig, image, .{ .engine = core }, &periph, vector_base, 100, &retired, .{});
+    const status = try boot.start(stream.writer(), .zig, .{ .engine = core }, &periph, vector_base, 100, &retired, .{});
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 100), retired);
     try std.testing.expectEqual(@as(u32, 0x247), try core.readWord(memmap.sram_base));

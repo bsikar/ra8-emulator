@@ -3,8 +3,7 @@
 //!
 //! CPU0 goes on its own store (src/interfaces/cli/zig_memory.zig), the
 //! opening line reads SP and the reset vector off that store, option memory
-//! is read from it, and src/interfaces/cli/zig_run.zig gets no engine. A
-//! lockstep run compares against Unicorn, so it stays on main's engine path.
+//! is read from it, and src/interfaces/cli/zig_run.zig gets no engine.
 const std = @import("std");
 const elf = @import("../../core/elf.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;

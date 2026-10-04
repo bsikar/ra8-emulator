@@ -9,8 +9,7 @@
 //! `attachStore` and reads everything back off the store.
 //!
 //! A run with a second core goes on the store too: CPU1 gets a store of its
-//! own that borrows this one's shared SRAM (RA8EMU-588). A lockstep run
-//! compares against Unicorn, so it stays on the engine.
+//! own that borrows this one's shared SRAM (RA8EMU-588).
 const engine = @import("../../core/engine.zig");
 const elf = @import("../../core/elf.zig");
 const Store = @import("../../core/cpu/memory/store.zig").Store;

@@ -73,7 +73,7 @@ test "--gdb runs on the Zig core; what its debugger does not take yet says so" {
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig }));
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .zig, .cpu1 = "c.elf" }));
     try std.testing.expectEqual(null, zig_debug_front.refusal(.{ .mode = .{ .gdb = 1 }, .cpu = .zig, .cpu1 = "c.elf" }));
-    try std.testing.expect(zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .lockstep }) != null);
+    try std.testing.expect(zig_debug_front.refusal(.{ .mode = .interactive, .cpu = .unicorn }) != null);
 }
 
 test "a --cpu zig --debug-script command line plays the script on the Zig core" {
