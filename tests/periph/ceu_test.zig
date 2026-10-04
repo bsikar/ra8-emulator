@@ -301,4 +301,6 @@ test {
     _ = @import("camera/pixel_convert_test.zig");
     _ = @import("camera/converted_source_test.zig");
     _ = @import("camera/camera_registry_test.zig");
+    _ = @import("camera/ppm_decode_test.zig");
+    _ = @import("camera/bmp_decode_test.zig");
 }
