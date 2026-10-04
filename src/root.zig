@@ -36,7 +36,6 @@ pub const core = struct {
     pub const pend_pace = @import("core/pend_pace.zig");
     pub const pend_sites = @import("core/pend_sites.zig");
     pub const unmask = @import("core/unmask.zig");
-    pub const idle_hook = @import("core/idle_hook.zig");
     pub const run_loop = @import("core/run_loop.zig");
     pub const run_pace = @import("core/run_pace.zig");
     pub const sleep_pace = @import("core/sleep_pace.zig");

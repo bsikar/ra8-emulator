@@ -37,7 +37,6 @@
 //! changed nothing: a store into ordinary RAM that writes back the value
 //! already there is harmless, and a store anywhere else is not, because a
 //! peripheral register can act on a write whose read-back never moves.
-//! src/core/idle_hook.zig is the half that watches for it.
 //!
 //! `core` is taken as `anytype` for the reason src/core/run_loop.zig takes
 //! it that way: it keeps this file off the engine's import cycle, and
