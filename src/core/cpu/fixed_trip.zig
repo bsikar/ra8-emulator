@@ -219,7 +219,16 @@ pub const Watch = struct {
         self.on = false;
     }
 
-    const vtable = bus.Bus.VTable{ .read = read, .write = write };
+    const vtable = bus.Bus.VTable{ .read = read, .write = write, .latch = latch };
+
+    /// A fault status bit the core raises mid-trip. Forwarded as a latch, not
+    /// a store, so a write-one-to-clear word keeps it (RA8EMU-634); the trip
+    /// is spoiled, since a fault is no part of a loop that changes nothing.
+    fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
+        const self: *Watch = @ptrCast(@alignCast(ctx));
+        self.spoiled = true;
+        return self.inner.latch(address, bits);
+    }
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *Watch = @ptrCast(@alignCast(ctx));

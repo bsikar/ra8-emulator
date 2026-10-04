@@ -24,7 +24,7 @@ pub const Listener = struct {
 
     pub fn onBus(self: *Listener, inner: bus.Bus) bus.Bus {
         self.inner_bus = inner;
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
     }
 
     pub fn onSource(self: *Listener, inner: Source) Source {
@@ -60,6 +60,12 @@ fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
     try self.inner_bus.write(address, bytes);
     if (bytes.len != 4) return;
     self.tracer.onStore(address, 4, std.mem.readInt(u32, bytes[0..4], .little));
+}
+
+/// A fault status bit stays a latch through the listener (RA8EMU-634).
+fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
+    const self: *Listener = @ptrCast(@alignCast(ctx));
+    return self.inner_bus.latch(address, bits);
 }
 
 fn winner(ctx: *anyopaque, through: bus.Bus) bus.Error!?Entry {
