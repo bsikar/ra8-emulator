@@ -18,7 +18,7 @@ const request = @import("../periph/model/request.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
 const Board = @import("board.zig").Board;
 
-pub const Error = error{ChannelTaken};
+pub const Error = error{ ChannelTaken, NothingFitted };
 
 /// The `--attach` asks, kept from before the board is wired until wiring
 /// plugs them after the fitted parts. Instances come from `arena`.
@@ -39,6 +39,13 @@ pub const Asks = struct {
 pub fn all(board: *Board) !void {
     const arena = board.asks.arena orelse return;
     for (board.asks.asked[0..board.asks.count]) |wanted| {
+        if (wanted.name.len == 0) {
+            fitted(board, arena, wanted) catch |err| {
+                std.debug.print("--fault on a fitted part: not applied ({s})\n", .{@errorName(err)});
+                return err;
+            };
+            continue;
+        }
         const made = try parts.all.make(arena, wanted.name, wanted.at);
         const device = faulted(board, arena, made.device, wanted) catch |err| {
             std.debug.print("--fault {s}: not applied ({s})\n", .{ wanted.name, @errorName(err) });
@@ -64,6 +71,21 @@ fn faulted(board: *Board, arena: std.mem.Allocator, device: catalog.Device, want
         }
     }
     return out;
+}
+
+/// `--fault @ENDPOINT=MODE`: the part the board fitted at that I2C address
+/// is wrapped where it sits in its line's registry (RA8EMU-536).
+pub fn fitted(board: *Board, arena: std.mem.Allocator, wanted: request.Request) !void {
+    if (wanted.at != .i2c) return catalog.Error.WrongEndpoint;
+    const mode = wanted.fault orelse return;
+    const registry = switch (wanted.at.i2c.line) {
+        .riic => &board.wire.controller.devices,
+        .touch => &board.wire.touchline.devices,
+    };
+    const found = registry.find(wanted.at.i2c.address) orelse return Error.NothingFitted;
+    const out = try fault_spec.apply(arena, .{ .i2c = found.* }, mode, &board.time.base);
+    if (mode == .bus_low) return registry.hold(true);
+    found.* = out.i2c;
 }
 
 /// Put one device on the line its endpoint names.

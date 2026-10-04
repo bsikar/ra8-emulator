@@ -102,3 +102,35 @@ test "a model that does not fit the endpoint kind is refused" {
     const ask = try model.request.parse("led@uart:sci3");
     try std.testing.expectError(error.WrongEndpoint, model.parts.all.make(arena.allocator(), ask.name, ask.at));
 }
+
+test "a fault on a fitted part wraps it where it sits, and NACKs when disconnected" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var bus = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.wire.attach(&bus);
+    const registry = &board.wire.touchline.devices;
+    try std.testing.expect(registry.answering(0x5D) != null);
+    const ask = try model.fault_spec.parse("@i2c:touch@0x5D=disconnected");
+    var wanted = ask.target;
+    wanted.fault = ask.mode;
+    try plug.fitted(&board, arena.allocator(), wanted);
+    try std.testing.expect(registry.find(0x5D) != null);
+    try std.testing.expect(registry.answering(0x5D) == null);
+}
+
+test "a fault on an empty endpoint has nothing fitted to wrap" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var bus = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    try board.wire.attach(&bus);
+    const ask = try model.fault_spec.parse("@i2c:riic@0x37=nack:2");
+    var wanted = ask.target;
+    wanted.fault = ask.mode;
+    try std.testing.expectError(plug.Error.NothingFitted, plug.fitted(&board, arena.allocator(), wanted));
+}

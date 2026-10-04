@@ -88,6 +88,15 @@ fn fault(options: *Options, spec: []const u8) !void {
         std.debug.print("--fault {s}: {s}\n", .{ spec, @errorName(err) });
         return err;
     };
+    if (wanted.target.name.len == 0) {
+        // A fitted part has no --attach ask to ride on, so it gets its own.
+        if (options.attach_count >= options.attaches.len) return error.TooManyAttaches;
+        var ask = wanted.target;
+        ask.fault = wanted.mode;
+        options.attaches[options.attach_count] = ask;
+        options.attach_count += 1;
+        return;
+    }
     fault_spec.place(options.attaches[0..options.attach_count], wanted) catch |err| {
         std.debug.print("--fault {s}: no --attach before it names that part\n", .{spec});
         return err;

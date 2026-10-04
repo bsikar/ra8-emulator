@@ -6,6 +6,9 @@
 //! the one place the two halves can meet. The left half is an `--attach`
 //! ask and goes through that parser, so a typo fails the same way.
 //!
+//! `@ENDPOINT=MODE` with no name is the part the board fitted at that I2C
+//! endpoint (RA8EMU-536), so a stock image's own I2C path can be faulted.
+//!
 //! Modes: disconnected, nack:N, stuck:0xHH, garbage:SEED, slow:NS,
 //! stretch:NS, bus_low.
 //! A mode that does not fit the device's bus is refused here, before the
@@ -13,6 +16,7 @@
 const std = @import("std");
 const catalog = @import("catalog.zig");
 const request = @import("request.zig");
+const endpoint = @import("endpoint.zig");
 const fault = @import("fault.zig");
 const fault_lines = @import("fault_lines.zig");
 const timebase = @import("../time/timebase.zig");
@@ -39,9 +43,18 @@ pub const Error = error{ NoMode, UnknownMode, BadArgument, WrongBus, NoSuchAttac
 pub fn parse(text: []const u8) Error!Fault {
     const split = std.mem.lastIndexOfScalar(u8, text, '=') orelse return Error.NoMode;
     return .{
-        .target = try request.parse(text[0..split]),
+        .target = try target(text[0..split]),
         .mode = try parseMode(text[split + 1 ..]),
     };
+}
+
+/// A named `--attach` ask, or `@ENDPOINT` for the fitted part there. Fitted
+/// parts are only reachable on the I2C lines' registries.
+fn target(text: []const u8) Error!request.Request {
+    if (text.len == 0 or text[0] != '@') return request.parse(text);
+    const at = try endpoint.parse(text[1..]);
+    if (at != .i2c) return Error.WrongBus;
+    return .{ .name = "", .at = at };
 }
 
 /// Put a fault on the `--attach` ask it names, same model at the same

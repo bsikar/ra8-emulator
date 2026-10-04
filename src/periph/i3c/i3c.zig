@@ -173,7 +173,8 @@ pub const I3c = struct {
             self.bst |= flag.bst.nackdf;
             return;
         }
-        const device = self.devices.find(self.target_7b) orelse {
+        // A part that does not acknowledge (a --fault disconnect) NACKs here.
+        const device = self.devices.answering(self.target_7b) orelse {
             self.acked = false;
             self.nacks += 1;
             self.bst |= flag.bst.nackdf;
@@ -199,7 +200,7 @@ pub const I3c = struct {
         }
         if (!self.addressed) return self.addressPhase(byte);
         if (!self.acked) return;
-        if (self.devices.find(self.target_7b)) |device| device.write(byte);
+        if (self.devices.answering(self.target_7b)) |device| device.write(byte);
         self.sent += 1;
         self.ntst |= flag.ntst.tdbef0;
     }
