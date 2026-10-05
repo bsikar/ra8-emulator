@@ -1,4 +1,4 @@
-//! A small preview of the picture the camera panel's media row chose
+//! A small preview of the picture or clip the camera panel's media row chose
 //! (RA8EMU-500). It is read and decoded from the file itself, never pulled
 //! from the running source, so drawing it cannot advance a video or eat a
 //! pipe's frame. The decoded picture is box-averaged down to fit a square
@@ -7,6 +7,8 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const decoded = @import("../periph/camera/decoded_image.zig");
 const image_source = @import("../periph/camera/image_source.zig");
+const y4m = @import("../periph/camera/y4m_header.zig");
+const yuv = @import("../periph/camera/y4m_frame.zig");
 const Color = draw_list.Color;
 
 /// The preview's longest edge, matching a panel button.
@@ -70,12 +72,39 @@ fn average(picture: decoded.Image, x0: usize, x1: usize, y0: usize, y1: usize) C
     return Color.rgb(@intCast(sum[0] / count), @intCast(sum[1] / count), @intCast(sum[2] / count));
 }
 
-/// Reads `name` from `dir`, decodes it and shrinks it to `side`.
+/// The longest Y4M header or FRAME line read before the clip is refused.
+const max_line: usize = 256;
+
+/// Reads `name` from `dir` and shrinks it to `side`: a picture whole, a
+/// Y4M clip by its first frame.
 pub fn load(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Thumb {
-    const bytes = try dir.readFileAlloc(allocator, name, image_source.max_file_bytes);
+    const file = try dir.openFile(name, .{});
+    defer file.close();
+    var head: [max_line]u8 = undefined;
+    const got = try file.preadAll(&head, 0);
+    if (std.mem.startsWith(u8, head[0..got], y4m.magic)) return clip(allocator, file, head[0..got]);
+    const bytes = try file.readToEndAlloc(allocator, image_source.max_file_bytes);
     defer allocator.free(bytes);
     const picture = try image_source.decodeAny(allocator, bytes);
     defer picture.deinit(allocator);
+    return shrink(allocator, picture, side);
+}
+
+/// The clip's first frame: header line, FRAME line, then its planes.
+fn clip(allocator: std.mem.Allocator, file: std.fs.File, head: []const u8) !Thumb {
+    const header_end = std.mem.indexOfScalar(u8, head, '\n') orelse return error.BadHeader;
+    const header = try y4m.parse(head[0..header_end]);
+    var line: [max_line]u8 = undefined;
+    const got = try file.preadAll(&line, header_end + 1);
+    const frame_end = std.mem.indexOfScalar(u8, line[0..got], '\n') orelse return error.Truncated;
+    if (!std.mem.startsWith(u8, line[0..frame_end], "FRAME")) return error.BadHeader;
+    const planes = try allocator.alloc(u8, @intCast(header.frameBytes()));
+    defer allocator.free(planes);
+    const read = try file.preadAll(planes, header_end + 1 + frame_end + 1);
+    if (read != planes.len) return error.Truncated;
+    const picture = try decoded.Image.alloc(allocator, header.width, header.height);
+    defer picture.deinit(allocator);
+    yuv.toRgb(header, planes, picture.pixels);
     return shrink(allocator, picture, side);
 }
 

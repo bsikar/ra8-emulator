@@ -243,3 +243,23 @@ test "the chosen picture's preview follows the pick and goes with the image sour
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expect(loop.thumb == null);
 }
+
+test "the chosen clip's preview shows while the video source is up" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H1 F25:1 Cmono\nFRAME\n\x10\xeb" });
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.useMediaDir(tmp.dir);
+    try window.feed(press(layout().source(.video)));
+    _ = try loop.tick(window.platform(), fake.run());
+    loop.pane.args.video = loop.pane.clips[0];
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(u32, 2), loop.thumb.?.width);
+    try window.feed(press(layout().source(.gradient)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(loop.thumb == null);
+}
