@@ -80,6 +80,7 @@ test {
     _ = @import("gui/devices_panel_test.zig");
     _ = @import("gui/devices_pane_test.zig");
     _ = @import("gui/plug_post_test.zig");
+    _ = @import("gui/speed_post_test.zig");
     _ = @import("interfaces/cli/window_devices_test.zig");
     _ = @import("gui/camera_switch_test.zig");
     _ = @import("gui/camera_open_test.zig");

@@ -1,0 +1,52 @@
+//! Hands a speed change from the window to the engine (RA8EMU-184), the
+//! way plug_post.zig hands plugs over: the board's pacing is only ever
+//! touched on the engine's thread.
+//!
+//! In a shown run the session's speed hook is `hook()`, so Session.setSpeed
+//! leaves the factor here on the window's thread. The engine takes the
+//! latest one at its next park and re-anchors the pacer there, so virtual
+//! time carries straight on and only its rate against the wall changes. A
+//! run that was not paced starts pacing at that park, against `clock`.
+const std = @import("std");
+const session_api = @import("../debug/session_api.zig");
+const clocks = @import("../periph/clocks.zig");
+
+pub const SpeedPost = struct {
+    mutex: std.Thread.Mutex = .{},
+    /// The latest factor asked for, in thousandths; an older one waiting
+    /// is dropped, since only where the slider ended up matters.
+    pending: ?u64 = null,
+
+    /// Window side: the session's speed hook, which leaves the factor here.
+    pub fn hook(self: *SpeedPost) session_api.SpeedHook {
+        return .{ .context = self, .setFn = post };
+    }
+
+    fn post(context: *anyopaque, milli: u64) anyerror!void {
+        const self: *SpeedPost = @ptrCast(@alignCast(context));
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.pending = milli;
+    }
+
+    /// Engine side, at a park: move `time` to the waiting factor. Returns
+    /// the factor applied, or null when none was waiting.
+    pub fn apply(self: *SpeedPost, time: *clocks.Time, clock: clocks.pacer.Clock) ?u64 {
+        const milli = self.take() orelse return null;
+        const now_ns = time.base.now();
+        if (time.pacing) |*pacing| {
+            pacing.setSpeed(now_ns, milli);
+        } else {
+            time.pacing = clocks.pacing.Pacing.start(clock, now_ns, milli);
+        }
+        return milli;
+    }
+
+    fn take(self: *SpeedPost) ?u64 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const milli = self.pending;
+        self.pending = null;
+        return milli;
+    }
+};

@@ -29,3 +29,4 @@ pub const console_scroll = @import("gui/console_scroll.zig");
 pub const devices_panel = @import("gui/devices_panel.zig");
 pub const devices_pane = @import("gui/devices_pane.zig");
 pub const plug_post = @import("gui/plug_post.zig");
+pub const speed_post = @import("gui/speed_post.zig");
