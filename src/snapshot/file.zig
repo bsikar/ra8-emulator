@@ -25,6 +25,8 @@ pub const Kind = enum(u32) {
     serial = 5,
     /// The SPI-mode SD card and the SD host controller's card (RA8EMU-664).
     sd = 6,
+    /// The I2C wire: RIIC, the I3C touch line and their parts (RA8EMU-666).
+    wire = 7,
     _,
 };
 
