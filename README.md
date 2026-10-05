@@ -12,9 +12,9 @@ a pass here means the flashed firmware drove the hardware the way the
 silicon expects. The RA8P1 has no board on the bench, so for that part this
 emulator is the only way its firmware gets proven.
 
-The emulator is written in Zig. Unicorn (the CPU) and Capstone (error-path
-disassembly) are still linked today, and are being replaced by our own Zig
-Armv8-M core (see [Where it is going](#where-it-is-going)).
+The emulator is written in Zig, CPU included: our own Armv8-M core replaced
+Unicorn. Capstone (error-path disassembly) is the one C library still linked,
+until our own disassembler replaces it (see [Where it is going](#where-it-is-going)).
 
 ## Building
 
@@ -45,16 +45,14 @@ export PATH="$HOME/.local/zig-x86_64-linux-0.14.1:$PATH"
 A different Zig is not supported: the build graph uses 0.14 APIs and 0.15
 renamed several of them.
 
-### Unicorn and Capstone (until the Zig core replaces them)
+### Capstone (until our own disassembler replaces it)
 
 ```sh
-sudo apt install libunicorn-dev libcapstone-dev      # Debian, Ubuntu
-zig build -Ddeps-prefix="$HOME/.local/unicorn"       # or point at your own prefix
+sudo apt install libcapstone-dev                     # Debian, Ubuntu
+zig build -Ddeps-prefix="$HOME/.local/capstone"      # or point at your own prefix
 ```
 
-`-Ddeps-prefix` adds that prefix's `include/`, `lib/` and an rpath. Unicorn's
-decode of Armv8.1-M differs between releases, so the version is pinned: the
-pin lives in ra8-firmware's `docs/TOOLCHAIN.md`.
+`-Ddeps-prefix` adds that prefix's `include/`, `lib/` and an rpath.
 
 ## Running
 

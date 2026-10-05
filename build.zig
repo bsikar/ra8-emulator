@@ -1,8 +1,8 @@
 //! The build for the RA8D2 board emulator.
 //!
-//! One language, one build. The emulator is Zig; Unicorn (the CPU) and
-//! Capstone (error-path disassembly) are C libraries and are reached through
-//! a single @cImport in src/core/c.zig. Nothing here is exported back to C and
+//! One language, one build. The emulator is Zig, CPU included; Capstone
+//! (error-path disassembly) is the one C library left, reached through a
+//! single @cImport in src/core/c.zig. Nothing here is exported back to C and
 //! there is no C ABI of our own.
 //!
 //!   zig build         the emulator into zig-out/bin
@@ -22,8 +22,8 @@
 //! in tests/ on mirrored paths, never in a `test` block at the bottom of a
 //! source file, and tests/all.zig is the root that pulls them in.
 //!
-//! Point the build at Unicorn and Capstone with -Ddeps-prefix=<prefix> when
-//! they are not on the system paths.
+//! Point the build at Capstone with -Ddeps-prefix=<prefix> when it is not on
+//! the system paths.
 //!
 //! Zig 0.14.1, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
@@ -31,7 +31,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const prefix = b.option([]const u8, "deps-prefix", "Prefix holding include/ and lib/ for unicorn and capstone");
+    const prefix = b.option([]const u8, "deps-prefix", "Prefix holding include/ and lib/ for capstone");
     const gui = b.option(bool, "gui", "Fetch and build SDL3 for the GUI steps and `--gui`") orelse false;
 
     // One library module, reached as "ra8" by the executable and by the
@@ -131,7 +131,6 @@ fn link(b: *std.Build, c: *std.Build.Step.Compile, prefix: ?[]const u8) void {
         c.addRPath(.{ .cwd_relative = b.fmt("{s}/lib", .{p}) });
     }
     c.linkLibC();
-    c.linkSystemLibrary("unicorn");
     c.linkSystemLibrary("capstone");
 }
 

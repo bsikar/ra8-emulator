@@ -1,13 +1,10 @@
-//! The only C surface in the rewrite: Unicorn and Capstone.
+//! The only C surface in the rewrite: Capstone.
 //!
 //! Everything above this file is native Zig with native Zig types. Nothing
 //! here is exported back to C, and the emulator keeps no C ABI of its own;
-//! these two declarations exist only because the CPU and the disassembler
-//! are C libraries.
-pub const uc = @cImport({
-    @cInclude("unicorn/unicorn.h");
-});
-
+//! this declaration exists only because the error-path disassembler is a C
+//! library. Unicorn's went with the engine (RA8EMU-607), and Capstone's goes
+//! when src/debug/disasm.zig moves to our own disassembler (RA8EMU-249).
 pub const cs = @cImport({
     @cInclude("capstone/capstone.h");
 });
