@@ -1,6 +1,5 @@
 //! The Zig core's bus over its own memory (RA8EMU-480): src/core/cpu/bus.zig
-//! in front of src/core/cpu/memory/store.zig. It is the engine-free
-//! counterpart of src/core/cpu/engine_bus.zig, with the same optional direct
+//! in front of src/core/cpu/memory/store.zig, with an optional direct
 //! path for code MRAM and system SRAM. An access that is not wholly inside
 //! one memory region is refused as unmapped; the peripheral windows are the
 //! board bus's (src/core/cpu/board_bus.zig), not this one's.
@@ -10,8 +9,7 @@ const Store = @import("store.zig").Store;
 
 pub const MemoryBus = struct {
     store: *const Store,
-    /// Off by default for the same reason as EngineBus: a diagnostic that
-    /// wraps the bus must see every access.
+    /// Off by default: a diagnostic that wraps the bus must see every access.
     fast_enabled: bool = false,
     direct: bus.DirectMemory = .{},
 

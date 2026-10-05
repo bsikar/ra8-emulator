@@ -60,17 +60,6 @@ test "an image loads into the Zig core's store with no engine open" {
     try std.testing.expectEqual(@as(u32, 0x5EED_C0DE), try memory.readWord(memmap.sram_base + 0x200));
 }
 
-test "the engine arm writes the same bytes the store arm does" {
-    var file = twoSegments(2);
-    const image = try elf.Image.init(&file);
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    const memory: Guest = .{ .engine = core };
-    try std.testing.expectEqual(@as(u32, 16), try load.image(memory, image));
-    try std.testing.expectEqual(@as(u32, 0x5EED_C0DE), try core.readWord(memmap.sram_base + 0x200));
-}
-
 test "an image with nothing to load is refused" {
     var file = twoSegments(0);
     const image = try elf.Image.init(&file);

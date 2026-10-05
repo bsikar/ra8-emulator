@@ -12,11 +12,8 @@ pub const Tick = struct {
     /// nothing is queued. Null for a tick with no queue to ask.
     dueFn: ?*const fn (context: *anyopaque) u64 = null,
 
-    /// `core` is a Guest, or the engine, which is wrapped into one until
-    /// the engine goes (RA8EMU-482).
-    pub fn run(self: Tick, core: anytype, instructions: u32) !void {
-        const guest: Guest = if (@TypeOf(core) == Guest) core else .{ .engine = core };
-        return self.tickFn(self.context, guest, instructions);
+    pub fn run(self: Tick, core: Guest, instructions: u32) !void {
+        return self.tickFn(self.context, core, instructions);
     }
 
     pub fn cyclesToDue(self: Tick) u64 {

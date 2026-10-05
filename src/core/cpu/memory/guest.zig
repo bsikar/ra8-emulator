@@ -1,9 +1,8 @@
-//! One handle on guest memory, whichever backend holds it: the Unicorn
-//! engine or the Zig core's own store. Board, peripheral and report code
-//! take a Guest so they run unchanged on both (RA8EMU-481); the engine arm
-//! goes when the engine does (RA8EMU-482).
+//! One handle on guest memory: the Zig core's own store. Board, peripheral
+//! and report code take a Guest (RA8EMU-481). It was a union over the Unicorn
+//! engine and the store; the engine arm went with RA8EMU-607, and the single
+//! arm stays so callers keep writing `.{ .store = ... }`.
 const std = @import("std");
-const engine = @import("../../engine.zig");
 const code_lines = @import("../code_lines.zig");
 const Store = @import("store.zig").Store;
 
@@ -13,13 +12,11 @@ pub const Error = error{Unmapped};
 pub const MapError = error{ Mapped, Full, OutOfMemory };
 
 pub const Guest = union(enum) {
-    engine: engine.Engine,
     store: *Store,
 
     pub fn read(self: Guest, address: u32, into: []u8) Error!void {
         if (into.len == 0) return;
         switch (self) {
-            .engine => |core| core.read(address, into) catch return Error.Unmapped,
             .store => |memory| {
                 const bytes = memory.span(address, into.len) orelse return Error.Unmapped;
                 @memcpy(into, bytes);
@@ -30,7 +27,6 @@ pub const Guest = union(enum) {
     pub fn write(self: Guest, address: u32, bytes: []const u8) Error!void {
         if (bytes.len == 0) return;
         switch (self) {
-            .engine => |core| core.write(address, bytes) catch return Error.Unmapped,
             .store => |memory| {
                 const into = memory.span(address, bytes.len) orelse return Error.Unmapped;
                 code_lines.notify(address, bytes.len);
@@ -43,7 +39,6 @@ pub const Guest = union(enum) {
     /// window mapped at attach (mram_window.zig, adc_tsn_cal.zig).
     pub fn map(self: Guest, base: u32, size: u32) MapError!void {
         switch (self) {
-            .engine => |core| core.map(base, size) catch return MapError.Mapped,
             .store => |memory| try memory.map(base, size),
         }
     }

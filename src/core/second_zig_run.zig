@@ -32,10 +32,7 @@ pub const Driver = struct {
     /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
     /// in storage the caller holds: both halves keep pointers into it.
     pub fn open(self: *Driver, allocator: std.mem.Allocator, board: *Board, path: []const u8, memory: Guest) !void {
-        const lender = switch (memory) {
-            .store => |lent| lent,
-            .engine => return error.NoStore,
-        };
+        const lender = memory.store;
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
         const bytes = try file.readToEndAlloc(allocator, second_core.limits.image_bytes);

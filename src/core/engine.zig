@@ -5,8 +5,6 @@
 //! Callers get Zig errors, slices and named registers.
 const std = @import("std");
 const c = @import("c.zig");
-const elf = @import("elf.zig");
-const guest_load = @import("cpu/memory/load.zig");
 const memmap = @import("memmap.zig");
 const code_lines = @import("cpu/code_lines.zig");
 const board_ram = @import("board_ram.zig");
@@ -177,15 +175,6 @@ pub const Engine = struct {
     pub fn shareBoardRamWith(self: *Engine, owner: *Engine) Error!void {
         if (!owner.ram.mapped()) return Error.MapFailed;
         board_ram.mapBoard(self.handle, &self.ram, &owner.ram) catch return Error.MapFailed;
-    }
-
-    /// Stream every PT_LOAD segment to its load address, mapping the flash-like
-    /// pages the image asks for that the board map does not already cover.
-    ///
-    /// The pages are merged before any of them is mapped: segments of one
-    /// image share pages, and the CPU model refuses a page it already holds.
-    pub fn loadImage(self: Engine, image: elf.Image) Error!u32 {
-        return guest_load.image(.{ .engine = self }, image);
     }
 
     /// Reset the core the way the silicon does: SP and PC out of the vector
