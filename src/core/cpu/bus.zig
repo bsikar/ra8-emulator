@@ -66,6 +66,9 @@ pub const Bus = struct {
     direct: ?*const DirectMemory = null,
     /// Attribution on data accesses; null checks nothing (RA8EMU-274).
     gate: ?*Gate = null,
+    /// Where the last access the bus behind refused went, for the BusFault's
+    /// BFAR; null records nothing (RA8EMU-641).
+    miss: ?*u32 = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
@@ -90,7 +93,7 @@ pub const Bus = struct {
         if (into.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.read(address, into)) return;
         };
-        return self.vtable.read(self.ctx, address, into);
+        return self.vtable.read(self.ctx, address, into) catch |err| self.missed(err, address);
     }
 
     pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
@@ -99,7 +102,13 @@ pub const Bus = struct {
         if (bytes.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.write(address, bytes)) return;
         };
-        return self.vtable.write(self.ctx, address, bytes);
+        return self.vtable.write(self.ctx, address, bytes) catch |err| self.missed(err, address);
+    }
+
+    /// Record `address` as the refused one, then hand `err` back.
+    fn missed(self: Bus, err: Error, address: u32) Error {
+        if (self.miss) |at| at.* = address;
+        return err;
     }
 
     /// Set `bits` in a status word the way the core raises a fault. This is
