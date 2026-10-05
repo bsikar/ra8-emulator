@@ -149,6 +149,26 @@ test "the pane offers the webcams the loop adopted, and the loop frees them" {
     try std.testing.expectEqual(@as(usize, 2), loop.pane.devices.len);
 }
 
+test "the webcams are listed again when the webcam dialog opens" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    (try tmp.dir.createFile("video1", .{})).close();
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.useDeviceDir(tmp.dir);
+    try std.testing.expectEqualSlices(u32, &.{1}, loop.pane.devices);
+    (try tmp.dir.createFile("video3", .{})).close();
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqualSlices(u32, &.{1}, loop.pane.devices);
+    try window.feed(press(layout().source(.webcam)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(loop.pane.panel.asking);
+    try std.testing.expectEqualSlices(u32, &.{ 1, 3 }, loop.pane.devices);
+}
+
 test "Always answered in the window is kept for the project's next run" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
