@@ -57,6 +57,8 @@ pub const Kind = enum(u32) {
     rswitch = 21,
     /// The NPU (RA8EMU-685).
     npu = 22,
+    /// The ESP32-C6 companion (RA8EMU-687).
+    c6 = 23,
     _,
 };
 
