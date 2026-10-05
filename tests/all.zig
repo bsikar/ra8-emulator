@@ -88,6 +88,7 @@ test {
     _ = @import("board/usb_test.zig");
     _ = @import("board/usb_disk_test.zig");
     _ = @import("board/usb_plug_test.zig");
+    _ = @import("board/session_faults_test.zig");
     _ = @import("board/wiring_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/unmodelled_test.zig");

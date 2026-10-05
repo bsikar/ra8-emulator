@@ -146,7 +146,9 @@ pub fn apply(
     };
 }
 
-fn i2cMode(mode: Mode) fault.Mode {
+/// The I2C wrapper's mode for a `--fault` mode; bus_low is the line's, so
+/// the part itself behaves.
+pub fn i2cMode(mode: Mode) fault.Mode {
     return switch (mode) {
         .disconnected => .disconnected,
         .nack_every => |n| .{ .nack_every = n },

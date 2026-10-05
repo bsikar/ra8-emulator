@@ -16,9 +16,11 @@ const gt911 = @import("../periph/i3c/i3c_gt911.zig");
 const BoardTick = @import("../core/tick.zig").Tick;
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const session_display = @import("session_display.zig");
+const endpoint = @import("../periph/model/endpoint.zig");
+const fault_spec = @import("../periph/model/fault_spec.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, TooManyListeners };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, TooManyListeners };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("break_table.zig").Id;
@@ -32,13 +34,22 @@ pub const Loader = struct {
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
 };
 
+/// Sets or clears (null) a fault mode on a part the board has on `at`
+/// (RA8EMU-520). The board owns the parts, so it does the wrapping.
+pub const FaultHook = struct {
+    context: *anyopaque,
+    setFn: *const fn (*anyopaque, endpoint.Endpoint, ?fault_spec.Mode) anyerror!void,
+};
+pub const Endpoint = endpoint.Endpoint;
+pub const FaultMode = fault_spec.Mode;
+
 pub const Event = struct {
     core: Core,
     kind: Kind,
     address: ?u32 = null,
     ended: ?Ended = null,
 
-    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled };
+    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared };
 };
 
 pub const Listener = struct {
@@ -58,6 +69,7 @@ pub const Session = struct {
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
     display: ?session_display.Display = null,
+    faults: ?FaultHook = null,
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
@@ -76,6 +88,24 @@ pub const Session = struct {
 
     pub fn attachDisplay(self: *Session, display: session_display.Display) void {
         self.display = display;
+    }
+
+    pub fn attachFaults(self: *Session, hook: FaultHook) void {
+        self.faults = hook;
+    }
+
+    /// Put the part on `at` into `mode` from now on, mid-run included.
+    pub fn setFault(self: *Session, core: Core, at: Endpoint, mode: FaultMode) anyerror!void {
+        const hook = self.faults orelse return Error.NoFaults;
+        try hook.setFn(hook.context, at, mode);
+        self.publish(.{ .core = core, .kind = .fault_set });
+    }
+
+    /// Let the part on `at` behave like the part again.
+    pub fn clearFault(self: *Session, core: Core, at: Endpoint) anyerror!void {
+        const hook = self.faults orelse return Error.NoFaults;
+        try hook.setFn(hook.context, at, null);
+        self.publish(.{ .core = core, .kind = .fault_cleared });
     }
 
     pub fn waitSettled(self: *Session, timeout_ns: u64) anyerror!void {
