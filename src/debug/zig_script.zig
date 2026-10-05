@@ -1,6 +1,5 @@
-//! Debugger commands on the Zig core, answered in the Unicorn session's
-//! words (RA8EMU-114). src/debug/session.zig carries a command out on the
-//! Unicorn engine; this carries the same commands out on a ZigSession, and
+//! Debugger commands on the Zig core (RA8EMU-114). This carries the
+//! commands out on a ZigSession, and
 //! prints through session_report and session_view, so one script gives one
 //! transcript on either CPU. `core 0|1` hands the session to the other
 //! core (RA8EMU-337), its image and temporary breaks with it.
@@ -28,7 +27,7 @@ pub const ZigScript = struct {
     other_temporary: Temporary = .{},
 
     /// Carry out one command. A command that fails prints why and the
-    /// script carries on, as on Unicorn.
+    /// script carries on.
     pub fn apply(self: *ZigScript, command: commands.Command, out: anytype) !session.Outcome {
         if (command == .quit) {
             try self.session.flushItm(self.session.currentCore(), out, true);

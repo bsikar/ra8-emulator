@@ -4,7 +4,7 @@
 //! copy of ICSR PENDSTSET/PENDSVSET and SHPR3 PRI_15/PRI_14 is in the word at
 //! 0xE000_EDxx, the Non-secure copy at 0xE002_EDxx (RA8EMU-365). A core that
 //! can reach that copy has `readNonSecure` and `writeNonSecure`; one that
-//! cannot, the Unicorn backend, offers only the Secure copy, as before.
+//! cannot offers only the Secure copy.
 const memmap = @import("../core/memmap.zig");
 const systick_bank = @import("../core/systick_bank.zig");
 const Candidate = @import("candidate.zig").Candidate;

@@ -2,8 +2,7 @@
 //! sweep found (src/core/undefined_ops.zig), counted as the core reaches
 //! them, and the run ended at the first one, before it executes.
 //!
-//! The Unicorn path does this with a code hook in front of each site. Here
-//! the core asks a fetch guard (src/core/cpu/fetch_guard.zig) before every
+//! The core asks a fetch guard (src/core/cpu/fetch_guard.zig) before every
 //! instruction. The guard is only installed when the flag asks for it,
 //! because it turns off the trip skipping a plain run relies on.
 const elf = @import("../../core/elf.zig");

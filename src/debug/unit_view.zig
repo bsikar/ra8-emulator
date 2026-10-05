@@ -1,7 +1,6 @@
 //! The debug units' registers as a firmware load sees them on the Zig
 //! core (RA8EMU-673), so a load of FP_CTRL, a DWT FUNCTION, an ITM port,
-//! DHCSR or DFSR reads what the stop machine holds. Unicorn's step hook
-//! wrote every unit back into memory before each instruction; the Zig core
+//! DHCSR or DFSR reads what the stop machine holds. The Zig core
 //! has no such pass, so watch_bus.zig lays this view over the bytes a
 //! firmware load read instead.
 const stop_machine = @import("stop_machine.zig");

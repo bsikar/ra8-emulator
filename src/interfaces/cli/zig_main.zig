@@ -1,4 +1,4 @@
-//! Every run from main, on the Zig core with no Unicorn engine opened
+//! Every run from main, on the Zig core
 //! (RA8EMU-592, slice 4e-2 of RA8EMU-481).
 //!
 //! CPU0 goes on its own store (src/interfaces/cli/zig_memory.zig), the

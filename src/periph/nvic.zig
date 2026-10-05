@@ -1,7 +1,7 @@
 //! The Nested Vectored Interrupt Controller: what is pending, and what taking
 //! it does to the core.
 //!
-//! Unicorn's M-profile core only takes exceptions it raised itself. Nothing
+//! A CPU model only takes exceptions it raised itself. Nothing
 //! here raises one: the PPB is plain RAM, so `NVIC->ISER[0] = 1 << n` and
 //! `SysTick`'s pend in ICSR are words sitting in memory that the core will
 //! never look at. Until this file existed, a firmware that armed SysTick with
@@ -13,7 +13,7 @@
 //! way the silicon does it (DDI0553 B3.19): stack the caller-saved frame,
 //! load LR with an EXC_RETURN, and enter the handler from the vector table at
 //! VTOR. Returning is the mirror: the handler branches to EXC_RETURN, which is
-//! an unmapped fetch as far as Unicorn is concerned, and the run loop unwinds
+//! an unmapped fetch to such a model, and the run loop unwinds
 //! the frame instead of reporting a fault.
 const held_reasons = @import("held.zig");
 const candidates = @import("candidate.zig");
@@ -199,7 +199,7 @@ pub const Nvic = struct {
         const handler = (try self.vectorFor(core, exc.number)) orelse return Error.NoVector;
         const xpsr = try core.register(.xpsr);
         // Thread mode may be running on either stack, and the frame goes on
-        // the one it is using. Unicorn banks SP on CONTROL.SPSEL, so reading
+        // the one it is using. The core banks SP on CONTROL.SPSEL, so reading
         // SP before the switch below already gives the right one.
         const from_handler = self.depth > 0;
         const on_process = !from_handler and self.on_process;

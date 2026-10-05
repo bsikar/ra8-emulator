@@ -1,8 +1,8 @@
 //! The `timing` object of `--report json` (RA8EMU-383): the time base,
 //! the idle seam, what the interrupt controller did with its pends, and the
 //! PRIMASK waits, the same facts report/timing.zig prints in timing() and
-//! controller(). The PendSV pend ledger is in json_pends.zig. Fed by hooks
-//! only the Unicorn run attaches, so the object is null on the Zig core.
+//! controller(). The PendSV pend ledger is in json_pends.zig. Nothing
+//! feeds it on the Zig core, so the object is null.
 const clocks = @import("../../../periph/clocks.zig");
 const nvic = @import("../../../periph/nvic.zig");
 const idle = @import("../../../core/idle.zig");

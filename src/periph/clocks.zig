@@ -1,6 +1,6 @@
 //! The modelled time bases: the DWT cycle counter and SysTick.
 //!
-//! Unicorn stops at instruction boundaries and has no clock of its own, so
+//! The core stops at instruction boundaries and has no clock of its own, so
 //! nothing inside the PPB moves on its own. The firmware does not care that a
 //! clock is missing until it waits on one: `ra8_delay_ms` spins on DWT_CYCCNT
 //! whenever interrupts are masked (which is the whole of early bring-up, since

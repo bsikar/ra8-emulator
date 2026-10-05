@@ -1,6 +1,5 @@
 //! Where the `--dump-regs` rows of `--report json` read from (RA8EMU-579):
-//! the Zig core's registers as the run left them. The Unicorn engine's
-//! reader went with the engine run (RA8EMU-607).
+//! the Zig core's registers as the run left them.
 const Cortex = @import("../../../core/cpu/cortex.zig").Cortex;
 const Regs = @import("../../../core/cpu/regs.zig").Regs;
 

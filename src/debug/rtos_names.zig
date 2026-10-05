@@ -9,7 +9,7 @@
 //! ThreadX revision the firmware pins.
 //!
 //! This file only knows the layout. Whatever reads target memory is passed
-//! in, so the same lookup serves Unicorn now and the Zig core later.
+//! in, so the lookup needs nothing from the core.
 const std = @import("std");
 
 /// Where the name pointer sits in a TX_THREAD.

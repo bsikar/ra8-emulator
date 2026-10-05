@@ -43,8 +43,8 @@ fn sourceThunk(context: *anyopaque, inner: Source) Source {
     return self.onSource(inner);
 }
 
-/// The core's retired count is the load clock, one tick per instruction,
-/// as Unicorn's code hook gives (RA8EMU-284).
+/// The core's retired count is the load clock, one tick per instruction
+/// (RA8EMU-284).
 fn retiredThunk(context: *anyopaque, retired: *const u64) void {
     const self: *Listener = @ptrCast(@alignCast(context));
     self.tracer.trace.fine = retired;

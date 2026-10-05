@@ -2,8 +2,7 @@
 //! the run limits, whether a script wants more, and the poll gdb's
 //! interrupt comes through.
 //!
-//! The Unicorn session that once lived here is gone (RA8EMU-605); the
-//! session is src/debug/zig_session.zig, driven by src/debug/zig_script.zig
+//! The session is src/debug/zig_session.zig, driven by src/debug/zig_script.zig
 //! for scripts and src/debug/rsp_zig.zig for gdb.
 pub const Error = error{ AlreadyRunning, NoSymbols, Unresolved, CoreNotAttached };
 

@@ -8,8 +8,8 @@
 //! the entry, which is the order they happened in. Two entries between the
 //! same pair of instructions show as one, the innermost.
 //!
-//! This file reads the model's counters and nothing else, so the same
-//! watcher serves Unicorn now and the Zig core later.
+//! This file reads the model's counters and nothing else, so the
+//! watcher needs nothing from the core.
 const nvic = @import("../periph/nvic.zig");
 const rtos_trace = @import("rtos_trace.zig");
 

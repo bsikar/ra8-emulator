@@ -8,8 +8,8 @@
 //! unit sync writes the model's stale view back over it.
 //!
 //! The units are read back through the core the debugger has selected
-//! (src/debug/core_view.zig), so a Zig session with no Unicorn engine
-//! behind it hands its stores on the same way (RA8EMU-483).
+//! (src/debug/core_view.zig), so a Zig session hands its stores on
+//! the same way (RA8EMU-483).
 const std = @import("std");
 const core_view = @import("core_view.zig");
 const stop_machine = @import("stop_machine.zig");

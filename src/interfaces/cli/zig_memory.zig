@@ -1,5 +1,5 @@
 //! CPU0's memory for a single-core `--cpu zig` run: the Zig core's own
-//! store, with no Unicorn memory behind it (RA8EMU-580, slice 4d-2 of
+//! store (RA8EMU-580, slice 4d-2 of
 //! RA8EMU-481).
 //!
 //! The board's blocks attach over the store, CPU0's PPB windows are primed

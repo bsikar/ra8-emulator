@@ -6,8 +6,8 @@
 //! answers it once, so the command layer, the GDB stub and the old one-off
 //! flags all step the same way instead of each growing its own.
 //!
-//! It never touches the engine. Whatever drives the CPU (a Unicorn code
-//! hook today, the Zig core's own loop later) hands it an `Event` before
+//! It never touches the engine. Whatever drives the CPU (the Zig core's
+//! own loop) hands it an `Event` before
 //! each instruction and stops the CPU when it says so. Stopping before the
 //! instruction leaves the program counter on it, which is what makes a
 //! reported stop address the instruction that has not run yet.

@@ -7,7 +7,7 @@
 //! (RA8EMU-118). `--cpu1` beside it brings CPU1 up on its own Zig core,
 //! and `core 0|1` switches between them (RA8EMU-337); `--gdb` serves it as
 //! thread 2 (RA8EMU-338).
-//! Since RA8EMU-483 no Unicorn engine is opened: CPU0 runs on its own store
+//! CPU0 runs on its own store
 //! (src/interfaces/cli/zig_memory.zig) and CPU1 on one that borrows its SRAM.
 const std = @import("std");
 const elf = @import("../../core/elf.zig");
@@ -140,7 +140,7 @@ const Other = struct {
     }
 };
 
-/// Play the script or talk to the terminal, as the Unicorn front does.
+/// Play the script or talk to the terminal.
 fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
     switch (mode) {
         .script => |path| {

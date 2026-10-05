@@ -1,7 +1,7 @@
 //! The address a place names, for either CPU (RA8EMU-114): a FILE:LINE
 //! from the line table, or a symbol or literal, one optional dereference,
-//! then its offset. The Unicorn session and the Zig-core one resolve
-//! through this, so `break`, `x` and `print` take the same places on both.
+//! then its offset. The session resolves
+//! through this, so `break`, `x` and `print` take the same places.
 const elf = @import("../core/elf.zig");
 const core_view = @import("core_view.zig");
 const place = @import("place.zig");

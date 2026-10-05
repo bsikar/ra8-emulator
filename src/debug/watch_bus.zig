@@ -1,6 +1,5 @@
-//! The Zig core's bus with the debugger listening (RA8EMU-113). On
-//! Unicorn, step_hook.zig's memory hook hands the stop machine every load
-//! and store; the Zig core owns no hooks, so this sits between the core and
+//! The Zig core's bus with the debugger listening (RA8EMU-113). The stop
+//! machine needs every load and store; the Zig core owns no hooks, so this sits between the core and
 //! its bus and does the same: a store reaches the debug units the firmware
 //! programs (FPB, DWT, ITM, DCB) through Driver.stored, and every access
 //! reaches the watches and the DWT comparators through Machine.onAccess.
@@ -71,7 +70,7 @@ fn width(len: usize) u8 {
     return @intCast(@min(len, std.math.maxInt(u8)));
 }
 
-/// The low word an access moved, little-endian, as the Unicorn hook sees it.
+/// The low word an access moved, little-endian.
 fn value(bytes: []const u8) u32 {
     var word: [4]u8 = .{ 0, 0, 0, 0 };
     const len = @min(bytes.len, word.len);

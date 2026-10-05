@@ -1,8 +1,8 @@
 //! How a stop is placed in the program: an address with its symbol, the
 //! instruction there, and the call chain above it (RA8EMU-114).
 //!
-//! These read the core only through core_view, so the Unicorn session
-//! (src/debug/session.zig) and the Zig-core one print the same lines for
+//! These read the core only through core_view, so any session prints the
+//! same lines for
 //! the same stop.
 const elf = @import("../core/elf.zig");
 const core_view = @import("core_view.zig");

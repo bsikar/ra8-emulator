@@ -1,5 +1,5 @@
-//! The debugger's view of the Zig core (RA8EMU-105): registers by the same
-//! names the Unicorn engine uses, memory through the core's own bus, one
+//! The debugger's view of the Zig core (RA8EMU-105): registers by their
+//! architectural names, memory through the core's own bus, one
 //! instruction at a time, and a run that stops on a breakpoint address.
 //!
 //! It owns nothing. The front end builds the `Cpu` on the board's bus and

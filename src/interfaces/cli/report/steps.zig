@@ -1,6 +1,6 @@
 //! What the CPU model could not decode, and this emulator stepped by hand.
 //!
-//! The pinned Unicorn has no Armv8.1-M CPU model, so two families of
+//! An Armv8.0-M CPU model rejects two families of
 //! encoding a Cortex-M85 compiler emits freely are rejected by the core and
 //! run off invalid-instruction hooks instead. Both lines are reported so a
 //! run that leans on them says so, rather than the gap passing unnoticed.

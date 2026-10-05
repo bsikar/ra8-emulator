@@ -1,5 +1,4 @@
-//! `--watch` on a `--cpu zig` run (RA8EMU-639). The Unicorn watch hook went
-//! with RA8EMU-607. The Zig core owns no hooks, so this sits between the
+//! `--watch` on a `--cpu zig` run (RA8EMU-639). The Zig core owns no hooks, so this sits between the
 //! core and its bus the way src/debug/rtos_zig.zig does, and hands every
 //! store that starts in the watched word to watchpoint.Watched.
 //!
@@ -142,7 +141,7 @@ fn width(len: usize) u8 {
     return @intCast(@min(len, std.math.maxInt(u8)));
 }
 
-/// The low word a store moved, little-endian, as the Unicorn hook saw it.
+/// The low word a store moved, little-endian.
 fn value(bytes: []const u8) u32 {
     var word: [4]u8 = .{ 0, 0, 0, 0 };
     const len = @min(bytes.len, word.len);
