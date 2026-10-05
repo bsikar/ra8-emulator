@@ -10,6 +10,7 @@ pub const frame_out = @import("frame_out.zig");
 pub const frames_out = @import("frames_out.zig");
 /// Stills of the host window (RA8EMU-500).
 pub const window_still = @import("window_still.zig");
+pub const window_stills = @import("window_stills.zig");
 
 const Board = @import("../../board/board.zig").Board;
 const elc = @import("../../periph/elc/elc.zig");
