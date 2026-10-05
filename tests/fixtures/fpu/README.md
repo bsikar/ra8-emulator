@@ -66,3 +66,14 @@ an 8-tap q15 FIR and a fused f32 dot product, storing eight words per count.
 Build it like `lob` (`M=cortex_m85+mve_fp+fp_armv8d16+fullfp16`,
 `-O ReleaseFast`), swapping in `dsp`. `dsp_corpus_test.zig` boots it on the
 Zig core and compares against the host-worked words in `dsp_vectors.zig`.
+
+`nnf.zig` is the TFLM / CMSIS-NN float corpus (RA8EMU-321). For trip counts
+0, 1, 5, 8, 13 and 32 (read back from SRAM) it runs float kernel shapes: a
+fused fully-connected layer, element-wise add and mul with ReLU, a max, int8
+dequantize, round-to-nearest requantize, F16 fused dot products (one after
+narrowing F32 into an operand) and an abs-and-scale pass, storing eight words
+per count. Build it like `lob`, swapping in `nnf`. `nnf_corpus_test.zig`
+boots it on the Zig core and compares against the host-worked words in
+`nnf_vectors.zig`. The dequantize scale is 9/128 on purpose: with a power of
+two, Zig 0.14.1's LLVM folds the multiply into a fixed-point VCVT whose
+fraction-bit count does not match the source (see RA8EMU-321).
