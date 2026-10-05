@@ -125,3 +125,30 @@ test "scanning on the engine leaves a step to read only what was handed over" {
     try std.testing.expect(run.vtable.step(run.ctx));
     try std.testing.expect(first.panel.ptr != run.vtable.board(run.ctx).panel.ptr);
 }
+
+test "a park hands the console what the channels sent, stamped with board time" {
+    const sci = ra8.periph.sci;
+    const console_feed = ra8.gui.console_feed;
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var counter = Counter{ .left = 1 };
+    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    defer screen.deinit();
+    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .now = screen.clock() };
+    defer feed.deinit();
+    screen.feed = &feed;
+    board.serial.tap = feed.tap();
+    var logs = [_]ra8.gui.console_log.Log{ra8.gui.console_log.Log.init(std.testing.allocator, 4)} ** sci.channels;
+    defer for (&logs) |*log| log.deinit();
+    board.serial.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.te);
+    board.time.base.advance(board.time.base.hz);
+    for ("boot\n") |byte| board.serial.write(sci.regAddress(sci.console_channel, sci.off_tdr), 4, byte);
+    _ = try feed.drain(&logs);
+    try std.testing.expectEqual(@as(usize, 0), logs[sci.console_channel].lines().len);
+    const hook = screen.parkHook();
+    hook.call(hook.ctx);
+    _ = try feed.drain(&logs);
+    const line = logs[sci.console_channel].lines()[0];
+    try std.testing.expectEqualStrings("boot", line.text);
+    try std.testing.expectEqual(board.time.base.now(), line.at_ns);
+}

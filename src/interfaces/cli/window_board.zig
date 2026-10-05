@@ -13,6 +13,7 @@ const host_loop = @import("../../gui/host_loop.zig");
 const board_snapshot = @import("../../gui/board_snapshot.zig");
 const window_pace = @import("window_pace.zig");
 const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
+const console_feed = @import("../../gui/console_feed.zig");
 const board_view = frame_out.board_view;
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
@@ -38,6 +39,8 @@ pub const Screen = struct {
     on_engine: bool = false,
     /// Camera picks the window opened, for the engine to install at a park.
     swap: SourceSwap = .{},
+    /// What the SCI channels sent, handed over at each park (RA8EMU-206).
+    feed: ?*console_feed.Feed = null,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board, stepper: Stepper) !Screen {
         var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper, .handoff = .init(allocator) };
@@ -69,6 +72,17 @@ pub const Screen = struct {
         const self: *Screen = @ptrCast(@alignCast(ctx));
         _ = self.swap.take(&self.board.capture.source);
         self.publishScan() catch {};
+        if (self.feed) |feed| feed.publish();
+    }
+
+    /// Board time, for stamping what the console feed carries.
+    pub fn clock(self: *Screen) console_feed.Now {
+        return .{ .ctx = self.board, .now = boardNow };
+    }
+
+    fn boardNow(ctx: *anyopaque) u64 {
+        const board: *Board = @ptrCast(@alignCast(ctx));
+        return board.time.base.now();
     }
 
     /// Scans the panel and reads the LEDs. The panel goes out opaque, as
