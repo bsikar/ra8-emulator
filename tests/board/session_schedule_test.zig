@@ -1,0 +1,101 @@
+//! RA8EMU-207 slice 2: a fault schedule applied on a Zig-core run lands
+//! each event at its exact virtual time. tests/fixtures/plug/gauge_poll.elf
+//! polls the MAX17048 at 0x36 forever; the schedule unplugs it, plugs it
+//! back, faults it and clears the fault, and the test reads the time each
+//! event was applied at and the session's event stream.
+const std = @import("std");
+const ra8 = @import("ra8");
+const store_board = @import("../interfaces/cli/store_board.zig");
+
+const api = ra8.core.session_api;
+const boot = ra8.core.cpu.boot;
+const elf = ra8.core.elf;
+const loader = ra8.core.cpu.memory.load;
+const zig_run = ra8.board.zig_run;
+const session_plug = ra8.board.session_plug;
+const session_faults = ra8.board.session_faults;
+const session_schedule = ra8.board.session_schedule;
+const fault_schedule = ra8.periph.registry.model.fault_schedule;
+
+const image_bytes = @embedFile("../fixtures/plug/gauge_poll.elf");
+const counts_at: u32 = 0x2200_0100;
+
+// Odd times on purpose, so none lands on a natural stretch edge.
+const text =
+    \\0s        plug   i2c:riic@0x36 max17048
+    \\123457ns  unplug i2c:riic@0x36
+    \\250us     plug   i2c:riic@0x36 max17048
+    \\250us     fault  i2c:riic@0x36 disconnected
+    \\377777ns  clear  i2c:riic@0x36
+;
+
+const Events = struct {
+    kinds: [8]api.Event.Kind = undefined,
+    seen: usize = 0,
+
+    fn receive(context: *anyopaque, event: api.Event) void {
+        const self: *Events = @ptrCast(@alignCast(context));
+        if (self.seen < self.kinds.len) self.kinds[self.seen] = event.kind;
+        self.seen += 1;
+    }
+};
+
+test "a fault schedule applies every event at its exact virtual time" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var diag = fault_schedule.Diagnostic{};
+    const plan = try fault_schedule.parse(std.testing.allocator, text, &diag);
+    defer plan.deinit(std.testing.allocator);
+
+    const image = try elf.Image.init(image_bytes);
+    var store = try store_board.Store.init(null);
+    defer store.deinit();
+    const core: store_board.Guest = .{ .store = &store };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try store_board.attach(&board, core);
+    _ = try loader.image(core, image);
+
+    var plugs = session_plug.Plugs.init(&board, arena.allocator());
+    var faults = session_faults.Faults.init(&board, arena.allocator());
+    var session: api.Session = .{ .live = undefined };
+    session.attachPlugs(plugs.hook());
+    session.attachFaults(faults.hook());
+    var events: Events = .{};
+    _ = try session.subscribe(.{ .context = &events, .receive = Events.receive });
+
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var applied: [5]u64 = .{ 0, 0, 0, 0, 0 };
+    var applier: session_schedule.Applier = .{
+        .events = plan.events,
+        .session = &session,
+        .clock = &board.time.base,
+        .inner = clock.boundary(),
+        .applied_ns = &applied,
+    };
+    try applier.start();
+    try std.testing.expectEqual(@as(usize, 1), applier.next);
+
+    var ran: u64 = 0;
+    var output: [256]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&output);
+    const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
+    _ = try boot.start(stream.writer(), .zig, core, &board.bus, vector_base, 500_000, &ran, .{
+        .boundary = applier.boundary(),
+        .partitions = &board.partitions,
+        .idau = &board.idau,
+        .regions = &board.regions,
+        .regions_ns = &board.regions_ns,
+        .clears = &board.clears,
+    });
+    try std.testing.expect(applier.finished());
+    for (plan.events, applied) |event, at| try std.testing.expectEqual(event.at_ns, at);
+
+    const want = [_]api.Event.Kind{ .plugged, .unplugged, .plugged, .fault_set, .fault_cleared };
+    try std.testing.expectEqual(want.len, events.seen);
+    try std.testing.expectEqualSlices(api.Event.Kind, &want, events.kinds[0..want.len]);
+    // The firmware lived through it: it saw the gauge go and come back.
+    try std.testing.expect(try core.readWord(counts_at + 4) > 0);
+    try std.testing.expect(try core.readWord(counts_at + 8) > 0);
+}
