@@ -28,6 +28,12 @@ pub const Switcher = struct {
         self.applied = changes;
     }
 
+    /// `changes` went to the engine to install (RA8EMU-227): it is in
+    /// hand, so the panel is not asked to open it again.
+    pub fn posted(self: *Switcher, changes: u32) void {
+        self.applied = changes;
+    }
+
     /// The panel's switch could not be opened (a picture that will not
     /// decode, a device that went away): keep the running source and stop
     /// asking until the panel switches again.

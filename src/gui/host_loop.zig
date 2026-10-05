@@ -21,6 +21,7 @@ const media_row = @import("camera_media_row.zig");
 const camera_devices = @import("camera_devices.zig");
 const consent_store = @import("camera_consent_store.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
+const SourceSwap = @import("source_swap.zig").SourceSwap;
 pub const board_view = @import("../interfaces/cli/board_view.zig");
 const Color = draw_list.Color;
 
@@ -33,7 +34,13 @@ pub const Board = struct {
 };
 
 /// Where the CEU reads its frames from, for the camera pane to swap.
-pub const Camera = struct { source: *FrameSource, format_control: *const u8 };
+pub const Camera = struct {
+    source: *FrameSource,
+    format_control: *const u8,
+    /// Set when the engine installs picks itself at its parks (RA8EMU-227);
+    /// the loop then posts there and never writes `source`.
+    swap: ?*SourceSwap = null,
+};
 
 /// The emulation the loop drives.
 pub const Run = struct {
@@ -204,7 +211,9 @@ pub const Loop = struct {
         self.refreshThumb();
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
-            self.pane.settle(self.allocator, camera.source, camera.format_control);
+            if (camera.swap) |swap| {
+                self.pane.settleInto(self.allocator, swap, camera.format_control);
+            } else self.pane.settle(self.allocator, camera.source, camera.format_control);
         }
         const running = run.vtable.step(run.ctx);
         try self.draw(window, run.vtable.board(run.ctx));
