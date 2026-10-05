@@ -15,6 +15,8 @@ const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const camera_view = @import("camera_view.zig");
 const camera_media = @import("camera_media.zig");
+const camera_thumb = @import("camera_thumb.zig");
+const media_row = @import("camera_media_row.zig");
 const camera_devices = @import("camera_devices.zig");
 const consent_store = @import("camera_consent_store.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
@@ -77,6 +79,10 @@ pub const Loop = struct {
     /// Where the project's pictures and clips are listed again each time
     /// the image or video source comes up; null offers none.
     media_dir: ?std.fs.Dir = null,
+    /// The chosen picture's preview and the name it was read from; the
+    /// name points into a listing, which outlives the loop's frames.
+    thumb: ?camera_thumb.Thumb = null,
+    thumb_of: []const u8 = "",
     /// Where Always for this project is kept; null keeps it for this run.
     project: ?std.fs.Dir = null,
     quit: bool = false,
@@ -86,6 +92,7 @@ pub const Loop = struct {
         if (self.media) |*media| media.deinit();
         for (self.retired.items) |*media| media.deinit();
         self.retired.deinit(self.allocator);
+        if (self.thumb) |thumb| thumb.deinit(self.allocator);
         self.allocator.free(self.canvas);
         self.allocator.free(self.pixels);
         if (self.frame) |*frame| frame.deinit(self.allocator);
@@ -147,6 +154,25 @@ pub const Loop = struct {
         self.adoptMedia(found);
     }
 
+    /// Reads the preview again when the chosen picture changed; any other
+    /// source, no pick, or a file that will not decode shows none.
+    fn refreshThumb(self: *Loop) void {
+        const wanted = if (self.pane.panel.active == .image) self.pane.args.image else "";
+        if (std.mem.eql(u8, wanted, self.thumb_of)) return;
+        if (self.thumb) |thumb| thumb.deinit(self.allocator);
+        self.thumb = null;
+        self.thumb_of = wanted;
+        const dir = self.media_dir orelse return;
+        if (wanted.len == 0) return;
+        self.thumb = camera_thumb.load(self.allocator, dir, wanted) catch null;
+    }
+
+    /// The preview goes in the slot after the media row's last file.
+    fn thumbArea(self: *const Loop) draw_list.Rect {
+        const row = media_row.rowFor(self.pane.layout, self.pane.devices.len);
+        return row.slot(self.pane.media().len);
+    }
+
     /// Keeps Always in `project`, starting from what an earlier run saved.
     pub fn useProject(self: *Loop, project: std.fs.Dir) void {
         self.project = project;
@@ -170,6 +196,7 @@ pub const Loop = struct {
         if (self.pane.panel.always and !always) self.remember();
         if (self.wantsWebcam() and !wanted) self.relist();
         if (self.pane.panel.active != kind and self.wantsMedia()) self.relistMedia();
+        self.refreshThumb();
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
             self.pane.settle(self.allocator, camera.source, camera.format_control);
@@ -198,6 +225,7 @@ pub const Loop = struct {
         const area = draw_list.Rect{ .x = 0, .y = 0, .w = @intCast(view.width), .h = @intCast(view.height) };
         try list.image(area, .{ .width = view.width, .height = view.height, .pixels = self.pixels });
         try self.pane.draw(&list);
+        try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
         raster.draw(frame, &list, null);
         try window.present(frame);
     }

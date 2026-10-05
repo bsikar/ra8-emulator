@@ -215,3 +215,31 @@ test "Always answered in the window is kept for the project's next run" {
     next.useProject(tmp.dir);
     try std.testing.expect(next.pane.panel.always);
 }
+
+test "the chosen picture's preview follows the pick and goes with the image source" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "p.ppm", .data = "P6\n2 1\n255\n" ++ "\x0a\x14\x1e\xc8\x00\x64" });
+    try tmp.dir.writeFile(.{ .sub_path = "q.png", .data = "\x89PNG\r\n\x1a\nbroken" });
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.useMediaDir(tmp.dir);
+    try window.feed(press(layout().source(.image)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(loop.thumb == null);
+    loop.pane.args.image = loop.pane.pictures[0];
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(u32, 2), loop.thumb.?.width);
+    try std.testing.expectEqual(ra8.gui.draw_list.Color.rgb(200, 0, 100), loop.thumb.?.pixels[1]);
+    loop.pane.args.image = loop.pane.pictures[1];
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(loop.thumb == null);
+    loop.pane.args.image = loop.pane.pictures[0];
+    _ = try loop.tick(window.platform(), fake.run());
+    try window.feed(press(layout().source(.gradient)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(loop.thumb == null);
+}
