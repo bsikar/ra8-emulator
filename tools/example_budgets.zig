@@ -38,6 +38,9 @@ pub const overrides = [_]Override{
     .{ .image = "txm_manager_cpu1.elf", .instructions = "60000000" },
     // The fault, the kill and ten manager ticks after it (RA8EMU-313).
     .{ .image = "txm_fault_cpu1.elf", .instructions = "60000000" },
+    // Two loads of the same module, ten runs each, with a stop and an unload
+    // between them (RA8EMU-157).
+    .{ .image = "txm_reload_cpu1.elf", .instructions = "120000000" },
     // A ThreadX module rebases its own data pointers before it runs
     // (RA8FW-539, RA8FW-544). txm_table_cpu1 reads its table at 10M, not 5M;
     // txm_rpc_cpu1 answers ten ra8_rpc calls at 30M, not 20M. Each budget is
