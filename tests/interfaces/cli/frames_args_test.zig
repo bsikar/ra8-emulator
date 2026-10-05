@@ -17,3 +17,9 @@ test "frame sequence flags are optional and validate the scan interval" {
     try std.testing.expectError(error.MissingValue, cli.parse(&.{ "emu", "a.elf", "--frames-out" }));
     try std.testing.expectError(error.MissingValue, cli.parse(&.{ "emu", "a.elf", "--gif-out" }));
 }
+
+test "frame-on-settle captures to its own directory with a virtual stability window" {
+    const parsed = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", "settled", "--settle-window-ms", "75" });
+    try std.testing.expectEqualStrings("settled", parsed.frames.frame_on_settle.?);
+    try std.testing.expectEqual(@as(u64, 75_000_000), parsed.frames.settle_window_ns);
+}

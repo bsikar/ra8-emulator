@@ -76,6 +76,8 @@ pub const text =
     \\  --frames-out DIR   write numbered P6 panel frames
     \\  --gif-out PATH     write sampled panel frames as an animated GIF
     \\  --frames-every N   consider every Nth scanned frame (default 1)
+    \\  --frame-on-settle DIR capture numbered P6 frames as the panel settles
+    \\  --settle-window-ms N require N ms of unchanged GLCDC pixels (default 50)
     \\  --report json      print the run and cores report as one JSON line
     \\  --cpu-load         CPU load per ThreadX thread and per ISR, on each
     \\                     core, over the whole run

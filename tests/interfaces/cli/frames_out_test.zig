@@ -253,3 +253,62 @@ test "GIF output follows the sampled sequence when no PPM directory is requested
     try file.reader().readNoEof(&header);
     try std.testing.expectEqualSlices(u8, "GIF89a", &header);
 }
+
+test "an overlapping e-ink refresh burst produces one settled frame" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.panel.planes.resize(.{ .width = 2, .height = 1 });
+    try std.testing.expect(board.panel.planes.ready());
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
+    defer std.testing.allocator.free(path);
+    const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", path, "--settle-window-ms", "1" });
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    defer armed.deinit();
+
+    board.panel.film.start();
+    board.panel.film.start();
+    for (0..6) |_| _ = board.panel.film.poll();
+    try armed.pollSettle(25);
+    try std.testing.expectEqual(@as(usize, 1), armed.sequence.written);
+    try expectIndex(armed.sequence, "frame_00000.ppm 25\n");
+}
+
+test "a GLCDC burst settles once the picture holds for the window, and only once" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
+    defer std.testing.allocator.free(path);
+    const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", path });
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    defer armed.deinit();
+    const a = [_]u32{ 1, 2 };
+    const b = [_]u32{ 3, 4 };
+    try armed.observeFrame(2, 1, &a, 0);
+    try armed.observeFrame(2, 1, &b, 10_000_000);
+    try armed.observeFrame(2, 1, &b, 40_000_000);
+    try std.testing.expectEqual(@as(usize, 0), armed.sequence.written);
+    try armed.observeFrame(2, 1, &b, 60_000_000);
+    try armed.observeFrame(2, 1, &b, 200_000_000);
+    try std.testing.expectEqual(@as(usize, 1), armed.sequence.written);
+    try expectIndex(armed.sequence, "frame_00000.ppm 60000000\n");
+}
+
+test "frame-on-settle refuses to share a run with --frames-out or --gif-out" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", "a", "--frames-out", "b" });
+    // Not expectError: on a miss it would print the Armed, board and all.
+    if (frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)) |armed| {
+        if (armed) |one| one.deinit();
+        return error.TestUnexpectedResult;
+    } else |err| try std.testing.expectEqual(error.SettleSharesRun, err);
+}
