@@ -153,4 +153,5 @@ pub const snapshot = struct {
     pub const blocks = @import("snapshot/blocks.zig");
     pub const sd = @import("snapshot/sd.zig");
     pub const wire = @import("snapshot/wire.zig");
+    pub const raster = @import("snapshot/raster.zig");
 };
