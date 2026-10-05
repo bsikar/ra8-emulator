@@ -43,3 +43,23 @@ test "a value outside its field's type is BadValue" {
     var tag: fields.Cursor = .{ .bytes = &.{ 9, 0, 0, 0, 0 } };
     try std.testing.expectError(error.BadValue, fields.read(?u32, &tag));
 }
+
+const Why = enum(u8) { bad_size, bad_mode };
+const Reason = union(enum) { stopped, spent, unsupported: Why };
+
+test "a tagged union reads back as its tag and active payload" {
+    const values = [_]Reason{ .stopped, .spent, .{ .unsupported = .bad_mode } };
+    for (values) |value| {
+        var list = std.ArrayList(u8).init(std.testing.allocator);
+        defer list.deinit();
+        try fields.write(list.writer(), value);
+        var cursor: fields.Cursor = .{ .bytes = list.items };
+        try std.testing.expectEqual(value, try fields.read(Reason, &cursor));
+        try std.testing.expect(cursor.done());
+    }
+}
+
+test "a union tag outside its type is BadValue" {
+    var cursor: fields.Cursor = .{ .bytes = &.{9} };
+    try std.testing.expectError(error.BadValue, fields.read(Reason, &cursor));
+}
