@@ -47,6 +47,11 @@ test "txm_fault_cpu1 runs long enough for the fault and ten manager ticks after 
     try std.testing.expectEqualStrings("60000000", budgets.pick("txm_fault_cpu1.elf", "2000000").?);
 }
 
+test "txm_reload_cpu1 runs long enough for two loads of ten runs each" {
+    try std.testing.expectEqualStrings("120000000", budgets.pick("txm_reload_cpu1.elf", null).?);
+    try std.testing.expectEqualStrings("120000000", budgets.pick("txm_reload_cpu1.elf", "2000000").?);
+}
+
 test "the rebasing ThreadX modules run long enough for their verdict" {
     try std.testing.expectEqualStrings("20000000", budgets.pick("txm_table_cpu1.elf", null).?);
     try std.testing.expectEqualStrings("20000000", budgets.pick("txm_table_cpu1.elf", "2000000").?);
