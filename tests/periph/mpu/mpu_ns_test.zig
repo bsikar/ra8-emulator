@@ -7,7 +7,7 @@ const memmap = ra8.core.memmap;
 const registry = ra8.periph.registry;
 const mpu_ns = ra8.periph.mpu.ns;
 const BoardBus = ra8.core.cpu.board_bus.BoardBus;
-const Engine = ra8.core.engine.Engine;
+const store_memory = @import("../store_memory.zig");
 const Banked = ra8.core.banked.Banked;
 
 const rbar_alias: u32 = memmap.mpu.rbar + mpu_ns.offset;
@@ -44,16 +44,15 @@ fn region(board: *BoardBus, rnr: u32, number: u32, rbar: u32, value: u32) !void 
 }
 
 test "Secure and Non-secure MPU programming stay apart on the Zig bus" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var secure_mpu = ra8.periph.mpu.Mpu.init();
     var ns_mpu = ra8.periph.mpu.Mpu.init();
     var state: Banked = .{};
     var board: BoardBus = .{
-        .memory = .{ .engine = .{ .core = &core } },
+        .memory = .{ .store = .{ .store = memory.store } },
         .periph = &periph,
         .security = &state,
         .scs = .{ .regions = &secure_mpu, .regions_ns = &ns_mpu },
@@ -76,13 +75,12 @@ test "Secure and Non-secure MPU programming stay apart on the Zig bus" {
 }
 
 test "with no Non-secure MPU wired the alias keeps its old path" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     var periph = registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     var secure_mpu = ra8.periph.mpu.Mpu.init();
-    var board: BoardBus = .{ .memory = .{ .engine = .{ .core = &core } }, .periph = &periph, .scs = .{ .regions = &secure_mpu } };
+    var board: BoardBus = .{ .memory = .{ .store = .{ .store = memory.store } }, .periph = &periph, .scs = .{ .regions = &secure_mpu } };
     try region(&board, memmap.mpu.rnr, 4, memmap.mpu.rbar, 0x2200_0000);
     try std.testing.expectEqual(@as(u32, 0x2200_0000), secure_mpu.table[4].rbar);
 }
