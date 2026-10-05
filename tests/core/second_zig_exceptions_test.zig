@@ -73,7 +73,7 @@ const Pair = struct {
     }
 
     fn expectRunning(self: *Pair) !void {
-        try std.testing.expectEqual(@as(?ra8.core.engine.Fault, null), self.driver.second.state.fault);
+        try std.testing.expectEqual(@as(?ra8.core.fault.Fault, null), self.driver.second.state.fault);
     }
 };
 

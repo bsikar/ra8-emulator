@@ -9,7 +9,3 @@ test "the register enum names every register the debugger and report read" {
     try std.testing.expect(@hasField(Cortex, "fpscr"));
     try std.testing.expect(@hasField(Cortex, "psp"));
 }
-
-test "the engine's register enum is the core's own" {
-    try std.testing.expect(ra8.core.engine.Cortex == Cortex);
-}

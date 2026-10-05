@@ -4,7 +4,6 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const second_core = ra8.core.second_core;
 const Driver = second_core.zig_run.Driver;
-const Engine = ra8.core.engine.Engine;
 const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const Units = second_core.zig.Units;
@@ -46,7 +45,7 @@ test "a round runs CPU1's share on its Zig core and counts it the Unicorn way" {
     try std.testing.expectEqual(@as(usize, 2), driver.second.state.turns);
     try std.testing.expectEqual(@as(usize, 200), driver.second.state.ran);
     try std.testing.expectEqual(code, driver.second.state.pc);
-    try std.testing.expectEqual(@as(?ra8.core.engine.Fault, null), driver.second.state.fault);
+    try std.testing.expectEqual(@as(?ra8.core.fault.Fault, null), driver.second.state.fault);
 }
 
 test "a CPU1 that stops is reported where it stopped and takes no more turns" {

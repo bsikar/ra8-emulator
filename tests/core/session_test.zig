@@ -16,7 +16,3 @@ test "a bare session runs one uninterrupted stretch" {
     try std.testing.expect(bare.deadline == null);
     try std.testing.expect(bare.undefined_sites == null);
 }
-
-test "the engine's re-export is the same type" {
-    try std.testing.expectEqual(Session, ra8.core.engine.Session);
-}

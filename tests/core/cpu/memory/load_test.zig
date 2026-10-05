@@ -6,7 +6,6 @@ const elf = ra8.core.elf;
 const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const load = ra8.core.cpu.memory.load;
-const Engine = ra8.core.engine.Engine;
 
 const page: usize = 0x1000;
 
