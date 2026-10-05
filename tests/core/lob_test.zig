@@ -49,6 +49,11 @@ test "WLS decodes its source register and its forward distance" {
     try std.testing.expectEqual(@as(u32, 2), two.offset);
 }
 
+test "WLS and LE require hw2 bit zero" {
+    try std.testing.expect(lob.decode(0xF040, 0xC004) == null);
+    try std.testing.expect(lob.decode(0xF00F, 0xC004) == null);
+}
+
 test "anything else stays undecoded, so it stays a fault" {
     // LETP: an MVE tail-predicated loop end. Refused on purpose, because
     // counting its iterations right would still run the body wrong.

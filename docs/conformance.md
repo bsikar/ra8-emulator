@@ -295,7 +295,7 @@ table above. A group with no vector fails `zig build test`.
 | dsp_mulhi | 33 |
 | dsp_long_mul | 28 |
 | csel | 37 |
-| lob | 34 |
+| lob | 36 |
 | long_shift | 23 |
 | long_shift_reg | 34 |
 | long_shift_sat | 51 |

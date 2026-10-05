@@ -100,6 +100,8 @@ const unclaimed = [_]V{
     bad("wls lr, sp is unclaimed", 0xF04D, by8),
     bad("wls lr, pc is unclaimed", 0xF04F, by8),
     bad("dls with hw2 0xE003 is unclaimed", 0xF040, 0xE003),
+    bad("wls with hw2[0] clear is unclaimed", 0xF040, 0xC004),
+    bad("le with hw2[0] clear is unclaimed", 0xF00F, 0xC004),
     bad("hw2[15:12] = 1101 is unclaimed", 0xF040, 0xD005),
     bad("letp is unclaimed", 0xF01F, by8),
     bad("dlstp is unclaimed", 0xF020, 0xE001),

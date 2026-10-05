@@ -6,9 +6,9 @@ const v81m = @import("v81m.zig");
 test "DLS, WLS and LE, WLS forward and LE backward" {
     try v81m.expectTexts(&.{
         .{ .hw1 = 0xF040, .hw2 = 0xE001, .text = "dls lr, r0" },
-        .{ .hw1 = 0xF041, .hw2 = 0xC010, .text = "wls lr, r1, #0x2000124" },
-        .{ .hw1 = 0xF042, .hw2 = 0xC802, .text = "wls lr, r2, #0x200010a" },
-        .{ .hw1 = 0xF00F, .hw2 = 0xC008, .text = "le lr, #0x20000f4" },
+        .{ .hw1 = 0xF041, .hw2 = 0xC011, .text = "wls lr, r1, #0x2000124" },
+        .{ .hw1 = 0xF042, .hw2 = 0xC803, .text = "wls lr, r2, #0x200010a" },
+        .{ .hw1 = 0xF00F, .hw2 = 0xC009, .text = "le lr, #0x20000f4" },
     });
 }
 
