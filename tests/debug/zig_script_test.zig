@@ -174,3 +174,50 @@ test "plug and unplug wire a part in and out through the board mid-script" {
     ;
     try std.testing.expectEqualStrings(want, out.items);
 }
+
+const FakeWall = struct {
+    at: u64 = 0,
+
+    fn clock(self: *FakeWall) ra8.periph.clocks.pacer.Clock {
+        return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
+    }
+
+    fn now(ctx: *anyopaque) u64 {
+        const self: *FakeWall = @ptrCast(@alignCast(ctx));
+        return self.at;
+    }
+
+    fn sleep(ctx: *anyopaque, ns: u64) void {
+        const self: *FakeWall = @ptrCast(@alignCast(ctx));
+        self.at += ns;
+    }
+};
+
+test "speed moves the board's pacer mid-script and refuses a bad factor" {
+    var memory: Sram = .{};
+    var cpu: Cpu = .{ .bus = memory.view() };
+    var machine: stop_machine.Machine = .{};
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var time = ra8.periph.clocks.Time{};
+    time.base.advance(1000);
+    var wall = FakeWall{};
+    var speed: ra8.board.board_speed.BoardSpeed = .{ .time = &time, .clock = wall.clock() };
+    target.session.speed = speed.hook();
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    const before = time.base.now();
+    _ = try target.apply((try commands.parse("speed 0.25")).?, out.writer());
+    try std.testing.expectEqual(@as(u64, 250), time.pacing.?.pacer.speed_milli);
+    _ = try target.apply((try commands.parse("speed 5")).?, out.writer());
+    try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
+    _ = try target.apply((try commands.parse("speed 0")).?, out.writer());
+    try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
+    try std.testing.expectEqual(before, time.base.now());
+    const want =
+        \\Speed 0.25x
+        \\Speed 5x
+        \\error: InvalidSpeed
+        \\
+    ;
+    try std.testing.expectEqualStrings(want, out.items);
+}

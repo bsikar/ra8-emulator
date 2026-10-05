@@ -44,6 +44,7 @@ pub const ZigScript = struct {
         switch (command) {
             .plug => |text| return self.plug(text, out),
             .unplug => |text| return self.unplug(text, out),
+            .speed => |wanted| return self.speed(wanted, out),
             else => {},
         }
         const view = try self.session.view(self.session.currentCore());
@@ -79,6 +80,13 @@ pub const ZigScript = struct {
     fn unplug(self: *ZigScript, text: []const u8, out: anytype) !void {
         try self.session.unplug(self.session.currentCore(), try endpoint.parse(text));
         try out.print("Unplugged {s}\n", .{text});
+    }
+
+    /// `speed FACTOR`: the run budget scales, and a paced run's pacer moves
+    /// to the new rate from here on (RA8EMU-184).
+    fn speed(self: *ZigScript, factor: f64, out: anytype) !void {
+        try self.session.setSpeed(self.session.currentCore(), factor);
+        try out.print("Speed {d}x\n", .{factor});
     }
 
     /// As session.zig's switchTo: say which core has the session and where

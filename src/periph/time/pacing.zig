@@ -52,11 +52,21 @@ pub const Pacing = struct {
 /// process because the board's pacing points at it; a run attaches one board
 /// at most (RA8EMU-181, slice 3).
 var host: pacer.HostClock = undefined;
+var host_started = false;
+
+/// The process's host clock, started on first use. A later caller gets the
+/// same one, so a pacer anchored on it never sees the clock restart.
+pub fn hostClock() !pacer.Clock {
+    if (!host_started) {
+        host = try pacer.HostClock.init();
+        host_started = true;
+    }
+    return host.clock();
+}
 
 /// Pace `time` against the host's monotonic clock from where it stands.
 pub fn attachHost(time: anytype, speed_milli: u64) !void {
-    host = try pacer.HostClock.init();
-    time.pacing = Pacing.start(host.clock(), time.base.now(), speed_milli);
+    time.pacing = Pacing.start(try hostClock(), time.base.now(), speed_milli);
 }
 
 /// The end-of-run line, only when the run was paced, so an unpaced run's

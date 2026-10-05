@@ -31,6 +31,7 @@
 //! core 0|1                    which CPU the next commands act on
 //! plug NAME@ENDPOINT          wire a fresh part in mid-run
 //! unplug ENDPOINT             take the part on ENDPOINT off mid-run
+//! speed FACTOR                pace the run at FACTOR times real time
 //! quit                q
 //! ```
 //!
@@ -104,6 +105,8 @@ pub const Command = union(enum) {
     plug: []const u8,
     /// `unplug ENDPOINT`, kept as written.
     unplug: []const u8,
+    /// `speed FACTOR`: the session checks the range (RA8EMU-184).
+    speed: f64,
     quit,
 };
 
@@ -131,6 +134,7 @@ const Verb = enum {
     halting,
     plug,
     unplug,
+    speed,
     quit,
 };
 
@@ -155,6 +159,7 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "core", .core },         .{ "quit", .quit },
     .{ "q", .quit },            .{ "halting", .halting },
     .{ "plug", .plug },         .{ "unplug", .unplug },
+    .{ "speed", .speed },
 });
 
 /// The names `info` lists breaks and watches under.
@@ -203,6 +208,7 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .halting => .{ .halting = try onOff(try required(words)) },
         .plug => .{ .plug = try required(words) },
         .unplug => .{ .unplug = try required(words) },
+        .speed => .{ .speed = try factor(try required(words)) },
         .quit => .quit,
     };
     if (words.next() != null) return Error.ExtraArgument;
@@ -253,6 +259,10 @@ fn required(words: *Words) Error![]const u8 {
 }
 
 /// A count or an id, decimal or `0x` hex.
+fn factor(text: []const u8) Error!f64 {
+    return std.fmt.parseFloat(f64, text) catch Error.BadNumber;
+}
+
 fn number(text: []const u8) Error!u32 {
     return std.fmt.parseInt(u32, text, 0) catch Error.BadNumber;
 }

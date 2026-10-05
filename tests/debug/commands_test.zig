@@ -97,3 +97,10 @@ test "plug and unplug keep their part and endpoint as written" {
     try std.testing.expectError(error.MissingArgument, commands.parse("plug"));
     try std.testing.expectError(error.ExtraArgument, commands.parse("unplug uart:sci3 now"));
 }
+
+test "speed takes a factor and leaves the range to the session" {
+    try std.testing.expectEqual(@as(f64, 0.25), (try commands.parse("speed 0.25")).?.speed);
+    try std.testing.expectEqual(@as(f64, 5), (try commands.parse("speed 5  # five times")).?.speed);
+    try std.testing.expectError(commands.Error.BadNumber, commands.parse("speed fast"));
+    try std.testing.expectError(commands.Error.MissingArgument, commands.parse("speed"));
+}
