@@ -14,7 +14,6 @@ const disasm = @import("../debug/disasm.zig");
 const cadence = @import("cadence.zig");
 const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
-const bus_hook = @import("bus_hook.zig");
 const mpu = @import("../periph/mpu/mpu.zig");
 const sau = @import("../periph/sau.zig");
 const tz = @import("tz.zig");
@@ -179,12 +178,6 @@ pub const Engine = struct {
     pub fn shareBoardRamWith(self: *Engine, owner: *Engine) Error!void {
         if (!owner.ram.mapped()) return Error.MapFailed;
         board_ram.mapBoard(self.handle, &self.ram, &owner.ram) catch return Error.MapFailed;
-    }
-
-    /// Record the invalid accesses a run takes, so a fault can say which
-    /// address the firmware reached for and how wide the access was.
-    pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
-        bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
