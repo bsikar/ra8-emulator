@@ -7,6 +7,7 @@ const Machine = ra8.core.stop_machine.Machine;
 const dispatch = ra8.core.rsp_dispatch;
 const zig_run = dispatch.zig_run;
 const zig_session = ra8.core.step_hook.zig_session;
+const session_api = ra8.core.session_api;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
@@ -51,8 +52,9 @@ test "one thread: thread queries and selecting any other thread" {
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
     var machine = Machine{};
-    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
-    var target: zig_run.Target = .{ .session = &session };
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
+    var api_session: session_api.Session = .{ .live = session };
+    var target: zig_run.Target = .{ .session = &api_session };
     try expectReply(&target, "qfThreadInfo", "m1");
     try expectReply(&target, "qsThreadInfo", "l");
     try expectReply(&target, "qC", "QC1");
@@ -73,14 +75,15 @@ test "with CPU1 attached it is thread 2, and selecting it moves g, s and ?" {
     try cpu1.reset(0);
     var machine0 = Machine{};
     var machine1 = Machine{};
-    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100, .other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1 } };
-    var target: zig_run.Target = .{ .session = &session };
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100, .other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1 } };
+    var api_session: session_api.Session = .{ .live = session };
+    var target: zig_run.Target = .{ .session = &api_session };
     try expectReply(&target, "qfThreadInfo", "m1,2");
     try expectReply(&target, "T2", "OK");
     try expectReply(&target, "T3", "E00");
     try expectReply(&target, "Hg2", "OK");
     try expectReply(&target, "qC", "QC2");
-    try std.testing.expectEqual(@as(u8, 1), session.index);
+    try std.testing.expectEqual(@as(u8, 1), api_session.live.index);
     try expectReply(&target, "s", "T05thread:2;");
     try std.testing.expectEqual(@as(u32, 0x0A), cpu1.regs.pc);
     try std.testing.expectEqual(@as(u32, 0x08), cpu0.regs.pc);
@@ -96,8 +99,9 @@ test "s steps one instruction, c stops on a break and then on the core's fault" 
     try cpu.reset(0);
     var machine = Machine{};
     _ = try machine.addBreak(.{ .address = 0x0E });
-    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
-    var target: zig_run.Target = .{ .session = &session };
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
+    var api_session: session_api.Session = .{ .live = session };
+    var target: zig_run.Target = .{ .session = &api_session };
     try expectReply(&target, "s", "T05thread:1;");
     try std.testing.expectEqual(@as(u32, 0x0A), cpu.regs.pc);
     try expectReply(&target, "vCont;c:1", "T05thread:1;");
@@ -114,7 +118,7 @@ test "an interrupt from the poll stops a continue with SIGINT" {
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
     var machine = Machine{};
-    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 50 };
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 50 };
     const Interrupt = struct {
         asked: u32 = 0,
         fn check(context: *anyopaque) bool {
@@ -124,7 +128,8 @@ test "an interrupt from the poll stops a continue with SIGINT" {
         }
     };
     var interrupt: Interrupt = .{};
-    var target: zig_run.Target = .{ .session = &session, .poll = .{ .context = &interrupt, .check = Interrupt.check } };
+    var api_session: session_api.Session = .{ .live = session };
+    var target: zig_run.Target = .{ .session = &api_session, .poll = .{ .context = &interrupt, .check = Interrupt.check } };
     try expectReply(&target, "c", "T02thread:1;");
     try std.testing.expectEqual(@as(u32, 3), interrupt.asked);
     try std.testing.expectEqual(@as(u32, 0x08), cpu.regs.pc);
@@ -135,8 +140,9 @@ test "Dispatch with a Zig session reads the Zig core's registers and memory" {
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
     var machine = Machine{};
-    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
-    var target: zig_run.Target = .{ .session = &session };
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
+    var api_session: session_api.Session = .{ .live = session };
+    var target: zig_run.Target = .{ .session = &api_session };
     const stub = dispatch.Dispatch{ .zig = &target };
     var out: [512]u8 = undefined;
     try std.testing.expectEqualStrings("08000000", try stub.answer("pf", &out));

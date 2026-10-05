@@ -19,7 +19,7 @@ const script = @import("../../debug/script.zig");
 const session = @import("../../debug/session.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
 const zig_script = @import("../../debug/zig_script.zig");
-const zig_session = @import("../../debug/zig_session.zig");
+const session_api = @import("../../debug/session_api.zig");
 const step_hook = @import("../../debug/step_hook.zig");
 const watch_bus = @import("../../debug/watch_bus.zig");
 const debug_front = @import("debug_front.zig");
@@ -28,6 +28,31 @@ const rsp_poll = @import("../../debug/rsp_poll.zig");
 const second_core = @import("../../core/second_core.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const Cpu0 = @import("zig_memory.zig").Cpu0;
+
+const LoaderState = struct {
+    cpu0: *cpu_mod.Cpu,
+    memory0: Guest,
+    cpu1: ?*cpu_mod.Cpu = null,
+    memory1: ?Guest = null,
+
+    fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
+        const self: *LoaderState = @ptrCast(@alignCast(context));
+        const image = try elf.Image.init(bytes);
+        const target = switch (core) {
+            .cpu0 => .{ self.cpu0, self.memory0 },
+            .cpu1 => .{ self.cpu1 orelse return error.CoreNotAttached, self.memory1 orelse return error.CoreNotAttached },
+        };
+        const cpu = target[0];
+        const memory = target[1];
+        var index: u16 = 0;
+        while (index < image.segmentCount()) : (index += 1) {
+            const segment = image.loadSegment(index) orelse continue;
+            try memory.write(segment.paddr, segment.bytes);
+        }
+        const vector = image.vectorBase() orelse return error.NoVectorTable;
+        try cpu.reset(vector);
+    }
+};
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {
@@ -63,11 +88,14 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
         std.debug.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
-    var target: zig_script.ZigScript = .{ .image = image, .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } };
+    var target: zig_script.ZigScript = .{ .image = image, .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } } };
+    var loading: LoaderState = .{ .cpu0 = &cpu, .memory0 = cpu0.own() };
+    target.session.attachLoader(.{ .context = &loading, .loadFn = LoaderState.load });
+    try target.session.load(.cpu0, image.bytes);
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};
     const named = request.cpu1 orelse return serve(allocator, &target, request.mode, out);
-    other.open(allocator, &pair, cpu0.own(), &board, named, &target) catch |err| {
+    other.open(allocator, &pair, cpu0.own(), &board, named, &target, &loading) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };
@@ -91,7 +119,7 @@ const Other = struct {
     watching: watch_bus.WatchBus = undefined,
     bytes: []u8 = &.{},
 
-    fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, cpu0: Guest, board: *Board, path: []const u8, target: *zig_script.ZigScript) !void {
+    fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, cpu0: Guest, board: *Board, path: []const u8, target: *zig_script.ZigScript, loading: *LoaderState) !void {
         self.bytes = try std.fs.cwd().readFileAlloc(allocator, path, second_core.limits.image_bytes);
         errdefer allocator.free(self.bytes);
         try pair.open(allocator, board, path, cpu0);
@@ -99,7 +127,10 @@ const Other = struct {
         self.driver = .{ .machine = &self.machine };
         self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };
         pair.core.cpu.bus = self.watching.view();
-        target.session.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine, .watch = &self.watching };
+        target.session.live.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = target.session.live.budget };
+        loading.cpu1 = &pair.core.cpu;
+        loading.memory1 = pair.guest();
+        try target.session.load(.cpu1, target.other_image.?.bytes);
     }
 
     fn close(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver) void {
@@ -122,13 +153,13 @@ fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debu
         .interactive => try debug_front.converse(target, out),
         .gdb => unreachable, // run sends --gdb to listen
     }
-    try target.session.machine.itm.flush(out, true);
+    try target.session.flushItm(target.session.currentCore(), out, true);
     return 0;
 }
 
 /// Wait for gdb on the loopback port and serve it from the Zig core
 /// (RA8EMU-118).
-fn listen(live: *zig_session.ZigSession, port: u16) !u8 {
+fn listen(live: *session_api.Session, port: u16) !u8 {
     const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
     var server = address.listen(.{ .reuse_address = true }) catch |err| {
         std.debug.print("cannot listen on 127.0.0.1:{d}: {s}\n", .{ port, @errorName(err) });
@@ -139,7 +170,7 @@ fn listen(live: *zig_session.ZigSession, port: u16) !u8 {
     const connection = try server.accept();
     defer connection.stream.close();
     var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
-    live.budget = rsp_poll.chunk;
+    try live.setRunBudget(live.currentCore(), rsp_poll.chunk);
     var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll() };
     const stub = rsp_dispatch.Dispatch{ .zig = &target };
     const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());

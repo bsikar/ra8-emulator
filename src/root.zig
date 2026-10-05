@@ -46,6 +46,7 @@ pub const core = struct {
     pub const break_table = @import("debug/break_table.zig");
     pub const break_list = @import("debug/break_list.zig");
     pub const stop_machine = @import("debug/stop_machine.zig");
+    pub const session_api = @import("debug/session_api.zig");
     pub const watch_table = @import("debug/watch_table.zig");
     pub const call_decode = @import("debug/call_decode.zig");
     pub const step_hook = @import("debug/step_hook.zig");

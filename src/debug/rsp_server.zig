@@ -46,7 +46,10 @@ pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: anytype, writer: anytype) 
                     const detach = request.len > 0 and request[0] == 'D';
                     const reply = if (detach) "OK" else try dispatch.answer(request, &payload);
                     if (dispatch.zig) |live| {
-                        if (console.resumes(request)) try console.send(writer, &live.session.machine.itm, &framed);
+                        if (console.resumes(request)) {
+                            const port = try live.session.itmPort(live.session.currentCore());
+                            try console.send(writer, port, &framed);
+                        }
                     }
                     last = try packet.frame(&framed, reply);
                     try writer.writeAll(last);

@@ -28,6 +28,8 @@ pub const Slot = struct {
     started: bool = false,
     watch: ?*watch_bus.WatchBus = null,
     clock: zig_cycles.Clock = .{},
+    index: u8 = 1,
+    budget: u64 = 1_000_000,
 };
 
 pub const ZigSession = struct {
@@ -52,13 +54,14 @@ pub const ZigSession = struct {
     pub fn switchTo(self: *ZigSession, index: u8) Error!void {
         if (index == self.index) return;
         const parked = self.other orelse return Error.CoreNotAttached;
-        self.other = .{ .core = self.core, .machine = self.machine, .started = self.started, .watch = self.watch, .clock = self.clock };
+        self.other = .{ .core = self.core, .machine = self.machine, .started = self.started, .watch = self.watch, .clock = self.clock, .index = self.index, .budget = self.budget };
         self.core = parked.core;
         self.machine = parked.machine;
         self.started = parked.started;
         self.watch = parked.watch;
         self.clock = parked.clock;
-        self.index = index;
+        self.index = parked.index;
+        self.budget = parked.budget;
     }
 
     /// Arm the machine for `command` as the Unicorn session does, then run.

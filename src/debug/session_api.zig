@@ -1,0 +1,229 @@
+//! The core-addressed debugger API, shared by the script and GDB fronts.
+//!
+//! It keeps image construction with the board front end, but every operation
+//! on a loaded image goes through this interface and names CPU0 or CPU1.
+const std = @import("std");
+const debug_session = @import("session.zig");
+const stop_machine = @import("stop_machine.zig");
+const itm = @import("itm.zig");
+const breakpoint = @import("breakpoint.zig");
+const core_view = @import("core_view.zig");
+const watch_table = @import("watch_table.zig");
+const zig_drive = @import("zig_drive.zig");
+const zig_session = @import("zig_session.zig");
+
+pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
+pub const Error = error{ CoreNotAttached, NoLoader, TooManyListeners };
+pub const Run = zig_session.Command;
+pub const Ended = zig_drive.Ended;
+pub const BreakId = @import("break_table.zig").Id;
+pub const WatchId = watch_table.Id;
+pub const Register = core_view.Cortex;
+
+pub const Loader = struct {
+    context: *anyopaque,
+    loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
+};
+
+pub const Event = struct {
+    core: Core,
+    kind: Kind,
+    address: ?u32 = null,
+    ended: ?Ended = null,
+
+    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed };
+};
+
+pub const Listener = struct {
+    context: *anyopaque,
+    receive: *const fn (*anyopaque, Event) void,
+};
+
+pub const limits = struct {
+    pub const listeners: usize = 8;
+};
+
+pub const Session = struct {
+    live: zig_session.ZigSession,
+    loader: ?Loader = null,
+    listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
+
+    pub fn attachLoader(self: *Session, loader: Loader) void {
+        self.loader = loader;
+    }
+
+    /// Load image bytes through the board-specific loader, then publish it.
+    pub fn load(self: *Session, core: Core, image: []const u8) anyerror!void {
+        try self.select(core);
+        const loader = self.loader orelse return Error.NoLoader;
+        try loader.loadFn(loader.context, core, image);
+        self.publish(.{ .core = core, .kind = .loaded });
+    }
+
+    pub fn run(self: *Session, core: Core, command: Run) anyerror!Ended {
+        try self.select(core);
+        const ended = try self.live.go(command);
+        self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
+        return ended;
+    }
+
+    pub fn step(self: *Session, core: Core) anyerror!Ended {
+        return self.run(core, .step);
+    }
+
+    pub fn interrupt(self: *Session, core: Core) anyerror!stop_machine.Stop {
+        try self.select(core);
+        const stop = self.live.machine.interrupt();
+        self.publish(.{ .core = core, .kind = .stopped, .ended = .{ .stop = stop } });
+        return stop;
+    }
+
+    pub fn pause(self: *Session, core: Core) anyerror!void {
+        try self.select(core);
+        self.live.machine.requestHalt();
+        self.publish(.{ .core = core, .kind = .paused });
+    }
+
+    /// Scale the default run rate for this core (1 is the default speed).
+    pub fn setSpeed(self: *Session, core: Core, factor: f64) anyerror!void {
+        if (!(factor > 0) or factor > 1.0e12) return error.InvalidSpeed;
+        const scaled = @as(f64, @floatFromInt(debug_session.limits.default_budget)) * factor;
+        if (scaled > @as(f64, @floatFromInt(std.math.maxInt(u64)))) return error.InvalidSpeed;
+        try self.setRunBudget(core, @intFromFloat(@max(scaled, 1)));
+        self.publish(.{ .core = core, .kind = .speed_changed });
+    }
+
+    /// Set the deterministic instruction chunk a running frontend executes.
+    pub fn setRunBudget(self: *Session, core: Core, instructions: u64) anyerror!void {
+        if (instructions == 0) return error.InvalidSpeed;
+        try self.select(core);
+        self.live.budget = instructions;
+    }
+
+    pub fn register(self: *Session, core: Core, which: Register) anyerror!u32 {
+        return (try self.view(core)).register(which);
+    }
+
+    pub fn setRegister(self: *Session, core: Core, which: Register, value: u32) anyerror!void {
+        try (try self.view(core)).setRegister(which, value);
+        self.publish(.{ .core = core, .kind = .register_written });
+    }
+
+    pub fn read(self: *Session, core: Core, address: u32, into: []u8) anyerror!void {
+        try (try self.view(core)).read(address, into);
+    }
+
+    pub fn write(self: *Session, core: Core, address: u32, bytes: []const u8) anyerror!void {
+        try (try self.view(core)).write(address, bytes);
+        self.publish(.{ .core = core, .kind = .memory_written, .address = address });
+    }
+
+    pub fn setBreakpoint(self: *Session, core: Core, point: breakpoint.Break) anyerror!BreakId {
+        try self.select(core);
+        const id = try self.live.machine.addBreak(point);
+        self.publish(.{ .core = core, .kind = .breakpoint_set, .address = point.address });
+        return id;
+    }
+
+    pub fn setWatchpoint(self: *Session, core: Core, point: watch_table.Watch) anyerror!WatchId {
+        try self.select(core);
+        const id = try self.live.machine.addWatch(point);
+        self.publish(.{ .core = core, .kind = .watchpoint_set, .address = point.first });
+        return id;
+    }
+
+    pub fn clearBreakpoint(self: *Session, core: Core, id: BreakId) anyerror!void {
+        try self.select(core);
+        try self.live.machine.breaks.remove(id);
+        self.publish(.{ .core = core, .kind = .breakpoint_cleared });
+    }
+
+    pub fn clearWatchpoint(self: *Session, core: Core, id: WatchId) anyerror!void {
+        try self.select(core);
+        try self.live.machine.watches.remove(id);
+        self.publish(.{ .core = core, .kind = .watchpoint_cleared });
+    }
+
+    pub const RemovedPoint = enum { breakpoint, watchpoint };
+
+    pub fn removePoint(self: *Session, core: Core, id: u32) anyerror!RemovedPoint {
+        try self.select(core);
+        self.live.machine.breaks.remove(id) catch |err| {
+            if (err != error.NoSuchBreak) return err;
+            self.live.machine.watches.remove(id) catch return error.NoSuchBreak;
+            self.publish(.{ .core = core, .kind = .watchpoint_cleared });
+            return .watchpoint;
+        };
+        self.publish(.{ .core = core, .kind = .breakpoint_cleared });
+        return .breakpoint;
+    }
+
+    pub fn breakpointExists(self: *Session, core: Core, id: BreakId) anyerror!bool {
+        try self.select(core);
+        return self.live.machine.breaks.get(id) != null;
+    }
+
+    pub fn watchKind(self: *Session, core: Core, id: WatchId) anyerror!?watch_table.Kind {
+        try self.select(core);
+        const point = self.live.machine.watches.get(id) orelse return null;
+        return point.kind;
+    }
+
+    pub fn hasCore(self: *const Session, core: Core) bool {
+        return @intFromEnum(core) == self.live.index or self.live.other != null;
+    }
+
+    pub fn currentCore(self: *const Session) Core {
+        return @enumFromInt(self.live.index);
+    }
+
+    pub fn switchTo(self: *Session, core: Core) anyerror!void {
+        try self.select(core);
+    }
+
+    pub fn view(self: *Session, core: Core) anyerror!core_view.View {
+        try self.select(core);
+        return self.live.view();
+    }
+
+    pub fn machine(self: *Session, core: Core) anyerror!*stop_machine.Machine {
+        try self.select(core);
+        return self.live.machine;
+    }
+
+    pub fn itmPort(self: *Session, core: Core) anyerror!*itm.Itm {
+        try self.select(core);
+        return &self.live.machine.itm;
+    }
+
+    pub fn flushItm(self: *Session, core: Core, out: anytype, final: bool) anyerror!void {
+        try self.select(core);
+        try self.live.machine.itm.flush(out, final);
+    }
+
+    pub fn subscribe(self: *Session, listener: Listener) Error!usize {
+        for (&self.listeners, 0..) |*slot, index| {
+            if (slot.* != null) continue;
+            slot.* = listener;
+            return index;
+        }
+        return Error.TooManyListeners;
+    }
+
+    pub fn unsubscribe(self: *Session, id: usize) void {
+        if (id < self.listeners.len) self.listeners[id] = null;
+    }
+
+    fn select(self: *Session, core: Core) anyerror!void {
+        return self.live.switchTo(@intFromEnum(core));
+    }
+
+    fn publish(self: *Session, event: Event) void {
+        for (self.listeners) |slot| if (slot) |listener| listener.receive(listener.context, event);
+    }
+};
+
+comptime {
+    std.debug.assert(@intFromEnum(Core.cpu0) == 0);
+    std.debug.assert(@intFromEnum(Core.cpu1) == 1);
+}

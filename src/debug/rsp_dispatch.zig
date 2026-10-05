@@ -60,7 +60,10 @@ pub const Dispatch = struct {
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
         if (self.zig) |live| {
             if (zig_run.handles(request)) return zig_run.answer(live, request, out);
-            const selected = Dispatch{ .machine = live.session.machine, .view = live.session.view() };
+            const core = live.session.currentCore();
+            const machine = live.session.machine(core) catch return copy(out, request_error);
+            const view = live.session.view(core) catch return copy(out, request_error);
+            const selected = Dispatch{ .machine = machine, .view = view };
             return selected.answer(request, out);
         }
         if (request.len == 0) return out[0..0];

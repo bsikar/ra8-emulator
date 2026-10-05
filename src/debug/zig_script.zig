@@ -13,14 +13,14 @@ const session_place = @import("session_place.zig");
 const session_report = @import("session_report.zig");
 const session_view = @import("session_view.zig");
 const watch_table = @import("watch_table.zig");
-const zig_session = @import("zig_session.zig");
+const session_api = @import("session_api.zig");
 
 pub const Error = error{Unsupported};
 
 const Temporary = std.BoundedArray(break_table.Id, break_table.limits.capacity);
 
 pub const ZigScript = struct {
-    session: zig_session.ZigSession,
+    session: session_api.Session,
     image: ?elf.Image = null,
     temporary: Temporary = .{},
     /// The parked core's image and temporary breaks, swapped in by `core`.
@@ -31,7 +31,7 @@ pub const ZigScript = struct {
     /// script carries on, as on Unicorn.
     pub fn apply(self: *ZigScript, command: commands.Command, out: anytype) !session.Outcome {
         if (command == .quit) {
-            try self.session.machine.itm.flush(out, true);
+            try self.session.flushItm(self.session.currentCore(), out, true);
             return .quit;
         }
         self.dispatch(command, out) catch |err| {
@@ -41,7 +41,7 @@ pub const ZigScript = struct {
     }
 
     fn dispatch(self: *ZigScript, command: commands.Command, out: anytype) !void {
-        const view = self.session.view();
+        const view = try self.session.view(self.session.currentCore());
         switch (command) {
             .brk => |at| try self.setBreak(at, false, out),
             .tbreak => |at| try self.setBreak(at, true, out),
@@ -64,23 +64,23 @@ pub const ZigScript = struct {
     /// As session.zig's switchTo: say which core has the session and where
     /// it stands.
     fn switchTo(self: *ZigScript, index: u8, out: anytype) !void {
-        if (index != self.session.index) {
-            try self.session.switchTo(index);
+        if (index != @intFromEnum(self.session.currentCore())) {
+            try self.session.switchTo(@enumFromInt(index));
             std.mem.swap(?elf.Image, &self.image, &self.other_image);
             std.mem.swap(Temporary, &self.temporary, &self.other_temporary);
         }
-        const view = self.session.view();
-        try out.print("Core {d}, ", .{self.session.index});
+        const view = try self.session.view(self.session.currentCore());
+        try out.print("Core {d}, ", .{@intFromEnum(self.session.currentCore())});
         try session_report.line(view, self.image, try view.register(.pc), out);
     }
 
-    fn resolve(self: *const ZigScript, text: []const u8) !u32 {
-        return session_place.resolve(self.session.view(), self.image, text);
+    fn resolve(self: *ZigScript, text: []const u8) !u32 {
+        return session_place.resolve(try self.session.view(self.session.currentCore()), self.image, text);
     }
 
     fn setBreak(self: *ZigScript, at: commands.At, temporary: bool, out: anytype) !void {
         const address = try self.resolve(at.place) & ~@as(u32, 1);
-        const id = try self.session.machine.addBreak(.{ .address = address, .arrival = at.arrival });
+        const id = try self.session.setBreakpoint(self.session.currentCore(), .{ .address = address, .arrival = at.arrival });
         if (temporary) try self.temporary.append(id);
         try out.print("{s} {d} at ", .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id });
         try session_report.where(self.image, address, out);
@@ -93,16 +93,13 @@ pub const ZigScript = struct {
     fn setWatch(self: *ZigScript, want: commands.Watch, out: anytype) !void {
         const address = try self.resolve(want.place);
         const span = try watch_table.Watch.span(address, session.limits.watch_bytes, want.kind);
-        const id = try self.session.machine.addWatch(span);
+        const id = try self.session.setWatchpoint(self.session.currentCore(), span);
         try out.print("Watchpoint {d} ({s}) at 0x{X:0>8}\n", .{ id, @tagName(want.kind), address });
     }
 
     fn deleteBreak(self: *ZigScript, id: break_table.Id, out: anytype) !void {
-        const machine = self.session.machine;
-        machine.breaks.remove(id) catch |err| {
-            machine.watches.remove(id) catch return err;
-            return out.print("Deleted watchpoint {d}\n", .{id});
-        };
+        const removed = try self.session.removePoint(self.session.currentCore(), id);
+        if (removed == .watchpoint) return out.print("Deleted watchpoint {d}\n", .{id});
         self.forget(id);
         try out.print("Deleted breakpoint {d}\n", .{id});
     }
@@ -113,15 +110,16 @@ pub const ZigScript = struct {
     }
 
     /// Run under `command` and say how it ended, in session.zig's words.
-    fn go(self: *ZigScript, command: zig_session.Command, out: anytype) !void {
-        const ended = try self.session.go(command);
-        const view = self.session.view();
+    fn go(self: *ZigScript, command: session_api.Run, out: anytype) !void {
+        const core = self.session.currentCore();
+        const ended = try self.session.run(core, command);
+        const view = try self.session.view(core);
         const pc = try view.register(.pc);
-        try self.session.machine.itm.flush(out, false);
+        try self.session.flushItm(core, out, false);
         const stop = switch (ended) {
             .stop => |why| why,
             .count => {
-                try out.print("Budget of {d} instructions spent at ", .{self.session.budget});
+                try out.print("Budget of {d} instructions spent at ", .{self.session.live.budget});
                 try session_report.where(self.image, pc, out);
                 return out.print("\n", .{});
             },
@@ -133,7 +131,7 @@ pub const ZigScript = struct {
         };
         const temporary = stop == .breakpoint and std.mem.indexOfScalar(break_table.Id, self.temporary.constSlice(), stop.breakpoint) != null;
         if (temporary) {
-            try self.session.machine.breaks.remove(stop.breakpoint);
+            try self.session.clearBreakpoint(core, stop.breakpoint);
             self.forget(stop.breakpoint);
         }
         try session_report.prefix(out, stop, temporary);

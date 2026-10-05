@@ -13,7 +13,7 @@ const std = @import("std");
 const debug_session = @import("session.zig");
 const watch_table = @import("watch_table.zig");
 const zig_drive = @import("zig_drive.zig");
-const zig_session = @import("zig_session.zig");
+const session_api = @import("session_api.zig");
 
 pub const Error = error{NoSpace};
 
@@ -25,7 +25,7 @@ const sigsegv: u8 = 0x0b;
 
 /// The Zig session gdb drives, with why it last stopped.
 pub const Target = struct {
-    session: *zig_session.ZigSession,
+    session: *session_api.Session,
     /// Asked between budgets while a continue runs; null runs one budget.
     poll: ?debug_session.Poll = null,
     last: ?zig_drive.Ended = null,
@@ -47,7 +47,7 @@ pub fn handles(request: []const u8) bool {
 pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     if (std.mem.eql(u8, request, "vCont?")) return copy(out, vcont_actions);
     if (std.mem.startsWith(u8, request, "vCont;")) return vcont(target, request["vCont;".len..], out);
-    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (target.session.other == null) "m1" else "m1,2");
+    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (!target.session.hasCore(.cpu1)) "m1" else "m1,2");
     if (std.mem.eql(u8, request, "qsThreadInfo")) return copy(out, "l");
     if (std.mem.eql(u8, request, "qC")) return print(out, "QC{d}", .{thread(target)});
     return switch (request[0]) {
@@ -75,15 +75,16 @@ fn vcont(target: *Target, actions: []const u8, out: []u8) Error![]const u8 {
     };
 }
 
-fn resume_(target: *Target, command: zig_session.Command, out: []u8) Error![]const u8 {
-    var ended = target.session.go(command) catch return copy(out, request_error);
+fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u8 {
+    var ended = target.session.run(target.session.currentCore(), command) catch return copy(out, request_error);
     while (command == .cont and ended == .count) {
         const poll = target.poll orelse break;
         if (poll.check(poll.context)) {
-            ended = .{ .stop = target.session.machine.interrupt() };
+            const stopped = target.session.interrupt(target.session.currentCore()) catch return copy(out, request_error);
+            ended = .{ .stop = stopped };
             break;
         }
-        ended = target.session.go(.cont) catch return copy(out, request_error);
+        ended = target.session.run(target.session.currentCore(), .cont) catch return copy(out, request_error);
     }
     target.last = ended;
     return stopReply(target, out);
@@ -108,7 +109,7 @@ fn stopReply(target: *Target, out: []u8) Error![]const u8 {
 /// gdb names a watch by what it was set to catch, so the kind comes from
 /// the table when the watch is still there.
 fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
-    const kind = if (target.session.machine.watches.get(hit.id)) |watch| watch.kind else switch (hit.access) {
+    const kind = (target.session.watchKind(target.session.currentCore(), hit.id) catch null) orelse switch (hit.access) {
         .read => watch_table.Kind.read,
         .write => watch_table.Kind.write,
     };
@@ -121,7 +122,7 @@ fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
 
 /// The selected core's thread id: CPU0 is 1, CPU1 is 2.
 fn thread(target: *const Target) u32 {
-    return @as(u32, target.session.index) + 1;
+    return @as(u32, @intFromEnum(target.session.currentCore())) + 1;
 }
 
 /// Thread `0` and `-1` mean any thread, so the selected one stands.
@@ -133,7 +134,7 @@ fn anyThread(text: []const u8) bool {
 fn alive(target: *const Target, text: []const u8) bool {
     if (anyThread(text)) return true;
     const id = std.fmt.parseInt(u32, text, 16) catch return false;
-    return id == 1 or (id == 2 and target.session.other != null);
+    return id == 1 or (id == 2 and target.session.hasCore(.cpu1));
 }
 
 /// Give the session to the core behind thread `text`; false when there is none.
@@ -141,7 +142,7 @@ fn select(target: *Target, text: []const u8) bool {
     if (!alive(target, text)) return false;
     if (anyThread(text)) return true;
     const id = std.fmt.parseInt(u8, text, 16) catch return false;
-    target.session.switchTo(id - 1) catch return false;
+    target.session.switchTo(@enumFromInt(id - 1)) catch return false;
     return true;
 }
 

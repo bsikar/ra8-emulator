@@ -85,9 +85,9 @@ fn zig(into: *std.ArrayList(u8)) !void {
     var cpu: Cpu = .{ .bus = memory.view() };
     cpu.regs.xpsr = ra8.core.cpu.regs.xpsr_bits.thumb;
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = image.budget } };
-    target.session.core.setRegister(.sp, image.stack);
-    target.session.core.setRegister(.pc, image.reset & ~@as(u32, 1));
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = image.budget } } };
+    target.session.live.core.setRegister(.sp, image.stack);
+    target.session.live.core.setRegister(.pc, image.reset & ~@as(u32, 1));
     try play(&target, into);
 }
 
@@ -128,7 +128,7 @@ test "a command the Zig core does not carry out yet says so" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
     _ = try target.apply(.{ .halting = true }, out.writer());
@@ -139,7 +139,7 @@ test "core 1 with no second core says so and the session carries on" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
     try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, out.writer()));

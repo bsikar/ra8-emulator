@@ -96,9 +96,9 @@ fn zig(into: *std.ArrayList(u8)) !void {
     var rig: Rig = .{};
     rig.wire();
     @memcpy(rig.memory.sram[0..image.bytes.len], &image.bytes);
-    var target: zig_script.ZigScript = .{ .session = .{ .core = .{ .cpu = &rig.cpu }, .machine = &rig.machine, .budget = image.budget, .watch = &rig.watching } };
-    target.session.core.setRegister(.sp, image.stack);
-    target.session.core.setRegister(.pc, image.reset & ~@as(u32, 1));
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &rig.cpu }, .machine = &rig.machine, .budget = image.budget, .watch = &rig.watching } } };
+    target.session.live.core.setRegister(.sp, image.stack);
+    target.session.live.core.setRegister(.pc, image.reset & ~@as(u32, 1));
     try play(&target, into);
 }
 
