@@ -89,6 +89,12 @@ pub const Gauge = struct {
         return gauge;
     }
 
+    /// The part as it comes up when plugged in: a default battery behind a
+    /// seeded register file, not the zeroed file `.{}` leaves.
+    pub fn powerOn() Gauge {
+        return init(.{}) catch unreachable;
+    }
+
     pub fn quiet(self: *const Gauge) bool {
         return self.reads == 0 and self.writes == 0 and self.read_only == 0 and
             self.misaligned == 0 and self.unmapped == 0 and self.resets == 0 and

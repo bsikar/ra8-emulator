@@ -67,7 +67,8 @@ fn Owned(comptime State: type) type {
 }
 
 /// A part with a default state and a `device()` on the I2C seam, moved to
-/// the endpoint's address.
+/// the endpoint's address. A part whose register file has a power-on state
+/// declares `powerOn`, so a plugged gauge reads a battery rather than zeros.
 fn I2cPart(comptime Part: type) type {
     return struct {
         fn model(comptime name: []const u8) catalog.Model {
@@ -76,7 +77,7 @@ fn I2cPart(comptime Part: type) type {
 
         fn create(allocator: std.mem.Allocator) catalog.Error!*anyopaque {
             const part = try allocator.create(Part);
-            part.* = .{};
+            part.* = if (@hasDecl(Part, "powerOn")) Part.powerOn() else .{};
             return part;
         }
 

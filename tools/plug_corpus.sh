@@ -14,7 +14,11 @@
 # `battery: soc=N% chg=Y|N PASS`, and halts with `battery: NAK (no fuel
 # gauge)` on a NACK. The clean row is the control; the unplug row runs
 # tools/plug/gauge_unplug.txt, so the firmware's own NAK line shows that
-# it saw the part leave mid-run.
+# it saw the part leave mid-run. The replug rows start the battery at 40%
+# and swap the gauge between two reads (tools/plug/gauge_replug.txt): the
+# demo halts on its first NACK, so it never sees the gap, but its last line
+# reads the fresh part's power-on 72% instead of 40%, so it saw the part
+# come back.
 #
 # Runs on the Zig core. Exits 1 on any difference. Update the expected file
 # in the same PR as a change that means to move a row.
@@ -36,7 +40,7 @@ fi
 
 row() {
     local name=$1 file=$2 out console stop
-    local args=("$image" --click --run-for 3s)
+    local args=("$image" --click --run-for 3s "${@:3}")
     [ "$file" != - ] && args+=(--faults "$here/plug/$file")
     out=$("$emulator" "${args[@]}" </dev/null 2>&1 || true)
     console=$(grep -m1 '^SCI console:' <<<"$out" | sed 's/.*last "\(.*\)"/\1/')
@@ -49,5 +53,7 @@ actual=$(
     echo '|---|---|---|'
     row none -
     row gauge_unplug gauge_unplug.txt
+    row battery_40 - --battery 40
+    row battery_40_replug gauge_replug.txt --battery 40
 )
 diff -u "$here/plug_expected.md" <(printf '%s\n' "$actual")

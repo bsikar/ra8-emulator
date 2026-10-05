@@ -49,3 +49,15 @@ test "binding a part the board holds leaves it the one that answers" {
     try std.testing.expectEqual(lsm6dso.identity, byte[0]);
     try std.testing.expect(held.reads != 0 or held.writes != 0 or !held.quiet());
 }
+
+test "a made gauge comes up at power-on, not zeroed" {
+    const allocator = std.testing.allocator;
+    const made = try parts.all.make(allocator, parts.gauge_name, try endpoint.parse("i2c:touch@0x36"));
+    defer catalog.Catalog.destroy(allocator, made);
+    const gauge: *const max17048.Gauge = @ptrCast(@alignCast(made.state));
+    const soc: u16 = @as(u16, max17048.cell.default_soc) << max17048.cell.percent_shift;
+    try std.testing.expectEqual(soc, gauge.word(max17048.reg.soc));
+    try std.testing.expectEqual(max17048.cell.vcell, gauge.word(max17048.reg.vcell));
+    const rate: u16 = @bitCast(-max17048.cell.crate_magnitude);
+    try std.testing.expectEqual(rate, gauge.word(max17048.reg.crate));
+}
