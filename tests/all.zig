@@ -66,6 +66,7 @@ test {
     _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("gui/draw_list_test.zig");
+    _ = @import("gui/triple_buffer_test.zig");
     _ = @import("gui/raster_test.zig");
     _ = @import("gui/font_test.zig");
     _ = @import("gui/headless_test.zig");

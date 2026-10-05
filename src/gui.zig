@@ -16,3 +16,4 @@ pub const camera_device_row = @import("gui/camera_device_row.zig");
 pub const camera_media_row = @import("gui/camera_media_row.zig");
 pub const camera_thumb = @import("gui/camera_thumb.zig");
 pub const host_loop = @import("gui/host_loop.zig");
+pub const triple_buffer = @import("gui/triple_buffer.zig");
