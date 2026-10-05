@@ -41,8 +41,6 @@ pub const Parts = struct {
     pacing: pend_pace.Pace = .{},
     mask_pacing: mask_pace.Pace = .{},
     hits: pc_hits.Hits = .{},
-    /// The BusFaults a `--bus-errors` run raised; src/core/bus_error.zig.
-    bus_tally: bus_fault.Tally = .{},
 
     /// The profile table, fed from the Zig core's retire path (RA8EMU-592).
     pub fn prepareProfile(self: *Parts, image: elf.Image) void {
