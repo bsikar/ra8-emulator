@@ -10,6 +10,8 @@ const cpu_mod = @import("../core/cpu/cpu.zig");
 const dispatch = @import("../core/cpu/exception/dispatch.zig");
 const watch_bus = @import("watch_bus.zig");
 const zig_cycles = @import("zig_cycles.zig");
+/// Re-exported for tests/debug/zig_monitor_test.zig.
+pub const zig_monitor = @import("zig_monitor.zig");
 
 /// How a driven run ended.
 pub const Ended = union(enum) {
@@ -62,7 +64,10 @@ pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
         if (clock) |counting| counting.tick(core, machine);
         const now = event(core);
-        if (machine.onInstruction(now)) |why| {
+        const stop = machine.onInstruction(now);
+        // A unit event with halting off pends DebugMonitor, as step_hook does.
+        zig_monitor.take(core, machine);
+        if (stop) |why| {
             if (clock) |counting| counting.halted(core, machine, why);
             return .{ .stop = why };
         }
