@@ -212,6 +212,12 @@ test "the counter lands where the architecture says after a long chunk" {
     try std.testing.expectEqual(Wrapped{ .value = 99, .periods = 1 }, wrap(10, 99, 11));
     try std.testing.expectEqual(Wrapped{ .value = 98, .periods = 1 }, wrap(10, 99, 12));
     try std.testing.expectEqual(Wrapped{ .value = 99, .periods = 2 }, wrap(10, 99, 111));
+    // Zero is reached on the CVR-th tick (RA8EMU-657).
+    try std.testing.expectEqual(Wrapped{ .value = 0, .periods = 1 }, wrap(10, 99, 10));
+    // From a written zero the first tick only reloads; zero comes a period later.
+    try std.testing.expectEqual(Wrapped{ .value = 99, .periods = 0 }, wrap(0, 99, 1));
+    try std.testing.expectEqual(Wrapped{ .value = 0, .periods = 1 }, wrap(0, 99, 100));
+    try std.testing.expectEqual(Wrapped{ .value = 99, .periods = 1 }, wrap(0, 99, 101));
 }
 
 test "an armed SysTick asks for a boundary one period wide" {

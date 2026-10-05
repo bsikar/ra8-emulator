@@ -17,14 +17,15 @@ fn tree(divcr2: u16) rate.Inputs {
 }
 
 test "the bring-up dividers put the same counter's wrap four times later on CPU1" {
-    const counter = due.Counter{ .csr = running, .rvr = 999, .cvr = 999 };
+    // Armed as firmware arms it, CVR cleared: zero comes a full period in (RA8EMU-657).
+    const counter = due.Counter{ .csr = running, .rvr = 999, .cvr = 0 };
     try std.testing.expectEqual(@as(?u64, 1_000), due.coreDueNs(tree(0x2020), .cpu0, counter, 0));
     try std.testing.expectEqual(@as(?u64, 4_000), due.coreDueNs(tree(0x2020), .cpu1, counter, 0));
 }
 
 test "different dividers on each core move each wrap with its own clock" {
     // CPU0 /2 at 500 MHz, CPU1 /4 at 250 MHz.
-    const counter = due.Counter{ .csr = running, .rvr = 499, .cvr = 499 };
+    const counter = due.Counter{ .csr = running, .rvr = 499, .cvr = 0 };
     try std.testing.expectEqual(@as(?u64, 5_000 + 1_000), due.coreDueNs(tree(0x0021), .cpu0, counter, 5_000));
     try std.testing.expectEqual(@as(?u64, 5_000 + 2_000), due.coreDueNs(tree(0x0021), .cpu1, counter, 5_000));
 }

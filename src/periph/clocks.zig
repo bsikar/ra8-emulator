@@ -160,15 +160,16 @@ pub const Clocks = struct {
     }
 
     /// How many instructions until the armed counter next wraps, or zero
-    /// when it never will. A counter at CVR wraps on its CVR + 1st tick
-    /// (`wrap`), so this, not `period()`, is the edge a sleeping stretch may
+    /// when it never will. A counter at CVR reaches zero on its CVR-th tick,
+    /// or a full period after it was left at zero (`wrap`, RA8EMU-657), so
+    /// this, not `period()`, is the edge a sleeping stretch may
     /// widen to: a stretch sized by the full period from a counter already
     /// part way down overshoots the next wrap and, run after run, swallows
     /// one (RA8EMU-618).
     pub fn untilWrap(self: *const Clocks, core: anytype) u32 {
         if (self.period(core) == 0) return 0;
         const current = (core.readWord(self.words.cvr) catch return 0) & counter_mask;
-        return current + 1;
+        return if (current != 0) current else self.period(core);
     }
 
     /// Charge `instructions` worth of time. `core` is anything that can read
@@ -246,14 +247,18 @@ pub const Clocks = struct {
 pub const Wrapped = struct { value: u32, periods: u64 };
 
 /// Where a counter at `current` lands after `count` ticks, and how many times
-/// it passed zero on the way. The counter spends one tick at zero before it
-/// reloads, so a period is reload + 1 ticks long.
+/// it reached zero on the way. Per the Armv8-M SysTick description (Arm
+/// Cortex-M85 and M33 Generic User Guides, "System timer, SysTick"), the
+/// counter counts down to zero, reloads from RVR on the next tick, and sets
+/// COUNTFLAG when it transitions to zero. So a period is reload + 1 ticks,
+/// a counter at CVR > 0 first reaches zero on its CVR-th tick, and a counter
+/// at zero (CVR written, which also clears COUNTFLAG) only reloads on its
+/// first tick and first reaches zero a full period later (RA8EMU-657).
 pub fn wrap(current: u32, reload: u32, count: u32) Wrapped {
-    if (count <= current) return .{ .value = current - count, .periods = 0 };
     const period: u64 = @as(u64, reload) + 1;
+    const first: u64 = if (current != 0) current else period;
+    const periods: u64 = if (count < first) 0 else 1 + (@as(u64, count) - first) / period;
+    if (count <= current) return .{ .value = current - count, .periods = periods };
     const past: u64 = @as(u64, count) - current - 1;
-    return .{
-        .value = reload - @as(u32, @intCast(past % period)),
-        .periods = 1 + past / period,
-    };
+    return .{ .value = reload - @as(u32, @intCast(past % period)), .periods = periods };
 }

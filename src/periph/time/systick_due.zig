@@ -3,9 +3,9 @@
 //!
 //! A SysTick tick is a core clock cycle, and each core is clocked through
 //! its own SCKDIVCR2 nibble, so the same CVR wraps at different times on
-//! CPU0 and CPU1. The counter spends one tick at zero before it reloads
-//! (clocks.wrap), so a timer at CVR wraps on its CVR + 1st tick, and that
-//! tick ends (CVR + 1) * 1e9 / hz ns from now. The answer is rounded up to
+//! CPU0 and CPU1. A counter reaches zero on its CVR-th tick, or a full
+//! period (RVR + 1 ticks) after it was left at zero (clocks.wrap,
+//! RA8EMU-657), and that tick ends ticks * 1e9 / hz ns from now. The answer is rounded up to
 //! the first whole nanosecond the wrap has happened by, the same instant
 //! TimeBase.cyclesUntil counts to.
 //!
@@ -28,7 +28,8 @@ pub fn dueNs(counter: Counter, now_ns: u64, hz: u64) ?u64 {
     if (counter.csr & clocks.csr_enable == 0) return null;
     if (counter.rvr & clocks.counter_mask == 0) return null;
     if (hz == 0) return null;
-    const ticks: u64 = @as(u64, counter.cvr & clocks.counter_mask) + 1;
+    const cvr: u64 = counter.cvr & clocks.counter_mask;
+    const ticks: u64 = if (cvr != 0) cvr else @as(u64, counter.rvr & clocks.counter_mask) + 1;
     return now_ns + divCeil(ticks * ns_per_s, hz);
 }
 
