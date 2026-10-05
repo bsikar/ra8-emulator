@@ -13,6 +13,7 @@ const cli = @import("cli.zig");
 const zig_run = @import("zig_run.zig");
 const window_pace = @import("window_pace.zig");
 const window_run = @import("window_run.zig");
+const window_stills = @import("window_stills.zig");
 const platform = @import("../../gui/platform.zig");
 
 /// One 60 Hz frame, in ns of core time.
@@ -59,8 +60,12 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     };
     defer how.close();
     var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz) };
+    var stills_dir = try window_stills.openDir(args.options.frames.window_stills);
+    defer if (stills_dir) |*dir| dir.close();
+    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .dir = stills_dir orelse std.fs.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
+    const shown = if (stills_dir != null) recorder.platform() else window;
     var live = Live{ .args = args, .pacer = &pacer };
-    _ = try window_run.show(allocator, window, args.board, &pacer, live.engine());
+    _ = try window_run.show(allocator, shown, args.board, &pacer, live.engine());
     return live.code;
 }
 

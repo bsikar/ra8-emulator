@@ -10,6 +10,10 @@ pub const Options = struct {
     settle_window_ns: u64 = 50_000_000,
     /// `--gui`: show the run live in the host window (RA8EMU-646).
     live: bool = false,
+    /// `--window-stills DIR`: keep numbered PNGs of the window (RA8EMU-500).
+    window_stills: ?[]const u8 = null,
+    /// `--window-stills-every N`: keep frame 0 and every Nth after it.
+    window_stills_every: u32 = 1,
 };
 
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
@@ -26,6 +30,11 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.settle_window_ns = std.math.mul(u64, millis, 1_000_000) catch return error.BadValue;
     } else if (std.mem.eql(u8, flag, "--gui")) {
         options.live = true;
+    } else if (std.mem.eql(u8, flag, "--window-stills")) {
+        options.window_stills = try world_flags.next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--window-stills-every")) {
+        options.window_stills_every = try std.fmt.parseInt(u32, try world_flags.next(argv, index), 10);
+        if (options.window_stills_every == 0) return error.BadValue;
     } else if (std.mem.eql(u8, flag, "--frames-every")) {
         options.frames_every = try std.fmt.parseInt(usize, try world_flags.next(argv, index), 10);
         if (options.frames_every == 0) return error.BadValue;
