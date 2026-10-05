@@ -21,6 +21,8 @@ pub const Kind = enum(u32) {
     time = 3,
     /// The board's timer units (RA8EMU-662).
     timers = 4,
+    /// The board's SCI channels and line buffer (RA8EMU-663).
+    serial = 5,
     _,
 };
 

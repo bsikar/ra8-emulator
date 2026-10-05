@@ -83,3 +83,25 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
         else => @compileError("a snapshot cannot hold " ++ @typeName(T)),
     }
 }
+
+/// `value`'s fields in declaration order, leaving out the ones named in
+/// `skip`: wiring such as a device or sink pointer that a struct of
+/// otherwise plain state carries.
+pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
+    inline for (@typeInfo(@TypeOf(value)).@"struct".fields) |field| {
+        if (comptime !named(field.name, skip)) try write(writer, @field(value, field.name));
+    }
+}
+
+/// Reads what `writeExcept` wrote over `out`; the skipped fields keep
+/// whatever `out` already held.
+pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
+    inline for (@typeInfo(@TypeOf(out.*)).@"struct".fields) |field| {
+        if (comptime !named(field.name, skip)) @field(out.*, field.name) = try read(field.type, cursor);
+    }
+}
+
+fn named(comptime name: []const u8, comptime list: anytype) bool {
+    inline for (list) |item| if (std.mem.eql(u8, name, item)) return true;
+    return false;
+}
