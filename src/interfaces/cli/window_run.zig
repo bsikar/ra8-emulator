@@ -11,6 +11,7 @@ const host_loop = @import("../../gui/host_loop.zig");
 const platform = @import("../../gui/platform.zig");
 const camera_devices = @import("../../gui/camera_devices.zig");
 const registry = @import("../../periph/camera/camera_registry.zig");
+const thread_priority = @import("../../gui/thread_priority.zig");
 
 /// Runs the emulation to its end. Its clock must charge `pacer`, as
 /// zig_run's Clock does when Ends.pace is set.
@@ -60,6 +61,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
 
 fn runThenFinish(engine: Engine, pacer: *window_pace.Pacer) void {
     defer pacer.finish();
+    if (thread_priority.raiseEngine() == .refused) std.debug.print("window: the host kept the engine thread at its normal priority\n", .{});
     engine.run(engine.ctx);
 }
 
