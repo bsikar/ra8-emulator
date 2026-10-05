@@ -47,6 +47,7 @@ test {
     _ = @import("gui/camera_panel_test.zig");
     _ = @import("gui/camera_switch_test.zig");
     _ = @import("gui/camera_open_test.zig");
+    _ = @import("gui/camera_devices_test.zig");
     _ = @import("gui/camera_view_test.zig");
     _ = @import("gui/camera_pane_test.zig");
     _ = @import("gui/host_loop_test.zig");
