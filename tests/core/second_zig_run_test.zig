@@ -111,6 +111,22 @@ test "an event INTSELR gives CPU1 pends CPU1's NVIC line and not CPU0's" {
     try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.nvic.ispr));
 }
 
+test "a CPU0-routed peripheral event pends CPU0 and not CPU1" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var store0 = try Store.init(null);
+    defer store0.deinit();
+    const cpu0: Guest = .{ .store = &store0 };
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    defer driver.close();
+
+    board.events.links[line] = routed;
+    try board.raise(cpu0, routed);
+    try std.testing.expectEqual(@as(u32, 1) << line, try cpu0.readWord(memmap.nvic.ispr));
+    try std.testing.expectEqual(@as(u32, 0), try driver.guest().readWord(memmap.nvic.ispr));
+}
+
 test "a DTCE slot on CPU1's table is served by DTC1" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
