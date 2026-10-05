@@ -25,6 +25,8 @@ pub const Shown = struct {
     frames: u32,
     /// The window closed before the run ended.
     closed: bool,
+    /// The most one board handoff to the window carried (RA8EMU-227).
+    snapshot_bytes: usize = 0,
 };
 
 /// Shows `board` in `window` while `engine` runs it, the camera pane
@@ -52,7 +54,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     }
     var frames: u32 = 0;
     while (try loop.tick(window, screen.run())) frames += 1;
-    return .{ .frames = frames, .closed = !ended(pacer) };
+    return .{ .frames = frames, .closed = !ended(pacer), .snapshot_bytes = screen.handoff.max_bytes.load(.monotonic) };
 }
 
 fn runThenFinish(engine: Engine, pacer: *window_pace.Pacer) void {

@@ -71,6 +71,9 @@ test "the window draws a frame per slice until the run ends" {
     // The tick on which the run ends still draws, so the window is left
     // showing the board as the run left it.
     try std.testing.expectEqual(shown.frames + 1, window.presents);
+    const board_view = ra8.board.report.frame_out.board_view;
+    const panel_bytes = @as(usize, board_view.panel_width) * board_view.panel_height * @sizeOf(u32);
+    try std.testing.expect(shown.snapshot_bytes >= panel_bytes);
     // The soaker sleeps, so board time, not retired instructions, is what
     // each frame's grant buys.
     try std.testing.expect(soak.board.time.base.now() >= shown.frames * per_frame);

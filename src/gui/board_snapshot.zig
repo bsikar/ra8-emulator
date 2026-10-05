@@ -33,6 +33,9 @@ pub const Handoff = struct {
     buffer: TripleBuffer(Snapshot) = .init(.{}),
     /// Bytes the last publish carried.
     last_bytes: usize = 0,
+    /// The most any one publish carried, for the end-of-run log. Atomic:
+    /// the window reads it while the engine may still be publishing.
+    max_bytes: std.atomic.Value(usize) = .init(0),
 
     pub fn init(allocator: std.mem.Allocator) Handoff {
         return .{ .allocator = allocator };
@@ -58,6 +61,7 @@ pub const Handoff = struct {
         slot.led_count = view.leds.len;
         self.buffer.publish();
         self.last_bytes = slot.bytes();
+        if (self.last_bytes > self.max_bytes.load(.monotonic)) self.max_bytes.store(self.last_bytes, .monotonic);
         return self.last_bytes;
     }
 
