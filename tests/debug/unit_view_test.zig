@@ -217,3 +217,20 @@ test "firmware clearing DEMCR.TRCENA with a byte store turns the DWT off" {
     _ = zig_drive.runWatched(core, &rig.machine, 2, &rig.watching);
     try std.testing.expect(!rig.machine.dwt.trcena);
 }
+
+// str r1,[r0,#8] (FP_COMP0); str r2,[r0] (FP_CTRL); nop x4. FPB at +6, break at +8.
+test "with halting debug off and MON_EN set, an FPB match pends DebugMonitor and latches DFSR" {
+    var rig: Rig = .{};
+    rig.machine.halting = false;
+    const core = rig.wire(&[_]u8{ 0x81, 0x60, 0x02, 0x60, 0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF });
+    std.mem.writeInt(u32, rig.memory.scs[dcb.demcr_address - layout.scs ..][0..4], dcb.demcr_bits.mon_en, .little);
+    core.setRegister(.r0, fpb.base);
+    core.setRegister(.r1, (layout.code + 6) | fpb.comp_enable);
+    core.setRegister(.r2, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    _ = try rig.machine.breaks.add(.{ .address = layout.code + 8 });
+    const ended = rig.run(core);
+    try std.testing.expect(ended.stop == .breakpoint);
+    try std.testing.expectEqual(layout.code + 8, core.register(.pc));
+    try std.testing.expect(try core.readWord(dcb.demcr_address) & dcb.demcr_bits.mon_pend != 0);
+    try std.testing.expect(try core.readWord(dcb.dfsr_address) & dcb.dfsr_bits.bkpt != 0);
+}
