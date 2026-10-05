@@ -1,6 +1,7 @@
 //! Covers src/gui/host_loop.zig: a short run through the headless window
 //! presents the board view and the camera pane, stops when the run ends or
 //! the window closes, and lets a click on the pane swap the camera source.
+//! A click on a console tab shows that channel.
 const std = @import("std");
 const ra8 = @import("ra8");
 const host_loop = ra8.gui.host_loop;
@@ -262,4 +263,23 @@ test "the chosen clip's preview shows while the video source is up" {
     try window.feed(press(layout().source(.gradient)));
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expect(loop.thumb == null);
+}
+
+test "a click on a console tab shows that channel's log" {
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    var logs: [3]ra8.gui.console_log.Log = undefined;
+    for (&logs) |*log| log.* = .init(std.testing.allocator, 4);
+    defer for (&logs) |*log| log.deinit();
+    // The fake board is 2x2, so its strip is narrower than one tab: tab 0 it is.
+    loop.useConsoles(&logs, 2);
+    const size = board_view.size(2, 2);
+    const strip = ra8.gui.console_pane.under(size.width, size.height, 128);
+    try window.feed(press(.{ .x = strip.x, .y = strip.y, .w = 1, .h = 1 }));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(usize, 0), loop.channel);
+    try std.testing.expectEqual(&logs[0], loop.console.?);
 }

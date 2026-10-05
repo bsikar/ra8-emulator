@@ -17,6 +17,7 @@ const camera_pane = @import("camera_pane.zig");
 const console_pane = @import("console_pane.zig");
 const console_log = @import("console_log.zig");
 const console_scroll = @import("console_scroll.zig");
+const console_pick = @import("console_pick.zig");
 const camera_view = @import("camera_view.zig");
 const camera_media = @import("camera_media.zig");
 const camera_thumb = @import("camera_thumb.zig");
@@ -107,6 +108,10 @@ pub const Loop = struct {
     project: ?std.fs.Dir = null,
     /// The console the pane under the board shows; null shows none.
     console: ?*const console_log.Log = null,
+    /// Every channel's console the pane's tabs pick from, and the one shown;
+    /// empty shows `console` with no tabs.
+    consoles: []const console_log.Log = &.{},
+    channel: usize = 0,
     /// The devices pane under the camera's media row (RA8EMU-703) and the
     /// post its clicks queue on; null shows no pane.
     plugs: ?*devices_panel.Panel = null,
@@ -259,7 +264,8 @@ pub const Loop = struct {
                 .quit => self.quit = true,
                 .pointer => |at| self.pointer = .{ .x = at.x, .y = at.y },
                 .wheel => |turn| self.wheel(turn.dy, consoleArea(window, before)),
-                else => if (!self.pane.handle(event)) self.clickDevices(event, window.size()),
+                else => if (!self.pane.handle(event) and !self.clickConsole(event, consoleArea(window, before)))
+                    self.clickDevices(event, window.size()),
             }
         }
         self.settleRefused();
@@ -279,6 +285,22 @@ pub const Loop = struct {
         return running;
     }
 
+    /// Shows `logs[channel]`, with a tab per log to pick another.
+    pub fn useConsoles(self: *Loop, logs: []const console_log.Log, channel: usize) void {
+        self.consoles = logs;
+        self.channel = channel;
+        self.console = &logs[channel];
+        self.scroll = .{};
+        self.scroll.follow(self.console.?);
+    }
+    fn clickConsole(self: *Loop, event: platform.Event, area: draw_list.Rect) bool {
+        if (event != .button or self.consoles.len == 0) return false;
+        const press = event.button;
+        if (!press.down or press.button != camera_pane.primary_button) return false;
+        const channel = console_pick.tabAt(area, self.consoles.len, press.x, press.y) orelse return false;
+        self.useConsoles(self.consoles, channel);
+        return true;
+    }
     fn wheel(self: *Loop, dy: f32, area: draw_list.Rect) void {
         const log = self.console orelse return;
         if (area.contains(self.pointer.x, self.pointer.y)) self.scroll.wheel(dy, log);
@@ -305,7 +327,10 @@ pub const Loop = struct {
         try self.pane.draw(&list);
         try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
         if (self.plugs) |panel| try devices_pane.draw(&list, self.devicesArea(size), panel.*);
-        if (self.console) |log| try console_pane.draw(&list, consoleArea(window, board), log, self.scroll.back);
+        const strip = consoleArea(window, board);
+        if (self.consoles.len > 0) try console_pick.draw(&list, strip, self.consoles, self.channel);
+        const lines = if (self.consoles.len > 0) console_pick.below(strip) else strip;
+        if (self.console) |log| try console_pane.draw(&list, lines, log, self.scroll.back);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);
     }
