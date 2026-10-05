@@ -88,6 +88,7 @@ test {
     _ = @import("gui/camera_thumb_test.zig");
     _ = @import("gui/host_loop_test.zig");
     _ = @import("gui/thread_priority_test.zig");
+    _ = @import("gui/console_log_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");
