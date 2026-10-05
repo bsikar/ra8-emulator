@@ -389,3 +389,4 @@ pub fn reboots(out: Writer, pending: reboot.Reboot) !void {
 
 pub const gif = @import("gif.zig");
 pub const wav = @import("wav.zig");
+pub const audio_out = @import("audio_out.zig");
