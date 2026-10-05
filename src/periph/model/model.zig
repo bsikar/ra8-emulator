@@ -7,3 +7,4 @@ pub const request = @import("request.zig");
 pub const fault = @import("fault.zig");
 pub const fault_lines = @import("fault_lines.zig");
 pub const fault_spec = @import("fault_spec.zig");
+pub const fault_schedule = @import("fault_schedule.zig");

@@ -7,4 +7,5 @@ test {
     _ = @import("fault_test.zig");
     _ = @import("fault_lines_test.zig");
     _ = @import("fault_spec_test.zig");
+    _ = @import("fault_schedule_test.zig");
 }
