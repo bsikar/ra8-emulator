@@ -31,6 +31,8 @@ pub const Sdl = struct {
         errdefer c.SDL_DestroyWindow(window);
         const renderer = c.SDL_CreateRenderer(window, null) orelse return fail(Error.SdlRenderer);
         _ = c.SDL_SetRenderVSync(renderer, 1);
+        // Shifted characters reach the console pane as text events.
+        _ = c.SDL_StartTextInput(window);
         return .{ .window = window, .renderer = renderer };
     }
 
@@ -118,6 +120,7 @@ fn translate(ev: *const c.SDL_Event) ?Event {
             .height = @intCast(@max(ev.window.data2, 0)),
         } },
         c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{ .code = ev.key.key, .down = ev.key.down } },
+        c.SDL_EVENT_TEXT_INPUT => .{ .text = gui.platform.Text.of(std.mem.span(ev.text.text)) },
         c.SDL_EVENT_MOUSE_MOTION => .{ .pointer = .{ .x = @intFromFloat(ev.motion.x), .y = @intFromFloat(ev.motion.y) } },
         c.SDL_EVENT_MOUSE_BUTTON_DOWN, c.SDL_EVENT_MOUSE_BUTTON_UP => .{ .button = .{
             .button = ev.button.button,

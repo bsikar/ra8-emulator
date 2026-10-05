@@ -9,12 +9,12 @@ const std = @import("std");
 /// Bytes that can wait between two parks.
 pub const capacity: usize = 256;
 
-/// The byte an SDL3 key code types: printable ASCII is its own code (keys
-/// arrive unshifted, so letters are lower case), plus Enter, Backspace,
-/// Tab, Escape and Delete. Null for keys that type nothing.
+/// The byte a control key types: Enter (as CR), Backspace, Tab, Escape
+/// and Delete. Printable characters arrive as text events instead (so
+/// Shift works), and every other key types nothing.
 pub fn byteOf(code: u32) ?u8 {
     return switch (code) {
-        0x20...0x7E, 0x08, 0x09, 0x1B, 0x7F => @intCast(code),
+        0x08, 0x09, 0x1B, 0x7F => @intCast(code),
         0x0D => '\r',
         else => null,
     };

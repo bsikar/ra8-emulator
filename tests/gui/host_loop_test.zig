@@ -285,7 +285,7 @@ test "a click on a console tab shows that channel's log" {
     try std.testing.expectEqual(&logs[0], loop.console.?);
 }
 
-test "a key typed with the pointer over the console goes to the shown channel" {
+test "text and Enter typed with the pointer over the console go to the shown channel" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
@@ -297,15 +297,18 @@ test "a key typed with the pointer over the console goes to the shown channel" {
     var typed = ra8.gui.console_keys.Typed{};
     loop.useConsoles(&logs, 2);
     loop.typed = &typed;
-    try window.feed(.{ .key = .{ .code = 'x', .down = true } });
+    try window.feed(.{ .text = ra8.gui.platform.Text.of("X") });
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expectEqual(@as(usize, 0), typed.len);
     const size = board_view.size(2, 2);
     const strip = ra8.gui.console_pane.under(size.width, size.height, 128);
     try window.feed(.{ .pointer = .{ .x = strip.x + 1, .y = strip.y + 20 } });
     try window.feed(.{ .key = .{ .code = 'x', .down = true } });
-    try window.feed(.{ .key = .{ .code = 'x', .down = false } });
+    try window.feed(.{ .text = ra8.gui.platform.Text.of("X") });
+    try window.feed(.{ .key = .{ .code = 0x0D, .down = true } });
+    try window.feed(.{ .key = .{ .code = 0x0D, .down = false } });
     _ = try loop.tick(window.platform(), fake.run());
-    try std.testing.expectEqual(@as(usize, 1), typed.len);
-    try std.testing.expectEqual(ra8.gui.console_keys.Key{ .channel = 2, .byte = 'x' }, typed.pending[0]);
+    try std.testing.expectEqual(@as(usize, 2), typed.len);
+    try std.testing.expectEqual(ra8.gui.console_keys.Key{ .channel = 2, .byte = 'X' }, typed.pending[0]);
+    try std.testing.expectEqual(ra8.gui.console_keys.Key{ .channel = 2, .byte = '\r' }, typed.pending[1]);
 }

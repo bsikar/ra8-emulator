@@ -1,4 +1,4 @@
-//! Covers src/gui/console_keys.zig: key codes map to the bytes they type,
+//! Covers src/gui/console_keys.zig: control keys map to the bytes they type,
 //! queued bytes reach their channels oldest first, and past capacity the
 //! newest are dropped and counted.
 const std = @import("std");
@@ -19,11 +19,12 @@ const Sink = struct {
     }
 };
 
-test "key codes map to the bytes they type" {
-    try std.testing.expectEqual(@as(?u8, 'a'), console_keys.byteOf('a'));
-    try std.testing.expectEqual(@as(?u8, ' '), console_keys.byteOf(' '));
+test "control keys map to the bytes they type" {
     try std.testing.expectEqual(@as(?u8, '\r'), console_keys.byteOf(0x0D));
     try std.testing.expectEqual(@as(?u8, 0x08), console_keys.byteOf(0x08));
+    try std.testing.expectEqual(@as(?u8, 0x7F), console_keys.byteOf(0x7F));
+    // Printable characters come as text events, so their key codes type nothing.
+    try std.testing.expectEqual(@as(?u8, null), console_keys.byteOf('a'));
     // SDL3's arrow and function keys carry the scancode mask: they type nothing.
     try std.testing.expectEqual(@as(?u8, null), console_keys.byteOf(0x4000_004F));
     try std.testing.expectEqual(@as(?u8, null), console_keys.byteOf(0x80));

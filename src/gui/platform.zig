@@ -6,10 +6,30 @@ const raster = @import("raster.zig");
 
 pub const Size = struct { width: u32, height: u32 };
 
+/// Text the window typed (SDL text input: shifted and composed
+/// characters), first bytes of its UTF-8 kept.
+pub const Text = struct {
+    bytes: [8]u8 = undefined,
+    len: u8 = 0,
+
+    pub fn of(utf8: []const u8) Text {
+        var text = Text{};
+        const count = @min(utf8.len, text.bytes.len);
+        @memcpy(text.bytes[0..count], utf8[0..count]);
+        text.len = @intCast(count);
+        return text;
+    }
+
+    pub fn slice(self: *const Text) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
 pub const Event = union(enum) {
     quit,
     resize: Size,
     key: struct { code: u32, down: bool },
+    text: Text,
     pointer: struct { x: i32, y: i32 },
     button: struct { button: u8, down: bool, x: i32, y: i32 },
     wheel: struct { dx: f32, dy: f32 },

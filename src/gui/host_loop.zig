@@ -267,7 +267,9 @@ pub const Loop = struct {
                 .quit => self.quit = true,
                 .pointer => |at| self.pointer = .{ .x = at.x, .y = at.y },
                 .wheel => |turn| self.wheel(turn.dy, consoleArea(window, before)),
-                .key => |key| self.typeKey(key.code, key.down, consoleArea(window, before)),
+                .key => |key| if (key.down) if (console_keys.byteOf(key.code)) |byte|
+                    self.typeBytes(&.{byte}, consoleArea(window, before)),
+                .text => |text| self.typeBytes(text.slice(), consoleArea(window, before)),
                 else => if (!self.pane.handle(event) and !self.clickConsole(event, consoleArea(window, before)))
                     self.clickDevices(event, window.size()),
             }
@@ -305,13 +307,12 @@ pub const Loop = struct {
         self.useConsoles(self.consoles, channel);
         return true;
     }
-    /// A key pressed with the pointer over the console types into the
-    /// channel it shows.
-    fn typeKey(self: *Loop, code: u32, down: bool, area: draw_list.Rect) void {
+    /// Keys typed with the pointer over the console go to the channel it
+    /// shows.
+    fn typeBytes(self: *Loop, bytes: []const u8, area: draw_list.Rect) void {
         const typed = self.typed orelse return;
-        if (!down or !area.contains(self.pointer.x, self.pointer.y)) return;
-        const byte = console_keys.byteOf(code) orelse return;
-        typed.post(@intCast(self.channel), byte);
+        if (!area.contains(self.pointer.x, self.pointer.y)) return;
+        for (bytes) |byte| typed.post(@intCast(self.channel), byte);
     }
     fn wheel(self: *Loop, dy: f32, area: draw_list.Rect) void {
         const log = self.console orelse return;
