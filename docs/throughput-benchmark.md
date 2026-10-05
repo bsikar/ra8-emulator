@@ -1,10 +1,9 @@
 # CPU throughput benchmark
 
 `tools/bench_releasefast.sh` builds this emulator with `-Doptimize=ReleaseFast`
-and compares the Zig core with Unicorn on one ELF image. Both runs use the same
-instruction budget and image on the same host. The output reports net
-instructions per second for each backend, after subtracting each backend's
-zero-instruction load time. Do not use numbers from a Debug build.
+and times the Zig core on one ELF image for a fixed instruction budget. The
+output reports net milliseconds and instructions per second, after subtracting
+the zero-instruction load time. Do not use numbers from a Debug build.
 
 The initial corpus image is `secure_app_vault_kat.elf`, built from
 `examples/ek_ra8d2/hw_pending/secure_app_vault_kat` in
@@ -22,7 +21,7 @@ tools/bench_releasefast.sh /path/to/ra8-firmware/zig-out/arm/secure_app_vault_ka
 
 The tool prints the ELF's SHA-256 so results can be tied to the exact image.
 It also accepts an instruction budget and, when needed, a prefix containing
-Unicorn and Capstone:
+Capstone:
 
 ```sh
 tools/bench_releasefast.sh IMAGE 2000000 /path/to/deps
@@ -35,27 +34,16 @@ reproducible single-image benchmark for this ticket.
 It runs each image the way the corpus does: an ELF named `NAME_cpu1.elf` next
 to `NAME.elf` is passed as `--cpu1`, and `NAME_ns.elf` as `--ns`, so the
 dual-core and TrustZone images time both cores. Each figure is the minimum of
-several interleaved runs (three by default) because a short image's single run
+several runs (three by default) because a short image's single run
 varies by about a third:
 
 ```sh
 tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
 ```
 
-`--cpu unicorn` left main with RA8EMU-606, so the Unicorn column needs a
-reference (RA8EMU-611). Point `UNICORN_EMULATOR` at a build from before 606,
-or `UNICORN_BASELINE` at a file of `IMAGE.elf MILLISECONDS` lines holding net
-Unicorn time at the same budget. A pinned file only holds for the machine
-that measured it:
-
-```sh
-UNICORN_EMULATOR=/path/to/pre-606/ra8_emulator tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
-UNICORN_BASELINE=unicorn_ms.txt tools/bench_core.sh zig-out/bin/ra8_emulator DIR 4000000 3
-```
-
-The RA8EMU-12 speed budget (no slower than 2x Unicorn) is read from the total
-row of that table over a directory holding the corpus images and their
-companions.
+The RA8EMU-12 speed budget is read from the total row of that table over a
+directory holding the corpus images and their companions, compared with the
+same total on an earlier build of main on the same host.
 
 ## Which speed factors are reachable (RA8EMU-180)
 

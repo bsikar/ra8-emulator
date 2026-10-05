@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Brighton Sikarskie
 #
-# Build ReleaseFast and compare both CPU backends on one fixed ELF image.
+# Build ReleaseFast and time the Zig core on one fixed ELF image.
 # See docs/throughput-benchmark.md for the corpus image and procedure.
 #
 #   tools/bench_releasefast.sh IMAGE [INSTRUCTIONS] [DEPS_PREFIX]
