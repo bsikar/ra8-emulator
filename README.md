@@ -12,8 +12,8 @@ a pass here means the flashed firmware drove the hardware the way the
 silicon expects. The RA8P1 has no board on the bench, so for that part this
 emulator is the only way its firmware gets proven.
 
-The emulator is written in Zig, CPU included: our own Armv8-M core replaced
-Unicorn. Capstone (error-path disassembly) is the one C library still linked,
+The emulator is written in Zig, CPU included: the core is our own Armv8-M
+decoder and executor. Capstone (error-path disassembly) is the one C library still linked,
 until our own disassembler replaces it (see [Where it is going](#where-it-is-going)).
 
 ## Building
@@ -74,10 +74,10 @@ debugger is on the way (below).
 ## What is modelled
 
 **Cores.** CPU0 is the Cortex-M85 and CPU1 the Cortex-M33, sharing one bus and
-interleaved round robin at the chunk boundary. Unicorn tops out at Armv8.0-M,
-so the Armv8.1-M instructions the firmware actually uses are hand-stepped off
-the invalid-instruction hook: DLS/WLS/LE (`src/core/lob.zig`), the CSEL family
-(`src/core/csel.zig`) and BLXNS (`src/core/tz.zig`). SAU registers are recorded
+interleaved round robin at the chunk boundary. The Zig core decodes and steps
+the Armv8.1-M instructions the firmware actually uses, among them DLS/WLS/LE
+(`src/core/lob.zig`), the CSEL family (`src/core/csel.zig`) and BLXNS
+(`src/core/tz.zig`). SAU registers are recorded
 but attribution is not enforced yet, and the MPU enforces read-only regions
 only.
 
@@ -104,9 +104,9 @@ Non-secure, CPU0 and CPU1 stay coherent with no write hook in the store path.
 All work is focused on making the emulator complete, in four parallel tracks:
 
 - **Our own Zig CPU core.** One Armv8-M decoder and executor behind
-  `src/core/engine.zig`. It reached zero divergence from Unicorn in lockstep
-  across the example corpus, so lockstep is gone and Unicorn and Capstone are
-  being removed entirely.
+  `src/core/engine.zig`. It reached zero lockstep divergence across the
+  example corpus and is the only CPU backend; Capstone is the last C
+  dependency and goes once our own disassembler lands.
 - **Cortex-M85 and Cortex-M33, complete.** FPv5, MVE (Helium), tail
   predication, PACBTI and stack limits on CPU0; CPU1 with its own NVIC,
   SysTick, MPU and SCB; TrustZone enforced on both, and the full fault model.

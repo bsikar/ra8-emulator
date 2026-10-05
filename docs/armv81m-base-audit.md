@@ -12,8 +12,8 @@ Audited for RA8EMU-258.
 |---|---|---|---|
 | CLRM | clrm.zig | tests/core/cpu/ops/clrm_test.zig | RA8EMU-260 (done) |
 | VSCCLRM | vscclrm.zig | tests/core/cpu/ops/vscclrm_test.zig | RA8EMU-259 (veneer run waits on RA8EMU-293) |
-| CSEL, CSINC, CSINV, CSNEG, and the CSET, CSETM, CINC, CINV, CNEG aliases | csel.zig (shares src/core/csel.zig) | tests/core/cpu/ops/csel_test.zig | RA8EMU-250 (fold the Unicorn seam) |
-| LSLL, LSRL, ASRL by immediate | long_shift.zig | tests/core/cpu/ops/long_shift_test.zig | RA8EMU-138 (Unicorn side, lockstep) |
+| CSEL, CSINC, CSINV, CSNEG, and the CSET, CSETM, CINC, CINV, CNEG aliases | csel.zig (shares src/core/csel.zig) | tests/core/cpu/ops/csel_test.zig | RA8EMU-250 (done) |
+| LSLL, LSRL, ASRL by immediate | long_shift.zig | tests/core/cpu/ops/long_shift_test.zig | RA8EMU-138 (done) |
 | LSLL, ASRL by register | none | none | RA8EMU-136 |
 | UQSHL, SQSHL, URSHR, SRSHR, UQRSHL, SQRSHR | none | none | RA8EMU-137 |
 | UQSHLL, URSHRL, SRSHRL, SQSHLL, UQRSHLL, SQRSHRL | none | none | RA8EMU-139 |
