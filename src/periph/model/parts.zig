@@ -13,11 +13,13 @@ const gpio_parts = @import("../gpio/gpio_parts.zig");
 const lsm6dso = @import("../i3c/i3c_lsm6dso.zig");
 const max17048 = @import("../i3c/i3c_max17048.zig");
 const modem = @import("../modem/modem.zig");
+const esp_hosted = @import("../esp_hosted.zig");
 
 pub const imu_name = "lsm6dso";
 pub const gauge_name = "max17048";
 pub const panel_name = "eink";
 pub const modem_name = "modem";
+pub const c6_name = "c6";
 pub const button_name = "button";
 pub const led_name = "led";
 
@@ -29,6 +31,7 @@ const models = [_]catalog.Model{
     I2cPart(max17048.Gauge).model(gauge_name),
     ChannelPart(eink.Panel, .spi).model(panel_name),
     ChannelPart(modem.Modem, .uart).model(modem_name),
+    ChannelPart(esp_hosted.C6, .uart).model(c6_name),
     ChannelPart(gpio_parts.Button, .gpio).model(button_name),
     ChannelPart(gpio_parts.Led, .gpio).model(led_name),
 };

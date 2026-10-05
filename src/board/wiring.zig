@@ -107,7 +107,6 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.receiver.block());
     try self.bus.add(self.host.block());
     try self.bus.add(self.serial.block());
-    self.c6.init(&self.serial, &self.pins);
     try self.bus.add(self.spi.block());
     // The card is on Pmod2, which is SCI0 in Simple-SPI mode, not on a
     // SPI_B channel (src/periph/sd_card_line.zig).

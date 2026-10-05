@@ -54,7 +54,9 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     if (self.display.output.vsync) |*frame| frame.tick(self.time.base.now());
     core_clock.retune(self);
     try takeResetRequests(self, core);
-    self.c6.tick(&self.pins);
+    for (self.serial.channels) |channel| {
+        if (channel.device) |device| device.tick(&self.pins);
+    }
     self.console_input.poll(&self.serial);
     self.touch_input.poll(&self.wire.panel, &self.pins);
     self.input_script.dispatch(self.time.base.now(), &self.wire.panel, &self.pins, &self.touch_input);

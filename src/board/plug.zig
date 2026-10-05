@@ -15,6 +15,7 @@ const catalog = @import("../periph/model/catalog.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
 const parts = @import("../periph/model/parts.zig");
 const request = @import("../periph/model/request.zig");
+const profile = @import("profile.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
 const eink = @import("../periph/eink/eink.zig");
 const Board = @import("board.zig").Board;
@@ -24,7 +25,7 @@ pub const Error = error{ ChannelTaken, NothingFitted };
 /// The `--attach` asks, kept from before the board is wired until wiring
 /// plugs them after the fitted parts. Instances come from `arena`.
 pub const Asks = struct {
-    asked: [request.max]request.Request = undefined,
+    asked: [request.max + profile.max_fits]request.Request = undefined,
     count: usize = 0,
     arena: ?std.mem.Allocator = null,
     attached_eink: ?*eink.Panel = null,
@@ -48,7 +49,10 @@ pub fn all(board: *Board) !void {
             };
             continue;
         }
-        const made = try parts.all.make(arena, wanted.name, wanted.at);
+        const made = if (std.mem.eql(u8, wanted.name, parts.c6_name)) blk: {
+            if (wanted.at != .uart or wanted.at.uart.channel != 2) return catalog.Error.WrongEndpoint;
+            break :blk catalog.Instance{ .model = parts.all.find(parts.c6_name).?, .device = try parts.all.bind(parts.c6_name, &board.c6, wanted.at), .state = &board.c6 };
+        } else try parts.all.make(arena, wanted.name, wanted.at);
         const device = faulted(board, arena, made.device, wanted) catch |err| {
             std.debug.print("--fault {s}: not applied ({s})\n", .{ wanted.name, @errorName(err) });
             return err;
@@ -109,6 +113,7 @@ pub fn one(board: *Board, device: catalog.Device, at: endpoint.Endpoint) !void {
             if (at != .uart) return catalog.Error.WrongEndpoint;
             const unit = &board.serial.channels[at.uart.channel];
             if (unit.device != null) return Error.ChannelTaken;
+            part.connect(&board.pins);
             board.serial.attachDevice(at.uart.channel, part);
         },
         .gpio => |part| {

@@ -37,7 +37,11 @@ pub const C6 = struct {
     wire: link.Link = .{},
 
     pub fn init(self: *C6, serial: *sci.Sci, pins: *gpio.Gpio) void {
+        self.connect(pins);
         serial.attachDevice(channel, self.device());
+    }
+
+    pub fn connect(self: *C6, pins: *gpio.Gpio) void {
         self.pins = pins;
         pins.observe(self, pinChanged);
         pins.setInput(handshake_port, handshake_pin, true);
@@ -47,7 +51,17 @@ pub const C6 = struct {
     }
 
     pub fn device(self: *C6) sci.Device {
-        return .{ .context = self, .feedFn = feed, .spi_only = true };
+        return .{ .context = self, .feedFn = feed, .spi_only = true, .connectFn = connectDevice, .tickFn = tickDevice };
+    }
+
+    fn connectDevice(context: *anyopaque, pins: *gpio.Gpio) void {
+        const self: *C6 = @ptrCast(@alignCast(context));
+        self.connect(pins);
+    }
+
+    fn tickDevice(context: *anyopaque, pins: *gpio.Gpio) void {
+        const self: *C6 = @ptrCast(@alignCast(context));
+        self.tick(pins);
     }
 
     /// Track the external chip-select level and drive HANDSHAKE from it.

@@ -8,6 +8,8 @@ const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const usb_plug = @import("../../board/usb_plug.zig");
 const pacing = @import("../../periph/time/pacing.zig");
+const profile = @import("../../board/profile.zig");
+const request = @import("../../periph/model/request.zig");
 
 pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
     board.part = options.part;
@@ -20,7 +22,17 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     if (options.rtc_start) |at| board.clock.seed(at);
     if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
     board.time.soak.armed = options.run_for;
-    board.asks.keep(allocator, options.attaches[0..options.attach_count]);
+    const profile_fits = try loadProfile(allocator, options.board_profile);
+    var asks: [profile.max_fits + request.max]request.Request = undefined;
+    var count: usize = 0;
+    for (profile_fits.fits[0..profile_fits.count]) |fitted| {
+        if (options.detach_c6 and std.mem.eql(u8, fitted.name, "c6")) continue;
+        asks[count] = fitted;
+        count += 1;
+    }
+    @memcpy(asks[count .. count + options.attach_count], options.attaches[0..options.attach_count]);
+    count += options.attach_count;
+    board.asks.keep(allocator, asks[0..count]);
     if (options.usb_loop) board.usb.loopBack();
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
@@ -54,4 +66,13 @@ fn setBattery(board: *Board, options: cli.Options) !void {
         std.debug.print("--battery {d}: not a state-of-charge a cell can hold\n", .{options.battery.soc_pct});
         return err;
     };
+}
+
+/// Load a selected profile, or the shipped EK-RA8D2 default from the repo.
+fn loadProfile(allocator: std.mem.Allocator, path: ?[]const u8) !profile.Profile {
+    const profile_path = path orelse return profile.parse(@embedFile("../../board/ek_ra8d2.board"));
+    const file = try std.fs.cwd().openFile(profile_path, .{});
+    defer file.close();
+    const contents = try file.readToEndAlloc(allocator, 64 * 1024);
+    return profile.parse(contents);
 }
