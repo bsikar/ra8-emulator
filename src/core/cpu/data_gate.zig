@@ -10,9 +10,6 @@
 //! instruction executes: the fetch has its own check (INVEP, RA8EMU-359 and
 //! RA8EMU-273), and exception entry, vector reads and stacking run in the
 //! state they target, which RA8EMU-168 still has to switch.
-//!
-//! Unicorn keeps the core Secure (src/core/tz.zig), so there is nothing to
-//! enforce there; Non-secure execution happens on the Zig core only.
 const attribution = @import("attribution.zig");
 const banked = @import("../banked.zig");
 

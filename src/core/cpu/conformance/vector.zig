@@ -1,7 +1,6 @@
 //! A conformance vector: one encoding, one input, and the result the Arm ARM
 //! (DDI0553) pseudocode says that encoding must produce. The pseudocode is the
-//! oracle for everything Unicorn cannot check, which is all of Armv8.1-M, and
-//! these vectors stay after Unicorn is gone.
+//! oracle, Armv8.1-M included.
 //!
 //! A vector compares outputs bit for bit with `std.meta.eql`, so a float
 //! result is carried as its bit pattern, never as an `f32` or `f64`: a NaN

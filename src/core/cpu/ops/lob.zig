@@ -1,9 +1,7 @@
 //! Armv8.1-M low-overhead loops (T1): DLS, WLS and LE.
 //!
-//! The encoding and the loop step live in src/core/lob.zig, the seam the
-//! Unicorn backend steps off its invalid-instruction hook. This group reuses
-//! both, so the two backends cannot disagree about where the loop goes or
-//! what lands in LR (RA8EMU-239). DLS loads LR and falls through; WLS does the
+//! The encoding and the loop step live in src/core/lob.zig, and this group
+//! reuses both (RA8EMU-239). DLS loads LR and falls through; WLS does the
 //! same or skips the body on a zero count; LE decrements LR and branches back
 //! while it stays non-zero. None of the three writes flags.
 //!

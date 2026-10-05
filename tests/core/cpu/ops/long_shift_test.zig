@@ -72,11 +72,11 @@ test "the forms this slice leaves alone" {
     for (left) |pair| try std.testing.expect(long_shift.group.decode(wide(pair[0], pair[1])) == null);
 }
 
-test "the group is checked against Unicorn" {
+test "the group has a lockstep oracle" {
     try std.testing.expect(long_shift.group.oracle);
 }
 
-// Ported from tests/core/long_shift_test.zig (the Unicorn seam), run
+// Ported from tests/core/long_shift_test.zig (the old seam), run
 // against the core's groups (RA8EMU-252). The register, single-register
 // saturating and pair saturating cases sit in long_shift_reg_test.zig,
 // long_shift_sat_test.zig and long_shift_sat64_test.zig.

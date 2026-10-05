@@ -9,7 +9,7 @@
 //! after it has written VTOR_NS and set MSP_NS from the Non-Secure vector
 //! table.
 //!
-//! WHY IT IS NOT LEFT TO THE CPU MODEL. The pinned Unicorn does execute the
+//! WHY IT IS NOT LEFT TO THE CPU MODEL. An Armv8.0-M CPU model does execute the
 //! instruction: the branch lands, the stack banks, LR comes back 0xFEFFFFFF.
 //! What it cannot do is make the target Non-Secure. Its M33 has an SAU of
 //! its own, reached through the core rather than over the bus, and this
@@ -64,7 +64,7 @@ pub const encoding = struct {
     pub const register_mask: u16 = 0x0078;
     pub const register_shift: u4 = 3;
     /// Bit 0 of the target is clear on a real BLXNS and has to be set on a
-    /// program counter Unicorn is given, which reads it as the Thumb bit.
+    /// program counter, which reads it as the Thumb bit.
     pub const thumb: u32 = 1;
 };
 

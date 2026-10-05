@@ -2,8 +2,8 @@
 //!
 //! The core decides that an instruction faults; this file latches the UFSR
 //! bit in CFSR, routes the fault against SHCSR, SHPR1 and the execution
-//! priority with the same rules the Unicorn backend uses
-//! (src/periph/fault_route.zig), owes HFSR.FORCED when it escalates to
+//! priority with the rules in
+//! src/periph/fault_route.zig, owes HFSR.FORCED when it escalates to
 //! HardFault, and enters the handler with the faulting instruction stacked
 //! as the return address (or, for INVPC on a refused exception return,
 //! tail-chains it onto the frame the return left behind). A HardFault that cannot preempt either (FAULTMASK

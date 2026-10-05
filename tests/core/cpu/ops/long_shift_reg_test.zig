@@ -86,7 +86,7 @@ test "no earlier group claims the register forms" {
     }
 }
 
-test "the group is checked against Unicorn" {
+test "the group has a lockstep oracle" {
     try std.testing.expect(long_shift_reg.group.oracle);
 }
 

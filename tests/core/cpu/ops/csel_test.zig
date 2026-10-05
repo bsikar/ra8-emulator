@@ -1,6 +1,6 @@
 //! Covers src/core/cpu/ops/csel.zig.
 //!
-//! The second half ports tests/core/csel_test.zig (the Unicorn seam's decode
+//! The second half ports tests/core/csel_test.zig (the old seam's decode
 //! and tails) to run each case through the Zig core's decoder and executor
 //! instead (RA8EMU-250). The seam's step counter has no core counterpart and
 //! stays with the seam.

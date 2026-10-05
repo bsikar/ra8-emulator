@@ -1,15 +1,15 @@
-//! The Armv8.1-M scalar long shifts, for the Unicorn side.
+//! The Armv8.1-M scalar long shifts over a plain register file.
 //!
-//! Unicorn 2.1.4 knows no Armv8.1-M, and these encodings sit in what Armv7-M
+//! These encodings sit in what Armv7-M
 //! calls ORRS with a shifted register: Rm = PC for the immediate forms, Rm =
-//! SP for the register forms. The CPU model runs them as that ORRS, so the
+//! SP for the register forms. An Armv8.0-M model runs them as that ORRS, so the
 //! high word of every 64-bit multiply-by-constant, offset or base the
 //! compiler builds out of LSLL, LSRL or ASRL comes out as garbage.
 //!
 //! This file owns no semantics of its own. It asks the Zig core's four
 //! decoders (src/core/cpu/ops/long_shift*.zig) whether an encoding is
-//! theirs and runs their arithmetic over a plain register file, so both
-//! backends compute the same answer from one definition.
+//! theirs and runs their arithmetic over a plain register file, so there
+//! is one definition.
 const Instr = @import("cpu/instr.zig").Instr;
 const imm = @import("cpu/ops/long_shift.zig");
 const by_reg = @import("cpu/ops/long_shift_reg.zig");

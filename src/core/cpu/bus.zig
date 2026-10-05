@@ -2,8 +2,7 @@
 //!
 //! The core owns no memory. It reaches whatever the run hands it through this
 //! one interface: the board's RAM and peripheral bus in a real run, a flat
-//! array in a test. Unicorn keeps its own view of the same bytes, which is
-//! what lets a lockstep run compare the two.
+//! array in a test.
 const std = @import("std");
 const memmap = @import("../memmap.zig");
 const Gate = @import("data_gate.zig").Gate;

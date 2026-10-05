@@ -5,8 +5,7 @@
 //! and writes only through CPU1's memory.Guest (RA8EMU-535). The
 //! instructions themselves run on CPU1's Zig core
 //! (src/core/second_zig.zig), which takes one turn per CPU0 round. Turns
-//! are sized by CPUCLK1 against CPUCLK0 (src/core/core_rate.zig), exactly as
-//! on Unicorn. CPU1's own timebase (its SysTick) advances by what it ran.
+//! are sized by CPUCLK1 against CPUCLK0 (src/core/core_rate.zig). CPU1's own timebase (its SysTick) advances by what it ran.
 const std = @import("std");
 const elf = @import("elf.zig");
 const second_core = @import("second_core.zig");
@@ -86,7 +85,7 @@ pub const Driver = struct {
     }
 
     /// CPU1's turn for one CPU0 round of `round` instructions. A core that
-    /// has stopped stays stopped, the way a faulted Unicorn CPU1 does.
+    /// has stopped stays stopped.
     pub fn round(self: *Driver, round_size: u32) void {
         const second = &self.second;
         if (second.state.fault != null or self.held()) return;

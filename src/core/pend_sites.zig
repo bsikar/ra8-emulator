@@ -13,7 +13,7 @@
 //! says where the firmware WAS when a pend was taken, and reads as an
 //! answer to where a lift gave up without being one.
 //!
-//! A FIXED TABLE, not a map. This is written from inside Unicorn's
+//! A FIXED TABLE, not a map. This is written from inside the
 //! memory-write hook, which has no allocator and runs on every store the
 //! firmware makes to the register. A handful of slots covers every
 //! scheduler that writes `ICSR.PENDSVSET` by hand (ThreadX uses two), and

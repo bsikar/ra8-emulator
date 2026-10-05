@@ -6,10 +6,7 @@
 //! enforces through src/core/cpu/mpu_check.zig, which turns a refused access
 //! away before it reaches memory.
 //!
-//! This file was the Unicorn half: write, read and code hooks over every
-//! protected span, a translation-cache flush on each arm, and a MemManage
-//! synthesised at the chunk boundary. Unicorn is gone (RA8EMU-607/608), so
-//! all that went with it. The board, CPU1 and the reports still hold a Guard
+//! The board, CPU1 and the reports still hold a Guard
 //! for the table pointer and the latch, which is all that is left.
 const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_fault = @import("../periph/mpu/mpu_fault.zig");

@@ -82,11 +82,11 @@ test "no Non-secure stack when VTOR_NS cannot be read" {
     try std.testing.expectEqual(@as(?u32, null), blxns.nonSecureStack(&cpu));
 }
 
-test "BLXNS is not checked against Unicorn" {
+test "BLXNS has no lockstep oracle" {
     try std.testing.expect(!blxns.group.oracle);
 }
 
-// Ported from tests/core/tz_test.zig (the Unicorn seam's decode), run
+// Ported from tests/core/tz_test.zig (the old seam's decode), run
 // against the core's group (RA8EMU-252). The seam decodes SP and PC too;
 // the core leaves those UNPREDICTABLE forms unclaimed.
 

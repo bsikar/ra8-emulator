@@ -1,6 +1,5 @@
-//! Which CPU runs the image. The Zig core is the only one left: Unicorn was
-//! dropped as a choice by RA8EMU-606, so `--cpu unicorn` is refused like any
-//! other unknown name. `--cpu zig` stays accepted for scripts that pass it.
+//! Which CPU runs the image. The Zig core is the only one, so any name but
+//! `zig` is refused as unknown. `--cpu zig` stays accepted for scripts that pass it.
 const std = @import("std");
 
 pub const Choice = enum {

@@ -5,17 +5,16 @@
 //! exception entry after it is not checked; the fetch before it is checked
 //! on its own through refusesFetch (RA8EMU-368). The board bus asks it about every load and store while it
 //! is armed, and a refused access is turned away before it reaches memory:
-//! unlike the Unicorn guard this replaced (RA8EMU-608), the faulting store
-//! never lands.
+//! the faulting store never lands.
 //!
-//! The rules are the Unicorn guard's, read from the same table:
+//! The rules, read from the region table:
 //!   - the highest-numbered enabled region covering the address decides,
 //!     through Region.refuses (privilege first, then read-only for a store);
 //!   - an address no region covers falls to the background
 //!     (src/periph/mpu/mpu_background.zig: refused to unprivileged code, and
 //!     to privileged code unless PRIVDEFENA);
 //!   - a disabled MPU refuses nothing.
-//! Two architecture rules the Unicorn guard does not model are kept here
+//! Two more architecture rules are kept here
 //! (Armv8-M ARM DDI0553A.k B10.1): the PPB, 0xE000_0000..0xE00F_FFFF, is
 //! never checked by the MPU, and while the core runs at a negative priority
 //! (HardFault, NMI, or FAULTMASK set) the MPU is off unless CTRL.HFNMIENA.

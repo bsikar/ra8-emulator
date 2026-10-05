@@ -1,8 +1,8 @@
 //! An FP-using handler run end to end on the Zig core (RA8EMU-124): real
 //! FP instructions in Thread mode open an FP context, SVC enters with the
 //! extended frame, the handler's own FP instruction overwrites S0, and the
-//! return restores it. Unicorn cannot be the oracle here: it faults on the
-//! FType-clear EXC_RETURN, so this test is the check instead of lockstep.
+//! return restores it. There is no lockstep oracle for the
+//! FType-clear EXC_RETURN, so this test is the check.
 const std = @import("std");
 const ra8 = @import("ra8");
 const fixture = @import("ram.zig");

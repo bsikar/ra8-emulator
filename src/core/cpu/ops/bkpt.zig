@@ -2,9 +2,6 @@
 //! debug event it raises (exception/debug_event.zig), so the PC is left on
 //! the BKPT for a debugger, or stacked as the return address for the
 //! handler.
-//!
-//! Not checked against Unicorn: Unicorn hands BKPT to an interrupt hook
-//! instead of taking the debug event, so lockstep cannot follow it.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;

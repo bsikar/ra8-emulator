@@ -1,7 +1,6 @@
-//! A run on the Zig core instead of Unicorn, chosen with `--cpu zig`.
+//! A run on the Zig core.
 //!
-//! The image is loaded and the board RAM mapped exactly as for a Unicorn
-//! run; the Zig core then resets out of the same vector table and runs until
+//! The image is loaded and the board RAM mapped; the Zig core then resets out of the same vector table and runs until
 //! its budget is spent or it meets something it cannot do yet, most often an
 //! encoding no group in src/core/cpu/ops/table.zig claims. This file prints
 //! one line saying which, so a corpus sweep can tell how far each image
@@ -47,8 +46,7 @@ pub const Boundary = struct {
     widthFn: *const fn (context: *anyopaque) u32,
     closeFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
     /// The reset a block asked for at this boundary (a watchdog underflow,
-    /// AIRCR.SYSRESETREQ), performed before the next stretch the way the
-    /// Unicorn run loop performs it (RA8EMU-508).
+    /// AIRCR.SYSRESETREQ), performed before the next stretch (RA8EMU-508).
     reboot: ?*Reboot = null,
     /// Asked after each closed stretch whether the run is over, which is
     /// how `--stop-sym` ends a Zig run on its counter (RA8EMU-603).
@@ -213,8 +211,7 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         const stopped = cpu.run(width);
         if (until) |wait| if (wait.reached) return .count;
         if (stopped != .count) return stopped;
-        // The firmware armed SysTick inside this stretch: like the Unicorn
-        // run loop, charge it one instruction and no time, and cut the next
+        // The firmware armed SysTick inside this stretch: charge it one instruction and no time, and cut the next
         // stretch from the period now armed (RA8EMU-464).
         if (cpu.cut) |cut| if (cut.take()) {
             left -= 1;
@@ -237,8 +234,7 @@ fn widthOf(cpu: *cpu_mod.Cpu, edge: Boundary) u32 {
     return @max(normal, reach(edge.context, normal));
 }
 
-/// A warm reboot of the Zig core, as src/core/reboot.zig performs one on
-/// Unicorn: SP and PC from the vector table, PRIMASK clear, handler frames
+/// A warm reboot of the Zig core: SP and PC from the vector table, PRIMASK clear, handler frames
 /// abandoned, RAM kept. The retired count is the run's, so it carries on.
 fn rebooted(cpu: *cpu_mod.Cpu, pending: *Reboot) !void {
     pending.requested = false;

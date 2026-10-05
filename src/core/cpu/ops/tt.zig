@@ -1,7 +1,6 @@
 //! TT, TTT, TTA and TTAT (T1, 0xE84n 0xFxxx) on the Zig core (RA8EMU-352).
 //!
-//! The decode and the response word are src/core/tt.zig's, the same ones the
-//! Unicorn hook uses, so both backends answer one way. The answer comes from
+//! The decode and the response word are src/core/tt.zig's. The answer comes from
 //! the core's attribution source; the board's is built from the SAU the
 //! firmware programmed (src/core/cpu/sau_source.zig).
 //!

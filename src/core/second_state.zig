@@ -1,6 +1,5 @@
 //! CPU1's run state, apart from whatever runs its instructions (RA8EMU-589).
-//! Unicorn's `Second` embeds one beside its engine; a Zig CPU1 on its own
-//! store (RA8EMU-588) carries one with no engine at all. Everything here
+//! A Zig CPU1 on its own store (RA8EMU-588) carries one. Everything here
 //! reads and writes CPU1's memory only through a memory.Guest.
 const fault = @import("fault.zig");
 const memmap = @import("memmap.zig");

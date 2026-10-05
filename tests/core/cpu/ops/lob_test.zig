@@ -121,7 +121,7 @@ test "no earlier group claims dls, wls or le" {
     }
 }
 
-test "the group is checked against Unicorn" {
+test "the group has a lockstep oracle" {
     try std.testing.expect(lob.group.oracle);
 }
 

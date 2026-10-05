@@ -2,10 +2,8 @@
 //! into a region rather than mapped on top of it (src/core/cpu/memory/load.zig)
 //! and an idle loop's spin target can be told from code (src/core/idle.zig).
 //!
-//! This file held the host pages behind Unicorn's Non-secure aliases and
-//! shared them between CPU0's and CPU1's engines. The Zig core's own store
-//! (src/core/cpu/memory/store.zig) keeps those rules now, so that part went
-//! with the engine (RA8EMU-607).
+//! The Non-secure aliases and the pages CPU0 and CPU1 share are the Zig
+//! core's own store's rules (src/core/cpu/memory/store.zig).
 const memmap = @import("memmap.zig");
 
 /// The page size the board's regions are aligned to.

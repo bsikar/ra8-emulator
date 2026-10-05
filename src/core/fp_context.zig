@@ -3,7 +3,7 @@
 //!
 //! The CMSE entry stub a compiler emits for a cmse_nonsecure_entry function
 //! opens with `vstr FPCXTNS, [sp, #-4]!` and closes with
-//! `vldr FPCXTNS, [sp], #4`. The pinned Unicorn has no Armv8.1-M model and
+//! `vldr FPCXTNS, [sp], #4`. An Armv8.0-M model
 //! raises an exception on both, which ends the run on the first call from the
 //! Non-Secure world into the Secure one. The Zig core executes them; this
 //! file knows the encoding and the effect, and nothing about the core, so
@@ -15,8 +15,7 @@
 //! and FPCXT_S (15). FPSCR_nzcvqc, VPR and P0 are left to stop the run.
 //!
 //! The effects follow the Zig core's VMRS/VMSR of the same registers
-//! (src/core/cpu/ops/fp_system.zig), so both backends agree. Two things the
-//! Unicorn backend cannot see are fixed: FPCCR.ASPEN is taken as its reset
+//! (src/core/cpu/ops/fp_system.zig). Two things are fixed: FPCCR.ASPEN is taken as its reset
 //! value 1, so CONTROL.FPCA alone says whether a context is active, and
 //! FPDSCR as its reset value 0, the FPSCR a fresh context starts with.
 

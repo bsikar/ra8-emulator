@@ -36,9 +36,8 @@ pub const Eci = enum {
 pub const Group = struct {
     name: []const u8,
     decode: *const fn (instr: Instr) ?Exec,
-    /// False for a group Unicorn cannot check: the Armv8.1-M encodings it does
-    /// not implement. A lockstep run steps only the Zig core for these and
-    /// counts them as skipped.
+    /// False for a group with no lockstep oracle: the Armv8.1-M encodings.
+    /// A lockstep run counts them as skipped.
     oracle: bool = true,
     /// The core feature the group's encodings belong to: a core whose
     /// profile lacks it does not ask the group (RA8EMU-233).

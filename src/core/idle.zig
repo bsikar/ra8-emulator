@@ -163,7 +163,7 @@ pub const Seam = struct {
     ///
     /// That is not merely wasted work, and the reason is the single step.
     /// A hook that wants to END the stretch stops the emulator by asking
-    /// Unicorn to stop, and inside a one-instruction run that request buys
+    /// the run to stop, and inside a one-instruction run that request buys
     /// nothing: the run was ending after that instruction regardless, and
     /// the loop here simply steps again. So a hook could ask 64 times and
     /// be overridden 64 times. Measured on `threadx_blink` with

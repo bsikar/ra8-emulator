@@ -63,7 +63,7 @@ test "an odd tail byte is not read past" {
 
 test "entering the world puts the Thumb bit back on the program counter" {
     // The firmware clears bit 0 before the BLXNS, because a real one faults
-    // on a target that still carries it. Unicorn reads that same bit as
+    // on a target that still carries it. The program counter reads that same bit as
     // Thumb state, so the branch has to put it back.
     const entry = tz.enter(0x0208_00F0, 0x2219_0000, 0x0200_179E);
     try std.testing.expectEqual(@as(u32, 0x0208_00F1), entry.pc);

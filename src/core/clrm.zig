@@ -2,10 +2,9 @@
 //!
 //! The CMSE entry stub a compiler emits for a cmse_nonsecure_entry function
 //! ends with `vscclrm` then `clrm {r1, r2, r3, ip, APSR}`, so no Secure value
-//! leaks back to the Non-Secure caller. The pinned Unicorn rejects CLRM as an
+//! leaks back to the Non-Secure caller. An Armv8.0-M model rejects CLRM as an
 //! invalid instruction, which stopped the TrustZone examples on their first
-//! Non-Secure to Secure call. This file knows the encoding and nothing about
-//! Unicorn; the Zig core runs it in src/core/cpu/ops/clrm.zig.
+//! Non-Secure to Secure call. This file knows the encoding only; the Zig core runs it in src/core/cpu/ops/clrm.zig.
 //!
 //! Encoding T1: hw1 0xE89F, hw2 = P M 0 register_list. Bits 0..12 name r0 to
 //! r12, bit 14 names LR and bit 15 names the APSR. Bit 13 (SP) must be clear

@@ -1,6 +1,6 @@
 //! CPU1's own PendSV and SysTick on the Zig core (RA8EMU-612): what the
 //! engine-side second_core tests checked before RA8EMU-607 removed CPU1's
-//! Unicorn turn, now through second_zig_run.Driver on a Store, no engine.
+//! old turn, now through second_zig_run.Driver on a Store, no engine.
 const std = @import("std");
 const ra8 = @import("ra8");
 const second_core = ra8.core.second_core;

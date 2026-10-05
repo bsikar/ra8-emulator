@@ -1,6 +1,5 @@
 //! The Zig core's bus in a full run: the peripheral windows go to the
-//! board's peripheral bus, the same handlers Unicorn's MMIO hooks call, and
-//! everything else goes to guest memory, the engine's or the core's own
+//! board's peripheral bus, and everything else goes to the core's own
 //! store (src/core/cpu/memory/guest_bus.zig).
 //!
 //! Both the Secure window and its Non-secure alias route to the one
@@ -152,7 +151,7 @@ pub const BoardBus = struct {
     /// write-one-to-clear model for the run report (RA8EMU-394).
     pub fn faults(self: *BoardBus) fault_status.Words {
         // A Non-secure fault's UFSR and MMFSR bits sit in the Non-secure
-        // copy; folded in, the report matches Unicorn's one word (RA8EMU-444).
+        // copy; folded in, the report shows one word (RA8EMU-444).
         const ns_bits = self.peek(memmap.scb.cfsr + 0x2_0000) & cfsr_banked;
         return .{ .cfsr = self.peek(memmap.scb.cfsr) | ns_bits, .hfsr = self.peek(memmap.scb.hfsr), .sfsr = self.peek(0xE000_EDE4) };
     }
@@ -190,7 +189,7 @@ pub const BoardBus = struct {
 };
 
 /// The models inside a core that a plain store into its PPB RAM must reach,
-/// the Zig twin of the Unicorn store hooks src/board/wiring.zig attaches.
+/// the store side of the models src/board/wiring.zig wires.
 /// Each is optional: a bus without one leaves that window as plain RAM.
 pub const Scs = struct {
     /// SAU RBAR/RLAR bank through RNR.
@@ -201,8 +200,7 @@ pub const Scs = struct {
     /// The Non-secure MPU, programmed through its own copy at +0x20000
     /// (src/periph/mpu/mpu_ns.zig). Null keeps every MPU access on `regions`.
     regions_ns: ?*mpu.Mpu = null,
-    /// CFSR, HFSR and SFSR are write-one-to-clear. Unicorn latches the clear
-    /// in a hook and settles it at the boundary; here the store is settled
+    /// CFSR, HFSR and SFSR are write-one-to-clear. The store is settled
     /// as it lands, so no read in between sees the raw word.
     clears: ?*fault_clear.Clears = null,
     /// FPCCR, FPCAR and FPDSCR, read and written in the core's FP state.
@@ -263,7 +261,7 @@ fn bankPartition(memory: bus.Bus, unit: *sau.Sau, address: u32, bytes: []const u
 
 /// File a word store into the MPU window and, when it moved RNR, put the
 /// four pairs RNR now selects back in RAM. A CTRL store is taken into the
-/// table by `observe`; the Unicorn-only traps it rearms have no Zig twin.
+/// table by `observe`.
 /// `shift` is where the bank's copy sits above the normal window.
 fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8, shift: u32) bus.Error!void {
     if (bytes.len != 4 or address < memmap.mpu.type_ or address > memmap.mpu.mair1) return;
