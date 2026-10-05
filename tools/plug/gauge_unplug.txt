@@ -1,0 +1,2 @@
+# RA8EMU-702: pull the Click module's fuel gauge off the touch line mid-run.
+1500ms unplug i2c:touch@0x36
