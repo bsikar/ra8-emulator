@@ -57,6 +57,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.c6.tick(&self.pins);
     self.console_input.poll(&self.serial);
     self.touch_input.poll(&self.wire.panel, &self.pins);
+    self.input_script.dispatch(self.time.base.now(), &self.wire.panel, &self.pins, &self.touch_input);
     try raisePinEdges(self, core);
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());

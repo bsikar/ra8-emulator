@@ -27,6 +27,13 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     try cli.card_setup.prepareSdhi(board, options.sdhi);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(path);
+    if (options.input_script) |path| {
+        const file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+        const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+        defer allocator.free(content);
+        try board.input_script.parse(content);
+    }
     try setBattery(board, options);
     try usb_plug.apply(&board.usb, allocator, options.usb_disk);
     try cli.usbip_export.run.install(&board.usb, allocator, options.usbip);

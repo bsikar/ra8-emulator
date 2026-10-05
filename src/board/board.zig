@@ -214,6 +214,7 @@ pub const Board = struct {
     console_input: sci_input.Input = .{},
     /// Host touches sampled at each board boundary under `--touch @PATH`.
     touch_input: gt911.host.Input = .{},
+    input_script: @import("../periph/i3c/i3c_input_script.zig").Script = .{},
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
