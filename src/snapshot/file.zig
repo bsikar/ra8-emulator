@@ -27,6 +27,8 @@ pub const Kind = enum(u32) {
     sd = 6,
     /// The I2C wire: RIIC, the I3C touch line and their parts (RA8EMU-666).
     wire = 7,
+    /// The DRW 2D engine (RA8EMU-667).
+    raster = 8,
     _,
 };
 
