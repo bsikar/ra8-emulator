@@ -61,6 +61,8 @@ pub const Kind = enum(u32) {
     c6 = 23,
     /// Which part the board was (RA8EMU-688); a load refuses another part.
     part = 24,
+    /// The run's secure and Non-secure SysTick time bases (RA8EMU-694).
+    systick = 25,
     _,
 };
 
