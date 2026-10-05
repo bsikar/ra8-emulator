@@ -8,9 +8,8 @@
 //! nothing to settle it with.
 //!
 //! This is that something. A requested address is counted on every
-//! execution and on nothing else. src/debug/hits_hook.zig is the other
-//! half: this file knows nothing about Unicorn, so the counting can be
-//! tested without a live engine.
+//! execution and on nothing else. The counting knows nothing about the
+//! engine that runs the code, so it can be tested without one.
 const std = @import("std");
 
 pub const limits = struct {

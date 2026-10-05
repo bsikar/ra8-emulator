@@ -7,9 +7,8 @@
 //! and finding out by hand means breaking on one candidate after another.
 //!
 //! A watched place records every store that lands in it, with the program
-//! counter that made it. src/core/watch_hook.zig is the other half: this
-//! file knows nothing about Unicorn, so the recording can be tested
-//! without a live engine.
+//! counter that made it. The recording knows nothing about the engine
+//! that runs the code, so it can be tested without one.
 const std = @import("std");
 const elf = @import("../core/elf.zig");
 const place = @import("place.zig");

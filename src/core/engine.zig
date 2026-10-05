@@ -22,11 +22,6 @@ const symbols = @import("../debug/symbols.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const lob = @import("lob.zig");
 const csel = @import("csel.zig");
-const break_hook = @import("../debug/break_hook.zig");
-const hits_hook = @import("../debug/hits_hook.zig");
-const watchpoint = @import("../debug/watchpoint.zig");
-const pc_hits = @import("../debug/pc_hits.zig");
-const watch_hook = @import("../debug/watch_hook.zig");
 const pend_break = @import("pend_break.zig");
 const cpu_reset = @import("cpu/reset.zig");
 const reboot = @import("reboot.zig");
@@ -190,26 +185,6 @@ pub const Engine = struct {
     /// address the firmware reached for and how wide the access was.
     pub fn attachWatch(self: Engine, watch: *Watch) Error!void {
         bus_hook.attachWatch(self.handle, watch) catch return Error.AttachFailed;
-    }
-
-    /// Arm the break: one instruction is hooked, and reaching it the
-    /// asked-for number of times stops the run where it stands.
-    pub fn attachBreak(self: Engine, point: *breakpoint.Break) Error!void {
-        break_hook.attach(self.handle, point) catch return Error.AttachFailed;
-    }
-
-    /// Count the executions of each instruction the run asked about. The
-    /// run is never stopped here, so the count cannot be a number about
-    /// its own hook.
-    pub fn attachHits(self: Engine, hits: *pc_hits.Hits) Error!void {
-        hits_hook.attach(self.handle, hits) catch return Error.AttachFailed;
-    }
-
-    /// Watch one word: every store that lands in it is recorded with the
-    /// program counter that made it. The run is not stopped, so a value
-    /// written more than once tells its whole story in one run.
-    pub fn attachWatchpoint(self: Engine, watched: *watchpoint.Watched) Error!void {
-        watch_hook.attach(self.handle, watched) catch return Error.AttachFailed;
     }
 
     /// Stream every PT_LOAD segment to its load address, mapping the flash-like
