@@ -20,7 +20,7 @@ const endpoint = @import("../periph/model/endpoint.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, TooManyListeners };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, TooManyListeners };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("break_table.zig").Id;
@@ -40,6 +40,12 @@ pub const FaultHook = struct {
     context: *anyopaque,
     setFn: *const fn (*anyopaque, endpoint.Endpoint, ?fault_spec.Mode) anyerror!void,
 };
+/// Puts the catalog part `name` on `at`, or takes whatever is there off it
+/// when `name` is null (RA8EMU-212). The board owns the lines, so it plugs.
+pub const PlugHook = struct {
+    context: *anyopaque,
+    plugFn: *const fn (*anyopaque, endpoint.Endpoint, ?[]const u8) anyerror!void,
+};
 pub const Endpoint = endpoint.Endpoint;
 pub const FaultMode = fault_spec.Mode;
 
@@ -49,7 +55,7 @@ pub const Event = struct {
     address: ?u32 = null,
     ended: ?Ended = null,
 
-    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared };
+    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged };
 };
 
 pub const Listener = struct {
@@ -70,6 +76,7 @@ pub const Session = struct {
     board_ticks: [2]?BoardRun = .{ null, null },
     display: ?session_display.Display = null,
     faults: ?FaultHook = null,
+    plugs: ?PlugHook = null,
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
@@ -106,6 +113,24 @@ pub const Session = struct {
         const hook = self.faults orelse return Error.NoFaults;
         try hook.setFn(hook.context, at, null);
         self.publish(.{ .core = core, .kind = .fault_cleared });
+    }
+
+    pub fn attachPlugs(self: *Session, hook: PlugHook) void {
+        self.plugs = hook;
+    }
+
+    /// Put a fresh `name` on `at` mid-run, as if it were just wired in.
+    pub fn plug(self: *Session, core: Core, at: Endpoint, name: []const u8) anyerror!void {
+        const hook = self.plugs orelse return Error.NoPlugs;
+        try hook.plugFn(hook.context, at, name);
+        self.publish(.{ .core = core, .kind = .plugged });
+    }
+
+    /// Take whatever is on `at` off it mid-run.
+    pub fn unplug(self: *Session, core: Core, at: Endpoint) anyerror!void {
+        const hook = self.plugs orelse return Error.NoPlugs;
+        try hook.plugFn(hook.context, at, null);
+        self.publish(.{ .core = core, .kind = .unplugged });
     }
 
     pub fn waitSettled(self: *Session, timeout_ns: u64) anyerror!void {
