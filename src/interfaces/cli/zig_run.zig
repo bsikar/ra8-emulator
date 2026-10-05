@@ -144,6 +144,7 @@ pub const Clock = struct {
         try self.timebase.advance(self.memory, instructions);
         try self.ns_timebase.advanceSysTick(self.memory, instructions);
         try self.board.tick(self.memory, instructions);
+        if (frames_out.Armed.of(self.board)) |armed| try armed.pollSettle(self.board.time.base.now());
         if (self.cpu1) |second| second.round(instructions);
     }
 };

@@ -61,7 +61,7 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, image: elf.Image, parts: *Parts, opti
     cli.console_output.configure(&board.serial.line, &parts.tap);
     if (options.profile) parts.prepareProfile(image);
     option_memory.apply(board, cpu0.own());
-    if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armOutputs(std.heap.page_allocator, board, options.frames.frames_out, options.frames.gif_out, options.frames.frames_every);
+    if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armForCli(std.heap.page_allocator, board, options.frames);
     return written;
 }
 

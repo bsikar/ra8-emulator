@@ -189,6 +189,14 @@ pub const Armed = struct {
     /// source to give a frame owns the sequence.
     glcdc_frames: u32 = 0,
     board_eink_frames: u32 = 0,
+    settle_only: bool = false,
+    settle_window_ns: u64 = 50_000_000,
+    settle_pixels: ?[]u32 = null,
+    settle_width: u32 = 0,
+    settle_height: u32 = 0,
+    settle_since: ?u64 = null,
+    settle_emitted: bool = false,
+    eink_settled: u32 = 0,
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
@@ -217,6 +225,19 @@ pub const Armed = struct {
         return self;
     }
 
+    pub fn armForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !?*Armed {
+        if (options.frame_on_settle != null and (options.frames_out != null or options.gif_out != null))
+            return error.SettleSharesRun;
+        const path = options.frames_out orelse options.frame_on_settle;
+        const armed = try armOutputs(allocator, board, path, options.gif_out, options.frames_every) orelse return null;
+        if (options.frame_on_settle != null) {
+            armed.settle_only = options.frames_out == null and options.gif_out == null;
+            armed.settle_window_ns = options.settle_window_ns;
+            armed.eink_settled = (armed.eink_panel orelse &board.panel).film.settled;
+        }
+        return armed;
+    }
+
     /// The run armed on this board, if any.
     pub fn of(board: *Board) ?*Armed {
         const vsync = board.display.output.vsync orelse return null;
@@ -234,13 +255,61 @@ pub const Armed = struct {
     fn frameAt(self: *Armed, when: u64) !void {
         const capture = (try self.fit()) orelse return;
         if (self.board.display.scanOut() == null) return;
-        try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+        if (self.settle_only) {
+            try self.observeFrame(capture.width, capture.height, capture.pixels, when);
+        } else {
+            try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+        }
         self.glcdc_frames += 1;
         capture.before = self.board.display.system.frames;
     }
 
+    /// A scanned GLCDC frame: written once it has held unchanged for the
+    /// settle window, and not again until the picture changes.
+    pub fn observeFrame(self: *Armed, width: u32, height: u32, pixels: []const u32, when: u64) !void {
+        const count = std.math.mul(usize, width, height) catch return error.BadShape;
+        if (pixels.len != count) return error.BadShape;
+        const same = self.settle_pixels != null and self.settle_width == width and
+            self.settle_height == height and Sequence.sameImage(self.settle_pixels.?, pixels);
+        if (!same) {
+            if (self.settle_pixels) |old| self.allocator.free(old);
+            self.settle_pixels = try self.allocator.dupe(u32, pixels);
+            self.settle_width = width;
+            self.settle_height = height;
+            self.settle_since = when;
+            self.settle_emitted = false;
+            return;
+        }
+        const since = self.settle_since orelse when;
+        if (!self.settle_emitted and when -| since >= self.settle_window_ns) {
+            try self.sequence.record(width, height, pixels, when);
+            self.settle_emitted = true;
+        }
+    }
+
+    /// Poll from each virtual-time boundary. The e-ink controller's LUT
+    /// status is authoritative; GLCDC stability is sampled at its vsyncs.
+    pub fn pollSettle(self: *Armed, now: u64) !void {
+        if (!self.settle_only) return;
+        const panel = self.eink_panel orelse &self.board.panel;
+        if (panel.film.settled == self.eink_settled) return;
+        self.eink_settled = panel.film.settled;
+        if (panel.film.busy()) return;
+        const count = panel.planes.glass.pixels.len;
+        if (count == 0) return;
+        if (self.eink_pixels == null or self.eink_pixels.?.len != count) {
+            if (self.eink_pixels) |old| self.allocator.free(old);
+            self.eink_pixels = try self.allocator.alloc(u32, count);
+        }
+        for (panel.planes.glass.pixels, self.eink_pixels.?) |gray, *pixel| {
+            pixel.* = 0xFF00_0000 | (@as(u32, gray) << 16) | (@as(u32, gray) << 8) | gray;
+        }
+        try self.sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, self.eink_pixels.?, now);
+    }
+
     fn onEinkRefresh(context: *anyopaque) void {
         const self: *Armed = @ptrCast(@alignCast(context));
+        if (self.settle_only) return;
         const panel = self.eink_panel orelse board: {
             if (self.glcdc_frames != 0) return;
             break :board &self.board.panel;
@@ -279,8 +348,10 @@ pub const Armed = struct {
 
     pub fn finish(self: *Armed) !void {
         if (self.failed) |err| return err;
-        if (self.capture) |*capture| {
-            if (self.board_eink_frames == 0) try capture.finish(self.board, &self.sequence);
+        if (!self.settle_only) {
+            if (self.capture) |*capture| {
+                if (self.board_eink_frames == 0) try capture.finish(self.board, &self.sequence);
+            }
         }
         try self.sequence.finish();
     }
@@ -292,6 +363,7 @@ pub const Armed = struct {
             if (hook.context == @as(*anyopaque, @ptrCast(self))) hooked.refresh_hook = null;
         }
         if (self.eink_pixels) |pixels| self.allocator.free(pixels);
+        if (self.settle_pixels) |pixels| self.allocator.free(pixels);
         if (self.capture) |*capture| capture.deinit(self.board);
         self.sequence.deinit();
         self.allocator.destroy(self);
@@ -309,13 +381,7 @@ pub const Run = struct {
     }
 
     pub fn initForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !Run {
-        const armed = Armed.of(board) orelse try Armed.armOutputs(
-            allocator,
-            board,
-            options.frames_out,
-            options.gif_out,
-            options.frames_every,
-        ) orelse return .{ .armed = null };
+        const armed = Armed.of(board) orelse try Armed.armForCli(allocator, board, options) orelse return .{ .armed = null };
         _ = try armed.fit();
         return .{ .armed = armed };
     }
