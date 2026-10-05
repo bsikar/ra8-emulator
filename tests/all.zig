@@ -20,6 +20,7 @@ test {
     _ = @import("snapshot/clocks_test.zig");
     _ = @import("snapshot/security_test.zig");
     _ = @import("snapshot/controllers_test.zig");
+    _ = @import("snapshot/storage_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
