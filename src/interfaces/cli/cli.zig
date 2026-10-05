@@ -110,7 +110,7 @@ pub const Options = struct {
     attaches: [request.max]request.Request = undefined,
     attach_count: usize = 0,
     /// A refused access raises the precise BusFault it raises on silicon
-    /// instead of ending the run; src/core/bus_error.zig. On by default;
+    /// instead of ending the run; src/core/cpu/exception/bus_fault.zig. On by default;
     /// `--no-bus-errors` brings back the old end-of-run fault report.
     bus_errors: bool = true,
     /// The Zig core runs from formed blocks (RA8EMU-408); `--no-blocks` steps.

@@ -122,7 +122,6 @@ test {
     _ = @import("core/part_map_test.zig");
     _ = @import("core/part_clock_test.zig");
     _ = @import("core/core_rate_test.zig");
-    _ = @import("core/bus_error_test.zig");
     _ = @import("core/appimg_test.zig");
     _ = @import("core/module_place_test.zig");
     _ = @import("core/core_event_test.zig");

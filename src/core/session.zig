@@ -52,10 +52,6 @@ pub const Session = struct {
     per_boundary: ?u32 = null,
     /// Consulted at each chunk boundary for an exception to take.
     interrupts: ?*nvic.Nvic = null,
-    /// Opt in to a refused access raising the BusFault it would on silicon
-    /// instead of ending the run. Needs `watch` and `interrupts` too; null
-    /// keeps the run ending at the access. src/core/bus_error.zig.
-    bus_errors: ?*bus_fault.Tally = null,
     /// Run at each chunk boundary, before the controller picks: the
     /// peripheral side of a tick, where a block that has something to raise
     /// raises it. The board hands one in; the engine only calls it.
