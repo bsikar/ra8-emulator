@@ -8,7 +8,8 @@ const ra8 = @import("ra8");
 const memmap = ra8.core.memmap;
 const boot = ra8.core.cpu.boot;
 const elf = ra8.core.elf;
-const Engine = ra8.core.engine.Engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const vectors = @import("nnf_vectors.zig");
 
 const image_bytes = @embedFile("../../fixtures/fpu/nnf.elf");
@@ -16,9 +17,9 @@ const results = memmap.sram_base + 0x100;
 
 test "the TFLM/CMSIS-NN float corpus runs bit-exact on the Zig core" {
     const image = try elf.Image.init(image_bytes);
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
     var segment_index: u16 = 0;
     while (segment_index < image.segmentCount()) : (segment_index += 1) {
         const segment = image.loadSegment(segment_index) orelse continue;
@@ -30,7 +31,7 @@ test "the TFLM/CMSIS-NN float corpus runs bit-exact on the Zig core" {
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.start(stream.writer(), .zig, .{ .engine = core }, &periph, vector_base, 1_000_000, &retired, .{});
+    const status = try boot.start(stream.writer(), .zig, core, &periph, vector_base, 1_000_000, &retired, .{});
     try std.testing.expectEqual(@as(u8, 0), status);
     for (vectors.words, 0..) |want, index| {
         const got = try core.readWord(results + @as(u32, @intCast(index)) * 4);
