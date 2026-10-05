@@ -24,6 +24,7 @@ fn busy() Stand {
     board.panel.vcom_mv = 1500;
     board.panel.register_count = 2;
     board.panel.refreshes = 6;
+    board.panel.data_index = 70_000;
     board.panel.display_args[4] = 2;
     return board;
 }
@@ -54,6 +55,7 @@ test "a panel with pixels round-trips, keeps its hook, and leaks nothing" {
     try std.testing.expectEqual(@as(u8, 0xA0), target.panel.planes.image.pixel(1, 2));
     try std.testing.expectEqual(@as(u8, 0x5F), target.panel.planes.glass.pixel(3, 0));
     try std.testing.expectEqual(@as(u16, 1500), target.panel.vcom_mv);
+    try std.testing.expectEqual(@as(u32, 70_000), target.panel.data_index);
     var again = std.ArrayList(u8).init(std.testing.allocator);
     defer again.deinit();
     try saved(&target, &again);

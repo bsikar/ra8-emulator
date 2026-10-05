@@ -99,7 +99,7 @@ pub const Panel = struct {
     burst: proto.Burst = .{},
     /// The command in flight, and how many of its data words have arrived.
     command: ?proto.Command = null,
-    data_index: u16 = 0,
+    data_index: u32 = 0,
     /// The command in flight was refused. Its data words are its own and the
     /// refusal has already been counted, so they are dropped without being
     /// counted again as strays.
@@ -318,7 +318,7 @@ pub const Panel = struct {
     }
 
     fn takeDisplayArg(self: *Panel, word: u16) void {
-        if (self.data_index < @as(u16, @intCast(self.display_args.len))) {
+        if (self.data_index < self.display_args.len) {
             self.display_args[self.data_index] = word;
         }
         if (self.data_index != proto.arg.display_waveform) return;
