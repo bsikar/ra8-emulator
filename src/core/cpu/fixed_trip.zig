@@ -184,7 +184,7 @@ pub const Watch = struct {
         }
         // The head instruction is the trip's first.
         self.* = .{ .on = true, .head = found.start, .steps = 1, .inner = cpu.bus, .before = Snapshot.take(cpu), .miss_pc = self.miss_pc };
-        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate };
+        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate, .miss = self.inner.miss, .tally = self.inner.tally };
         self.rec.start(&cpu.regs);
         self.record(cpu);
     }
@@ -209,7 +209,7 @@ pub const Watch = struct {
     pub fn reclaim(self: *Watch, cpu: *Cpu, lent: bool, taken: bool) void {
         if (!lent) return;
         if (taken) return self.miss(cpu);
-        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate };
+        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate, .miss = self.inner.miss, .tally = self.inner.tally };
     }
 
     /// Put the real bus back. `run` calls this on every way out.

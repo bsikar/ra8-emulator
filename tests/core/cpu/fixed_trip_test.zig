@@ -7,6 +7,9 @@ const Fake = @import("exception/fake_source.zig").Fake;
 const QuietSource = ra8.core.cpu.exception.quiet_source.QuietSource;
 const BlockCache = ra8.core.cpu.decode.block_cache.BlockCache;
 const Cpu = ra8.core.cpu.cpu.Cpu;
+const memmap = ra8.core.memmap;
+const bus_fault = ra8.periph.fault_status.bus;
+const status = ra8.periph.fault_status;
 const Stop = ra8.core.cpu.cpu.Stop;
 const fixed_trip = ra8.core.cpu.cpu.fixed_trip;
 
@@ -269,4 +272,37 @@ test "a fault latched mid-trip reaches the bus as a latch and spoils the trip" {
     try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
     try std.testing.expectEqual(@as(u32, 0), under.writes);
     try std.testing.expect(watch.spoiled);
+}
+
+test "a refused post-indexed load through the trip bus takes a precise BusFault" {
+    var rig: Rig = .{};
+    try rig.init(&.{ 0xF852, 0x1B04, 0xBF00 });
+    defer rig.deinit();
+
+    const bus_handler = fixture.base + 0x1E0;
+    rig.ram.putWord(fixture.base + 3 * 4, (fixture.base + 0x1C0) | 1);
+    rig.ram.putWord(fixture.base + 5 * 4, bus_handler | 1);
+    rig.ram.putWord(memmap.scb.shcsr, 1 << 17);
+    var miss: u32 = 0xFFFF_FFFF;
+    var tally: bus_fault.Tally = .{};
+    rig.cpu.bus.miss = &miss;
+    rig.cpu.bus.tally = &tally;
+    rig.cpu.regs.set(1, 0xCAFE_F00D);
+    rig.cpu.regs.set(2, fixture.base + 0x200);
+
+    _ = rig.cache.next(rig.cpu.bus, rig.cpu.profile, fixture.code);
+    rig.quiet.settled = true;
+    try std.testing.expectEqual(@as(u64, 0), rig.cpu.trip.observe(&rig.cpu, 1));
+    try std.testing.expect(rig.cpu.trip.on);
+    rig.cpu.regs.set(2, 0);
+    try std.testing.expectEqual(@as(?Stop, null), rig.cpu.step());
+
+    try std.testing.expectEqual(bus_handler, rig.cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 5), rig.cpu.regs.xpsr & 0x1FF);
+    try std.testing.expectEqual(status.Cause.preciserr.bit() | status.Cause.bfarvalid.bit(), rig.ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0), rig.ram.word(memmap.scb.bfar));
+    try std.testing.expectEqual(fixture.code, rig.ram.word(fixture.msp_top - 8));
+    try std.testing.expectEqual(@as(u32, 0xCAFE_F00D), rig.cpu.regs.get(1));
+    try std.testing.expectEqual(@as(u32, 0), rig.cpu.regs.get(2));
+    try std.testing.expectEqual(bus_fault.Tally{ .raised = 1 }, tally);
 }
