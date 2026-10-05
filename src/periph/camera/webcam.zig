@@ -3,6 +3,7 @@
 //! the frame source over it.
 pub const consent = @import("webcam_consent.zig");
 pub const privacy = @import("webcam_privacy.zig");
+pub const av_permission = @import("av_permission.zig");
 pub const v4l2 = @import("v4l2_abi.zig");
 pub const negotiate = @import("v4l2_negotiate.zig");
 pub const device = @import("v4l2_device.zig");
