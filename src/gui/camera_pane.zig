@@ -16,6 +16,7 @@ const camera_open = @import("camera_open.zig");
 const camera_switch = @import("camera_switch.zig");
 const camera_devices = @import("camera_devices.zig");
 const device_row = @import("camera_device_row.zig");
+const media_row = @import("camera_media_row.zig");
 const FrameSource = camera_switch.FrameSource;
 
 /// The button number SDL gives the primary (left) mouse button.
@@ -30,6 +31,9 @@ pub const Pane = struct {
     devices: []const u32 = &.{},
     /// The webcam the device row picked; null opens the default one.
     device: ?u32 = null,
+    /// The project's pictures and clips, owned by whoever listed them.
+    pictures: []const []const u8 = &.{},
+    clips: []const []const u8 = &.{},
 
     /// Feeds one window event to the panel. Only a primary-button press is
     /// a click; returns whether the panel took the event, so the window
@@ -42,8 +46,40 @@ pub const Pane = struct {
         if (!press.down or press.button != primary_button) return false;
         if (camera_view.click(&self.panel, self.layout, press.x, press.y)) return true;
         const picked = device_row.hit(device_row.Row.under(self.layout), self.devices, press.x, press.y);
-        if (picked) |device| self.pickDevice(device);
-        return picked != null;
+        if (picked) |device| {
+            self.pickDevice(device);
+            return true;
+        }
+        const name = media_row.hit(self.mediaRow(), self.media(), press.x, press.y) orelse return false;
+        self.pickMedia(name);
+        return true;
+    }
+
+    /// The files the media row offers: the active source's kind, or none
+    /// when the active source does not open a file.
+    pub fn media(self: *const Pane) []const []const u8 {
+        return switch (self.panel.active) {
+            .image => self.pictures,
+            .video => self.clips,
+            else => &.{},
+        };
+    }
+
+    /// Makes `name` the active picture or clip source's file; a new file
+    /// counts as a switch so `settle` opens it.
+    pub fn pickMedia(self: *Pane, name: []const u8) void {
+        const slot = switch (self.panel.active) {
+            .image => &self.args.image,
+            .video => &self.args.video,
+            else => return,
+        };
+        if (std.mem.eql(u8, slot.*, name)) return;
+        slot.* = name;
+        self.panel.changes += 1;
+    }
+
+    fn mediaRow(self: *const Pane) device_row.Row {
+        return media_row.rowFor(self.layout, self.devices.len);
     }
 
     /// Names the webcam to open. While the webcam is running, the new
@@ -57,6 +93,8 @@ pub const Pane = struct {
     pub fn draw(self: *const Pane, list: *draw_list.DrawList) !void {
         try camera_view.draw(list, self.layout, self.panel);
         try device_row.draw(list, device_row.Row.under(self.layout), self.devices, self.device);
+        const color = camera_view.colorOf(self.panel.active);
+        try media_row.draw(list, self.mediaRow(), self.media(), self.args.of(self.panel.active), color);
     }
 
     /// Between emulation steps: when the panel switched, open its pick and

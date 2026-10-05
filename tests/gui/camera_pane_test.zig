@@ -103,3 +103,36 @@ test "a new device while the webcam runs counts as a switch" {
     pane.pickDevice(1);
     try std.testing.expectEqual(before + 1, pane.panel.changes);
 }
+
+test "the media row offers the active source's files and a press picks one" {
+    const pictures = [_][]const u8{ "a.png", "b.png" };
+    const clips = [_][]const u8{"clip.y4m"};
+    var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 }, .pictures = &pictures, .clips = &clips };
+    try std.testing.expectEqual(@as(usize, 0), pane.media().len);
+    _ = pane.handle(press(pane.layout.source(.image), camera_pane.primary_button, true));
+    try std.testing.expectEqual(@as(usize, 2), pane.media().len);
+    const changes = pane.panel.changes;
+    const slot = ra8.gui.camera_media_row.rowFor(pane.layout, 0).slot(1);
+    try std.testing.expect(pane.handle(press(slot, camera_pane.primary_button, true)));
+    try std.testing.expectEqualStrings("b.png", pane.args.image);
+    try std.testing.expectEqual(changes + 1, pane.panel.changes);
+    try std.testing.expect(pane.handle(press(slot, camera_pane.primary_button, true)));
+    try std.testing.expectEqual(changes + 1, pane.panel.changes);
+    _ = pane.handle(press(pane.layout.source(.video), camera_pane.primary_button, true));
+    try std.testing.expectEqualStrings("clip.y4m", pane.media()[0]);
+    try std.testing.expectEqualStrings("b.png", pane.args.image);
+}
+
+test "with webcams listed the media row moves under the device row" {
+    const pictures = [_][]const u8{"a.png"};
+    const devices = [_]u32{0};
+    var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 }, .pictures = &pictures, .devices = &devices };
+    _ = pane.handle(press(pane.layout.source(.image), camera_pane.primary_button, true));
+    const under_panel = ra8.gui.camera_media_row.rowFor(pane.layout, 0).slot(0);
+    try std.testing.expect(pane.handle(press(under_panel, camera_pane.primary_button, true)));
+    try std.testing.expectEqual(@as(?u32, 0), pane.device);
+    try std.testing.expectEqualStrings("", pane.args.image);
+    const moved = ra8.gui.camera_media_row.rowFor(pane.layout, 1).slot(0);
+    try std.testing.expect(pane.handle(press(moved, camera_pane.primary_button, true)));
+    try std.testing.expectEqualStrings("a.png", pane.args.image);
+}
