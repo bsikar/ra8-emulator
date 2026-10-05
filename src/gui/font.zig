@@ -157,6 +157,17 @@ pub fn draw(list: *draw_list.DrawList, x: i32, y: i32, text: []const u8, color: 
     }
 }
 
+/// Adds `text`, cut to whole cells that fit with a pixel spare each side,
+/// centred in `area`.
+pub fn centred(list: *draw_list.DrawList, area: draw_list.Rect, text: []const u8, color: draw_list.Color) !void {
+    const shown = fit(text, @intCast(@max(area.w - 2, 0)));
+    if (shown.len == 0) return;
+    const w: i32 = @intCast(textWidth(shown.len) - 1);
+    const x = area.x + @divTrunc(area.w - w, 2);
+    const y = area.y + @divTrunc(area.h - glyph_h, 2);
+    try draw(list, x, y, shown, color);
+}
+
 fn expand() [atlas_w * atlas_h]u8 {
     @setEvalBranchQuota(200_000);
     var out = [_]u8{0} ** (atlas_w * atlas_h);

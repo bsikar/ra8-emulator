@@ -63,3 +63,16 @@ test "drawn text lands in the frame at its cell positions" {
     try std.testing.expectEqual(@as(u8, 0), frame.at(1, 4).a);
     try std.testing.expectEqual(@as(u8, 0), frame.at(9, 4).a);
 }
+
+test "a centred label is cut to fit and sits in the middle of its area" {
+    var list = draw_list.DrawList.init(std.testing.allocator, 64, 64);
+    defer list.deinit();
+    try font.centred(&list, .{ .x = 10, .y = 20, .w = 24, .h = 24 }, "camera", Color.rgb(1, 2, 3));
+    try std.testing.expectEqual(@as(usize, 3), list.commands.items.len);
+    const left = list.commands.items[0].shape.glyph.area;
+    try std.testing.expectEqual(@as(i32, 10 + @divTrunc(24 - 17, 2)), left.x);
+    try std.testing.expectEqual(@as(i32, 20 + @divTrunc(24 - 7, 2)), left.y);
+    list.commands.clearRetainingCapacity();
+    try font.centred(&list, .{ .x = 0, .y = 0, .w = 6, .h = 8 }, "x", Color.rgb(1, 2, 3));
+    try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
+}

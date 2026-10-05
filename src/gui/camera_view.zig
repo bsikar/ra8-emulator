@@ -6,11 +6,12 @@
 //! A row of one button per source, the active one ringed; a dot that is
 //! red while the webcam is the source; and, while the webcam permission is
 //! being asked, a dialog of Allow once, Always for this project and Cancel.
-//! The buttons carry their own colour until the font atlas gives them
-//! labels.
+//! Each button has its own colour and a short label in the built-in font
+//! (RA8EMU-677).
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const camera_panel = @import("camera_panel.zig");
+const font = @import("font.zig");
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 const Panel = camera_panel.Panel;
@@ -35,6 +36,33 @@ pub fn colorOf(kind: Kind) Color {
         .pipe => Color.rgb(0xA3, 0xBE, 0x8C),
         .webcam => Color.rgb(0xEB, 0xCB, 0x8B),
     };
+}
+
+/// Each source's button label, three cells at most.
+pub fn labelOf(kind: Kind) []const u8 {
+    return switch (kind) {
+        .gradient => "GRD",
+        .image => "IMG",
+        .video => "VID",
+        .pipe => "PIP",
+        .webcam => "CAM",
+    };
+}
+
+/// Each answer's button label.
+pub fn answerLabel(reply: Answer) []const u8 {
+    return switch (reply) {
+        .allow_once => "ONE",
+        .always => "ALW",
+        .cancel => "NO",
+    };
+}
+
+/// Label ink that reads on `fill`: the dark background on light fills,
+/// the light ring colour on dark ones.
+pub fn inkOn(fill: Color) Color {
+    const luma = @as(u32, fill.r) * 299 + @as(u32, fill.g) * 587 + @as(u32, fill.b) * 114;
+    return if (luma > 128 * 1000) background else ring;
 }
 
 /// Each answer's button colour.
@@ -86,10 +114,14 @@ pub fn draw(list: *draw_list.DrawList, layout: Layout, panel: Panel) !void {
             try list.fill(.{ .x = at.x - 2, .y = at.y - 2, .w = at.w + 4, .h = at.h + 4 }, ring);
         }
         try list.fill(at, colorOf(kind));
+        try font.centred(list, at, labelOf(kind), inkOn(colorOf(kind)));
     }
     try list.fill(layout.indicator(), if (panel.cameraOn()) camera_on else camera_off);
     if (!panel.asking) return;
-    for (std.enums.values(Answer)) |reply| try list.fill(layout.dialog(reply), answerColor(reply));
+    for (std.enums.values(Answer)) |reply| {
+        try list.fill(layout.dialog(reply), answerColor(reply));
+        try font.centred(list, layout.dialog(reply), answerLabel(reply), inkOn(answerColor(reply)));
+    }
 }
 
 /// Applies a click at (`x`, `y`) to `panel`. While the dialog is open only

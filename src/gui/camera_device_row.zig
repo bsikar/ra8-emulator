@@ -1,11 +1,11 @@
 //! The webcam device row under the camera panel (RA8EMU-500): one slot per
 //! /dev/videoN the host lists (camera_devices.zig), the chosen one ringed.
 //! A click on a slot names that device; the pane turns it into the webcam
-//! argument. The slots carry no labels until the font atlas lands, so their
-//! order is the device order.
+//! argument. Each slot is labelled vN for /dev/videoN (RA8EMU-677).
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const camera_view = @import("camera_view.zig");
+const font = @import("font.zig");
 const Rect = draw_list.Rect;
 
 pub const slot_color = camera_view.camera_off;
@@ -43,6 +43,9 @@ pub fn draw(list: *draw_list.DrawList, row: Row, devices: []const u32, chosen: ?
             try list.fill(.{ .x = at.x - 2, .y = at.y - 2, .w = at.w + 4, .h = at.h + 4 }, camera_view.ring);
         }
         try list.fill(at, slot_color);
+        var text: [12]u8 = undefined;
+        const label = std.fmt.bufPrint(&text, "v{d}", .{device}) catch "v?";
+        try font.centred(list, at, label, camera_view.inkOn(slot_color));
     }
 }
 

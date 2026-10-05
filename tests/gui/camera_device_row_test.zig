@@ -31,7 +31,8 @@ test "no devices draw nothing; the chosen one is ringed" {
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
     try row_mod.draw(&list, row, &devices, null);
     const plain = list.commands.items.len;
-    try std.testing.expectEqual(@as(usize, 1 + devices.len), plain);
+    // Background, three slots, and the glyphs of v0, v2 and v10.
+    try std.testing.expectEqual(@as(usize, 1 + devices.len + 7), plain);
     list.commands.clearRetainingCapacity();
     try row_mod.draw(&list, row, &devices, 2);
     try std.testing.expectEqual(plain + 1, list.commands.items.len);
