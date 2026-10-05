@@ -302,13 +302,12 @@ test "a GLCDC burst settles once the picture holds for the window, and only once
     try expectIndex(armed.sequence, "frame_00000.ppm 60000000\n");
 }
 
-test "frame-on-settle refuses to share a run with --frames-out or --gif-out" {
+test "frame-on-settle can share a run with ordinary frames" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", "a", "--frames-out", "b" });
-    // Not expectError: on a miss it would print the Armed, board and all.
-    if (frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)) |armed| {
-        if (armed) |one| one.deinit();
-        return error.TestUnexpectedResult;
-    } else |err| try std.testing.expectEqual(error.SettleSharesRun, err);
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    defer armed.deinit();
+    try std.testing.expect(!armed.settle_only);
+    try std.testing.expect(armed.settle_sequence != null);
 }

@@ -7,6 +7,7 @@ test "frame sequence flags are optional and validate the scan interval" {
     const defaults = try cli.parse(&.{ "emu", "a.elf" });
     try std.testing.expect(defaults.frames.frames_out == null);
     try std.testing.expect(defaults.frames.gif_out == null);
+    try std.testing.expect(defaults.frames.video_out == null);
     try std.testing.expectEqual(@as(usize, 1), defaults.frames.frames_every);
 
     const asked = try cli.parse(&.{ "emu", "a.elf", "--frames-out", "frames", "--gif-out", "movie.gif", "--frames-every", "2" });
@@ -40,4 +41,9 @@ test "--window-stills names a directory and how often to keep a frame" {
     try std.testing.expectEqual(@as(u32, 30), asked.frames.window_stills_every);
     try std.testing.expectError(error.BadValue, cli.parse(&.{ "emu", "a.elf", "--window-stills-every", "0" }));
     try std.testing.expectError(error.MissingValue, cli.parse(&.{ "emu", "a.elf", "--window-stills" }));
+}
+
+test "video output argument takes a path" {
+    const parsed = try cli.parse(&.{ "emu", "image.elf", "--video-out", "capture.y4m" });
+    try std.testing.expectEqualStrings("capture.y4m", parsed.frames.video_out.?);
 }

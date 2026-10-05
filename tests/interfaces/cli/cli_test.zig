@@ -112,6 +112,7 @@ test {
     _ = @import("window_run_test.zig");
     _ = @import("window_main_test.zig");
     _ = @import("gif_test.zig");
+    _ = @import("video_out_test.zig");
     _ = @import("gif_lzw_test.zig");
     _ = @import("wav_test.zig");
     _ = @import("audio_out_test.zig");

@@ -7,6 +7,7 @@ const frame_args = @import("frames_args.zig");
 const eink = @import("../../periph/eink/eink.zig");
 const eink_wire = @import("../../periph/eink/eink_wire.zig");
 const gif = @import("gif.zig");
+const video_out = @import("video_out.zig");
 const display_settled = @import("../../board/display_settled.zig");
 
 pub const Sequence = struct {
@@ -16,6 +17,7 @@ pub const Sequence = struct {
     index: ?std.fs.File,
     gif_path: ?[]const u8,
     gif_writer: ?gif.Writer = null,
+    video_writer: ?video_out.Writer = null,
     every: usize,
     scanned: usize = 0,
     written: usize = 0,
@@ -28,8 +30,12 @@ pub const Sequence = struct {
     }
 
     pub fn initOutputs(allocator: std.mem.Allocator, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !Sequence {
+        return initAll(allocator, frames_path, gif_path, null, every);
+    }
+
+    pub fn initAll(allocator: std.mem.Allocator, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !Sequence {
         if (every == 0) return error.BadInterval;
-        if (frames_path == null and gif_path == null) return error.NoOutput;
+        if (frames_path == null and gif_path == null and video_path == null) return error.NoOutput;
         var directory = std.fs.cwd();
         var owns_directory = false;
         var index: ?std.fs.File = null;
@@ -44,12 +50,14 @@ pub const Sequence = struct {
             }
             index = try directory.createFile("frames.txt", .{});
         }
+        const video_writer = if (video_path) |path| try video_out.Writer.init(allocator, path) else null;
         return .{
             .allocator = allocator,
             .directory = directory,
             .owns_directory = owns_directory,
             .index = index,
             .gif_path = gif_path,
+            .video_writer = video_writer,
             .every = every,
         };
     }
@@ -63,6 +71,7 @@ pub const Sequence = struct {
     pub fn deinit(self: *Sequence) void {
         if (self.previous) |pixels| self.allocator.free(pixels);
         if (self.gif_writer) |*writer| writer.deinit();
+        if (self.video_writer) |*writer| writer.deinit();
         if (self.index) |file| file.close();
         if (self.owns_directory) self.directory.close();
     }
@@ -111,8 +120,17 @@ pub const Sequence = struct {
         self.written += 1;
     }
 
+    pub fn recordVideo(self: *Sequence, width: u32, height: u32, pixels: []const u32, when: u64) !void {
+        if (self.video_writer) |*writer| try writer.record(width, height, pixels, when);
+    }
+
+    pub fn holdVideoUntil(self: *Sequence, when: u64) !void {
+        if (self.video_writer) |*writer| try writer.holdUntil(when);
+    }
+
     pub fn finish(self: *Sequence) !void {
         if (self.gif_writer) |*writer| try writer.finish();
+        if (self.video_writer) |*writer| try writer.finish();
     }
 
     fn write(self: *Sequence, width: u32, height: u32, pixels: []const u32) !void {
@@ -132,45 +150,7 @@ pub const Sequence = struct {
     }
 };
 
-/// Buffers the panel around the report scan, or asks for one scan after the
-/// report if it did not scan. No extra scan is made when reporting already
-/// completed one.
-pub const FrameCapture = struct {
-    allocator: std.mem.Allocator,
-    pixels: []u32,
-    width: u32,
-    height: u32,
-    before: u32,
-
-    pub fn init(allocator: std.mem.Allocator, board: *Board) !?FrameCapture {
-        const width = board.display.panelWidth();
-        const height = board.display.panelHeight();
-        if (width == 0 or height == 0) return null;
-        const count = std.math.mul(usize, width, height) catch return error.BadShape;
-        const pixels = try allocator.alloc(u32, count);
-        @memset(pixels, 0);
-        board.display.output.capture = .{ .pixels = pixels, .width = width, .height = height };
-        return .{
-            .allocator = allocator,
-            .pixels = pixels,
-            .width = width,
-            .height = height,
-            .before = board.display.system.frames,
-        };
-    }
-
-    pub fn deinit(self: *FrameCapture, board: *Board) void {
-        board.display.output.capture = null;
-        self.allocator.free(self.pixels);
-    }
-
-    pub fn finish(self: *FrameCapture, board: *Board, sequence: *Sequence) !void {
-        defer board.display.output.capture = null;
-        if (board.display.system.frames == self.before) _ = board.display.scanOut();
-        if (board.display.system.frames != self.before)
-            try sequence.record(self.width, self.height, self.pixels, board.time.base.now());
-    }
-};
+pub const FrameCapture = @import("frame_capture.zig").FrameCapture;
 
 /// --frames-out armed before the run (RA8EMU-573). It installs a Vsync on
 /// the GLCDC output stage, so each frame period the board boundary scans the
@@ -192,6 +172,7 @@ pub const Armed = struct {
     board_eink_frames: u32 = 0,
     settle_only: bool = false,
     settled: display_settled.Detector,
+    settle_sequence: ?Sequence = null,
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
@@ -200,13 +181,17 @@ pub const Armed = struct {
     }
 
     pub fn armOutputs(allocator: std.mem.Allocator, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !?*Armed {
-        if (frames_path == null and gif_path == null) return null;
+        return armAll(allocator, board, frames_path, gif_path, null, every);
+    }
+
+    fn armAll(allocator: std.mem.Allocator, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !?*Armed {
+        if (frames_path == null and gif_path == null and video_path == null) return null;
         const self = try allocator.create(Armed);
         errdefer allocator.destroy(self);
         self.* = .{
             .allocator = allocator,
             .board = board,
-            .sequence = try Sequence.initOutputs(allocator, frames_path, gif_path, every),
+            .sequence = try Sequence.initAll(allocator, frames_path, gif_path, video_path, every),
             .settled = .{ .allocator = allocator },
         };
         errdefer self.sequence.deinit();
@@ -222,11 +207,11 @@ pub const Armed = struct {
     }
 
     pub fn armForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !?*Armed {
+        const path = options.frames_out orelse if (options.frame_on_settle != null and options.gif_out == null) options.frame_on_settle else null;
+        const armed = try armAll(allocator, board, path, options.gif_out, options.video_out, options.frames_every) orelse return null;
         if (options.frame_on_settle != null and (options.frames_out != null or options.gif_out != null))
-            return error.SettleSharesRun;
-        const path = options.frames_out orelse options.frame_on_settle;
-        const armed = try armOutputs(allocator, board, path, options.gif_out, options.frames_every) orelse return null;
-        if (options.frame_on_settle != null) {
+            armed.settle_sequence = try Sequence.init(allocator, options.frame_on_settle.?, options.frames_every);
+        if (options.frame_on_settle != null or options.video_out != null) {
             armed.settle_only = options.frames_out == null and options.gif_out == null;
             armed.settled.window_ns = options.settle_window_ns;
             armed.settled.eink_settled = (armed.eink_panel orelse &board.panel).film.settled;
@@ -251,11 +236,13 @@ pub const Armed = struct {
     fn frameAt(self: *Armed, when: u64) !void {
         const capture = (try self.fit()) orelse return;
         if (self.board.display.scanOut() == null) return;
-        if (self.settle_only) {
-            try self.observeFrame(capture.width, capture.height, capture.pixels, when);
-        } else {
-            try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+        const tracks_settle = self.settle_only or self.settle_sequence != null or self.sequence.video_writer != null;
+        if (tracks_settle and try self.settled.observeFrame(capture.width, capture.height, capture.pixels, when)) {
+            if (self.settle_sequence) |*sequence| try sequence.record(capture.width, capture.height, capture.pixels, when);
+            if (self.settle_only) try self.sequence.record(capture.width, capture.height, capture.pixels, when);
+            try self.sequence.recordVideo(capture.width, capture.height, capture.pixels, when);
         }
+        if (!self.settle_only) try self.sequence.record(capture.width, capture.height, capture.pixels, when);
         self.glcdc_frames += 1;
         capture.before = self.board.display.system.frames;
     }
@@ -270,7 +257,7 @@ pub const Armed = struct {
     /// Poll from each virtual-time boundary. The e-ink controller's LUT
     /// status is authoritative; GLCDC stability is sampled at its vsyncs.
     pub fn pollSettle(self: *Armed, now: u64) !void {
-        if (!self.settle_only) return;
+        if (!self.settle_only and self.settle_sequence == null and self.sequence.video_writer == null) return;
         const panel = self.eink_panel orelse &self.board.panel;
         if (!self.settled.observeEink(panel)) return;
         const count = panel.planes.glass.pixels.len;
@@ -282,7 +269,9 @@ pub const Armed = struct {
         for (panel.planes.glass.pixels, self.eink_pixels.?) |gray, *pixel| {
             pixel.* = 0xFF00_0000 | (@as(u32, gray) << 16) | (@as(u32, gray) << 8) | gray;
         }
-        try self.sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, self.eink_pixels.?, now);
+        if (self.settle_sequence) |*sequence| try sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, self.eink_pixels.?, now);
+        if (self.settle_only) try self.sequence.record(panel.planes.geometry.width, panel.planes.geometry.height, self.eink_pixels.?, now);
+        try self.sequence.recordVideo(panel.planes.geometry.width, panel.planes.geometry.height, self.eink_pixels.?, now);
     }
 
     fn onEinkRefresh(context: *anyopaque) void {
@@ -331,7 +320,9 @@ pub const Armed = struct {
                 if (self.board_eink_frames == 0) try capture.finish(self.board, &self.sequence);
             }
         }
+        try self.sequence.holdVideoUntil(self.board.time.base.now());
         try self.sequence.finish();
+        if (self.settle_sequence) |*sequence| try sequence.finish();
     }
 
     pub fn deinit(self: *Armed) void {
@@ -344,6 +335,7 @@ pub const Armed = struct {
         self.settled.deinit();
         if (self.capture) |*capture| capture.deinit(self.board);
         self.sequence.deinit();
+        if (self.settle_sequence) |*sequence| sequence.deinit();
         self.allocator.destroy(self);
     }
 };
