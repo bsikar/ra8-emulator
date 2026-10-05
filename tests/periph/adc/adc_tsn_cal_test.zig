@@ -4,26 +4,26 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const engine = ra8.core.engine;
+const store_memory = @import("../store_memory.zig");
 const tsn_cal = ra8.periph.adc.tsn_cal;
 const adc_scan = ra8.periph.adc_scan;
 
 test "map seeds both calibration words where adc_diag_tsn_demo stopped" {
-    var core = try engine.Engine.open();
-    defer core.close();
+    const core = try store_memory.open();
+    defer store_memory.close(core);
 
-    try std.testing.expect(try tsn_cal.map(.{ .engine = core }));
+    try std.testing.expect(try tsn_cal.map(core));
     try std.testing.expectEqual(tsn_cal.code.high, try core.readWord(0x02C1_EDA0));
     try std.testing.expectEqual(tsn_cal.code.low, try core.readWord(0x02C1_EDA4));
 }
 
 test "a page something already mapped keeps its bytes" {
-    var core = try engine.Engine.open();
-    defer core.close();
+    const core = try store_memory.open();
+    defer store_memory.close(core);
 
     try core.map(tsn_cal.addr.page_base, tsn_cal.page);
     try core.writeWord(tsn_cal.addr.tscdr, 0x0000_0ABC);
-    try std.testing.expect(!try tsn_cal.map(.{ .engine = core }));
+    try std.testing.expect(!try tsn_cal.map(core));
     try std.testing.expectEqual(@as(u32, 0x0000_0ABC), try core.readWord(tsn_cal.addr.tscdr));
 }
 
