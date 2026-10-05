@@ -1,6 +1,7 @@
 //! Covers src/interfaces/cli/window_run.zig: a Zig-core run shown in a
 //! headless window advances one frame per tick, ends the loop when the run
-//! ends, and ends the run when the window closes.
+//! ends, ends the run when the window closes, and lets a click on the
+//! camera pane swap the CEU source while the run goes on.
 const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
@@ -89,4 +90,50 @@ test "closing the window ends the run at its next boundary" {
     try std.testing.expectEqual(@as(u32, 0), window.presents);
     try std.testing.expect(soak.board.time.base.now() <= per_frame);
     try std.testing.expect(soak.clock.paced_out);
+}
+
+/// A camera source that counts how often the board let go of it.
+const Held = struct {
+    closed: u32 = 0,
+
+    fn source(self: *Held) ra8.gui.camera_switch.FrameSource {
+        return .{ .context = self, .vtable = &.{ .frame = frame, .fill = fill, .close = close }, .label = "held" };
+    }
+
+    fn frame(_: *anyopaque, _: u64, _: ra8.periph.ceu.camera.frame_source.Shape) void {}
+
+    fn fill(_: *anyopaque, _: u32, _: u32, out: []u8) void {
+        @memset(out, 0);
+    }
+
+    fn close(context: *anyopaque) void {
+        const self: *Held = @ptrCast(@alignCast(context));
+        self.closed += 1;
+    }
+};
+
+fn press(at: ra8.gui.draw_list.Rect) ra8.gui.platform.Event {
+    return .{ .button = .{ .button = 1, .down = true, .x = at.x + 1, .y = at.y + 1 } };
+}
+
+test "a click on the camera pane swaps the CEU's source while the run goes on" {
+    var soak: Soak = undefined;
+    try soak.init(100_000);
+    defer soak.deinit();
+    var held = Held{};
+    soak.board.capture.source = held.source();
+    var window = Headless.init(std.testing.allocator, 1600, 700);
+    defer window.deinit();
+    const board_view = ra8.board.report.frame_out.board_view;
+    const pane = ra8.gui.host_loop.paneLayout(board_view.size(board_view.panel_width, board_view.panel_height));
+    // The pane starts on the gradient, so a pick away and back is a switch.
+    try window.feed(press(pane.source(.video)));
+    try window.feed(press(pane.source(.gradient)));
+    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine());
+    defer soak.board.capture.source.close();
+    try std.testing.expect(!soak.failed);
+    try std.testing.expect(!shown.closed);
+    try std.testing.expect(shown.frames >= 4);
+    try std.testing.expectEqual(@as(u32, 1), held.closed);
+    try std.testing.expectEqualStrings("synthetic gradient", soak.board.capture.source.label);
 }
