@@ -22,6 +22,7 @@ const card_setup = cli.card_setup;
 /// `index` past any value it took; false leaves it where it was.
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     if (try parseSplit(options, argv, index)) return true;
+    if (try @import("audio_out.zig").parse(&options.audio, argv, index)) return true;
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--console")) {
         options.console = true;

@@ -58,9 +58,8 @@ pub const Options = struct {
     /// The budget `--instructions` asked for, or null to take whichever
     /// default fits the run. Resolved by `budget`, never read raw.
     instructions: ?usize = null,
-    /// Which part the run models. The two share a register map; the RA8P1
-    /// also carries the Ethos-U55, so this decides whether that window
-    /// answers at all.
+    /// Which part the run models. Both share a register map; the RA8P1 also
+    /// carries the Ethos-U55, so this decides whether that window answers.
     part: part.Part = .ra8d2,
     /// CMSAMON.CMS and SFSAMON.SFS, the Secure code MRAM and SiP flash in
     /// 32 KB units. Null leaves the part unprogrammed (RA8EMU-428).
@@ -85,6 +84,7 @@ pub const Options = struct {
     frame_out: ?[]const u8 = null,
     panel_only: bool = false, // `--panel-only`: only the glass, at its own size
     frames: @import("frames_args.zig").Options = .{},
+    audio: @import("audio_out.zig").Options = .{}, // `--audio-out`, `--audio-rate`
     rtc_start: ?@import("../../periph/rtc/rtc_clock.zig").Calendar = null,
     speed: ?u64 = null, // `--speed`/`--realtime`: thousandths of 1x; null runs flat out
     run_for: bool = false, // `--run-for`: a watchdog reset ends the run (RA8EMU-186)

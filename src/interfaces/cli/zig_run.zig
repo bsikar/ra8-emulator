@@ -21,6 +21,7 @@ const json_run = @import("report/json_run.zig");
 const report_dumps = @import("report/dumps.zig");
 const frame_out = @import("frame_out.zig");
 const frames_out = @import("report.zig").frames_out;
+const audio_out = @import("audio_out.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const profile = @import("../../debug/profile.zig");
@@ -219,6 +220,9 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var boot_output = out;
     var final: boot.Regs = .{};
     // --console opens the ITM as a probe would (RA8EMU-629).
+    var audio: audio_out.Run = .{};
+    audio.arm(board, if (options.cpu == .zig) options.audio else .{});
+    defer audio.deinit();
     var itm_port = itm_console.opened();
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
     const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
@@ -259,12 +263,11 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
             try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, timebase.*, ran, clock.bus_tally);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
-        // The globals a memory-probe verdict reads, out of the Zig core's
-        // own memory, so the line is the Unicorn run's line.
+        // Globals a memory-probe verdict reads, out of the Zig core's memory.
         if (!options.report_json) try textDumps(out, board, clock.memory, &final, image, options, watched);
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
-        try finishFrames(out, board, options, &frames);
+        try finishFrames(out, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
     } else try captureFrames(board, options);
@@ -297,8 +300,9 @@ fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *cons
     try watchpoint.print(out, image, options.watch_place, watched);
 }
 
-fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run) !void {
+fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
     try frames.finish(board);
+    try audio.finish(out);
     try frame_out.report(out, board, options.frame_out, options.panel_only);
 }
 
