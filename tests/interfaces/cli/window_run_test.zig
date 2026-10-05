@@ -75,8 +75,9 @@ test "the window draws a frame per slice until the run ends" {
     const panel_bytes = @as(usize, board_view.panel_width) * board_view.panel_height * @sizeOf(u32);
     try std.testing.expect(shown.snapshot_bytes >= panel_bytes);
     // The soaker sleeps, so board time, not retired instructions, is what
-    // each frame's grant buys.
-    try std.testing.expect(soak.board.time.base.now() >= shown.frames * per_frame);
+    // a grant buys. The window no longer waits for each grant to be spent,
+    // so a tick can draw without granting; at least one grant was.
+    try std.testing.expect(soak.board.time.base.now() >= per_frame);
 }
 
 test "closing the window ends the run at its next boundary" {

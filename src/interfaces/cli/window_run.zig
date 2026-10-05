@@ -1,6 +1,7 @@
 //! A run shown live in the host window (RA8EMU-646): the engine runs to
-//! its end on its own thread, paced one frame per window tick, while the
-//! window draws the board and takes input. Closing the window ends the run
+//! its end on its own thread, at most one frame per window tick, while the
+//! window draws the newest board the engine published and takes input. The
+//! window never waits on the engine (RA8EMU-227). Closing the window ends the run
 //! at its next boundary; the run ending closes the loop.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
@@ -33,7 +34,7 @@ pub const Shown = struct {
 /// starting on `camera`, the run's own source. The panel is scanned once
 /// before the engine starts, so the first frame never races it.
 pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec) !Shown {
-    var screen = try window_board.Screen.init(allocator, board, pacer.stepper());
+    var screen = try window_board.Screen.init(allocator, board, pacer.granter());
     defer screen.deinit();
     screen.on_engine = true;
     pacer.at_park = screen.parkHook();
