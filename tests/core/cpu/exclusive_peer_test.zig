@@ -4,6 +4,9 @@ const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
 const exclusive_peer = ra8.core.cpu.exclusive_peer;
 const Cpu = ra8.core.cpu.cpu.Cpu;
+const Instr = ra8.core.cpu.instr.Instr;
+const ex = ra8.core.cpu.ops.exclusive;
+const fixture = @import("exception/ram.zig");
 
 /// Shared SRAM both cores store into.
 const Shared = struct {
@@ -78,4 +81,35 @@ test "unpaired cores watch nothing" {
     cpu0.exclusive = 0x2200_0020;
     try cpu1.bus.writeWord(0x2200_0020, 1);
     try std.testing.expectEqual(@as(?u32, 0x2200_0020), cpu0.exclusive);
+}
+
+/// One wide exclusive instruction on `cpu`, as its decoder runs it.
+fn exec(cpu: *Cpu, hw1: u16, hw2: u16) !void {
+    const instr: Instr = .{ .address = fixture.code, .hw1 = hw1, .hw2 = hw2, .size = 4 };
+    try ex.group.decode(instr).?(cpu, instr);
+}
+
+test "a spinlock taken by one core makes the other core's strex fail" {
+    var ram: fixture.Ram = .{};
+    const lock: u32 = fixture.base + 0x200;
+    var cpu0 = try fixture.boot(&ram);
+    var cpu1 = try fixture.boot(&ram);
+    exclusive_peer.pair(&cpu0, &cpu1);
+    defer exclusive_peer.unpair(&cpu0, &cpu1);
+    cpu0.regs.low[0] = lock;
+    cpu1.regs.low[0] = lock;
+    cpu0.regs.low[3] = 1;
+    cpu1.regs.low[3] = 2;
+    // Both cores see the lock free.
+    try exec(&cpu0, 0xE850, 0x1F00); // ldrex r1, [r0]
+    try exec(&cpu1, 0xE850, 0x1F00);
+    try std.testing.expectEqual(@as(u32, 0), cpu0.regs.low[1]);
+    try std.testing.expectEqual(@as(u32, 0), cpu1.regs.low[1]);
+    // CPU1 takes it first.
+    try exec(&cpu1, 0xE840, 0x3200); // strex r2, r3, [r0]
+    try std.testing.expectEqual(@as(u32, 0), cpu1.regs.low[2]);
+    // CPU0's reservation went with CPU1's store, so its strex stores nothing.
+    try exec(&cpu0, 0xE840, 0x3200);
+    try std.testing.expectEqual(@as(u32, 1), cpu0.regs.low[2]);
+    try std.testing.expectEqual(@as(u32, 2), ram.word(lock));
 }
