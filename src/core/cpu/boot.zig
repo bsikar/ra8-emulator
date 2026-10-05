@@ -75,11 +75,21 @@ pub const Wrap = struct {
 /// Save and restore for a `--cpu zig` run (RA8EMU-695): `loadFn` runs right
 /// after the core resets, before its first instruction; `saveFn` runs once
 /// the budget is spent. Each is handed the core, which lives only in runOn.
+/// Both carry what the run owes its clocks (`Owed`, RA8EMU-700): a load
+/// returns what the saved run owed, a save is handed what this one owes.
 pub const Snapshot = struct {
     context: *anyopaque,
-    loadFn: ?*const fn (context: *anyopaque, core: *cpu_mod.Cpu) anyerror!void = null,
-    saveFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu) anyerror!void = null,
+    loadFn: ?*const fn (context: *anyopaque, core: *cpu_mod.Cpu) anyerror!u32 = null,
+    saveFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu, owed: u32) anyerror!void = null,
 };
+
+/// Instructions a stretch retired but has not charged to the clocks yet
+/// (RA8EMU-700). A budget that ends inside a stretch would close it short,
+/// which a straight run never does, so a run that saves holds that stretch
+/// open (`hold`), saves what it owes (`out`), then closes it. A loaded run
+/// starts `in` instructions into its first stretch, so its boundaries, and
+/// every SysTick pend they carry, land where the straight run's do.
+pub const Owed = struct { in: u32 = 0, hold: bool = false, out: u32 = 0 };
 
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
 /// boundary that moves time, the core-private SAU and MPU its stores bank
@@ -201,9 +211,13 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
-    if (watch.snapshot) |hook| if (hook.loadFn) |load| try load(hook.context, &cpu);
-    const stopped = try stretches(&cpu, budget, boundary, until);
-    if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu);
+    var owed: Owed = .{ .hold = if (watch.snapshot) |hook| hook.saveFn != null else false };
+    if (watch.snapshot) |hook| if (hook.loadFn) |load| {
+        owed.in = try load(hook.context, &cpu);
+    };
+    const stopped = try stretches(&cpu, budget, boundary, until, &owed);
+    if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu, owed.out);
+    if (owed.out != 0) if (boundary) |edge| try edge.closeFn(edge.context, owed.out);
     if (ran) |count| count.* = cpu.retired;
     if (final) |into| into.* = cpu.regs;
     const code = try report(out, cpu, stopped);
@@ -215,23 +229,37 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
 }
 
 /// The budget in stretches, each closed by the boundary. A stretch the core
-/// stops inside is not closed: it never ran to its edge.
-pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until) !cpu_mod.Stop {
+/// stops inside is not closed: it never ran to its edge. `owed` carries a
+/// stretch across a save and a load (RA8EMU-700).
+pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until, owed: *Owed) !cpu_mod.Stop {
     const edge = boundary orelse return cpu.run(budget);
     var left = budget;
+    var carry = owed.in;
     while (left > 0) {
-        const width: u32 = @intCast(@min(left, widthOf(cpu, edge)));
+        const full = widthOf(cpu, edge);
+        if (carry >= full) {
+            try edge.closeFn(edge.context, carry);
+            carry = 0;
+            continue;
+        }
+        const width: u32 = @intCast(@min(left, full - carry));
         const stopped = cpu.run(width);
         if (until) |wait| if (wait.reached) return .count;
         if (stopped != .count) return stopped;
         // The firmware armed SysTick inside this stretch: charge it one instruction and no time, and cut the next
-        // stretch from the period now armed (RA8EMU-464).
+        // stretch from the period now armed (RA8EMU-464). What the stretch carried in goes uncharged with it.
         if (cpu.cut) |cut| if (cut.take()) {
             left -= 1;
+            carry = 0;
             continue;
         };
         left -= width;
-        try edge.closeFn(edge.context, width);
+        if (left == 0 and owed.hold and carry + width < full) {
+            owed.out = carry + width;
+            return .count;
+        }
+        try edge.closeFn(edge.context, carry + width);
+        carry = 0;
         if (edge.doneFn) |done| if (done(edge.context)) return .count;
         if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
     }

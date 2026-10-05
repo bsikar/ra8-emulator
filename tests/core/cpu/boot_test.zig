@@ -296,29 +296,64 @@ test "a reset asked for at a boundary brings the zig core back up on its reset v
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc 0x22000008") != null);
 }
 
-/// Records what the snapshot hook saw (RA8EMU-695).
+/// Records what the snapshot hook saw (RA8EMU-695, RA8EMU-700).
 const Probe = struct {
     start_retired: u64 = 0,
+    owed_in: u32 = 0,
     loaded: bool = false,
     saved_retired: ?u64 = null,
     saved_pc: u32 = 0,
+    saved_owed: u32 = 0,
 
-    fn load(context: *anyopaque, core: *ra8.core.cpu.cpu.Cpu) anyerror!void {
+    fn load(context: *anyopaque, core: *ra8.core.cpu.cpu.Cpu) anyerror!u32 {
         const self: *Probe = @ptrCast(@alignCast(context));
         self.loaded = core.retired == 0;
         core.retired = self.start_retired;
+        return self.owed_in;
     }
 
-    fn save(context: *anyopaque, core: *const ra8.core.cpu.cpu.Cpu) anyerror!void {
+    fn save(context: *anyopaque, core: *const ra8.core.cpu.cpu.Cpu, owed: u32) anyerror!void {
         const self: *Probe = @ptrCast(@alignCast(context));
         self.saved_retired = core.retired;
         self.saved_pc = core.regs.pc;
+        self.saved_owed = owed;
     }
 
     fn hook(self: *Probe) boot.Snapshot {
         return .{ .context = self, .loadFn = load, .saveFn = save };
     }
 };
+
+/// Runs `loadSpin` for `budget` on a board with a boundary of `edges`.
+fn runOwed(probe: *Probe, edges: *Edges, budget: u64) !void {
+    var store = try Store.init(null);
+    defer store.deinit();
+    try loadSpin(&store);
+    var ran: u64 = 0;
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, budget, &ran, .{ .boundary = edges.boundary(), .snapshot = probe.hook() });
+}
+
+test "a run that saves holds the stretch its budget cut short, saves what it owes, then closes it" {
+    var probe: Probe = .{};
+    var edges: Edges = .{ .width = 4 };
+    try runOwed(&probe, &edges, 10);
+    try std.testing.expectEqual(@as(u32, 2), probe.saved_owed);
+    try std.testing.expectEqual(@as(u32, 3), edges.closes);
+    try std.testing.expectEqual(@as(u64, 10), edges.charged);
+}
+
+test "a loaded run starts its first stretch as far in as the saved run owed" {
+    var probe: Probe = .{ .owed_in = 2 };
+    var edges: Edges = .{ .width = 4 };
+    try runOwed(&probe, &edges, 6);
+    try std.testing.expectEqual(@as(u32, 0), probe.saved_owed);
+    try std.testing.expectEqual(@as(u32, 2), edges.closes);
+    try std.testing.expectEqual(@as(u64, 8), edges.charged);
+}
 
 test "the snapshot hook loads after reset and saves once the budget is spent" {
     var store = try Store.init(null);

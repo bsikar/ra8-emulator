@@ -1,9 +1,7 @@
 //! Covers src/interfaces/cli/zig_snapshot.zig: a run saved part way and
-//! restored ends where the uninterrupted run ends (RA8EMU-696).
-//!
-//! The split sits on a chunk boundary: a save ends the run's last chunk, so
-//! a split anywhere else adds one boundary the straight run never had, and
-//! per-boundary counts (the RTT reader's ticks) differ by that one.
+//! restored ends where the uninterrupted run ends (RA8EMU-696), wherever the
+//! split falls: a save holds the chunk it stopped in open instead of closing
+//! it short, and the load picks it up there (RA8EMU-700).
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -74,6 +72,26 @@ test "two chunks straight end where one chunk, saved, then one restored end" {
     const half = try read(tmp.dir, "half");
     defer std.testing.allocator.free(half);
     try std.testing.expect(!std.mem.eql(u8, straight, half));
+    try std.testing.expectEqualSlices(u8, straight, resumed);
+}
+
+test "a split off a chunk boundary ends where the straight run ends too" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const paths = [_][]const u8{ "straight", "half", "resumed" };
+    var full: [3][]u8 = undefined;
+    for (paths, 0..) |name, at| full[at] = try std.fs.path.join(std.testing.allocator, &.{ root, name });
+    defer for (full) |one| std.testing.allocator.free(one);
+    const chunk: usize = ra8.periph.clocks.chunk_instructions;
+    try run(tmp.dir, chunk * 2, .{ .save = full[0] });
+    try run(tmp.dir, chunk + 1000, .{ .save = full[1] });
+    try run(tmp.dir, chunk - 1000, .{ .load = full[1], .save = full[2] });
+    const straight = try read(tmp.dir, "straight");
+    defer std.testing.allocator.free(straight);
+    const resumed = try read(tmp.dir, "resumed");
+    defer std.testing.allocator.free(resumed);
     try std.testing.expectEqualSlices(u8, straight, resumed);
 }
 

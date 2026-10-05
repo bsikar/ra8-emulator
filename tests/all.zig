@@ -30,6 +30,7 @@ test {
     _ = @import("snapshot/rswitch_test.zig");
     _ = @import("snapshot/npu_test.zig");
     _ = @import("snapshot/systick_test.zig");
+    _ = @import("snapshot/stretch_test.zig");
     _ = @import("snapshot/c6_test.zig");
     _ = @import("snapshot/board_test.zig");
     _ = @import("snapshot/run_test.zig");
