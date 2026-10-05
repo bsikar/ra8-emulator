@@ -15,6 +15,7 @@ const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const camera_view = @import("camera_view.zig");
 const camera_devices = @import("camera_devices.zig");
+const consent_store = @import("camera_consent_store.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
 pub const board_view = @import("../interfaces/cli/board_view.zig");
 const Color = draw_list.Color;
@@ -63,6 +64,8 @@ pub const Loop = struct {
     pixels: []Color = &.{},
     frame: ?raster.Framebuffer = null,
     devices: ?camera_devices.Devices = null,
+    /// Where Always for this project is kept; null keeps it for this run.
+    project: ?std.fs.Dir = null,
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
@@ -79,17 +82,25 @@ pub const Loop = struct {
         self.pane.devices = devices.numbers;
     }
 
+    /// Keeps Always in `project`, starting from what an earlier run saved.
+    pub fn useProject(self: *Loop, project: std.fs.Dir) void {
+        self.project = project;
+        if (consent_store.load(project)) self.pane.panel.always = true;
+    }
+
     /// One frame. Returns false once the run ended or the window closed;
     /// a closed window stops before the slice runs.
     pub fn tick(self: *Loop, window: platform.Platform, run: Run) !bool {
         const before = run.vtable.board(run.ctx);
         self.pane.layout = paneLayout(board_view.size(before.width, before.height));
+        const always = self.pane.panel.always;
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
                 else => _ = self.pane.handle(event),
             }
         }
+        if (self.pane.panel.always and !always) self.remember();
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
             self.pane.settle(self.allocator, camera.source, camera.format_control);
@@ -97,6 +108,12 @@ pub const Loop = struct {
         const running = run.vtable.step(run.ctx);
         try self.draw(window, run.vtable.board(run.ctx));
         return running;
+    }
+
+    /// A project that will not take the marker asks again next run.
+    fn remember(self: *Loop) void {
+        const project = self.project orelse return;
+        consent_store.save(project) catch {};
     }
 
     fn draw(self: *Loop, window: platform.Platform, board: Board) !void {

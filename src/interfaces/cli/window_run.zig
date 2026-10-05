@@ -34,6 +34,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
     loop.adoptDevices(try camera_devices.listHost(allocator));
+    loop.useProject(std.fs.cwd());
     const thread = try std.Thread.spawn(.{}, runThenFinish, .{ engine, pacer });
     defer {
         pacer.stop();
