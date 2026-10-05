@@ -1,7 +1,7 @@
 //! Covers src/board/session_plug.zig through the session API: a gauge on
-//! the RIIC line, a panel on SPI and a modem on SCI3 unplugged and plugged
-//! back mid-run, with each line behaving as a missing part would while it
-//! is out (RA8EMU-212).
+//! the RIIC line, a panel on SPI, a modem on SCI3 and buttons on GPIO pins
+//! unplugged and plugged back mid-run, with each line behaving as a missing
+//! part would while it is out (RA8EMU-212).
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -99,6 +99,26 @@ test "an unplugged modem leaves the line silent until it is plugged again" {
     try std.testing.expect(rig.modemLine() != null);
 }
 
+test "an unplugged button lets its pin fall back to its pull state" {
+    var rig: Rig = .{ .arena = undefined, .board = undefined };
+    try rig.setUp();
+    defer rig.tearDown();
+    const gpio = ra8.periph.gpio;
+    const plain: Endpoint = .{ .gpio = .{ .port = 1, .pin = 6 } };
+    try rig.session.plug(.cpu0, plain, "button");
+    try std.testing.expect(rig.board.pins.pinLevel(1, 6));
+    try rig.session.unplug(.cpu0, plain);
+    try std.testing.expect(!rig.board.pins.pinLevel(1, 6));
+    try std.testing.expectEqual(@as(usize, 0), rig.board.pins.wired.count);
+    const switch_pin: Endpoint = .{ .gpio = .{ .port = gpio.sw_port, .pin = gpio.sw1_pin } };
+    try rig.session.plug(.cpu0, switch_pin, "button");
+    try rig.session.unplug(.cpu0, switch_pin);
+    try std.testing.expect(rig.board.pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try rig.session.plug(.cpu0, plain, "button");
+    try std.testing.expect(rig.board.pins.pinLevel(1, 6));
+    try std.testing.expectEqual(@as(usize, 1), rig.board.pins.wired.count);
+}
+
 test "empty endpoints, taken endpoints, unknown parts and GPIO are refused" {
     var bare: api.Session = .{ .live = undefined };
     try std.testing.expectError(api.Error.NoPlugs, bare.unplug(.cpu0, gauge_at));
@@ -115,8 +135,8 @@ test "empty endpoints, taken endpoints, unknown parts and GPIO are refused" {
     try rig.session.plug(.cpu0, modem_at, "modem");
     try std.testing.expectError(error.ChannelTaken, rig.session.plug(.cpu0, modem_at, "modem"));
     try std.testing.expectError(error.UnknownModel, rig.session.plug(.cpu0, gauge_at, "nope"));
-    const pin: Endpoint = .{ .gpio = .{ .port = 0, .pin = 6 } };
-    try std.testing.expectError(session_plug.Error.WrongEndpoint, rig.session.plug(.cpu0, pin, "led"));
-    try std.testing.expectError(session_plug.Error.WrongEndpoint, rig.session.unplug(.cpu0, pin));
+    const pin: Endpoint = .{ .gpio = .{ .port = 1, .pin = 6 } };
+    try std.testing.expectError(empty, rig.session.unplug(.cpu0, pin));
+    try std.testing.expectError(error.WrongEndpoint, rig.session.plug(.cpu0, gauge_at, "led"));
     try std.testing.expectEqual(@as(usize, 3), rig.seen);
 }
