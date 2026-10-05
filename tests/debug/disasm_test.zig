@@ -13,3 +13,11 @@ test "a Thumb store decodes to its mnemonic and operands" {
 test "bytes that decode to nothing are an error, not a guess" {
     try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }));
 }
+
+test "the linked Capstone reports the version the parity oracle pins" {
+    const linked = mod.version();
+    try std.testing.expect(linked.major >= 4);
+    // This build links Capstone 5; a 4.x or 6.x box skips parity instead.
+    if (linked.major != 5) return error.SkipZigTest;
+    try std.testing.expectEqual(@as(u32, 0), linked.minor);
+}

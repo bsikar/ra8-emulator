@@ -49,3 +49,14 @@ pub fn one(address: u32, bytes: []const u8) Error!Text {
     text.len = writer.pos;
     return text;
 }
+
+/// The linked Capstone's major and minor version. The parity tests pin
+/// Capstone 5: the printers under src/core/cpu/text follow its spelling.
+pub const Version = struct { major: u32, minor: u32 };
+
+pub fn version() Version {
+    var major: c_int = 0;
+    var minor: c_int = 0;
+    _ = c.cs.cs_version(&major, &minor);
+    return .{ .major = @intCast(major), .minor = @intCast(minor) };
+}
