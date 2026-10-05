@@ -19,6 +19,9 @@ pub const DirectMemory = struct {
     flash: ?[]u8 = null,
     sram: ?[]u8 = null,
     enabled: bool = false,
+    /// The MPU check's armed flag. While it is set every access goes through
+    /// the vtable, so the board bus can ask the MPU (RA8EMU-710).
+    checking: ?*const bool = null,
 
     inline fn read(self: *const DirectMemory, address: u32, into: []u8) bool {
         const data = self.span(address, into.len) orelse return false;
@@ -33,6 +36,7 @@ pub const DirectMemory = struct {
     }
 
     inline fn span(self: *const DirectMemory, address: u32, len: usize) ?[]u8 {
+        if (self.checking) |armed| if (armed.*) return null;
         if (address >= memmap.mram_base and address < memmap.mram_end) {
             const offset = address - memmap.mram_base;
             if (len > memmap.mram_end - memmap.mram_base - offset) return null;

@@ -207,7 +207,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         cpu.cut = b.scs.cut;
         if (b.scs.regions) |unit| {
             check = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };
-            b.check = &check;
+            b.armCheck(&check);
             cpu.mpu = &check;
         }
     }
