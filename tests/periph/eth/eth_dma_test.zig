@@ -2,7 +2,8 @@
 //! and the rings the model refuses to walk.
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const desc = ra8.periph.eth_desc;
 const eth_dma = ra8.periph.eth_dma;
 
@@ -10,20 +11,24 @@ const linkfix_at: u32 = 0x2200_1000;
 const chain_at: u32 = 0x2200_1100;
 const buffer_at: u32 = 0x2200_2000;
 
-/// A machine with RAM, and an engine pointed at a LINKFIX table in it.
+/// A machine with RAM, and a descriptor engine pointed at a LINKFIX table in
+/// it. The store lives on the heap so the rings' handle outlives a move.
 const Fixture = struct {
-    core: engine.Engine,
+    store: *Store,
+    core: Guest,
     rings: eth_dma.Dma,
 
     fn open() !Fixture {
-        var core = try engine.Engine.open();
-        errdefer core.close();
-        try core.mapBoardRam();
-        return .{ .core = core, .rings = .{ .memory = .{ .engine = core }, .linkfix = linkfix_at } };
+        const store = try std.testing.allocator.create(Store);
+        errdefer std.testing.allocator.destroy(store);
+        store.* = try Store.init(null);
+        const core: Guest = .{ .store = store };
+        return .{ .store = store, .core = core, .rings = .{ .memory = core, .linkfix = linkfix_at } };
     }
 
     fn close(self: *Fixture) void {
-        self.core.close();
+        self.store.deinit();
+        std.testing.allocator.destroy(self.store);
     }
 
     /// Write an eight-byte descriptor at `at`.
