@@ -37,3 +37,23 @@ test "an unplug from the pane lands at the park" {
     devices.park();
     try std.testing.expect(board.wire.controller.devices.answering(0x36) == null);
 }
+
+test "a speed change waits for the park and keeps virtual time" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var devices: window_devices.Devices = undefined;
+    devices.init(std.testing.allocator, &board, &.{}, false);
+    defer devices.deinit();
+    board.time.base.advance(5000);
+    const before = board.time.base.now();
+    try devices.setSpeed(0.25);
+    try std.testing.expect(board.time.pacing == null);
+    devices.park();
+    try std.testing.expectEqual(@as(u64, 250), board.time.pacing.?.pacer.speed_milli);
+    try devices.setSpeed(5);
+    devices.park();
+    try std.testing.expectEqual(@as(u64, 5000), board.time.pacing.?.pacer.speed_milli);
+    try std.testing.expectEqual(before, board.time.base.now());
+    try std.testing.expectError(error.InvalidSpeed, devices.setSpeed(0));
+    try std.testing.expectError(error.InvalidSpeed, devices.setSpeed(-1));
+}
