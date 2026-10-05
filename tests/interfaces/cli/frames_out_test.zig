@@ -305,7 +305,15 @@ test "a GLCDC burst settles once the picture holds for the window, and only once
 test "frame-on-settle can share a run with ordinary frames" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", "a", "--frames-out", "b" });
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(root);
+    const settled = try std.fs.path.join(std.testing.allocator, &.{ root, "a" });
+    defer std.testing.allocator.free(settled);
+    const frames = try std.fs.path.join(std.testing.allocator, &.{ root, "b" });
+    defer std.testing.allocator.free(frames);
+    const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", settled, "--frames-out", frames });
     const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
     defer armed.deinit();
     try std.testing.expect(!armed.settle_only);
