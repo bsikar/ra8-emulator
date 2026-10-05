@@ -1,8 +1,9 @@
-//! The drain model against a real engine: discovery, the checks dev skips,
-//! and the ring coming out in order.
+//! The drain model against the Zig core's own store: discovery, the checks
+//! dev skips, and the ring coming out in order.
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const rtt = ra8.periph.rtt;
 const block = ra8.periph.rtt_block;
 
@@ -12,18 +13,22 @@ const ring_size: u32 = 64;
 
 /// A machine with RAM and a control block laid out in it.
 const Fixture = struct {
-    core: engine.Engine,
+    store: *Store,
+    core: Guest,
     model: rtt.Rtt,
 
+    /// The store lives on the heap so the model's handle outlives a move.
     fn open() !Fixture {
-        var core = try engine.Engine.open();
-        errdefer core.close();
-        try core.mapBoardRam();
-        return .{ .core = core, .model = .{ .memory = .{ .engine = core } } };
+        const store = try std.testing.allocator.create(Store);
+        errdefer std.testing.allocator.destroy(store);
+        store.* = try Store.init(null);
+        const core: Guest = .{ .store = store };
+        return .{ .store = store, .core = core, .model = .{ .memory = core } };
     }
 
     fn close(self: *Fixture) void {
-        self.core.close();
+        self.store.deinit();
+        std.testing.allocator.destroy(self.store);
     }
 
     /// Write a control block whose up-buffer zero points at `buf`.
