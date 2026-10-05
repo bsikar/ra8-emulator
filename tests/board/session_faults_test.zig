@@ -153,15 +153,15 @@ test "bus_low holds the line; clearing releases it; set/clear never stacks wrapp
     try std.testing.expectEqual(wrapped, rig.part().context);
 }
 
-test "no hook, a non-I2C endpoint and an empty address are refused" {
+test "no hook, a GPIO endpoint and an empty address are refused" {
     var bare: api.Session = .{ .live = undefined };
     const at = (try model.request.parse(spec)).at;
     try std.testing.expectError(api.Error.NoFaults, bare.setFault(.cpu0, at, .disconnected));
     var rig: Rig = .{ .arena = undefined, .board = undefined };
     try rig.setUp();
     defer rig.tearDown();
-    const uart = (try model.request.parse("modem@uart:sci3")).at;
-    try std.testing.expectError(session_faults.Error.WrongEndpoint, rig.session.setFault(.cpu0, uart, .disconnected));
+    const pin: model.endpoint.Endpoint = .{ .gpio = .{ .port = 0, .pin = 0 } };
+    try std.testing.expectError(session_faults.Error.WrongEndpoint, rig.session.setFault(.cpu0, pin, .disconnected));
     const empty = (try model.request.parse("max17048@i2c:riic@0x50")).at;
     try std.testing.expectError(session_faults.Error.NothingFitted, rig.session.setFault(.cpu0, empty, .disconnected));
 }

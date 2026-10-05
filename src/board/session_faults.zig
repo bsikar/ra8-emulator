@@ -5,16 +5,22 @@
 //! same wrapper's mode, so setting and clearing mid-run never stacks
 //! wrappers; a cleared part passes straight through. bus_low is a fact about
 //! the line, not the part: setting it holds the line low, and clearing any
-//! part on that line lets it go. SPI and UART channels are not covered yet.
+//! part on that line lets it go. SPI and UART channels go through
+//! session_faults_lines.zig.
 const std = @import("std");
 const endpoint = @import("../periph/model/endpoint.zig");
 const fault = @import("../periph/model/fault.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
+const fault_lines = @import("../periph/model/fault_lines.zig");
 const riic_bus = @import("../periph/riic/riic_bus.zig");
+const spi = @import("../periph/spi/spi.zig");
+const sci = @import("../periph/sci/sci.zig");
+const sci_device = @import("../periph/sci/sci_device.zig");
+const lines = @import("session_faults_lines.zig");
 const session_api = @import("../debug/session_api.zig");
 const Board = @import("board.zig").Board;
 
-pub const Error = error{ WrongEndpoint, NothingFitted, TooManyFaults } || std.mem.Allocator.Error;
+pub const Error = error{ WrongEndpoint, NothingFitted, TooManyFaults } || lines.Error;
 
 /// Parts that can carry a session fault at once: every slot on both lines.
 pub const max_wrapped: usize = 2 * riic_bus.max_devices;
@@ -23,6 +29,8 @@ pub const Faults = struct {
     board: *Board,
     arena: std.mem.Allocator,
     wrapped: [max_wrapped]?*fault.I2c = .{null} ** max_wrapped,
+    spi_parts: lines.Wrappers(fault_lines.Spi, spi.Device, spi.channel_count) = .{},
+    uart_parts: lines.Wrappers(fault_lines.Uart, sci_device.Device, sci.channels) = .{},
 
     pub fn init(board: *Board, arena: std.mem.Allocator) Faults {
         return .{ .board = board, .arena = arena };
@@ -34,7 +42,21 @@ pub const Faults = struct {
 
     /// Put the part on `at` into `mode`, or back to itself when null.
     pub fn set(self: *Faults, at: endpoint.Endpoint, mode: ?fault_spec.Mode) Error!void {
-        if (at != .i2c) return Error.WrongEndpoint;
+        switch (at) {
+            .i2c => try self.setI2c(at, mode),
+            .spi => |where| {
+                const slot = &self.board.spi.channels[where.channel].device;
+                try self.spi_parts.set(self.arena, where.channel, slot, try lines.lineMode(mode));
+            },
+            .uart => |where| {
+                const slot = &self.board.serial.channels[where.channel].device;
+                try self.uart_parts.set(self.arena, where.channel, slot, try lines.lineMode(mode));
+            },
+            .gpio => return Error.WrongEndpoint,
+        }
+    }
+
+    fn setI2c(self: *Faults, at: endpoint.Endpoint, mode: ?fault_spec.Mode) Error!void {
         const registry = self.line(at.i2c.line);
         const found = registry.find(at.i2c.address) orelse return Error.NothingFitted;
         const wanted = mode orelse {
