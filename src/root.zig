@@ -155,4 +155,5 @@ pub const snapshot = struct {
     pub const wire = @import("snapshot/wire.zig");
     pub const raster = @import("snapshot/raster.zig");
     pub const display = @import("snapshot/display.zig");
+    pub const panel = @import("snapshot/panel.zig");
 };

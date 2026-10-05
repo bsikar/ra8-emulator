@@ -31,6 +31,8 @@ pub const Kind = enum(u32) {
     raster = 8,
     /// The GLCDC display controller (RA8EMU-668).
     display = 9,
+    /// The e-paper panel (RA8EMU-669).
+    panel = 10,
     _,
 };
 
