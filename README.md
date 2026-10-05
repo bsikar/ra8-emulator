@@ -13,8 +13,8 @@ silicon expects. The RA8P1 has no board on the bench, so for that part this
 emulator is the only way its firmware gets proven.
 
 The emulator is written in Zig, CPU included: the core is our own Armv8-M
-decoder and executor. Capstone (error-path disassembly) is the one C library still linked,
-until our own disassembler replaces it (see [Where it is going](#where-it-is-going)).
+decoder and executor, and the disassembler is our own too. No C library is linked
+beyond libc.
 
 ## Building
 
@@ -45,14 +45,8 @@ export PATH="$HOME/.local/zig-x86_64-linux-0.14.1:$PATH"
 A different Zig is not supported: the build graph uses 0.14 APIs and 0.15
 renamed several of them.
 
-### Capstone (until our own disassembler replaces it)
-
-```sh
-sudo apt install libcapstone-dev                     # Debian, Ubuntu
-zig build -Ddeps-prefix="$HOME/.local/capstone"      # or point at your own prefix
-```
-
-`-Ddeps-prefix` adds that prefix's `include/`, `lib/` and an rpath.
+Nothing else is needed: the build links no C library beyond libc.
+`-Ddeps-prefix` is still accepted and ignored.
 
 ## Running
 
@@ -105,8 +99,8 @@ All work is focused on making the emulator complete, in four parallel tracks:
 
 - **Our own Zig CPU core.** One Armv8-M decoder and executor behind
   `src/core/engine.zig`. It reached zero lockstep divergence across the
-  example corpus and is the only CPU backend; Capstone is the last C
-  dependency and goes once our own disassembler lands.
+  example corpus and is the only CPU backend; the disassembler is ours as
+  well, so no C library is linked.
 - **Cortex-M85 and Cortex-M33, complete.** FPv5, MVE (Helium), tail
   predication, PACBTI and stack limits on CPU0; CPU1 with its own NVIC,
   SysTick, MPU and SCB; TrustZone enforced on both, and the full fault model.

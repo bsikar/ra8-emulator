@@ -1,9 +1,8 @@
 //! The build for the RA8D2 board emulator.
 //!
-//! One language, one build. The emulator is Zig, CPU included; Capstone
-//! (error-path disassembly) is the one C library left, reached through a
-//! single @cImport in src/core/c.zig. Nothing here is exported back to C and
-//! there is no C ABI of our own.
+//! One language, one build. The emulator is Zig, CPU and disassembler
+//! included; no C library is linked beyond libc, nothing here is exported
+//! back to C and there is no C ABI of our own.
 //!
 //!   zig build         the emulator into zig-out/bin
 //!   zig build run     build and run it
@@ -17,13 +16,13 @@
 //!                     window (RA8EMU-646)
 //!
 //! Source is grouped, not flat: src/core/ is the machine (engine, elf,
-//! memmap, disasm and the one C boundary), src/periph/ is everything that
+//! memmap and disasm), src/periph/ is everything that
 //! answers on the peripheral bus, and src/main.zig sits on top. Tests live
 //! in tests/ on mirrored paths, never in a `test` block at the bottom of a
 //! source file, and tests/all.zig is the root that pulls them in.
 //!
-//! Point the build at Capstone with -Ddeps-prefix=<prefix> when it is not on
-//! the system paths.
+//! -Ddeps-prefix is accepted and ignored: it pointed at Capstone, which is
+//! gone (RA8EMU-706), and existing invocations keep building.
 //!
 //! Zig 0.14.1, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
@@ -31,7 +30,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const prefix = b.option([]const u8, "deps-prefix", "Prefix holding include/ and lib/ for capstone");
+    _ = b.option([]const u8, "deps-prefix", "Ignored; it pointed at Capstone, which is gone");
     const gui = b.option(bool, "gui", "Fetch and build SDL3 for the GUI steps and `--gui`") orelse false;
 
     // One library module, reached as "ra8" by the executable and by the
@@ -42,7 +41,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    if (prefix) |p| emu.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{p}) });
 
     const exe = b.addExecutable(.{
         .name = "ra8_emulator",
@@ -54,7 +52,7 @@ pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "gui", gui);
     exe.root_module.addOptions("build_options", build_options);
-    link(b, exe, prefix);
+    exe.linkLibC();
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
@@ -82,7 +80,6 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| table.addArgs(args);
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
-    const parity_mod = disasmParity(b, target, optimize, emu, prefix);
     usbipAttach(b, target, optimize);
     const bench_mod = handoffBench(b, target, optimize, emu);
     if (guiHello(b, target, optimize, emu, gui)) |sdl_mod| exe.root_module.addImport("gui_sdl", sdl_mod);
@@ -95,9 +92,8 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("ra8", emu);
     tests.root_module.addImport("gate", gate_mod);
     tests.root_module.addImport("example_table", table_mod);
-    tests.root_module.addImport("disasm_parity", parity_mod);
     tests.root_module.addImport("handoff_bench", bench_mod);
-    link(b, tests, prefix);
+    tests.linkLibC();
     const test_step = b.step("test", "Run the unit tests and compile the emulator");
     test_step.dependOn(&b.addRunArtifact(tests).step);
     test_step.dependOn(&exe.step);
@@ -124,16 +120,6 @@ fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     for (paths) |path| run.addArg(path);
     run.step.dependOn(&fmt.step);
     return &run.step;
-}
-
-fn link(b: *std.Build, c: *std.Build.Step.Compile, prefix: ?[]const u8) void {
-    if (prefix) |p| {
-        c.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{p}) });
-        c.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{p}) });
-        c.addRPath(.{ .cwd_relative = b.fmt("{s}/lib", .{p}) });
-    }
-    c.linkLibC();
-    c.linkSystemLibrary("capstone");
 }
 
 /// tools/usbip_attach.zig attaches `--usbip PORT` the way usbip does and
@@ -163,23 +149,6 @@ fn handoffBench(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     bench.has_side_effects = true;
     b.step("bench-handoff", "Time the UI snapshot handoff against a 240 Hz reader (use -Doptimize=ReleaseFast)").dependOn(&bench.step);
     return bench_mod;
-}
-
-/// tools/disasm_parity.zig compares our disassembler with Capstone over
-/// ELFs (RA8EMU-325); the tests drive its walker through the same module.
-fn disasmParity(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, prefix: ?[]const u8) *std.Build.Module {
-    const parity_mod = b.createModule(.{
-        .root_source_file = b.path("tools/disasm_parity.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    parity_mod.addImport("ra8", emu);
-    const parity_exe = b.addExecutable(.{ .name = "disasm_parity", .root_module = parity_mod });
-    link(b, parity_exe, prefix);
-    const parity = b.addRunArtifact(parity_exe);
-    if (b.args) |args| parity.addArgs(args);
-    b.step("parity", "Compare our disassembler with Capstone: -- ELF...").dependOn(&parity.step);
-    return parity_mod;
 }
 
 /// The SDL3 hello window (RA8EMU-616, docs/adr/0001-gui-stack.md). SDL is

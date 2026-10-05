@@ -5,12 +5,12 @@
 # Build ReleaseFast and time the Zig core on one fixed ELF image.
 # See docs/throughput-benchmark.md for the corpus image and procedure.
 #
-#   tools/bench_releasefast.sh IMAGE [INSTRUCTIONS] [DEPS_PREFIX]
+#   tools/bench_releasefast.sh IMAGE [INSTRUCTIONS]
 
 set -euo pipefail
 
-if [ $# -lt 1 ] || [ $# -gt 3 ]; then
-    echo "usage: $0 IMAGE [INSTRUCTIONS] [DEPS_PREFIX]" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "usage: $0 IMAGE [INSTRUCTIONS]" >&2
     exit 2
 fi
 
@@ -25,11 +25,7 @@ if [ ! -f "$image" ]; then
 fi
 
 cd "$root"
-if [ $# -eq 3 ]; then
-    zig build -Doptimize=ReleaseFast -Ddeps-prefix="$3"
-else
-    zig build -Doptimize=ReleaseFast
-fi
+zig build -Doptimize=ReleaseFast
 
 echo "ReleaseFast build; fixed image: $image"
 shasum -a 256 "$image"

@@ -20,11 +20,10 @@ tools/bench_releasefast.sh /path/to/ra8-firmware/zig-out/arm/secure_app_vault_ka
 ```
 
 The tool prints the ELF's SHA-256 so results can be tied to the exact image.
-It also accepts an instruction budget and, when needed, a prefix containing
-Capstone:
+It also accepts an instruction budget:
 
 ```sh
-tools/bench_releasefast.sh IMAGE 2000000 /path/to/deps
+tools/bench_releasefast.sh IMAGE 2000000
 ```
 
 `tools/bench_core.sh` remains available for a prebuilt emulator and either a
