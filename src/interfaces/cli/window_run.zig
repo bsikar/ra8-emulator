@@ -33,7 +33,9 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     defer screen.deinit();
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
-    loop.adoptDevices(try camera_devices.listHost(allocator));
+    var host_devices: ?std.fs.Dir = std.fs.openDirAbsolute(camera_devices.host_dir, .{ .iterate = true }) catch null;
+    defer if (host_devices) |*dir| dir.close();
+    if (host_devices) |dir| loop.useDeviceDir(dir);
     loop.useProject(std.fs.cwd());
     const thread = try std.Thread.spawn(.{}, runThenFinish, .{ engine, pacer });
     defer {

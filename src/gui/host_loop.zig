@@ -64,6 +64,10 @@ pub const Loop = struct {
     pixels: []Color = &.{},
     frame: ?raster.Framebuffer = null,
     devices: ?camera_devices.Devices = null,
+    /// Where the host's webcams are listed again each time the webcam comes
+    /// up (its dialog opens or it becomes the source), so one plugged in
+    /// after the window opened is offered; null keeps the adopted list.
+    device_dir: ?std.fs.Dir = null,
     /// Where Always for this project is kept; null keeps it for this run.
     project: ?std.fs.Dir = null,
     quit: bool = false,
@@ -82,6 +86,24 @@ pub const Loop = struct {
         self.pane.devices = devices.numbers;
     }
 
+    /// Lists the webcams in `dir` now and again whenever the webcam comes
+    /// up. The caller keeps `dir` open while the loop runs.
+    pub fn useDeviceDir(self: *Loop, dir: std.fs.Dir) void {
+        self.device_dir = dir;
+        self.relist();
+    }
+
+    /// A listing that fails keeps the webcams already offered.
+    fn relist(self: *Loop) void {
+        const dir = self.device_dir orelse return;
+        const found = camera_devices.list(self.allocator, dir) catch return;
+        self.adoptDevices(found);
+    }
+
+    fn wantsWebcam(self: *const Loop) bool {
+        return self.pane.panel.asking or self.pane.panel.active == .webcam;
+    }
+
     /// Keeps Always in `project`, starting from what an earlier run saved.
     pub fn useProject(self: *Loop, project: std.fs.Dir) void {
         self.project = project;
@@ -94,6 +116,7 @@ pub const Loop = struct {
         const before = run.vtable.board(run.ctx);
         self.pane.layout = paneLayout(board_view.size(before.width, before.height));
         const always = self.pane.panel.always;
+        const wanted = self.wantsWebcam();
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
@@ -101,6 +124,7 @@ pub const Loop = struct {
             }
         }
         if (self.pane.panel.always and !always) self.remember();
+        if (self.wantsWebcam() and !wanted) self.relist();
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
             self.pane.settle(self.allocator, camera.source, camera.format_control);
