@@ -21,6 +21,7 @@ const zig_code: u32 = vectors + 0x200;
 /// CPU1 on its Zig core, reset into STR r1, [r0] then B . from its own store.
 fn bring(driver: *Driver, board: *Board) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
+    driver.board = null;
     driver.store = try ra8.core.cpu.memory.store.Store.init(null);
     errdefer driver.close();
     const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &driver.store.? };

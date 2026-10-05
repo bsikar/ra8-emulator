@@ -26,6 +26,9 @@ pub const Driver = struct {
     /// CPU1's own store; `second`'s engine is never opened (RA8EMU-588).
     /// Null only once `close` has dropped it.
     store: ?Store,
+    /// The board CPU1's store is handed to, so INTSELR events reach CPU1's
+    /// NVIC and DTC1 (RA8EMU-614). Null before `open` and after `close`.
+    board: ?*Board,
 
     /// CPU1 from the image at `path`, on `board`, ready to take
     /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
@@ -39,6 +42,7 @@ pub const Driver = struct {
         const image = try elf.Image.init(bytes);
         self.ns_timebase = .{ .words = systick_bank.non_secure_words };
         self.store = null;
+        self.board = null;
         return self.openOwn(lender, board, image);
     }
 
@@ -63,9 +67,20 @@ pub const Driver = struct {
             .pc = self.core.cpu.regs.pc,
         };
         if (board.reboot) |pending| units.state.resets_seen = pending.performed;
+        self.handTo(board);
+    }
+
+    /// Give `board` CPU1's store, so events INTSELR routes to CPU1 pend
+    /// CPU1's NVIC and run DTC1 (board/boundary.zig). A CPU1 reset keeps
+    /// the same store, so the handle stays good until `close`.
+    pub fn handTo(self: *Driver, board: *Board) void {
+        self.board = board;
+        board.cpu1 = .{ .store = &self.store.? };
     }
 
     fn dropStore(self: *Driver) void {
+        if (self.board) |board| board.cpu1 = null;
+        self.board = null;
         if (self.store) |*owned| owned.deinit();
         self.store = null;
     }

@@ -9,6 +9,9 @@ const Guest = ra8.core.cpu.memory.guest.Guest;
 const Units = second_core.zig.Units;
 const memmap = ra8.core.memmap;
 const Board = ra8.board.Board;
+const icu = ra8.periph.icu;
+const dtc = ra8.periph.dtc;
+const xfer = ra8.periph.dtc_xfer;
 
 const vectors: u32 = memmap.sram_base + 0x1000;
 const code: u32 = vectors + 0x200;
@@ -18,6 +21,7 @@ const stack: u32 = vectors + 0x800;
 /// builds it but from words in its own store instead of an ELF on disk.
 fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
+    driver.board = null;
     driver.store = try Store.init(null);
     errdefer driver.close();
     const memory: Guest = .{ .store = &driver.store.? };
@@ -29,6 +33,7 @@ fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
         try memory.write(code + @as(u32, @intCast(2 * i)), &bytes);
     }
     try driver.core.openOn(memory, Units.of(&driver.second), &board.bus);
+    driver.handTo(board);
 }
 
 test "a round runs CPU1's share on its Zig core and counts it by core rate" {
@@ -66,4 +71,77 @@ test "a CPU1 that stops is reported where it stopped and takes no more turns" {
     driver.round(50);
     try std.testing.expectEqual(@as(usize, 1), driver.second.state.turns);
     try std.testing.expectEqual(ran, driver.second.state.ran);
+}
+
+test "opening CPU1 hands its store to the board and closing takes it back" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    const handed = board.cpu1 orelse return error.NotHanded;
+    try std.testing.expect(handed.store == &driver.store.?);
+    driver.close();
+    try std.testing.expect(board.cpu1 == null);
+}
+
+/// The event INTSELR hands to CPU1, and the line CPU1's ICU links it to.
+const routed: u16 = 7;
+const line: usize = 3;
+
+/// INTSELR word 0 holds events 0 to 31, one bit each (RA8EMU-150).
+fn routeToCpu1(board: *Board) void {
+    board.events.select.write(icu.intsel.wordAddress(0), 4, @as(u32, 1) << routed);
+}
+
+test "an event INTSELR gives CPU1 pends CPU1's NVIC line and not CPU0's" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var store0 = try Store.init(null);
+    defer store0.deinit();
+    const cpu0: Guest = .{ .store = &store0 };
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    defer driver.close();
+
+    routeToCpu1(&board);
+    board.events.cpu1[line] = routed;
+    try board.raise(cpu0, routed);
+    try std.testing.expectEqual(@as(u32, 1) << line, try driver.guest().readWord(memmap.nvic.ispr));
+    try std.testing.expectEqual(@as(u32, 0), try cpu0.readWord(memmap.nvic.ispr));
+}
+
+test "a DTCE slot on CPU1's table is served by DTC1" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var store0 = try Store.init(null);
+    defer store0.deinit();
+    const cpu0: Guest = .{ .store = &store0 };
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    defer driver.close();
+
+    // One byte copy, interrupt on the last transfer, in CPU1's store.
+    const memory = driver.guest();
+    const table: u32 = memmap.sram_base + 0x4000;
+    const info: u32 = table + 0x100;
+    const source: u32 = table + 0x140;
+    const dest: u32 = table + 0x180;
+    try memory.writeWord(dtc.entryAddress(table, line), info);
+    try memory.writeWord(info + xfer.off.mr, (@as(u32, 0b0000_1000) << 24) | (@as(u32, 0b0000_1000) << 16));
+    try memory.writeWord(info + xfer.off.sar, source);
+    try memory.writeWord(info + xfer.off.dar, dest);
+    try memory.writeWord(info + xfer.off.counts, @as(u32, 1) << 16);
+    try memory.write(source, &.{0x5A});
+    board.transfers1.table = .cpu1;
+    board.transfers1.write(dtc.win_base + dtc.off.dtcvbr, 4, table);
+    board.transfers1.write(dtc.win_base + dtc.off.dtcst, 1, dtc.field.start);
+
+    routeToCpu1(&board);
+    board.events.cpu1[line] = routed | icu.field.dtce;
+    try board.raise(cpu0, routed);
+    var copied: [1]u8 = undefined;
+    try memory.read(dest, &copied);
+    try std.testing.expectEqual(@as(u8, 0x5A), copied[0]);
+    try std.testing.expectEqual(@as(u32, 1), board.transfers1.activations);
+    try std.testing.expectEqual(@as(u32, 0), board.transfers.activations);
 }
