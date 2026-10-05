@@ -108,9 +108,9 @@ test "the Non-secure time base counts at the alias and pends only its own ICSR" 
     const words = bank.non_secure_words;
     try std.testing.expectEqual(@as(u32, 0xE002_E010), words.csr);
     try std.testing.expectEqual(@as(u32, 0xE002_ED04), words.icsr);
-    var core = try ra8.core.engine.Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const core: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
     try core.writeWord(words.rvr, 9);
     try core.writeWord(words.cvr, 3);
     try core.writeWord(words.csr, run);
