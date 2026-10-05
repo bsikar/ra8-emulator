@@ -59,7 +59,9 @@ pub const ImageSource = struct {
         self.* = .{
             .allocator = allocator,
             .image = image,
-            .converted = .{ .input = image.frame(), .format = formatFor(format_control.*) },
+            // frame() reads the sensor register before each capture, on the
+            // engine thread; opening never touches the board (RA8EMU-227).
+            .converted = .{ .input = image.frame(), .format = .yuv422 },
             .format_control = format_control,
         };
         return self;
