@@ -157,4 +157,5 @@ pub const snapshot = struct {
     pub const display = @import("snapshot/display.zig");
     pub const panel = @import("snapshot/panel.zig");
     pub const clocks = @import("snapshot/clocks.zig");
+    pub const security = @import("snapshot/security.zig");
 };

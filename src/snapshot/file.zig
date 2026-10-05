@@ -35,6 +35,8 @@ pub const Kind = enum(u32) {
     panel = 10,
     /// The clock generation units and their protection (RA8EMU-670).
     clocks = 11,
+    /// Security attribution, MPU, SAU and system control (RA8EMU-671).
+    security = 12,
     _,
 };
 
