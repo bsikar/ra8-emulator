@@ -6,9 +6,9 @@
 //! (`Bus.miss`): CFSR PRECISERR and BFARVALID, BFAR the address. The fault
 //! routes against SHCSR.BUSFAULTENA, SHPR1.PRI_5 and the execution priority
 //! (src/periph/fault_route.zig); escalated, it owes HFSR.FORCED. The handler
-//! is entered with the faulting instruction stacked as the return address. A
-//! run that records nothing, or a HardFault that cannot preempt, stops
-//! instead.
+//! is entered with the faulting instruction stacked as the return address,
+//! and `Bus.tally` counts it. A run that records nothing, or a HardFault that
+//! cannot preempt, stops instead.
 
 const std = @import("std");
 const memmap = @import("../../memmap.zig");
@@ -27,12 +27,16 @@ pub const Error = fault.Error || error{NotRecorded};
 pub fn refused(cpu: *Cpu, pc: u32) Error!void {
     if (cpu.mpu) |m| if (m.take()) |at| return mem_manage.data(cpu, pc, at);
     const miss = cpu.bus.miss orelse return error.NotRecorded;
-    return data(cpu, pc, miss.*);
+    const escalated = try data(cpu, pc, miss.*);
+    if (cpu.bus.tally) |t| {
+        t.raised +%= 1;
+        if (escalated) t.escalated +%= 1;
+    }
 }
 
 /// Raise the precise BusFault for a data access to `bfar` the instruction
-/// at `pc` made.
-pub fn data(cpu: *Cpu, pc: u32, bfar: u32) Error!void {
+/// at `pc` made; true when it escalated to HardFault.
+pub fn data(cpu: *Cpu, pc: u32, bfar: u32) Error!bool {
     const r = &cpu.regs;
     const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, dispatch.prigroup(cpu.bus));
     const route = fault_route.route(
@@ -49,4 +53,5 @@ pub fn data(cpu: *Cpu, pc: u32, bfar: u32) Error!void {
     if (route.escalated) fault.orInto(cpu.bus, memmap.scb.hfsr, status.Hard.forced.bit());
     cpu.regs.pc = pc;
     try dispatch.enter(cpu, .{ .number = @intCast(route.number), .priority = route.priority }, pc);
+    return route.escalated;
 }
