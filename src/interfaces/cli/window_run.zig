@@ -12,6 +12,12 @@ const platform = @import("../../gui/platform.zig");
 const camera_devices = @import("../../gui/camera_devices.zig");
 const registry = @import("../../periph/camera/camera_registry.zig");
 const thread_priority = @import("../../gui/thread_priority.zig");
+const console_feed = @import("../../gui/console_feed.zig");
+const console_log = @import("../../gui/console_log.zig");
+const sci = @import("../../periph/sci/sci.zig");
+
+/// Finished lines each channel's console keeps.
+pub const console_capacity: usize = 2000;
 
 /// Runs the emulation to its end. Its clock must charge `pacer`, as
 /// zig_run's Clock does when Ends.pace is set.
@@ -29,6 +35,10 @@ pub const Shown = struct {
     closed: bool,
     /// The most one board handoff to the window carried (RA8EMU-227).
     snapshot_bytes: usize = 0,
+    /// Finished lines the console channel's log held at the end, and the
+    /// bytes the feed could not keep (RA8EMU-206).
+    console_lines: usize = 0,
+    console_lost: u64 = 0,
 };
 
 /// Shows `board` in `window` while `engine` runs it, the camera pane
@@ -39,6 +49,14 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     defer screen.deinit();
     screen.on_engine = true;
     pacer.at_park = screen.parkHook();
+    var feed = console_feed.Feed{ .allocator = allocator, .now = screen.clock() };
+    defer feed.deinit();
+    var logs: [sci.channels]console_log.Log = undefined;
+    for (&logs) |*log| log.* = .init(allocator, console_capacity);
+    defer for (&logs) |*log| log.deinit();
+    screen.feed = &feed;
+    board.serial.tap = feed.tap();
+    defer board.serial.tap = null;
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
     loop.pane.seed(camera);
@@ -55,8 +73,16 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
         thread.join();
     }
     var frames: u32 = 0;
-    while (try loop.tick(window, screen.run())) frames += 1;
-    return .{ .frames = frames, .closed = !ended(pacer), .snapshot_bytes = screen.handoff.max_bytes.load(.monotonic) };
+    var lost: u64 = 0;
+    while (try loop.tick(window, screen.run())) : (lost = try feed.drain(&logs)) frames += 1;
+    lost = try feed.drain(&logs);
+    return .{
+        .frames = frames,
+        .closed = !ended(pacer),
+        .snapshot_bytes = screen.handoff.max_bytes.load(.monotonic),
+        .console_lines = logs[sci.console_channel].lines().len,
+        .console_lost = lost,
+    };
 }
 
 fn runThenFinish(engine: Engine, pacer: *window_pace.Pacer) void {
