@@ -1,0 +1,114 @@
+//! Draws the camera panel and turns clicks on it into picks and answers
+//! (RA8EMU-500). It only reads and changes a `camera_panel.Panel`; the run
+//! loop opens the source and swaps it between steps (camera_open.zig,
+//! camera_switch.zig).
+//!
+//! A row of one button per source, the active one ringed; a dot that is
+//! red while the webcam is the source; and, while the webcam permission is
+//! being asked, a dialog of Allow once, Always for this project and Cancel.
+//! The buttons carry their own colour until the font atlas gives them
+//! labels.
+const std = @import("std");
+const draw_list = @import("draw_list.zig");
+const camera_panel = @import("camera_panel.zig");
+const Color = draw_list.Color;
+const Rect = draw_list.Rect;
+const Panel = camera_panel.Panel;
+const Kind = camera_panel.Kind;
+const Answer = camera_panel.Answer;
+
+pub const button: i32 = 24;
+pub const gap: i32 = 4;
+pub const dot: i32 = 8;
+
+pub const background = Color.rgb(0x28, 0x2C, 0x34);
+pub const ring = Color.rgb(0xD8, 0xDE, 0xE9);
+pub const camera_on = Color.rgb(0xE0, 0x3C, 0x31);
+pub const camera_off = Color.rgb(0x4A, 0x51, 0x5C);
+
+/// Each source's button colour.
+pub fn colorOf(kind: Kind) Color {
+    return switch (kind) {
+        .gradient => Color.rgb(0x9A, 0xA5, 0xB4),
+        .image => Color.rgb(0x5E, 0x81, 0xAC),
+        .video => Color.rgb(0xB4, 0x8E, 0xAD),
+        .pipe => Color.rgb(0xA3, 0xBE, 0x8C),
+        .webcam => Color.rgb(0xEB, 0xCB, 0x8B),
+    };
+}
+
+/// Each answer's button colour.
+pub fn answerColor(reply: Answer) Color {
+    return switch (reply) {
+        .allow_once => Color.rgb(0xA3, 0xBE, 0x8C),
+        .always => Color.rgb(0x5E, 0x81, 0xAC),
+        .cancel => Color.rgb(0xBF, 0x61, 0x6A),
+    };
+}
+
+/// Where everything sits, from the panel's top-left corner.
+pub const Layout = struct {
+    x: i32,
+    y: i32,
+
+    const kinds = std.enums.values(Kind);
+
+    /// The whole panel: the source row over the dialog row.
+    pub fn area(self: Layout) Rect {
+        const w = @as(i32, @intCast(kinds.len + 1)) * (button + gap) + gap;
+        return .{ .x = self.x, .y = self.y, .w = w, .h = 2 * (button + gap) + gap };
+    }
+
+    pub fn source(self: Layout, kind: Kind) Rect {
+        const at: i32 = @intCast(@intFromEnum(kind));
+        return .{ .x = self.x + gap + at * (button + gap), .y = self.y + gap, .w = button, .h = button };
+    }
+
+    pub fn indicator(self: Layout) Rect {
+        const at: i32 = @intCast(kinds.len);
+        const x = self.x + gap + at * (button + gap) + @divTrunc(button - dot, 2);
+        return .{ .x = x, .y = self.y + gap + @divTrunc(button - dot, 2), .w = dot, .h = dot };
+    }
+
+    pub fn dialog(self: Layout, reply: Answer) Rect {
+        const at: i32 = @intCast(@intFromEnum(reply));
+        const y = self.y + 2 * gap + button;
+        return .{ .x = self.x + gap + at * (button + gap), .y = y, .w = button, .h = button };
+    }
+};
+
+/// Appends the panel as it stands to `list`.
+pub fn draw(list: *draw_list.DrawList, layout: Layout, panel: Panel) !void {
+    try list.fill(layout.area(), background);
+    for (Layout.kinds) |kind| {
+        const at = layout.source(kind);
+        if (kind == panel.active) {
+            try list.fill(.{ .x = at.x - 2, .y = at.y - 2, .w = at.w + 4, .h = at.h + 4 }, ring);
+        }
+        try list.fill(at, colorOf(kind));
+    }
+    try list.fill(layout.indicator(), if (panel.cameraOn()) camera_on else camera_off);
+    if (!panel.asking) return;
+    for (std.enums.values(Answer)) |reply| try list.fill(layout.dialog(reply), answerColor(reply));
+}
+
+/// Applies a click at (`x`, `y`) to `panel`. While the dialog is open only
+/// its buttons and the source row answer; a click anywhere else is not the
+/// panel's. Returns whether the panel took the click.
+pub fn click(panel: *Panel, layout: Layout, x: i32, y: i32) bool {
+    if (panel.asking) {
+        for (std.enums.values(Answer)) |reply| {
+            if (layout.dialog(reply).contains(x, y)) {
+                panel.answer(reply);
+                return true;
+            }
+        }
+    }
+    for (Layout.kinds) |kind| {
+        if (layout.source(kind).contains(x, y)) {
+            panel.pick(kind);
+            return true;
+        }
+    }
+    return layout.area().contains(x, y);
+}
