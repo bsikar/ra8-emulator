@@ -39,6 +39,7 @@ const soak_symbols = @import("soak_symbols.zig");
 pub const itm_console = @import("itm_console.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
 pub const break_sym = @import("zig_break.zig");
+const window_pace = @import("window_pace.zig");
 /// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
 pub const undefined_sites = @import("zig_undefined.zig");
 
@@ -51,6 +52,8 @@ pub const Ends = struct {
     timed: ?*Deadline = null,
     /// The swept sites `--stop-on-undefined` ends the run on.
     undefined_sites: ?*undefined_sites.Found = null,
+    /// The host window's pacer, when the run is shown live (RA8EMU-646).
+    pace: ?*window_pace.Pacer = null,
 };
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
@@ -90,6 +93,11 @@ pub const Clock = struct {
     undefined_sites: ?*undefined_sites.Found = null,
     /// `--idle-skip`: a sleeping CPU0 runs straight to the next edge (RA8EMU-185).
     idle_skip: bool = false,
+    /// The host window's pacer: each stretch is charged to it at close,
+    /// parking there between frames (RA8EMU-646).
+    pace: ?*window_pace.Pacer = null,
+    /// The window closed while the run was parked, so the run ends.
+    paced_out: bool = false,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
@@ -110,6 +118,7 @@ pub const Clock = struct {
     /// (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
         self.soakFaults();
+        if (self.paced_out) return true;
         if (self.board.time.soak.ended()) return true;
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
@@ -146,6 +155,7 @@ pub const Clock = struct {
         try self.board.tick(self.memory, instructions);
         if (frames_out.Armed.of(self.board)) |armed| try armed.pollSettle(self.board.time.base.now());
         if (self.cpu1) |second| second.round(instructions);
+        if (self.pace) |pace| self.paced_out = !pace.charge(instructions);
     }
 };
 
@@ -181,7 +191,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
 pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
