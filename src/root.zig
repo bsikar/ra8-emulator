@@ -7,6 +7,7 @@ pub const core = struct {
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");
     pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
+    pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
     pub const disasm = @import("debug/disasm.zig");

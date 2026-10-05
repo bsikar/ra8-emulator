@@ -79,6 +79,7 @@ pub const text =
     \\  --gif-out PATH     write sampled panel frames as an animated GIF
     \\  --frames-every N   consider every Nth scanned frame (default 1)
     \\  --frame-on-settle DIR capture numbered P6 frames as the panel settles
+    \\  --video-out PATH   write a 10 fps grayscale Y4M or ffmpeg MP4
     \\  --settle-window-ms N require N ms of unchanged GLCDC pixels (default 50)
     \\  --gui              show the run live in a window (a -Dgui build)
     \\  --window-stills DIR with --gui, keep numbered PNGs of the window

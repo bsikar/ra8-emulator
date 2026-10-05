@@ -7,6 +7,7 @@ pub const Options = struct {
     frames_every: usize = 1,
     gif_out: ?[]const u8 = null,
     frame_on_settle: ?[]const u8 = null,
+    video_out: ?[]const u8 = null,
     settle_window_ns: u64 = 50_000_000,
     /// `--gui`: show the run live in the host window (RA8EMU-646).
     live: bool = false,
@@ -24,6 +25,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.gif_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--frame-on-settle")) {
         options.frame_on_settle = try world_flags.next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--video-out")) {
+        options.video_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--settle-window-ms")) {
         const millis = try std.fmt.parseInt(u64, try world_flags.next(argv, index), 10);
         if (millis == 0) return error.BadValue;
