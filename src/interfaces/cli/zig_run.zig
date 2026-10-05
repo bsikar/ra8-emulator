@@ -24,6 +24,9 @@ const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const profile = @import("../../debug/profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
+const watchpoint = @import("../../debug/watchpoint.zig");
+/// `--watch` on a Zig run: src/interfaces/cli/zig_watch.zig.
+pub const zig_watch = @import("zig_watch.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
 const Until = @import("../../core/until.zig").Until;
@@ -195,7 +198,8 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         found.now = &timebase.ticks;
         listener = .{ .tracer = found };
     }
-    const wrap = if (tracer != null) listener.wrap() else null;
+    var watcher: zig_watch.Recorder = .{};
+    const wrap = watcher.arm(image, options.watch_place, if (tracer != null) listener.wrap() else null, &timebase.ticks);
     const budget = options.budgetFor(ends.stop != null);
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
     var boot_output = out;
@@ -214,7 +218,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .fast_memory = options.watch_place == null and wrap == null,
         .blocks = options.blocks,
         .wrap = wrap,
-        .retire_listener = retire.listener(),
+        .retire_listener = watcher.listener(retire.listener()),
         .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
@@ -222,6 +226,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     });
     if (options.console) try itm_port.flush(out, true);
     clock.soakFaults();
+    const watched = watcher.result(final.pc);
     board.time.soak.place(final.pc, if (board.clock.running()) board.clock.now else null);
     const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
@@ -236,12 +241,12 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options }, .load = if (options.cpu_load) &load else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null });
         } else try report_run.zigCore(out, board, timebase.*, ran);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads, out of the Zig core's
         // own memory, so the line is the Unicorn run's line.
-        if (!options.report_json) try textDumps(out, board, clock.memory, &final, image, options);
+        if (!options.report_json) try textDumps(out, board, clock.memory, &final, image, options, watched);
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
         try finishFrames(out, board, options, &frames);
@@ -267,12 +272,14 @@ fn openSecond(pair: *second_core.zig_run.Driver, board: *Board, named: []const u
 }
 
 /// The flag-asked dumps of a text run, in the engine report's order
-/// (RA8EMU-638): globals, the card block, registers, memory words.
-fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options) !void {
+/// (RA8EMU-638): globals, the card block, registers, memory words, then
+/// what landed in the `--watch` word (RA8EMU-639).
+fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options, watched: ?watchpoint.Watched) !void {
     try report_dumps.dumpSymbols(out, memory, image, options);
     try report_dumps.dumpBlock(out, board, options);
     try report_dumps.dumpRegisters(out, .{ .zig = final }, memory, options);
     try mem_dump.printAll(out, memory, &board.bus, image, options.memDumps());
+    try watchpoint.print(out, image, options.watch_place, watched);
 }
 
 fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run) !void {

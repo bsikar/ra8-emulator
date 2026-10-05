@@ -68,6 +68,9 @@ pub const Wrap = struct {
     /// Lent the core's retired-instruction count for the run, so a listener
     /// can time what it sees per instruction (RA8EMU-284).
     retiredFn: ?*const fn (context: *anyopaque, retired: *const u64) void = null,
+    /// Lent the core's registers for the run, so a listener can name who
+    /// made an access (`--watch`'s lr, RA8EMU-639).
+    regsFn: ?*const fn (context: *anyopaque, regs: *const Regs) void = null,
 };
 
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
@@ -177,6 +180,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         }
     }
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
+    if (wrap) |w| if (w.regsFn) |lend| lend(w.context, &cpu.regs);
     cpu.reset(vector_base) catch {
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
