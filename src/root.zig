@@ -146,4 +146,5 @@ pub const snapshot = struct {
     pub const memory = @import("snapshot/memory.zig");
     pub const fields = @import("snapshot/fields.zig");
     pub const cpu = @import("snapshot/cpu.zig");
+    pub const time = @import("snapshot/time.zig");
 };
