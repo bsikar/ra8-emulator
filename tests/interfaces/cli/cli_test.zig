@@ -100,6 +100,7 @@ test {
     _ = @import("realtime_test.zig");
     _ = @import("png_test.zig");
     _ = @import("frame_out_test.zig");
+    _ = @import("window_still_test.zig");
     _ = @import("frames_args_test.zig");
     _ = @import("frames_out_test.zig");
     _ = @import("window_board_test.zig");

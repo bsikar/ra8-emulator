@@ -8,6 +8,8 @@ pub const after = @import("report/after.zig");
 pub const png = @import("png.zig");
 pub const frame_out = @import("frame_out.zig");
 pub const frames_out = @import("frames_out.zig");
+/// Stills of the host window (RA8EMU-500).
+pub const window_still = @import("window_still.zig");
 
 const Board = @import("../../board/board.zig").Board;
 const elc = @import("../../periph/elc/elc.zig");
