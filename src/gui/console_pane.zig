@@ -2,7 +2,9 @@
 //! lines that fit, oldest at the top, each stamped with the virtual time it
 //! ended at, and the line still being printed last without a stamp. It sits
 //! under the board view; when the window leaves no room for a row there it
-//! draws nothing. Read-only: it draws what console_log.Log holds.
+//! draws nothing. Scrolled `back` lines from the newest (console_scroll.zig)
+//! it shows the finished lines ending there and hides the unfinished one.
+//! Read-only: it draws what console_log.Log holds.
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
@@ -33,20 +35,21 @@ pub fn rows(area: Rect) usize {
     return @intCast(@divTrunc(inner, @as(i32, @intCast(font.cell_h))));
 }
 
-pub fn draw(list: *draw_list.DrawList, area: Rect, log: *const console_log.Log) !void {
+pub fn draw(list: *draw_list.DrawList, area: Rect, log: *const console_log.Log, back: usize) !void {
     const count = rows(area);
     if (count == 0) return;
     try list.fill(area, panel);
     try list.pushClip(area);
     defer list.popClip();
-    const partial = log.partial();
+    const partial = if (back == 0) log.partial() else "";
     const room = count - @intFromBool(partial.len > 0);
     const lines = log.lines();
-    const first = lines.len -| room;
+    const end = @max(lines.len -| back, @min(room, lines.len));
+    const first = end -| room;
     const width: u32 = @intCast(@max(area.w - 2 * pad, 0));
     const x = area.x + pad;
     var y = area.y + pad;
-    for (lines[first..]) |entry| {
+    for (lines[first..end]) |entry| {
         try drawEntry(list, x, y, width, entry);
         y += @intCast(font.cell_h);
     }
