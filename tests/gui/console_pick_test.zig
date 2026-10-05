@@ -1,6 +1,7 @@
 //! Covers src/gui/console_pick.zig: the strip takes one row off the top of
 //! the pane, a click lands on the tab under it and nowhere else, and the
-//! strip draws one label per channel with the shown one lit.
+//! strip draws one label per channel with the shown one lit, plus a SAVE
+//! tab at its right end when it fits.
 const std = @import("std");
 const ra8 = @import("ra8");
 const console_log = ra8.gui.console_log;
@@ -43,6 +44,16 @@ test "the strip draws one label per channel and lights the shown one" {
         if (command.shape == .glyph) glyphs += 1;
         if (command.shape == .fill and std.meta.eql(command.shape.fill.color, console_pick.lit)) lit += 1;
     }
-    try std.testing.expectEqual(@as(usize, 3 * 4), glyphs);
+    // Three channel labels of four glyphs each, then "SAVE".
+    try std.testing.expectEqual(@as(usize, 3 * 4 + 4), glyphs);
     try std.testing.expectEqual(@as(usize, 1), lit);
+}
+
+test "the SAVE tab sits at the strip's right end and is not a channel" {
+    const tab = console_pick.saveTab(area);
+    try std.testing.expectEqual(console_pick.tab_w, tab.w);
+    try std.testing.expectEqual(area.x + area.w - console_pick.tab_w, tab.x);
+    try std.testing.expectEqual(@as(?usize, null), console_pick.tabAt(area, 20, tab.x + 1, tab.y + 1));
+    const narrow = draw_list.Rect{ .x = 0, .y = 0, .w = 2 * console_pick.tab_w - 1, .h = 60 };
+    try std.testing.expectEqual(@as(i32, 0), console_pick.saveTab(narrow).w);
 }

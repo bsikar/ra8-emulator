@@ -99,6 +99,7 @@ test {
     _ = @import("gui/console_feed_test.zig");
     _ = @import("gui/console_pane_test.zig");
     _ = @import("gui/console_keys_test.zig");
+    _ = @import("gui/console_save_test.zig");
     _ = @import("gui/platform_test.zig");
     _ = @import("gui/console_pick_test.zig");
     _ = @import("gui/console_scroll_test.zig");
