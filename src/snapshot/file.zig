@@ -33,6 +33,8 @@ pub const Kind = enum(u32) {
     display = 9,
     /// The e-paper panel (RA8EMU-669).
     panel = 10,
+    /// The clock generation units and their protection (RA8EMU-670).
+    clocks = 11,
     _,
 };
 
