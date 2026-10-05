@@ -150,4 +150,6 @@ pub const snapshot = struct {
     pub const units = @import("snapshot/units.zig");
     pub const timers = @import("snapshot/timers.zig");
     pub const serial = @import("snapshot/serial.zig");
+    pub const blocks = @import("snapshot/blocks.zig");
+    pub const sd = @import("snapshot/sd.zig");
 };

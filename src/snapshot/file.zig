@@ -23,6 +23,8 @@ pub const Kind = enum(u32) {
     timers = 4,
     /// The board's SCI channels and line buffer (RA8EMU-663).
     serial = 5,
+    /// The SPI-mode SD card and the SD host controller's card (RA8EMU-664).
+    sd = 6,
     _,
 };
 
