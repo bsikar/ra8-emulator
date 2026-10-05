@@ -1,7 +1,10 @@
 //! RA8EMU-186's done condition: a soak catches a stack overflow at the
 //! virtual hour it happens, and a clean image sleeps through a virtual week
 //! with no events. Both run with idle fast-forward, at a 1 MHz core clock so
-//! SysTick's longest period is 16.8 virtual seconds.
+//! SysTick's longest period is 16.8 virtual seconds. The overflow happens
+//! on the last wake, and the soak sees it at the boundary that ends the next
+//! sleep: one period later, give or take the stretch it lands in
+//! (RA8EMU-657).
 const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
@@ -52,7 +55,7 @@ test "a soak catches a stack overflow in the virtual hour it happens" {
     try std.testing.expectEqual(@as(u32, soaker.wakes), ended.count);
     const due_ns = soaker.wakes * soaker.period * (1_000_000_000 / hz);
     try std.testing.expect(event.at_ns >= due_ns);
-    try std.testing.expect(event.at_ns - due_ns < 1_000_000_000);
+    try std.testing.expect(event.at_ns - due_ns < soaker.period * (1_000_000_000 / hz) + 1_000_000_000);
     try std.testing.expectEqual(@as(u64, 1), event.at_ns / ns_per_hour);
 }
 

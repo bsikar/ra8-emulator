@@ -96,11 +96,13 @@ test "the skip closes fewer boundaries on an idle image" {
 test "with a period that is not a whole number of stretches, the skip delivers every wrap the stepped run does" {
     // 50 wraps of a 200,003-cycle period: each wake starts part way down the
     // counter, so a stretch sized by the full period would overshoot the next
-    // wrap and in time swallow one (RA8EMU-618).
+    // wrap and in time swallow one (RA8EMU-618). From CVR = 0 the 50th wrap
+    // lands on cycle 50 * 200,003 (RA8EMU-657), so a short tail lets its
+    // handler run.
     const reload: u32 = 200_002;
-    const stepped = try runIdler(false, reload, 50 * 200_003);
-    const skipped = try runIdler(true, reload, 50 * 200_003);
-    try std.testing.expect(stepped.count >= 49);
+    const stepped = try runIdler(false, reload, 50 * 200_003 + 100_000);
+    const skipped = try runIdler(true, reload, 50 * 200_003 + 100_000);
+    try std.testing.expectEqual(@as(u32, 50), stepped.count);
     try std.testing.expectEqual(stepped.ticks, skipped.ticks);
     try std.testing.expectEqual(stepped.count, skipped.count);
     try std.testing.expectEqual(stepped.elapsed, skipped.elapsed);

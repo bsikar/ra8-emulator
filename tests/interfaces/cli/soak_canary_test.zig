@@ -3,7 +3,8 @@
 //! image is idler.zig's counting SysTick handler with a one-second period at
 //! a 1 MHz core clock, and a reset handler that sleeps until the handler
 //! has counted 120 wraps (the first lands a full second in), then stores
-//! over the canary and spins. The soak sees it at the next boundary.
+//! over the canary and sleeps. The soak sees it at the next boundary, which
+//! ends that sleep at the 121st wrap, one second later (RA8EMU-657).
 const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
@@ -61,7 +62,7 @@ test "a soak ends at the virtual minute the firmware overwrites its canary" {
     try std.testing.expectEqual(soak.Kind.stack_canary, event.kind);
     try std.testing.expectEqual(@as(?u32, canary_at), event.word);
     try std.testing.expectEqual(@as(u32, wraps), try core.readWord(idler.counter_at));
-    try std.testing.expect(event.at_ns >= 120 * ns_per_s);
-    try std.testing.expect(event.at_ns < 121 * ns_per_s);
+    try std.testing.expect(event.at_ns > 120 * ns_per_s);
+    try std.testing.expect(event.at_ns < 122 * ns_per_s);
     try std.testing.expectEqual(@as(u64, 2), event.at_ns / (60 * ns_per_s));
 }
