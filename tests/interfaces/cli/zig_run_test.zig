@@ -108,6 +108,7 @@ test {
     _ = @import("zig_memory_test.zig");
     _ = @import("zig_main_test.zig");
     _ = @import("idle_skip_equiv_test.zig");
+    _ = @import("sleep_wake_test.zig");
     _ = @import("soak_done_test.zig");
     _ = @import("soak_canary_test.zig");
     _ = @import("threadx_stkof_test.zig");
