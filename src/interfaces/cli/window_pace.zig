@@ -1,9 +1,11 @@
 //! Paces a running emulation to the host window, one frame at a time
 //! (RA8EMU-646). The engine keeps its own loop on its own thread and
 //! charges each stretch here at the boundary; once the frame's share is
-//! spent it parks until the window grants the next. The window steps only
-//! while the engine is parked, so its scan of the board never races a
-//! stretch, and neither backend's run loop has to be rebuilt to yield.
+//! spent it parks until the window grants the next. The engine publishes
+//! the board at each park (RA8EMU-227), so the shown window grants without
+//! waiting and never holds the engine to its own frame; `step` still waits
+//! for the stretch, for callers that read the board themselves. Neither
+//! backend's run loop has to be rebuilt to yield.
 const std = @import("std");
 const window_board = @import("window_board.zig");
 
@@ -72,6 +74,22 @@ pub const Pacer = struct {
         return !self.ended;
     }
 
+    /// Window side, without waiting: when the engine has spent its grant
+    /// and parked, grant the next frame; while it is still running, leave
+    /// it be, so it never gets more than one frame ahead of the window.
+    /// False once the run has ended.
+    pub fn grant(self: *Pacer) bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        if (self.ended) return false;
+        if (self.parked and self.left == 0) {
+            self.left = self.per_frame;
+            self.parked = false;
+            self.changed.broadcast();
+        }
+        return true;
+    }
+
     /// Window side, when it closes: release a parked engine to stop.
     pub fn stop(self: *Pacer) void {
         self.mutex.lock();
@@ -91,5 +109,16 @@ pub const Pacer = struct {
     fn stepThunk(ctx: *anyopaque) bool {
         const self: *Pacer = @ptrCast(@alignCast(ctx));
         return self.step();
+    }
+
+    /// A stepper that grants without waiting, for a window that only reads
+    /// what the engine published.
+    pub fn granter(self: *Pacer) window_board.Stepper {
+        return .{ .ctx = self, .step = grantThunk };
+    }
+
+    fn grantThunk(ctx: *anyopaque) bool {
+        const self: *Pacer = @ptrCast(@alignCast(ctx));
+        return self.grant();
     }
 };

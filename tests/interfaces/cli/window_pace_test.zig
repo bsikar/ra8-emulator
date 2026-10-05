@@ -95,6 +95,26 @@ test "the park hook runs on the engine at each park and once at the end" {
     try std.testing.expectEqual(@as(u32, 5), count.calls.load(.monotonic));
 }
 
+test "a grant never waits and never runs the engine more than a frame ahead" {
+    var pacer = Pacer{ .per_frame = 100 };
+    var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300 };
+    const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
+    waitParked(&pacer);
+    try std.testing.expect(pacer.grant());
+    // Before the engine has taken the grant, another one is no top-up.
+    pacer.mutex.lock();
+    const left = pacer.left;
+    pacer.mutex.unlock();
+    try std.testing.expect(pacer.grant());
+    pacer.mutex.lock();
+    try std.testing.expect(pacer.left <= left);
+    pacer.mutex.unlock();
+    while (pacer.grant()) std.Thread.yield() catch {};
+    thread.join();
+    try std.testing.expectEqual(@as(u64, 300), engine.ran);
+    try std.testing.expect(!pacer.grant());
+}
+
 /// Holds until the engine has reached its first boundary, so the hold
 /// before the first stretch is a park and not raced by the first grant.
 fn waitParked(pacer: *Pacer) void {
