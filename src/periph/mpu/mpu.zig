@@ -46,10 +46,9 @@
 //! programs four regions without touching RNR again.
 //!
 //! THE TABLE IS WHAT ENFORCEMENT READS. A store into a read-only region is a
-//! MemManage violation on silicon and Unicorn's core models no MPU, so the
-//! exception is synthesised from a write hook over each protected span:
-//! src/core/mpu_guard.zig keeps those traps, src/periph/mpu_fault.zig holds
-//! what they catch, and this block is the table they are built from. So a
+//! MemManage violation on silicon, and the Zig core refuses it through
+//! src/core/cpu/mpu_check.zig: src/periph/mpu_fault.zig holds what it
+//! catches, and this block is the table it reads. So a
 //! region captured wrongly here is now a fault taken wrongly rather than a
 //! line in the report, which is why `observe` says what each store meant
 //! rather than leaving the caller to work it out from the address.
