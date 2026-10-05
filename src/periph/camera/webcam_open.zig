@@ -7,6 +7,7 @@
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const consent = @import("webcam_consent.zig");
+const privacy = @import("webcam_privacy.zig");
 const v4l2 = @import("v4l2_device.zig");
 const negotiate = @import("v4l2_negotiate.zig");
 const v4l2_stream = @import("v4l2_stream.zig");
@@ -66,6 +67,7 @@ pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Gr
     var name: Name = undefined;
     const named = try consent.device(&name, arg);
     if (consent.decide(grant, named, reader, writer) == .refused) return error.WebcamRefused;
+    try privacy.gate(privacy.host(), writer);
     const node = try allocator.create(Node);
     errdefer allocator.destroy(node);
     const path = try allocator.dupe(u8, named);
