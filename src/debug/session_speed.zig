@@ -1,0 +1,32 @@
+//! A speed change asked through the session (RA8EMU-184, slice 3): the
+//! factor as the debugger's run budget and as the pacer's thousandths.
+//!
+//! One range for both, the one `--speed` already takes (src/periph/time/
+//! speed.zig): 0.001x to 1000000x. A factor between thousandths rounds to
+//! the nearest one; one that rounds to zero is refused, not paused, since
+//! pause is Session.pause.
+const std = @import("std");
+const speed = @import("../periph/time/speed.zig");
+
+/// Where a running engine takes the new factor, in thousandths of real time.
+pub const Hook = struct {
+    context: *anyopaque,
+    setFn: *const fn (context: *anyopaque, milli: u64) anyerror!void,
+};
+
+pub const Error = error{InvalidSpeed};
+
+pub const Change = struct {
+    /// Instructions per run command at this factor.
+    budget: u64,
+    /// The factor in the pacer's unit: 1000 is 1x.
+    milli: u64,
+
+    pub fn of(factor: f64, default_budget: u64) Error!Change {
+        if (!(factor > 0)) return Error.InvalidSpeed;
+        const milli = @round(factor * 1000);
+        if (milli < 1 or milli > @as(f64, @floatFromInt(speed.max_milli))) return Error.InvalidSpeed;
+        const scaled = @as(f64, @floatFromInt(default_budget)) * factor;
+        return .{ .budget = @intFromFloat(@max(scaled, 1)), .milli = @intFromFloat(milli) };
+    }
+};
