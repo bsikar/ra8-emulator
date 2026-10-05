@@ -18,13 +18,14 @@ const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const session_display = @import("session_display.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
+const TimeBase = @import("../periph/time/timebase.zig").TimeBase;
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const session_speed = @import("session_speed.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, TooManyListeners };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManyListeners };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("break_table.zig").Id;
@@ -77,6 +78,7 @@ const BoardRun = struct { tick: BoardTick, guest: Guest };
 
 pub const Session = struct {
     live: zig_session.ZigSession,
+    time_base: ?*const TimeBase = null,
     loader: ?Loader = null,
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
@@ -90,7 +92,14 @@ pub const Session = struct {
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
-
+    /// Bind the board's shared virtual time base to this session.
+    pub fn attachTimeBase(self: *Session, time_base: *const TimeBase) void {
+        self.time_base = time_base;
+    }
+    /// Virtual nanoseconds since the attached board began its run.
+    pub fn now(self: *const Session) Error!u64 {
+        return (self.time_base orelse return Error.NoTime).now();
+    }
     /// Bind timed input to the board script that the boundary dispatches.
     pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
         self.input_script = script;
@@ -104,7 +113,6 @@ pub const Session = struct {
     pub fn attachDisplay(self: *Session, display: session_display.Display) void {
         self.display = display;
     }
-
     pub fn attachFaults(self: *Session, hook: FaultHook) void {
         self.faults = hook;
     }
@@ -283,12 +291,10 @@ pub const Session = struct {
     pub fn read(self: *Session, core: Core, address: u32, into: []u8) anyerror!void {
         try (try self.view(core)).read(address, into);
     }
-
     pub fn write(self: *Session, core: Core, address: u32, bytes: []const u8) anyerror!void {
         try (try self.view(core)).write(address, bytes);
         self.publish(.{ .core = core, .kind = .memory_written, .address = address });
     }
-
     pub fn setBreakpoint(self: *Session, core: Core, point: breakpoint.Break) anyerror!BreakId {
         try self.select(core);
         const id = try self.live.machine.addBreak(point);
@@ -314,7 +320,6 @@ pub const Session = struct {
         try self.live.machine.watches.remove(id);
         self.publish(.{ .core = core, .kind = .watchpoint_cleared });
     }
-
     pub const RemovedPoint = enum { breakpoint, watchpoint };
 
     pub fn removePoint(self: *Session, core: Core, id: u32) anyerror!RemovedPoint {
@@ -393,8 +398,3 @@ pub const Session = struct {
         for (self.listeners) |slot| if (slot) |listener| listener.receive(listener.context, event);
     }
 };
-
-comptime {
-    std.debug.assert(@intFromEnum(Core.cpu0) == 0);
-    std.debug.assert(@intFromEnum(Core.cpu1) == 1);
-}
