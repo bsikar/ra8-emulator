@@ -5,9 +5,9 @@
 //! opens with `vstr FPCXTNS, [sp, #-4]!` and closes with
 //! `vldr FPCXTNS, [sp], #4`. The pinned Unicorn has no Armv8.1-M model and
 //! raises an exception on both, which ends the run on the first call from the
-//! Non-Secure world into the Secure one. src/core/fpcxt_resume.zig finds those
-//! stops; this file knows the encoding and the effect, and nothing about the
-//! core, so the semantics are tested on their own.
+//! Non-Secure world into the Secure one. The Zig core executes them; this
+//! file knows the encoding and the effect, and nothing about the core, so
+//! the semantics are tested on their own.
 //!
 //! Encoding T1 (DDI0553 VLDR/VSTR system register): hw1 = 1110 110 P U D W L
 //! Rn, hw2 = reg[2:0] 0 1111 1 imm7. The register is D:reg, and P = 0 with

@@ -60,10 +60,8 @@ const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
-const hint_resume = @import("hint_resume.zig");
 const second_wait = @import("second_wait.zig");
 const unmask = @import("unmask.zig");
-const run_loop = @import("run_loop.zig");
 const pend_break = @import("pend_break.zig");
 
 const Board = @import("../board/board.zig").Board;

@@ -6,7 +6,7 @@
 //! whole chunk late. Here the stretch is narrowed so it ends on the due
 //! time, bounded by `cadence.floor` the same way the SysTick period is.
 //!
-//! Beside the run loop rather than in it: src/core/run_loop.zig belongs to
+//! Beside the run loop rather than in it: the run loop belongs to
 //! the dual-core work, and src/core/run_pace.zig is already where every
 //! narrowing lives. Only ever narrows.
 const std = @import("std");

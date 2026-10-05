@@ -29,7 +29,6 @@ const stop = @import("stop.zig");
 const undefined_ops = @import("undefined_ops.zig");
 const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
-const run_loop = @import("run_loop.zig");
 const idle = @import("idle.zig");
 
 pub const Error = error{
@@ -199,18 +198,8 @@ pub const Engine = struct {
         try self.setRegister(.pc, reset_vector & ~@as(u32, 1));
     }
 
-    /// One uninterrupted stretch of execution. The clocks stand still inside
-    /// it: a chunk is the unit of modelled time.
-    /// Run a bounded number of instructions. A fault is a result, not a
-    /// crash: it comes back with the PC that took it. The policy over the
-    /// stretches this is cut into lives in src/core/run_loop.zig; the engine
-    /// keeps only the bounded stretch it is built out of.
-    pub fn run(self: Engine, start: u32, instructions: usize, session: Session) Error!?Fault {
-        return run_loop.run(self, start, instructions, session);
-    }
-
-    /// One bounded stretch of execution, with no boundary at either end.
-    /// Public because the run loop is what puts the boundaries in.
+    /// One bounded stretch of execution, with no boundary at either end. The
+    /// clocks stand still inside it: a chunk is the unit of modelled time.
     pub fn runChunk(self: Engine, start: u32, instructions: usize, watch: ?*Watch) Error!?Fault {
         const err = c.uc.uc_emu_start(
             self.handle,

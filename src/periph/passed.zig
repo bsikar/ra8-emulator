@@ -18,7 +18,7 @@
 //!
 //! A loss is NOT a bug on its own. Losing one pick is the architecture
 //! working: the winner runs and the loser is taken next, which is what
-//! tail-chaining in src/core/run_loop.zig is for. What matters is a pend that
+//! tail-chaining at a run boundary is for. What matters is a pend that
 //! loses CONSECUTIVE boundaries, so the run of losses is tracked as well as
 //! the count.
 

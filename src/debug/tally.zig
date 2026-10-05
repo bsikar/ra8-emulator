@@ -19,7 +19,7 @@
 //!
 //! Two callers, and the second is why this is not named after the first.
 //! src/debug/watchpoint.zig tallies (program counter, value written) to
-//! say who wrote a watched place. src/core/run_loop.zig tallies
+//! say who wrote a watched place. The run loop tallies
 //! (interrupted program counter, exception number) to say where the
 //! machine was when an exception was taken, which is the only way to ask
 //! whether a context switch lands inside a window that must not be cut.

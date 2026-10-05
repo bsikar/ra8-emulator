@@ -40,7 +40,6 @@ const std = @import("std");
 /// because src/root.zig is at its 400-line limit (RA8EMU-63).
 pub const clrm = @import("clrm.zig");
 pub const fp_context = @import("fp_context.zig");
-pub const fpcxt_resume = @import("fpcxt_resume.zig");
 /// TT from the board's SAU rather than the CPU model's (RA8EMU-348).
 pub const tt = @import("tt.zig");
 
