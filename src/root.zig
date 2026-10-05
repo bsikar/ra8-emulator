@@ -168,4 +168,5 @@ pub const snapshot = struct {
     pub const npu = @import("snapshot/npu.zig");
     pub const c6 = @import("snapshot/c6.zig");
     pub const board = @import("snapshot/board.zig");
+    pub const run = @import("snapshot/run.zig");
 };
