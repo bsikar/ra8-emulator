@@ -22,7 +22,6 @@ test {
     _ = @import("step_hook_image_test.zig");
     _ = @import("commands_test.zig");
     _ = @import("script_test.zig");
-    _ = @import("break_hook_test.zig");
     _ = @import("break_list_test.zig");
     _ = @import("pc_hits_test.zig");
     _ = @import("watchpoint_test.zig");

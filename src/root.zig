@@ -44,7 +44,6 @@ pub const core = struct {
     pub const undefined_ops = @import("core/undefined_ops.zig");
     pub const tick = @import("core/tick.zig");
     pub const breakpoint = @import("debug/breakpoint.zig");
-    pub const break_hook = @import("debug/break_hook.zig");
     pub const commands = @import("debug/commands.zig");
     pub const debug_session = @import("debug/session.zig");
     pub const session_view = @import("debug/session_view.zig");
