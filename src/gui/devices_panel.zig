@@ -5,17 +5,19 @@
 //!
 //! The panel never touches a bus. It asks the session, and only a change
 //! the session accepted moves a row, so a refused plug leaves the row
-//! showing what is really on the line. Drawing the panel and the clicks
-//! that call these are later slices.
+//! showing what is really on the line. devices_pane.zig draws it
+//! and turns a click into `click`.
 const std = @import("std");
 const session_api = @import("../debug/session_api.zig");
 
 pub const Endpoint = session_api.Endpoint;
 
-/// One endpoint and what is on it now; `part` is null while it is empty.
+/// One endpoint and what is on it now; `part` is null while it is empty,
+/// and `last` keeps what came off it so a click can put it back.
 pub const Row = struct {
     at: Endpoint,
     part: ?[]const u8,
+    last: ?[]const u8 = null,
 };
 
 pub const Panel = struct {
@@ -29,6 +31,7 @@ pub const Panel = struct {
     pub fn unplug(self: *Panel, index: usize) anyerror!void {
         const row = &self.rows[index];
         try self.session.unplug(self.core, row.at);
+        row.last = row.part;
         row.part = null;
     }
 
@@ -44,6 +47,14 @@ pub const Panel = struct {
     pub fn toggle(self: *Panel, index: usize, name: []const u8) anyerror!void {
         if (self.rows[index].part == null) return self.plug(index, name);
         return self.unplug(index);
+    }
+
+    /// What a click on row `index` does: unplug what is fitted, or put back
+    /// what came off. A row that never held a part does nothing.
+    pub fn click(self: *Panel, index: usize) anyerror!void {
+        const row = self.rows[index];
+        if (row.part) |name| return self.toggle(index, name);
+        if (row.last) |name| return self.plug(index, name);
     }
 
     /// The row listing `at`, if the panel lists it.
