@@ -11,6 +11,7 @@ test {
     _ = @import("snapshot/time_test.zig");
     _ = @import("snapshot/units_test.zig");
     _ = @import("snapshot/timers_test.zig");
+    _ = @import("snapshot/serial_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
