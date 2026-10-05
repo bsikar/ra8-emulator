@@ -18,6 +18,7 @@ pub const MemoryBus = struct {
             .flash = self.store.region(memmap.mram_base),
             .sram = self.store.region(memmap.sram_base),
             .enabled = self.fast_enabled,
+            .checking = self.direct.checking,
         };
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct };
     }

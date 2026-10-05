@@ -43,6 +43,15 @@ pub const BoardBus = struct {
     /// The core's MPU check, asked about every access while it is armed.
     check: ?*mpu_check.Check = null,
 
+    /// Ask `check` about every access, the direct MRAM/SRAM path included:
+    /// a store that path took would land past an MPU refusal (RA8EMU-710).
+    pub fn armCheck(self: *BoardBus, check: *mpu_check.Check) void {
+        self.check = check;
+        switch (self.memory) {
+            .store => |*memory| memory.direct.checking = &check.armed,
+        }
+    }
+
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat }, .direct = memory.direct };

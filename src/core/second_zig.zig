@@ -79,7 +79,7 @@ pub const SecondZig = struct {
         self.board.security = &self.cpu.banked;
         self.pending.banked = &self.cpu.banked;
         self.check = .{ .unit = units.regions };
-        self.board.check = &self.check;
+        self.board.armCheck(&self.check);
         self.cpu.mpu = &self.check;
         try self.cpu.reset(units.vector_base);
     }

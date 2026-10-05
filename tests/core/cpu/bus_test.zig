@@ -78,6 +78,26 @@ test "direct memory bypasses the vtable only while enabled" {
     try std.testing.expectEqual(@as(usize, 2), flat.reads);
 }
 
+test "an armed MPU check turns the direct path aside" {
+    var backing = [_]u8{ 0x11, 0x22, 0x33, 0x44 };
+    var slow = [_]u8{ 0xAA, 0xBB, 0xCC, 0xDD };
+    var flat: Flat = .{ .base = memmap.mram_base, .bytes = &slow };
+    var armed = true;
+    var direct: bus.DirectMemory = .{ .flash = &backing, .enabled = true, .checking = &armed };
+    var view = flat.view();
+    view.direct = &direct;
+
+    try view.write(flat.base, &.{0x5A});
+    try std.testing.expectEqual(@as(usize, 1), flat.writes);
+    try std.testing.expectEqual(@as(u8, 0x11), backing[0]);
+    try std.testing.expectEqual(@as(u8, 0x5A), slow[0]);
+
+    armed = false;
+    try view.write(flat.base, &.{0x66});
+    try std.testing.expectEqual(@as(usize, 1), flat.writes);
+    try std.testing.expectEqual(@as(u8, 0x66), backing[0]);
+}
+
 test "a refused read or write records where it went" {
     var bytes = [_]u8{0} ** 4;
     var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
