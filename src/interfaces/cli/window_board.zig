@@ -10,6 +10,8 @@ const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../periph/gpio/gpio.zig");
 const frame_out = @import("frame_out.zig");
 const host_loop = @import("../../gui/host_loop.zig");
+const board_snapshot = @import("../../gui/board_snapshot.zig");
+const window_pace = @import("window_pace.zig");
 const board_view = frame_out.board_view;
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
@@ -28,15 +30,39 @@ pub const Screen = struct {
     leds: [gpio.led_count]board_view.Led = undefined,
     /// Whether the last scan gave a frame; without one the panel is dark.
     frame: bool = false,
+    /// What the window draws: the newest scan handed over (RA8EMU-227).
+    handoff: board_snapshot.Handoff,
+    /// The engine thread scans through parkHook, so a step only reads the
+    /// handoff; otherwise the step scans after the slice itself.
+    on_engine: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board, stepper: Stepper) !Screen {
-        var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper };
-        try screen.refresh();
+        var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper, .handoff = .init(allocator) };
+        errdefer screen.deinit();
+        try screen.publishScan();
+        _ = screen.handoff.latest();
         return screen;
     }
 
     pub fn deinit(self: *Screen) void {
         self.allocator.free(self.pixels);
+        self.handoff.deinit();
+    }
+
+    /// Scans and hands the result to the window.
+    pub fn publishScan(self: *Screen) !void {
+        try self.refresh();
+        _ = try self.handoff.publish(.{ .panel = self.pixels, .width = self.width, .height = self.height, .leds = &self.leds });
+    }
+
+    /// For the pacer: scan on the engine thread at each park and at the end.
+    pub fn parkHook(self: *Screen) window_pace.Hook {
+        return .{ .ctx = self, .call = parkThunk };
+    }
+
+    fn parkThunk(ctx: *anyopaque) void {
+        const self: *Screen = @ptrCast(@alignCast(ctx));
+        self.publishScan() catch {};
     }
 
     /// Scans the panel and reads the LEDs. The panel goes out opaque, as
@@ -77,18 +103,19 @@ pub const Screen = struct {
         return .{ .ctx = self, .vtable = &.{ .step = step, .board = boardOf, .camera = camera } };
     }
 
-    /// A slice, then a fresh scan. When the scan cannot get memory for a
+    /// A slice, then the newest scan. When a scan cannot get memory for a
     /// resized panel the window keeps the last frame.
     fn step(ctx: *anyopaque) bool {
         const self: *Screen = @ptrCast(@alignCast(ctx));
         const running = self.stepper.step(self.stepper.ctx);
-        self.refresh() catch {};
+        if (!self.on_engine) self.publishScan() catch {};
+        _ = self.handoff.latest();
         return running;
     }
 
     fn boardOf(ctx: *anyopaque) host_loop.Board {
         const self: *Screen = @ptrCast(@alignCast(ctx));
-        return .{ .panel = self.pixels, .width = self.width, .height = self.height, .leds = &self.leds };
+        return self.handoff.current();
     }
 
     fn camera(ctx: *anyopaque) ?host_loop.Camera {

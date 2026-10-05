@@ -33,6 +33,8 @@ pub const Shown = struct {
 pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec) !Shown {
     var screen = try window_board.Screen.init(allocator, board, pacer.stepper());
     defer screen.deinit();
+    screen.on_engine = true;
+    pacer.at_park = screen.parkHook();
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
     loop.pane.seed(camera);

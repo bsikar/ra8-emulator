@@ -7,6 +7,15 @@
 const std = @import("std");
 const window_board = @import("window_board.zig");
 
+/// Engine side, run where the engine stops: just before it parks for the
+/// next grant and once the run has ended (RA8EMU-227). The window reads
+/// what it published, so the board is only ever touched on the engine's
+/// own thread.
+pub const Hook = struct {
+    ctx: *anyopaque,
+    call: *const fn (ctx: *anyopaque) void,
+};
+
 pub const Pacer = struct {
     /// Instructions the window grants per frame.
     per_frame: u64,
@@ -20,6 +29,8 @@ pub const Pacer = struct {
     ended: bool = false,
     /// The window has gone; the engine should stop at its next boundary.
     quit: bool = false,
+    /// Runs once at each park and once at the end, on the engine thread.
+    at_park: ?Hook = null,
 
     /// Engine side, at each boundary: charge the stretch, and once the
     /// grant is spent wait for the next. Charging 0 before the first
@@ -29,6 +40,7 @@ pub const Pacer = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         self.left -|= instructions;
+        if (self.left == 0 and !self.quit) self.park();
         while (self.left == 0 and !self.quit) {
             self.parked = true;
             self.changed.broadcast();
@@ -42,6 +54,7 @@ pub const Pacer = struct {
     pub fn finish(self: *Pacer) void {
         self.mutex.lock();
         defer self.mutex.unlock();
+        self.park();
         self.ended = true;
         self.changed.broadcast();
     }
@@ -65,6 +78,10 @@ pub const Pacer = struct {
         defer self.mutex.unlock();
         self.quit = true;
         self.changed.broadcast();
+    }
+
+    fn park(self: *Pacer) void {
+        if (self.at_park) |hook| hook.call(hook.ctx);
     }
 
     pub fn stepper(self: *Pacer) window_board.Stepper {
