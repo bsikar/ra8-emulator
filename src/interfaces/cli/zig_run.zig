@@ -22,6 +22,7 @@ const json_run = @import("report/json_run.zig");
 const report_dumps = @import("report/dumps.zig");
 const frame_out = @import("frame_out.zig");
 const frames_out = @import("report.zig").frames_out;
+const eink_log = @import("eink_log.zig");
 const audio_out = @import("audio_out.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
@@ -223,6 +224,9 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     const wrap = watcher.arm(image, options.watch_place, if (tracer != null) listener.wrap() else null, &timebase.ticks);
     const budget = options.budgetFor(ends.stop != null);
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
+    var eink_recorder = eink_log.Run.init(std.heap.page_allocator, board);
+    if (options.frames.eink_log != null) eink_recorder.arm();
+    defer eink_recorder.deinit();
     var boot_output = out;
     var final: boot.Regs = .{};
     var audio: audio_out.Run = .{};
@@ -251,14 +255,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .peer = if (clock.cpu1) |second| &second.core.cpu else null,
     });
     if (options.console) try itm_port.flush(out, true);
-    clock.soakFaults();
-    const watched = watcher.result(final.pc);
-    board.time.soak.place(final.pc, if (board.clock.running()) board.clock.now else null);
-    const said = BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load };
-    if (ends.point) |point| {
-        try break_sym.verdict(said, options.break_place.?, point.*, retire.at, final.pc, budget);
-    } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
-    if (ends.undefined_sites) |found| try undefined_sites.print(said, image, found.*);
+    const watched = try postBootReport(out, &clock, &watcher, &final, image, options, ends, retire.at, budget);
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
@@ -267,7 +264,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
         } else try report_run.zigCore(out, board, timebase.*, ran, clock.bus_tally);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.
@@ -278,7 +275,27 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
     } else try captureFrames(board, options);
+    try finishEinkLog(out, options, &eink_recorder);
     return status;
+}
+
+fn postBootReport(out: std.fs.File.Writer, clock: *Clock, watcher: *zig_watch.Recorder, final: *const boot.Regs, image: elf.Image, options: cli.Options, ends: Ends, retire_at: u32, budget: usize) !?watchpoint.Watched {
+    clock.soakFaults();
+    const watched = watcher.result(final.pc);
+    clock.board.time.soak.place(final.pc, if (clock.board.clock.running()) clock.board.clock.now else null);
+    var output = out;
+    const said = BootWriter{ .output = &output, .quiet = options.ctl_cpu_load };
+    if (ends.point) |point| {
+        try break_sym.verdict(said, options.break_place.?, point.*, retire_at, final.pc, budget);
+    } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
+    if (ends.undefined_sites) |found| try undefined_sites.print(said, image, found.*);
+    return watched;
+}
+
+fn finishEinkLog(out: std.fs.File.Writer, options: cli.Options, recorder: *eink_log.Run) !void {
+    const path = options.frames.eink_log orelse return;
+    try recorder.write(path);
+    if (!options.report_json) try recorder.printTotals(out);
 }
 
 /// Bring CPU1 up from `named`, with its block cache when asked; false once

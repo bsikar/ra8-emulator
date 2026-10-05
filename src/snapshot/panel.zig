@@ -12,7 +12,7 @@ const fields = @import("fields.zig");
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 
-const wiring = .{ "planes", "refresh_hook" };
+const wiring = .{ "planes", "refresh_hook", "refresh_log_hook" };
 const buffers = .{ "allocator", "image", "glass" };
 const max_side: u16 = 4096;
 

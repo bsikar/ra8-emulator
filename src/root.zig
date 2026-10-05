@@ -5,6 +5,7 @@ pub const core = struct {
     pub const second_core = @import("core/second_core.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");
+    pub const eink_log = @import("interfaces/cli/eink_log.zig");
     pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
     pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");

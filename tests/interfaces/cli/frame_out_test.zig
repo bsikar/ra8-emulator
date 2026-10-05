@@ -20,6 +20,13 @@ test "--frame-out takes a path and is off by default" {
     try std.testing.expect(panel_only.panel_only);
 }
 
+test "--eink-log takes a path and is off by default" {
+    try std.testing.expectEqual(@as(?[]const u8, null), (try cli.parse(&[_][]const u8{ "emu", "a.elf" })).frames.eink_log);
+    const given = try cli.parse(&[_][]const u8{ "emu", "a.elf", "--eink-log", "refresh.jsonl" });
+    try std.testing.expectEqualStrings("refresh.jsonl", given.frames.eink_log.?);
+    try std.testing.expectError(error.MissingValue, cli.parse(&[_][]const u8{ "emu", "a.elf", "--eink-log" }));
+}
+
 test "no path means no line and no file" {
     var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
