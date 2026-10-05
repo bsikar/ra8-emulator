@@ -37,6 +37,8 @@ pub const Kind = enum(u32) {
     clocks = 11,
     /// Security attribution, MPU, SAU and system control (RA8EMU-671).
     security = 12,
+    /// The fixed-size memory controllers (RA8EMU-672).
+    controllers = 13,
     _,
 };
 
