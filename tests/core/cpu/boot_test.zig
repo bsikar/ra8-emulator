@@ -295,3 +295,58 @@ test "a reset asked for at a boundary brings the zig core back up on its reset v
     try std.testing.expectEqual(@as(u64, 3), ran);
     try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc 0x22000008") != null);
 }
+
+/// Records what the snapshot hook saw (RA8EMU-695).
+const Probe = struct {
+    start_retired: u64 = 0,
+    loaded: bool = false,
+    saved_retired: ?u64 = null,
+    saved_pc: u32 = 0,
+
+    fn load(context: *anyopaque, core: *ra8.core.cpu.cpu.Cpu) anyerror!void {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.loaded = core.retired == 0;
+        core.retired = self.start_retired;
+    }
+
+    fn save(context: *anyopaque, core: *const ra8.core.cpu.cpu.Cpu) anyerror!void {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.saved_retired = core.retired;
+        self.saved_pc = core.regs.pc;
+    }
+
+    fn hook(self: *Probe) boot.Snapshot {
+        return .{ .context = self, .loadFn = load, .saveFn = save };
+    }
+};
+
+test "the snapshot hook loads after reset and saves once the budget is spent" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    try loadSpin(&store);
+    var probe: Probe = .{ .start_retired = 1000 };
+    var ran: u64 = 0;
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{ .snapshot = probe.hook() });
+    try std.testing.expectEqual(@as(u8, 0), status);
+    try std.testing.expect(probe.loaded);
+    try std.testing.expectEqual(@as(u64, 1010), probe.saved_retired.?);
+    try std.testing.expectEqual(@as(u64, 1010), ran);
+    try std.testing.expectEqual(memmap.sram_base + 8, probe.saved_pc);
+}
+
+test "a run with no snapshot hook is unchanged" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    try loadSpin(&store);
+    var ran: u64 = 0;
+    var buf: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{});
+    try std.testing.expectEqual(@as(u64, 10), ran);
+}

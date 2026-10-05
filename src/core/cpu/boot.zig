@@ -72,6 +72,15 @@ pub const Wrap = struct {
     regsFn: ?*const fn (context: *anyopaque, regs: *const Regs) void = null,
 };
 
+/// Save and restore for a `--cpu zig` run (RA8EMU-695): `loadFn` runs right
+/// after the core resets, before its first instruction; `saveFn` runs once
+/// the budget is spent. Each is handed the core, which lives only in runOn.
+pub const Snapshot = struct {
+    context: *anyopaque,
+    loadFn: ?*const fn (context: *anyopaque, core: *cpu_mod.Cpu) anyerror!void = null,
+    saveFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu) anyerror!void = null,
+};
+
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
 /// boundary that moves time, the core-private SAU and MPU its stores bank
 /// into, and the fault status words its stores clear.
@@ -107,6 +116,8 @@ pub const Wiring = struct {
     /// `--bus-errors`: a refused data access raises the precise BusFault,
     /// counted here (RA8EMU-641); null ends the run on it instead.
     bus_errors: ?*bus_fault.Tally = null,
+    /// `--save-state` / `--load-state` (RA8EMU-660).
+    snapshot: ?Snapshot = null,
 };
 
 /// The hand-off from main to the CPU the run asked for.
@@ -135,12 +146,12 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors }, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot }, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
 /// What the core reports to, per instruction: after it retires and before
 /// it is fetched.
-const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null };
+const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null };
 
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
@@ -190,7 +201,9 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         try out.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
         return 1;
     };
+    if (watch.snapshot) |hook| if (hook.loadFn) |load| try load(hook.context, &cpu);
     const stopped = try stretches(&cpu, budget, boundary, until);
+    if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu);
     if (ran) |count| count.* = cpu.retired;
     if (final) |into| into.* = cpu.regs;
     const code = try report(out, cpu, stopped);
