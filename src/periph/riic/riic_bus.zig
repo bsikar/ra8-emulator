@@ -117,6 +117,19 @@ pub const Registry = struct {
         return Error.BusFull;
     }
 
+    /// Take the part at `address` off the bus (a hot unplug, RA8EMU-212):
+    /// its address phase goes unacknowledged from now on. Gives back what
+    /// was there, or null when nothing was.
+    pub fn detach(self: *Registry, address: u7) ?Device {
+        for (&self.devices) |*slot| {
+            const device = slot.* orelse continue;
+            if (device.address != address) continue;
+            slot.* = null;
+            return device;
+        }
+        return null;
+    }
+
     pub fn find(self: *Registry, address: u7) ?*Device {
         for (&self.devices) |*slot| {
             if (slot.*) |*device| {
