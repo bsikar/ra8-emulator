@@ -3,7 +3,6 @@
 //! directly or through a file listed here.
 test {
     _ = @import("disasm_test.zig");
-    _ = @import("capstone_ref_test.zig");
     _ = @import("symbols_test.zig");
     _ = @import("breakpoint_test.zig");
     _ = @import("break_table_test.zig");

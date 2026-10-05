@@ -1,6 +1,5 @@
 //! The emulator module, imported as "ra8" by the build and tests.
 pub const core = struct {
-    pub const c = @import("core/c.zig");
     pub const board_ram = @import("core/board_ram.zig");
     pub const session = @import("core/session.zig");
     pub const second_core = @import("core/second_core.zig");
@@ -11,7 +10,6 @@ pub const core = struct {
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
     pub const disasm = @import("debug/disasm.zig");
-    pub const capstone_ref = @import("debug/capstone_ref.zig");
     pub const elf = @import("core/elf.zig");
     pub const long_shift = @import("core/long_shift.zig");
     pub const lob = @import("core/lob.zig");

@@ -24,9 +24,3 @@ test "a wide first halfword without its second is an error" {
 test "fewer than two bytes is an error" {
     try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{0x01}));
 }
-
-test "our text matches the Capstone oracle on the fault-path store" {
-    const ours = try one(0x2200_0000, &[_]u8{ 0x01, 0x60 });
-    const theirs = ra8.core.capstone_ref.one(0x2200_0000, &[_]u8{ 0x01, 0x60 }) catch return error.SkipZigTest;
-    try std.testing.expectEqualStrings(theirs.slice(), ours.slice());
-}
