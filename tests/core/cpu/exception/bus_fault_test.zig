@@ -108,3 +108,47 @@ test "a refused store under PRIMASK escalates and counts as escalated" {
         try std.testing.expectEqual(Tally{ .raised = 1, .escalated = 1 }, tally);
     }
 }
+
+test "a refused fetch raises IBUSERR without changing BFAR" {
+    for (profiles) |profile| {
+        var ram: fixture.Ram = .{};
+        ram.putWord(fixture.base + 5 * 4, bus_handler | 1);
+        ram.putWord(memmap.scb.shcsr, busfaultena);
+        ram.putWord(memmap.scb.bfar, 0x1234_5678);
+        var cpu = try fixture.boot(&ram);
+        cpu.profile = profile;
+        cpu.regs.pc = hole;
+        var miss: u32 = 0;
+        var tally: Tally = .{};
+        cpu.bus.miss = &miss;
+        cpu.bus.tally = &tally;
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(Tally{ .raised = 1, .escalated = 0 }, tally);
+        try std.testing.expectEqual(bus_handler, cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 5), ipsr(&cpu));
+        try std.testing.expectEqual(@as(u32, 1 << 8), ram.word(memmap.scb.cfsr));
+        try std.testing.expectEqual(@as(u32, 0x1234_5678), ram.word(memmap.scb.bfar));
+        try std.testing.expectEqual(hole, ram.word(fixture.msp_top - 8));
+    }
+}
+
+test "an unrecorded refused fetch remains a bus fault stop" {
+    var ram: fixture.Ram = .{};
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.pc = hole;
+    try std.testing.expectEqual(@as(?Stop, .{ .bus_fault = hole }), cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+}
+
+test "a refused fetch escalates to forced HardFault when BusFault is disabled" {
+    var ram: fixture.Ram = .{};
+    ram.putWord(fixture.base + 3 * 4, hard_handler | 1);
+    var cpu = try fixture.boot(&ram);
+    cpu.regs.pc = hole;
+    var miss: u32 = 0;
+    cpu.bus.miss = &miss;
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    try std.testing.expectEqual(hard_handler, cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 1 << 8), ram.word(memmap.scb.cfsr));
+    try std.testing.expectEqual(forced, ram.word(memmap.scb.hfsr));
+}
