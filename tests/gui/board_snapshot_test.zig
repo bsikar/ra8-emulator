@@ -36,6 +36,8 @@ test "a resized panel arrives whole and the newest publish wins" {
     try std.testing.expectEqual(@as(u32, 9), seen.panel[11]);
     for (0..6) |i| _ = try handoff.publish(.{ .panel = if (i % 2 == 0) &small else &big, .width = 1, .height = 1, .leds = &.{} });
     try std.testing.expectEqual(@as(usize, 12), handoff.latest().?.panel.len);
+    try std.testing.expectEqual(@as(usize, 12 * 4), handoff.max_bytes.load(.monotonic));
+    try std.testing.expectEqual(@as(usize, 12 * 4), handoff.last_bytes);
 }
 
 test "more LEDs than a slot holds are refused" {
