@@ -136,3 +136,33 @@ test "with webcams listed the media row moves under the device row" {
     try std.testing.expect(pane.handle(press(moved, camera_pane.primary_button, true)));
     try std.testing.expectEqualStrings("a.png", pane.args.image);
 }
+
+test "the pane starts on the run's own source without counting a switch" {
+    const sources = [_]struct { kind: ra8.gui.camera_panel.Kind, arg: []const u8 }{
+        .{ .kind = .image, .arg = "sunset.ppm" },
+        .{ .kind = .video, .arg = "clip.y4m" },
+        .{ .kind = .pipe, .arg = "-,64x48,rgb565" },
+        .{ .kind = .webcam, .arg = "2" },
+    };
+    for (sources) |given| {
+        var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 } };
+        pane.seed(.{ .kind = given.kind, .arg = given.arg });
+        try std.testing.expectEqual(given.kind, pane.panel.active);
+        try std.testing.expectEqualStrings(given.arg, pane.args.of(given.kind));
+        try std.testing.expectEqual(@as(u32, 0), pane.panel.changes);
+        try std.testing.expect(!pane.panel.asking);
+    }
+    var plain = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 } };
+    plain.seed(.{});
+    try std.testing.expectEqual(ra8.gui.camera_panel.Kind.gradient, plain.panel.active);
+}
+
+test "a webcam the run opened still asks again once the user leaves it" {
+    var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 } };
+    pane.seed(.{ .kind = .webcam, .allow_webcam = true });
+    try std.testing.expect(pane.panel.cameraOn());
+    pane.panel.pick(.gradient);
+    pane.panel.pick(.webcam);
+    try std.testing.expect(pane.panel.asking);
+    try std.testing.expect(!pane.panel.cameraOn());
+}

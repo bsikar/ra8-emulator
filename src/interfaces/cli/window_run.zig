@@ -9,6 +9,7 @@ const window_pace = @import("window_pace.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const platform = @import("../../gui/platform.zig");
 const camera_devices = @import("../../gui/camera_devices.zig");
+const registry = @import("../../periph/camera/camera_registry.zig");
 
 /// Runs the emulation to its end. Its clock must charge `pacer`, as
 /// zig_run's Clock does when Ends.pace is set.
@@ -26,13 +27,15 @@ pub const Shown = struct {
     closed: bool,
 };
 
-/// Shows `board` in `window` while `engine` runs it. The panel is scanned
-/// once before the engine starts, so the first frame never races it.
-pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine) !Shown {
+/// Shows `board` in `window` while `engine` runs it, the camera pane
+/// starting on `camera`, the run's own source. The panel is scanned once
+/// before the engine starts, so the first frame never races it.
+pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec) !Shown {
     var screen = try window_board.Screen.init(allocator, board, pacer.stepper());
     defer screen.deinit();
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
+    loop.pane.seed(camera);
     var host_devices: ?std.fs.Dir = std.fs.openDirAbsolute(camera_devices.host_dir, .{ .iterate = true }) catch null;
     defer if (host_devices) |*dir| dir.close();
     if (host_devices) |dir| loop.useDeviceDir(dir);
