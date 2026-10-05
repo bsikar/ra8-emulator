@@ -61,10 +61,15 @@ pub const Screen = struct {
         self.leds = frame_out.ledsOf(self.board);
     }
 
+    /// The window looks at the panel; it is not a frame the guest made.
+    /// Scanning bumps the report counters and raises VPOS, so the
+    /// controller is put back exactly as it was afterwards (RA8EMU-656).
+    /// It holds no heap state of its own, so the copy is the whole of it.
     fn scan(self: *Screen) bool {
         const unit = &self.board.display;
+        const before = unit.*;
+        defer unit.* = before;
         unit.output.capture = .{ .pixels = self.pixels, .width = self.width, .height = self.height };
-        defer unit.output.capture = null;
         return unit.scanOut() != null;
     }
 
