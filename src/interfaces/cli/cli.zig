@@ -100,8 +100,8 @@ pub const Options = struct {
     /// Contacts queued on the touch panel, one drained per frame read.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,
-    /// `--touch @PATH`: a file or FIFO of live host touches, one per line.
-    touch_in: ?[]const u8 = null,
+    touch_in: ?[]const u8 = null, // `--touch @PATH`: a file or FIFO of host touches, one per line
+    input_script: ?[]const u8 = null, // `--input-script PATH`: timed taps, swipes, presses, buttons
     /// What the fuel gauge says is in the battery; the gauge range-checks it.
     battery: max17048.Battery = .{},
     /// Fit the Click module, so the IMU and the fuel gauge answer at all.

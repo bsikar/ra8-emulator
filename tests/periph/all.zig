@@ -108,6 +108,7 @@ test {
     _ = @import("gptp/gptp_test.zig");
     _ = @import("gptp/gptp_timer_test.zig");
     _ = @import("i3c/i3c_gt911_test.zig");
+    _ = @import("i3c/i3c_input_script_test.zig");
     _ = @import("i3c/i3c_lsm6dso_test.zig");
     _ = @import("i3c/i3c_max17048_test.zig");
     _ = @import("i3c/i3c_regs_test.zig");

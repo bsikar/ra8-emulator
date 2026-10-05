@@ -4,7 +4,7 @@ pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
     \\       ra8_emulator ctl cpu-load <firmware.elf> [--from N --to N]
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]
-    \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH]
+    \\                    [--dump-sd BLOCK] [--touch X,Y | --touch @PATH | --input-script PATH]
     \\                    [--battery PCT] [--charge] [--click] [--console]
     \\                    [--usb-loop] [--usbip PORT] [--cms N] [--sfs N]
     \\                    [--dump-sym NAME] [--stop-sym NAME N] [--until TEXT] [--ms N]
