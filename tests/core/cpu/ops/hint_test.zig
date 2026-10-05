@@ -105,3 +105,47 @@ test "sev then wfe pairs off, and nop, yield and wfi leave the event alone" {
     try runHint(&cpu, 0xBF20);
     try std.testing.expect(!cpu.event);
 }
+
+test "the complete narrow hint number table decodes and reserved values are NOPs" {
+    var number: u16 = 0;
+    while (number <= 15) : (number += 1) {
+        const hw1 = 0xBF00 | (number << 4);
+        const exec = narrow(hw1) orelse return error.UnclaimedHint;
+        var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+        cpu.regs.pc = 0x100;
+        cpu.regs.xpsr = 0x0100_0000;
+        try exec(&cpu, .{ .address = 0xFE, .hw1 = hw1, .size = 2 });
+        if (number == hint.encodings.wfe or number == hint.encodings.wfi) {
+            try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
+        } else if (number == hint.encodings.sev) {
+            try std.testing.expect(cpu.event);
+        } else {
+            try std.testing.expect(!cpu.event);
+            try std.testing.expectEqual(@as(u32, 0x0100_0000), cpu.regs.xpsr);
+        }
+    }
+}
+
+test "the complete wide hint number table claims architectural hints only" {
+    var number: u16 = 0;
+    while (number <= 0xFF) : (number += 1) {
+        const hw2 = 0x8000 | number;
+        const exec = wide(hw2);
+        const pacbti_number = number == 0x0D or number == 0x1D or number == 0x2D;
+        try std.testing.expectEqual(!pacbti_number, exec != null);
+        if (exec) |run| {
+            var cpu: ra8.core.cpu.cpu.Cpu = .{ .bus = undefined };
+            cpu.regs.pc = 0x100;
+            cpu.regs.xpsr = 0x0100_0000;
+            run(&cpu, .{ .address = 0xFC, .hw1 = 0xF3AF, .hw2 = hw2, .size = 4 }) catch return error.ExecutionFailed;
+            if (number == hint.encodings.sev) {
+                try std.testing.expect(cpu.event);
+            } else if (number == hint.encodings.wfe) {
+                try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
+            } else if (number != 0x0F) {
+                try std.testing.expect(!cpu.event);
+                try std.testing.expectEqual(@as(u32, 0x0100_0000), cpu.regs.xpsr);
+            }
+        }
+    }
+}
