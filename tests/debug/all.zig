@@ -21,6 +21,7 @@ test {
     _ = @import("watch_bus_test.zig");
     _ = @import("unit_view_test.zig");
     _ = @import("zig_monitor_test.zig");
+    _ = @import("zig_drive_image_test.zig");
     _ = @import("step_hook_image_test.zig");
     _ = @import("commands_test.zig");
     _ = @import("script_test.zig");
