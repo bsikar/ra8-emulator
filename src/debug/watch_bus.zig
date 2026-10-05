@@ -4,12 +4,15 @@
 //! its bus and does the same: a store reaches the debug units the firmware
 //! programs (FPB, DWT, ITM, DCB) through Driver.stored, and every access
 //! reaches the watches and the DWT comparators through Machine.onAccess.
+//! A load of a unit's register reads what the machine holds (unit_view.zig).
 //!
 //! It listens only while armed, which zig_drive does around one
 //! instruction, and never to that instruction's own fetch.
 const std = @import("std");
 const bus = @import("../core/cpu/bus.zig");
 const step_hook = @import("step_hook.zig");
+/// Re-exported for tests/debug/unit_view_test.zig.
+pub const unit_view = @import("unit_view.zig");
 
 pub const WatchBus = struct {
     inner: bus.Bus,
@@ -42,6 +45,7 @@ pub const WatchBus = struct {
         const self: *WatchBus = @ptrCast(@alignCast(ctx));
         try self.inner.read(address, into);
         if (!self.armed or self.fetching(address)) return;
+        unit_view.overlay(self.driver.machine, address, into);
         self.driver.loaded(address);
         self.driver.machine.onAccess(address, width(into.len), .read, value(into));
     }
