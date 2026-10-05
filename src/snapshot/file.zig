@@ -41,6 +41,8 @@ pub const Kind = enum(u32) {
     controllers = 13,
     /// The option MRAM and the xSPI flash with their sparse contents (RA8EMU-674).
     storage = 14,
+    /// The self-contained data path units (RA8EMU-675).
+    signals = 15,
     _,
 };
 
