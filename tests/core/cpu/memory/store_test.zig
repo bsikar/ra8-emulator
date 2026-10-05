@@ -65,3 +65,78 @@ test "a store maps a window outside memmap and refuses one inside a region" {
     try std.testing.expectError(error.Mapped, store.map(0x02C1_E000, 0x1000));
     try std.testing.expectError(error.Mapped, store.map(memmap.sram_base, 0x1000));
 }
+
+fn put(store: *const Store, address: u32, value: u32) void {
+    std.mem.writeInt(u32, store.span(address, 4).?[0..4], value, .little);
+}
+
+fn get(store: *const Store, address: u32) u32 {
+    return std.mem.readInt(u32, store.span(address, 4).?[0..4], .little);
+}
+
+test "the SRAM pair and the SDRAM pair are separate memories" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    put(&store, memmap.sram_base + 0x80, 0xAAAA_AAAA);
+    try std.testing.expectEqual(@as(u32, 0), get(&store, memmap.sdram_base + 0x80));
+}
+
+test "a store comes up zeroed even where the last one wrote" {
+    {
+        var first = try Store.init(null);
+        defer first.deinit();
+        put(&first, memmap.sram_base + 0x80, 0xAAAA_AAAA);
+        put(&first, memmap.sdram_base + 0x2000, 0xAAAA_AAAA);
+    }
+    var store = try Store.init(null);
+    defer store.deinit();
+    try std.testing.expectEqual(@as(u32, 0), get(&store, memmap.ns_sram_base + 0x80));
+    try std.testing.expectEqual(@as(u32, 0), get(&store, memmap.sdram_base + 0x2000));
+}
+
+test "the cpu1 marker handshake crosses both the alias and the core" {
+    // cpu1_main.c: CPU1 is a permanent-NS controller and writes its boot
+    // markers through the Non-secure view; CPU0 reads the standard one.
+    var cpu0 = try Store.init(null);
+    defer cpu0.deinit();
+    var cpu1 = try Store.init(&cpu0);
+    defer cpu1.deinit();
+    put(&cpu1, memmap.ns_sram_base + 0x0010_0200, 0xB055_A55A);
+    try std.testing.expectEqual(@as(u32, 0xB055_A55A), get(&cpu0, memmap.sram_base + 0x0010_0200));
+    put(&cpu0, memmap.sdram_base + 0x40, 0x1111_1111);
+    try std.testing.expectEqual(@as(u32, 0x1111_1111), get(&cpu1, memmap.ns_sdram_base + 0x40));
+    put(&cpu1, memmap.ns_sdram_base + 0x44, 0x3333_3333);
+    try std.testing.expectEqual(@as(u32, 0x3333_3333), get(&cpu0, memmap.sdram_base + 0x44));
+}
+
+test "a borrower keeps its own code MRAM" {
+    var cpu0 = try Store.init(null);
+    defer cpu0.deinit();
+    var cpu1 = try Store.init(&cpu0);
+    defer cpu1.deinit();
+    put(&cpu0, memmap.mram_base + 0x100, 0xC0DE_DEAD);
+    try std.testing.expectEqual(@as(u32, 0), get(&cpu1, memmap.mram_base + 0x100));
+}
+
+test "the Non-secure MRAM view is the store's own code MRAM (RA8EMU-412)" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    // Where a relinked Non-secure image's vector table sits (RA8FW-510).
+    put(&store, memmap.mram_base + 0x8_0000, 0x1208_00F1);
+    try std.testing.expectEqual(@as(u32, 0x1208_00F1), get(&store, memmap.ns_mram_base + 0x8_0000));
+    put(&store, memmap.ns_mram_base + 0x8_0004, 0xC0DE_0001);
+    try std.testing.expectEqual(@as(u32, 0xC0DE_0001), get(&store, memmap.mram_base + 0x8_0004));
+}
+
+test "the PPB is backed per store and starts zeroed (RA8EMU-416)" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const ppb = store.region(memmap.ppb_base).?;
+    try std.testing.expectEqual(@as(usize, memmap.ppb_size), ppb.len);
+    try std.testing.expectEqual(@as(u32, 0), get(&store, memmap.scb.ccr));
+    put(&store, memmap.scb.ccr, 0x0007_0200);
+    try std.testing.expectEqual(@as(u32, 0x0007_0200), std.mem.readInt(u32, ppb[0xED14..][0..4], .little));
+    var other = try Store.init(null);
+    defer other.deinit();
+    try std.testing.expectEqual(@as(u32, 0), get(&other, memmap.scb.ccr));
+}
