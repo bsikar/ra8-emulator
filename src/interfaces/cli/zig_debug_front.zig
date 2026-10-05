@@ -137,6 +137,8 @@ const Other = struct {
         loading.cpu1 = &pair.core.cpu;
         loading.memory1 = pair.guest();
         try target.session.load(.cpu1, target.other_image.?.bytes);
+        // Loading CPU1 selects it; gdb attaches to CPU0 (thread 1) first.
+        try target.session.switchTo(.cpu0);
     }
 
     fn close(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver) void {
