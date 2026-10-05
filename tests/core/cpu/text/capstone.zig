@@ -15,6 +15,7 @@ pub fn expectGroupMatches(group: []const u8) !void {
 /// As expectGroupMatches, skipping the encodings in `skip`: ones Capstone 5
 /// cannot decode, which a by-name test covers instead.
 pub fn expectGroupMatchesExcept(group: []const u8, skip: []const u16) !void {
+    try oracleReady();
     var compared: usize = 0;
     var mismatched: usize = 0;
     var hw: u32 = 0;
@@ -36,6 +37,7 @@ pub fn expectGroupMatchesExcept(group: []const u8, skip: []const u16) !void {
 /// The 32-bit form: every hw1 with `hw1 & mask == value`, each paired with
 /// every hw2 in `samples`.
 pub fn expectWideGroupMatches(group: []const u8, mask: u16, value: u16, samples: []const u16) !void {
+    try oracleReady();
     var compared: usize = 0;
     var mismatched: usize = 0;
     var hw: u32 = value;
@@ -53,6 +55,20 @@ pub fn expectWideGroupMatches(group: []const u8, mask: u16, value: u16, samples:
     }
     try std.testing.expect(compared > 0);
     try std.testing.expectEqual(@as(usize, 0), mismatched);
+}
+
+/// The oracle is Capstone 5 (RA8EMU-615). Capstone 4.0.2 has no Armv8-M
+/// security or system forms: SG and TT come back as LDRD and STREX, BXNS as
+/// BX, BLXNS and MSR/MRS MSPLIM decode to nothing, CSDB as `hint.w #0x14`.
+/// The printers follow 5, so another major skips every comparison and says
+/// why, instead of failing ten groups that are right.
+pub const oracle_major: u32 = 5;
+
+fn oracleReady() !void {
+    const linked = ra8.core.disasm.version();
+    if (linked.major == oracle_major) return;
+    std.debug.print("capstone parity skipped: linked Capstone {d}.{d}, oracle is {d}.x (-Ddeps-prefix)\n", .{ linked.major, linked.minor, oracle_major });
+    return error.SkipZigTest;
 }
 
 fn matches(instr: Instr) !bool {
