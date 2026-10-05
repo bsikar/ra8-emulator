@@ -9,4 +9,5 @@ pub const camera_open = @import("gui/camera_open.zig");
 pub const camera_devices = @import("gui/camera_devices.zig");
 pub const camera_view = @import("gui/camera_view.zig");
 pub const camera_pane = @import("gui/camera_pane.zig");
+pub const camera_device_row = @import("gui/camera_device_row.zig");
 pub const host_loop = @import("gui/host_loop.zig");

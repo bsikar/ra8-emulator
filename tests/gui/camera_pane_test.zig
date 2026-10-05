@@ -83,3 +83,23 @@ test "draw puts the panel into the frame's list" {
     try pane.draw(&list);
     try std.testing.expect(list.commands.items.len > 0);
 }
+
+test "a device slot press names the webcam to open" {
+    const devices = [_]u32{ 0, 3 };
+    var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 }, .devices = &devices };
+    const row = ra8.gui.camera_device_row.Row.under(pane.layout);
+    try std.testing.expect(pane.handle(press(row.slot(1), camera_pane.primary_button, true)));
+    try std.testing.expectEqual(@as(?u32, 3), pane.device);
+    try std.testing.expectEqual(@as(u32, 0), pane.panel.changes);
+}
+
+test "a new device while the webcam runs counts as a switch" {
+    var pane = camera_pane.Pane{ .layout = .{ .x = 0, .y = 0 } };
+    pane.panel.pick(.webcam);
+    pane.panel.answer(.allow_once);
+    const before = pane.panel.changes;
+    pane.pickDevice(1);
+    try std.testing.expectEqual(before + 1, pane.panel.changes);
+    pane.pickDevice(1);
+    try std.testing.expectEqual(before + 1, pane.panel.changes);
+}

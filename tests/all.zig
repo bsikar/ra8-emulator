@@ -52,6 +52,7 @@ test {
     _ = @import("gui/camera_devices_test.zig");
     _ = @import("gui/camera_view_test.zig");
     _ = @import("gui/camera_pane_test.zig");
+    _ = @import("gui/camera_device_row_test.zig");
     _ = @import("gui/host_loop_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/quiet_due_test.zig");
