@@ -32,18 +32,32 @@ pub const Args = struct {
     ends: zig_run.Ends,
 };
 
-/// The window this build can open. The emulator links no window toolkit
-/// yet, so there is none; a -Dgui build hands back SDL's here.
+/// How the executable opens and closes its window. src/main.zig sets it
+/// in a -Dgui build (src/gui_window.zig, SDL); otherwise there is none.
+pub const Opener = struct {
+    open: *const fn () ?platform.Platform,
+    close: *const fn () void,
+};
+
+pub var opener: ?Opener = null;
+
+/// The window this build opens, or null when it has none to open.
 pub fn open() ?platform.Platform {
-    return null;
+    const how = opener orelse return null;
+    return how.open();
 }
 
-/// Runs `args` in the window; 2 when this build has no window to open.
+/// Runs `args` in the window; 2 when there is no window to open.
 pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
-    const window = open() orelse {
+    const how = opener orelse {
         std.debug.print("--gui needs a window: build the emulator with -Dgui\n", .{});
         return 2;
     };
+    const window = how.open() orelse {
+        std.debug.print("--gui could not open a window\n", .{});
+        return 2;
+    };
+    defer how.close();
     var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz) };
     var live = Live{ .args = args, .pacer = &pacer };
     _ = try window_run.show(allocator, window, args.board, &pacer, live.engine());
