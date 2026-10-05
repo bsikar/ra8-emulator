@@ -111,6 +111,7 @@ test {
     _ = @import("gif_lzw_test.zig");
     _ = @import("wav_test.zig");
     _ = @import("audio_out_test.zig");
+    _ = @import("audio_tone_test.zig");
     _ = @import("ctl_args_test.zig");
 }
 
