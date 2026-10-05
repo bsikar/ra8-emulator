@@ -1,0 +1,52 @@
+//! Taking the precise BusFault a refused data access raises on the Zig core
+//! (RA8EMU-641), the twin of src/core/bus_error.zig on Unicorn.
+//!
+//! An access the MPU refused is MemManage (mem_manage.zig). Any other refusal
+//! is a precise BusFault when the run records refused addresses on its bus
+//! (`Bus.miss`): CFSR PRECISERR and BFARVALID, BFAR the address. The fault
+//! routes against SHCSR.BUSFAULTENA, SHPR1.PRI_5 and the execution priority
+//! (src/periph/fault_route.zig); escalated, it owes HFSR.FORCED. The handler
+//! is entered with the faulting instruction stacked as the return address. A
+//! run that records nothing, or a HardFault that cannot preempt, stops
+//! instead.
+
+const std = @import("std");
+const memmap = @import("../../memmap.zig");
+const fault_route = @import("../../../periph/fault_route.zig");
+const status = @import("../../../periph/fault_status.zig");
+const active = @import("active.zig");
+const dispatch = @import("dispatch.zig");
+const fault = @import("fault.zig");
+const mem_manage = @import("mem_manage.zig");
+const Cpu = @import("../cpu.zig").Cpu;
+
+pub const Error = fault.Error || error{NotRecorded};
+
+/// Take what the data access the instruction at `pc` made and the bus
+/// refused owes: MemManage for an MPU refusal, else the precise BusFault.
+pub fn refused(cpu: *Cpu, pc: u32) Error!void {
+    if (cpu.mpu) |m| if (m.take()) |at| return mem_manage.data(cpu, pc, at);
+    const miss = cpu.bus.miss orelse return error.NotRecorded;
+    return data(cpu, pc, miss.*);
+}
+
+/// Raise the precise BusFault for a data access to `bfar` the instruction
+/// at `pc` made.
+pub fn data(cpu: *Cpu, pc: u32, bfar: u32) Error!void {
+    const r = &cpu.regs;
+    const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, dispatch.prigroup(cpu.bus));
+    const route = fault_route.route(
+        .bus_fault,
+        cpu.bus.readWord(memmap.scb.shcsr) catch 0,
+        cpu.bus.readWord(memmap.scb.shpr1) catch 0,
+        fault.running(level),
+    );
+    if (route.escalated and (level < 0 or fault.inHardFaultOrNmi(cpu))) return error.Lockup;
+    fault.orInto(cpu.bus, memmap.scb.cfsr, status.Cause.preciserr.bit() | status.Cause.bfarvalid.bit());
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, bfar, .little);
+    cpu.bus.write(memmap.scb.bfar, &bytes) catch {};
+    if (route.escalated) fault.orInto(cpu.bus, memmap.scb.hfsr, status.Hard.forced.bit());
+    cpu.regs.pc = pc;
+    try dispatch.enter(cpu, .{ .number = @intCast(route.number), .priority = route.priority }, pc);
+}

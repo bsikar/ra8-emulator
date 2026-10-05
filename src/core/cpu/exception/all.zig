@@ -12,6 +12,7 @@ pub const dispatch = @import("dispatch.zig");
 pub const fault = @import("fault.zig");
 pub const secure = @import("secure.zig");
 pub const mem_manage = @import("mem_manage.zig");
+pub const bus_fault = @import("bus_fault.zig");
 pub const lazy_fault = @import("lazy_fault.zig");
 pub const debug_event = @import("debug_event.zig");
 pub const nvic_source = @import("nvic_source.zig");
