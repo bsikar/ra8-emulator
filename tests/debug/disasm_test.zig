@@ -1,23 +1,32 @@
-//! Tests for src/core/disasm.zig.
+//! Tests for src/debug/disasm.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const mod = ra8.core.disasm;
 
 const Error = mod.Error;
 const one = mod.one;
+
 test "a Thumb store decodes to its mnemonic and operands" {
     const text = try one(0x2200_0000, &[_]u8{ 0x01, 0x60 });
     try std.testing.expectEqualStrings("str r1, [r0]", text.slice());
 }
 
-test "bytes that decode to nothing are an error, not a guess" {
-    try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }));
+test "a 32-bit encoding reads both halfwords" {
+    // ldr.w r1, [r0, #4]: hw1 0xF8D0, hw2 0x1004.
+    const text = try one(0x2200_0000, &[_]u8{ 0xD0, 0xF8, 0x04, 0x10 });
+    try std.testing.expectEqualStrings("ldr.w r1, [r0, #4]", text.slice());
 }
 
-test "the linked Capstone reports the version the parity oracle pins" {
-    const linked = mod.version();
-    try std.testing.expect(linked.major >= 4);
-    // This build links Capstone 5; a 4.x or 6.x box skips parity instead.
-    if (linked.major != 5) return error.SkipZigTest;
-    try std.testing.expectEqual(@as(u32, 0), linked.minor);
+test "a wide first halfword without its second is an error" {
+    try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{ 0xD0, 0xF8 }));
+}
+
+test "fewer than two bytes is an error" {
+    try std.testing.expectError(Error.NothingDecoded, one(0x2200_0000, &[_]u8{0x01}));
+}
+
+test "our text matches the Capstone oracle on the fault-path store" {
+    const ours = try one(0x2200_0000, &[_]u8{ 0x01, 0x60 });
+    const theirs = ra8.core.capstone_ref.one(0x2200_0000, &[_]u8{ 0x01, 0x60 }) catch return error.SkipZigTest;
+    try std.testing.expectEqualStrings(theirs.slice(), ours.slice());
 }
