@@ -94,8 +94,8 @@ pub const Options = struct {
     state: @import("state_args.zig").Options = .{}, // `--save-state`, `--load-state` (RA8EMU-696)
     console: bool = false, // `--console`: stream finished SCI console lines to stdout
     console_reply: @import("../../periph/sci/sci_reply.zig").Reply = .{}, // RA8EMU-626
-    /// Print this card block back as hex once the run is over.
-    dump_sd: ?u32 = null,
+    dump_sd: ?u32 = null, // print this card block back as hex once the run is over
+    faults: ?[]const u8 = null, // `--faults FILE`: hardware changes at virtual times (RA8EMU-207)
     /// Contacts queued on the touch panel, one drained per frame read.
     touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
     touch_count: usize = 0,

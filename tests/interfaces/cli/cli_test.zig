@@ -98,6 +98,7 @@ test {
     _ = @import("touch_spec_test.zig");
     _ = @import("rtc_start_test.zig");
     _ = @import("realtime_test.zig");
+    _ = @import("fault_file_test.zig");
     _ = @import("png_test.zig");
     _ = @import("frame_out_test.zig");
     _ = @import("window_still_test.zig");

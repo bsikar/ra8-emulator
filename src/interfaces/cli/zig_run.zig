@@ -13,6 +13,7 @@ const systick_bank = @import("../../core/systick_bank.zig");
 const scs_route = @import("../../core/cpu/scs_route.zig");
 const sleep_pace = @import("../../core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
+const fault_file = @import("fault_file.zig");
 const quiet_due = @import("../../board/quiet_due.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
@@ -59,6 +60,8 @@ pub const Ends = struct {
     undefined_sites: ?*undefined_sites.Found = null,
     /// The host window's pacer, when the run is shown live (RA8EMU-646).
     pace: ?*window_pace.Pacer = null,
+    /// The `--faults FILE` schedule, applied at its virtual times (RA8EMU-207).
+    schedule: ?*fault_file.Applier = null,
 };
 /// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
 pub const cpu0_memory = @import("zig_memory.zig");
@@ -229,7 +232,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
     const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
-        .boundary = clock.boundary(),
+        .boundary = try fault_file.boundary(ends.schedule, clock.boundary()),
         .partitions = &board.partitions,
         .idau = &board.idau,
         .regions = &board.regions,

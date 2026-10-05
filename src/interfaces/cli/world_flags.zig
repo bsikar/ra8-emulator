@@ -82,6 +82,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         try attach(options, try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--fault")) {
         try fault(options, try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--faults")) {
+        options.faults = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--input-script")) {
         options.input_script = try next(argv, index);
     } else if (touch_spec.claims(flag)) {
