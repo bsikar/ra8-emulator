@@ -77,3 +77,26 @@ test "direct memory bypasses the vtable only while enabled" {
     try std.testing.expectEqual(@as(u32, 0xDDCC_BBAA), try view.readWord(flat.base));
     try std.testing.expectEqual(@as(usize, 2), flat.reads);
 }
+
+test "a refused read or write records where it went" {
+    var bytes = [_]u8{0} ** 4;
+    var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
+    var at: u32 = 0;
+    var b = flat.view();
+    b.miss = &at;
+    try std.testing.expectError(bus.Error.Unmapped, b.readWord(0x3000_0000));
+    try std.testing.expectEqual(@as(u32, 0x3000_0000), at);
+    try std.testing.expectError(bus.Error.Unmapped, b.write(0x1000_0004, &.{0x55}));
+    try std.testing.expectEqual(@as(u32, 0x1000_0004), at);
+}
+
+test "an access that lands leaves the recorded miss alone" {
+    var bytes = [_]u8{0} ** 4;
+    var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
+    var at: u32 = 0xDEAD_BEEF;
+    var b = flat.view();
+    b.miss = &at;
+    try b.write(0x2000_0000, &.{0x55});
+    _ = try b.readWord(0x2000_0000);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), at);
+}
