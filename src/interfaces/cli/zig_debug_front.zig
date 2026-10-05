@@ -89,6 +89,7 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
         return 1;
     };
     var target: zig_script.ZigScript = .{ .image = image, .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = session.limits.default_budget, .watch = &watching } } };
+    target.session.attachInputScript(&board.input_script);
     var loading: LoaderState = .{ .cpu0 = &cpu, .memory0 = cpu0.own() };
     target.session.attachLoader(.{ .context = &loading, .loadFn = LoaderState.load });
     try target.session.load(.cpu0, image.bytes);

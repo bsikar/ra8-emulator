@@ -14,6 +14,7 @@ test {
     _ = @import("zig_drive_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("zig_session_test.zig");
+    _ = @import("session_api_test.zig");
     _ = @import("zig_cycles_test.zig");
     _ = @import("session_report_test.zig");
     _ = @import("zig_script_test.zig");

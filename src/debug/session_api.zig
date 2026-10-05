@@ -11,14 +11,19 @@ const core_view = @import("core_view.zig");
 const watch_table = @import("watch_table.zig");
 const zig_drive = @import("zig_drive.zig");
 const zig_session = @import("zig_session.zig");
+const input_script = @import("../periph/i3c/i3c_input_script.zig");
+const gt911 = @import("../periph/i3c/i3c_gt911.zig");
+const BoardTick = @import("../core/tick.zig").Tick;
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
-pub const Error = error{ CoreNotAttached, NoLoader, TooManyListeners };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, TooManyListeners };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("break_table.zig").Id;
 pub const WatchId = watch_table.Id;
 pub const Register = core_view.Cortex;
+pub const Button = input_script.Button;
 
 pub const Loader = struct {
     context: *anyopaque,
@@ -31,7 +36,7 @@ pub const Event = struct {
     address: ?u32 = null,
     ended: ?Ended = null,
 
-    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed };
+    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled };
 };
 
 pub const Listener = struct {
@@ -43,13 +48,27 @@ pub const limits = struct {
     pub const listeners: usize = 8;
 };
 
+const BoardRun = struct { tick: BoardTick, guest: Guest };
+
 pub const Session = struct {
     live: zig_session.ZigSession,
     loader: ?Loader = null,
+    input_script: ?*input_script.Script = null,
+    board_ticks: [2]?BoardRun = .{ null, null },
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
+    }
+
+    /// Bind timed input to the board script that the boundary dispatches.
+    pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
+        self.input_script = script;
+    }
+
+    /// Advance one core's board at the end of each run command.
+    pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
+        self.board_ticks[@intFromEnum(core)] = .{ .tick = tick, .guest = guest };
     }
 
     /// Load image bytes through the board-specific loader, then publish it.
@@ -60,9 +79,49 @@ pub const Session = struct {
         self.publish(.{ .core = core, .kind = .loaded });
     }
 
+    /// Queue a panel-pixel tap for virtual board time `at_ns`.
+    pub fn tap(self: *Session, core: Core, at_ns: u64, x: u16, y: u16) anyerror!void {
+        try self.scheduleInput(core, at_ns, .{ .tap = .{ .x = x, .y = y } });
+    }
+
+    /// Queue a swipe; intermediate reports use the input script's cadence.
+    pub fn swipe(self: *Session, core: Core, at_ns: u64, from: gt911.Contact, to: gt911.Contact, duration_ns: u64) anyerror!void {
+        try self.scheduleInput(core, at_ns, .{ .swipe = .{ .from = from, .to = to, .duration_ns = duration_ns } });
+    }
+
+    /// Queue repeated contact reports for a virtual-time long press.
+    pub fn longpress(self: *Session, core: Core, at_ns: u64, point: gt911.Contact, duration_ns: u64) anyerror!void {
+        try self.scheduleInput(core, at_ns, .{ .longpress = .{ .point = point, .duration_ns = duration_ns } });
+    }
+
+    /// Queue an active-low board button press (released by the shared script).
+    pub fn button(self: *Session, core: Core, at_ns: u64, which: Button) anyerror!void {
+        try self.scheduleInput(core, at_ns, .{ .button = .{ .down = true, .button_id = which } });
+    }
+
+    fn advanceBoard(self: *Session, core: Core, instructions: u64) anyerror!void {
+        const board = self.board_ticks[@intFromEnum(core)] orelse return;
+        var left = instructions;
+        while (left > 0) {
+            const count: u32 = @intCast(@min(left, std.math.maxInt(u32)));
+            try board.tick.run(board.guest, count);
+            left -= count;
+        }
+    }
+
+    fn scheduleInput(self: *Session, core: Core, at_ns: u64, event: input_script.Event) anyerror!void {
+        try self.select(core);
+        const script = self.input_script orelse return Error.NoInput;
+        try script.schedule(.{ .at_ns = at_ns, .event = event });
+        self.publish(.{ .core = core, .kind = .input_scheduled });
+    }
+
     pub fn run(self: *Session, core: Core, command: Run) anyerror!Ended {
         try self.select(core);
+        const cpu = self.live.core.cpu;
+        const retired_before = cpu.retired;
         const ended = try self.live.go(command);
+        try self.advanceBoard(core, cpu.retired - retired_before);
         self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
         return ended;
     }

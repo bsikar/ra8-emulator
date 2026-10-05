@@ -3,10 +3,16 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const api = ra8.core.session_api;
 const breakpoint = ra8.core.breakpoint;
 const Machine = ra8.core.stop_machine.Machine;
 const zig_session = ra8.core.step_hook.zig_session;
+const input_script = ra8.periph.i3c_input_script;
+const gt911 = ra8.periph.i3c_gt911;
+const gpio = ra8.periph.gpio;
+const touch_input = ra8.periph.i3c_touch_input;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.
 const Ram = struct {
@@ -54,6 +60,21 @@ const Events = struct {
         const self: *Events = @ptrCast(@alignCast(context));
         self.count += 1;
         self.last = event;
+    }
+};
+
+const InputBoard = struct {
+    events: *input_script.Script,
+    panel: *gt911.Panel,
+    pins: *gpio.Gpio,
+    input: *touch_input.Input,
+    now_ns: u64 = 0,
+
+    fn tick(context: *anyopaque, guest: Guest, instructions: u32) anyerror!void {
+        _ = guest;
+        const self: *InputBoard = @ptrCast(@alignCast(context));
+        self.now_ns += @as(u64, instructions) * 50_000_000;
+        self.events.dispatch(self.now_ns, self.panel, self.pins, self.input);
     }
 };
 
@@ -107,4 +128,63 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     try session.pause(.cpu0);
     try std.testing.expectEqual(api.Event.Kind.paused, events.last.?.kind);
     try std.testing.expectEqual(api.Core.cpu0, events.last.?.core);
+}
+
+test "session input calls advance the board and expose firmware touch reports" {
+    var memory = Ram.init();
+    for (memory.bytes[8..], 0..) |*byte, index| byte.* = if (index % 2 == 0) 0x00 else 0xBF;
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 };
+    var session: api.Session = .{ .live = live };
+    var events = input_script.Script{};
+    var panel = gt911.Panel{};
+    var pins = gpio.Gpio.init();
+    var input = touch_input.Input{};
+    var board = InputBoard{ .events = &events, .panel = &panel, .pins = &pins, .input = &input };
+    var store = try Store.init(null);
+    defer store.deinit();
+    session.attachInputScript(&events);
+    session.attachBoard(.cpu0, .{ .context = &board, .tickFn = InputBoard.tick }, .{ .store = &store });
+
+    try session.swipe(.cpu0, 100_000_000, .{ .x = 900, .y = 700 }, .{ .x = 100, .y = 700 }, 100_000_000);
+    try session.tap(.cpu0, 50_000_000, 300, 400);
+    try session.longpress(.cpu0, 250_000_000, .{ .x = 500, .y = 500 }, 100_000_000);
+    try session.button(.cpu0, 400_000_000, .sw1);
+
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 300, .y = 400 }, firmwareReport(&panel).?);
+    try std.testing.expectError(error.InputInPast, session.tap(.cpu0, 25_000_000, 0, 0));
+
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 900, .y = 700 }, firmwareReport(&panel).?);
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 500, .y = 700 }, firmwareReport(&panel).?);
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 100, .y = 700 }, firmwareReport(&panel).?);
+
+    _ = try session.step(.cpu0);
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 500, .y = 500 }, firmwareReport(&panel).?);
+    _ = try session.step(.cpu0);
+    _ = try session.step(.cpu0);
+    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    _ = try session.step(.cpu0);
+    _ = try session.step(.cpu0);
+    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+}
+
+fn firmwareReport(panel: *gt911.Panel) ?gt911.Contact {
+    var status: [1]u8 = undefined;
+    panel.pointer = gt911.reg.status;
+    _ = panel.read(&status);
+    if (status[0] & gt911.status.ready == 0) return null;
+    var record: [gt911.record.bytes]u8 = undefined;
+    panel.pointer = gt911.reg.point0;
+    _ = panel.read(&record);
+    panel.pointer = gt911.reg.status;
+    panel.taken = gt911.pointer_bytes;
+    panel.write(0);
+    return .{ .x = @as(u16, record[2]) << 8 | record[1], .y = @as(u16, record[4]) << 8 | record[3] };
 }

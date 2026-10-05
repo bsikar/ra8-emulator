@@ -7,11 +7,11 @@ pub const Event = union(enum) {
     tap: gt911.Contact,
     swipe: struct { from: gt911.Contact, to: gt911.Contact, duration_ns: u64 },
     longpress: struct { point: gt911.Contact, duration_ns: u64 },
-    button: struct { down: bool, button_id: Switch },
+    button: struct { down: bool, button_id: Button },
 };
 pub const Timed = struct { at_ns: u64, event: Event };
 pub const max_events = 256;
-const Switch = enum { sw1, sw2 };
+pub const Button = enum { sw1, sw2 };
 const Active = union(enum) {
     swipe: struct { from: gt911.Contact, to: gt911.Contact, start: u64, duration: u64, next: u64 },
     longpress: struct { point: gt911.Contact, start: u64, duration: u64, next: u64 },
@@ -22,7 +22,8 @@ pub const Script = struct {
     cursor: usize = 0,
     previous_at: u64 = 0,
     active: ?Active = null,
-    button_release: ?struct { at_ns: u64, button_id: Switch } = null,
+    button_release: ?struct { at_ns: u64, button_id: Button } = null,
+    now_ns: u64 = 0,
     pub fn parse(self: *Script, text: []const u8) !void {
         var lines = std.mem.tokenizeScalar(u8, text, '\n');
         while (lines.next()) |raw| {
@@ -36,10 +37,25 @@ pub const Script = struct {
             self.len += 1;
         }
     }
+    /// Schedule one typed event on the same virtual-time queue as a script.
+    /// Pending events stay ordered; equal-time events retain insertion order.
+    pub fn schedule(self: *Script, timed: Timed) !void {
+        if (timed.at_ns < self.now_ns) return error.InputInPast;
+        if (self.len == max_events) return error.TooManyEvents;
+        var position = self.cursor;
+        while (position < self.len and self.events[position].at_ns <= timed.at_ns) : (position += 1) {}
+        var end = self.len;
+        while (end > position) : (end -= 1) self.events[end] = self.events[end - 1];
+        self.events[position] = timed;
+        self.len += 1;
+        self.previous_at = @max(self.previous_at, timed.at_ns);
+    }
+
     pub fn dispatch(self: *Script, now_ns: u64, panel: *gt911.Panel, pins: *gpio.Gpio, input: *host.Input) void {
         // Script times are absolute virtual board time, as the doc says:
         // "at 2s" is 2 s after reset, wherever the first boundary lands.
         const elapsed = now_ns;
+        self.now_ns = @max(self.now_ns, elapsed);
         if (self.button_release) |release| if (elapsed >= release.at_ns) {
             input.feedLine(panel, pins, switchLine(release.button_id, false));
             self.button_release = null;
@@ -91,7 +107,7 @@ pub const Script = struct {
     }
 };
 const frame_ns: u64 = 50_000_000;
-fn switchLine(which: Switch, down: bool) []const u8 {
+fn switchLine(which: Button, down: bool) []const u8 {
     return switch (which) {
         .sw1 => if (down) "sw1 down" else "sw1 up",
         .sw2 => if (down) "sw2 down" else "sw2 up",
