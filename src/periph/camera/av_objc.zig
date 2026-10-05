@@ -23,19 +23,19 @@ pub const Runtime = struct {
 
 pub fn send0(rt: Runtime, comptime R: type, recv: Id, sel: [*:0]const u8) R {
     const F = *const fn (Id, Id) callconv(.c) R;
-    const f: F = @ptrCast(rt.msg_send);
+    const f: F = @ptrCast(@alignCast(rt.msg_send));
     return f(recv, rt.selector(sel));
 }
 
 pub fn send1(rt: Runtime, comptime R: type, recv: Id, sel: [*:0]const u8, a: anytype) R {
     const F = *const fn (Id, Id, @TypeOf(a)) callconv(.c) R;
-    const f: F = @ptrCast(rt.msg_send);
+    const f: F = @ptrCast(@alignCast(rt.msg_send));
     return f(recv, rt.selector(sel), a);
 }
 
 pub fn send2(rt: Runtime, comptime R: type, recv: Id, sel: [*:0]const u8, a: anytype, b: anytype) R {
     const F = *const fn (Id, Id, @TypeOf(a), @TypeOf(b)) callconv(.c) R;
-    const f: F = @ptrCast(rt.msg_send);
+    const f: F = @ptrCast(@alignCast(rt.msg_send));
     return f(recv, rt.selector(sel), a, b);
 }
 
