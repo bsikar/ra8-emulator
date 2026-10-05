@@ -5,10 +5,13 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const ceu = ra8.periph.ceu;
-const engine = ra8.core.engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 
-/// The SDRAM address the camera example captures into.
-const frame_base: u32 = 0x6800_0000;
+/// The last page of SDRAM. The Zig core's store backs all of SDRAM, so the
+/// buffer sits at its top: the tests that run a capture off the end of
+/// memory still reach an address nothing backs.
+const frame_base: u32 = ra8.core.memmap.sdram_end - 0x1000;
 
 fn at(offset: u32) u32 {
     return ceu.win_base + offset;
@@ -19,20 +22,25 @@ fn window(width: u32, lines: u32) u32 {
     return width | lines << ceu.field.vertical_shift;
 }
 
-/// A CEU with memory behind it, and the frame buffer it captures into.
+/// A CEU with memory behind it, and the frame buffer it captures into. The
+/// Zig core's store backs SDRAM, so the buffer needs no map of its own.
 const Bench = struct {
-    core: engine.Engine = undefined,
+    store: *Store = undefined,
+    core: Guest = undefined,
     unit: ceu.Ceu = undefined,
 
     fn open(self: *Bench) !void {
-        self.core = try engine.Engine.open();
-        try self.core.map(frame_base, 0x1000);
+        self.store = try std.testing.allocator.create(Store);
+        errdefer std.testing.allocator.destroy(self.store);
+        self.store.* = try Store.init(null);
+        self.core = .{ .store = self.store };
         self.unit = ceu.Ceu.init();
-        self.unit.memory = .{ .engine = self.core };
+        self.unit.memory = self.core;
     }
 
     fn close(self: *Bench) void {
-        self.core.close();
+        self.store.deinit();
+        std.testing.allocator.destroy(self.store);
     }
 
     /// Program a capture of `width` x `lines` into `destination`, with a

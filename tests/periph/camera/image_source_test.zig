@@ -7,7 +7,8 @@ const ra8 = @import("ra8");
 const ceu = ra8.periph.ceu;
 const camera = ceu.camera;
 const still = camera.still;
-const engine = ra8.core.engine;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
 const allocator = std.testing.allocator;
 
 /// A 2x2 P6 picture: red, green / blue, white.
@@ -103,12 +104,15 @@ test "an armed CEU capture writes the picture's pixels into the buffer" {
     try writeFile(tmp.dir, "a.ppm", ppm_bytes);
     var format_control: u8 = 0x6F;
     const loaded = try loadFrom(tmp, "a.ppm", &format_control);
-    var core = try engine.Engine.open();
-    defer core.close();
+    const store = try allocator.create(Store);
+    defer allocator.destroy(store);
+    store.* = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = store };
+    // SDRAM, which the Zig core's store already backs.
     const base: u32 = 0x6800_0000;
-    try core.map(base, 0x1000);
     var unit = ceu.Ceu.init();
-    unit.memory = .{ .engine = core };
+    unit.memory = core;
     unit.source = loaded.source();
     defer unit.source.close();
     unit.write(ceu.win_base + ceu.off.capwr, 4, 4 | 2 << ceu.field.vertical_shift);
