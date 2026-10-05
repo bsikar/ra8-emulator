@@ -82,7 +82,7 @@ pub const core = struct {
     pub const conformance_suite = @import("core/cpu/conformance/suite.zig");
     pub const fpu = @import("core/cpu/fpu/all.zig");
     pub const mve = @import("core/cpu/mve/all.zig");
-    /// The Zig CPU core (RA8EMU-10), growing beside Unicorn until it replaces it.
+    /// The Zig CPU core (RA8EMU-10).
     pub const cpu = struct {
         pub const boot = @import("core/cpu/boot.zig");
         pub const bus = @import("core/cpu/bus.zig");

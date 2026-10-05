@@ -9,7 +9,7 @@ const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
 fn render(board: *ra8.board.Board, sites: ?*const json_sites.Sites, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "unicorn", .elapsed = 1, .sites = sites });
+    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .sites = sites });
     return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
 }
 

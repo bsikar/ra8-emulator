@@ -31,7 +31,7 @@ const Banked = struct {
     }
 };
 
-/// A core with one copy, as the Unicorn backend is.
+/// A core with one copy.
 const Single = struct {
     words: [2]u32 = .{ 0, 0 },
 

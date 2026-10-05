@@ -1,6 +1,6 @@
 //! Tests for src/debug/unit_view.zig: firmware that programs the debug
-//! units and reads them back sees on the Zig core what it saw through
-//! Unicorn's step hook (RA8EMU-673), with the same stops.
+//! units and reads them back sees on the Zig core what the stop machine
+//! holds (RA8EMU-673), with the recorded stops.
 const std = @import("std");
 const ra8 = @import("ra8");
 

@@ -1,5 +1,5 @@
 //! Tests for src/debug/watch_bus.zig: watchpoints and DWT data matches on
-//! the Zig core stop where they stopped on Unicorn before RA8EMU-605.
+//! the Zig core stop on the recorded instruction.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -102,8 +102,7 @@ fn zig(into: *std.ArrayList(u8)) !void {
     try play(&target, into);
 }
 
-/// What this script printed on the Unicorn session before RA8EMU-605
-/// retired it, kept so the Zig core stays held to it.
+/// The recorded transcript this script must print on the Zig core.
 const transcript =
     \\Watchpoint 1 (write) at 0x22000054
     \\Watchpoint 1: write of 4 at 0x22000054, 0x22000010: bx lr
@@ -116,7 +115,7 @@ const transcript =
     \\
 ;
 
-test "a write and a read watchpoint stop on the instruction they stopped on under Unicorn" {
+test "a write and a read watchpoint stop on the recorded instruction" {
     var got = std.ArrayList(u8).init(std.testing.allocator);
     defer got.deinit();
     try zig(&got);

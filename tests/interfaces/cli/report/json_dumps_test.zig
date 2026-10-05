@@ -14,7 +14,7 @@ const Fixture = @import("json_board.zig").Fixture;
 const base: u32 = ra8.core.memmap.sram_base;
 
 fn render(board: *ra8.board.Board, dumps: ?*const json_dumps.Dumps, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "unicorn", .elapsed = 1, .dumps = dumps });
+    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .dumps = dumps });
     return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
 }
 

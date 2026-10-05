@@ -27,7 +27,7 @@ fn run(clock: *u64) rtos_hook.Tracer {
 }
 
 fn render(board: *ra8.board.Board, load: ?*const json_load.Load, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "unicorn", .elapsed = 1, .load = load });
+    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .load = load });
     return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
 }
 

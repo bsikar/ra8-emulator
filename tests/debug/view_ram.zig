@@ -1,6 +1,5 @@
 //! A Zig core over a little board memory for the remote-protocol tests:
 //! SRAM at its board address and the PPB, where the debug units live.
-//! It stands where the Unicorn engine's board RAM stood before RA8EMU-605.
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;

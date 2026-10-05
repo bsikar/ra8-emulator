@@ -1,5 +1,5 @@
 //! Tests for src/debug/zig_script.zig: one script on the Zig core prints
-//! the transcript the Unicorn session printed before RA8EMU-605.
+//! its recorded transcript.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -91,8 +91,7 @@ fn zig(into: *std.ArrayList(u8)) !void {
     try play(&target, into);
 }
 
-/// What this script printed on the Unicorn session before RA8EMU-605
-/// retired it, kept so the Zig core stays held to it.
+/// The recorded transcript this script must print on the Zig core.
 const transcript =
     \\Breakpoint 1 at 0x22000008, arrival 3
     \\Breakpoint 1, 0x22000008: ldr r1, [pc, #8]
@@ -116,7 +115,7 @@ const transcript =
     \\
 ;
 
-test "a script prints the transcript it printed on Unicorn, on the Zig core" {
+test "a script prints its recorded transcript on the Zig core" {
     var got = std.ArrayList(u8).init(std.testing.allocator);
     defer got.deinit();
     try zig(&got);

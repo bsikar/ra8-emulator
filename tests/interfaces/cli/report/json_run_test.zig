@@ -9,7 +9,7 @@ const Fixture = @import("json_board.zig").Fixture;
 
 /// The document for `board`, parsed. The caller frees both.
 fn parsed(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "unicorn", .elapsed = 42, .bus_errors = .{ .raised = 2, .escalated = 1 } });
+    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 42, .bus_errors = .{ .raised = 2, .escalated = 1 } });
     try std.testing.expect(std.mem.endsWith(u8, buf.items, "}\n"));
     try std.testing.expect(std.mem.count(u8, buf.items, "\n") == 1);
     return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
@@ -39,7 +39,7 @@ test "a quiet board has every run and cores key, and empty unit lists" {
     try std.testing.expectEqualStrings("ra8-report/1", doc.value.object.get("schema").?.string);
     const run = doc.value.object.get("run").?;
     try has(run, "part", .string);
-    try std.testing.expectEqualStrings("unicorn", run.object.get("engine").?.string);
+    try std.testing.expectEqualStrings("zig", run.object.get("engine").?.string);
     try std.testing.expectEqual(@as(i64, 42), try int(run, "elapsed_instructions"));
     for ([_][]const u8{ "reads", "writes", "unmodelled_registers" }) |key| _ = try int(run.object.get("bus").?, key);
     try std.testing.expectEqual(@as(i64, 2), try int(run.object.get("bus_faults").?, "raised"));
