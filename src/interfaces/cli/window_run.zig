@@ -37,6 +37,9 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     defer if (host_devices) |*dir| dir.close();
     if (host_devices) |dir| loop.useDeviceDir(dir);
     loop.useProject(std.fs.cwd());
+    var project_media: ?std.fs.Dir = std.fs.cwd().openDir(".", .{ .iterate = true }) catch null;
+    defer if (project_media) |*dir| dir.close();
+    if (project_media) |dir| loop.useMediaDir(dir);
     const thread = try std.Thread.spawn(.{}, runThenFinish, .{ engine, pacer });
     defer {
         pacer.stop();
