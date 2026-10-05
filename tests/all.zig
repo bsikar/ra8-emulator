@@ -49,6 +49,7 @@ test {
     _ = @import("core/cpu/dsp_corpus_test.zig");
     _ = @import("core/cpu/nnf_corpus_test.zig");
     _ = @import("core/cpu/bus_test.zig");
+    _ = @import("core/cpu/exclusive_peer_test.zig");
     _ = @import("core/cpu/choice_test.zig");
     _ = @import("core/cpu/cortex_test.zig");
     _ = @import("core/cpu/memory/all_test.zig");
