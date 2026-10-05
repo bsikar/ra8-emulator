@@ -1,7 +1,8 @@
 //! Covers src/gui/host_loop.zig: a short run through the headless window
 //! presents the board view and the camera pane, stops when the run ends or
 //! the window closes, and lets a click on the pane swap the camera source.
-//! A click on a console tab shows that channel.
+//! A click on a console tab shows that channel, and keys typed over the
+//! console go to it.
 const std = @import("std");
 const ra8 = @import("ra8");
 const host_loop = ra8.gui.host_loop;
@@ -282,4 +283,29 @@ test "a click on a console tab shows that channel's log" {
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expectEqual(@as(usize, 0), loop.channel);
     try std.testing.expectEqual(&logs[0], loop.console.?);
+}
+
+test "a key typed with the pointer over the console goes to the shown channel" {
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    var logs: [3]ra8.gui.console_log.Log = undefined;
+    for (&logs) |*log| log.* = .init(std.testing.allocator, 4);
+    defer for (&logs) |*log| log.deinit();
+    var typed = ra8.gui.console_keys.Typed{};
+    loop.useConsoles(&logs, 2);
+    loop.typed = &typed;
+    try window.feed(.{ .key = .{ .code = 'x', .down = true } });
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(usize, 0), typed.len);
+    const size = board_view.size(2, 2);
+    const strip = ra8.gui.console_pane.under(size.width, size.height, 128);
+    try window.feed(.{ .pointer = .{ .x = strip.x + 1, .y = strip.y + 20 } });
+    try window.feed(.{ .key = .{ .code = 'x', .down = true } });
+    try window.feed(.{ .key = .{ .code = 'x', .down = false } });
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(usize, 1), typed.len);
+    try std.testing.expectEqual(ra8.gui.console_keys.Key{ .channel = 2, .byte = 'x' }, typed.pending[0]);
 }

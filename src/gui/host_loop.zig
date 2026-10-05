@@ -18,6 +18,7 @@ const console_pane = @import("console_pane.zig");
 const console_log = @import("console_log.zig");
 const console_scroll = @import("console_scroll.zig");
 const console_pick = @import("console_pick.zig");
+const console_keys = @import("console_keys.zig");
 const camera_view = @import("camera_view.zig");
 const camera_media = @import("camera_media.zig");
 const camera_thumb = @import("camera_thumb.zig");
@@ -112,6 +113,8 @@ pub const Loop = struct {
     /// empty shows `console` with no tabs.
     consoles: []const console_log.Log = &.{},
     channel: usize = 0,
+    /// Where keys typed with the pointer over the console go; null drops them.
+    typed: ?*console_keys.Typed = null,
     /// The devices pane under the camera's media row (RA8EMU-703) and the
     /// post its clicks queue on; null shows no pane.
     plugs: ?*devices_panel.Panel = null,
@@ -264,6 +267,7 @@ pub const Loop = struct {
                 .quit => self.quit = true,
                 .pointer => |at| self.pointer = .{ .x = at.x, .y = at.y },
                 .wheel => |turn| self.wheel(turn.dy, consoleArea(window, before)),
+                .key => |key| self.typeKey(key.code, key.down, consoleArea(window, before)),
                 else => if (!self.pane.handle(event) and !self.clickConsole(event, consoleArea(window, before)))
                     self.clickDevices(event, window.size()),
             }
@@ -300,6 +304,14 @@ pub const Loop = struct {
         const channel = console_pick.tabAt(area, self.consoles.len, press.x, press.y) orelse return false;
         self.useConsoles(self.consoles, channel);
         return true;
+    }
+    /// A key pressed with the pointer over the console types into the
+    /// channel it shows.
+    fn typeKey(self: *Loop, code: u32, down: bool, area: draw_list.Rect) void {
+        const typed = self.typed orelse return;
+        if (!down or !area.contains(self.pointer.x, self.pointer.y)) return;
+        const byte = console_keys.byteOf(code) orelse return;
+        typed.post(@intCast(self.channel), byte);
     }
     fn wheel(self: *Loop, dy: f32, area: draw_list.Rect) void {
         const log = self.console orelse return;

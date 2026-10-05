@@ -14,6 +14,7 @@ const board_snapshot = @import("../../gui/board_snapshot.zig");
 const window_pace = @import("window_pace.zig");
 const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
 const console_feed = @import("../../gui/console_feed.zig");
+const console_keys = @import("../../gui/console_keys.zig");
 const window_devices = @import("window_devices.zig");
 const board_view = frame_out.board_view;
 
@@ -42,6 +43,8 @@ pub const Screen = struct {
     swap: SourceSwap = .{},
     /// What the SCI channels sent, handed over at each park (RA8EMU-206).
     feed: ?*console_feed.Feed = null,
+    /// Keys typed into the console pane, fed into the SCI at each park.
+    typed: ?*console_keys.Typed = null,
     /// Plugs the devices pane queued, applied at each park (RA8EMU-703).
     devices: ?*window_devices.Devices = null,
 
@@ -77,6 +80,7 @@ pub const Screen = struct {
         if (self.devices) |devices| devices.park();
         self.publishScan() catch {};
         if (self.feed) |feed| feed.publish();
+        if (self.typed) |typed| _ = typed.take(&self.board.serial);
     }
 
     /// Board time, for stamping what the console feed carries.
