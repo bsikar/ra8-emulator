@@ -57,6 +57,18 @@ pub const Panel = struct {
         if (row.last) |name| return self.plug(index, name);
     }
 
+    /// The board refused a change the session queued (plug_post.zig):
+    /// put the row back to what is still on the line.
+    pub fn refused(self: *Panel, at: Endpoint, name: ?[]const u8) void {
+        const index = self.find(at) orelse return;
+        const row = &self.rows[index];
+        if (name != null) {
+            row.part = null;
+        } else if (row.part == null) {
+            row.part = row.last;
+        }
+    }
+
     /// The row listing `at`, if the panel lists it.
     pub fn find(self: Panel, at: Endpoint) ?usize {
         for (self.rows, 0..) |row, index| {
