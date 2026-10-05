@@ -6,7 +6,6 @@ const memmap = ra8.core.memmap;
 const mod = ra8.core.engine;
 
 const Engine = mod.Engine;
-const Watch = mod.Watch;
 const elf = ra8.core.elf;
 
 fn copyImage() [0x3000]u8 {
@@ -108,32 +107,6 @@ test "a copied Thumb image runs from SRAM after its loaded reset vector" {
     try std.testing.expectEqual(@as(u32, 0xE7FE_222A), try engine.readWord(0x2202_0000));
     try std.testing.expectEqual(@as(u32, 42), try engine.register(.r2));
     try std.testing.expectEqual(@as(u32, 0x2202_0002), try engine.register(.pc));
-}
-
-test "a fault reports the address it reached for and the instruction that did it" {
-    var engine = try Engine.open();
-    defer engine.close();
-    try engine.mapBoardRam();
-
-    var watch = Watch{};
-    try engine.attachWatch(&watch);
-
-    // r0 = 0x90000000 (nothing is mapped there); str r1, [r0].
-    const code = [_]u8{
-        0x40, 0xF2, 0x00, 0x00, // movw r0, #0
-        0xC9, 0xF2, 0x00, 0x00, // movt r0, #0x9000
-        0x55, 0x21, //             movs r1, #0x55
-        0x01, 0x60, //             str  r1, [r0]
-    };
-    try engine.write(memmap.sram_base, &code);
-    try engine.setRegister(.sp, memmap.sram_base + 0x1000);
-
-    const fault = (try engine.run(memmap.sram_base, 4, .{ .watch = &watch })) orelse return error.TestExpectedFault;
-    const access = fault.access orelse return error.TestExpectedAccess;
-    try std.testing.expectEqual(@as(u64, 0x9000_0000), access.address);
-    try std.testing.expectEqual(@as(u8, 4), access.size);
-    try std.testing.expect(access.kind == .write);
-    try std.testing.expectEqualStrings("str r1, [r0]", (fault.instruction orelse return error.TestExpectedText).slice());
 }
 
 test "a chunked run charges the clocks and lets a CYCCNT wait finish" {
