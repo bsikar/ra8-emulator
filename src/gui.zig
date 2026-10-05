@@ -20,3 +20,4 @@ pub const triple_buffer = @import("gui/triple_buffer.zig");
 pub const board_snapshot = @import("gui/board_snapshot.zig");
 pub const source_swap = @import("gui/source_swap.zig");
 pub const thread_priority = @import("gui/thread_priority.zig");
+pub const console_log = @import("gui/console_log.zig");
