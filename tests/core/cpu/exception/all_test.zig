@@ -17,6 +17,7 @@ test {
     _ = @import("fault_test.zig");
     _ = @import("clronret_test.zig");
     _ = @import("mem_manage_test.zig");
+    _ = @import("bus_fault_test.zig");
     _ = @import("lazy_fault_test.zig");
     _ = @import("secure_test.zig");
     _ = @import("debug_event_test.zig");

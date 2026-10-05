@@ -167,6 +167,7 @@ pub const scb = struct {
     /// than a fault of its own.
     pub const hfsr: u32 = 0xE000_ED2C;
     pub const mmfar: u32 = 0xE000_ED34;
+    pub const bfar: u32 = 0xE000_ED38;
     pub const demcr: u32 = 0xE000_EDFC;
 };
 

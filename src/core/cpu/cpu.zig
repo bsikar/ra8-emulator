@@ -266,12 +266,11 @@ pub const Cpu = struct {
         return null;
     }
 
-    /// Take the MemManage an access the MPU refused raises, or stop on a bus
-    /// fault when nothing was refused, or when it locks up or cannot stack.
+    /// Take the MemManage or precise BusFault a refused data access owes
+    /// (exception/bus_fault.zig), or stop on a bus fault when the run records
+    /// no refusals, or when it locks up or cannot stack.
     fn refusedOr(self: *Cpu, address: u32) ?Stop {
-        const m = self.mpu orelse return .{ .bus_fault = address };
-        const at = m.take() orelse return .{ .bus_fault = address };
-        exception.mem_manage.data(self, address, at) catch return .{ .bus_fault = address };
+        exception.bus_fault.refused(self, address) catch return .{ .bus_fault = address };
         return null;
     }
 
