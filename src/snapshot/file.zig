@@ -59,6 +59,8 @@ pub const Kind = enum(u32) {
     npu = 22,
     /// The ESP32-C6 companion (RA8EMU-687).
     c6 = 23,
+    /// Which part the board was (RA8EMU-688); a load refuses another part.
+    part = 24,
     _,
 };
 
