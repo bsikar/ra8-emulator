@@ -34,7 +34,7 @@ test "a zig run reports the bus and the blocks and says what it leaves out" {
     var buf: [4096]u8 = undefined;
     const text = try zigReport(&buf);
     try std.testing.expect(std.mem.startsWith(u8, text, "peripheral accesses: 0 read, 0 written"));
-    try std.testing.expect(std.mem.indexOf(u8, text, "zig core: pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "zig core: pend/idle seam counts and stepped-instruction counts are not reported\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "GPIO LEDs: none driven\n") != null);
 }
 
