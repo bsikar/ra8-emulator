@@ -63,3 +63,29 @@ test "a union tag outside its type is BadValue" {
     var cursor: fields.Cursor = .{ .bytes = &.{9} };
     try std.testing.expectError(error.BadValue, fields.read(Reason, &cursor));
 }
+
+const Leaf = struct { keep: u8, wire: *const u8 };
+const Holder = struct { head: u16, items: [2]Leaf, one: Leaf };
+const leaf_skip = .{ "items.wire", "one.wire" };
+const wire_a: u8 = 1;
+const wire_b: u8 = 2;
+
+fn holder(head: u16, keep: u8, wire: *const u8) Holder {
+    const leaf: Leaf = .{ .keep = keep, .wire = wire };
+    return .{ .head = head, .items = .{ leaf, .{ .keep = keep + 1, .wire = wire } }, .one = leaf };
+}
+
+test "a dotted skip leaves out a field inside structs and arrays" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    try fields.writeExcept(list.writer(), holder(7, 3, &wire_a), leaf_skip);
+    try std.testing.expectEqual(@as(usize, 2 + 3), list.items.len);
+    var out = holder(0, 0, &wire_b);
+    var cursor: fields.Cursor = .{ .bytes = list.items };
+    try fields.readOver(&cursor, &out, leaf_skip);
+    try std.testing.expect(cursor.done());
+    try std.testing.expectEqual(@as(u16, 7), out.head);
+    try std.testing.expectEqual(@as(u8, 4), out.items[1].keep);
+    try std.testing.expectEqual(@as(u8, 3), out.one.keep);
+    try std.testing.expect(out.items[0].wire == &wire_b and out.one.wire == &wire_b);
+}

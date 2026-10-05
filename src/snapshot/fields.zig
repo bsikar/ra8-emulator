@@ -104,10 +104,24 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
 
 /// `value`'s fields in declaration order, leaving out the ones named in
 /// `skip`: wiring such as a device or sink pointer that a struct of
-/// otherwise plain state carries.
+/// otherwise plain state carries. A dotted name skips a field further down
+/// (RA8EMU-681): "channels.listener" leaves out `listener` in every element
+/// of `channels`.
 pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
     inline for (@typeInfo(@TypeOf(value)).@"struct".fields) |field| {
-        if (comptime !named(field.name, skip)) try write(writer, @field(value, field.name));
+        if (comptime named(field.name, skip)) continue;
+        const inner = comptime below(field.name, skip);
+        if (inner.len == 0) {
+            try write(writer, @field(value, field.name));
+        } else try writeInner(writer, @field(value, field.name), inner);
+    }
+}
+
+fn writeInner(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
+    switch (@typeInfo(@TypeOf(value))) {
+        .array => for (value) |item| try writeInner(writer, item, skip),
+        .@"struct" => try writeExcept(writer, value, skip),
+        else => @compileError("a skip path runs through structs and arrays only"),
     }
 }
 
@@ -115,11 +129,35 @@ pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @Typ
 /// whatever `out` already held.
 pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
     inline for (@typeInfo(@TypeOf(out.*)).@"struct".fields) |field| {
-        if (comptime !named(field.name, skip)) @field(out.*, field.name) = try read(field.type, cursor);
+        if (comptime named(field.name, skip)) continue;
+        const inner = comptime below(field.name, skip);
+        if (inner.len == 0) {
+            @field(out.*, field.name) = try read(field.type, cursor);
+        } else try readInner(cursor, &@field(out.*, field.name), inner);
+    }
+}
+
+fn readInner(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
+    switch (@typeInfo(@TypeOf(out.*))) {
+        .array => for (out) |*item| try readInner(cursor, item, skip),
+        .@"struct" => try readOver(cursor, out, skip),
+        else => @compileError("a skip path runs through structs and arrays only"),
     }
 }
 
 fn named(comptime name: []const u8, comptime list: anytype) bool {
     inline for (list) |item| if (std.mem.eql(u8, name, item)) return true;
     return false;
+}
+
+/// The rest of each `list` entry that starts with `name` and a dot.
+fn below(comptime name: []const u8, comptime list: anytype) []const []const u8 {
+    var out: []const []const u8 = &.{};
+    inline for (list) |item| {
+        const path: []const u8 = item;
+        if (path.len > name.len + 1 and std.mem.startsWith(u8, path, name) and path[name.len] == '.') {
+            out = out ++ [_][]const u8{path[name.len + 1 ..]};
+        }
+    }
+    return out;
 }

@@ -25,6 +25,7 @@ test {
     _ = @import("snapshot/datapath_test.zig");
     _ = @import("snapshot/media_test.zig");
     _ = @import("snapshot/wired_test.zig");
+    _ = @import("snapshot/channels_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
