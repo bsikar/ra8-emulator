@@ -3,3 +3,4 @@ pub const draw_list = @import("gui/draw_list.zig");
 pub const raster = @import("gui/raster.zig");
 pub const platform = @import("gui/platform.zig");
 pub const headless = @import("gui/headless.zig");
+pub const camera_panel = @import("gui/camera_panel.zig");
