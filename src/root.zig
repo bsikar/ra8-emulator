@@ -164,4 +164,5 @@ pub const snapshot = struct {
     pub const channels = @import("snapshot/channels.zig");
     pub const usb = @import("snapshot/usb.zig");
     pub const rswitch = @import("snapshot/rswitch.zig");
+    pub const npu = @import("snapshot/npu.zig");
 };
