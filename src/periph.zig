@@ -55,6 +55,7 @@ pub const dtc_regs = @import("periph/dtc/dtc_regs.zig");
 pub const dtc_skip = @import("periph/dtc/dtc_skip.zig");
 pub const dtc_xfer = @import("periph/dtc/dtc_xfer.zig");
 pub const eink = @import("periph/eink/eink.zig");
+pub const eink_refresh = @import("periph/eink/eink_refresh.zig");
 pub const eink_busy = @import("periph/eink/eink_busy.zig");
 pub const eink_wire = @import("periph/eink/eink_wire.zig");
 pub const exc_return = @import("periph/exc_return.zig");

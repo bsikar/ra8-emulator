@@ -63,12 +63,11 @@ const std = @import("std");
 const proto = @import("eink_wire.zig");
 const busy = @import("eink_busy.zig");
 const image = @import("eink_image.zig");
+const refresh = @import("eink_refresh.zig");
 const spi = @import("../spi/spi.zig");
-
 /// The LUT busy model, re-exported so a caller reaches it through the
 /// panel rather than by a second import.
 pub const lut = busy;
-
 /// Which SPI_B channel the panel is wired to. The model's own rule; see the
 /// header.
 pub const line_channel: usize = 0;
@@ -122,6 +121,7 @@ pub const Panel = struct {
     load_mode: u16 = 0,
     planes: image.Planes = .{},
     refresh_hook: ?image.RefreshHook = null,
+    refresh_log_hook: ?refresh.LogHook = null,
     loaded_pixels: u32 = 0,
     display_args: [5]u16 = .{0} ** 5,
     /// The film: busy while a refresh is still being driven.
@@ -333,6 +333,7 @@ pub const Panel = struct {
         self.refreshes +%= 1;
         self.film.start();
         if (self.refresh_hook) |hook| hook.refreshFn(hook.context);
+        refresh.notify(self.refresh_log_hook, self.display_args, word);
     }
 
     /// What the next read burst carries. A refused command answers zero: the

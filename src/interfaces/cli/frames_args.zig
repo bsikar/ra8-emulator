@@ -4,6 +4,7 @@ const world_flags = @import("world_flags.zig");
 
 pub const Options = struct {
     frames_out: ?[]const u8 = null,
+    eink_log: ?[]const u8 = null,
     frames_every: usize = 1,
     gif_out: ?[]const u8 = null,
     frame_on_settle: ?[]const u8 = null,
@@ -19,7 +20,9 @@ pub const Options = struct {
 
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
-    if (std.mem.eql(u8, flag, "--frames-out")) {
+    if (std.mem.eql(u8, flag, "--eink-log")) {
+        options.eink_log = try world_flags.next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--frames-out")) {
         options.frames_out = try world_flags.next(argv, index);
     } else if (std.mem.eql(u8, flag, "--gif-out")) {
         options.gif_out = try world_flags.next(argv, index);

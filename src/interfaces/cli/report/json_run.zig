@@ -47,6 +47,7 @@ pub const json_timing = @import("json_timing.zig");
 pub const json_sites = @import("json_sites.zig");
 pub const json_dumps = @import("json_dumps.zig");
 pub const json_load = @import("json_load.zig");
+const eink_log = @import("../eink_log.zig");
 
 pub const schema = "ra8-report/1";
 
@@ -65,6 +66,7 @@ pub const Run = struct {
     dumps: ?*const json_dumps.Dumps = null,
     /// The `--cpu-load` table per core (RA8EMU-266); null when not asked.
     load: ?*const json_load.Load = null,
+    eink_log: ?*const eink_log.Run = null,
 };
 
 /// The whole document, ending in a newline.
@@ -115,6 +117,7 @@ fn run(j: anytype, board: *Board, of: Run) !void {
     try j.field("raised", of.bus_errors.raised);
     try j.field("escalated", of.bus_errors.escalated);
     try j.close('}');
+    if (of.eink_log) |log| try log.reportJson(j);
     try j.close('}');
 }
 
