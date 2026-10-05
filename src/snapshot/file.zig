@@ -19,6 +19,8 @@ pub const Kind = enum(u32) {
     cpu = 2,
     /// The virtual time base and its event queue (RA8EMU-661).
     time = 3,
+    /// The board's timer units (RA8EMU-662).
+    timers = 4,
     _,
 };
 
