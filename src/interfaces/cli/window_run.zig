@@ -8,6 +8,7 @@ const window_board = @import("window_board.zig");
 const window_pace = @import("window_pace.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const platform = @import("../../gui/platform.zig");
+const camera_devices = @import("../../gui/camera_devices.zig");
 
 /// Runs the emulation to its end. Its clock must charge `pacer`, as
 /// zig_run's Clock does when Ends.pace is set.
@@ -32,6 +33,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     defer screen.deinit();
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
+    loop.adoptDevices(try camera_devices.listHost(allocator));
     const thread = try std.Thread.spawn(.{}, runThenFinish, .{ engine, pacer });
     defer {
         pacer.stop();
