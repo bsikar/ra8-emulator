@@ -11,11 +11,12 @@
 const zig_core = @import("zig_core.zig");
 const zig_cycles = @import("zig_cycles.zig");
 const zig_drive = @import("zig_drive.zig");
+const zig_boundary = @import("zig_boundary.zig");
 const core_view = @import("core_view.zig");
 const stop_machine = @import("stop_machine.zig");
 const watch_bus = @import("watch_bus.zig");
 
-pub const Error = error{ AlreadyRunning, CoreNotAttached };
+pub const Error = error{ AlreadyRunning, CoreNotAttached, BoundaryFailed };
 
 /// The commands that run the core.
 pub const Command = enum { run, cont, step, next, finish };
@@ -47,6 +48,9 @@ pub const ZigSession = struct {
     /// The other CPU, parked while this one has the session. Null on a
     /// single-core session.
     other: ?Slot = null,
+    /// The board's boundary, passed whichever core runs (RA8EMU-709). Null
+    /// runs the core alone, as a bare-core session does.
+    boundary: ?zig_boundary.Boundary = null,
 
     /// Give the session to CPU `index`. The core left behind holds where
     /// it stopped, with its own breaks, watches and clock.
@@ -76,7 +80,8 @@ pub const ZigSession = struct {
             .finish => self.machine.stepOut(self.core.register(.lr), self.core.register(.sp)),
         }
         self.started = true;
-        return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
+        const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
+        return zig_boundary.run(self.core, self.machine, self.budget, self.watch, &self.clock, edge);
     }
 
     /// The core as the printers and the unwinder read it.

@@ -13,6 +13,7 @@ test {
     _ = @import("cycle_count_test.zig");
     _ = @import("zig_core_test.zig");
     _ = @import("zig_drive_test.zig");
+    _ = @import("zig_boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("zig_session_test.zig");
     _ = @import("session_api_test.zig");

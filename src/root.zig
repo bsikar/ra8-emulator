@@ -129,6 +129,7 @@ pub const board = struct {
     pub const session_faults = @import("board/session_faults.zig");
     pub const session_plug = @import("board/session_plug.zig");
     pub const board_speed = @import("board/board_speed.zig");
+    pub const board_boundary = @import("board/board_boundary.zig");
     pub const session_schedule = @import("board/session_schedule.zig");
     pub const report = @import("interfaces/cli/report.zig");
     pub const window_board = @import("interfaces/cli/window_board.zig");
