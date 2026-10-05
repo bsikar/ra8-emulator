@@ -1,6 +1,6 @@
-//! tests/debug/step_hook_image_test.zig on the Zig core (RA8EMU-673): the
-//! same compiled program, driven by zig_drive.zig instead of step_hook's
-//! Unicorn hooks, must stop in the same places for the same reasons.
+//! The stop machine driven over a compiled program on the Zig core
+//! (RA8EMU-673): every stop kind on real compiler output, with real calls,
+//! a real stack frame and a counter in RAM, run through zig_drive.zig.
 //!
 //!   target(x):  ldr r1,=counter; ldr r2,[r1]; add r0,r2; str r0,[r1]; bx lr
 //!   reset():    calls target(0..4) in a loop, then target(1) forever

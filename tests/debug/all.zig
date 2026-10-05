@@ -9,7 +9,6 @@ test {
     _ = @import("stop_machine_test.zig");
     _ = @import("watch_table_test.zig");
     _ = @import("call_decode_test.zig");
-    _ = @import("step_hook_test.zig");
     _ = @import("cycle_count_test.zig");
     _ = @import("zig_core_test.zig");
     _ = @import("zig_drive_test.zig");
@@ -22,7 +21,6 @@ test {
     _ = @import("unit_view_test.zig");
     _ = @import("zig_monitor_test.zig");
     _ = @import("zig_drive_image_test.zig");
-    _ = @import("step_hook_image_test.zig");
     _ = @import("commands_test.zig");
     _ = @import("script_test.zig");
     _ = @import("break_list_test.zig");
