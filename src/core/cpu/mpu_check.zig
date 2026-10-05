@@ -5,8 +5,8 @@
 //! exception entry after it is not checked; the fetch before it is checked
 //! on its own through refusesFetch (RA8EMU-368). The board bus asks it about every load and store while it
 //! is armed, and a refused access is turned away before it reaches memory:
-//! unlike the Unicorn guard (src/core/mpu_guard.zig), the faulting store never
-//! lands.
+//! unlike the Unicorn guard this replaced (RA8EMU-608), the faulting store
+//! never lands.
 //!
 //! The rules are the Unicorn guard's, read from the same table:
 //!   - the highest-numbered enabled region covering the address decides,

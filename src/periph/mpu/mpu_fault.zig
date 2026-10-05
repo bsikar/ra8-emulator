@@ -2,12 +2,9 @@
 //! latches, and the violation waiting to become one.
 //!
 //! Armv8-M refuses a store into a region whose RBAR.AP says read-only, at
-//! both privilege levels, and takes a MemManage for it. Unicorn's core models
-//! no MPU at all, so nothing refuses the store and nothing takes the fault:
-//! the enforcement is synthesised, with a write hook over each protected span
-//! catching the store and the run loop turning it into an exception at the
-//! chunk boundary. src/core/mpu_guard.zig is that half; this file is what it
-//! records, kept apart so the bookkeeping can be tested without an engine.
+//! both privilege levels, and takes a MemManage for it. The Zig core refuses
+//! it through src/core/cpu/mpu_check.zig; this file is what enforcement
+//! records, kept apart so the bookkeeping can be tested on its own.
 //!
 //!   CFSR 0xE000_ED28, MMFSR is its low byte (DDI0553 D1.2.11)
 //!     IACCVIOL  [0] an instruction fetch the MPU refused
