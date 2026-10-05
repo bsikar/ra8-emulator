@@ -326,6 +326,7 @@ test {
     _ = @import("camera/mf_capture_test.zig");
     _ = @import("camera/mf_webcam_test.zig");
     _ = @import("camera/av_permission_test.zig");
+    _ = @import("camera/av_info_plist_test.zig");
     _ = @import("camera/v4l2_negotiate_test.zig");
     _ = @import("camera/v4l2_device_test.zig");
     _ = @import("camera/webcam_source_test.zig");
