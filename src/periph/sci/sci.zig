@@ -179,10 +179,14 @@ pub const Channel = struct {
 /// live in src/periph/sci_line.zig.
 pub const Line = @import("sci_line.zig").Line;
 
+/// What a watcher outside the run sees of every sent byte (RA8EMU-206).
+pub const Tap = @import("sci_tap.zig").Tap;
+
 /// The block: ten channels and the console line capture.
 pub const Sci = struct {
     channels: [channels]Channel = [_]Channel{.{}} ** channels,
     line: Line = .{},
+    tap: ?Tap = null,
 
     pub fn init() Sci {
         return .{};
@@ -326,6 +330,7 @@ pub const Sci = struct {
         }
         channel.transmitted += 1;
         if (index == console_channel) self.line.feed(byte);
+        if (self.tap) |tap| tap.sent(tap.ctx, index, byte);
         self.deliver(index, byte);
     }
 
