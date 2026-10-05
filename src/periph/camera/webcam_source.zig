@@ -63,7 +63,9 @@ pub const WebcamSource = struct {
             .device_path = device_path,
             .bytes = bytes,
             .image = image,
-            .converted = .{ .input = image.frame(), .format = still.formatFor(format_control.*) },
+            // frame() reads the sensor register before each capture, on the
+            // engine thread; opening never touches the board (RA8EMU-227).
+            .converted = .{ .input = image.frame(), .format = .yuv422 },
             .format_control = format_control,
         };
         @memset(image.pixels, .{ .r = 0, .g = 0, .b = 0 });
