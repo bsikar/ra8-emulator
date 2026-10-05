@@ -59,6 +59,7 @@ test {
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("gui/draw_list_test.zig");
     _ = @import("gui/raster_test.zig");
+    _ = @import("gui/font_test.zig");
     _ = @import("gui/headless_test.zig");
     _ = @import("gui/camera_panel_test.zig");
     _ = @import("gui/camera_switch_test.zig");
