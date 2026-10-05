@@ -3,7 +3,7 @@
 # threadx_cpu1.elf keeps CPU0 bare metal and starts ThreadX on CPU1 from
 # threadx_cpu1_cpu1.elf, so the trace must come back tagged cpu1, with the
 # ticker thread named from its TX_THREAD and PendSV around each switch.
-# usage: [CPU=unicorn] tools/rtos_trace_cpu1.sh EMULATOR CPU0_ELF CPU1_ELF
+# usage: [CPU=zig] tools/rtos_trace_cpu1.sh EMULATOR CPU0_ELF CPU1_ELF
 #
 # SysTick lines are checked for presence, not position, as in rtos_trace.sh.
 set -eu

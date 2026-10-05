@@ -10,7 +10,7 @@
 #   tools/npu_vela_conv.sh EMULATOR ELF [CPU...]
 #
 # ELF is npu_vela_conv.elf from ra8-firmware's `zig build arm`. CPU defaults
-# to "unicorn zig". Each run must exit 0, print "npu_vela_conv: PASS" on the
+# to "zig". Each run must exit 0, print "npu_vela_conv: PASS" on the
 # console and report one Vela program that ran to STOP; any miss exits 1.
 
 set -euo pipefail
@@ -23,7 +23,7 @@ emulator=$1
 elf=$2
 shift 2
 cpus=("$@")
-[ ${#cpus[@]} -gt 0 ] || cpus=(unicorn zig)
+[ ${#cpus[@]} -gt 0 ] || cpus=(zig)
 
 status=0
 for cpu in "${cpus[@]}"; do

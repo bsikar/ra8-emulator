@@ -26,8 +26,8 @@
 //! tz_nsc_cgc_usb's verdict is its NS host's USB self-loop round count, and
 //! the bench gets there with the loop cable fitted and a boot dwell before
 //! the probe window. The table fits the loop and runs two seconds of target
-//! time: rounds start between 1.0 and 1.5 s and read 358 at 2.0 s on
-//! Unicorn (RA8EMU-289). A caller budget passes --instructions, which wins
+//! time: rounds start between 1.0 and 1.5 s and read 358 at 2.0 s
+//! (RA8EMU-289). A caller budget passes --instructions, which wins
 //! over --ms, so that row only reaches its verdict at the table's own budget.
 //!
 //! pagecache mounts with format-if-blank and its README asks for a blank

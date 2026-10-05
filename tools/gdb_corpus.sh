@@ -26,7 +26,7 @@ image=$2
 second=${3:-}
 function=${4:-main}
 gdb=${5:-gdb-multiarch}
-cpu=${CPU:-unicorn}
+cpu=${CPU:-zig}
 port=$((4500 + RANDOM % 400))
 work=$(mktemp -d)
 trap 'kill "$pid" 2>/dev/null || true; rm -rf "$work"' EXIT

@@ -7,39 +7,29 @@
 # (RA8EMU-37). A pair is foo.elf beside foo_cpu1.elf, as ra8-firmware's
 # `zig build arm` leaves them in zig-out/arm.
 #
-#   tools/dualcore_corpus.sh EMULATOR DIR [CPU]
+#   tools/dualcore_corpus.sh EMULATOR DIR
 #
-# CPU is the backend both halves run on: unicorn (the default) diffs
-# against tools/dualcore_expected.md, any other backend (zig) against
-# tools/dualcore_expected_CPU.md, so a regression on the Zig core shows up
-# as a diff too (RA8EMU-140).
+# Both halves run on the Zig core (RA8EMU-140).
 #
 # Extra flags for `zig build` (a deps prefix, an optimize mode) come from
-# ZIG_BUILD_ARGS. Exits 1 on any difference: a pair that stopped passing on
-# either core, a console line that changed, or an expected pair missing from
-# DIR. Update the expected file in the same PR as a change that means to
-# move a row.
+# ZIG_BUILD_ARGS. Exits 1 on any difference: a pair that stopped passing,
+# a console line that changed, or an expected pair missing from DIR.
+# Update the expected file in the same PR as a change that means to move
+# a row.
 
 set -euo pipefail
 
-if [ $# -lt 2 ] || [ $# -gt 3 ]; then
-    echo "usage: $0 EMULATOR DIR [CPU]" >&2
+if [ $# -ne 2 ]; then
+    echo "usage: $0 EMULATOR DIR" >&2
     exit 2
 fi
 emulator=$(realpath "$1")
 dir=$2
 here=$(cd "$(dirname "$0")" && pwd)
-cpu=${3:-unicorn}
 expected=$here/dualcore_expected.md
 
 pairs=$(mktemp -d)
 trap 'rm -rf "$pairs"' EXIT
-[ "$cpu" != unicorn ] && expected=$here/dualcore_expected_$cpu.md
-# Always name the backend: the emulator's own default moved to zig
-# (RA8EMU-471), so an unwrapped run would no longer be the Unicorn one.
-printf '#!/bin/bash\nexec "%s" "$@" --cpu %s\n' "$emulator" "$cpu" >"$pairs/emulator.sh"
-chmod +x "$pairs/emulator.sh"
-emulator=$pairs/emulator.sh
 for cpu1 in "$dir"/*_cpu1.elf; do
     [ -e "$cpu1" ] || continue
     cpu0=${cpu1%_cpu1.elf}.elf
