@@ -13,6 +13,7 @@ const cli = @import("cli.zig");
 const zig_run = @import("zig_run.zig");
 const window_pace = @import("window_pace.zig");
 const window_run = @import("window_run.zig");
+const window_devices = @import("window_devices.zig");
 const window_stills = @import("window_stills.zig");
 const platform = @import("../../gui/platform.zig");
 
@@ -65,7 +66,10 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .dir = stills_dir orelse std.fs.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
     var live = Live{ .args = args, .pacer = &pacer };
-    const result = try window_run.show(allocator, shown, args.board, &pacer, live.engine(), args.options.camera);
+    var devices: window_devices.Devices = undefined;
+    devices.init(allocator, args.board, args.options.attaches[0..args.options.attach_count], args.options.click);
+    defer devices.deinit();
+    const result = try window_run.show(allocator, shown, args.board, &pacer, live.engine(), args.options.camera, &devices);
     std.debug.print("window: {d} frames, board snapshot up to {d} bytes per frame\n", .{ result.frames, result.snapshot_bytes });
     return live.code;
 }

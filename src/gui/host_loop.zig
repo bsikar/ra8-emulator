@@ -24,6 +24,9 @@ const camera_devices = @import("camera_devices.zig");
 const consent_store = @import("camera_consent_store.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
 const SourceSwap = @import("source_swap.zig").SourceSwap;
+const devices_panel = @import("devices_panel.zig");
+const devices_pane = @import("devices_pane.zig");
+const plug_post = @import("plug_post.zig");
 pub const board_view = @import("../interfaces/cli/board_view.zig");
 const Color = draw_list.Color;
 
@@ -97,6 +100,10 @@ pub const Loop = struct {
     project: ?std.fs.Dir = null,
     /// The console the pane under the board shows; null shows none.
     console: ?*const console_log.Log = null,
+    /// The devices pane under the camera's media row (RA8EMU-703) and the
+    /// post its clicks queue on; null shows no pane.
+    plugs: ?*devices_panel.Panel = null,
+    posted: ?*plug_post.PlugPost = null,
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
@@ -183,6 +190,40 @@ pub const Loop = struct {
         self.thumb = camera_thumb.load(self.allocator, dir, wanted) catch null;
     }
 
+    /// Lists `panel` under the media row; refusals come back through `post`.
+    pub fn useDevices(self: *Loop, panel: *devices_panel.Panel, post: *plug_post.PlugPost) void {
+        self.plugs = panel;
+        self.posted = post;
+    }
+
+    /// The devices pane fills what is left under the thumbnail's row.
+    pub fn devicesArea(self: *const Loop, size: platform.Size) draw_list.Rect {
+        const thumb = self.thumbArea();
+        const top = thumb.y + thumb.h + camera_view.gap;
+        const left = self.pane.layout.x;
+        const w: i32 = @as(i32, @intCast(size.width)) - left;
+        const h: i32 = @as(i32, @intCast(size.height)) - top;
+        return .{ .x = left, .y = top, .w = @max(w, 0), .h = @max(h, 0) };
+    }
+
+    /// A click the camera pane left goes to the devices pane; a plug the
+    /// session refuses leaves the row as it was.
+    fn clickDevices(self: *Loop, event: platform.Event, size: platform.Size) void {
+        const panel = self.plugs orelse return;
+        if (event != .button) return;
+        const press = event.button;
+        if (!press.down or press.button != camera_pane.primary_button) return;
+        _ = devices_pane.click(panel, self.devicesArea(size), press.x, press.y) catch {};
+    }
+
+    /// Plugs the board refused at the last park put their rows back.
+    fn settleRefused(self: *Loop) void {
+        const panel = self.plugs orelse return;
+        const post = self.posted orelse return;
+        var buffer: [plug_post.limits.pending]plug_post.Request = undefined;
+        for (post.takeRefused(&buffer)) |request| panel.refused(request.at, request.name);
+    }
+
     /// The preview goes in the slot after the media row's last file.
     fn thumbArea(self: *const Loop) draw_list.Rect {
         const row = media_row.rowFor(self.pane.layout, self.pane.devices.len);
@@ -206,9 +247,10 @@ pub const Loop = struct {
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
-                else => _ = self.pane.handle(event),
+                else => if (!self.pane.handle(event)) self.clickDevices(event, window.size()),
             }
         }
+        self.settleRefused();
         if (self.pane.panel.always and !always) self.remember();
         if (self.wantsWebcam() and !wanted) self.relist();
         if (self.pane.panel.active != kind and self.wantsMedia()) self.relistMedia();
@@ -244,6 +286,7 @@ pub const Loop = struct {
         try list.image(area, .{ .width = view.width, .height = view.height, .pixels = self.pixels });
         try self.pane.draw(&list);
         try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
+        if (self.plugs) |panel| try devices_pane.draw(&list, self.devicesArea(size), panel.*);
         if (self.console) |log| try console_pane.draw(&list, console_pane.under(view.width, view.height, size.height), log);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);

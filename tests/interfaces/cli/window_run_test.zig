@@ -64,7 +64,7 @@ test "the window draws a frame per slice until the run ends" {
     defer soak.deinit();
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
-    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{});
+    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{}, null);
     try std.testing.expect(!soak.failed);
     try std.testing.expect(!shown.closed);
     try std.testing.expect(shown.frames >= 4);
@@ -89,7 +89,7 @@ test "closing the window ends the run at its next boundary" {
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
     try window.feed(.quit);
-    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{});
+    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{}, null);
     try std.testing.expect(!soak.failed);
     try std.testing.expect(shown.closed);
     try std.testing.expectEqual(@as(u32, 0), shown.frames);
@@ -135,7 +135,7 @@ test "a click on the camera pane swaps the CEU's source while the run goes on" {
     // The pane starts on the gradient, so a pick away and back is a switch.
     try window.feed(press(pane.source(.video)));
     try window.feed(press(pane.source(.gradient)));
-    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{});
+    const shown = try window_run.show(std.testing.allocator, window.platform(), &soak.board, &soak.pacer, soak.engine(), .{}, null);
     defer soak.board.capture.source.close();
     try std.testing.expect(!soak.failed);
     try std.testing.expect(!shown.closed);

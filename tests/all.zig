@@ -80,6 +80,7 @@ test {
     _ = @import("gui/devices_panel_test.zig");
     _ = @import("gui/devices_pane_test.zig");
     _ = @import("gui/plug_post_test.zig");
+    _ = @import("interfaces/cli/window_devices_test.zig");
     _ = @import("gui/camera_switch_test.zig");
     _ = @import("gui/camera_open_test.zig");
     _ = @import("gui/camera_devices_test.zig");
@@ -91,6 +92,7 @@ test {
     _ = @import("gui/camera_media_row_test.zig");
     _ = @import("gui/camera_thumb_test.zig");
     _ = @import("gui/host_loop_test.zig");
+    _ = @import("gui/host_loop_devices_test.zig");
     _ = @import("gui/thread_priority_test.zig");
     _ = @import("gui/console_log_test.zig");
     _ = @import("gui/console_feed_test.zig");

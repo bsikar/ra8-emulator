@@ -14,6 +14,7 @@ const board_snapshot = @import("../../gui/board_snapshot.zig");
 const window_pace = @import("window_pace.zig");
 const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
 const console_feed = @import("../../gui/console_feed.zig");
+const window_devices = @import("window_devices.zig");
 const board_view = frame_out.board_view;
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
@@ -41,6 +42,8 @@ pub const Screen = struct {
     swap: SourceSwap = .{},
     /// What the SCI channels sent, handed over at each park (RA8EMU-206).
     feed: ?*console_feed.Feed = null,
+    /// Plugs the devices pane queued, applied at each park (RA8EMU-703).
+    devices: ?*window_devices.Devices = null,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board, stepper: Stepper) !Screen {
         var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper, .handoff = .init(allocator) };
@@ -71,6 +74,7 @@ pub const Screen = struct {
     fn parkThunk(ctx: *anyopaque) void {
         const self: *Screen = @ptrCast(@alignCast(ctx));
         _ = self.swap.take(&self.board.capture.source);
+        if (self.devices) |devices| devices.park();
         self.publishScan() catch {};
         if (self.feed) |feed| feed.publish();
     }
