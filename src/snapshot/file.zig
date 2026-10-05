@@ -64,6 +64,8 @@ pub const Kind = enum(u32) {
     part = 24,
     /// The run's secure and Non-secure SysTick time bases (RA8EMU-694).
     systick = 25,
+    /// What the run owed its clocks when it saved (RA8EMU-700).
+    stretch = 26,
     _,
 };
 
