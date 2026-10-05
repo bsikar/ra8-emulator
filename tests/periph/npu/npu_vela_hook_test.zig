@@ -3,9 +3,10 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const npu = ra8.periph.npu;
-const engine = ra8.core.engine;
+const store_memory = @import("../store_memory.zig");
+const Guest = store_memory.Guest;
 
-const arena_base: u32 = 0x2000_0000;
+const arena_base: u32 = ra8.core.memmap.dtcm_end - arena_size;
 const arena_size: u32 = 0x4000;
 const stream_at: u32 = arena_base;
 const region0: u32 = arena_base + 0x1000;
@@ -20,18 +21,17 @@ fn peek(unit: *npu.Npu, offset: u32) u32 {
 }
 
 const Bench = struct {
-    core: engine.Engine,
+    core: Guest,
     unit: npu.Npu,
 
     fn open(self: *Bench) !void {
-        self.core = try engine.Engine.open();
-        try self.core.map(arena_base, arena_size);
+        self.core = try store_memory.open();
         self.unit = npu.Npu.init();
-        self.unit.memory = .{ .engine = self.core };
+        self.unit.memory = self.core;
     }
 
     fn close(self: *Bench) void {
-        self.core.close();
+        store_memory.close(self.core);
     }
 
     fn submit(self: *Bench, words: []const u32) !void {
