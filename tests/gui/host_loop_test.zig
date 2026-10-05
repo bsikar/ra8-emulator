@@ -136,3 +136,15 @@ test "a resized window gets a frame of its new size" {
     try std.testing.expectEqual(@as(u32, 300), window.last.?.width);
     try std.testing.expectEqual(@as(u32, 140), window.last.?.height);
 }
+
+test "the pane offers the webcams the loop adopted, and the loop frees them" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    for ([_][]const u8{ "video4", "video1" }) |name| (try tmp.dir.createFile(name, .{})).close();
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, tmp.dir));
+    try std.testing.expectEqualSlices(u32, &.{ 1, 4 }, loop.pane.devices);
+    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, tmp.dir));
+    try std.testing.expectEqual(@as(usize, 2), loop.pane.devices.len);
+}

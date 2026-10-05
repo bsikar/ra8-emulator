@@ -14,6 +14,7 @@ const raster = @import("raster.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const camera_view = @import("camera_view.zig");
+const camera_devices = @import("camera_devices.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
 pub const board_view = @import("../interfaces/cli/board_view.zig");
 const Color = draw_list.Color;
@@ -61,12 +62,21 @@ pub const Loop = struct {
     canvas: []u32 = &.{},
     pixels: []Color = &.{},
     frame: ?raster.Framebuffer = null,
+    devices: ?camera_devices.Devices = null,
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
+        if (self.devices) |*devices| devices.deinit();
         self.allocator.free(self.canvas);
         self.allocator.free(self.pixels);
         if (self.frame) |*frame| frame.deinit(self.allocator);
+    }
+
+    /// Hands the pane the host's webcams to offer; the loop frees them.
+    pub fn adoptDevices(self: *Loop, devices: camera_devices.Devices) void {
+        if (self.devices) |*old| old.deinit();
+        self.devices = devices;
+        self.pane.devices = devices.numbers;
     }
 
     /// One frame. Returns false once the run ended or the window closed;
