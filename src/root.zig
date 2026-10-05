@@ -141,3 +141,7 @@ pub const board = struct {
     pub const report_timing = @import("interfaces/cli/report/timing.zig");
     pub const report_mask = @import("interfaces/cli/report/mask.zig");
 };
+pub const snapshot = struct {
+    pub const file = @import("snapshot/file.zig");
+    pub const memory = @import("snapshot/memory.zig");
+};

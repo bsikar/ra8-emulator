@@ -4,6 +4,8 @@
 const std = @import("std");
 test {
     _ = @import("core/systick_bank_test.zig");
+    _ = @import("snapshot/file_test.zig");
+    _ = @import("snapshot/memory_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
