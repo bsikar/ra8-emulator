@@ -215,6 +215,7 @@ test {
     _ = @import("itns_test.zig");
     _ = @import("debug_monitor_test.zig");
     _ = @import("sci/sci_test.zig");
+    _ = @import("sci/sci_tap_test.zig");
     _ = @import("sau_test.zig");
     _ = @import("sau_attr_test.zig");
     _ = @import("scs_alias_test.zig");
