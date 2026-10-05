@@ -1,7 +1,7 @@
 //! The watchdog and RTC half of the `timers` object (RA8EMU-356): IWDT,
 //! WDT0 and the RTC, the same facts report/timers.zig (IWDT),
 //! report/watchdog.zig and report/time.zig print. WDT0's refresh cadence
-//! needs the SysTick timebase, which is Unicorn-only; a reader divides the
+//! needs a SysTick timebase this section does not carry; a reader divides the
 //! timing section's ticks by `refreshes` instead.
 const Board = @import("../../../board/board.zig").Board;
 const iwdt = @import("../../../periph/iwdt/iwdt.zig");

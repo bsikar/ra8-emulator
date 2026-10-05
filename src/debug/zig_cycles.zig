@@ -1,6 +1,6 @@
 //! DWT_CYCCNT and the halt record on the Zig core's debug path (RA8EMU-172).
 //!
-//! On Unicorn, step_hook.zig counts DWT_CYCCNT one instruction at a time
+//! DWT_CYCCNT is counted one instruction at a time
 //! while a Cycle Counter comparator is live (src/debug/cycle_count.zig),
 //! and on a halt writes the count back and latches DFSR. The Zig debug path
 //! runs no board clock, so this does the same from zig_drive.zig: one count
@@ -32,7 +32,7 @@ pub const Clock = struct {
 
     /// The machine stopped the core for `why`: put the count back into
     /// DWT_CYCCNT and record why in DFSR, so a debugger reading either at
-    /// the stop sees what the Unicorn path shows.
+    /// the stop sees why it stopped.
     pub fn halted(self: *Clock, core: zig_core.ZigCore, machine: *stop_machine.Machine, why: stop_machine.Stop) void {
         if (self.count.settle()) |count| store(core, cyccnt_address, count);
         machine.dcb.latch(dfsrFor(why));

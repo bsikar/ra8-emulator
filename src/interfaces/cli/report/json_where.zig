@@ -18,7 +18,7 @@ const lob = @import("../../../core/lob.zig");
 const csel = @import("../../../core/csel.zig");
 const tz = @import("../../../core/tz.zig");
 
-/// The hand-stepped counts, as the Unicorn run tallies them.
+/// The hand-stepped counts.
 pub const Steps = struct {
     loops: lob.Loops,
     selects: csel.Selects,

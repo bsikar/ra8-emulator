@@ -11,8 +11,7 @@
 //! RA8EMU-224).
 //!
 //! The Zig core feeds the tracer through src/debug/rtos_zig.zig, and CPU1
-//! through src/debug/rtos_second.zig. The Unicorn hooks that used to live
-//! here went with RA8EMU-607.
+//! through src/debug/rtos_second.zig.
 const std = @import("std");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../core/elf.zig");

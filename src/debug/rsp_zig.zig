@@ -1,5 +1,5 @@
 //! The remote protocol's run control and threads on the Zig core
-//! (RA8EMU-118). The Unicorn counterpart, rsp_run.zig, went with RA8EMU-605.
+//! (RA8EMU-118).
 //!
 //! Each core is a thread: CPU0 is thread 1 and, with CPU1 attached
 //! (RA8EMU-338), CPU1 is thread 2. `Hg`, `Hc` and a vCont action's thread

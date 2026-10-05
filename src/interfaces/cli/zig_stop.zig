@@ -1,7 +1,6 @@
 //! The counter `--stop-sym NAME N` names, for a Zig run (RA8EMU-603).
 //!
-//! Resolved against the image's symbol table the way the Unicorn path in
-//! src/main.zig resolves it, so both runs stop on the same word. The
+//! Resolved against the image's symbol table. The
 //! counter is read at each boundary by zig_run.Clock.done.
 const std = @import("std");
 const elf = @import("../../core/elf.zig");

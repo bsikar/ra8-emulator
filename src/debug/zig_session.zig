@@ -1,9 +1,8 @@
-//! The run commands on the Zig core (RA8EMU-105). src/debug/session.zig
-//! drives the Unicorn engine and is full; this is the same run, cont,
-//! step, next and finish, arming the shared stop machine the same way but
+//! The run commands on the Zig core (RA8EMU-105). This is run, cont,
+//! step, next and finish, arming the shared stop machine but
 //! running the core through src/debug/zig_drive.zig. Its view() hands the
 //! printers and the unwinder the Zig core, so `registers`, `x`, `print`
-//! and `bt` read the same as on Unicorn.
+//! and `bt` read the core.
 //!
 //! With CPU1 attached (RA8EMU-337) the other core is parked in `other`,
 //! and switchTo swaps it in. As in session.zig, only the selected core
@@ -41,7 +40,7 @@ pub const ZigSession = struct {
     /// The core's bus with the debugger listening, so watches and DWT data
     /// matches see its accesses. Null runs without them.
     watch: ?*watch_bus.WatchBus = null,
-    /// DWT_CYCCNT and DFSR kept the way the Unicorn path keeps them.
+    /// DWT_CYCCNT and DFSR as the debugger reads them.
     clock: zig_cycles.Clock = .{},
     /// Which CPU the fields above describe.
     index: u8 = 0,
@@ -64,7 +63,7 @@ pub const ZigSession = struct {
         self.budget = parked.budget;
     }
 
-    /// Arm the machine for `command` as the Unicorn session does, then run.
+    /// Arm the machine for `command`, then run.
     pub fn go(self: *ZigSession, command: Command) Error!zig_drive.Ended {
         switch (command) {
             .run => {

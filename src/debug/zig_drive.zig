@@ -1,5 +1,4 @@
-//! The stop machine fed from the Zig core (RA8EMU-105). On Unicorn,
-//! step_hook.zig's code hook hands the machine each instruction before it
+//! The stop machine fed from the Zig core (RA8EMU-105). The machine wants the machine each instruction before it
 //! runs; here the debugger owns the loop, so it builds the same event,
 //! asks the machine, and only then lets the core execute.
 const std = @import("std");
@@ -23,8 +22,7 @@ pub const Ended = union(enum) {
     core: cpu_mod.Stop,
 };
 
-/// The event for the instruction under the PC, as the Unicorn hook builds
-/// it: its address and width, SP before it runs, and whether it is a call.
+/// The event for the instruction under the PC: its address and width, SP before it runs, and whether it is a call.
 pub fn event(core: zig_core.ZigCore) stop_machine.Event {
     const pc = core.register(.pc);
     const sp = core.register(.sp);
@@ -49,8 +47,7 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64) E
 }
 
 /// As `run`, with `watch` listening to the loads and stores each
-/// instruction makes (RA8EMU-113), the way step_hook.zig's memory hook does
-/// on Unicorn. It listens only while the instruction runs, so neither the
+/// instruction makes (RA8EMU-113). It listens only while the instruction runs, so neither the
 /// debugger's own reads nor the instruction's fetch count as an access.
 pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus) Ended {
     return runClocked(core, machine, count, watch, null);

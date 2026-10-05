@@ -29,8 +29,8 @@ pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {
 
 /// What a `--cpu zig` run can report: the part, the bus, its own timebase
 /// and the blocks, with the instructions it retired as the elapsed time. The
-/// pend/idle seam counts and the stepped-instruction counts came from the
-/// Unicorn hooks, which are gone (RA8EMU-607), so a line says they are not
+/// pend/idle seam counts and the stepped-instruction counts have no source
+/// on the Zig core, so a line says they are not
 /// reported. The
 /// BusFaults a `--bus-errors` run raised close it.
 pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64, bus_errors: bus_fault.Tally) !void {

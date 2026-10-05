@@ -10,7 +10,7 @@
 //! Exception entry and return go in the same trace (RA8EMU-224), so a
 //! switch reads between the PendSV that made it and the return after.
 //!
-//! This file knows nothing about Unicorn or the Zig core. Whatever sees the
+//! This file knows nothing about the core. Whatever sees the
 //! store hands it the core, the virtual time and the value; the hook that
 //! does so is RA8EMU-221.
 const rtos_load = @import("rtos_load.zig");

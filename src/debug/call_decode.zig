@@ -2,8 +2,7 @@
 //!
 //! A step over needs exactly one fact about the instruction it starts on:
 //! does it call. The driver already has the bytes in hand when it feeds the
-//! stop machine, so the answer is read here, without a disassembler, and the
-//! same answer serves Unicorn now and the Zig core later.
+//! stop machine, so the answer is read here, without a disassembler.
 //!
 //! Three encodings call on Armv8-M: BL and BLX with an immediate (32-bit),
 //! and BLX with a register (16-bit). Everything else, branches included, is

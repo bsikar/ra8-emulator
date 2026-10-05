@@ -1,8 +1,7 @@
 //! DebugMonitor pends on the Zig core's debug path (RA8EMU-673).
 //!
 //! With halting debug off, an FPB or DWT event does not stop the core: the
-//! stop machine holds it (Machine.takeMonitor), and on Unicorn
-//! step_hook.zig turns it into DEMCR.MON_PEND and a DFSR latch for the
+//! stop machine holds it (Machine.takeMonitor), and it becomes DEMCR.MON_PEND and a DFSR latch for the
 //! interrupt controller to take at its next boundary
 //! (src/periph/debug_monitor.zig). zig_drive.zig does the same through
 //! this, once per instruction, so firmware running a debug monitor sees

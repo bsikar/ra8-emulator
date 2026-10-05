@@ -1,9 +1,9 @@
 //! The address `--break-sym` names, for a Zig run (RA8EMU-603).
 //!
-//! Resolved the way the Unicorn path in src/main.zig resolves it. Arrivals
+//! Resolved against the image's symbol table. Arrivals
 //! are counted on each retired instruction; the run ends at the next
 //! boundary after the wanted one, and the verdict names that arrival's own
-//! address, which is where the Unicorn run stops.
+//! address.
 const std = @import("std");
 const elf = @import("../../core/elf.zig");
 const breakpoint = @import("../../debug/breakpoint.zig");
@@ -38,7 +38,7 @@ pub const Retire = struct {
     }
 
     /// Count an arrival at the break. Counting stops once the wanted one
-    /// is met, so the report says the arrival the Unicorn run stopped on.
+    /// is met, so the report says the wanted arrival.
     pub fn instruction(self: *Retire, address: u32) void {
         if (self.table) |table| table.instruction(address);
         const point = self.point orelse return;

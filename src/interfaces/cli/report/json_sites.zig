@@ -3,7 +3,7 @@
 //! pcHits(), takenFrom() and takenIn() and report/mask.zig in maskSites().
 //! Every kept row is listed, ranked as the text ranks it, each with the
 //! symbol around it; the text's top-N cut on taken-from is not applied.
-//! Fed by hooks only the Unicorn run attaches, so null on the Zig core.
+//! Nothing feeds it on the Zig core, so it is null.
 const elf = @import("../../../core/elf.zig");
 const pend_sites = @import("../../../core/pend_sites.zig");
 const pc_hits = @import("../../../debug/pc_hits.zig");

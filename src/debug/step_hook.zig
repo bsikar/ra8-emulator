@@ -3,8 +3,7 @@
 //! src/debug/stop_machine.zig decides when a session stops. Driver holds
 //! the machine a run is driven by and how the last run ended, and routes the
 //! firmware's stores to the debug units (FPB, DWT, ITM, DCB). The Zig core
-//! feeds it through watch_bus.zig and zig_drive.zig. The Unicorn code and
-//! memory hooks that used to live here went with RA8EMU-607.
+//! feeds it through watch_bus.zig and zig_drive.zig.
 const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
 const fpb = @import("fpb.zig");

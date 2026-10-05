@@ -1,4 +1,4 @@
-//! The text a finished Unicorn run prints after the report block: where the
+//! The text a finished run prints after the report block: where the
 //! run spent itself, then the site lines. `--report json` carries all of it
 //! in the one JSON line (RA8EMU-391), so main.zig calls this only for text.
 const elf = @import("../../../core/elf.zig");

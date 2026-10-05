@@ -5,9 +5,8 @@
 //! owner its ticks and its share of the core's run in tenths of a percent,
 //! split by largest remainder so a core's shares add up to exactly 100.0%.
 //!
-//! Load is counted in instructions retired on the core: one by one on
-//! Unicorn, and on the Zig core in the timebase's elapsed count, which
-//! moves a chunk at a time.
+//! Load is counted in instructions retired on the core, in the
+//! timebase's elapsed count, which moves a chunk at a time.
 const std = @import("std");
 const rtos_hook = @import("rtos_hook.zig");
 const rtos_load = @import("rtos_load.zig");

@@ -1,6 +1,6 @@
 //! A `--cpu zig` run started from main, with the
-//! board's time wired in. The Unicorn run loop charges SysTick, DWT_CYCCNT
-//! and the blocks at every chunk boundary; this gives the Zig core the same
+//! board's time wired in. This charges SysTick, DWT_CYCCNT
+//! and the blocks at every chunk boundary, the same
 //! boundary, so a ThreadX image gets its tick and the peripherals that count
 //! time (the USB host script among them) move.
 const std = @import("std");
@@ -118,7 +118,7 @@ pub const Clock = struct {
     }
 
     /// Has a soak event (a watchdog reset, or a fault latched since the last
-    /// boundary) ended the run, or the watched counter climbed to its floor? An unreadable word is not a stop, as on the Unicorn path
+    /// boundary) ended the run, or the watched counter climbed to its floor? An unreadable word is not a stop
     /// (src/core/stop.zig).
     pub fn done(self: *Clock) bool {
         self.soakFaults();
@@ -143,7 +143,7 @@ pub const Clock = struct {
         soak.check(self.memory, self.board.time.base.now());
     }
 
-    /// The chunk the Unicorn path uses, cut down to the armed SysTick period
+    /// The run's chunk, cut down to the armed SysTick period
     /// so a stretch never swallows more than one wrap.
     pub fn width(self: *const Clock) u32 {
         const period = systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory));
@@ -151,8 +151,7 @@ pub const Clock = struct {
         return self.timebase.per_chunk;
     }
 
-    /// Charge the stretch to the clocks, then tick the blocks, in the order
-    /// the Unicorn run loop does.
+    /// Charge the stretch to the clocks, then tick the blocks, in that order.
     pub fn close(self: *Clock, instructions: u32) !void {
         try self.timebase.advance(self.memory, instructions);
         try self.ns_timebase.advanceSysTick(self.memory, instructions);
@@ -191,7 +190,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
     return self.close(instructions);
 }
 
-/// Run off Unicorn, then, for a Zig run, print what the board has to say.
+/// Run, then print what the board has to say.
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
 pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;

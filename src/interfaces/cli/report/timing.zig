@@ -158,8 +158,8 @@ fn pends(out: Writer, pending: pend_break.Pend, entered: u64, pacing: pend_pace.
 
 /// The time lines of a run report: cycles, SysTick periods and pends from the
 /// run's own timebase, plus the warnings when periods collapsed, DWT_CYCCNT
-/// ran short or boundaries ended where the firmware armed SysTick. Both the
-/// Unicorn and the `--cpu zig` report print these (RA8EMU-470).
+/// ran short or boundaries ended where the firmware armed SysTick. The
+/// `--cpu zig` report prints these (RA8EMU-470).
 pub fn clock(out: Writer, timebase: clocks.Clocks) !void {
     try out.print(
         "time: {d} cycles elapsed, {d} SysTick periods, {d} pended",

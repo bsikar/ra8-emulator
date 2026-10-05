@@ -4,8 +4,8 @@
 //! debugger needs as many as the person driving it sets, added and removed
 //! while the run is stopped, and one place that answers "does anything stop
 //! at this address". That place is this table. It knows nothing about the
-//! engine: the stop machine asks it on each instruction, so it behaves the
-//! same on Unicorn now and on the Zig core later.
+//! engine: the stop machine asks it on each instruction, so it needs nothing
+//! from the core.
 //!
 //! An entry is a `breakpoint.Break`, so the three kinds the epic asks for
 //! (by address, by symbol, by symbol plus arrival count) are one kind here.
