@@ -7,6 +7,7 @@ const frame_args = @import("frames_args.zig");
 const eink = @import("../../periph/eink/eink.zig");
 const eink_wire = @import("../../periph/eink/eink_wire.zig");
 const gif = @import("gif.zig");
+const display_settled = @import("../../board/display_settled.zig");
 
 pub const Sequence = struct {
     allocator: std.mem.Allocator,
@@ -190,13 +191,7 @@ pub const Armed = struct {
     glcdc_frames: u32 = 0,
     board_eink_frames: u32 = 0,
     settle_only: bool = false,
-    settle_window_ns: u64 = 50_000_000,
-    settle_pixels: ?[]u32 = null,
-    settle_width: u32 = 0,
-    settle_height: u32 = 0,
-    settle_since: ?u64 = null,
-    settle_emitted: bool = false,
-    eink_settled: u32 = 0,
+    settled: display_settled.Detector,
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
@@ -212,6 +207,7 @@ pub const Armed = struct {
             .allocator = allocator,
             .board = board,
             .sequence = try Sequence.initOutputs(allocator, frames_path, gif_path, every),
+            .settled = .{ .allocator = allocator },
         };
         errdefer self.sequence.deinit();
         if (board.asks.attached_eink) |panel| {
@@ -232,8 +228,8 @@ pub const Armed = struct {
         const armed = try armOutputs(allocator, board, path, options.gif_out, options.frames_every) orelse return null;
         if (options.frame_on_settle != null) {
             armed.settle_only = options.frames_out == null and options.gif_out == null;
-            armed.settle_window_ns = options.settle_window_ns;
-            armed.eink_settled = (armed.eink_panel orelse &board.panel).film.settled;
+            armed.settled.window_ns = options.settle_window_ns;
+            armed.settled.eink_settled = (armed.eink_panel orelse &board.panel).film.settled;
         }
         return armed;
     }
@@ -267,24 +263,8 @@ pub const Armed = struct {
     /// A scanned GLCDC frame: written once it has held unchanged for the
     /// settle window, and not again until the picture changes.
     pub fn observeFrame(self: *Armed, width: u32, height: u32, pixels: []const u32, when: u64) !void {
-        const count = std.math.mul(usize, width, height) catch return error.BadShape;
-        if (pixels.len != count) return error.BadShape;
-        const same = self.settle_pixels != null and self.settle_width == width and
-            self.settle_height == height and Sequence.sameImage(self.settle_pixels.?, pixels);
-        if (!same) {
-            if (self.settle_pixels) |old| self.allocator.free(old);
-            self.settle_pixels = try self.allocator.dupe(u32, pixels);
-            self.settle_width = width;
-            self.settle_height = height;
-            self.settle_since = when;
-            self.settle_emitted = false;
-            return;
-        }
-        const since = self.settle_since orelse when;
-        if (!self.settle_emitted and when -| since >= self.settle_window_ns) {
+        if (try self.settled.observeFrame(width, height, pixels, when))
             try self.sequence.record(width, height, pixels, when);
-            self.settle_emitted = true;
-        }
     }
 
     /// Poll from each virtual-time boundary. The e-ink controller's LUT
@@ -292,9 +272,7 @@ pub const Armed = struct {
     pub fn pollSettle(self: *Armed, now: u64) !void {
         if (!self.settle_only) return;
         const panel = self.eink_panel orelse &self.board.panel;
-        if (panel.film.settled == self.eink_settled) return;
-        self.eink_settled = panel.film.settled;
-        if (panel.film.busy()) return;
+        if (!self.settled.observeEink(panel)) return;
         const count = panel.planes.glass.pixels.len;
         if (count == 0) return;
         if (self.eink_pixels == null or self.eink_pixels.?.len != count) {
@@ -363,7 +341,7 @@ pub const Armed = struct {
             if (hook.context == @as(*anyopaque, @ptrCast(self))) hooked.refresh_hook = null;
         }
         if (self.eink_pixels) |pixels| self.allocator.free(pixels);
-        if (self.settle_pixels) |pixels| self.allocator.free(pixels);
+        self.settled.deinit();
         if (self.capture) |*capture| capture.deinit(self.board);
         self.sequence.deinit();
         self.allocator.destroy(self);

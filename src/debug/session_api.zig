@@ -15,6 +15,7 @@ const input_script = @import("../periph/i3c/i3c_input_script.zig");
 const gt911 = @import("../periph/i3c/i3c_gt911.zig");
 const BoardTick = @import("../core/tick.zig").Tick;
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const session_display = @import("session_display.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, TooManyListeners };
@@ -24,6 +25,7 @@ pub const BreakId = @import("break_table.zig").Id;
 pub const WatchId = watch_table.Id;
 pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
+pub const Frame = session_display.Frame;
 
 pub const Loader = struct {
     context: *anyopaque,
@@ -55,6 +57,7 @@ pub const Session = struct {
     loader: ?Loader = null,
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
+    display: ?session_display.Display = null,
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
@@ -69,6 +72,20 @@ pub const Session = struct {
     /// Advance one core's board at the end of each run command.
     pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
         self.board_ticks[@intFromEnum(core)] = .{ .tick = tick, .guest = guest };
+    }
+
+    pub fn attachDisplay(self: *Session, display: session_display.Display) void {
+        self.display = display;
+    }
+
+    pub fn waitSettled(self: *Session, timeout_ns: u64) anyerror!void {
+        const display = self.display orelse return session_display.Error.NoDisplay;
+        try display.waitSettled(timeout_ns);
+    }
+
+    pub fn frame(self: *Session, allocator: std.mem.Allocator) anyerror!Frame {
+        const display = self.display orelse return session_display.Error.NoDisplay;
+        return display.frame(allocator);
     }
 
     /// Load image bytes through the board-specific loader, then publish it.

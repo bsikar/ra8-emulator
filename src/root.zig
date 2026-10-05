@@ -111,6 +111,7 @@ pub const periph = @import("periph.zig");
 pub const gui = @import("gui.zig");
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
+    pub const session_display = @import("board/session_display.zig");
     pub const boundary = @import("board/boundary.zig");
     pub const wiring = @import("board/wiring.zig");
     pub const option_memory = @import("board/option_memory.zig");
