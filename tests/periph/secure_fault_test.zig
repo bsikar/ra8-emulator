@@ -1,8 +1,8 @@
-//! Tests for src/periph/secure_fault.zig, against a real engine.
+//! Tests for src/periph/secure_fault.zig, against a fake core.
 
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const FakeCore = @import("fake_core.zig").FakeCore;
 const memmap = ra8.core.memmap;
 const fault_status = ra8.periph.fault_status;
 const secure = fault_status.secure;
@@ -14,16 +14,11 @@ const table: u32 = memmap.sram_base + 0x6000;
 const handlers: u32 = memmap.sram_base + 0x7000;
 const securefaultena: u32 = 1 << 19;
 
-/// A core whose every handler is `b .` at `handlers + 0x10 * n`.
-fn bench(shcsr: u32) !engine.Engine {
-    var core = try engine.Engine.open();
-    errdefer core.close();
-    try core.mapBoardRam();
-    var number: u32 = 0;
-    while (number < 16) : (number += 1) {
-        try core.writeWord(table + 4 * number, handlers + 0x10 * number + 1);
-        try core.writeWord(handlers + 0x10 * number, 0xE7FE_E7FE);
-    }
+/// A fake core whose vector n points at `handlers + 0x10 * n`.
+fn bench(shcsr: u32) !FakeCore {
+    var core = FakeCore.init();
+    errdefer core.deinit();
+    try core.vectors(table, handlers);
     try core.writeWord(memmap.scb.vtor, table);
     try core.writeWord(memmap.scb.shcsr, shcsr);
     try core.setRegister(.sp, memmap.sram_base + 0x8000);
@@ -50,7 +45,7 @@ test "an invalid entry point leaves SFAR alone" {
 
 test "an enabled SecureFault vectors to 7 with the instruction stacked" {
     var core = try bench(securefaultena);
-    defer core.close();
+    defer core.deinit();
     var unit = Nvic{};
     const taken = try secure.raise(&core, &unit, .auviol, 0x2200_0040, entry);
     try std.testing.expectEqual(@as(u16, 7), taken.number);
@@ -64,7 +59,7 @@ test "an enabled SecureFault vectors to 7 with the instruction stacked" {
 
 test "a disabled SecureFault escalates with HFSR.FORCED and keeps SFSR" {
     var core = try bench(0);
-    defer core.close();
+    defer core.deinit();
     var unit = Nvic{};
     const taken = try secure.raise(&core, &unit, .invtran, 0, entry);
     try std.testing.expectEqual(@as(u16, 3), taken.number);

@@ -6,44 +6,20 @@ const memmap = ra8.core.memmap;
 const bus = ra8.periph.fault_status.bus;
 const Nvic = ra8.periph.nvic.Nvic;
 
-/// PPB words in a map and registers in an array, enough for a fault entry.
-const FakeCore = struct {
-    const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, basepri, psp };
+const FakeCore = @import("fake_core.zig").FakeCore;
 
-    words: std.AutoHashMap(u32, u32),
-    registers: std.EnumArray(Name, u32) = std.EnumArray(Name, u32).initFill(0),
-
-    fn init() !FakeCore {
-        var core = FakeCore{ .words = std.AutoHashMap(u32, u32).init(std.testing.allocator) };
-        try core.writeWord(memmap.scb.vtor, 0x2200_0000);
-        var number: u32 = 0;
-        while (number < 16) : (number += 1) {
-            try core.writeWord(0x2200_0000 + 4 * number, 0x2200_1000 + 0x100 * number + 1);
-        }
-        try core.setRegister(.sp, 0x2200_8000);
-        return core;
+/// Vector n at 0x2200_0000 points to 0x2200_1000 + 0x100 * n.
+fn bench() !FakeCore {
+    var core = FakeCore.init();
+    errdefer core.deinit();
+    try core.writeWord(memmap.scb.vtor, 0x2200_0000);
+    var number: u32 = 0;
+    while (number < 16) : (number += 1) {
+        try core.writeWord(0x2200_0000 + 4 * number, 0x2200_1000 + 0x100 * number + 1);
     }
-
-    fn deinit(self: *FakeCore) void {
-        self.words.deinit();
-    }
-
-    pub fn readWord(self: *FakeCore, address: u32) !u32 {
-        return self.words.get(address) orelse 0;
-    }
-
-    pub fn writeWord(self: *FakeCore, address: u32, value: u32) !void {
-        try self.words.put(address, value);
-    }
-
-    pub fn register(self: *FakeCore, which: Name) !u32 {
-        return self.registers.get(which);
-    }
-
-    pub fn setRegister(self: *FakeCore, which: Name, value: u32) !void {
-        self.registers.set(which, value);
-    }
-};
+    try core.setRegister(.sp, 0x2200_8000);
+    return core;
+}
 
 const busfaultena: u32 = 1 << 17;
 const fault_pc: u32 = 0x2200_0400;
@@ -62,7 +38,7 @@ test "a refused fetch latches IBUSERR and leaves BFAR alone" {
 }
 
 test "an enabled BusFault vectors to exception 5 with BFAR set" {
-    var core = try FakeCore.init();
+    var core = try bench();
     defer core.deinit();
     try core.writeWord(memmap.scb.shcsr, busfaultena);
     var unit = Nvic{};
@@ -78,7 +54,7 @@ test "an enabled BusFault vectors to exception 5 with BFAR set" {
 }
 
 test "a disabled BusFault escalates to HardFault with FORCED and keeps BFSR" {
-    var core = try FakeCore.init();
+    var core = try bench();
     defer core.deinit();
     var unit = Nvic{};
     const taken = try bus.raise(&core, &unit, .read, 0x6000_0020, fault_pc);
@@ -90,7 +66,7 @@ test "a disabled BusFault escalates to HardFault with FORCED and keeps BFSR" {
 }
 
 test "a BusFault inside a handler it cannot preempt escalates" {
-    var core = try FakeCore.init();
+    var core = try bench();
     defer core.deinit();
     try core.writeWord(memmap.scb.shcsr, busfaultena);
     try core.writeWord(memmap.scb.shpr1, 0x0000_8000);
