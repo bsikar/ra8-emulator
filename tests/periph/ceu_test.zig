@@ -320,6 +320,8 @@ test {
     _ = @import("camera/pipe_source_test.zig");
     _ = @import("camera/webcam_consent_test.zig");
     _ = @import("camera/webcam_privacy_test.zig");
+    _ = @import("camera/mf_abi_test.zig");
+    _ = @import("camera/mf_com_test.zig");
     _ = @import("camera/v4l2_negotiate_test.zig");
     _ = @import("camera/v4l2_device_test.zig");
     _ = @import("camera/webcam_source_test.zig");
