@@ -55,6 +55,7 @@ test {
     _ = @import("gui/camera_open_test.zig");
     _ = @import("gui/camera_devices_test.zig");
     _ = @import("gui/camera_consent_store_test.zig");
+    _ = @import("gui/camera_media_test.zig");
     _ = @import("gui/camera_view_test.zig");
     _ = @import("gui/camera_pane_test.zig");
     _ = @import("gui/camera_device_row_test.zig");
