@@ -144,4 +144,6 @@ pub const board = struct {
 pub const snapshot = struct {
     pub const file = @import("snapshot/file.zig");
     pub const memory = @import("snapshot/memory.zig");
+    pub const fields = @import("snapshot/fields.zig");
+    pub const cpu = @import("snapshot/cpu.zig");
 };

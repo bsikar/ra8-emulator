@@ -15,6 +15,8 @@ pub const Error = error{ BadMagic, BadVersion, Truncated };
 /// What a section holds. Values are part of the format and never reused.
 pub const Kind = enum(u32) {
     memory = 1,
+    /// One core's architectural state (RA8EMU-658).
+    cpu = 2,
     _,
 };
 
