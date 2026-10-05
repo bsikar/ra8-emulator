@@ -17,6 +17,7 @@ const NvicSource = @import("../../core/cpu/exception/nvic_source.zig").NvicSourc
 const Board = @import("../../board/board.zig").Board;
 const session_plug = @import("../../board/session_plug.zig");
 const board_speed = @import("../../board/board_speed.zig");
+const board_boundary = @import("../../board/board_boundary.zig");
 const pacing = @import("../../periph/time/pacing.zig");
 const script = @import("../../debug/script.zig");
 const session = @import("../../debug/session.zig");
@@ -102,6 +103,8 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
     target.session.attachPlugs(plugs.hook());
     var speed: board_speed.BoardSpeed = .{ .time = &board.time, .clock = try pacing.hostClock() };
     target.session.speed = speed.hook();
+    var edge: board_boundary.BoardBoundary = .{ .board = &board, .core = cpu0.own() };
+    target.session.live.boundary = edge.hook();
     try target.session.load(.cpu0, image.bytes);
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};

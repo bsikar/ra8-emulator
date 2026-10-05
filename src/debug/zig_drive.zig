@@ -56,6 +56,14 @@ pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
 /// As `runWatched`, with `clock` counting DWT_CYCCNT for a Cycle Counter
 /// comparator and recording each halt in DFSR (RA8EMU-172).
 pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock) Ended {
+    var retired: u64 = 0;
+    return runCounted(core, machine, count, watch, clock, &retired);
+}
+
+/// As `runClocked`, adding each instruction that ran to `retired`, so a
+/// caller passing the board's boundary knows how far time moved
+/// (RA8EMU-709).
+pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64) Ended {
     var left = count;
     while (left > 0) : (left -= 1) {
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
@@ -71,6 +79,7 @@ pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
         if (watch) |listening| listening.arm(now.pc, now.size);
         defer if (watch) |listening| listening.disarm();
         if (core.cpu.step()) |stopped| return .{ .core = stopped };
+        retired.* += 1;
     }
     return .count;
 }
