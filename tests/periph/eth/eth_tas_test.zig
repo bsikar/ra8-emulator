@@ -1,7 +1,7 @@
 //! TAS gate-list RAM and cycle register behavior.
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const Store = ra8.core.cpu.memory.store.Store;
 const eth = ra8.periph.eth;
 const regs = ra8.periph.eth_regs;
 const net = ra8.board.net;
@@ -97,13 +97,13 @@ test "TAS register window is connected to the powered board bus" {
     var bus = periph.Bus.init(std.testing.allocator);
     defer bus.deinit();
     var cluster = net.Rswitch{};
-    var core = try engine.Engine.open();
-    defer core.close();
+    var store = try Store.init(null);
+    defer store.deinit();
     var guard = prcr.Prcr.init();
     guard.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
     var domain = pdctr.Pdctr.init(&guard, .eswm);
     domain.write(pdctr.Domain.eswm.base(), 1, 0);
-    try cluster.attach(&bus, .{ .engine = core }, &domain);
+    try cluster.attach(&bus, .{ .store = &store }, &domain);
 
     const expected = eth.tas.reg.gate_state | 0x0055_aa55;
     bus.write(base + eth.tas.reg.ram_init, 4, eth.tas.reg.ram_init_request);
