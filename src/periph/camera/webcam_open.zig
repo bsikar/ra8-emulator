@@ -1,10 +1,12 @@
 //! Opens `--camera-source webcam[:N|PATH]` (RA8EMU-506): the consent gate
 //! first, then the V4L2 node, the format negotiation and the frame source.
+//! On Windows the whole open goes to Media Foundation (mf_webcam.zig).
 //! The device is asked for 640x480; the converter scales whatever it
 //! settles on to the size the firmware programmed. Frames come by read()
 //! when the node offers it, otherwise by a memory-mapped stream, which is
 //! what most UVC webcams offer.
 const std = @import("std");
+const builtin = @import("builtin");
 const frame_source = @import("frame_source.zig");
 const consent = @import("webcam_consent.zig");
 const privacy = @import("webcam_privacy.zig");
@@ -12,6 +14,8 @@ const v4l2 = @import("v4l2_device.zig");
 const negotiate = @import("v4l2_negotiate.zig");
 const v4l2_stream = @import("v4l2_stream.zig");
 const source = @import("webcam_source.zig");
+const mf_open = @import("mf_open.zig");
+const mf_webcam = @import("mf_webcam.zig");
 
 pub const request_width: u32 = 640;
 pub const request_height: u32 = 480;
@@ -64,6 +68,14 @@ pub fn open(allocator: std.mem.Allocator, arg: []const u8, allow: bool, format_c
 
 /// `open` with the consent question's reader and writer passed in.
 pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+    if (builtin.os.tag == .windows) {
+        const calls = mf_open.system() orelse return error.NoCaptureIo;
+        return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer, format_control);
+    }
+    return openV4l2(allocator, arg, grant, reader, writer, format_control);
+}
+
+fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
     var name: Name = undefined;
     const named = try consent.device(&name, arg);
     if (consent.decide(grant, named, reader, writer) == .refused) return error.WebcamRefused;

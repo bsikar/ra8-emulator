@@ -11,6 +11,7 @@ const mf_open = @import("mf_open.zig");
 const v4l2 = @import("v4l2_abi.zig");
 const negotiate = @import("v4l2_negotiate.zig");
 const source = @import("webcam_source.zig");
+const consent = @import("webcam_consent.zig");
 
 /// How many empty samples (stream ticks) one read waits through.
 pub const gap_tries = 4;
@@ -18,12 +19,24 @@ pub const gap_tries = 4;
 pub const MfCapture = struct {
     allocator: std.mem.Allocator,
     reader: mf_open.Reader,
+    name: [24]u8 = undefined,
+    name_len: usize = 0,
 
     /// Takes the reader; closing the capture closes it.
     pub fn create(allocator: std.mem.Allocator, reader: mf_open.Reader) error{OutOfMemory}!*MfCapture {
         const self = try allocator.create(MfCapture);
         self.* = .{ .allocator = allocator, .reader = reader };
         return self;
+    }
+
+    /// Names the camera for the log lines and the source's detail.
+    pub fn setName(self: *MfCapture, text: []const u8) void {
+        self.name_len = @min(text.len, self.name.len);
+        @memcpy(self.name[0..self.name_len], text[0..self.name_len]);
+    }
+
+    pub fn named(self: *const MfCapture) []const u8 {
+        return self.name[0..self.name_len];
     }
 
     pub fn capture(self: *MfCapture) source.Capture {
@@ -70,6 +83,7 @@ pub const MfCapture = struct {
     fn close(ctx: *anyopaque) void {
         const self: *MfCapture = @ptrCast(@alignCast(ctx));
         self.reader.close();
+        if (self.name_len > 0) consent.logStop(std.io.getStdErr().writer(), self.named()) catch {};
         self.allocator.destroy(self);
     }
 };
