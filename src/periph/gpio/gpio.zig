@@ -151,6 +151,19 @@ pub const Gpio = struct {
         }
     }
 
+    /// Stop driving a pin from outside (a part unplugged, RA8EMU-212): it
+    /// falls back to its pull state. The user switches carry board pull-ups
+    /// and read high; this model has no pin pull register, so every other
+    /// input reads low with nothing driving it.
+    pub fn release(self: *Gpio, port: u8, pin: u4) void {
+        if (port >= port_count) return;
+        const bit = @as(u16, 1) << pin;
+        self.ports[port].in_ovr &= ~bit;
+        self.ports[port].in_lvl &= ~bit;
+        const switch_pin = pin == sw1_pin or pin == sw2_pin;
+        if (port == sw_port and switch_pin) self.setInput(port, pin, true);
+    }
+
     pub fn getInput(self: *const Gpio, port: u8, pin: u4) bool {
         if (port >= port_count) return false;
         return (self.ports[port].in_lvl & (@as(u16, 1) << pin)) != 0;

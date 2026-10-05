@@ -57,6 +57,18 @@ pub const Pins = struct {
     }
 
     /// Hand every model its link again, after the port block reset.
+    /// Take the part on `port`/`pin` off its pin; false when none was there.
+    /// The caller lets the pin go back to its pull state.
+    pub fn detach(self: *Pins, port: u8, pin: u4) bool {
+        for (self.slots[0..self.count], 0..) |slot, index| {
+            if (slot.port != port or slot.pin != pin) continue;
+            self.count -= 1;
+            self.slots[index] = self.slots[self.count];
+            return true;
+        }
+        return false;
+    }
+
     pub fn reconnect(self: *const Pins, owner: *gpio.Gpio) void {
         for (self.slots[0..self.count]) |slot| {
             const link = Link{ .pins = owner, .port = slot.port, .pin = slot.pin };

@@ -5,7 +5,8 @@
 //! leaves its line's registry, so its address phase goes unacknowledged. An
 //! SPI channel gets a stand-in that reads MISO floating high (the
 //! controller's own empty-channel read is left alone, which keeps recorded
-//! runs identical). A UART channel goes silent. GPIO is not covered yet.
+//! runs identical). A UART channel goes silent. A GPIO pin goes back to its
+//! pull state.
 const std = @import("std");
 const endpoint = @import("../periph/model/endpoint.zig");
 const parts = @import("../periph/model/parts.zig");
@@ -16,7 +17,7 @@ const session_api = @import("../debug/session_api.zig");
 const plug = @import("plug.zig");
 const Board = @import("board.zig").Board;
 
-pub const Error = error{ WrongEndpoint, NothingFitted };
+pub const Error = error{NothingFitted};
 
 /// What an unplugged SPI select reads: nothing drives MISO, so it floats.
 pub const floating = struct {
@@ -48,7 +49,6 @@ pub const Plugs = struct {
     /// Put a fresh `name` on `at`, or take what is there off it when null.
     pub fn set(self: *Plugs, at: endpoint.Endpoint, name: ?[]const u8) !void {
         const wanted = name orelse return self.unplug(at);
-        if (at == .gpio) return Error.WrongEndpoint;
         const made = try parts.all.make(self.arena, wanted, at);
         if (at == .spi) {
             const unit = &self.board.spi.channels[at.spi.channel];
@@ -80,7 +80,10 @@ pub const Plugs = struct {
                 if (unit.device == null) return Error.NothingFitted;
                 unit.device = null;
             },
-            .gpio => return Error.WrongEndpoint,
+            .gpio => |where| {
+                if (!self.board.pins.wired.detach(where.port, where.pin)) return Error.NothingFitted;
+                self.board.pins.release(where.port, where.pin);
+            },
         }
     }
 
