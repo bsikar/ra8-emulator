@@ -1,0 +1,4 @@
+# RA8EMU-702: swap the fuel gauge between two of the demo's 1 s reads, so
+# the next read lands on a freshly plugged part.
+1500ms unplug i2c:touch@0x36
+1600ms plug   i2c:touch@0x36 max17048
