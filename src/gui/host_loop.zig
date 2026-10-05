@@ -14,6 +14,7 @@ const raster = @import("raster.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const camera_view = @import("camera_view.zig");
+const camera_media = @import("camera_media.zig");
 const camera_devices = @import("camera_devices.zig");
 const consent_store = @import("camera_consent_store.zig");
 const FrameSource = @import("camera_switch.zig").FrameSource;
@@ -68,12 +69,23 @@ pub const Loop = struct {
     /// up (its dialog opens or it becomes the source), so one plugged in
     /// after the window opened is offered; null keeps the adopted list.
     device_dir: ?std.fs.Dir = null,
+    /// The pictures and clips the pane offers, and every earlier listing:
+    /// a running source and the pane's arguments may still name a file from
+    /// one, so no listing is freed before the loop is.
+    media: ?camera_media.Media = null,
+    retired: std.ArrayListUnmanaged(camera_media.Media) = .empty,
+    /// Where the project's pictures and clips are listed again each time
+    /// the image or video source comes up; null offers none.
+    media_dir: ?std.fs.Dir = null,
     /// Where Always for this project is kept; null keeps it for this run.
     project: ?std.fs.Dir = null,
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
         if (self.devices) |*devices| devices.deinit();
+        if (self.media) |*media| media.deinit();
+        for (self.retired.items) |*media| media.deinit();
+        self.retired.deinit(self.allocator);
         self.allocator.free(self.canvas);
         self.allocator.free(self.pixels);
         if (self.frame) |*frame| frame.deinit(self.allocator);
@@ -100,8 +112,39 @@ pub const Loop = struct {
         self.adoptDevices(found);
     }
 
+    fn wantsMedia(self: *const Loop) bool {
+        return self.pane.panel.active == .image or self.pane.panel.active == .video;
+    }
+
     fn wantsWebcam(self: *const Loop) bool {
         return self.pane.panel.asking or self.pane.panel.active == .webcam;
+    }
+
+    /// Hands the pane the project's pictures and clips; the loop frees them.
+    /// When the earlier listing cannot be kept, the new one is dropped.
+    pub fn adoptMedia(self: *Loop, found: camera_media.Media) void {
+        var media = found;
+        if (self.media) |old| self.retired.append(self.allocator, old) catch {
+            media.deinit();
+            return;
+        };
+        self.media = media;
+        self.pane.pictures = media.images;
+        self.pane.clips = media.videos;
+    }
+
+    /// Lists the pictures and clips in `dir` now and again whenever the
+    /// image or video source comes up. The caller keeps `dir` open.
+    pub fn useMediaDir(self: *Loop, dir: std.fs.Dir) void {
+        self.media_dir = dir;
+        self.relistMedia();
+    }
+
+    /// A listing that fails keeps the files already offered.
+    fn relistMedia(self: *Loop) void {
+        const dir = self.media_dir orelse return;
+        const found = camera_media.list(self.allocator, dir) catch return;
+        self.adoptMedia(found);
     }
 
     /// Keeps Always in `project`, starting from what an earlier run saved.
@@ -117,6 +160,7 @@ pub const Loop = struct {
         self.pane.layout = paneLayout(board_view.size(before.width, before.height));
         const always = self.pane.panel.always;
         const wanted = self.wantsWebcam();
+        const kind = self.pane.panel.active;
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
@@ -125,6 +169,7 @@ pub const Loop = struct {
         }
         if (self.pane.panel.always and !always) self.remember();
         if (self.wantsWebcam() and !wanted) self.relist();
+        if (self.pane.panel.active != kind and self.wantsMedia()) self.relistMedia();
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
             self.pane.settle(self.allocator, camera.source, camera.format_control);

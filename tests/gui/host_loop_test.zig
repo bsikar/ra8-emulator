@@ -169,6 +169,31 @@ test "the webcams are listed again when the webcam dialog opens" {
     try std.testing.expectEqualSlices(u32, &.{ 1, 3 }, loop.pane.devices);
 }
 
+test "the project's pictures are listed again when the image source comes up" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "a.png", .data = "\x89PNG\r\n\x1a\nrest" });
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.useMediaDir(tmp.dir);
+    try std.testing.expectEqual(@as(usize, 1), loop.pane.pictures.len);
+    loop.pane.args.image = loop.pane.pictures[0];
+    try tmp.dir.writeFile(.{ .sub_path = "b.bmp", .data = "BMrest" });
+    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H2\n" });
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(@as(usize, 1), loop.pane.pictures.len);
+    try window.feed(press(layout().source(.image)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expectEqual(.image, loop.pane.panel.active);
+    try std.testing.expectEqual(@as(usize, 2), loop.pane.pictures.len);
+    try std.testing.expectEqualStrings("b.bmp", loop.pane.pictures[1]);
+    try std.testing.expectEqualStrings("c.y4m", loop.pane.clips[0]);
+    try std.testing.expectEqualStrings("a.png", loop.pane.args.image);
+}
+
 test "Always answered in the window is kept for the project's next run" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
