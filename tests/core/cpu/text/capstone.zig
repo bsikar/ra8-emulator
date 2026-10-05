@@ -65,7 +65,7 @@ pub fn expectWideGroupMatches(group: []const u8, mask: u16, value: u16, samples:
 pub const oracle_major: u32 = 5;
 
 fn oracleReady() !void {
-    const linked = ra8.core.disasm.version();
+    const linked = ra8.core.capstone_ref.version();
     if (linked.major == oracle_major) return;
     std.debug.print("capstone parity skipped: linked Capstone {d}.{d}, oracle is {d}.x (-Ddeps-prefix)\n", .{ linked.major, linked.minor, oracle_major });
     return error.SkipZigTest;
@@ -73,7 +73,7 @@ fn oracleReady() !void {
 
 fn matches(instr: Instr) !bool {
     const all = [4]u8{ @truncate(instr.hw1), @truncate(instr.hw1 >> 8), @truncate(instr.hw2), @truncate(instr.hw2 >> 8) };
-    const theirs = ra8.core.disasm.one(instr.address, all[0..instr.size]) catch return false;
+    const theirs = ra8.core.capstone_ref.one(instr.address, all[0..instr.size]) catch return false;
     const ours = decode.text.disasm.one(instr) orelse return false;
     if (std.mem.eql(u8, ours.slice(), theirs.slice())) return true;
     std.debug.print("0x{x:0>4} {x:0>4}: ours \"{s}\", capstone \"{s}\"\n", .{ instr.hw1, instr.hw2, ours.slice(), theirs.slice() });
