@@ -1,6 +1,7 @@
 //! Opens `--camera-source webcam[:N|PATH]` (RA8EMU-506): the consent gate
 //! first, then the V4L2 node, the format negotiation and the frame source.
-//! On Windows the whole open goes to Media Foundation (mf_webcam.zig).
+//! On Windows the whole open goes to Media Foundation (mf_webcam.zig),
+//! on macOS to AVFoundation (av_webcam.zig).
 //! The device is asked for 640x480; the converter scales whatever it
 //! settles on to the size the firmware programmed. Frames come by read()
 //! when the node offers it, otherwise by a memory-mapped stream, which is
@@ -16,6 +17,7 @@ const v4l2_stream = @import("v4l2_stream.zig");
 const source = @import("webcam_source.zig");
 const mf_open = @import("mf_open.zig");
 const mf_webcam = @import("mf_webcam.zig");
+const av_webcam = @import("av_webcam.zig");
 
 pub const request_width: u32 = 640;
 pub const request_height: u32 = 480;
@@ -71,6 +73,10 @@ pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Gr
     if (builtin.os.tag == .windows) {
         const calls = mf_open.system() orelse return error.NoCaptureIo;
         return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer, format_control);
+    }
+    if (builtin.os.tag == .macos) {
+        const host = av_webcam.system() orelse return error.NoCaptureIo;
+        return av_webcam.openWith(allocator, host, arg, grant, reader, writer, format_control);
     }
     return openV4l2(allocator, arg, grant, reader, writer, format_control);
 }
