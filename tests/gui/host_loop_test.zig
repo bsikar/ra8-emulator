@@ -148,3 +148,25 @@ test "the pane offers the webcams the loop adopted, and the loop frees them" {
     loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, tmp.dir));
     try std.testing.expectEqual(@as(usize, 2), loop.pane.devices.len);
 }
+
+test "Always answered in the window is kept for the project's next run" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 10 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    loop.useProject(tmp.dir);
+    try std.testing.expect(!loop.pane.panel.always);
+    try window.feed(press(layout().source(.webcam)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(!ra8.gui.camera_consent_store.load(tmp.dir));
+    try window.feed(press(layout().dialog(.always)));
+    _ = try loop.tick(window.platform(), fake.run());
+    try std.testing.expect(ra8.gui.camera_consent_store.load(tmp.dir));
+    var next = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer next.deinit();
+    next.useProject(tmp.dir);
+    try std.testing.expect(next.pane.panel.always);
+}
