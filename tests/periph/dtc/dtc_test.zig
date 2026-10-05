@@ -16,7 +16,7 @@ const Cells = struct {
 
 /// A stand-in for the machine's memory: one flat window, with the four calls
 /// the controller makes of a core. A real engine is the other implementation;
-/// this one keeps a descriptor test off unicorn.
+/// this one keeps a descriptor test off the core.
 const Memory = struct {
     cells: *Cells,
 

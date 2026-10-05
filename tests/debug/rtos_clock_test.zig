@@ -1,4 +1,4 @@
-//! RA8EMU-292: the Unicorn tracer's load clock is virtual time per
+//! RA8EMU-292: the tracer's load clock is virtual time per
 //! instruction. The run loop's idle skip (src/core/idle.zig) charges a
 //! stretch to the clocks without executing it, so the per-instruction hook
 //! never sees it; the clock restarts from the run's elapsed count whenever

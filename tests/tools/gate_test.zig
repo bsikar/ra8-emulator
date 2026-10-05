@@ -58,7 +58,7 @@ test "a method inside a container is its own function, a nested one is not" {
 }
 
 test "a declaration without a body is not a function" {
-    try std.testing.expect(gate.declaredName("extern fn unicorn_open(arch: u32) c_int;") == null);
+    try std.testing.expect(gate.declaredName("extern fn engine_open(arch: u32) c_int;") == null);
     try std.testing.expect(gate.declaredName("pub const Hook = *const fn (u64) void;") == null);
     try std.testing.expect(gate.declaredName("const total = fn_count(list);") == null);
     try std.testing.expect(gate.declaredName("    // fn read(self: Block) u32 {") == null);

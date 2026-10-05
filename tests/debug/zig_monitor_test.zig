@@ -1,6 +1,6 @@
 //! Tests for src/debug/zig_monitor.zig: a unit event held with halting
-//! debug off pends DebugMonitor on the Zig core as step_hook.zig does on
-//! Unicorn (RA8EMU-673).
+//! debug off pends DebugMonitor on the Zig core
+//! (RA8EMU-673).
 const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;

@@ -81,7 +81,7 @@ test "--sd selects a raw card image" {
 test "--cpu picks the CPU, defaulting to the Zig core" {
     const Choice = ra8.core.cpu.choice.Choice;
     try std.testing.expectEqual(Choice.zig, (try parse(&[_][]const u8{ "emu", "a.elf" })).cpu);
-    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "unicorn" }));
+    try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "other" }));
     try std.testing.expectEqual(Choice.zig, (try parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "zig" })).cpu);
     try std.testing.expectError(error.BadValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu", "arm" }));
     try std.testing.expectError(error.MissingValue, parse(&[_][]const u8{ "emu", "a.elf", "--cpu" }));

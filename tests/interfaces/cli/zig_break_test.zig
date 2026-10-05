@@ -36,7 +36,7 @@ test "nothing to listen for gives no listener" {
     try std.testing.expect(retire.listener() == null);
 }
 
-test "the verdict reads as the Unicorn path's" {
+test "the verdict names the arrival and the pc" {
     var buffer: [128]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
     const met: zig_break.Break = .{ .address = 0x100, .arrival = 1, .seen = 1, .reached = true };

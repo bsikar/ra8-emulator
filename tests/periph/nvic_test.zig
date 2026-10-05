@@ -19,13 +19,13 @@ const systick = mod.systick;
 const xpsr_stack_align = mod.xpsr_stack_align;
 
 /// A core-shaped stand-in: PPB words in a map, registers in an array, so the
-/// controller can be tested without Unicorn underneath it.
+/// controller can be tested without a CPU underneath it.
 const FakeCore = struct {
     const Name = enum { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp };
 
     words: std.AutoHashMap(u32, u32),
     registers: std.EnumArray(Name, u32) = std.EnumArray(Name, u32).initFill(0),
-    /// Unicorn's rule for an unprivileged thread: a PSP write from Thread
+    /// The rule for an unprivileged thread: a PSP write from Thread
     /// mode is dropped, so only one made from Handler mode lands.
     unprivileged: bool = false,
 
