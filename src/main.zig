@@ -6,6 +6,7 @@
 //! and src/periph, reached through "ra8".
 const std = @import("std");
 const ra8 = @import("ra8");
+const build_options = @import("build_options");
 
 const cli = ra8.core.cli;
 const elf = ra8.core.elf;
@@ -26,6 +27,8 @@ pub fn main() !u8 {
     const argv = try std.process.argsAlloc(allocator);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
     const image = openImage(allocator, options.path) catch return 1;
+    // Only a -Dgui build compiles src/gui_window.zig and links SDL.
+    if (build_options.gui) ra8.board.window_main.opener = @import("gui_window.zig").opener;
     return ra8.board.zig_run.main_path.run(allocator, image, options);
 }
 

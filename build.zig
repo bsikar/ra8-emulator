@@ -13,6 +13,8 @@
 //!   zig build gui-hello -Dgui
 //!                     the SDL3 hello window (RA8EMU-616); SDL is a lazy
 //!                     dependency, fetched and built only with -Dgui
+//!   zig build -Dgui   the emulator with SDL linked, so `--gui` opens a
+//!                     window (RA8EMU-646)
 //!
 //! Source is grouped, not flat: src/core/ is the machine (engine, elf,
 //! memmap, disasm and the one C boundary), src/periph/ is everything that
@@ -30,6 +32,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const prefix = b.option([]const u8, "deps-prefix", "Prefix holding include/ and lib/ for unicorn and capstone");
+    const gui = b.option(bool, "gui", "Fetch and build SDL3 for the GUI steps and `--gui`") orelse false;
 
     // One library module, reached as "ra8" by the executable and by the
     // tests, so neither has to walk relative paths into src/.
@@ -48,6 +51,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addImport("ra8", emu);
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "gui", gui);
+    exe.root_module.addOptions("build_options", build_options);
     link(b, exe, prefix);
     b.installArtifact(exe);
 
@@ -78,7 +84,7 @@ pub fn build(b: *std.Build) void {
 
     const parity_mod = disasmParity(b, target, optimize, emu, prefix);
     usbipAttach(b, target, optimize);
-    guiHello(b, target, optimize, emu);
+    if (guiHello(b, target, optimize, emu, gui)) |sdl_mod| exe.root_module.addImport("gui_sdl", sdl_mod);
 
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/all.zig"),
@@ -161,16 +167,17 @@ fn disasmParity(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
 }
 
 /// The SDL3 hello window (RA8EMU-616, docs/adr/0001-gui-stack.md). SDL is
-/// a lazy dependency asked for only under -Dgui, so test, gate and the
-/// emulator never fetch or compile it. Without -Dgui the step says how.
-fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module) void {
+/// a lazy dependency asked for only under -Dgui, so test and gate never
+/// fetch or compile it. Without -Dgui the step says how. Returns the SDL
+/// module, which the emulator also takes under -Dgui for `--gui`
+/// (RA8EMU-646).
+fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, enabled: bool) ?*std.Build.Module {
     const step = b.step("gui-hello", "Build and open the SDL3 hello window (needs -Dgui): -- [--frames N]");
-    const enabled = b.option(bool, "gui", "Fetch and build SDL3 for the GUI steps") orelse false;
     if (!enabled) {
         step.dependOn(&b.addFail("gui-hello needs SDL3: run `zig build gui-hello -Dgui`").step);
-        return;
+        return null;
     }
-    const sdl_dep = b.lazyDependency("sdl", .{ .target = target, .optimize = optimize }) orelse return;
+    const sdl_dep = b.lazyDependency("sdl", .{ .target = target, .optimize = optimize }) orelse return null;
     const sdl_mod = b.createModule(.{ .root_source_file = b.path("src/gui/sdl.zig"), .target = target, .optimize = optimize });
     sdl_mod.addImport("ra8", emu);
     sdl_mod.linkLibrary(sdl_dep.artifact("SDL3"));
@@ -181,9 +188,10 @@ fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     const install = b.addInstallArtifact(hello, .{});
     step.dependOn(&install.step);
     // A cross build (x86_64-windows-gnu, aarch64-macos) only installs.
-    if (!target.query.isNative()) return;
+    if (!target.query.isNative()) return sdl_mod;
     const run = b.addRunArtifact(hello);
     run.step.dependOn(&install.step);
     if (b.args) |args| run.addArgs(args);
     step.dependOn(&run.step);
+    return sdl_mod;
 }

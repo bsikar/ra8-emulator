@@ -11,3 +11,21 @@ test "a frame is a sixtieth of a second of core time" {
 test "this build has no window to open" {
     try std.testing.expect(window_main.open() == null);
 }
+
+var fake: ?ra8.gui.headless.Headless = null;
+
+fn fakeOpen() ?ra8.gui.platform.Platform {
+    fake = ra8.gui.headless.Headless.init(std.testing.allocator, 320, 200);
+    if (fake) |*window| return window.platform();
+    return null;
+}
+
+fn fakeClose() void {}
+
+test "an opener set by the executable is the window --gui opens" {
+    window_main.opener = .{ .open = fakeOpen, .close = fakeClose };
+    defer window_main.opener = null;
+    const window = window_main.open() orelse return error.NoWindow;
+    defer fake.?.deinit();
+    try std.testing.expectEqual(@as(u32, 320), window.size().width);
+}
