@@ -67,3 +67,42 @@ test "closing the window releases a parked engine and ends the run" {
     try std.testing.expect(engine.ran < engine.total);
     try std.testing.expect(!pacer.step());
 }
+
+const Count = struct {
+    calls: std.atomic.Value(u32) = .init(0),
+
+    fn hook(self: *Count) ra8.board.window_pace.Hook {
+        return .{ .ctx = self, .call = bump };
+    }
+
+    fn bump(ctx: *anyopaque) void {
+        const self: *Count = @ptrCast(@alignCast(ctx));
+        _ = self.calls.fetchAdd(1, .monotonic);
+    }
+};
+
+test "the park hook runs on the engine at each park and once at the end" {
+    var count = Count{};
+    var pacer = Pacer{ .per_frame = 250, .at_park = count.hook() };
+    var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 1000 };
+    const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
+    waitParked(&pacer);
+    try std.testing.expectEqual(@as(u32, 1), count.calls.load(.monotonic));
+    try std.testing.expect(pacer.step());
+    try std.testing.expectEqual(@as(u32, 2), count.calls.load(.monotonic));
+    while (pacer.step()) {}
+    thread.join();
+    try std.testing.expectEqual(@as(u32, 5), count.calls.load(.monotonic));
+}
+
+/// Holds until the engine has reached its first boundary, so the hold
+/// before the first stretch is a park and not raced by the first grant.
+fn waitParked(pacer: *Pacer) void {
+    while (true) {
+        pacer.mutex.lock();
+        const parked = pacer.parked;
+        pacer.mutex.unlock();
+        if (parked) return;
+        std.Thread.yield() catch {};
+    }
+}

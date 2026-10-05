@@ -106,3 +106,22 @@ test "the window's scans leave the controller and its report as they were" {
     try std.testing.expectEqual(@as(u32, 64), screen.width);
     try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&board.display));
 }
+
+test "scanning on the engine leaves a step to read only what was handed over" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var counter = Counter{ .left = 5 };
+    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    defer screen.deinit();
+    screen.on_engine = true;
+    const run = screen.run();
+    const first = run.vtable.board(run.ctx);
+    try std.testing.expectEqual(@as(usize, screen.width) * screen.height, first.panel.len);
+    try std.testing.expectEqualDeep(@as([]const board_view.Led, &frame_out.ledsOf(&board)), first.leds);
+    try std.testing.expect(run.vtable.step(run.ctx));
+    try std.testing.expectEqual(first.panel.ptr, run.vtable.board(run.ctx).panel.ptr);
+    const hook = screen.parkHook();
+    hook.call(hook.ctx);
+    try std.testing.expect(run.vtable.step(run.ctx));
+    try std.testing.expect(first.panel.ptr != run.vtable.board(run.ctx).panel.ptr);
+}
