@@ -84,6 +84,7 @@ pub fn build(b: *std.Build) void {
 
     const parity_mod = disasmParity(b, target, optimize, emu, prefix);
     usbipAttach(b, target, optimize);
+    const bench_mod = handoffBench(b, target, optimize, emu);
     if (guiHello(b, target, optimize, emu, gui)) |sdl_mod| exe.root_module.addImport("gui_sdl", sdl_mod);
 
     const tests = b.addTest(.{
@@ -95,6 +96,7 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("gate", gate_mod);
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("disasm_parity", parity_mod);
+    tests.root_module.addImport("handoff_bench", bench_mod);
     link(b, tests, prefix);
     const test_step = b.step("test", "Run the unit tests and compile the emulator");
     test_step.dependOn(&b.addRunArtifact(tests).step);
@@ -146,6 +148,21 @@ fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
     const usbip = b.addRunArtifact(b.addExecutable(.{ .name = "usbip_attach", .root_module = usbip_mod }));
     if (b.args) |args| usbip.addArgs(args);
     b.step("usbip-attach", "Attach --usbip PORT and check it end to end: -- PORT").dependOn(&usbip.step);
+}
+
+/// tools/handoff_bench.zig times the board snapshot handoff with and
+/// without a 240 Hz reader (RA8EMU-227); the tests drive the same module.
+fn handoffBench(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module) *std.Build.Module {
+    const bench_mod = b.createModule(.{
+        .root_source_file = b.path("tools/handoff_bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bench_mod.addImport("ra8", emu);
+    const bench = b.addRunArtifact(b.addExecutable(.{ .name = "handoff_bench", .root_module = bench_mod }));
+    bench.has_side_effects = true;
+    b.step("bench-handoff", "Time the UI snapshot handoff against a 240 Hz reader (use -Doptimize=ReleaseFast)").dependOn(&bench.step);
+    return bench_mod;
 }
 
 /// tools/disasm_parity.zig compares our disassembler with Capstone over
