@@ -68,3 +68,41 @@ test "the window loop steps the board until the stepper ends and presents the vi
     try std.testing.expectEqual(host_loop.colorOf(0xFF000000), shown.at(board_view.margin, board_view.margin));
     try std.testing.expectEqual(host_loop.colorOf(board_view.pcb), shown.at(1, 1));
 }
+
+const tcon = ra8.periph.glcdc_tcon;
+
+/// A 64x32 panel in the timing controller, so the window has one to scan.
+fn programPanel(unit: *tcon.Tcon) void {
+    _ = unit.latch(tcon.off.tim, 0);
+    _ = unit.latch(tcon.off.stva1, 1);
+    _ = unit.latch(tcon.off.stva2, @intFromEnum(tcon.Signal.stva) | tcon.field.invert);
+    _ = unit.latch(tcon.off.stha1, 1);
+    _ = unit.latch(tcon.off.stha2, @intFromEnum(tcon.Signal.de));
+    _ = unit.latch(tcon.off.stvb1, 2 << tcon.field.start_shift | 32);
+    _ = unit.latch(tcon.off.stvb2, @intFromEnum(tcon.Signal.stha) | tcon.field.invert);
+    _ = unit.latch(tcon.off.sthb1, 2 << tcon.field.start_shift | 64);
+    _ = unit.latch(tcon.off.sthb2, 0);
+    _ = unit.latch(tcon.off.de, 0);
+}
+
+test "the window's scans leave the controller and its report as they were" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.domains = ra8.periph.pdctr.Domains.init(&board.protection);
+    board.display = ra8.periph.glcdc.Glcdc.init(&board.domains.graphics);
+    programPanel(&board.display.timing);
+    try std.testing.expectEqual(@as(u32, 64), board.display.panelWidth());
+    const before = board.display;
+    var counter = Counter{ .left = 3 };
+    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    defer screen.deinit();
+    var window = Headless.init(std.testing.allocator, 1280, 700);
+    defer window.deinit();
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    const run = screen.run();
+    while (try loop.tick(window.platform(), run)) {}
+    try std.testing.expectEqual(@as(u32, 3), counter.steps);
+    try std.testing.expectEqual(@as(u32, 64), screen.width);
+    try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&board.display));
+}
