@@ -1,0 +1,59 @@
+//! Covers src/gui/camera_thumb.zig: the chosen picture's preview, its size,
+//! its averaged pixels, reading it from the file, and where it is drawn.
+const std = @import("std");
+const ra8 = @import("ra8");
+const thumb = ra8.gui.camera_thumb;
+const DrawList = ra8.gui.draw_list.DrawList;
+const Color = ra8.gui.draw_list.Color;
+const decoded = ra8.periph.ceu.camera.image;
+const Rgb = ra8.periph.ceu.camera.convert.Rgb;
+
+const red = Rgb{ .r = 200, .g = 0, .b = 0 };
+const blue = Rgb{ .r = 0, .g = 0, .b = 100 };
+
+test "the longer edge fits the limit and the shape is kept" {
+    try std.testing.expectEqual(.{ @as(u32, 24), @as(u32, 12) }, thumb.fit(48, 24, 24));
+    try std.testing.expectEqual(.{ @as(u32, 12), @as(u32, 24) }, thumb.fit(100, 200, 24));
+    try std.testing.expectEqual(.{ @as(u32, 10), @as(u32, 5) }, thumb.fit(10, 5, 24));
+    try std.testing.expectEqual(.{ @as(u32, 24), @as(u32, 1) }, thumb.fit(1000, 1, 24));
+}
+
+test "each preview cell averages the pixels under it" {
+    var pixels = [_]Rgb{ red, red, blue, blue, red, blue, blue, blue };
+    const picture = decoded.Image{ .width = 4, .height = 2, .pixels = &pixels };
+    const t = try thumb.shrink(std.testing.allocator, picture, 2);
+    defer t.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u32, 2), t.width);
+    try std.testing.expectEqual(@as(u32, 1), t.height);
+    try std.testing.expectEqual(Color.rgb(150, 0, 25), t.pixels[0]);
+    try std.testing.expectEqual(Color.rgb(0, 0, 100), t.pixels[1]);
+}
+
+test "a picture file loads as its preview; anything else is refused" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const ppm = "P6\n2 1\n255\n" ++ "\x0a\x14\x1e" ++ "\xc8\x00\x64";
+    try tmp.dir.writeFile(.{ .sub_path = "p.ppm", .data = ppm });
+    try tmp.dir.writeFile(.{ .sub_path = "n.txt", .data = "not a picture" });
+    const t = try thumb.load(std.testing.allocator, tmp.dir, "p.ppm");
+    defer t.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u32, 2), t.width);
+    try std.testing.expectEqual(Color.rgb(10, 20, 30), t.pixels[0]);
+    try std.testing.expectEqual(Color.rgb(200, 0, 100), t.pixels[1]);
+    try std.testing.expectError(error.Unsupported, thumb.load(std.testing.allocator, tmp.dir, "n.txt"));
+}
+
+test "no preview draws nothing; a preview is centred in its area" {
+    var list = DrawList.init(std.testing.allocator, 200, 200);
+    defer list.deinit();
+    const area = ra8.gui.draw_list.Rect{ .x = 10, .y = 20, .w = 24, .h = 24 };
+    try thumb.draw(&list, area, null);
+    try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
+    var pixels = [_]Color{Color.rgb(1, 2, 3)} ** 8;
+    try thumb.draw(&list, area, .{ .width = 4, .height = 2, .pixels = &pixels });
+    try std.testing.expectEqual(@as(usize, 1), list.commands.items.len);
+    const quad = list.commands.items[0].shape.image;
+    try std.testing.expectEqual(@as(i32, 20), quad.area.x);
+    try std.testing.expectEqual(@as(i32, 31), quad.area.y);
+    try std.testing.expectEqual(@as(u32, 4), quad.image.width);
+}
