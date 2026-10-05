@@ -14,6 +14,7 @@ const cli = @import("cli.zig");
 const Parts = @import("parts.zig").Parts;
 const report = @import("report.zig");
 const zig_run = @import("zig_run.zig");
+const fault_file = @import("fault_file.zig");
 const window_main = @import("window_main.zig");
 const Cpu0 = @import("zig_memory.zig").Cpu0;
 
@@ -43,11 +44,15 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options)
     var point = zig_run.break_sym.resolve(image, options);
     var timed = zig_run.stop_sym.deadline(options);
     var swept = zig_run.undefined_sites.resolve(image, options);
+    var schedule: fault_file.Run = undefined;
+    if (options.faults) |path| schedule.open(&board, path) catch return 2;
+    defer if (options.faults != null) schedule.deinit();
     const ends: zig_run.Ends = .{
         .stop = if (stop) |*watch| watch else null,
         .point = if (point) |*one| one else null,
         .timed = if (timed) |*due| due else null,
         .undefined_sites = if (swept) |*found| found else null,
+        .schedule = if (options.faults != null) &schedule.applier else null,
     };
     if (options.frames.live) return window_main.show(allocator, .{ .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends });
     return zig_run.run(out, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends);

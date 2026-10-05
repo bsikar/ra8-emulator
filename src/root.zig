@@ -6,6 +6,7 @@ pub const core = struct {
     pub const second_core = @import("core/second_core.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");
+    pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
     pub const disasm = @import("debug/disasm.zig");
