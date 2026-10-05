@@ -161,7 +161,7 @@ pub const Cpu = struct {
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
             return self.fetchRefused(address);
-        const fetched = self.fetchDecoded(address) catch return .{ .bus_fault = address };
+        const fetched = self.fetchDecoded(address) catch return self.fetchBusFault(address);
         const instr = fetched.instr;
         if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
             return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
@@ -255,23 +255,24 @@ pub const Cpu = struct {
         return null;
     }
 
-    /// Take a UsageFault the instruction at `address` caused, or stop with
-    /// `otherwise` when it locks up or the frame cannot be stacked.
+    /// Take a UsageFault caused by the current instruction, or stop.
     fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
         exception.fault.usage(self, cause, address) catch return otherwise;
         return null;
     }
 
-    /// Take the MemManage or precise BusFault a refused data access owes
-    /// (exception/bus_fault.zig), or stop on a bus fault when the run records
-    /// no refusals, or when it locks up or cannot stack.
+    /// Take MemManage or BusFault for a refused data access, or stop.
     fn refusedOr(self: *Cpu, address: u32) ?Stop {
         exception.bus_fault.refused(self, address) catch return .{ .bus_fault = address };
         return null;
     }
 
-    /// Take the MemManage a fetch the MPU refused raises; the instruction at
-    /// `address` never runs. Stops on a bus fault when it locks up.
+    /// Take BusFault for a refused fetch when the run records it.
+    fn fetchBusFault(self: *Cpu, address: u32) ?Stop {
+        return exception.bus_fault.instructionOrStop(self, address);
+    }
+
+    /// Take MemManage for an MPU-refused fetch, or stop.
     fn fetchRefused(self: *Cpu, address: u32) ?Stop {
         exception.mem_manage.instruction(self, address) catch return .{ .bus_fault = address };
         return null;
@@ -282,8 +283,7 @@ pub const Cpu = struct {
         return self.regs.faultmask != 0 or exception.fault.inHardFaultOrNmi(self);
     }
 
-    /// Take a SecureFault the instruction at `address` caused, or stop with
-    /// `otherwise` when it locks up or the frame cannot be stacked.
+    /// Take a SecureFault the instruction at `address` caused, or stop.
     /// `sfar` is the address AUVIOL reports; the other causes ignore it.
     fn secureFault(self: *Cpu, cause: exception.secure.Cause, address: u32, sfar: u32, otherwise: Stop) ?Stop {
         exception.secure.raise(self, cause, address, sfar) catch return otherwise;

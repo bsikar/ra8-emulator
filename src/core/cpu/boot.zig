@@ -127,8 +127,8 @@ pub const Wiring = struct {
     peer: ?*cpu_mod.Cpu = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
     itm: ?*@import("../../debug/itm.zig").Itm = null,
-    /// `--bus-errors`: a refused data access raises the precise BusFault,
-    /// counted here (RA8EMU-641); null ends the run on it instead.
+    /// `--bus-errors`: a refused data and fetch accesses raise BusFaults,
+    /// counted here (RA8EMU-641); null ends the run on them instead.
     bus_errors: ?*bus_fault.Tally = null,
     /// `--save-state` / `--load-state` (RA8EMU-660).
     snapshot: ?Snapshot = null,
