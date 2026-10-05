@@ -25,25 +25,37 @@ test "a set IS bit hands that event to CPU1 and no other" {
     try std.testing.expectEqual(intsel.Core.cpu0, bank.coreFor(3));
 }
 
-test "event zero and the per-core events ignore a store" {
+test "only assigned and non-fixed event bits accept stores" {
+    const expected = [_]u32{
+        0xFFFFFFFE, 0x00000001, 0x84C0FFFF, 0x00E33B1F,
+        0xFFFC0FFF, 0xFE5FFBDF, 0x07FFF3FF, 0x00000000,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0xFFFFFFFF, 0x7FBFDFFF, 0xFBFDFEFF, 0x7FFFFFFF,
+        0x00000000, 0x00000000, 0x00000000, 0x00000000,
+        0xFC000000, 0x03FFFFFB, 0xFFFFFFFE, 0xFFFFFFFF,
+        0xFFFFFFFF, 0xFF3FF33F, 0xFFFFFFFF, 0x0002DFDF,
+        0x00FFBF3C, 0x00000000, 0x00000000, 0x00000000,
+    };
     var bank = intsel.Intsel{};
-    for (0..intsel.words) |index| bank.write(intsel.wordAddress(index), 4, 0xFFFF_FFFF);
-    for (intsel.fixed) |event| {
-        try std.testing.expectEqual(intsel.Core.cpu0, bank.coreFor(event));
+    for (0..intsel.words) |index| {
+        bank.write(intsel.wordAddress(index), 4, 0xFFFF_FFFF);
+        try std.testing.expectEqual(expected[index], bank.read(intsel.wordAddress(index), 4));
     }
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFFE), bank.read(intsel.wordAddress(0), 4));
-    try std.testing.expectEqual(@as(u32, 0xE4FF_FFFF), bank.read(intsel.wordAddress(2), 4));
-    try std.testing.expectEqual(@as(u32, 0xFFFF_FFDF), bank.read(intsel.wordAddress(3), 4));
-    try std.testing.expectEqual(intsel.Core.cpu1, bank.coreFor(90));
+    for (intsel.fixed) |event| try std.testing.expectEqual(intsel.Core.cpu0, bank.coreFor(event));
+    for (0..intsel.events) |event| {
+        const assigned = (expected[event / 32] & (@as(u32, 1) << @intCast(event % 32))) != 0;
+        try std.testing.expectEqual(if (assigned) intsel.Core.cpu1 else intsel.Core.cpu0, bank.coreFor(@intCast(event)));
+    }
 }
 
-test "a byte store keeps the lanes it does not name" {
+test "a byte store keeps lanes containing assigned events" {
     var bank = intsel.Intsel{};
     bank.write(intsel.wordAddress(1), 4, 0x0000_00FF);
-    bank.write(intsel.wordAddress(1) + 2, 1, 0x80);
-    try std.testing.expectEqual(@as(u32, 0x0080_00FF), bank.read(intsel.wordAddress(1), 4));
-    try std.testing.expectEqual(@as(u32, 0x80), bank.read(intsel.wordAddress(1) + 2, 1));
-    try std.testing.expectEqual(intsel.Core.cpu1, bank.coreFor(32 + 23));
+    bank.write(intsel.wordAddress(2) + 2, 1, 0x80);
+    try std.testing.expectEqual(@as(u32, 0x0000_0001), bank.read(intsel.wordAddress(1), 4));
+    try std.testing.expectEqual(@as(u32, 0x0080_0000), bank.read(intsel.wordAddress(2), 4));
+    try std.testing.expectEqual(@as(u32, 0x80), bank.read(intsel.wordAddress(2) + 2, 1));
+    try std.testing.expectEqual(intsel.Core.cpu1, bank.coreFor(87));
 }
 
 test "an address outside the bank reads zero and keeps nothing" {

@@ -32,6 +32,21 @@ pub const Core = enum { cpu0, cpu1 };
 /// The event numbers whose IS bit reads zero whatever is written.
 pub const fixed = [_]u16{ 0, 88, 89, 91, 92, 101 };
 
+// One bit for each event named by HUM Rev 1.30 Table 14.5, except for the
+// event 0 and the five per-core events whose INTSELR bits are separately
+// fixed by HUM 14.2.22. A zero means the event number is unassigned and its
+// IS bit is fixed at zero.
+const assigned_writable = [_]u32{
+    0xFFFFFFFE, 0x00000001, 0x84C0FFFF, 0x00E33B1F,
+    0xFFFC0FFF, 0xFE5FFBDF, 0x07FFF3FF, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0xFFFFFFFF, 0x7FBFDFFF, 0xFBFDFEFF, 0x7FFFFFFF,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0xFC000000, 0x03FFFFFB, 0xFFFFFFFE, 0xFFFFFFFF,
+    0xFFFFFFFF, 0xFF3FF33F, 0xFFFFFFFF, 0x0002DFDF,
+    0x00FFBF3C, 0x00000000, 0x00000000, 0x00000000,
+};
+
 pub const Intsel = struct {
     bank: [words]u32 = [_]u32{0} ** words,
 
@@ -75,12 +90,8 @@ pub fn wordAddress(index: usize) u32 {
 
 /// The bits of INTSELRp that keep a store.
 pub fn writable(index: usize) u32 {
-    var mask: u32 = ~@as(u32, 0);
-    for (fixed) |event| {
-        if (event / 32 != index) continue;
-        mask &= ~(@as(u32, 1) << @intCast(event % 32));
-    }
-    return mask;
+    if (index >= words) return 0;
+    return assigned_writable[index];
 }
 
 fn wordAt(address: u32) ?usize {
