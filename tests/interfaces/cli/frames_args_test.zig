@@ -23,3 +23,10 @@ test "frame-on-settle captures to its own directory with a virtual stability win
     try std.testing.expectEqualStrings("settled", parsed.frames.frame_on_settle.?);
     try std.testing.expectEqual(@as(u64, 75_000_000), parsed.frames.settle_window_ns);
 }
+
+test "--gui asks for the run to be shown live" {
+    const defaults = try cli.parse(&.{ "emu", "a.elf" });
+    try std.testing.expect(!defaults.frames.live);
+    const asked = try cli.parse(&.{ "emu", "a.elf", "--gui" });
+    try std.testing.expect(asked.frames.live);
+}
