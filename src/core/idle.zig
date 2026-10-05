@@ -38,9 +38,8 @@
 //! already there is harmless, and a store anywhere else is not, because a
 //! peripheral register can act on a write whose read-back never moves.
 //!
-//! `core` is taken as `anytype` for the reason src/core/run_loop.zig takes
-//! it that way: it keeps this file off the engine's import cycle, and
-//! nothing here touches C.
+//! `core` is taken as `anytype`: it keeps this file off the engine's
+//! import cycle, and nothing here touches C.
 const std = @import("std");
 const fault = @import("fault.zig");
 const board_ram = @import("board_ram.zig");

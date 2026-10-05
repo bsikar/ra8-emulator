@@ -119,8 +119,7 @@ pub const Nvic = struct {
     /// boundaries is a scheduler that never runs.
     standing: standing_pends.Standing = .{},
     /// Returns that went straight into another handler instead of back to
-    /// the interrupted code. See the tail-chain paragraph in
-    /// src/core/run_loop.zig: without this the second exception waits for
+    /// the interrupted code. Without this the second exception waits for
     /// the next run boundary, which is thousands of instructions away.
     chained: u64 = 0,
     /// Returns that landed a thread back on the Process stack. Nonzero means

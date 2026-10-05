@@ -1,7 +1,7 @@
 //! How wide the next stretch is allowed to be.
 //!
 //! Its own file because it is policy over the run loop rather than part of
-//! it: src/core/run_loop.zig decides WHEN a boundary happens and what it
+//! it: the run loop decides WHEN a boundary happens and what it
 //! does, this decides how far apart boundaries are. Three things narrow a
 //! stretch below the configured width, in this order: the SysTick period
 //! the firmware armed, a pend standing unserved (src/core/pend_pace.zig),

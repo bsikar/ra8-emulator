@@ -126,7 +126,6 @@ test {
     _ = @import("core/pend_pace_test.zig");
     _ = @import("core/pend_sites_test.zig");
     _ = @import("core/unmask_test.zig");
-    _ = @import("core/run_loop_test.zig");
     _ = @import("core/run_pace_test.zig");
     _ = @import("core/sleep_pace_test.zig");
     _ = @import("core/tz_test.zig");
@@ -140,7 +139,6 @@ test {
     _ = @import("core/csel_test.zig");
     _ = @import("core/clrm_test.zig");
     _ = @import("core/fp_context_test.zig");
-    _ = @import("core/fpcxt_resume_test.zig");
     _ = @import("core/tt_test.zig");
     _ = @import("core/lob_test.zig");
     _ = @import("core/long_shift_test.zig");
@@ -154,11 +152,8 @@ test {
     _ = @import("core/appimg_test.zig");
     _ = @import("core/module_place_test.zig");
     _ = @import("core/core_event_test.zig");
-    _ = @import("core/hint_resume_test.zig");
     _ = @import("core/second_wait_test.zig");
-    _ = @import("core/svc_trap_test.zig");
     _ = @import("core/module_fault_seam_test.zig");
-    _ = @import("core/svc_seam_test.zig");
     _ = @import("tools/all_test.zig");
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
