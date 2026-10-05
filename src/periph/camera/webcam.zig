@@ -8,6 +8,7 @@ pub const av_info_plist = @import("av_info_plist.zig");
 pub const av_frame = @import("av_frame.zig");
 pub const av_delegate = @import("av_delegate.zig");
 pub const av_objc = @import("av_objc.zig");
+pub const av_session = @import("av_session.zig");
 pub const v4l2 = @import("v4l2_abi.zig");
 pub const negotiate = @import("v4l2_negotiate.zig");
 pub const device = @import("v4l2_device.zig");

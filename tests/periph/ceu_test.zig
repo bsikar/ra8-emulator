@@ -330,6 +330,7 @@ test {
     _ = @import("camera/av_frame_test.zig");
     _ = @import("camera/av_delegate_test.zig");
     _ = @import("camera/av_objc_test.zig");
+    _ = @import("camera/av_session_test.zig");
     _ = @import("camera/v4l2_negotiate_test.zig");
     _ = @import("camera/v4l2_device_test.zig");
     _ = @import("camera/webcam_source_test.zig");
