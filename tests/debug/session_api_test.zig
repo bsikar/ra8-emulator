@@ -13,6 +13,7 @@ const input_script = ra8.periph.i3c_input_script;
 const gt911 = ra8.periph.i3c_gt911;
 const gpio = ra8.periph.gpio;
 const touch_input = ra8.periph.i3c_touch_input;
+const timebase = ra8.periph.clocks.timebase;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.
 const Ram = struct {
@@ -63,6 +64,16 @@ const Events = struct {
     }
 };
 
+const ClockBoard = struct {
+    base: *timebase.TimeBase,
+
+    fn tick(context: *anyopaque, guest: Guest, instructions: u32) anyerror!void {
+        _ = guest;
+        const self: *ClockBoard = @ptrCast(@alignCast(context));
+        self.base.advance(instructions);
+    }
+};
+
 const InputBoard = struct {
     events: *input_script.Script,
     panel: *gt911.Panel,
@@ -77,6 +88,25 @@ const InputBoard = struct {
         self.events.dispatch(self.now_ns, self.panel, self.pins, self.input);
     }
 };
+
+test "session now exposes board virtual nanoseconds across a run" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
+    var session: api.Session = .{ .live = live };
+    var base: timebase.TimeBase = .{};
+    var board = ClockBoard{ .base = &base };
+    var store = try Store.init(null);
+    defer store.deinit();
+    session.attachTimeBase(&base);
+    session.attachBoard(.cpu0, .{ .context = &board, .tickFn = ClockBoard.tick }, .{ .store = &store });
+
+    try std.testing.expectEqual(@as(u64, 0), try session.now());
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(@as(u64, 1), try session.now());
+}
 
 test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, and breakpoints" {
     var memory0 = Ram.init();
