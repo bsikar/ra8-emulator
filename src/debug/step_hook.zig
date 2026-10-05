@@ -29,7 +29,7 @@ pub const watch_link = @import("watch_link.zig");
 /// Re-exported for tests/debug/rtos_trace_test.zig (RA8EMU-222).
 pub const rtos_trace = @import("rtos_trace.zig");
 pub const rtos_stream = @import("rtos_stream.zig");
-/// `--trace-rtos` on a Unicorn run, reached by src/main.zig (RA8EMU-221).
+/// `--trace-rtos`: the tracer and its report (RA8EMU-221).
 pub const rtos_hook = @import("rtos_hook.zig");
 /// Re-exported for tests/interfaces/cli/zig_debug_front_test.zig: src/root.zig is full.
 pub const zig_debug_front = @import("../interfaces/cli/zig_debug_front.zig");
