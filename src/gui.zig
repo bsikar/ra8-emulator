@@ -23,3 +23,4 @@ pub const thread_priority = @import("gui/thread_priority.zig");
 pub const console_log = @import("gui/console_log.zig");
 pub const console_feed = @import("gui/console_feed.zig");
 pub const console_pane = @import("gui/console_pane.zig");
+pub const devices_panel = @import("gui/devices_panel.zig");
