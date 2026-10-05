@@ -60,6 +60,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
     loop.pane.seed(camera);
+    loop.console = &logs[sci.console_channel];
     var host_devices: ?std.fs.Dir = std.fs.openDirAbsolute(camera_devices.host_dir, .{ .iterate = true }) catch null;
     defer if (host_devices) |*dir| dir.close();
     if (host_devices) |dir| loop.useDeviceDir(dir);

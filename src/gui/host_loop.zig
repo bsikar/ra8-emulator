@@ -14,6 +14,8 @@ const raster = @import("raster.zig");
 const font = @import("font.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
+const console_pane = @import("console_pane.zig");
+const console_log = @import("console_log.zig");
 const camera_view = @import("camera_view.zig");
 const camera_media = @import("camera_media.zig");
 const camera_thumb = @import("camera_thumb.zig");
@@ -93,6 +95,8 @@ pub const Loop = struct {
     thumb_of: []const u8 = "",
     /// Where Always for this project is kept; null keeps it for this run.
     project: ?std.fs.Dir = null,
+    /// The console the pane under the board shows; null shows none.
+    console: ?*const console_log.Log = null,
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
@@ -240,6 +244,7 @@ pub const Loop = struct {
         try list.image(area, .{ .width = view.width, .height = view.height, .pixels = self.pixels });
         try self.pane.draw(&list);
         try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
+        if (self.console) |log| try console_pane.draw(&list, console_pane.under(view.width, view.height, size.height), log);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);
     }
