@@ -92,7 +92,7 @@ ZIG
 "$zig" ld.lld --gc-sections -T link.ld itm.o -o itm.elf
 image=fw.elf
 
-cpu=${CPU:-unicorn}
+cpu=${CPU:-zig}
 cpu_args=(--cpu "$cpu")
 port=$((20000 + RANDOM % 20000))
 failed=0

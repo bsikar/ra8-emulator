@@ -16,8 +16,7 @@
 # without --fault must not move. bus_low holds the touch line low, which the
 # I3C model shows as a bus that never reads free (RA8EMU-537).
 #
-# CPU is the backend (zig, the default, or unicorn); both are expected to
-# give the same rows. Exits 1 on any difference. Update the expected file in
+# CPU is the backend, zig by default. Exits 1 on any difference. Update the expected file in
 # the same PR as a change that means to move a row.
 
 set -euo pipefail
