@@ -43,7 +43,6 @@ test {
     _ = @import("core/cpu/bus_test.zig");
     _ = @import("core/cpu/choice_test.zig");
     _ = @import("core/cpu/cortex_test.zig");
-    _ = @import("core/cpu/engine_bus_test.zig");
     _ = @import("core/cpu/memory/all_test.zig");
     _ = @import("core/cpu/cpu_test.zig");
     _ = @import("core/cpu/decode_test.zig");

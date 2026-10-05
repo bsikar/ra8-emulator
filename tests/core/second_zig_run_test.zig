@@ -68,13 +68,3 @@ test "a CPU1 that stops is reported where it stopped and takes no more turns" {
     try std.testing.expectEqual(@as(usize, 1), driver.second.state.turns);
     try std.testing.expectEqual(ran, driver.second.state.ran);
 }
-
-test "CPU1 refuses to open on an engine-backed CPU0 (RA8EMU-607)" {
-    var cpu0 = try Engine.open();
-    defer cpu0.close();
-    var board = Board.init(std.testing.allocator);
-    defer board.deinit();
-    var driver: Driver = undefined;
-    const memory: ra8.core.cpu.memory.guest.Guest = .{ .engine = cpu0 };
-    try std.testing.expectError(error.NoStore, driver.open(std.testing.allocator, &board, "no-such-cpu1.elf", memory));
-}

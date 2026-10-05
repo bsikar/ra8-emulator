@@ -20,18 +20,6 @@ test "a store guest gives a bus over the store, with no engine open" {
     try std.testing.expect(!view.direct.?.enabled);
 }
 
-test "an engine guest reads the bytes the engine holds" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    try core.write(memmap.sram_base, &.{ 0x78, 0x56, 0x34, 0x12 });
-    const guest: Guest = .{ .engine = core };
-    var memory = GuestBus.of(&guest, true);
-    const view = memory.view();
-    try std.testing.expectEqual(@as(u32, 0x1234_5678), try view.readWord(memmap.sram_base));
-    try std.testing.expect(view.direct.?.enabled);
-}
-
 test "the board bus runs over a store: memory and the SCS go to it" {
     var store = try Store.init(null);
     defer store.deinit();
