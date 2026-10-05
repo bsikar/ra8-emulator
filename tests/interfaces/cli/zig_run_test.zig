@@ -110,6 +110,7 @@ test {
     _ = @import("idle_skip_equiv_test.zig");
     _ = @import("soak_done_test.zig");
     _ = @import("soak_canary_test.zig");
+    _ = @import("threadx_stkof_test.zig");
 }
 
 test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-603)" {
