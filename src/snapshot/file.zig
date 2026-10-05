@@ -39,6 +39,8 @@ pub const Kind = enum(u32) {
     security = 12,
     /// The fixed-size memory controllers (RA8EMU-672).
     controllers = 13,
+    /// The option MRAM and the xSPI flash with their sparse contents (RA8EMU-674).
+    storage = 14,
     _,
 };
 
