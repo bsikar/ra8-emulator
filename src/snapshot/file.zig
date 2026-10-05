@@ -55,6 +55,8 @@ pub const Kind = enum(u32) {
     usb = 20,
     /// The Ethernet switch (RA8EMU-683).
     rswitch = 21,
+    /// The NPU (RA8EMU-685).
+    npu = 22,
     _,
 };
 
