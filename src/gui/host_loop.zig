@@ -16,6 +16,7 @@ const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const console_pane = @import("console_pane.zig");
 const console_log = @import("console_log.zig");
+const console_scroll = @import("console_scroll.zig");
 const camera_view = @import("camera_view.zig");
 const camera_media = @import("camera_media.zig");
 const camera_thumb = @import("camera_thumb.zig");
@@ -73,6 +74,12 @@ pub fn paneLayout(view: board_view.Size) camera_view.Layout {
     return .{ .x = @intCast(view.width + camera_view.gap), .y = @intCast(board_view.margin) };
 }
 
+/// The strip under the board view the console pane draws into.
+pub fn consoleArea(window: platform.Platform, board: Board) draw_list.Rect {
+    const view = board_view.size(board.width, board.height);
+    return console_pane.under(view.width, view.height, window.size().height);
+}
+
 pub const Loop = struct {
     allocator: std.mem.Allocator,
     pane: camera_pane.Pane = .{ .layout = .{ .x = 0, .y = 0 } },
@@ -104,6 +111,9 @@ pub const Loop = struct {
     /// post its clicks queue on; null shows no pane.
     plugs: ?*devices_panel.Panel = null,
     posted: ?*plug_post.PlugPost = null,
+    scroll: console_scroll.Scroll = .{},
+    /// Where the pointer was last seen, so a wheel over the console scrolls it.
+    pointer: struct { x: i32, y: i32 } = .{ .x = -1, .y = -1 },
     quit: bool = false,
 
     pub fn deinit(self: *Loop) void {
@@ -247,6 +257,8 @@ pub const Loop = struct {
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
+                .pointer => |at| self.pointer = .{ .x = at.x, .y = at.y },
+                .wheel => |turn| self.wheel(turn.dy, consoleArea(window, before)),
                 else => if (!self.pane.handle(event)) self.clickDevices(event, window.size()),
             }
         }
@@ -262,8 +274,14 @@ pub const Loop = struct {
             } else self.pane.settle(self.allocator, camera.source, camera.format_control);
         }
         const running = run.vtable.step(run.ctx);
+        if (self.console) |log| self.scroll.follow(log);
         try self.draw(window, run.vtable.board(run.ctx));
         return running;
+    }
+
+    fn wheel(self: *Loop, dy: f32, area: draw_list.Rect) void {
+        const log = self.console orelse return;
+        if (area.contains(self.pointer.x, self.pointer.y)) self.scroll.wheel(dy, log);
     }
 
     /// A project that will not take the marker asks again next run.
@@ -287,7 +305,7 @@ pub const Loop = struct {
         try self.pane.draw(&list);
         try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
         if (self.plugs) |panel| try devices_pane.draw(&list, self.devicesArea(size), panel.*);
-        if (self.console) |log| try console_pane.draw(&list, console_pane.under(view.width, view.height, size.height), log);
+        if (self.console) |log| try console_pane.draw(&list, consoleArea(window, board), log, self.scroll.back);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);
     }
