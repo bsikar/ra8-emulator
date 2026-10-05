@@ -120,6 +120,7 @@ pub const board = struct {
     pub const usb = @import("board/usb.zig");
     pub const usb_disk = @import("board/usb_disk.zig");
     pub const usb_plug = @import("board/usb_plug.zig");
+    pub const session_faults = @import("board/session_faults.zig");
     pub const report = @import("interfaces/cli/report.zig");
     pub const window_board = @import("interfaces/cli/window_board.zig");
     pub const window_pace = @import("interfaces/cli/window_pace.zig");
