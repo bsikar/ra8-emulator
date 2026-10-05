@@ -275,10 +275,9 @@ pub fn writable(address: u32, len: usize) bool {
         within(address, len, memmap.ns_sram_base, memmap.ns_sram_end);
 }
 
-/// RAM, code flash and the ITCM: what a trip may read and see the same next time.
+/// RAM and code flash: what a trip may read and see the same next time.
 pub fn readable(address: u32, len: usize) bool {
     return writable(address, len) or
-        within(address, len, memmap.itcm_base, memmap.itcm_end) or
         within(address, len, memmap.mram_base, memmap.mram_end) or
         within(address, len, memmap.ns_mram_base, memmap.ns_mram_end);
 }

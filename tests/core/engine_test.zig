@@ -85,12 +85,11 @@ test "an engine opens, maps the board, and reads back what it wrote" {
     try std.testing.expectEqual(memmap.sram_base + 0x100, try engine.register(.sp));
 }
 
-test "the M85 ITCM at zero is mapped for startup code copies" {
+test "address zero is not mapped, so a startup copy from it is refused" {
     var engine = try Engine.open();
     defer engine.close();
     try engine.mapBoardRam();
-    try engine.writeWord(memmap.itcm_base, 0xC0DE_4260);
-    try std.testing.expectEqual(@as(u32, 0xC0DE_4260), try engine.readWord(memmap.itcm_base));
+    if (engine.readWord(memmap.itcm_base)) |_| return error.TestUnexpectedResult else |_| {}
 }
 
 test "a copied Thumb image runs from SRAM after its loaded reset vector" {

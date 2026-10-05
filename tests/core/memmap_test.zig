@@ -21,10 +21,10 @@ test "every named PPB register falls inside the PPB window" {
     }
 }
 
-test "the M85 ITCM at zero spans the 64 KiB linked by the board" {
+test "the M85 ITCM window spans the 64 KiB linked by the board and is not mapped" {
     try std.testing.expectEqual(@as(u32, 0), mod.itcm_base);
     try std.testing.expectEqual(@as(u32, 0x1_0000), mod.itcm_end - mod.itcm_base);
-    try std.testing.expect(mod.debugHolds(mod.itcm_base, 4));
+    try std.testing.expect(!mod.debugHolds(mod.itcm_base, 4));
     try std.testing.expect(!masterHolds(mod.itcm_base, 4));
 }
 
@@ -150,8 +150,8 @@ test "the code MRAM region is the part map's 1 MB at its base" {
     const geometry = ra8.core.part.map.of(.ra8d2);
     try std.testing.expectEqual(geometry.mram_base, mod.mram_base);
     try std.testing.expectEqual(geometry.mram_bytes, mod.mram_end - mod.mram_base);
-    try std.testing.expectEqualStrings("ITCM", ram[0].name);
-    try std.testing.expectEqualStrings("MRAM", ram[1].name);
+    try std.testing.expectEqualStrings("MRAM", ram[0].name);
+    for (ram) |region| try std.testing.expect(region.base != mod.itcm_base);
 }
 
 test "the Non-secure MRAM view is code MRAM one IDAU bit up (RA8EMU-412)" {

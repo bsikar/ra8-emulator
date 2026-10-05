@@ -54,8 +54,11 @@ pub const Region = struct {
     }
 };
 
-/// M85 instruction tightly coupled memory (HUM 2.1.1). Firmware linker scripts
-/// place ITCM at zero, so the startup copy used by dfu_copy_to_run reads here.
+/// M85 instruction tightly coupled memory (HUM 2.1.1), where the firmware
+/// linker scripts place it. NOT MAPPED: on the EK-RA8D2 a data read at 0 takes
+/// a precise BusFault (BFAR 0, RA8EMU-495), so an access here is refused and
+/// raises the same fault. No firmware places code or data in it. The startup
+/// copy that read here (RA8EMU-426) was the empty-.sram_text bug, RA8FW-549.
 pub const itcm_base: u32 = 0x0000_0000;
 pub const itcm_end: u32 = itcm_base + 0x0001_0000;
 
@@ -129,7 +132,6 @@ pub const ppb_size: u32 = 0x0010_0000;
 
 /// RAM and flash-like regions the loader maps before an image is streamed in.
 pub const ram = [_]Region{
-    .{ .name = "ITCM", .base = itcm_base, .size = itcm_end - itcm_base, .perms = .{} },
     .{ .name = "MRAM", .base = mram_base, .size = mram_end - mram_base, .perms = .{} },
     .{ .name = "NS MRAM", .base = ns_mram_base, .size = ns_mram_end - ns_mram_base, .perms = .{} },
     .{ .name = "DTCM", .base = dtcm_base, .size = dtcm_end - dtcm_base, .perms = .{} },
@@ -279,7 +281,6 @@ pub const master_ram = [_]Window{
 /// so the `master_ram` exclusions do not apply to it. The peripheral window
 /// is still not here: registers are not somewhere a log ring lives.
 pub const debug_ram = [_]Window{
-    .{ .base = itcm_base, .end = itcm_end },
     .{ .base = dtcm_base, .end = dtcm_end },
     .{ .base = sram_base, .end = sram_end },
     .{ .base = ns_sram_base, .end = ns_sram_end },
