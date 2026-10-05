@@ -31,8 +31,9 @@ test "no files draws nothing; the chosen file is ringed" {
     try row.draw(&list, at, &.{}, "", view.camera_off);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
     try row.draw(&list, at, &names, "", view.camera_off);
-    try std.testing.expectEqual(@as(usize, 3), list.commands.items.len);
+    // Background, two slots, and the stems "a" and "b".
+    try std.testing.expectEqual(@as(usize, 5), list.commands.items.len);
     list.commands.clearRetainingCapacity();
     try row.draw(&list, at, &names, "b.png", view.camera_off);
-    try std.testing.expectEqual(@as(usize, 4), list.commands.items.len);
+    try std.testing.expectEqual(@as(usize, 6), list.commands.items.len);
 }

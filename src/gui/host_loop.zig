@@ -11,6 +11,7 @@
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const raster = @import("raster.zig");
+const font = @import("font.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const camera_view = @import("camera_view.zig");
@@ -230,7 +231,7 @@ pub const Loop = struct {
         try list.image(area, .{ .width = view.width, .height = view.height, .pixels = self.pixels });
         try self.pane.draw(&list);
         try camera_thumb.draw(&list, self.thumbArea(), self.thumb);
-        raster.draw(frame, &list, null);
+        raster.draw(frame, &list, font.atlas);
         try window.present(frame);
     }
 

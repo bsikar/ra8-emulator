@@ -11,8 +11,21 @@ const Rect = draw_list.Rect;
 
 const layout = view.Layout{ .x = 10, .y = 20 };
 
+/// A corner just inside a button: its colour, clear of the centred label.
 fn centre(at: Rect) [2]i32 {
-    return .{ at.x + @divTrunc(at.w, 2), at.y + @divTrunc(at.h, 2) };
+    return .{ at.x + 1, at.y + 1 };
+}
+
+fn inked(frame: *const raster.Framebuffer, at: Rect, ink: draw_list.Color) usize {
+    var count: usize = 0;
+    var y = at.y;
+    while (y < at.y + at.h) : (y += 1) {
+        var x = at.x;
+        while (x < at.x + at.w) : (x += 1) {
+            if (std.meta.eql(frame.at(@intCast(x), @intCast(y)), ink)) count += 1;
+        }
+    }
+    return count;
 }
 
 fn render(panel: Panel) !raster.Framebuffer {
@@ -20,7 +33,7 @@ fn render(panel: Panel) !raster.Framebuffer {
     defer list.deinit();
     try view.draw(&list, layout, panel);
     var frame = try raster.Framebuffer.init(std.testing.allocator, 256, 128);
-    raster.draw(&frame, &list, null);
+    raster.draw(&frame, &list, ra8.gui.font.atlas);
     return frame;
 }
 
@@ -93,4 +106,23 @@ test "the dialog row does nothing while closed and clicks outside are not taken"
     try std.testing.expectEqual(.gradient, panel.active);
     try std.testing.expect(!view.click(&panel, layout, 0, 0));
     try std.testing.expect(!view.click(&panel, layout, 250, 120));
+}
+
+test "every source and dialog button carries a label in ink that reads on it" {
+    var frame = try render(.{ .asking = true });
+    defer frame.deinit(std.testing.allocator);
+    for (std.enums.values(ra8.gui.camera_panel.Kind)) |kind| {
+        const ink = view.inkOn(view.colorOf(kind));
+        try std.testing.expect(!std.meta.eql(ink, view.colorOf(kind)));
+        try std.testing.expect(inked(&frame, layout.source(kind), ink) > 10);
+        try std.testing.expect(view.labelOf(kind).len <= 3);
+    }
+    for (std.enums.values(ra8.gui.camera_panel.Answer)) |reply| {
+        try std.testing.expect(inked(&frame, layout.dialog(reply), view.inkOn(view.answerColor(reply))) > 5);
+    }
+}
+
+test "label ink is dark on light fills and light on dark ones" {
+    try std.testing.expectEqual(view.background, view.inkOn(draw_list.Color.rgb(0xEB, 0xCB, 0x8B)));
+    try std.testing.expectEqual(view.ring, view.inkOn(view.camera_off));
 }
