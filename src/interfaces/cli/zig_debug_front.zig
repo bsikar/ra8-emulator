@@ -28,6 +28,7 @@ const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
 const rsp_poll = @import("../../debug/rsp_poll.zig");
 const second_core = @import("../../core/second_core.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
+const exclusive_peer = @import("../../core/cpu/exclusive_peer.zig");
 const Cpu0 = @import("zig_memory.zig").Cpu0;
 
 const LoaderState = struct {
@@ -124,6 +125,7 @@ const Other = struct {
     driver: step_hook.Driver = undefined,
     watching: watch_bus.WatchBus = undefined,
     bytes: []u8 = &.{},
+    paired: ?*cpu_mod.Cpu = null,
 
     fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, cpu0: Guest, board: *Board, path: []const u8, target: *zig_script.ZigScript, loading: *LoaderState) !void {
         self.bytes = try std.fs.cwd().readFileAlloc(allocator, path, second_core.limits.image_bytes);
@@ -133,6 +135,9 @@ const Other = struct {
         self.driver = .{ .machine = &self.machine };
         self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };
         pair.core.cpu.bus = self.watching.view();
+        // Pair the monitors on the buses the cores hold now, watch buses included.
+        exclusive_peer.pair(loading.cpu0, &pair.core.cpu);
+        self.paired = loading.cpu0;
         target.session.live.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = target.session.live.budget };
         loading.cpu1 = &pair.core.cpu;
         loading.memory1 = pair.guest();
@@ -142,6 +147,7 @@ const Other = struct {
     }
 
     fn close(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver) void {
+        if (self.paired) |cpu0| exclusive_peer.unpair(cpu0, &pair.core.cpu);
         pair.close();
         allocator.free(self.bytes);
     }
