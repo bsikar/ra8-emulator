@@ -17,6 +17,8 @@ pub const Kind = enum(u32) {
     memory = 1,
     /// One core's architectural state (RA8EMU-658).
     cpu = 2,
+    /// The virtual time base and its event queue (RA8EMU-661).
+    time = 3,
     _,
 };
 
