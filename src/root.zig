@@ -125,6 +125,7 @@ pub const board = struct {
     pub const usb_disk = @import("board/usb_disk.zig");
     pub const usb_plug = @import("board/usb_plug.zig");
     pub const report = @import("interfaces/cli/report.zig");
+    pub const window_board = @import("interfaces/cli/window_board.zig");
     pub const report_dma = @import("interfaces/cli/report/dma.zig");
     pub const report_unmodelled = @import("interfaces/cli/report/unmodelled.zig");
     pub const report_watchdog = @import("interfaces/cli/report/watchdog.zig");
