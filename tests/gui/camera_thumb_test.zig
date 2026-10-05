@@ -57,3 +57,20 @@ test "no preview draws nothing; a preview is centred in its area" {
     try std.testing.expectEqual(@as(i32, 31), quad.area.y);
     try std.testing.expectEqual(@as(u32, 4), quad.image.width);
 }
+
+test "a clip previews as its first frame; a cut-short clip is refused" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const header = "YUV4MPEG2 W2 H1 F25:1 Cmono\n";
+    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = header ++ "FRAME\n\x10\xeb" ++ "FRAME\n\xeb\x10" });
+    try tmp.dir.writeFile(.{ .sub_path = "short.y4m", .data = header ++ "FRAME\n\x10" });
+    try tmp.dir.writeFile(.{ .sub_path = "bad.y4m", .data = header ++ "JUNK\n\x10\xeb" });
+    const t = try thumb.load(std.testing.allocator, tmp.dir, "c.y4m");
+    defer t.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u32, 2), t.width);
+    try std.testing.expectEqual(@as(u32, 1), t.height);
+    try std.testing.expectEqual(Color.rgb(0, 0, 0), t.pixels[0]);
+    try std.testing.expectEqual(Color.rgb(255, 255, 255), t.pixels[1]);
+    try std.testing.expectError(error.Truncated, thumb.load(std.testing.allocator, tmp.dir, "short.y4m"));
+    try std.testing.expectError(error.BadHeader, thumb.load(std.testing.allocator, tmp.dir, "bad.y4m"));
+}

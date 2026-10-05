@@ -79,7 +79,7 @@ pub const Loop = struct {
     /// Where the project's pictures and clips are listed again each time
     /// the image or video source comes up; null offers none.
     media_dir: ?std.fs.Dir = null,
-    /// The chosen picture's preview and the name it was read from; the
+    /// The chosen picture's or clip's preview and the name it was read from; the
     /// name points into a listing, which outlives the loop's frames.
     thumb: ?camera_thumb.Thumb = null,
     thumb_of: []const u8 = "",
@@ -154,10 +154,14 @@ pub const Loop = struct {
         self.adoptMedia(found);
     }
 
-    /// Reads the preview again when the chosen picture changed; any other
-    /// source, no pick, or a file that will not decode shows none.
+    /// Reads the preview again when the chosen picture or clip changed; any
+    /// other source, no pick, or a file that will not decode shows none.
     fn refreshThumb(self: *Loop) void {
-        const wanted = if (self.pane.panel.active == .image) self.pane.args.image else "";
+        const wanted = switch (self.pane.panel.active) {
+            .image => self.pane.args.image,
+            .video => self.pane.args.video,
+            else => "",
+        };
         if (std.mem.eql(u8, wanted, self.thumb_of)) return;
         if (self.thumb) |thumb| thumb.deinit(self.allocator);
         self.thumb = null;
