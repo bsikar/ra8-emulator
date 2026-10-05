@@ -9,13 +9,26 @@ const symbols = @import("../../debug/symbols.zig");
 const Stop = @import("../../core/stop.zig").Stop;
 const Deadline = @import("../../core/deadline.zig").Deadline;
 const cli = @import("cli.zig");
+const dumps = @import("report/dumps.zig");
 
 /// The watched counter, or null. A name the image does not carry is
 /// reported and the run goes to its instruction budget instead: a missing
 /// symbol is the suite's verdict to make, not a reason to refuse the run.
+///
+/// With `--ns`, a name the main image lacks is looked up in the Non-secure
+/// image too, as `--dump-sym` does (RA8EMU-651): a TrustZone build keeps its
+/// heartbeat counters on the Non-secure side.
 pub fn resolve(image: elf.Image, options: cli.Options) ?Stop {
     const name = options.stop_symbol orelse return null;
-    const address = symbols.addressOf(image, name) orelse {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var images: [2]elf.Image = .{ image, undefined };
+    var count: usize = 1;
+    if (dumps.nonSecure(arena.allocator(), options) catch null) |second| {
+        images[1] = second;
+        count = 2;
+    }
+    const address = symbols.addressInAny(images[0..count], name) orelse {
         std.debug.print("--stop-sym {s} not found in symbol table\n", .{name});
         return null;
     };
