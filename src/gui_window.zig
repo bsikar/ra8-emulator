@@ -8,13 +8,18 @@ const sdl = @import("gui_sdl");
 
 const Platform = ra8.gui.platform.Platform;
 
+/// Tall enough for the board view (696 px) and about twenty console rows
+/// under it (RA8EMU-206).
+const width: u32 = 1280;
+const height: u32 = 860;
+
 /// The one window a run opens, alive from open until close.
 var backend: ?sdl.Sdl = null;
 
 pub const opener: ra8.board.window_main.Opener = .{ .open = open, .close = close };
 
 fn open() ?Platform {
-    backend = sdl.Sdl.init("ra8 emulator", 1280, 720) catch return null;
+    backend = sdl.Sdl.init("ra8 emulator", width, height) catch return null;
     if (backend) |*window| return window.platform();
     return null;
 }

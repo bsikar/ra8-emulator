@@ -1,0 +1,64 @@
+//! The console pane (RA8EMU-206): one channel's log drawn as the newest
+//! lines that fit, oldest at the top, each stamped with the virtual time it
+//! ended at, and the line still being printed last without a stamp. It sits
+//! under the board view; when the window leaves no room for a row there it
+//! draws nothing. Read-only: it draws what console_log.Log holds.
+const std = @import("std");
+const draw_list = @import("draw_list.zig");
+const font = @import("font.zig");
+const console_log = @import("console_log.zig");
+
+const Color = draw_list.Color;
+const Rect = draw_list.Rect;
+
+pub const panel = Color.rgb(0x21, 0x25, 0x2B);
+pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
+pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
+/// Space round the text inside the pane, and between it and the board.
+pub const pad: i32 = 4;
+/// Characters a time stamp takes: "[   1.000000000] ".
+pub const stamp_len: usize = 17;
+
+/// The strip under a board view `view_w` x `view_h` in a window
+/// `window_h` high.
+pub fn under(view_w: u32, view_h: u32, window_h: u32) Rect {
+    const top: i32 = @as(i32, @intCast(view_h)) + pad;
+    return .{ .x = 0, .y = top, .w = @intCast(view_w), .h = @max(@as(i32, @intCast(window_h)) - top, 0) };
+}
+
+/// How many text rows fit in `area`.
+pub fn rows(area: Rect) usize {
+    const inner = area.h - 2 * pad;
+    if (inner < font.glyph_h) return 0;
+    return @intCast(@divTrunc(inner, @as(i32, @intCast(font.cell_h))));
+}
+
+pub fn draw(list: *draw_list.DrawList, area: Rect, log: *const console_log.Log) !void {
+    const count = rows(area);
+    if (count == 0) return;
+    try list.fill(area, panel);
+    try list.pushClip(area);
+    defer list.popClip();
+    const partial = log.partial();
+    const room = count - @intFromBool(partial.len > 0);
+    const lines = log.lines();
+    const first = lines.len -| room;
+    const width: u32 = @intCast(@max(area.w - 2 * pad, 0));
+    const x = area.x + pad;
+    var y = area.y + pad;
+    for (lines[first..]) |entry| {
+        try drawEntry(list, x, y, width, entry);
+        y += @intCast(font.cell_h);
+    }
+    if (partial.len > 0) try font.draw(list, x + @as(i32, @intCast(font.textWidth(stamp_len))), y, font.fit(partial, width -| font.textWidth(stamp_len)), ink);
+}
+
+fn drawEntry(list: *draw_list.DrawList, x: i32, y: i32, width: u32, entry: console_log.Entry) !void {
+    var buffer: [stamp_len + 8]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buffer);
+    console_log.stamp(stream.writer(), entry.at_ns) catch {};
+    const stamp = stream.getWritten();
+    try font.draw(list, x, y, font.fit(stamp, width), muted);
+    const left = font.textWidth(stamp.len);
+    try font.draw(list, x + @as(i32, @intCast(left)), y, font.fit(entry.text, width -| left), ink);
+}
