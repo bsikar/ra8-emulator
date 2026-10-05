@@ -271,3 +271,31 @@ fn firmwareReport(panel: *gt911.Panel) ?gt911.Contact {
     panel.write(0);
     return .{ .x = @as(u16, record[2]) << 8 | record[1], .y = @as(u16, record[4]) << 8 | record[3] };
 }
+
+const SpeedLog = struct {
+    milli: [4]u64 = undefined,
+    count: usize = 0,
+
+    fn set(context: *anyopaque, milli: u64) anyerror!void {
+        const self: *SpeedLog = @ptrCast(@alignCast(context));
+        self.milli[self.count] = milli;
+        self.count += 1;
+    }
+};
+
+test "a speed change reaches the attached hook in thousandths; a refused one reaches nothing" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var session: api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    try session.setSpeed(.cpu0, 2);
+    var log: SpeedLog = .{};
+    session.speed = .{ .context = &log, .setFn = SpeedLog.set };
+    try session.setSpeed(.cpu0, 0.25);
+    try session.setSpeed(.cpu0, 5);
+    try std.testing.expectError(error.InvalidSpeed, session.setSpeed(.cpu0, 0));
+    try std.testing.expectError(error.InvalidSpeed, session.setSpeed(.cpu0, 2_000_000));
+    try std.testing.expectEqualSlices(u64, &.{ 250, 5000 }, log.milli[0..log.count]);
+    try std.testing.expectEqual(@as(u64, 5_000_000), session.live.budget);
+}

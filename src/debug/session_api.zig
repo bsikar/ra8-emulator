@@ -21,6 +21,7 @@ const fault_spec = @import("../periph/model/fault_spec.zig");
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
+const session_speed = @import("session_speed.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, TooManyListeners };
@@ -52,6 +53,7 @@ pub const PlugHook = struct {
 };
 pub const Endpoint = endpoint.Endpoint;
 pub const FaultMode = fault_spec.Mode;
+pub const SpeedHook = session_speed.Hook;
 
 pub const Event = struct {
     core: Core,
@@ -81,6 +83,7 @@ pub const Session = struct {
     display: ?session_display.Display = null,
     faults: ?FaultHook = null,
     plugs: ?PlugHook = null,
+    speed: ?SpeedHook = null,
     widget_tree_addresses: [2]?u32 = .{ null, null },
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
@@ -252,12 +255,12 @@ pub const Session = struct {
         self.publish(.{ .core = core, .kind = .paused });
     }
 
-    /// Scale the default run rate for this core (1 is the default speed).
+    /// Scale this core's run rate (1 is the default) and, with a speed hook,
+    /// the pacer; the range is --speed's (session_speed.zig).
     pub fn setSpeed(self: *Session, core: Core, factor: f64) anyerror!void {
-        if (!(factor > 0) or factor > 1.0e12) return error.InvalidSpeed;
-        const scaled = @as(f64, @floatFromInt(debug_session.limits.default_budget)) * factor;
-        if (scaled > @as(f64, @floatFromInt(std.math.maxInt(u64)))) return error.InvalidSpeed;
-        try self.setRunBudget(core, @intFromFloat(@max(scaled, 1)));
+        const change = try session_speed.Change.of(factor, debug_session.limits.default_budget);
+        try self.setRunBudget(core, change.budget);
+        if (self.speed) |hook| try hook.setFn(hook.context, change.milli);
         self.publish(.{ .core = core, .kind = .speed_changed });
     }
 
