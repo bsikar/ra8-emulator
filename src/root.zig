@@ -87,6 +87,7 @@ pub const core = struct {
     pub const cpu = struct {
         pub const boot = @import("core/cpu/boot.zig");
         pub const bus = @import("core/cpu/bus.zig");
+        pub const exclusive_peer = @import("core/cpu/exclusive_peer.zig");
         pub const choice = @import("core/cpu/choice.zig");
         pub const cortex = @import("core/cpu/cortex.zig");
         pub const board_bus = @import("core/cpu/board_bus.zig");

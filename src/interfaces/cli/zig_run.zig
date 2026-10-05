@@ -205,8 +205,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
-    const path = if (options.cpu == .zig) options.cpu1_path else null;
-    if (path) |named| {
+    if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
         if (!openSecond(&pair, board, named, memory, options.blocks)) return 1;
         clock.cpu1 = &pair;
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
@@ -249,6 +248,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .itm = if (options.console) &itm_port else null,
         .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
         .snapshot = zig_snapshot.hook(&clock),
+        .peer = if (clock.cpu1) |second| &second.core.cpu else null,
     });
     if (options.console) try itm_port.flush(out, true);
     clock.soakFaults();

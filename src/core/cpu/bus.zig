@@ -7,6 +7,7 @@ const std = @import("std");
 const memmap = @import("../memmap.zig");
 const Gate = @import("data_gate.zig").Gate;
 const code_lines = @import("code_lines.zig");
+const Peer = @import("exclusive_peer.zig").Peer;
 const bus_fault = @import("../../periph/bus_fault.zig");
 
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
@@ -71,6 +72,9 @@ pub const Bus = struct {
     miss: ?*u32 = null,
     /// Counts the BusFaults those refusals raised, for the run report.
     tally: ?*bus_fault.Tally = null,
+    /// The other core's exclusive monitor, cleared by a store into the word
+    /// it tagged; null on a single-core run (RA8EMU-134).
+    peer: ?Peer = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
@@ -101,6 +105,7 @@ pub const Bus = struct {
     pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
         if (self.gate) |gate| if (gate.refuses(address, bytes.len)) return error.SecurityViolation;
         code_lines.notify(address, bytes.len);
+        if (self.peer) |other| other.stored(address, bytes.len);
         if (bytes.len != 0) if (self.direct) |memory| {
             if (memory.enabled and memory.write(address, bytes)) return;
         };

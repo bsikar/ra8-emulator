@@ -28,6 +28,7 @@ const fault_status = @import("../../periph/fault_status.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
 const Bus = @import("bus.zig").Bus;
 const code_lines = @import("code_lines.zig");
+const exclusive_peer = @import("exclusive_peer.zig");
 const FpState = @import("fpu/state.zig").State;
 const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
@@ -121,6 +122,9 @@ pub const Wiring = struct {
     /// Filled with the core's registers as the run left them, for the
     /// `--report json` register dump (RA8EMU-579).
     final: ?*Regs = null,
+    /// CPU1's core: each core's stores clear the other's exclusive monitor
+    /// (RA8EMU-134). Null on a single-core run.
+    peer: ?*cpu_mod.Cpu = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
     itm: ?*@import("../../debug/itm.zig").Itm = null,
     /// `--bus-errors`: a refused data access raises the precise BusFault,
@@ -156,12 +160,12 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot }, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot, .peer = wiring.peer }, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
 /// What the core reports to, per instruction: after it retires and before
 /// it is fetched.
-const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null };
+const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null, peer: ?*cpu_mod.Cpu = null };
 
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
@@ -172,6 +176,8 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     else
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     pending.banked = &cpu.banked;
+    if (watch.peer) |other| exclusive_peer.pair(&cpu, other);
+    defer if (watch.peer) |other| exclusive_peer.unpair(&cpu, other);
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
     const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
