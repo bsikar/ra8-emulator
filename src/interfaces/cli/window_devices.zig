@@ -6,12 +6,20 @@
 //! the touch line when `click` is set, then each `--attach`. The session's
 //! plug hook is the post (plug_post.zig), so a click only queues; `park`
 //! applies the queue through the board's own hook.
+//!
+//! A speed change (RA8EMU-184) waits for the park the same way, in the
+//! speed post, and lands on the board's pacing there. It is taken by
+//! `setSpeed` rather than Session.setSpeed: this session drives no core,
+//! so it has no run budget to scale.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const session_plug = @import("../../board/session_plug.zig");
 const session_api = @import("../../debug/session_api.zig");
 const devices_panel = @import("../../gui/devices_panel.zig");
 const plug_post = @import("../../gui/plug_post.zig");
+const speed_post = @import("../../gui/speed_post.zig");
+const session_speed = @import("../../debug/session_speed.zig");
+const pacing = @import("../../periph/time/pacing.zig");
 const parts = @import("../../periph/model/parts.zig");
 const request = @import("../../periph/model/request.zig");
 
@@ -23,13 +31,15 @@ pub const Devices = struct {
     arena: std.heap.ArenaAllocator,
     plugs: session_plug.Plugs,
     post: plug_post.PlugPost = .{},
+    speed: speed_post.SpeedPost = .{},
+    board: *Board,
     session: session_api.Session = .{ .live = undefined },
     rows: [request.max + 2]devices_panel.Row = undefined,
     panel: devices_panel.Panel = undefined,
 
     /// Builds in place: the session and the panel point into `self`.
     pub fn init(self: *Devices, allocator: std.mem.Allocator, board: *Board, attaches: []const request.Request, click: bool) void {
-        self.* = .{ .arena = .init(allocator), .plugs = undefined };
+        self.* = .{ .arena = .init(allocator), .plugs = undefined, .board = board };
         self.plugs = session_plug.Plugs.init(board, self.arena.allocator());
         self.session.attachPlugs(self.post.hook());
         var count: usize = 0;
@@ -49,8 +59,19 @@ pub const Devices = struct {
         self.arena.deinit();
     }
 
-    /// Engine side, at each park: apply what the pane queued.
+    /// Window side: pace the run at `factor` times real time from the next
+    /// park on. A factor --speed would refuse is refused here too.
+    pub fn setSpeed(self: *Devices, factor: f64) !void {
+        const change = try session_speed.Change.of(factor, 1);
+        const hook = self.speed.hook();
+        try hook.setFn(hook.context, change.milli);
+    }
+
+    /// Engine side, at each park: apply what the pane queued, then any
+    /// speed change against the host clock.
     pub fn park(self: *Devices) void {
         _ = self.post.apply(self.plugs.hook());
+        const clock = pacing.hostClock() catch return;
+        _ = self.speed.apply(&self.board.time, clock);
     }
 };
