@@ -247,9 +247,10 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         if (until) |wait| if (wait.reached) return .count;
         if (stopped != .count) return stopped;
         // The firmware armed SysTick inside this stretch: charge it one instruction and no time, and cut the next
-        // stretch from the period now armed (RA8EMU-464). What the stretch carried in goes uncharged with it.
+        // stretch from the period now armed (RA8EMU-464). What the stretch carried in goes uncharged with it,
+        // so a loaded run hands those instructions back to its budget, as the run left whole never spent them (RA8EMU-701).
         if (cpu.cut) |cut| if (cut.take()) {
-            left -= 1;
+            left = left - 1 + carry;
             carry = 0;
             continue;
         };
