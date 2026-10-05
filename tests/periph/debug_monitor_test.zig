@@ -1,9 +1,9 @@
 //! Tests for src/periph/debug_monitor.zig, through the controllers dispatch
-//! on a real engine.
+//! on a fake core.
 
 const std = @import("std");
 const ra8 = @import("ra8");
-const engine = ra8.core.engine;
+const FakeCore = @import("fake_core.zig").FakeCore;
 const memmap = ra8.core.memmap;
 const debug_monitor = ra8.periph.nvic.debug_monitor;
 const Nvic = ra8.periph.nvic.Nvic;
@@ -14,19 +14,13 @@ const handlers: u32 = memmap.sram_base + 0x7000;
 const mon_en: u32 = 1 << 16;
 const mon_pend: u32 = 1 << 17;
 
-/// A core with every handler `b .` at `handlers + 0x10 * n`, sitting on
-/// `b .` at the entry, with DEMCR set to `demcr`.
-fn bench(demcr: u32) !engine.Engine {
-    var core = try engine.Engine.open();
-    errdefer core.close();
-    try core.mapBoardRam();
-    var number: u32 = 0;
-    while (number < 16) : (number += 1) {
-        try core.writeWord(table + 4 * number, handlers + 0x10 * number + 1);
-        try core.writeWord(handlers + 0x10 * number, 0xE7FE_E7FE);
-    }
+/// A fake core whose vector n points at `handlers + 0x10 * n`, sitting at
+/// the entry, with DEMCR set to `demcr`.
+fn bench(demcr: u32) !FakeCore {
+    var core = FakeCore.init();
+    errdefer core.deinit();
+    try core.vectors(table, handlers);
     try core.writeWord(memmap.scb.vtor, table);
-    try core.writeWord(entry, 0xE7FE_E7FE);
     try core.writeWord(memmap.scb.demcr, demcr);
     try core.setRegister(.sp, memmap.sram_base + 0x8000);
     try core.setRegister(.pc, entry);
@@ -35,7 +29,7 @@ fn bench(demcr: u32) !engine.Engine {
 
 test "MON_PEND with MON_EN enters DebugMonitor, clears the pend and sets MONITORACT" {
     var core = try bench(mon_en | mon_pend);
-    defer core.close();
+    defer core.deinit();
     var unit = Nvic{};
     try std.testing.expectEqual(@as(?u16, debug_monitor.number), try unit.dispatch(&core));
     try std.testing.expectEqual(handlers + 0x10 * debug_monitor.number, try core.register(.pc));
@@ -45,7 +39,7 @@ test "MON_PEND with MON_EN enters DebugMonitor, clears the pend and sets MONITOR
 
 test "MON_PEND without MON_EN is not taken" {
     var core = try bench(mon_pend);
-    defer core.close();
+    defer core.deinit();
     var unit = Nvic{};
     try std.testing.expectEqual(@as(?u16, null), try unit.dispatch(&core));
     try std.testing.expectEqual(mon_pend, try core.readWord(memmap.scb.demcr));
@@ -53,7 +47,7 @@ test "MON_PEND without MON_EN is not taken" {
 
 test "DebugMonitor under PRIMASK stays pending" {
     var core = try bench(mon_en | mon_pend);
-    defer core.close();
+    defer core.deinit();
     try core.setRegister(.primask, 1);
     var unit = Nvic{};
     try std.testing.expectEqual(@as(?u16, null), try unit.dispatch(&core));
@@ -62,7 +56,7 @@ test "DebugMonitor under PRIMASK stays pending" {
 
 test "pending reads PRI_12 from the low byte of SHPR3" {
     var core = try bench(mon_en | mon_pend);
-    defer core.close();
+    defer core.deinit();
     try core.writeWord(memmap.scb.shpr3, 0x00C0_0060);
     const candidate = (try debug_monitor.pending(&core)) orelse return error.NotPending;
     try std.testing.expectEqual(@as(u8, 0x60), candidate.priority);
