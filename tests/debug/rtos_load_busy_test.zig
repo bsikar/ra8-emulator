@@ -1,9 +1,10 @@
 //! RA8EMU-268: CPU load checked against busy loops of known length, on both
-//! cores. Each core runs its own engine with a two-thread loop that names a
-//! thread in the current-thread pointer, spins a known count, names the
-//! other, spins again, and goes round. The tracer is attached the way a run
-//! attaches it (rtos_hook.attach), so the load is charged in instructions
-//! counted by the engine's per-instruction hook.
+//! cores. Each check runs the Zig core over its own store with a two-thread
+//! loop that names a thread in the current-thread pointer, spins a known
+//! count, names the other, spins again, and goes round. The tracer sits in
+//! front of the core's bus the way a Zig-core run puts it there
+//! (rtos_hook.zig.Listener), so the load is charged in the core's retired
+//! instructions.
 //!
 //! One round is 2*a + 2*b + 5 instructions: thread A holds the core from its
 //! store to B's (2*a + 2: the store, the count, the spin) and B from its
@@ -12,10 +13,12 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const memmap = ra8.core.memmap;
-const nvic = ra8.periph.nvic;
 const rtos_hook = ra8.core.step_hook.rtos_hook;
 const rtos_load = rtos_hook.load;
-const Engine = ra8.core.engine.Engine;
+const Cpu = ra8.core.cpu.cpu.Cpu;
+const Store = ra8.core.cpu.memory.store.Store;
+const Guest = ra8.core.cpu.memory.guest.Guest;
+const GuestBus = ra8.core.cpu.memory.guest_bus.GuestBus;
 
 const pointer: u32 = memmap.sram_base + 0x1ABC;
 const thread_a: u32 = memmap.sram_base + 0x10F0;
@@ -31,6 +34,47 @@ fn program(a: u8, b: u8) [18]u8 {
     return .{ 0x01, 0x60, a, 0x23, 0x01, 0x3B, 0xFD, 0xD1, 0x02, 0x60, b, 0x23, 0x01, 0x3B, 0xFD, 0xD1, 0xF6, 0xE7 };
 }
 
+/// The loop on the Zig core: a store, a reset vector to `code`, and the
+/// tracer's listener in front of the bus, lent the core's retired count.
+const Rig = struct {
+    store: Store = undefined,
+    guest: Guest = undefined,
+    memory: GuestBus = undefined,
+    listener: rtos_hook.zig.Listener = undefined,
+    cpu: Cpu = undefined,
+
+    fn open(self: *Rig, tracer: *rtos_hook.Tracer, a: u8, b: u8) !void {
+        self.store = try Store.init(null);
+        errdefer self.store.deinit();
+        self.guest = .{ .store = &self.store };
+        self.memory = GuestBus.of(&self.guest, false);
+        const view = self.memory.view();
+        try view.writeWord(memmap.sram_base, memmap.sram_base + 0x1F00);
+        try view.writeWord(memmap.sram_base + 4, code | 1);
+        const bytes = program(a, b);
+        try view.write(code, &bytes);
+        self.listener = .{ .tracer = tracer };
+        self.cpu = .{ .bus = self.listener.onBus(view) };
+        try self.cpu.reset(memmap.sram_base);
+        const wrap = self.listener.wrap();
+        wrap.retiredFn.?(wrap.context, &self.cpu.retired);
+        self.cpu.regs.low[0] = pointer;
+        self.cpu.regs.low[1] = thread_a;
+        self.cpu.regs.low[2] = thread_b;
+    }
+
+    fn run(self: *Rig, count: u32) !void {
+        var left = count;
+        while (left > 0) : (left -= 1) {
+            if (self.cpu.step()) |_| return error.CoreStopped;
+        }
+    }
+
+    fn close(self: *Rig) void {
+        self.store.deinit();
+    }
+};
+
 fn share(load: *const rtos_load.Load, core: u1, thread: u32) f64 {
     for (load.rows(core)) |slot| {
         if (slot.owner.kind == .thread and slot.owner.id == thread) {
@@ -41,20 +85,12 @@ fn share(load: *const rtos_load.Load, core: u1, thread: u32) f64 {
 }
 
 fn check(core_index: u1, a: u8, b: u8) !void {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    const bytes = program(a, b);
-    try core.write(code, &bytes);
-    try core.setRegister(.r0, pointer);
-    try core.setRegister(.r1, thread_a);
-    try core.setRegister(.r2, thread_b);
-    const clock: u64 = 0;
-    const interrupts = nvic.Nvic{ .vector_base = memmap.sram_base };
-    const tracer = try rtos_hook.attach(core.handle, .{ .address = pointer, .core = core_index }, &clock, &interrupts);
-    defer std.heap.page_allocator.destroy(tracer);
+    var tracer = rtos_hook.Tracer{ .address = pointer, .core = core_index };
+    var rig: Rig = .{};
+    try rig.open(&tracer, a, b);
+    defer rig.close();
     const per_round: u32 = 2 * @as(u32, a) + 2 * @as(u32, b) + 5;
-    _ = try core.runChunk(code, rounds * per_round, null);
+    try rig.run(rounds * per_round);
 
     var load = tracer.trace.load;
     load.finish(tracer.trace.loadNow(0));
@@ -78,22 +114,14 @@ test "CPU1: a 1:3 busy split is reported as 1:3" {
 }
 
 test "the load table names the core and adds up to 100.0%" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    const bytes = program(50, 50);
-    try core.write(code, &bytes);
-    try core.setRegister(.r0, pointer);
-    try core.setRegister(.r1, thread_a);
-    try core.setRegister(.r2, thread_b);
-    const clock: u64 = 0;
-    const interrupts = nvic.Nvic{ .vector_base = memmap.sram_base };
-    const tracer = try rtos_hook.attach(core.handle, .{ .address = pointer, .core = 1 }, &clock, &interrupts);
-    defer std.heap.page_allocator.destroy(tracer);
-    _ = try core.runChunk(code, 10 * 205, null);
+    var tracer = rtos_hook.Tracer{ .address = pointer, .core = 1 };
+    var rig: Rig = .{};
+    try rig.open(&tracer, 50, 50);
+    defer rig.close();
+    try rig.run(10 * 205);
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.report.load(out.writer(), tracer, NoNames{});
+    try rtos_hook.report.load(out.writer(), &tracer, NoNames{});
     try std.testing.expect(std.mem.startsWith(u8, out.items, "  cpu load cpu1 : 2050 instruction(s)\n"));
     var tenths: u64 = 0;
     var lines = std.mem.splitScalar(u8, out.items, '\n');
@@ -107,22 +135,13 @@ test "the load table names the core and adds up to 100.0%" {
 }
 
 test "a load window charges only the instructions inside it" {
-    var core = try Engine.open();
-    defer core.close();
-    try core.mapBoardRam();
-    const bytes = program(90, 30);
-    try core.write(code, &bytes);
-    try core.setRegister(.r0, pointer);
-    try core.setRegister(.r1, thread_a);
-    try core.setRegister(.r2, thread_b);
-    const clock: u64 = 0;
-    const interrupts = nvic.Nvic{ .vector_base = memmap.sram_base };
-    var found: rtos_hook.Tracer = .{ .address = pointer };
-    found.trace.load.from = 245 * 10;
-    found.trace.load.to = 245 * 30;
-    const tracer = try rtos_hook.attach(core.handle, found, &clock, &interrupts);
-    defer std.heap.page_allocator.destroy(tracer);
-    _ = try core.runChunk(code, 245 * 40, null);
+    var tracer: rtos_hook.Tracer = .{ .address = pointer };
+    tracer.trace.load.from = 245 * 10;
+    tracer.trace.load.to = 245 * 30;
+    var rig: Rig = .{};
+    try rig.open(&tracer, 90, 30);
+    defer rig.close();
+    try rig.run(245 * 40);
     var load = tracer.trace.load;
     load.finish(tracer.trace.loadNow(0));
     try std.testing.expectEqual(@as(u64, 245 * 20), load.total(0));
