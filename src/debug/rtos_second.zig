@@ -7,7 +7,7 @@
 //!
 //! The tracer is kept here because the run holds CPU1 as a bare
 //! `?*Second`; a run has at most one CPU1 and so at most one of these, and
-//! like rtos_hook.arm's it lives until the process ends.
+//! it lives until the process ends.
 const std = @import("std");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../core/elf.zig");

@@ -1,29 +1,23 @@
-//! `--trace-rtos` on a Unicorn run (RA8EMU-221).
+//! `--trace-rtos` (RA8EMU-221): the tracer and its report.
 //!
 //! src/debug/rtos_trace.zig turns stores to ThreadX's current-thread
-//! pointer into switch events and knows nothing about Unicorn. This file is
-//! the other half: it finds `_tx_thread_current_ptr` in the image, asks to
-//! be called for writes to that word and nowhere else, stamps each one with
-//! the run's own period counter, and prints the trace once the run is over.
+//! pointer into switch events. This file finds `_tx_thread_current_ptr` in
+//! the image, holds the Tracer that stamps each store with the run's own
+//! clock, and prints the trace once the run is over.
 //!
 //! Each switch is printed with the thread's name, read from its TX_THREAD
-//! once the run is over (src/debug/rtos_names.zig, RA8EMU-223).
+//! once the run is over (src/debug/rtos_names.zig, RA8EMU-223). Exception
+//! entry and return are traced with them (src/debug/rtos_isr.zig,
+//! RA8EMU-224).
 //!
-//! Exception entry and return are traced with them (src/debug/rtos_isr.zig,
-//! RA8EMU-224): before each instruction the NVIC model's counters are read.
-//! That costs a call per instruction, so it is only hooked with the flag.
-//!
-//! A `--cpu zig` run is traced through src/debug/rtos_zig.zig instead, and
-//! CPU1 through src/debug/rtos_second.zig.
-//! Only CPU0 on Unicorn is hooked here. CPU1 and the Zig core are their own
-//! tickets under RA8EMU-211.
+//! The Zig core feeds the tracer through src/debug/rtos_zig.zig, and CPU1
+//! through src/debug/rtos_second.zig. The Unicorn hooks that used to live
+//! here went with RA8EMU-607.
 const std = @import("std");
-const c = @import("../core/c.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
-const clocks = @import("../periph/clocks.zig");
 pub const names = @import("rtos_names.zig");
 pub const isr = @import("rtos_isr.zig");
 pub const zig = @import("rtos_zig.zig");
@@ -36,8 +30,6 @@ pub const file = @import("rtos_file.zig");
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
 
-pub const Error = error{AttachFailed};
-
 /// The pointer's address, the trace it feeds, and the clock it stamps from.
 pub const Tracer = struct {
     address: u32,
@@ -48,8 +40,8 @@ pub const Tracer = struct {
     core: u1 = 0,
     /// Exception entry and return, when a controller was handed over.
     exceptions: ?isr.Watcher = null,
-    /// Instructions seen by the per-instruction hook: the load clock on an
-    /// engine that has one (Unicorn), lent to the trace by `attach`.
+    /// Instructions seen through `onInstruction`: the load clock when no
+    /// `elapsed` is lent.
     steps: u64 = 0,
     /// The run's virtual-instruction count, which also moves through
     /// stretches the idle skip charges without executing (src/core/idle.zig).
@@ -124,78 +116,6 @@ pub fn resolveOn(image: elf.Image, wanted: ?load.Window, core: u1) ?Tracer {
     found.trace.load.from = window.from;
     found.trace.load.to = window.to;
     return found;
-}
-
-/// Resolve and hook. The tracer has to outlive the engine, which keeps its
-/// pointer for every later run, so it is allocated here and left for the
-/// process to reclaim; a run attaches at most one.
-pub fn arm(
-    handle: ?*c.uc.uc_engine,
-    image: elf.Image,
-    wanted: ?load.Window,
-    timebase: *const clocks.Clocks,
-    controller: *const isr.Nvic,
-) Error!?*Tracer {
-    const found = resolve(image, wanted) orelse return null;
-    const owned = try attach(handle, found, &timebase.ticks, controller);
-    owned.elapsed = &timebase.elapsed;
-    return owned;
-}
-
-/// Hook a resolved tracer onto one core's engine, stamped from that core's
-/// clock and watching that core's NVIC.
-pub fn attach(
-    handle: ?*c.uc.uc_engine,
-    found: Tracer,
-    clock: *const u64,
-    controller: *const isr.Nvic,
-) Error!*Tracer {
-    const owned = std.heap.page_allocator.create(Tracer) catch return Error.AttachFailed;
-    owned.* = found;
-    owned.trace.fine = &owned.clock;
-    owned.now = clock;
-    owned.exceptions = isr.Watcher.start(controller);
-    var hook: c.uc.uc_hook = 0;
-    if (c.uc.uc_hook_add(
-        handle,
-        &hook,
-        c.uc.UC_HOOK_MEM_WRITE,
-        @constCast(@as(*const anyopaque, @ptrCast(&onWrite))),
-        owned,
-        found.address,
-        found.address + 3,
-    ) != c.uc.UC_ERR_OK) {
-        std.heap.page_allocator.destroy(owned);
-        return Error.AttachFailed;
-    }
-    var every: c.uc.uc_hook = 0;
-    const code = @constCast(@as(*const anyopaque, @ptrCast(&onCode)));
-    if (c.uc.uc_hook_add(handle, &every, c.uc.UC_HOOK_CODE, code, owned, 1, 0) != c.uc.UC_ERR_OK) {
-        return Error.AttachFailed;
-    }
-    return owned;
-}
-
-fn onCode(uc: ?*c.uc.uc_engine, address: u64, size: u32, user: ?*anyopaque) callconv(.C) void {
-    _ = uc;
-    _ = address;
-    _ = size;
-    const owned: *Tracer = @ptrCast(@alignCast(user orelse return));
-    owned.onInstruction();
-}
-
-fn onWrite(
-    uc: ?*c.uc.uc_engine,
-    kind: c_int,
-    address: u64,
-    size: c_int,
-    value: i64,
-    user: ?*anyopaque,
-) callconv(.C) void {
-    _ = uc;
-    _ = kind;
-    const owned: *Tracer = @ptrCast(@alignCast(user orelse return));
-    owned.onStore(@truncate(address), @intCast(size), @truncate(@as(u64, @bitCast(value))));
 }
 
 /// Target memory read through the shared guest handle, for the thread names.
