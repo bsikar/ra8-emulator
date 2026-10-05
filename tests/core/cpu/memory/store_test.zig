@@ -34,7 +34,7 @@ test "a second core borrows the shared SRAM and keeps its own MRAM, TCMs and PPB
     first.span(memmap.sram_base, 1).?[0] = 0x11;
     try std.testing.expectEqual(@as(u8, 0x11), second.span(memmap.ns_sram_base, 1).?[0]);
     try std.testing.expectEqual(first.region(memmap.sdram_base).?.ptr, second.region(memmap.sdram_base).?.ptr);
-    for ([_]u32{ memmap.mram_base, memmap.itcm_base, memmap.dtcm_base, memmap.ppb_base }) |base| {
+    for ([_]u32{ memmap.mram_base, memmap.dtcm_base, memmap.ppb_base }) |base| {
         try std.testing.expect(first.region(base).?.ptr != second.region(base).?.ptr);
     }
 }

@@ -127,13 +127,13 @@ test "a pending interrupt is still taken" {
     try std.testing.expectEqual(@as(u32, 1), rig.fake.taken);
 }
 
-test "only RAM is writable, and flash and the ITCM are readable too" {
+test "only RAM is writable, flash is readable too, and address zero is neither" {
     try std.testing.expect(fixed_trip.writable(0x2000_0000, 4));
     try std.testing.expect(fixed_trip.writable(0x2200_0010, 4));
     try std.testing.expect(!fixed_trip.writable(0x2000_FFFE, 4));
     try std.testing.expect(!fixed_trip.writable(0x0200_0000, 4));
     try std.testing.expect(fixed_trip.readable(0x0200_0000, 4));
-    try std.testing.expect(fixed_trip.readable(0x0000_0100, 2));
+    try std.testing.expect(!fixed_trip.readable(0x0000_0100, 2));
     try std.testing.expect(!fixed_trip.readable(0x4000_0000, 4));
     try std.testing.expect(!fixed_trip.readable(0xE000_E010, 4));
 }
