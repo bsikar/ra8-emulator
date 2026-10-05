@@ -161,4 +161,5 @@ pub const snapshot = struct {
     pub const controllers = @import("snapshot/controllers.zig");
     pub const storage = @import("snapshot/storage.zig");
     pub const signals = @import("snapshot/signals.zig");
+    pub const datapath = @import("snapshot/datapath.zig");
 };

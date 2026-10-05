@@ -3,8 +3,9 @@
 //! Integers, enums and packed structs go as their little-endian bits, each
 //! integer widened to whole bytes; bools as one byte; arrays element by
 //! element; optionals as a one-byte tag and then the value; structs field by
-//! field in declaration order. A pointer, union or float does not compile, so
-//! nothing that is wiring rather than state can slip in.
+//! field in declaration order; tagged unions as their tag and then the
+//! active payload (RA8EMU-676). A pointer, untagged union or float does not
+//! compile, so nothing that is wiring rather than state can slip in.
 const std = @import("std");
 
 pub const Error = error{ Truncated, BadValue };
@@ -29,6 +30,14 @@ pub fn write(writer: anytype, value: anytype) @TypeOf(writer).Error!void {
         .@"struct" => |s| if (s.layout == .@"packed") {
             try write(writer, @as(s.backing_integer.?, @bitCast(value)));
         } else inline for (s.fields) |field| try write(writer, @field(value, field.name)),
+        .@"union" => |u| {
+            const Tag = u.tag_type orelse @compileError("a snapshot cannot hold untagged " ++ @typeName(T));
+            try write(writer, @as(Tag, value));
+            switch (value) {
+                inline else => |payload| try write(writer, payload),
+            }
+        },
+        .void => {},
         else => @compileError("a snapshot cannot hold " ++ @typeName(T)),
     }
 }
@@ -80,6 +89,15 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
             inline for (s.fields) |field| @field(out, field.name) = try read(field.type, cursor);
             return out;
         },
+        .@"union" => |u| {
+            const Tag = u.tag_type orelse @compileError("a snapshot cannot hold untagged " ++ @typeName(T));
+            const tag = try read(Tag, cursor);
+            inline for (u.fields) |field| {
+                if (tag == @field(Tag, field.name)) return @unionInit(T, field.name, try read(field.type, cursor));
+            }
+            unreachable;
+        },
+        .void => return {},
         else => @compileError("a snapshot cannot hold " ++ @typeName(T)),
     }
 }
