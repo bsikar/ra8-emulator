@@ -5,3 +5,4 @@ pub const platform = @import("gui/platform.zig");
 pub const headless = @import("gui/headless.zig");
 pub const camera_panel = @import("gui/camera_panel.zig");
 pub const camera_switch = @import("gui/camera_switch.zig");
+pub const camera_open = @import("gui/camera_open.zig");
