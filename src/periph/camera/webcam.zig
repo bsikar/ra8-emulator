@@ -12,3 +12,4 @@ pub const opener = @import("webcam_open.zig");
 pub const mf = @import("mf_abi.zig");
 pub const mf_com = @import("mf_com.zig");
 pub const mf_open = @import("mf_open.zig");
+pub const mf_capture = @import("mf_capture.zig");

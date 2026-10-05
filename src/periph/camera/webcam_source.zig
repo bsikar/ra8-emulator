@@ -29,6 +29,7 @@ pub const OpenError = error{ UnsupportedFormat, BadGeometry, OutOfMemory } || de
 pub fn rawFormat(pixelformat: u32) ?raw.Format {
     if (pixelformat == abi.pix_yuyv) return .yuyv;
     if (pixelformat == abi.pix_rgb565) return .rgb565;
+    if (pixelformat == abi.pix_rgb24) return .rgb24;
     return null;
 }
 
