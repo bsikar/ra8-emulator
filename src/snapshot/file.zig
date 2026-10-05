@@ -29,6 +29,8 @@ pub const Kind = enum(u32) {
     wire = 7,
     /// The DRW 2D engine (RA8EMU-667).
     raster = 8,
+    /// The GLCDC display controller (RA8EMU-668).
+    display = 9,
     _,
 };
 
