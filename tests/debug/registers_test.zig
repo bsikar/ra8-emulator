@@ -13,7 +13,7 @@ test "the argument registers lead the dump" {
 test "the dump ends on the program counter" {
     const last = registers.dumped[registers.dumped.len - 1];
     try std.testing.expectEqualStrings("pc", last.name);
-    try std.testing.expectEqual(ra8.core.engine.Cortex.pc, last.which);
+    try std.testing.expectEqual(ra8.core.cpu.cortex.Cortex.pc, last.which);
 }
 
 test "a line ends every fourth register" {

@@ -44,9 +44,7 @@ pub const control_bits = struct {
 };
 
 /// The registers by name. R0-R15 come first, in order, so a register number
-/// and its name share a value. The set is the one src/core/engine.zig names
-/// for Unicorn, which is what lets a lockstep run compare the two backends
-/// one name at a time.
+/// and its name share a value.
 pub const Name = enum(u5) {
     r0,
     r1,

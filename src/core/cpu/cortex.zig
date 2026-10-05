@@ -1,7 +1,5 @@
 //! The architectural registers the debugger, the report and the run loop
-//! name. A plain enum: the Zig core indexes its own register file, and the
-//! engine maps each one to Unicorn's id in src/core/engine.zig until the
-//! engine goes (RA8EMU-482).
+//! name. A plain enum: the Zig core indexes its own register file.
 
 pub const Cortex = enum {
     pc,

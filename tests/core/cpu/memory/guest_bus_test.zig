@@ -7,7 +7,6 @@ const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const GuestBus = ra8.core.cpu.memory.guest_bus.GuestBus;
 const BoardBus = ra8.core.cpu.board_bus.BoardBus;
-const Engine = ra8.core.engine.Engine;
 
 test "a store guest gives a bus over the store, with no engine open" {
     var store = try Store.init(null);

@@ -3,7 +3,6 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const fault = ra8.core.fault;
-const engine = ra8.core.engine;
 
 test "a fresh watch has caught nothing" {
     const watch = fault.Watch{};
@@ -29,9 +28,4 @@ test "a fault carries no access and no instruction until one is found" {
     const taken = fault.Fault{ .pc = 0x0200_0910, .detail = "unmapped" };
     try std.testing.expect(taken.access == null);
     try std.testing.expect(taken.instruction == null);
-}
-
-test "engine re-exports the pair, so engine.Fault is the same type" {
-    try std.testing.expect(engine.Fault == fault.Fault);
-    try std.testing.expect(engine.Watch == fault.Watch);
 }
