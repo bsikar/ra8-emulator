@@ -10,6 +10,7 @@ pub fn fourcc(code: *const [4]u8) u32 {
 
 pub const pix_yuyv = fourcc("YUYV");
 pub const pix_rgb565 = fourcc("RGBP");
+pub const pix_rgb24 = fourcc("RGB3");
 
 pub const buf_type_video_capture: u32 = 1;
 pub const field_none: u32 = 1;
