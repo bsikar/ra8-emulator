@@ -53,6 +53,7 @@ pub const encoding = struct {
 /// fault, rather than quietly stepping over it.
 pub fn decode(first: u16, second: u16) ?Instruction {
     if (second & encoding.branch_mask == encoding.branch) {
+        if (second & 1 == 0) return null;
         const distance = branchDistance(second);
         if (first == encoding.le_first) return .{ .kind = .le, .offset = distance };
         if (first & encoding.setup_mask == encoding.setup) return .{
