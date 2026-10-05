@@ -43,6 +43,7 @@ test {
     _ = @import("gui/raster_test.zig");
     _ = @import("gui/headless_test.zig");
     _ = @import("gui/camera_panel_test.zig");
+    _ = @import("gui/camera_switch_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");
