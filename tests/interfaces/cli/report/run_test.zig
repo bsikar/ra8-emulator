@@ -24,7 +24,7 @@ fn zigReportWith(buf: []u8, timebase: ra8.periph.clocks.Clocks) ![]const u8 {
     defer dir.cleanup();
     const file = try dir.dir.createFile("report.txt", .{ .read = true });
     defer file.close();
-    try report_run.zigCore(file.writer(), &board, timebase, 42);
+    try report_run.zigCore(file.writer(), &board, timebase, 42, .{});
     try file.seekTo(0);
     const len = try file.readAll(buf);
     return buf[0..len];

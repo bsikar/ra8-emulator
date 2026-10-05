@@ -26,6 +26,7 @@ const Attribution = @import("attribution.zig").Attribution;
 const mpu = @import("../../periph/mpu/mpu.zig");
 const fault_clear = @import("../../periph/fault_clear.zig");
 const fault_status = @import("../../periph/fault_status.zig");
+const bus_fault = @import("../../periph/bus_fault.zig");
 const Bus = @import("bus.zig").Bus;
 const code_lines = @import("code_lines.zig");
 const FpState = @import("fpu/state.zig").State;
@@ -105,6 +106,9 @@ pub const Wiring = struct {
     final: ?*Regs = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
     itm: ?*@import("../../debug/itm.zig").Itm = null,
+    /// `--bus-errors`: a refused data access raises the precise BusFault,
+    /// counted here (RA8EMU-641); null ends the run on it instead.
+    bus_errors: ?*bus_fault.Tally = null,
 };
 
 /// The hand-off from main to the CPU the run asked for.
@@ -133,12 +137,12 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard }, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors }, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
 /// What the core reports to, per instruction: after it retires and before
 /// it is fetched.
-const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null };
+const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null };
 
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
@@ -161,6 +165,9 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     cpu.blocks = formed;
     cpu.retire_listener = watch.retire;
     cpu.fetch_guard = watch.fetch;
+    var miss: u32 = 0;
+    if (watch.bus_errors) |tally| cpu.bus.tally = tally;
+    if (watch.bus_errors != null) cpu.bus.miss = &miss;
     cpu.until = until;
     cpu.attribution = source;
     var check: mpu_check.Check = undefined;

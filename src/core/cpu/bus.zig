@@ -8,6 +8,7 @@ const std = @import("std");
 const memmap = @import("../memmap.zig");
 const Gate = @import("data_gate.zig").Gate;
 const code_lines = @import("code_lines.zig");
+const bus_fault = @import("../../periph/bus_fault.zig");
 
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
 pub const Error = error{ Unmapped, SecurityViolation };
@@ -69,6 +70,8 @@ pub const Bus = struct {
     /// Where the last access the bus behind refused went, for the BusFault's
     /// BFAR; null records nothing (RA8EMU-641).
     miss: ?*u32 = null,
+    /// Counts the BusFaults those refusals raised, for the run report.
+    tally: ?*bus_fault.Tally = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,

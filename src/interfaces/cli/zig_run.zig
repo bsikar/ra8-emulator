@@ -8,6 +8,7 @@ const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
+const bus_fault = @import("../../periph/bus_fault.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
 const scs_route = @import("../../core/cpu/scs_route.zig");
 const sleep_pace = @import("../../core/sleep_pace.zig");
@@ -88,6 +89,8 @@ pub const Clock = struct {
     /// The `--ms` window, which ends the run once modelled time runs out.
     timed: ?*Deadline = null,
     undefined_sites: ?*undefined_sites.Found = null,
+    /// The BusFaults a `--bus-errors` run raised (RA8EMU-641).
+    bus_tally: bus_fault.Tally = .{},
     /// `--idle-skip`: a sleeping CPU0 runs straight to the next edge (RA8EMU-185).
     idle_skip: bool = false,
 
@@ -224,6 +227,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .until = if (options.cpu == .zig) until else null,
         .final = &final,
         .itm = if (options.console) &itm_port else null,
+        .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
     });
     if (options.console) try itm_port.flush(out, true);
     clock.soakFaults();
@@ -242,8 +246,8 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null });
-        } else try report_run.zigCore(out, board, timebase.*, ran);
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null });
+        } else try report_run.zigCore(out, board, timebase.*, ran, clock.bus_tally);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // The globals a memory-probe verdict reads, out of the Zig core's
         // own memory, so the line is the Unicorn run's line.

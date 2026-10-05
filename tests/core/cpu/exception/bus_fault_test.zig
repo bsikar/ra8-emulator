@@ -1,7 +1,7 @@
 //! Covers src/core/cpu/exception/bus_fault.zig through Cpu.step: a load or
 //! store the bus refuses is the precise BusFault when the run records
-//! refusals, escalated to HardFault when BusFault is off, and a stop when
-//! the run records nothing.
+//! refusals, escalated to HardFault when BusFault is off or PRIMASK is
+//! set, counted on the bus's tally, and a stop when the run records nothing.
 const std = @import("std");
 const ra8 = @import("ra8");
 const fixture = @import("ram.zig");
@@ -9,6 +9,7 @@ const memmap = ra8.core.memmap;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 const Stop = ra8.core.cpu.cpu.Stop;
 const Profile = ra8.core.cpu.decode.profile.Profile;
+const Tally = ra8.periph.fault_status.bus.Tally;
 
 const bus_handler: u32 = fixture.base + 0x1C0;
 const hard_handler: u32 = fixture.base + 0x1E0;
@@ -77,5 +78,33 @@ test "a run that records no refusals stops on the bus fault" {
         var cpu = try bootWith(&ram, profile, str_r1_r0, null);
         try std.testing.expectEqual(@as(?Stop, .{ .bus_fault = fixture.code }), cpu.step());
         try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
+    }
+}
+
+/// One refused store with `tally` counting; returns where the core went.
+fn counted(profile: Profile, primask: bool, tally: *Tally) !u32 {
+    var ram: fixture.Ram = .{};
+    ram.putWord(memmap.scb.shcsr, busfaultena);
+    var miss: u32 = 0;
+    var cpu = try bootWith(&ram, profile, str_r1_r0, &miss);
+    cpu.bus.tally = tally;
+    cpu.regs.primask = @intFromBool(primask);
+    try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+    return cpu.regs.pc;
+}
+
+test "a taken BusFault is counted on the bus tally" {
+    for (profiles) |profile| {
+        var tally: Tally = .{};
+        try std.testing.expectEqual(bus_handler, try counted(profile, false, &tally));
+        try std.testing.expectEqual(Tally{ .raised = 1, .escalated = 0 }, tally);
+    }
+}
+
+test "a refused store under PRIMASK escalates and counts as escalated" {
+    for (profiles) |profile| {
+        var tally: Tally = .{};
+        try std.testing.expectEqual(hard_handler, try counted(profile, true, &tally));
+        try std.testing.expectEqual(Tally{ .raised = 1, .escalated = 1 }, tally);
     }
 }
