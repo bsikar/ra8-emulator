@@ -29,8 +29,9 @@ pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {
 
 /// What a `--cpu zig` run can report: the part, the bus, its own timebase
 /// and the blocks, with the instructions it retired as the elapsed time. The
-/// pend/idle seams and the stepped-instruction counts are fed by hooks only
-/// the Unicorn run attaches, so they are left out and a line says so. The
+/// pend/idle seam counts and the stepped-instruction counts came from the
+/// Unicorn hooks, which are gone (RA8EMU-607), so a line says they are not
+/// reported. The
 /// BusFaults a `--bus-errors` run raised close it.
 pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64, bus_errors: bus_fault.Tally) !void {
     try report_part.print(out, board.part);
@@ -38,7 +39,7 @@ pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64
     try report_timing.clock(out, timebase);
     try pacing.line(out, &board.time);
     try board.time.soak.line(out);
-    try out.print("zig core: pend/idle seams and stepped-instruction counts are Unicorn-only, not reported\n", .{});
+    try out.print("zig core: pend/idle seam counts and stepped-instruction counts are not reported\n", .{});
     try report.blocks(board, out, .{ .elapsed = retired });
     try busErrors(out, bus_errors);
 }
