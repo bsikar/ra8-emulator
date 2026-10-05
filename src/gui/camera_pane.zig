@@ -11,6 +11,7 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const platform = @import("platform.zig");
 const camera_panel = @import("camera_panel.zig");
+const registry = @import("../periph/camera/camera_registry.zig");
 const camera_view = @import("camera_view.zig");
 const camera_open = @import("camera_open.zig");
 const camera_switch = @import("camera_switch.zig");
@@ -34,6 +35,22 @@ pub const Pane = struct {
     /// The project's pictures and clips, owned by whoever listed them.
     pictures: []const []const u8 = &.{},
     clips: []const []const u8 = &.{},
+
+    /// Starts the pane on the source the run was given (`--camera-source`)
+    /// so it shows what the CEU already captures (RA8EMU-680). That source
+    /// is open already, so nothing counts as a switch. A webcam the run
+    /// opened was allowed on the terminal first, so it shows as allowed
+    /// once: picking another source and coming back asks again.
+    pub fn seed(self: *Pane, given: registry.Spec) void {
+        switch (given.kind) {
+            .gradient => {},
+            .image => self.args.image = given.arg,
+            .video => self.args.video = given.arg,
+            .pipe => self.args.pipe = given.arg,
+            .webcam => self.args.webcam = given.arg,
+        }
+        self.panel.active = given.kind;
+    }
 
     /// Feeds one window event to the panel. Only a primary-button press is
     /// a click; returns whether the panel took the event, so the window

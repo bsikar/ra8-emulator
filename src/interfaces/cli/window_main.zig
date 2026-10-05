@@ -65,7 +65,7 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .dir = stills_dir orelse std.fs.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
     var live = Live{ .args = args, .pacer = &pacer };
-    _ = try window_run.show(allocator, shown, args.board, &pacer, live.engine());
+    _ = try window_run.show(allocator, shown, args.board, &pacer, live.engine(), args.options.camera);
     return live.code;
 }
 
