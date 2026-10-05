@@ -51,6 +51,8 @@ pub const Kind = enum(u32) {
     wired = 18,
     /// The units with wiring in their channel arrays (RA8EMU-681).
     channels = 19,
+    /// The board's USB side (RA8EMU-682).
+    usb = 20,
     _,
 };
 
