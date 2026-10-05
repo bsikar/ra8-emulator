@@ -29,6 +29,8 @@
 //! backtrace           bt      the call chain
 //! list [PLACE]        l       the source around PLACE, or the pc
 //! core 0|1                    which CPU the next commands act on
+//! plug NAME@ENDPOINT          wire a fresh part in mid-run
+//! unplug ENDPOINT             take the part on ENDPOINT off mid-run
 //! quit                q
 //! ```
 //!
@@ -97,6 +99,11 @@ pub const Command = union(enum) {
     /// `halting on|off`: DHCSR.C_DEBUGEN for the selected core. Off, the
     /// firmware's FPB and DWT events go to DebugMonitor instead of halting.
     halting: bool,
+    /// `plug NAME@ENDPOINT`, kept as written: the board parses it, as the
+    /// session resolves a place (RA8EMU-212).
+    plug: []const u8,
+    /// `unplug ENDPOINT`, kept as written.
+    unplug: []const u8,
     quit,
 };
 
@@ -122,6 +129,8 @@ const Verb = enum {
     list,
     core,
     halting,
+    plug,
+    unplug,
     quit,
 };
 
@@ -145,6 +154,7 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "bt", .backtrace },      .{ "where", .backtrace },
     .{ "core", .core },         .{ "quit", .quit },
     .{ "q", .quit },            .{ "halting", .halting },
+    .{ "plug", .plug },         .{ "unplug", .unplug },
 });
 
 /// The names `info` lists breaks and watches under.
@@ -191,6 +201,8 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .list => .{ .list = words.next() },
         .core => .{ .core = try core(try required(words)) },
         .halting => .{ .halting = try onOff(try required(words)) },
+        .plug => .{ .plug = try required(words) },
+        .unplug => .{ .unplug = try required(words) },
         .quit => .quit,
     };
     if (words.next() != null) return Error.ExtraArgument;

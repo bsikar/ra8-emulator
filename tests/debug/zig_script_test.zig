@@ -144,3 +144,33 @@ test "core 1 with no second core says so and the session carries on" {
     try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, out.writer()));
     try std.testing.expectEqualStrings("error: CoreNotAttached\n", out.items);
 }
+
+test "plug and unplug wire a part in and out through the board mid-script" {
+    var memory: Sram = .{};
+    var cpu: Cpu = .{ .bus = memory.view() };
+    var machine: stop_machine.Machine = .{};
+    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var plugs = ra8.board.session_plug.Plugs.init(&board, arena.allocator());
+    target.session.attachPlugs(plugs.hook());
+    var out = std.ArrayList(u8).init(std.testing.allocator);
+    defer out.deinit();
+    const registry = &board.wire.controller.devices;
+    _ = try target.apply((try commands.parse("plug max17048@i2c:riic@0x36")).?, out.writer());
+    try std.testing.expect(registry.answering(0x36) != null);
+    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, out.writer());
+    try std.testing.expect(registry.answering(0x36) == null);
+    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, out.writer());
+    _ = try target.apply((try commands.parse("plug @uart:sci3")).?, out.writer());
+    const want =
+        \\Plugged max17048 into i2c:riic@0x36
+        \\Unplugged i2c:riic@0x36
+        \\error: NothingFitted
+        \\error: MissingPart
+        \\
+    ;
+    try std.testing.expectEqualStrings(want, out.items);
+}

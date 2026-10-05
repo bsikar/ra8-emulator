@@ -88,3 +88,12 @@ test "breaks and watches are listed as gdb asks" {
     try expectParsed(.breakpoints, "i b");
     try expectParsed(.breakpoints, "info break");
 }
+
+test "plug and unplug keep their part and endpoint as written" {
+    const plugged = (try commands.parse("plug max17048@i2c:riic@0x36")).?;
+    try std.testing.expectEqualStrings("max17048@i2c:riic@0x36", plugged.plug);
+    const unplugged = (try commands.parse("unplug uart:sci3  # the modem")).?;
+    try std.testing.expectEqualStrings("uart:sci3", unplugged.unplug);
+    try std.testing.expectError(error.MissingArgument, commands.parse("plug"));
+    try std.testing.expectError(error.ExtraArgument, commands.parse("unplug uart:sci3 now"));
+}

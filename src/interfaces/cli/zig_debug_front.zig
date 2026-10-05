@@ -15,6 +15,7 @@ const BoardBus = @import("../../core/cpu/board_bus.zig").BoardBus;
 const cpu_mod = @import("../../core/cpu/cpu.zig");
 const NvicSource = @import("../../core/cpu/exception/nvic_source.zig").NvicSource;
 const Board = @import("../../board/board.zig").Board;
+const session_plug = @import("../../board/session_plug.zig");
 const script = @import("../../debug/script.zig");
 const session = @import("../../debug/session.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
@@ -92,6 +93,10 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
     target.session.attachInputScript(&board.input_script);
     var loading: LoaderState = .{ .cpu0 = &cpu, .memory0 = cpu0.own() };
     target.session.attachLoader(.{ .context = &loading, .loadFn = LoaderState.load });
+    var parts_arena = std.heap.ArenaAllocator.init(allocator);
+    defer parts_arena.deinit();
+    var plugs = session_plug.Plugs.init(&board, parts_arena.allocator());
+    target.session.attachPlugs(plugs.hook());
     try target.session.load(.cpu0, image.bytes);
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};

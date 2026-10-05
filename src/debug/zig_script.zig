@@ -13,8 +13,9 @@ const session_report = @import("session_report.zig");
 const session_view = @import("session_view.zig");
 const watch_table = @import("watch_table.zig");
 const session_api = @import("session_api.zig");
+const endpoint = @import("../periph/model/endpoint.zig");
 
-pub const Error = error{Unsupported};
+pub const Error = error{ Unsupported, MissingPart };
 
 const Temporary = std.BoundedArray(break_table.Id, break_table.limits.capacity);
 
@@ -40,6 +41,11 @@ pub const ZigScript = struct {
     }
 
     fn dispatch(self: *ZigScript, command: commands.Command, out: anytype) !void {
+        switch (command) {
+            .plug => |text| return self.plug(text, out),
+            .unplug => |text| return self.unplug(text, out),
+            else => {},
+        }
         const view = try self.session.view(self.session.currentCore());
         switch (command) {
             .brk => |at| try self.setBreak(at, false, out),
@@ -58,6 +64,21 @@ pub const ZigScript = struct {
             .core => |index| try self.switchTo(index, out),
             else => return Error.Unsupported,
         }
+    }
+
+    /// `plug NAME@ENDPOINT`: the board wires a fresh NAME onto ENDPOINT.
+    fn plug(self: *ZigScript, text: []const u8, out: anytype) !void {
+        const split = std.mem.indexOfScalar(u8, text, '@') orelse return Error.MissingPart;
+        if (split == 0) return Error.MissingPart;
+        const at = try endpoint.parse(text[split + 1 ..]);
+        try self.session.plug(self.session.currentCore(), at, text[0..split]);
+        try out.print("Plugged {s} into {s}\n", .{ text[0..split], text[split + 1 ..] });
+    }
+
+    /// `unplug ENDPOINT`: the line behaves as if nothing were on it.
+    fn unplug(self: *ZigScript, text: []const u8, out: anytype) !void {
+        try self.session.unplug(self.session.currentCore(), try endpoint.parse(text));
+        try out.print("Unplugged {s}\n", .{text});
     }
 
     /// As session.zig's switchTo: say which core has the session and where
