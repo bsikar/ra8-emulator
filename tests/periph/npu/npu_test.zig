@@ -5,11 +5,12 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const npu = ra8.periph.npu;
 const cmd = ra8.periph.npu_cmd;
-const engine = ra8.core.engine;
+const store_memory = @import("../store_memory.zig");
+const Guest = store_memory.Guest;
 
-/// Guest memory the arenas and the command stream live in. One mapped page
-/// is enough for a stream and two small regions.
-const arena_base: u32 = 0x2000_0000;
+/// The arenas and command stream sit in the top 16 KiB of DTCM, so a walk
+/// off the arena's end reaches memory nothing backs.
+const arena_base: u32 = ra8.core.memmap.dtcm_end - arena_size;
 const arena_size: u32 = 0x4000;
 const stream_at: u32 = arena_base;
 const source_at: u32 = arena_base + 0x100;
@@ -30,18 +31,17 @@ fn peek(unit: *npu.Npu, offset: u32) u32 {
 /// The NPU with guest memory behind it, the way attach() wires it on an
 /// RA8P1 run.
 const Bench = struct {
-    core: engine.Engine,
+    core: Guest,
     unit: npu.Npu,
 
     fn open(self: *Bench) !void {
-        self.core = try engine.Engine.open();
-        try self.core.map(arena_base, arena_size);
+        self.core = try store_memory.open();
         self.unit = npu.Npu.init();
-        self.unit.memory = .{ .engine = self.core };
+        self.unit.memory = self.core;
     }
 
     fn close(self: *Bench) void {
-        self.core.close();
+        store_memory.close(self.core);
     }
 
     /// Point the queue at a stream and give it the two regions it names.
