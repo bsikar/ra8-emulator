@@ -11,7 +11,8 @@ const cache = ra8.periph.drw_cache;
 const limit = ra8.periph.drw_limit;
 const pdctr = ra8.periph.pdctr;
 const prcr = ra8.periph.prcr;
-const engine = ra8.core.engine;
+const store_memory = @import("../store_memory.zig");
+const Guest = store_memory.Guest;
 
 /// The SDRAM address the graphics examples draw into.
 const fb_base: u32 = 0x6800_0000;
@@ -131,10 +132,9 @@ test "the framebuffer cache is no longer a decline: the render happens and the p
     const guard = unlockedGuard();
     const domain = poweredDomain(&guard);
     var unit = drw.Drw.init(&domain);
-    var memory = try engine.Engine.open();
-    defer memory.close();
-    try memory.mapBoardRam();
-    unit.memory = .{ .engine = memory };
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
+    unit.memory = memory;
 
     const ram: u32 = 0x2200_0000;
     try memory.writeWord(ram, 0);
@@ -166,25 +166,24 @@ test "a render with no memory behind it is declined, not silently counted" {
     try std.testing.expectEqual(@as(u32, 0), unit.renders);
 }
 
-/// A board's worth of machine for the rasterizing tests: SDRAM mapped, the
-/// domain powered, the engine handed to the block as its framebuffer memory.
+/// A board's worth of machine for the rasterizing tests: SDRAM backed, the
+/// domain powered, the store handed to the block as its framebuffer memory.
 const Bench = struct {
-    core: engine.Engine,
+    core: Guest,
     guard: prcr.Prcr,
     domain: pdctr.Pdctr,
     unit: drw.Drw,
 
     fn open(self: *Bench) !void {
-        self.core = try engine.Engine.open();
-        try self.core.map(fb_base, 0x1000);
+        self.core = try store_memory.open();
         self.guard = unlockedGuard();
         self.domain = poweredDomain(&self.guard);
         self.unit = drw.Drw.init(&self.domain);
-        self.unit.memory = .{ .engine = self.core };
+        self.unit.memory = self.core;
     }
 
     fn close(self: *Bench) void {
-        self.core.close();
+        store_memory.close(self.core);
     }
 
     fn pixel(self: *Bench, index: u32) !u32 {

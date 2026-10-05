@@ -6,7 +6,8 @@ const ra8 = @import("ra8");
 
 const tex = ra8.periph.drw_tex;
 const texel = ra8.periph.drw_texel;
-const engine = ra8.core.engine;
+const store_memory = @import("../store_memory.zig");
+const Guest = store_memory.Guest;
 
 /// An SRAM address a texture can live at, which memmap.masterHolds admits.
 const tex_base: u32 = 0x2200_0000;
@@ -25,13 +26,6 @@ fn programmed() tex.Source {
     _ = source.latch(tex.off.texpitch, 8);
     _ = source.latch(tex.off.texmask, 7 << 16 | 7);
     return source;
-}
-
-fn machine() !engine.Engine {
-    var unit = try engine.Engine.open();
-    errdefer unit.close();
-    try unit.mapBoardRam();
-    return unit;
 }
 
 test "the texture registers latch and every other offset is left alone" {
@@ -116,27 +110,27 @@ test "a texture with no origin or pitch, or a pitch past the clamp, is refused" 
 }
 
 test "a plain ARGB8888 texel comes back as it was stored" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0xFF11_2233);
     var source = programmed();
     const word = readFormat(0x2);
-    try std.testing.expectEqual(@as(?u32, 0xFF11_2233), source.sample(.{ .engine = memory }, word, 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF11_2233), source.sample(memory, word, 0, 0));
     try std.testing.expectEqual(@as(u64, 1), source.texels);
 }
 
 test "the V coordinate steps a whole texture row, not a texel" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base + 8 * 4, 0xFF44_5566);
     var source = programmed();
     _ = source.latch(tex.off.lvyaddi, 1);
-    try std.testing.expectEqual(@as(?u32, 0xFF44_5566), source.sample(.{ .engine = memory }, readFormat(0x2), 0, 1));
+    try std.testing.expectEqual(@as(?u32, 0xFF44_5566), source.sample(memory, readFormat(0x2), 0, 1));
 }
 
 test "four I4 texels share a byte, low nibble first" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0x0000_0021);
     var source = programmed();
     _ = source.latch(tex.off.texcladdr, 0);
@@ -145,97 +139,97 @@ test "four I4 texels share a byte, low nibble first" {
     _ = source.latch(tex.off.texcldata, 0xFF00_FF00);
     _ = source.latch(tex.off.luxadd, 16);
     const word = readFormat(0xA) | tex.control2.clut_enable;
-    try std.testing.expectEqual(@as(?u32, 0xFF00_00FF), source.sample(.{ .engine = memory }, word, 0, 0));
-    try std.testing.expectEqual(@as(?u32, 0xFF00_FF00), source.sample(.{ .engine = memory }, word, 1, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_00FF), source.sample(memory, word, 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_FF00), source.sample(memory, word, 1, 0));
 }
 
 test "ACLUT44 takes its colour from the palette and its alpha from the texel" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0x0000_0081);
     var source = programmed();
     _ = source.latch(tex.off.texcladdr, 1);
     _ = source.latch(tex.off.texcldata, 0xFF11_2233);
     const word = readFormat(0x5) | tex.control2.clut_enable;
-    const got = source.sample(.{ .engine = memory }, word, 0, 0).?;
+    const got = source.sample(memory, word, 0, 0).?;
     try std.testing.expectEqual(@as(u32, 0x11_2233), got & tex.limits.rgb_mask);
     try std.testing.expectEqual(@as(u32, 0x88), got >> 24);
 }
 
 test "a 565 palette is expanded, a plain one is not" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0x0000_0000);
     var source = programmed();
     _ = source.latch(tex.off.texcladdr, 0);
     _ = source.latch(tex.off.texcldata, 0xF800);
     const word = readFormat(0x9) | tex.control2.clut_enable;
-    try std.testing.expectEqual(@as(?u32, 0xF800), source.sample(.{ .engine = memory }, word, 0, 0));
-    try std.testing.expectEqual(@as(?u32, 0xFFFF_0000), source.sample(.{ .engine = memory }, word | tex.control2.clut_565, 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xF800), source.sample(memory, word, 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFFFF_0000), source.sample(memory, word | tex.control2.clut_565, 0, 0));
 }
 
 test "a colour-keyed texel paints nothing, and the key ignores alpha" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0xFF00_FF00);
     var source = programmed();
     _ = source.latch(tex.off.colkey, 0x0000_FF00);
     const word = readFormat(0x2) | tex.control2.colkey_enable;
-    try std.testing.expectEqual(@as(?u32, null), source.sample(.{ .engine = memory }, word, 0, 0));
+    try std.testing.expectEqual(@as(?u32, null), source.sample(memory, word, 0, 0));
     try std.testing.expectEqual(@as(u64, 1), source.keyed);
-    try std.testing.expectEqual(@as(?u32, 0xFF00_FF00), source.sample(.{ .engine = memory }, readFormat(0x2), 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_FF00), source.sample(memory, readFormat(0x2), 0, 0));
 }
 
 test "a coordinate past the mask wraps, and is counted" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0xFF00_0001);
     var source = programmed();
     _ = source.latch(tex.off.luxadd, 16);
-    try std.testing.expectEqual(@as(?u32, 0xFF00_0001), source.sample(.{ .engine = memory }, readFormat(0x2), 8, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_0001), source.sample(memory, readFormat(0x2), 8, 0));
     try std.testing.expectEqual(@as(u64, 1), source.wrapped);
 }
 
 test "with the clamp bits set the coordinate stops at the edge instead" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base + 7 * 4, 0xFF99_9999);
     var source = programmed();
     _ = source.latch(tex.off.luxadd, 16);
     const word = readFormat(0x2) | tex.control2.clamp_x;
-    try std.testing.expectEqual(@as(?u32, 0xFF99_9999), source.sample(.{ .engine = memory }, word, 9, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF99_9999), source.sample(memory, word, 9, 0));
     try std.testing.expectEqual(@as(u64, 1), source.wrapped);
 }
 
 test "a negative coordinate wraps to the far edge, or clamps to zero" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     try memory.writeWord(tex_base, 0xFF00_0001);
     try memory.writeWord(tex_base + 7 * 4, 0xFF00_0007);
     var source = programmed();
     _ = source.latch(tex.off.lustart, @bitCast(@as(i32, -16)));
-    try std.testing.expectEqual(@as(?u32, 0xFF00_0007), source.sample(.{ .engine = memory }, readFormat(0x2), 0, 0));
-    try std.testing.expectEqual(@as(?u32, 0xFF00_0001), source.sample(.{ .engine = memory }, readFormat(0x2) | tex.control2.clamp_x, 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_0007), source.sample(memory, readFormat(0x2), 0, 0));
+    try std.testing.expectEqual(@as(?u32, 0xFF00_0001), source.sample(memory, readFormat(0x2) | tex.control2.clamp_x, 0, 0));
 }
 
 test "a texture outside RAM is not read, and is counted apart from a fault" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     var source = tex.Source{};
     _ = source.latch(tex.off.texorigin, 0x4000_0000);
     _ = source.latch(tex.off.texpitch, 8);
-    try std.testing.expectEqual(@as(?u32, null), source.sample(.{ .engine = memory }, readFormat(0x2), 0, 0));
+    try std.testing.expectEqual(@as(?u32, null), source.sample(memory, readFormat(0x2), 0, 0));
     try std.testing.expectEqual(@as(u64, 1), source.off_ram);
     try std.testing.expectEqual(@as(u64, 0), source.faults);
     try std.testing.expectEqual(@as(u64, 0), source.texels);
 }
 
 test "a fresh source is quiet and a sampled one is not" {
-    var memory = try machine();
-    defer memory.close();
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
     var source = programmed();
     try std.testing.expect(source.quiet());
-    _ = source.sample(.{ .engine = memory }, readFormat(0x2), 0, 0);
+    _ = source.sample(memory, readFormat(0x2), 0, 0);
     try std.testing.expect(!source.quiet());
 }
 
