@@ -16,7 +16,7 @@ const touch_input = ra8.periph.i3c_touch_input;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [8192]u8 = [_]u8{0} ** 8192,
 
     fn init() Ram {
         var memory: Ram = .{};
@@ -173,6 +173,89 @@ test "session input calls advance the board and expose firmware touch reports" {
     _ = try session.step(.cpu0);
     _ = try session.step(.cpu0);
     try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+}
+
+test "session lists widgets and taps the named widget center" {
+    var memory = Ram.init();
+    for (memory.bytes[8..], 0..) |*byte, index| byte.* = if (index % 2 == 0) 0x00 else 0xBF;
+    const tree_address: u32 = 256;
+    var channel: [16 + 88]u8 = @splat(0);
+    std.mem.writeInt(u32, channel[0..4], 0x52385754, .little);
+    std.mem.writeInt(u16, channel[4..6], 1, .little);
+    std.mem.writeInt(u16, channel[6..8], 1, .little);
+    std.mem.writeInt(u32, channel[8..12], 7, .little);
+    const record = channel[16..];
+    putText(record[0..32], "settings_button");
+    putText(record[32..48], "button");
+    putText(record[48..72], "ready");
+    std.mem.writeInt(i32, record[72..76], 200, .little);
+    std.mem.writeInt(i32, record[76..80], 300, .little);
+    std.mem.writeInt(i32, record[80..84], 100, .little);
+    std.mem.writeInt(i32, record[84..88], 50, .little);
+    @memcpy(memory.bytes[tree_address..][0..channel.len], &channel);
+
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 };
+    var session: api.Session = .{ .live = live };
+    var loader: LoadLog = .{};
+    session.attachLoader(.{ .context = &loader, .loadFn = LoadLog.load });
+    var image: [256]u8 = @splat(0);
+    widgetTreeElf(&image, tree_address);
+    try session.load(.cpu0, &image);
+    var events = input_script.Script{};
+    var panel = gt911.Panel{};
+    var pins = gpio.Gpio.init();
+    var input = touch_input.Input{};
+    var board = InputBoard{ .events = &events, .panel = &panel, .pins = &pins, .input = &input };
+    var store = try Store.init(null);
+    defer store.deinit();
+    session.attachInputScript(&events);
+    session.attachBoard(.cpu0, .{ .context = &board, .tickFn = InputBoard.tick }, .{ .store = &store });
+
+    const widgets = try session.widgets(std.testing.allocator, .cpu0);
+    defer std.testing.allocator.free(widgets);
+    try std.testing.expectEqual(@as(usize, 1), widgets.len);
+    try std.testing.expectEqualStrings("settings_button", widgets[0].nameSlice());
+    try std.testing.expectEqualStrings("button", widgets[0].kindSlice());
+    try std.testing.expectEqualStrings("ready", widgets[0].stateSlice());
+    try std.testing.expectEqual(ra8.core.widget_tree.Rect{ .x = 200, .y = 300, .w = 100, .h = 50 }, widgets[0].rect);
+
+    try session.tapWidget(std.testing.allocator, .cpu0, 50_000_000, "settings_button");
+    _ = try session.step(.cpu0);
+    try std.testing.expectEqual(gt911.Contact{ .x = 250, .y = 325 }, firmwareReport(&panel).?);
+    try std.testing.expectError(error.WidgetNotFound, session.tapWidget(std.testing.allocator, .cpu0, 100_000_000, "missing"));
+}
+
+fn widgetTreeElf(out: []u8, address: u32) void {
+    @memcpy(out[0..4], "\x7fELF");
+    out[4] = 1;
+    out[5] = 1;
+    std.mem.writeInt(u16, out[18..20], 40, .little);
+    std.mem.writeInt(u32, out[32..36], 52, .little);
+    std.mem.writeInt(u16, out[46..48], 40, .little);
+    std.mem.writeInt(u16, out[48..50], 3, .little);
+    std.mem.writeInt(u16, out[50..52], 0, .little);
+    const symtab = out[92..132];
+    std.mem.writeInt(u32, symtab[4..8], 2, .little);
+    std.mem.writeInt(u32, symtab[16..20], 172, .little);
+    std.mem.writeInt(u32, symtab[20..24], 32, .little);
+    std.mem.writeInt(u32, symtab[24..28], 2, .little);
+    std.mem.writeInt(u32, symtab[32..36], 4, .little);
+    std.mem.writeInt(u32, symtab[36..40], 16, .little);
+    const strings = out[132..172];
+    std.mem.writeInt(u32, strings[4..8], 3, .little);
+    std.mem.writeInt(u32, strings[16..20], 204, .little);
+    const symbol_name = "\x00ra8_widget_debug_tree\x00";
+    std.mem.writeInt(u32, strings[20..24], @intCast(symbol_name.len), .little);
+    std.mem.writeInt(u32, out[188..192], 1, .little);
+    std.mem.writeInt(u32, out[192..196], address, .little);
+    @memcpy(out[204..][0..symbol_name.len], symbol_name);
+}
+
+fn putText(out: []u8, value: []const u8) void {
+    @memcpy(out[0..value.len], value);
 }
 
 fn firmwareReport(panel: *gt911.Panel) ?gt911.Contact {

@@ -18,6 +18,9 @@ const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const session_display = @import("session_display.zig");
 const endpoint = @import("../periph/model/endpoint.zig");
 const fault_spec = @import("../periph/model/fault_spec.zig");
+const elf = @import("../core/elf.zig");
+const symbols = @import("symbols.zig");
+const widget_tree = @import("widget_tree.zig");
 
 pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, TooManyListeners };
@@ -28,6 +31,7 @@ pub const WatchId = watch_table.Id;
 pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
 pub const Frame = session_display.Frame;
+pub const Widget = widget_tree.Widget;
 
 pub const Loader = struct {
     context: *anyopaque,
@@ -77,6 +81,7 @@ pub const Session = struct {
     display: ?session_display.Display = null,
     faults: ?FaultHook = null,
     plugs: ?PlugHook = null,
+    widget_tree_addresses: [2]?u32 = .{ null, null },
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
@@ -148,7 +153,39 @@ pub const Session = struct {
         try self.select(core);
         const loader = self.loader orelse return Error.NoLoader;
         try loader.loadFn(loader.context, core, image);
+        const tree_address = if (elf.Image.init(image)) |parsed|
+            symbols.addressOf(parsed, widget_tree.symbol)
+        else |_|
+            null;
+        self.widget_tree_addresses[@intFromEnum(core)] = tree_address;
         self.publish(.{ .core = core, .kind = .loaded });
+    }
+
+    /// Read the latest visible widget snapshot published by ra8_widget.
+    pub fn widgets(self: *Session, allocator: std.mem.Allocator, core: Core) anyerror![]Widget {
+        try self.select(core);
+        const address = self.widget_tree_addresses[@intFromEnum(core)] orelse return error.NoWidgetTree;
+        return widget_tree.read(self.live.view(), address, allocator);
+    }
+
+    /// Tap the center of the uniquely named widget at virtual time `at_ns`.
+    pub fn tapWidget(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8) anyerror!void {
+        const tree = try self.widgets(allocator, core);
+        defer allocator.free(tree);
+
+        var found: ?*const Widget = null;
+        for (tree) |*widget| {
+            if (!std.mem.eql(u8, widget.nameSlice(), name)) continue;
+            if (found != null) return error.AmbiguousWidget;
+            found = widget;
+        }
+        const widget = found orelse return error.WidgetNotFound;
+        const rect = widget.rect;
+        if (rect.w <= 0 or rect.h <= 0) return error.InvalidWidgetRect;
+        const x = @as(i64, rect.x) + @divTrunc(rect.w, 2);
+        const y = @as(i64, rect.y) + @divTrunc(rect.h, 2);
+        if (x < 0 or x > std.math.maxInt(u16) or y < 0 or y > std.math.maxInt(u16)) return error.InvalidWidgetRect;
+        try self.tap(core, at_ns, @intCast(x), @intCast(y));
     }
 
     /// Queue a panel-pixel tap for virtual board time `at_ns`.
