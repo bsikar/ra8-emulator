@@ -15,6 +15,7 @@ const thread_priority = @import("../../gui/thread_priority.zig");
 const console_feed = @import("../../gui/console_feed.zig");
 const console_log = @import("../../gui/console_log.zig");
 const sci = @import("../../periph/sci/sci.zig");
+const window_devices = @import("window_devices.zig");
 
 /// Finished lines each channel's console keeps.
 pub const console_capacity: usize = 2000;
@@ -43,11 +44,13 @@ pub const Shown = struct {
 
 /// Shows `board` in `window` while `engine` runs it, the camera pane
 /// starting on `camera`, the run's own source. The panel is scanned once
-/// before the engine starts, so the first frame never races it.
-pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec) !Shown {
+/// before the engine starts, so the first frame never races it. The
+/// devices pane lists `devices` and plugs through it; null shows none.
+pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec, devices: ?*window_devices.Devices) !Shown {
     var screen = try window_board.Screen.init(allocator, board, pacer.granter());
     defer screen.deinit();
     screen.on_engine = true;
+    screen.devices = devices;
     pacer.at_park = screen.parkHook();
     var feed = console_feed.Feed{ .allocator = allocator, .now = screen.clock() };
     defer feed.deinit();
@@ -61,6 +64,7 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     defer loop.deinit();
     loop.pane.seed(camera);
     loop.console = &logs[sci.console_channel];
+    if (devices) |d| loop.useDevices(&d.panel, &d.post);
     var host_devices: ?std.fs.Dir = std.fs.openDirAbsolute(camera_devices.host_dir, .{ .iterate = true }) catch null;
     defer if (host_devices) |*dir| dir.close();
     if (host_devices) |dir| loop.useDeviceDir(dir);

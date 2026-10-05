@@ -131,6 +131,7 @@ pub const board = struct {
     pub const window_board = @import("interfaces/cli/window_board.zig");
     pub const window_pace = @import("interfaces/cli/window_pace.zig");
     pub const window_run = @import("interfaces/cli/window_run.zig");
+    pub const window_devices = @import("interfaces/cli/window_devices.zig");
     pub const window_main = @import("interfaces/cli/window_main.zig");
     pub const report_dma = @import("interfaces/cli/report/dma.zig");
     pub const report_unmodelled = @import("interfaces/cli/report/unmodelled.zig");
