@@ -53,6 +53,11 @@ pub fn setCurrentMediaType(reader: *anyopaque, stream: u32, media_type: *anyopaq
     return method(F, reader, abi.slot.reader_set_current_media_type)(reader, stream, null, media_type);
 }
 
+pub fn getCurrentMediaType(reader: *anyopaque, stream: u32, out: *?*anyopaque) HRESULT {
+    const F = *const fn (*anyopaque, u32, *?*anyopaque) callconv(abi.cc) HRESULT;
+    return method(F, reader, abi.slot.reader_get_current_media_type)(reader, stream, out);
+}
+
 /// One synchronous IMFSourceReader::ReadSample; `sample` stays null on a
 /// gap or at the end of the stream.
 pub fn readSample(reader: *anyopaque, stream: u32, flags: *u32, sample: *?*anyopaque) HRESULT {
