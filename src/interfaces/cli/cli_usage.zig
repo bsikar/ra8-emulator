@@ -71,6 +71,8 @@ pub const text =
     \\  --trace-rtos-out FILE
     \\                     --trace-rtos, and write the trace to FILE (CPU1's
     \\                     to FILE.cpu1) as text a reader can take back
+    \\  --save-state PATH  write the whole run to PATH once the budget is spent
+    \\  --load-state PATH  start from a run --save-state wrote (not with --cpu1)
     \\  --frame-out PATH   write what the panel shows at the end as a PNG
     \\  --panel-only       write just the panel, at its own size
     \\  --frames-out DIR   write numbered P6 panel frames

@@ -103,6 +103,7 @@ test {
     _ = @import("window_still_test.zig");
     _ = @import("window_stills_test.zig");
     _ = @import("frames_args_test.zig");
+    _ = @import("state_args_test.zig");
     _ = @import("frames_out_test.zig");
     _ = @import("window_board_test.zig");
     _ = @import("window_pace_test.zig");
