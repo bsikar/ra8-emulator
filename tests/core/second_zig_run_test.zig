@@ -31,7 +31,7 @@ fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
     try driver.core.openOn(memory, Units.of(&driver.second), &board.bus);
 }
 
-test "a round runs CPU1's share on its Zig core and counts it the Unicorn way" {
+test "a round runs CPU1's share on its Zig core and counts it by core rate" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var driver: Driver = undefined;

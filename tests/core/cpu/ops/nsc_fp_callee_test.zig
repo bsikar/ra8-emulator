@@ -1,7 +1,7 @@
 //! RA8EMU-484 (the lockstep clause of RA8EMU-380): a Non-secure call through
 //! an NSC veneer into a Secure callee that uses FP, stepped one instruction
-//! at a time through Cpu.step on the Zig core. Unicorn has no Security state
-//! for SG or BXNS (blxns_test, "BLXNS is not checked against Unicorn"), so
+//! at a time through Cpu.step on the Zig core. There is no lockstep oracle
+//! for SG or BXNS (blxns_test, "BLXNS has no lockstep oracle"), so
 //! this register trace is the reference the ticket asks for instead of a
 //! lockstep row. Encodings from arm-none-eabi-as 13.3
 //! -march=armv8.1-m.main+mve.fp+fp.dp:

@@ -27,6 +27,6 @@ test "SVC raises exception 11 for the core to take once it retires" {
     try std.testing.expectEqual(fixture.code, cpu.regs.pc);
 }
 
-test "SVC is not checked against Unicorn yet" {
+test "SVC has no lockstep oracle" {
     try std.testing.expect(!svc.group.oracle);
 }

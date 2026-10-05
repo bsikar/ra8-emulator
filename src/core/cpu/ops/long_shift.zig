@@ -3,7 +3,7 @@
 //! Each shifts the 64-bit value RdaHi:RdaLo held in an even/odd register
 //! pair and writes it back to the same pair. They sit in what Armv8-M left
 //! as ORRS with the PC as the shifted operand (hw2[3:0] = 0b1111), so a core
-//! without MVE, Unicorn included, reads them as that UNPREDICTABLE ORRS.
+//! without MVE reads them as that UNPREDICTABLE ORRS.
 //! This group claims them before ORRS gets the chance (RA8EMU-138).
 //!
 //! The fields, from the encoding:

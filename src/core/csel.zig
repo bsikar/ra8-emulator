@@ -1,8 +1,7 @@
 //! Armv8.1-M conditional select: CSEL, CSINC, CSINV and CSNEG.
 //!
-//! Same gap as the low-overhead loops next door, and found the same way. The
-//! pinned Unicorn offers no Armv8.1-M CPU model, so the core rejects these
-//! four encodings outright, and a compiler targeting a Cortex-M85 reaches for
+//! Same gap as the low-overhead loops next door, and found the same way. An
+//! Armv8.0-M CPU model rejects these four encodings outright, and a compiler targeting a Cortex-M85 reaches for
 //! them wherever a C ternary or a boolean result would otherwise cost a
 //! branch. `ra8_mpu_abi.validateCfg` is the case that pushed this: it ends in
 //!

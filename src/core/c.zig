@@ -3,8 +3,7 @@
 //! Everything above this file is native Zig with native Zig types. Nothing
 //! here is exported back to C, and the emulator keeps no C ABI of its own;
 //! this declaration exists only because the error-path disassembler is a C
-//! library. Unicorn's went with the engine (RA8EMU-607), and Capstone's goes
-//! when src/debug/disasm.zig moves to our own disassembler (RA8EMU-249).
+//! library. Capstone's goes when src/debug/disasm.zig moves to our own disassembler (RA8EMU-249).
 pub const cs = @cImport({
     @cInclude("capstone/capstone.h");
 });

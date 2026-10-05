@@ -1,7 +1,7 @@
 //! Where a thread resumes after the store that pended it.
 //!
 //! The pend hook stops the stretch from inside the store's own write, and
-//! Unicorn leaves the program counter ON that store with the write already
+//! the program counter is left ON that store with the write already
 //! made. Resuming there runs the store a second time. For an ordinary word
 //! that is harmless; for `ICSR.PENDSVSET` it is a second request to switch.
 //!

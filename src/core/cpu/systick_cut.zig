@@ -4,7 +4,7 @@
 //! the stretch begins, and at reset nothing is armed, so the first stretch
 //! is a whole boundary wide.
 //! `ra8_time_init` arms SysTick inside it, and the periods that stretch then
-//! covers collapse into one pend: blink_hal ran 5 ms behind Unicorn from
+//! covers collapse into one pend: blink_hal ran 5 ms behind the part from
 //! boot that way. Seeing the store, and ending the stretch after the
 //! instruction that made it, keeps the next boundary cut from the period the
 //! firmware just armed. src/periph/systick_arm.zig holds the rule; this

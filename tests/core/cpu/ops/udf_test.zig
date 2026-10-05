@@ -79,6 +79,6 @@ test "UDF with FAULTMASK set locks up and stops on the UDF" {
     try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr));
 }
 
-test "UDF is not checked against Unicorn" {
+test "UDF has no lockstep oracle" {
     try std.testing.expect(!udf.group.oracle);
 }

@@ -1,6 +1,6 @@
 //! Why a run stopped badly: the faulting access, and where the hook puts it.
 //!
-//! Unicorn reports an invalid access twice and never in one piece. The
+//! An invalid access is reported twice and never in one piece. The
 //! memory hook fires first and carries the address, the width and the value,
 //! but cannot stop the run or return anything; the run then ends with an
 //! error code that carries none of those. So the hook writes what it saw
@@ -16,7 +16,7 @@ const disasm = @import("../debug/disasm.zig");
 pub const Fault = struct {
     pc: u32,
     detail: []const u8,
-    /// The access that took the fault, when Unicorn reported one.
+    /// The access that took the fault, when one was reported.
     access: ?Access = null,
     /// The instruction at the PC, when it decoded.
     instruction: ?disasm.Text = null,
@@ -29,7 +29,7 @@ pub const Fault = struct {
     };
 };
 
-/// Catches the invalid access behind a fault. Unicorn reports the address and
+/// Catches the invalid access behind a fault. The address and
 /// width in a hook and only the error code afterwards, so the hook writes here
 /// and `run` reads it back once the run has stopped.
 pub const Watch = struct {

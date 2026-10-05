@@ -1,10 +1,6 @@
 //! UDF, the permanently undefined instruction (T1 and T2). It never runs:
 //! the core takes it as a UsageFault with CFSR.UNDEFINSTR set, and the
 //! stacked return address is the UDF itself.
-//!
-//! Not checked against Unicorn: Unicorn reports an undefined instruction as
-//! an emulator error instead of raising the fault, so lockstep cannot
-//! follow the handler that comes after it.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;

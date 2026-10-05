@@ -14,9 +14,6 @@
 //!
 //! Left unclaimed: Rm of SP or PC, and the 32-bit space. BXNS is
 //! src/core/cpu/ops/bxns.zig.
-//!
-//! Not checked against Unicorn: its side is the tz hook, which performs the
-//! same branch and stops the run, so lockstep brings Unicorn to this state.
 const std = @import("std");
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;

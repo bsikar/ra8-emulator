@@ -13,9 +13,6 @@
 //!
 //! The attribution comes from Cpu.attribution; with none set every address
 //! is Secure, so the Non-secure cases only arise once a board supplies one.
-//!
-//! Not checked against Unicorn: its flat domain has no security attribution,
-//! so a lockstep run steps only the Zig core for SG.
 const op = @import("../op.zig");
 const attribution = @import("../attribution.zig");
 const Cpu = @import("../cpu.zig").Cpu;

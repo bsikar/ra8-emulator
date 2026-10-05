@@ -10,9 +10,6 @@
 //!
 //! Left unclaimed: Rm of SP or PC. FNC_RETURN targets arrive with
 //! RA8EMU-32; until then they take the BX path.
-//!
-//! Not checked against Unicorn: its flat domain has no security state, so a
-//! lockstep run steps only the Zig core for BXNS.
 const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;

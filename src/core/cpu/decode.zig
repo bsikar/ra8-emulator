@@ -8,7 +8,7 @@ pub const Hit = struct {
     /// The class the instruction was decoded under.
     group: []const u8,
     exec: op.Exec,
-    /// Whether Unicorn can be the lockstep oracle for it; see `op.Group`.
+    /// Whether a lockstep oracle checks it; see `op.Group`.
     oracle: bool,
     /// How it treats a nonzero EPSR.ECI (RA8EMU-453).
     eci: op.Eci = .refuses,

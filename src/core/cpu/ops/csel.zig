@@ -1,9 +1,8 @@
 //! Armv8.1-M conditional select (T1): CSEL, CSINC, CSINV and CSNEG, and the
 //! CSET, CSETM and CINC aliases a compiler actually emits for them.
 //!
-//! The encoding and the select itself live in src/core/csel.zig, the seam
-//! the Unicorn backend steps by hand. This group reuses both, so the two
-//! backends cannot disagree about what lands in Rd. Register 0b1111 in Rn or
+//! The encoding and the select itself live in src/core/csel.zig, and this
+//! group reuses both. Register 0b1111 in Rn or
 //! Rm is the zero register, never the PC. None of the four writes flags.
 //!
 //! Left unclaimed (decode in csel.zig refuses them): SP in any register

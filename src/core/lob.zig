@@ -2,8 +2,7 @@
 //!
 //! The RA8D2 core is a Cortex-M85, and a compiler told to target one emits
 //! these three instructions for an ordinary counted loop, `memcpy` and
-//! `memset` included. The pinned Unicorn offers no Armv8.1-M CPU model: the
-//! newest it has is the Cortex-M33, which is Armv8.0-M, so the core rejects
+//! `memset` included. A Cortex-M33 model is Armv8.0-M and rejects
 //! the encoding and a real image stops in its C startup before it reaches
 //! main(). They are decoded here and stepped by the Zig core in
 //! src/core/cpu/ops/lob.zig, which is far more honest than telling a

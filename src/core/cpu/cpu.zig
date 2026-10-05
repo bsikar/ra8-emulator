@@ -1,8 +1,5 @@
 //! The Zig core: a register file, the bus it fetches through, and the
 //! fetch-decode-execute step.
-//!
-//! RA8EMU-15 brought it up beside Unicorn; since RA8EMU-606 it is the only
-//! CPU, and Unicorn is no longer linked (RA8EMU-607).
 const bus = @import("bus.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
@@ -122,8 +119,7 @@ pub const Cpu = struct {
     entering_non_secure: bool = false,
     /// Which security state an address belongs to; null means all Secure.
     attribution: ?attribution.Attribution = null,
-    /// How many SecureFaults this core has taken. Lockstep reads it around a
-    /// step, since Unicorn models no security state to compare one against.
+    /// How many SecureFaults this core has taken.
     secure_faults: u32 = 0,
     /// The MPU check the board bus asks during an instruction's own accesses;
     /// null checks nothing.

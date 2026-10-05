@@ -1,5 +1,5 @@
 //! Taking the precise BusFault a refused data access raises on the Zig core
-//! (RA8EMU-641). It replaced the Unicorn-side src/core/bus_error.zig (RA8EMU-652).
+//! (RA8EMU-641).
 //!
 //! An access the MPU refused is MemManage (mem_manage.zig). Any other refusal
 //! is a precise BusFault when the run records refused addresses on its bus

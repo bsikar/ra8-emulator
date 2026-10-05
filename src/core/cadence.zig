@@ -1,6 +1,6 @@
 //! How finely modelled time advances: the boundary between chunks.
 //!
-//! Nothing inside this model moves on its own. Unicorn runs a stretch of
+//! Nothing inside this model moves on its own. The core runs a stretch of
 //! instructions with the peripherals frozen, and time passes only where that
 //! stretch ends: the board ticks, a counter advances, a due event is raised,
 //! and the controller picks. That end is a boundary, and how many

@@ -1,5 +1,5 @@
 //! The Zig core's own memory: every region of src/core/memmap.zig on host
-//! pages, with no Unicorn engine behind it (RA8EMU-480). It is the first
+//! pages (RA8EMU-480). It is the first
 //! slice of RA8EMU-255, and every run is on it now.
 //!
 //! It keeps the rules src/core/board_ram.zig keeps for the engine.

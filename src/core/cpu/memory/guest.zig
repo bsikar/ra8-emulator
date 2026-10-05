@@ -1,7 +1,6 @@
 //! One handle on guest memory: the Zig core's own store. Board, peripheral
-//! and report code take a Guest (RA8EMU-481). It was a union over the Unicorn
-//! engine and the store; the engine arm went with RA8EMU-607, and the single
-//! arm stays so callers keep writing `.{ .store = ... }`.
+//! and report code take a Guest (RA8EMU-481). It is a union with a single
+//! arm, so callers write `.{ .store = ... }`.
 const std = @import("std");
 const code_lines = @import("../code_lines.zig");
 const Store = @import("store.zig").Store;

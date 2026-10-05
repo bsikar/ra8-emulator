@@ -38,7 +38,7 @@
 //!
 //! THIS CORE IS NOT COPYABLE once it is open, and that is why `open` fills a
 //! caller's `Second` in place instead of returning one. Its watch, its SAU
-//! and its MPU guard are registered with Unicorn BY ADDRESS, so a `Second` returned by
+//! and its MPU guard are registered BY ADDRESS, so a `Second` returned by
 //! value leaves both hooks pointing at the temporary they were taken from
 //! and every record they make lands in freed memory.
 //!

@@ -153,7 +153,7 @@ test "no earlier group claims these encodings" {
     }
 }
 
-test "the group is checked against Unicorn" {
+test "the group has a lockstep oracle" {
     try std.testing.expect(sat.group.oracle);
 }
 
