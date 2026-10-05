@@ -44,6 +44,9 @@ pub const break_sym = @import("zig_break.zig");
 const window_pace = @import("window_pace.zig");
 /// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
 pub const undefined_sites = @import("zig_undefined.zig");
+/// `--save-state` / `--load-state` (RA8EMU-696).
+pub const state_args = @import("state_args.zig");
+pub const zig_snapshot = @import("zig_snapshot.zig");
 
 /// What ends a Zig run before its budget: the `--stop-sym` counter and the
 /// `--break-sym` arrival (RA8EMU-603).
@@ -102,6 +105,8 @@ pub const Clock = struct {
     pace: ?*window_pace.Pacer = null,
     /// The window closed while the run was parked, so the run ends.
     paced_out: bool = false,
+    /// `--save-state` / `--load-state` (RA8EMU-696): zig_snapshot.zig.
+    state: state_args.Options = .{},
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
@@ -194,7 +199,7 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
 pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace };
+    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     const path = if (options.cpu == .zig) options.cpu1_path else null;
@@ -218,11 +223,10 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
     var boot_output = out;
     var final: boot.Regs = .{};
-    // --console opens the ITM as a probe would (RA8EMU-629).
     var audio: audio_out.Run = .{};
     audio.arm(board, if (options.cpu == .zig) options.audio else .{});
     defer audio.deinit();
-    var itm_port = itm_console.opened();
+    var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
     const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
         .boundary = clock.boundary(),
@@ -241,6 +245,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .final = &final,
         .itm = if (options.console) &itm_port else null,
         .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
+        .snapshot = zig_snapshot.hook(&clock),
     });
     if (options.console) try itm_port.flush(out, true);
     clock.soakFaults();

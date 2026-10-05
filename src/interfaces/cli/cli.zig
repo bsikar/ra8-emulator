@@ -89,10 +89,9 @@ pub const Options = struct {
     speed: ?u64 = null, // `--speed`/`--realtime`: thousandths of 1x; null runs flat out
     run_for: bool = false, // `--run-for`: a watchdog reset ends the run (RA8EMU-186)
     idle_skip: bool = true, // a sleeping core runs to its next edge; `--no-idle-skip` steps it
-    /// Cable the HS host jack to the board's own FS device jack.
-    usb_loop: bool = false,
-    /// Write one line per SD command to stderr.
-    trace_sd: bool = false,
+    usb_loop: bool = false, // cable the HS host jack to the board's own FS device jack
+    trace_sd: bool = false, // write one line per SD command to stderr
+    state: @import("state_args.zig").Options = .{}, // `--save-state`, `--load-state` (RA8EMU-696)
     console: bool = false, // `--console`: stream finished SCI console lines to stdout
     console_reply: @import("../../periph/sci/sci_reply.zig").Reply = .{}, // RA8EMU-626
     /// Print this card block back as hex once the run is over.
@@ -334,6 +333,7 @@ fn parseCtl(argv: []const []const u8) !Options {
 /// one of these and `index` has been walked past any value it took.
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
     if (try @import("frames_args.zig").parse(&options.frames, argv, index)) return true;
+    if (try @import("state_args.zig").parse(&options.state, argv, index)) return true;
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
         options.cpu1_path = try world_flags.next(argv, index);
