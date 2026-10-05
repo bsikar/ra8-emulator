@@ -74,6 +74,7 @@ const fifo = @import("ssie_fifo.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const soft_reset = @import("ssie_reset.zig");
+const audio_tap = @import("ssie_tap.zig");
 
 /// The staging FIFO, reached as `ssie.stage` the way the other split blocks
 /// in this tree re-export their halves.
@@ -81,6 +82,9 @@ pub const stage = fifo;
 
 /// The SSIRST rule, reached as `ssie.reset` the same way.
 pub const reset = soft_reset;
+
+/// The shifted-out sample listener and SSICR's stream shape (RA8EMU-648).
+pub const tap = audio_tap;
 
 /// SSIE geometry. The Non-secure alias is folded onto this base by the bus.
 pub const win_base: u32 = 0x4025_D000;
@@ -131,6 +135,8 @@ pub const Channel = struct {
     narrow_writes: u32 = 0,
     /// SSIRST pulses the channel took.
     resets: u32 = 0,
+    /// Hears every sample shifted out (`--audio-out`).
+    listener: ?audio_tap.Tap = null,
 
     pub fn transmitting(self: *const Channel) bool {
         return self.ssicr & field.ten != 0;
@@ -198,6 +204,7 @@ pub const Channel = struct {
     fn shift(self: *Channel, sample: u32) void {
         self.last = sample;
         self.transmitted +%= 1;
+        if (self.listener) |heard| heard.call(sample);
     }
 
     /// Enabling the transmitter starts shifting whatever the FIFO already
