@@ -12,6 +12,7 @@ const frame_out = @import("frame_out.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const board_snapshot = @import("../../gui/board_snapshot.zig");
 const window_pace = @import("window_pace.zig");
+const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
 const board_view = frame_out.board_view;
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
@@ -35,6 +36,8 @@ pub const Screen = struct {
     /// The engine thread scans through parkHook, so a step only reads the
     /// handoff; otherwise the step scans after the slice itself.
     on_engine: bool = false,
+    /// Camera picks the window opened, for the engine to install at a park.
+    swap: SourceSwap = .{},
 
     pub fn init(allocator: std.mem.Allocator, board: *Board, stepper: Stepper) !Screen {
         var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper, .handoff = .init(allocator) };
@@ -47,6 +50,7 @@ pub const Screen = struct {
     pub fn deinit(self: *Screen) void {
         self.allocator.free(self.pixels);
         self.handoff.deinit();
+        self.swap.deinit();
     }
 
     /// Scans and hands the result to the window.
@@ -55,13 +59,15 @@ pub const Screen = struct {
         _ = try self.handoff.publish(.{ .panel = self.pixels, .width = self.width, .height = self.height, .leds = &self.leds });
     }
 
-    /// For the pacer: scan on the engine thread at each park and at the end.
+    /// For the pacer: on the engine thread at each park and at the end,
+    /// install a waiting camera pick, then scan.
     pub fn parkHook(self: *Screen) window_pace.Hook {
         return .{ .ctx = self, .call = parkThunk };
     }
 
     fn parkThunk(ctx: *anyopaque) void {
         const self: *Screen = @ptrCast(@alignCast(ctx));
+        _ = self.swap.take(&self.board.capture.source);
         self.publishScan() catch {};
     }
 
@@ -120,6 +126,7 @@ pub const Screen = struct {
 
     fn camera(ctx: *anyopaque) ?host_loop.Camera {
         const self: *Screen = @ptrCast(@alignCast(ctx));
-        return .{ .source = &self.board.capture.source, .format_control = &self.board.wire.sensor.format };
+        const swap: ?*SourceSwap = if (self.on_engine) &self.swap else null;
+        return .{ .source = &self.board.capture.source, .format_control = &self.board.wire.sensor.format, .swap = swap };
     }
 };

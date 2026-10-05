@@ -70,6 +70,7 @@ test {
     _ = @import("gui/draw_list_test.zig");
     _ = @import("gui/triple_buffer_test.zig");
     _ = @import("gui/board_snapshot_test.zig");
+    _ = @import("gui/source_swap_test.zig");
     _ = @import("gui/raster_test.zig");
     _ = @import("gui/font_test.zig");
     _ = @import("gui/headless_test.zig");
