@@ -250,6 +250,7 @@ test {
     _ = @import("sram/sram_lock_test.zig");
     _ = @import("sram/sram_test.zig");
     _ = @import("ssie/ssie_test.zig");
+    _ = @import("ssie/ssie_tap_test.zig");
     _ = @import("ssie/ssie_fifo_test.zig");
     _ = @import("ssie/ssie_reset_test.zig");
     _ = @import("ulpt/ulpt_compare_test.zig");
