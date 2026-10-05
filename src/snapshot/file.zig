@@ -45,6 +45,8 @@ pub const Kind = enum(u32) {
     signals = 15,
     /// The data path units that carry wiring (RA8EMU-676).
     datapath = 16,
+    /// The self-contained media and comms units (RA8EMU-678).
+    media = 17,
     _,
 };
 
