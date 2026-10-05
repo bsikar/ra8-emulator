@@ -27,6 +27,7 @@ test {
     _ = @import("snapshot/wired_test.zig");
     _ = @import("snapshot/channels_test.zig");
     _ = @import("snapshot/usb_test.zig");
+    _ = @import("snapshot/rswitch_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");

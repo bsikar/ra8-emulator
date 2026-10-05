@@ -53,6 +53,8 @@ pub const Kind = enum(u32) {
     channels = 19,
     /// The board's USB side (RA8EMU-682).
     usb = 20,
+    /// The Ethernet switch (RA8EMU-683).
+    rswitch = 21,
     _,
 };
 
