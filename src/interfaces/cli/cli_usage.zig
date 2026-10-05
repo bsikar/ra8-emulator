@@ -79,6 +79,8 @@ pub const text =
     \\  --frame-on-settle DIR capture numbered P6 frames as the panel settles
     \\  --settle-window-ms N require N ms of unchanged GLCDC pixels (default 50)
     \\  --gui              show the run live in a window (a -Dgui build)
+    \\  --window-stills DIR with --gui, keep numbered PNGs of the window
+    \\  --window-stills-every N keep the first frame and every Nth after it
     \\  --audio-out PATH   write what SSIE0 transmitted as a WAV (Zig core)
     \\  --audio-rate HZ    the WAV's sample rate; no audio clock (default 48000)
     \\  --report json      print the run and cores report as one JSON line

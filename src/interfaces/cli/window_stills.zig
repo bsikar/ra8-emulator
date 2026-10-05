@@ -9,6 +9,13 @@ const raster = @import("../../gui/raster.zig");
 const platform_mod = @import("../../gui/platform.zig");
 const window_still = @import("window_still.zig");
 
+/// The directory `--window-stills` named, made if missing; null when the
+/// run did not ask for stills.
+pub fn openDir(path: ?[]const u8) !?std.fs.Dir {
+    const target = path orelse return null;
+    return try std.fs.cwd().makeOpenPath(target, .{});
+}
+
 pub const Recorder = struct {
     allocator: std.mem.Allocator,
     inner: platform_mod.Platform,

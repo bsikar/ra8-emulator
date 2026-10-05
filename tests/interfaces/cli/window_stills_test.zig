@@ -65,3 +65,16 @@ test "an every of zero keeps each frame" {
     try std.testing.expect(recorder.keeps(0));
     try std.testing.expect(recorder.keeps(7));
 }
+
+test "the stills directory is made when asked for and absent otherwise" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try std.testing.expect((try stills.openDir(null)) == null);
+    var base: [std.fs.max_path_bytes]u8 = undefined;
+    const root = try tmp.dir.realpath(".", &base);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "shots", "pane" });
+    defer std.testing.allocator.free(path);
+    var dir = (try stills.openDir(path)).?;
+    defer dir.close();
+    try tmp.dir.access("shots/pane", .{});
+}
