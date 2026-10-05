@@ -15,6 +15,8 @@
 //! nothing on the board is wired to. The modem is the other way round: it is
 //! on a UART line, so it leaves this false and hears everything sent.
 
+const gpio = @import("../gpio/gpio.zig");
+
 /// Something on a channel's line.
 pub const Device = struct {
     context: *anyopaque,
@@ -22,6 +24,17 @@ pub const Device = struct {
     /// Only on the line while the channel is in Simple-SPI mode. See the
     /// header: this is about which pins the device is wired to.
     spi_only: bool = false,
+    /// Companion models join sideband pins and advance at board boundaries.
+    connectFn: ?*const fn (*anyopaque, *gpio.Gpio) void = null,
+    tickFn: ?*const fn (*anyopaque, *gpio.Gpio) void = null,
+
+    pub fn connect(self: Device, pins: *gpio.Gpio) void {
+        if (self.connectFn) |f| f(self.context, pins);
+    }
+
+    pub fn tick(self: Device, pins: *gpio.Gpio) void {
+        if (self.tickFn) |f| f(self.context, pins);
+    }
 
     pub fn feed(self: Device, byte: u8) []const u8 {
         return self.feedFn(self.context, byte);

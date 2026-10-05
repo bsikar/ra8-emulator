@@ -1,0 +1,3 @@
+# RA8D2 EK development board, profile format version 1.
+version=1
+companion=c6@uart:sci2

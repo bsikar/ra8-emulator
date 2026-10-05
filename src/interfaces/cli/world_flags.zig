@@ -78,6 +78,12 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.camera.allow_webcam = allow;
     } else if (std.mem.eql(u8, flag, "--allow-webcam")) {
         options.camera.allow_webcam = true;
+    } else if (std.mem.eql(u8, flag, "--board-profile")) {
+        options.board_profile = try next(argv, index);
+    } else if (std.mem.eql(u8, flag, "--detach")) {
+        const name = try next(argv, index);
+        if (!std.mem.eql(u8, name, "c6")) return error.UnknownFittedPart;
+        options.detach_c6 = true;
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--fault")) {

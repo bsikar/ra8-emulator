@@ -18,11 +18,9 @@ pub const usbip_wire = @import("../usbip/usbip_wire.zig");
 pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
 pub const console_input = @import("../../periph/sci/sci_input.zig");
-
 /// How many `--dump-sym` names one run will carry: the suite asks for at most
 /// two (progress and failure counters), so this is a little room above that.
 pub const dump_limit: usize = 8;
-
 /// Instructions a run gets when nothing tells it when to stop. Long enough
 /// for an app to reach whatever it prints and short enough that a sweep of
 /// the whole corpus stays quick.
@@ -105,6 +103,8 @@ pub const Options = struct {
     battery: max17048.Battery = .{},
     /// Fit the Click module, so the IMU and the fuel gauge answer at all.
     click: bool = false,
+    board_profile: ?[]const u8 = null,
+    detach_c6: bool = false,
     /// `--attach NAME@ENDPOINT`: extra catalog models, in the order asked.
     attaches: [request.max]request.Request = undefined,
     attach_count: usize = 0,

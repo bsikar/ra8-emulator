@@ -77,3 +77,12 @@ test {
     _ = @import("esp_hosted/esp_gateway_test.zig");
     _ = @import("esp_hosted/esp_scan_test.zig");
 }
+
+test "the C6 companion hooks leave DATA_READY low with an empty queue" {
+    var pins = gpio.Gpio.init();
+    var peer: c6.C6 = .{};
+    const device = peer.device();
+    device.connect(&pins);
+    device.tick(&pins);
+    try std.testing.expect(!pins.pinLevel(c6.data_ready_port, c6.data_ready_pin));
+}
