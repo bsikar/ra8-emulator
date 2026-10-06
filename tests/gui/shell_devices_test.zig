@@ -1,6 +1,8 @@
 //! Host tests for the shell's device list (RA8EMU-792): only the response to
 //! its own ask is kept, a refused or garbled reply becomes a note, lines split
 //! into name and endpoint, and the devices leaf draws rows in place of its note.
+//! Unplug (RA8EMU-801): the cell hit, the ask carrying the row's endpoint, the
+//! re-list after the session answers, and the refusal note.
 const std = @import("std");
 const ra8 = @import("ra8");
 const proto = ra8.interfaces.rpc.session;
@@ -13,6 +15,32 @@ const panes = ra8.gui.shell_panes;
 const status_bar = ra8.gui.status_bar;
 const shell_devices = ra8.gui.shell_devices;
 const Devices = shell_devices.Devices;
+const Stdio = ra8.interfaces.rpc.stdio.Stdio;
+const session_link = ra8.gui.session_link;
+const Env = proto.Client.Env;
+
+/// A link that has finished its greeting, writing into a pipe nobody answers.
+const Wire = struct {
+    link: session_link.Link = undefined,
+    io: Stdio = .{},
+    fds: [4]std.posix.fd_t = undefined,
+    rx: [2 * Env.max_frame]u8 = undefined,
+    tx: [Env.max_frame]u8 = undefined,
+
+    fn open(self: *Wire) !void {
+        const down = try std.posix.pipe();
+        const up = try std.posix.pipe();
+        self.fds = .{ down[0], down[1], up[0], up[1] };
+        self.io = .{ .input = up[0], .output = down[1] };
+        self.link.open(self.io.transport(), &self.rx, &self.tx);
+        self.link.state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } };
+        self.link.client.peer_caps = proto.capabilities;
+    }
+
+    fn close(self: *Wire) void {
+        for (self.fds) |fd| std.posix.close(fd);
+    }
+};
 
 fn answer(devices: *Devices, id: u32, text: []const u8) !void {
     var bytes: [4200]u8 = undefined;
@@ -104,4 +132,58 @@ test "the devices leaf draws a row per part in place of its note" {
         try std.testing.expect(!holds(&pixels, below, frame.muted));
     }
     try std.testing.expect(leaves > 0);
+}
+
+test "the unplug cell sits at a row's right end and only it is hit" {
+    const body: draw_list.Rect = .{ .x = 10, .y = 20, .w = 200, .h = 100 };
+    const cell = shell_devices.unplugCell(body, 1);
+    try std.testing.expectEqual(@as(?usize, 1), shell_devices.unplugRowAt(body, cell.x, cell.y));
+    try std.testing.expectEqual(@as(?usize, null), shell_devices.unplugRowAt(body, body.x + frame.pad, cell.y));
+    try std.testing.expectEqual(@as(?usize, null), shell_devices.unplugRowAt(body, cell.x, body.y));
+    try std.testing.expectEqual(@as(?usize, null), shell_devices.unplugRowAt(body, cell.x, body.y + body.h + 1));
+}
+
+test "an unplug asks for the row's endpoint, and its answer asks the list again" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    var devices: Devices = .{};
+    devices.attach(&wire.link);
+    const first = devices.asked.?;
+    try answer(&devices, first, "lsm6dso@i2c:touch@0x6b\nmax17048@i2c:touch@0x36\n");
+    try std.testing.expectEqualStrings("max17048@i2c:touch@0x36", devices.line(1).?);
+    try std.testing.expect(!devices.unplug(&wire.link, 2));
+    try std.testing.expect(devices.unplug(&wire.link, 1));
+    try std.testing.expect(!devices.unplug(&wire.link, 0));
+    const gone = devices.unplugging.?;
+    devices.attach(&wire.link);
+    try std.testing.expectEqual(@as(?u32, null), devices.asked);
+    devices.observe(.{ .response = .{ .id = gone, .result = .{ .ok = "" } } });
+    try std.testing.expect(!devices.unplug_refused);
+    devices.attach(&wire.link);
+    const again = devices.asked.?;
+    try std.testing.expect(again != first);
+    try answer(&devices, again, "lsm6dso@i2c:touch@0x6b\n");
+    try std.testing.expectEqual(@as(?[]const u8, null), devices.line(1));
+}
+
+test "a refused unplug keeps the rows and leaves a note under them" {
+    const gpa = std.testing.allocator;
+    var devices: Devices = .{ .asked = 1 };
+    try answer(&devices, 1, "lsm6dso@i2c:touch@0x6b\n");
+    devices.unplugging = 5;
+    devices.observe(.{ .response = .{ .id = 5, .result = .{ .err = @enumFromInt(0x0100) } } });
+    try std.testing.expect(devices.unplug_refused);
+    try std.testing.expect(devices.want);
+    try std.testing.expectEqualStrings("lsm6dso@i2c:touch@0x6b", devices.line(0).?);
+    var list = draw_list.DrawList.init(gpa, 240, 120);
+    defer list.deinit();
+    const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 240, .h = 120 };
+    try shell_devices.draw(&list, body, &devices);
+    var pixels = try raster.Framebuffer.init(gpa, 240, 120);
+    defer pixels.deinit(gpa);
+    raster.draw(&pixels, &list, font.atlas);
+    try std.testing.expect(holds(&pixels, shell_devices.unplugCell(body, 0), frame.muted));
+    const under: draw_list.Rect = .{ .x = 0, .y = frame.pad + shell_devices.row_h, .w = 240, .h = font.glyph_h };
+    try std.testing.expect(holds(&pixels, under, frame.muted));
 }

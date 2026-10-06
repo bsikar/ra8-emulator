@@ -93,6 +93,9 @@ pub const Shell = struct {
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down or self.held != null) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
+                if (self.link) |link| if (self.devices) |devices| {
+                    if (devices.clickIn(link, &self.layout, solved, press.x, press.y)) return;
+                };
                 const camera = self.camera orelse return;
                 _ = camera.clickIn(&self.layout, solved, press.x, press.y);
             },
