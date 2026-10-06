@@ -10,6 +10,7 @@ pub const core = struct {
     pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
     pub const probe_ctl = @import("interfaces/cli/probe_ctl.zig");
     pub const serve_main = @import("interfaces/cli/serve_main.zig");
+    pub const serve_listen = @import("interfaces/cli/serve_listen.zig");
     pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
