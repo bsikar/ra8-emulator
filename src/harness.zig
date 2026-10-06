@@ -152,6 +152,11 @@ pub const Harness = struct {
     }
 
     /// Snapshot and restore of this run's file (RA8EMU-768).
+    /// The board's plug hook, which also keeps what is fitted where.
+    pub fn plugs(self: *Harness) *session_plug.Plugs {
+        return &self.state.plugs;
+    }
+
     pub fn stateFiles(self: *Harness) session_state.Hook {
         return self.state.files.hook();
     }

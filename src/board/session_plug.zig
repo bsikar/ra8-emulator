@@ -7,6 +7,10 @@
 //! controller's own empty-channel read is left alone, which keeps recorded
 //! runs identical). A UART channel goes silent. A GPIO pin goes back to its
 //! pull state.
+//!
+//! It also keeps what sits where (RA8EMU-791): the run's `--attach` asks,
+//! then each plug the session made and each unplug, so a client can list
+//! the parts without reaching into a bus.
 const std = @import("std");
 const endpoint = @import("../periph/model/endpoint.zig");
 const catalog = @import("../periph/model/catalog.zig");
@@ -37,6 +41,11 @@ pub const floating = struct {
 };
 
 const max_instances = 256;
+const max_fitted = max_instances + @typeInfo(std.meta.FieldType(plug.Asks, .asked)).array.len;
+
+/// One endpoint and the catalog part on it, by name.
+pub const Fitted = struct { at: endpoint.Endpoint, name: []const u8 };
+
 pub const Plugs = struct {
     board: *Board,
     arena: std.mem.Allocator,
@@ -44,8 +53,14 @@ pub const Plugs = struct {
 
     instances: [max_instances]catalog.Instance = undefined,
     instance_count: usize = 0,
+    fitted: [max_fitted]Fitted = undefined,
+    fitted_count: usize = 0,
+
     pub fn init(board: *Board, arena: std.mem.Allocator) Plugs {
         var self: Plugs = .{ .board = board, .arena = arena };
+        for (board.asks.asked[0..board.asks.count]) |asked| {
+            if (asked.name.len != 0) self.note(asked.at, asked.name);
+        }
         if (board.asks.attached_eink) |panel| {
             for (board.asks.asked[0..board.asks.count]) |asked| {
                 if (!std.mem.eql(u8, asked.name, parts.panel_name) or asked.at != .spi) continue;
@@ -68,7 +83,10 @@ pub const Plugs = struct {
 
     /// Put a fresh `name` on `at`, or take what is there off it when null.
     pub fn set(self: *Plugs, at: endpoint.Endpoint, name: ?[]const u8) !void {
-        const wanted = name orelse return self.unplug(at);
+        const wanted = name orelse {
+            try self.unplug(at);
+            return self.forget(at);
+        };
         if (self.instance_count == self.instances.len) return error.TooManyInstances;
         const made = try parts.all.make(self.arena, wanted, at);
         self.instances[self.instance_count] = made;
@@ -84,11 +102,47 @@ pub const Plugs = struct {
             };
         }
         try plug.one(self.board, made.device, at);
+        self.note(at, made.model.name);
         if (std.mem.eql(u8, wanted, parts.panel_name)) {
             const panel: *eink.Panel = @ptrCast(@alignCast(made.state));
             panel.event_hook = self.board.panel.event_hook;
             self.panels[at.spi.channel] = panel;
             self.board.asks.attached_eink = panel;
+        }
+    }
+
+    /// Each fitted part as `MODEL@ENDPOINT`, one per line, in the order
+    /// they went on; `error.NoSpaceLeft` when `out` cannot hold them all.
+    pub fn list(self: *const Plugs, out: []u8) ![]const u8 {
+        var stream = std.io.fixedBufferStream(out);
+        const w = stream.writer();
+        for (self.fitted[0..self.fitted_count]) |part| {
+            try w.print("{s}@", .{part.name});
+            try part.at.write(w);
+            try w.writeByte('\n');
+        }
+        return stream.getWritten();
+    }
+
+    /// `name` is on `at` now, in place of whatever was.
+    fn note(self: *Plugs, at: endpoint.Endpoint, name: []const u8) void {
+        for (self.fitted[0..self.fitted_count]) |*part| {
+            if (std.meta.eql(part.at, at)) {
+                part.name = name;
+                return;
+            }
+        }
+        if (self.fitted_count == self.fitted.len) return;
+        self.fitted[self.fitted_count] = .{ .at = at, .name = name };
+        self.fitted_count += 1;
+    }
+
+    fn forget(self: *Plugs, at: endpoint.Endpoint) void {
+        for (self.fitted[0..self.fitted_count], 0..) |part, index| {
+            if (!std.meta.eql(part.at, at)) continue;
+            std.mem.copyForwards(Fitted, self.fitted[index .. self.fitted_count - 1], self.fitted[index + 1 .. self.fitted_count]);
+            self.fitted_count -= 1;
+            return;
         }
     }
 

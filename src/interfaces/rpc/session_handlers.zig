@@ -16,6 +16,12 @@ pub const app_codes = struct {
     pub const too_long: u16 = 0x0102;
 };
 
+/// Writes the fitted parts as `MODEL@ENDPOINT` lines into the buffer given.
+pub const Listing = struct {
+    context: *anyopaque,
+    listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
+};
+
 const topic_count = @typeInfo(proto.Topic).@"enum".fields.len;
 
 pub const Context = struct {
@@ -37,6 +43,8 @@ pub const Context = struct {
     gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.
     state: ?@import("../../board/session_state.zig").Hook = null,
+    /// Writes the fitted parts for list_parts; a server without one refuses it.
+    listing: ?Listing = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@intFromEnum(of)] & bit(topic) != 0;

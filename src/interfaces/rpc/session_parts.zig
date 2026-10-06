@@ -4,7 +4,8 @@
 //! Each request carries the part spec as text in the CLI's own syntax and
 //! the server parses it with the same parsers `--attach` and `--fault`
 //! use, so the two syntaxes cannot drift. A spec that does not parse is
-//! `bad_args`; one the board cannot honour is `refused`.
+//! `bad_args`; one the board cannot honour is `refused`. list_parts
+//! (RA8EMU-791) answers in the same syntax plug takes.
 const std = @import("std");
 const rpc = @import("ra8_rpc");
 const proto = @import("session_rpc.zig");
@@ -54,4 +55,16 @@ pub fn clearFault(context: *Context, args: proto.PartSpec) Ack {
     const at = endpoint.parse(args.text) catch return .{ .err = .bad_args };
     context.session.clearFault(core(args.core), at) catch |err| return refused(err);
     return ack;
+}
+
+/// The fitted parts, one `MODEL@ENDPOINT` line each.
+pub fn listParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.PartList) {
+    const listing = context.listing orelse return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    const room = @min(context.scratch.len, proto.PartList.max_len.text);
+    const text = listing.listFn(listing.context, context.scratch[0..room]) catch |err| {
+        if (err == error.NoSpaceLeft) return .{ .err = @enumFromInt(handlers.app_codes.too_long) };
+        std.debug.print("serve: {s}\n", .{@errorName(err)});
+        return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    };
+    return .{ .ok = .{ .text = text } };
 }

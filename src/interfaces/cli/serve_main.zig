@@ -10,6 +10,7 @@ const proto = @import("../rpc/session_rpc.zig");
 const served = @import("../rpc/session_server.zig");
 const loop = @import("serve_loop.zig");
 const listen = @import("serve_listen.zig");
+const session_plug = @import("../../board/session_plug.zig");
 
 pub const usage =
     \\usage: ra8_emulator serve --stdio <firmware.elf>
@@ -45,6 +46,7 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
         .tx = try allocator.alloc(u8, Env.max_frame),
     };
     var context: served.Context = .{ .session = owner.session(), .scratch = try allocator.alloc(u8, proto.max_payload), .state = owner.stateFiles(), .gpa = allocator };
+    context.listing = .{ .context = owner.plugs(), .listFn = listParts };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(spec, &context, buffers),
@@ -54,4 +56,9 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
         return 1;
     };
     return 0;
+}
+
+fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {
+    const plugs: *session_plug.Plugs = @ptrCast(@alignCast(context));
+    return plugs.list(out);
 }

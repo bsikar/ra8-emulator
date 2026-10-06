@@ -39,6 +39,17 @@ pub const Endpoint = union(Kind) {
     pub fn kind(self: Endpoint) Kind {
         return std.meta.activeTag(self);
     }
+
+    /// The text `parse` reads back: i2c:riic@0x36, spi:spi1@ssl0,
+    /// uart:sci3, gpio:P106.
+    pub fn write(self: Endpoint, out: anytype) !void {
+        switch (self) {
+            .i2c => |i| try out.print("i2c:{s}@0x{X:0>2}", .{ @tagName(i.line), i.address }),
+            .spi => |s| try out.print("spi:spi{d}@ssl{d}", .{ s.channel, s.select }),
+            .uart => |u| try out.print("uart:sci{d}", .{u.channel}),
+            .gpio => |g| try out.print("gpio:P{X}{d:0>2}", .{ g.port, g.pin }),
+        }
+    }
 };
 
 pub const Error = error{
