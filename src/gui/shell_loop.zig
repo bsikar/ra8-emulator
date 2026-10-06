@@ -1,6 +1,6 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains
 //! the window's events (quit, gutter drags), pumps the session link into the
-//! status bar model, the console (RA8EMU-787) and the board (RA8EMU-790), then draws the shell frame (RA8EMU-764) and shows it
+//! status bar model, the console (RA8EMU-787), the board (RA8EMU-790) and the device list (RA8EMU-792), then draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
@@ -13,6 +13,7 @@ const status_bar = @import("status_bar.zig");
 const session_link = @import("session_link.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
+const shell_devices = @import("shell_devices.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -26,6 +27,7 @@ pub const Shell = struct {
     painter: ?shell_frame.Painter = null,
     console: ?*shell_console.Console = null,
     board: ?*shell_board.Board = null,
+    devices: ?*shell_devices.Devices = null,
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
     open: bool = true,
@@ -94,17 +96,19 @@ pub const Shell = struct {
         }
     }
 
-    /// Feed what the session sent into the status bar model, the console and the board.
+    /// Feed what the session sent into the status bar model, the console, the board and the device list.
     pub fn pump(self: *Shell) !void {
         const link = self.link orelse return;
         if (self.console) |console| console.attach(link);
         if (self.board) |board| board.attach(link);
+        if (self.devices) |devices| devices.attach(link);
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
             const arrival = link.pump() orelse return;
             self.status.observe(link, arrival);
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
+            if (self.devices) |devices| devices.observe(arrival);
         }
     }
 
