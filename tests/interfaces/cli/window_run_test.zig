@@ -68,9 +68,9 @@ test "the window draws a frame per slice until the run ends" {
     try std.testing.expect(!soak.failed);
     try std.testing.expect(!shown.closed);
     try std.testing.expect(shown.frames >= 4);
-    // The tick on which the run ends still draws, so the window is left
-    // showing the board as the run left it.
-    try std.testing.expectEqual(shown.frames + 1, window.presents);
+    // Every tick draws, but only a changed list presents (RA8EMU-732): the
+    // first frame always does, and none presents more than once per tick.
+    try std.testing.expect(window.presents >= 1 and window.presents <= shown.frames + 1);
     const board_view = ra8.board.report.frame_out.board_view;
     const panel_bytes = @as(usize, board_view.panel_width) * board_view.panel_height * @sizeOf(u32);
     try std.testing.expect(shown.snapshot_bytes >= panel_bytes);

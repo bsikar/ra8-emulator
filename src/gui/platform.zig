@@ -29,6 +29,8 @@ pub const Text = struct {
 pub const Event = union(enum) {
     quit,
     resize: Size,
+    /// The window was uncovered and must be drawn again.
+    expose,
     key: struct { code: u32, down: bool },
     text: Text,
     pointer: struct { x: i32, y: i32 },
@@ -48,6 +50,8 @@ pub const Platform = struct {
         /// Draws and shows a list on the backend itself (SDL geometry,
         /// RA8EMU-739). Null, or false back, means rasterize and present.
         show: ?*const fn (ctx: *anyopaque, list: *const draw_list.DrawList, atlas: ?raster.Atlas) anyerror!bool = null,
+        /// The least time between presents (RA8EMU-732); null is no cap.
+        interval: ?*const fn (ctx: *anyopaque) u64 = null,
     };
 
     /// The next input event, or null once this frame's events are drained.
@@ -76,5 +80,11 @@ pub const Platform = struct {
     pub fn show(self: Platform, list: *const draw_list.DrawList, atlas: ?raster.Atlas) !bool {
         const backend_show = self.vtable.show orelse return false;
         return backend_show(self.ctx, list, atlas);
+    }
+
+    /// Nanoseconds the next present must wait after the last; 0 is no cap.
+    pub fn interval(self: Platform) u64 {
+        const get = self.vtable.interval orelse return 0;
+        return get(self.ctx);
     }
 };

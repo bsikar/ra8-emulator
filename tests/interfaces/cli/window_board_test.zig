@@ -63,7 +63,8 @@ test "the window loop steps the board until the stepper ends and presents the vi
     const run = screen.run();
     while (try loop.tick(window.platform(), run)) {}
     try std.testing.expectEqual(@as(u32, 2), counter.steps);
-    try std.testing.expectEqual(@as(u32, 2), window.presents);
+    // The board never changes, so only the first frame presents (RA8EMU-732).
+    try std.testing.expectEqual(@as(u32, 1), window.presents);
     const shown = &window.last.?;
     try std.testing.expectEqual(host_loop.colorOf(0xFF000000), shown.at(board_view.margin, board_view.margin));
     try std.testing.expectEqual(host_loop.colorOf(board_view.pcb), shown.at(1, 1));

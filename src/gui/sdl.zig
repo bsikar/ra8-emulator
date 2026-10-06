@@ -26,6 +26,8 @@ pub const Sdl = struct {
     /// The geometry path (RA8EMU-739); null runs the CPU texture path,
     /// forced by RA8_GUI_CPU or taken when the renderer fails geometry.
     presenter: ?geometry.Presenter = null,
+    /// Whether the renderer paces presents to the display itself.
+    vsync: bool = false,
 
     pub fn init(title: [:0]const u8, width: u32, height: u32) Error!Sdl {
         if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return fail(Error.SdlInit);
@@ -35,10 +37,10 @@ pub const Sdl = struct {
             return fail(Error.SdlWindow);
         errdefer c.SDL_DestroyWindow(window);
         const renderer = c.SDL_CreateRenderer(window, null) orelse return fail(Error.SdlRenderer);
-        _ = c.SDL_SetRenderVSync(renderer, 1);
+        const vsync = c.SDL_SetRenderVSync(renderer, 1);
         // Shifted characters reach the console pane as text events.
         _ = c.SDL_StartTextInput(window);
-        var self = Sdl{ .window = window, .renderer = renderer };
+        var self = Sdl{ .window = window, .renderer = renderer, .vsync = vsync };
         if (!cpuForced()) {
             self.presenter = geometry.Presenter.init(std.heap.page_allocator, renderer);
         }
@@ -63,6 +65,7 @@ pub const Sdl = struct {
         .scale = scale,
         .present = present,
         .show = show,
+        .interval = interval,
     };
 
     fn from(ctx: *anyopaque) *Sdl {
@@ -102,6 +105,11 @@ pub const Sdl = struct {
 
     /// One frame through geometry. A failure drops to the CPU path for
     /// the rest of the run, so a renderer without geometry still draws.
+    fn interval(ctx: *anyopaque) u64 {
+        const self: *Sdl = @ptrCast(@alignCast(ctx));
+        return if (self.vsync) 0 else gui.present_gate.default_interval_ns;
+    }
+
     fn show(ctx: *anyopaque, list: *const gui.draw_list.DrawList, atlas: ?gui.raster.Atlas) anyerror!bool {
         const self = from(ctx);
         const presenter = if (self.presenter) |*p| p else return false;
@@ -152,6 +160,7 @@ fn translate(ev: *const c.SDL_Event) ?Event {
             .width = @intCast(@max(ev.window.data1, 0)),
             .height = @intCast(@max(ev.window.data2, 0)),
         } },
+        c.SDL_EVENT_WINDOW_EXPOSED => .expose,
         c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{ .code = ev.key.key, .down = ev.key.down } },
         c.SDL_EVENT_TEXT_INPUT => .{ .text = gui.platform.Text.of(std.mem.span(ev.text.text)) },
         c.SDL_EVENT_MOUSE_MOTION => .{ .pointer = .{ .x = @intFromFloat(ev.motion.x), .y = @intFromFloat(ev.motion.y) } },
