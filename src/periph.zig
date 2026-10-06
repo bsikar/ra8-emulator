@@ -98,6 +98,7 @@ pub const gpt_sync = @import("periph/gpt/gpt_sync.zig");
 pub const gpt_window = @import("periph/gpt/gpt_window.zig");
 pub const gptp = @import("periph/gptp/gptp.zig");
 pub const gptp_timer = @import("periph/gptp/gptp_timer.zig");
+pub const host_console = @import("periph/host_console.zig");
 pub const host_read = @import("periph/host_read.zig");
 pub const i3c = @import("periph/i3c/i3c.zig");
 pub const i3c_flags = @import("periph/i3c/i3c_flags.zig");
