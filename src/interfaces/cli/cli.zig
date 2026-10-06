@@ -232,11 +232,11 @@ pub const Options = struct {
     }
 };
 
-/// The instruction ceiling a deadline of `milliseconds` gets, saturating
-/// rather than wrapping: a deadline nothing could reach is still a run that
-/// ends, not one that overflows into a short budget.
+/// The instruction ceiling a deadline of `milliseconds` gets: one period
+/// over, so the boot before SysTick arms never ends a 1 GHz run a period
+/// short (RA8EMU-526). It saturates rather than wraps into a short budget.
 pub fn ceilingFor(milliseconds: u64) usize {
-    const wanted = milliseconds *| @as(u64, instructions_per_ms);
+    const wanted = (milliseconds +| 1) *| @as(u64, instructions_per_ms);
     return std.math.cast(usize, wanted) orelse std.math.maxInt(usize);
 }
 
