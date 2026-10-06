@@ -31,6 +31,7 @@ pub fn main() !u8 {
     const allocator = arena.allocator();
     const argv = try std.process.argsAlloc(allocator);
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return ra8.core.probe_ctl.run(allocator, argv);
+    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "--connect")) return ra8.core.session_ctl.run(allocator, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(argv);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);

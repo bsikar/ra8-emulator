@@ -8,20 +8,6 @@ const serve_peer = @import("serve_peer.zig");
 const image_path = serve_peer.image_path;
 const Term = std.process.Child.Term;
 
-/// Start serve on `spec` and return it with the address it says it bound.
-fn start(gpa: std.mem.Allocator, spec: []const u8, line: []u8) !struct { child: std.process.Child, bound: []const u8 } {
-    var child = std.process.Child.init(&.{ test_paths.emulator, "serve", "--listen", spec, image_path }, gpa);
-    child.stdin_behavior = .Ignore;
-    child.stdout_behavior = .Ignore;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
-    errdefer _ = child.kill() catch {};
-    const said = try child.stderr.?.reader().readUntilDelimiter(line, '\n');
-    const prefix = "serve: listening on ";
-    try std.testing.expect(std.mem.startsWith(u8, said, prefix));
-    return .{ .child = child, .bound = said[prefix.len..] };
-}
-
 /// Drive one session over `connection`, hang up, then stop serve with SIGTERM.
 fn session(gpa: std.mem.Allocator, child: *std.process.Child, connection: *Connection) !void {
     const peer = try serve_peer.Peer.init(gpa, connection.transport());
@@ -34,7 +20,7 @@ fn session(gpa: std.mem.Allocator, child: *std.process.Child, connection: *Conne
 test "serve --listen tcp::0 binds localhost, serves a client and exits 0 on SIGTERM" {
     const gpa = std.testing.allocator;
     var line: [128]u8 = undefined;
-    var started = try start(gpa, "tcp::0", &line);
+    var started = try serve_peer.listen(gpa, "tcp::0", &line);
     try std.testing.expect(std.mem.startsWith(u8, started.bound, "tcp:127.0.0.1:"));
     const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
     const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
@@ -51,7 +37,7 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var started = try start(gpa, spec, &line);
+    var started = try serve_peer.listen(gpa, spec, &line);
     try std.testing.expectEqualStrings(spec, started.bound);
     var connection = try Connection.unix(path);
     try session(gpa, &started.child, &connection);
