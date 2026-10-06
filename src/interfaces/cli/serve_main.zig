@@ -14,6 +14,10 @@ const session_plug = @import("../../board/session_plug.zig");
 const camera_install = @import("../../board/camera_install.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 const Board = @import("../../board/board.zig").Board;
+const session_api = @import("../../debug/session_api.zig");
+const region_map = @import("../../debug/region_map.zig");
+const region_map_json = @import("../../debug/region_map_json.zig");
+const map_main = @import("map_main.zig");
 
 pub const usage =
     \\usage: ra8_emulator serve --stdio <firmware.elf>
@@ -52,6 +56,7 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     context.listing = .{ .context = owner.plugs(), .listFn = listParts };
     var camera: Camera = .{ .board = owner.board(), .allocator = allocator };
     context.camera = .{ .context = &camera, .setFn = Camera.set };
+    context.mapping = .{ .context = &owner, .mapFn = mapImage };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(spec, &context, buffers),
@@ -66,6 +71,20 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
 fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {
     const plugs: *session_plug.Plugs = @ptrCast(@alignCast(context));
     return plugs.list(out);
+}
+
+/// The map of a core's last loaded image, as `--map` text or JSON.
+fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]const u8 {
+    const owner: *harness.Harness = @ptrCast(@alignCast(context));
+    const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
+    const image = owner.loadedImage(which) orelse return error.NoImage;
+    var stream = std.io.fixedBufferStream(out);
+    if (json) {
+        try region_map_json.write(stream.writer(), image, &region_map.ek_ra8d2);
+    } else {
+        try map_main.render(stream.writer(), image, &region_map.ek_ra8d2);
+    }
+    return stream.getWritten();
 }
 
 /// The board and allocator set_camera_source opens sources with.
