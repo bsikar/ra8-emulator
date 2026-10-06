@@ -131,7 +131,7 @@ pub fn explain(err: anyerror) []const u8 {
 
 pub fn uart(w: anytype, json: bool, sent: proto.Uart) !void {
     if (!json) return w.writeAll(sent.bytes);
-    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"text\":{}}}}}\n", .{ @tagName(sent.core), sent.channel, std.json.fmt(sent.bytes, .{}) });
+    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"virtual_ns\":{d},\"text\":{}}}}}\n", .{ @tagName(sent.core), sent.channel, sent.virtual_ns, std.json.fmt(sent.bytes, .{}) });
 }
 
 pub fn timeout(w: anytype, json: bool, until: []const u8) !void {

@@ -70,6 +70,7 @@ const Wire = struct {
     /// UART bytes the last call's events carried, and the topics in arrival order.
     uart: std.BoundedArray(u8, 64) = .{},
     channels: std.BoundedArray(u8, 8) = .{},
+    stamps: std.BoundedArray(u64, 8) = .{},
     topics: std.BoundedArray(proto.Topic, 8) = .{},
 
     fn init(gpa: std.mem.Allocator) !*Wire {
@@ -106,6 +107,7 @@ const Wire = struct {
         self.stop = null;
         self.uart.len = 0;
         self.channels.len = 0;
+        self.stamps.len = 0;
         self.topics.len = 0;
         var result: ?Env.Result = null;
         while (try self.client.poll(self.tx)) |incoming| switch (incoming) {
@@ -125,6 +127,7 @@ const Wire = struct {
                 const sent = try proto.decode(proto.Uart, payload);
                 try std.testing.expectEqual(proto.Core.cpu0, sent.core);
                 try self.channels.append(sent.channel);
+                try self.stamps.append(sent.virtual_ns);
                 try self.uart.appendSlice(sent.bytes);
             },
             else => return error.Unexpected,
@@ -223,7 +226,12 @@ test "the server refuses unknown methods, missing cores, oversized reads and sta
 }
 
 fn sendUart(session: *api.Session, channel: u8, text: []const u8) void {
-    for (text) |byte| session.event_stream.publish(.{ .core = .cpu0, .kind = .uart_byte, .payload = .{ .uart = .{ .channel = channel, .byte = byte } } });
+    sendUartAt(session, channel, text, 0);
+}
+
+/// Publishes `text` with byte i stamped `first_ns + i`.
+fn sendUartAt(session: *api.Session, channel: u8, text: []const u8, first_ns: u64) void {
+    for (text, 0..) |byte, i| session.event_stream.publish(.{ .core = .cpu0, .kind = .uart_byte, .virtual_ns = first_ns + i, .payload = .{ .uart = .{ .channel = channel, .byte = byte } } });
 }
 
 test "uart bytes reach a client only while it subscribes, in order and before the stop" {
@@ -257,6 +265,26 @@ test "uart bytes reach a client only while it subscribes, in order and before th
     sendUart(&session, 3, "late");
     _ = try reply(proto.U32, try wire.call(proto.ReadRegister, .read_register, pc));
     try std.testing.expectEqual(@as(usize, 0), wire.uart.len);
+}
+
+test "each uart event carries the virtual time of its run's last byte" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var session: api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    var scratch: [8]u8 = undefined;
+    var context: served.Context = .{ .session = &session, .scratch = &scratch };
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&context);
+
+    _ = try reply(proto.Ack, try wire.call(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .uart }));
+    sendUartAt(&session, 3, "ab", 100);
+    sendUartAt(&session, 4, "c", 200);
+    _ = try reply(proto.Ack, try wire.call(proto.Run, .run, .{ .core = .cpu0, .mode = .step, .budget = 0 }));
+    try std.testing.expectEqualStrings("abc", wire.uart.slice());
+    try std.testing.expectEqualSlices(u64, &.{ 101, 200 }, wire.stamps.slice());
 }
 
 test "part methods parse their spec, refuse a bad one and refuse a board with no hooks" {

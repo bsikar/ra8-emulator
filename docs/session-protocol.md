@@ -48,7 +48,7 @@ Part specs travel as text in the same syntax as the `--attach` and `--fault` fla
 | Topic | Payload |
 |---:|---|
 | 0x0100 | stop reason, core, address, and reason-specific detail |
-| 0x0101 | core, SCI channel, raw UART bytes |
+| 0x0101 | core, SCI channel, virtual timestamp of the last byte, raw UART bytes |
 | 0x0102 | core and achieved speed |
 | 0x0103 | core, rectangle origin and size, virtual timestamp, raw grayscale pixels |
 | 0x0104 | core and trace bytes |

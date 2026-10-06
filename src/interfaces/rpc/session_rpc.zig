@@ -87,6 +87,8 @@ pub const Stopped = struct { core: Core, reason: StopReason, address: u32, detai
 pub const Uart = struct {
     core: Core,
     channel: u8,
+    /// Board time when the run's last byte was written.
+    virtual_ns: u64,
     bytes: []const u8,
     pub const max_len = .{ .bytes = 4096 };
 };
