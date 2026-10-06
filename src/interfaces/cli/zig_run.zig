@@ -276,7 +276,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     defer audio.deinit();
     var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory.asMaster(.cpu0), &board.bus, vector_base, budget, &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory.asInitiator(.cpu0), &board.bus, vector_base, budget, &ran, .{
         .boundary = try fault_file.boundary(ends.schedule, clock.boundary()),
         .partitions = &board.partitions,
         .idau = &board.idau,

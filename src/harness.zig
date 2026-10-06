@@ -188,7 +188,7 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
     option_memory.apply(&state.board, state.cpu0.own());
-    state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.?, .master = .cpu0 } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
+    state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
     state.machine = .{};
     state.driver = .{ .machine = &state.machine };
     state.watching = .{ .inner = state.memory.view(), .driver = &state.driver };

@@ -3,7 +3,7 @@
 //! two seams that have no acknowledge, so there is no NACK mode here.
 //!
 //! Disconnected means the part hears nothing: an SPI frame reads back the
-//! idle-high MISO (0xFF) and a UART line goes silent. Stuck and garbage let
+//! idle-high CIPO (0xFF) and a UART line goes silent. Stuck and garbage let
 //! the part hear its bytes and rewrite what it sends back.
 const fault = @import("fault.zig");
 const spi = @import("../spi/spi.zig");
@@ -16,7 +16,7 @@ pub const LineMode = union(enum) {
     garbage: u32,
 };
 
-/// What an unpulled MISO reads with nothing driving it.
+/// What an unpulled CIPO reads with nothing driving it.
 pub const floating: u8 = 0xFF;
 
 /// The most of one UART reply a fault rewrites. A longer reply is cut here

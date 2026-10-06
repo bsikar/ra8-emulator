@@ -1,7 +1,7 @@
 //! A Zig run's boundary close on the shared 1 ns wall clock (RA8EMU-643):
 //! CPU0's stretch, charged at the image rate when the run is rate scaled
 //! (RA8EMU-526), CPU1's round and any external-memory stalls the fabric owes
-//! each master. The longest of them is what the board, both SysTick banks
+//! each initiator. The longest of them is what the board, both SysTick banks
 //! and the window pacer see.
 const std = @import("std");
 const clocks = @import("../../periph/clocks.zig");

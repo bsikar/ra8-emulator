@@ -16,7 +16,7 @@ fn at(offset: u32) u32 {
     return cpscu.win_base + offset;
 }
 
-test "reset leaves every master Secure" {
+test "reset leaves every initiator Secure" {
     var lock = gate(false);
     const unit = cpscu.Unit.init(&lock);
     try std.testing.expect(unit.quiet());

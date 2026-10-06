@@ -66,7 +66,7 @@ test "an unplugged gauge stops acknowledging, and comes back when plugged" {
     try std.testing.expectEqual(api.Event.Kind.plugged, events[2].kind);
 }
 
-test "an unplugged panel leaves MISO floating, and a new panel replaces it" {
+test "an unplugged panel leaves CIPO floating, and a new panel replaces it" {
     var rig: Rig = .{ .arena = undefined, .board = undefined };
     try rig.setUp();
     defer rig.tearDown();

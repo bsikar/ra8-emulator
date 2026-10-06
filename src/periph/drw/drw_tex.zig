@@ -254,7 +254,7 @@ pub const Source = struct {
         // A texture lives in memory the engine can reach, not in the
         // peripheral window and not in the core's own TCM: dev never read one
         // at all, so this is the first chance to say where it is.
-        if (!memmap.masterHolds(address, 4)) {
+        if (!memmap.initiatorHolds(address, 4)) {
             self.off_ram +%= 1;
             return null;
         }

@@ -34,7 +34,7 @@
 //!
 //! NOT MODELLED, AND NOT GUESSED: the rest of the CPSCU attribution window.
 //! BUSSARA/B/C, MMPUSARA/B and CPUSAR are written by the same boot and are
-//! still shadow, because they attribute the bus arbiter and the master MPU,
+//! still shadow, because they attribute the bus arbiter and the bus-initiator MPU,
 //! neither of which this board models; giving them a home here would be a
 //! register file pretending to be a decision.
 const periph = @import("../registry.zig");

@@ -179,7 +179,7 @@ fn attribution(board: *Board, out: Writer) !void {
 }
 
 /// What the Secure boot handed to the rest of the chip. Recorded, not
-/// enforced: this board has no bus arbiter and no master MPU, so the words
+/// enforced: this board has no bus arbiter and no bus-initiator MPU, so the words
 /// are reported and nothing is refused on the strength of them.
 fn chipAttribution(board: *Board, out: Writer) !void {
     const unit = &board.chip_attribution;

@@ -7,7 +7,7 @@ const dwt = mod.dwt;
 const nvic = mod.nvic;
 const ppb_base = mod.ppb_base;
 const ppb_size = mod.ppb_size;
-const masterHolds = mod.masterHolds;
+const initiatorHolds = mod.initiatorHolds;
 const ram = mod.ram;
 const scb = mod.scb;
 const syst = mod.syst;
@@ -25,7 +25,7 @@ test "the M85 ITCM window spans the 64 KiB linked by the board and is not mapped
     try std.testing.expectEqual(@as(u32, 0), mod.itcm_base);
     try std.testing.expectEqual(@as(u32, 0x1_0000), mod.itcm_end - mod.itcm_base);
     try std.testing.expect(!mod.debugHolds(mod.itcm_base, 4));
-    try std.testing.expect(!masterHolds(mod.itcm_base, 4));
+    try std.testing.expect(!initiatorHolds(mod.itcm_base, 4));
 }
 
 test "the PPB does not overlap the peripheral window" {
@@ -42,52 +42,52 @@ test "regions are ordered, non-overlapping and page aligned" {
     }
 }
 
-test "a bus master reaches the SRAM and both SDRAM aliases" {
-    try std.testing.expect(masterHolds(mod.sram_base, 4));
-    try std.testing.expect(masterHolds(mod.sram_end - 4, 4));
-    try std.testing.expect(masterHolds(mod.sdram_base, 4));
-    try std.testing.expect(masterHolds(mod.sdram_end - 4, 4));
-    try std.testing.expect(masterHolds(mod.ns_sdram_base, 4));
-    try std.testing.expect(masterHolds(mod.ns_sdram_end - 4, 4));
+test "a bus initiator reaches the SRAM and both SDRAM aliases" {
+    try std.testing.expect(initiatorHolds(mod.sram_base, 4));
+    try std.testing.expect(initiatorHolds(mod.sram_end - 4, 4));
+    try std.testing.expect(initiatorHolds(mod.sdram_base, 4));
+    try std.testing.expect(initiatorHolds(mod.sdram_end - 4, 4));
+    try std.testing.expect(initiatorHolds(mod.ns_sdram_base, 4));
+    try std.testing.expect(initiatorHolds(mod.ns_sdram_end - 4, 4));
 }
 
-test "a bus master does not reach the core's own TCM" {
-    try std.testing.expect(!masterHolds(mod.dtcm_base, 4));
-    try std.testing.expect(!masterHolds(mod.dtcm_end - 4, 4));
+test "a bus initiator does not reach the core's own TCM" {
+    try std.testing.expect(!initiatorHolds(mod.dtcm_base, 4));
+    try std.testing.expect(!initiatorHolds(mod.dtcm_end - 4, 4));
 }
 
 test "the peripheral window and the PPB are not somewhere a frame lives" {
-    try std.testing.expect(!masterHolds(0x4000_0000, 4));
-    try std.testing.expect(!masterHolds(mod.ppb_base, 4));
+    try std.testing.expect(!initiatorHolds(0x4000_0000, 4));
+    try std.testing.expect(!initiatorHolds(mod.ppb_base, 4));
 }
 
 test "a span that runs off the end of a window is not held by it" {
-    try std.testing.expect(!masterHolds(mod.sram_end - 2, 4));
-    try std.testing.expect(!masterHolds(mod.sdram_end - 2, 4));
-    try std.testing.expect(!masterHolds(0xFFFF_FFFC, 8));
+    try std.testing.expect(!initiatorHolds(mod.sram_end - 2, 4));
+    try std.testing.expect(!initiatorHolds(mod.sdram_end - 2, 4));
+    try std.testing.expect(!initiatorHolds(0xFFFF_FFFC, 8));
 }
 
 test "an empty span is nowhere" {
-    try std.testing.expect(!masterHolds(mod.sram_base, 0));
+    try std.testing.expect(!initiatorHolds(mod.sram_base, 0));
 }
 
-test "the window a bus master address sits in comes back whole" {
-    try std.testing.expectEqual(mod.sram_end, mod.masterWindow(mod.sram_base).?.end);
-    try std.testing.expectEqual(mod.sram_base, mod.masterWindow(mod.sram_end - 1).?.base);
-    try std.testing.expectEqual(mod.sdram_end, mod.masterWindow(mod.sdram_base).?.end);
-    try std.testing.expectEqual(mod.ns_sdram_end, mod.masterWindow(mod.ns_sdram_base).?.end);
+test "the window a bus initiator address sits in comes back whole" {
+    try std.testing.expectEqual(mod.sram_end, mod.initiatorWindow(mod.sram_base).?.end);
+    try std.testing.expectEqual(mod.sram_base, mod.initiatorWindow(mod.sram_end - 1).?.base);
+    try std.testing.expectEqual(mod.sdram_end, mod.initiatorWindow(mod.sdram_base).?.end);
+    try std.testing.expectEqual(mod.ns_sdram_end, mod.initiatorWindow(mod.ns_sdram_base).?.end);
 }
 
-test "an address in no master window sits in none" {
-    try std.testing.expect(mod.masterWindow(mod.dtcm_base) == null);
-    try std.testing.expect(mod.masterWindow(mod.sram_end) == null);
-    try std.testing.expect(mod.masterWindow(mod.sdram_end) == null);
-    try std.testing.expect(mod.masterWindow(0x4000_0000) == null);
+test "an address in no initiator window sits in none" {
+    try std.testing.expect(mod.initiatorWindow(mod.dtcm_base) == null);
+    try std.testing.expect(mod.initiatorWindow(mod.sram_end) == null);
+    try std.testing.expect(mod.initiatorWindow(mod.sdram_end) == null);
+    try std.testing.expect(mod.initiatorWindow(0x4000_0000) == null);
 }
 
-test "the debug window list carries the DTCM the master list leaves out" {
+test "the debug window list carries the DTCM the initiator list leaves out" {
     try std.testing.expect(mod.debugHolds(mod.dtcm_base, 16));
-    try std.testing.expect(!masterHolds(mod.dtcm_base, 16));
+    try std.testing.expect(!initiatorHolds(mod.dtcm_base, 16));
 }
 
 test "the debug window list carries every RAM the loader maps" {
@@ -106,11 +106,11 @@ test "the system SRAM is the full 1664 KB both parts carry" {
 }
 
 test "a stack top at the very top of SRAM is held" {
-    try std.testing.expect(mod.masterHolds(mod.sram_end - 8, 8));
+    try std.testing.expect(mod.initiatorHolds(mod.sram_end - 8, 8));
 }
 
 test "the upper 640 KB an RA8D2 script calls NS_SRAM is the same memory" {
-    try std.testing.expectEqual(mod.masterWindow(mod.sram_base).?.end, mod.masterWindow(0x2210_0000).?.end);
+    try std.testing.expectEqual(mod.initiatorWindow(mod.sram_base).?.end, mod.initiatorWindow(0x2210_0000).?.end);
 }
 
 test "the Non-secure alias sits one IDAU bit above its Secure region" {
@@ -133,17 +133,17 @@ test "the marker CPU1 writes through the alias lands in a mapped region" {
     }
     try std.testing.expect(mapped);
     // The same image also marks the Secure view, so both have to answer.
-    try std.testing.expect(masterHolds(marker, 4));
-    try std.testing.expect(masterHolds(0x2219_0200, 4));
+    try std.testing.expect(initiatorHolds(marker, 4));
+    try std.testing.expect(initiatorHolds(0x2219_0200, 4));
 }
 
-test "a debug probe and a bus master both reach the Non-secure SRAM view" {
-    try std.testing.expect(masterHolds(mod.ns_sram_base, 4));
-    try std.testing.expect(masterHolds(mod.ns_sram_end - 4, 4));
+test "a debug probe and a bus initiator both reach the Non-secure SRAM view" {
+    try std.testing.expect(initiatorHolds(mod.ns_sram_base, 4));
+    try std.testing.expect(initiatorHolds(mod.ns_sram_end - 4, 4));
     try std.testing.expect(mod.debugHolds(mod.ns_sram_base, 4));
     try std.testing.expect(mod.debugHolds(mod.ns_sram_end - 4, 4));
     // One past the alias is nobody's.
-    try std.testing.expect(!masterHolds(mod.ns_sram_end, 4));
+    try std.testing.expect(!initiatorHolds(mod.ns_sram_end, 4));
 }
 
 test "the code MRAM region is the part map's 1 MB at its base" {

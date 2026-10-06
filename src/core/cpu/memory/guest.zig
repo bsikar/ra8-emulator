@@ -1,4 +1,4 @@
-//! A handle on the Zig core's store with the bus-master identity used by the
+//! A handle on the Zig core's store with the bus-initiator identity used by the
 //! shared external-memory fabric.
 const std = @import("std");
 const code_lines = @import("../code_lines.zig");
@@ -10,19 +10,19 @@ pub const MapError = error{ Mapped, Full, OutOfMemory };
 
 pub const Guest = struct {
     store: *Store,
-    master: external.Master = .none,
+    initiator: external.Initiator = .none,
 
-    pub fn asMaster(self: Guest, master: external.Master) Guest {
-        return .{ .store = self.store, .master = master };
+    pub fn asInitiator(self: Guest, initiator: external.Initiator) Guest {
+        return .{ .store = self.store, .initiator = initiator };
     }
 
     pub fn read(self: Guest, address: u32, into: []u8) Error!void {
-        self.store.read(self.master, address, into) catch return Error.Unmapped;
+        self.store.read(self.initiator, address, into) catch return Error.Unmapped;
     }
 
     pub fn write(self: Guest, address: u32, bytes: []const u8) Error!void {
         if (bytes.len == 0) return;
-        self.store.write(self.master, address, bytes) catch return Error.Unmapped;
+        self.store.write(self.initiator, address, bytes) catch return Error.Unmapped;
         code_lines.notify(address, bytes.len);
     }
 

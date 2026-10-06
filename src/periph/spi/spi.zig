@@ -72,7 +72,7 @@
 //! effect, so the aside is not evidence enough to refuse it.
 //!
 //! NOT MODELLED, AND NOT GUESSED: SPBR and BRDV, the bit rate, which a
-//! headless run has no clock to show; SPSSR slave select; and the
+//! headless run has no clock to show; SPSSR chip select; and the
 //! mode-fault, overrun and parity errors.
 //! The rest of the window is shadowed so a read-modify-write survives, and
 //! never read.

@@ -1,12 +1,12 @@
-//! CPSCU: the chip-level security attribution words for the bus masters,
-//! the master MPUs and the second CPU, and the gate in front of them.
+//! CPSCU: the chip-level security attribution words for the bus initiators,
+//! the bus-initiator MPUs and the second CPU, and the gate in front of them.
 //!
 //! The CPSCU window at 0x4000_8000 carries the attribution the Secure boot
 //! writes before it hands anything to the Non-Secure world. Two of its words
 //! already have a home: IPCSAR and IPCPAR live in ipc_attr.zig, because they
 //! attribute the mailbox channels and the mailbox is what reports them. This
 //! file is the rest of what the firmware in this tree touches: the three bus
-//! controller words, the two master-MPU words, and the CPU attribution word.
+//! controller words, the two bus-initiator MPU words, and the CPU attribution word.
 //!
 //! WHAT THE FIRMWARE DOES WITH THEM. cpu1_pingpong_ipc's trustzone_init.c
 //! writes all six in one protected scope, immediately before it releases the
@@ -44,8 +44,8 @@
 //! pscu.zig records for the peripheral attribution words.
 //!
 //! RECORDED, NOT ENFORCED, the line the SAU and IPC attribution models both
-//! hold. Nothing here refuses an access because a master was left Secure:
-//! this board has no bus arbiter and no master MPU to refuse on behalf of,
+//! hold. Nothing here refuses an access because an initiator was left Secure:
+//! this board has no bus arbiter and no bus-initiator MPU to refuse on behalf of,
 //! and a refusal invented out of a register value would be a register file
 //! pretending to be a decision.
 const periph = @import("registry.zig");
@@ -92,7 +92,7 @@ pub const layout = [register_count]u32{
     off.cpusar,
 };
 
-/// Reset: every master Secure.
+/// Reset: every initiator Secure.
 pub const reset: u32 = 0;
 
 /// The six words, and what the gate turned away.
@@ -128,7 +128,7 @@ pub const Unit = struct {
         return self.words[@intFromEnum(register)];
     }
 
-    /// True once any master has been handed to the Non-Secure world.
+    /// True once any initiator has been handed to the Non-Secure world.
     pub fn anyDelegated(self: *const Unit) bool {
         for (self.words) |word| {
             if (word != reset) return true;

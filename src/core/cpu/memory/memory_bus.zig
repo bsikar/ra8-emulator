@@ -1,4 +1,4 @@
-//! The Zig core's bus over its store, retaining the Guest master identity for
+//! The Zig core's bus over its store, retaining the Guest initiator identity for
 //! external-memory timing and instrumentation.
 const bus = @import("../bus.zig");
 const memmap = @import("../../memmap.zig");
@@ -7,7 +7,7 @@ const Store = @import("store.zig").Store;
 
 pub const MemoryBus = struct {
     store: *Store,
-    master: external.Master = .none,
+    initiator: external.Initiator = .none,
     fast_enabled: bool = false,
     direct: bus.DirectMemory = .{},
 
@@ -23,11 +23,11 @@ pub const MemoryBus = struct {
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
         const self: *MemoryBus = @ptrCast(@alignCast(ctx));
-        self.store.read(self.master, address, into) catch return bus.Error.Unmapped;
+        self.store.read(self.initiator, address, into) catch return bus.Error.Unmapped;
     }
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
         const self: *MemoryBus = @ptrCast(@alignCast(ctx));
-        self.store.write(self.master, address, bytes) catch return bus.Error.Unmapped;
+        self.store.write(self.initiator, address, bytes) catch return bus.Error.Unmapped;
     }
 };

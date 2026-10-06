@@ -21,7 +21,7 @@
 //! spent 8.65 MILLION peripheral reads there, all of them the same poll of
 //! SCI0's CSR, and stopped at the instruction budget having reached nothing.
 //!
-//! WHAT AN IDLE LINE CARRIES IS 0xFF. MISO is pulled high on the Pmod2 SD
+//! WHAT AN IDLE LINE CARRIES IS 0xFF. CIPO is pulled high on the Pmod2 SD
 //! slot, as it is on every SPI bus this board carries, so a frame clocked
 //! against no device reads back all ones. That is also exactly what an SD
 //! card in SPI mode drives while it is not answering, so a card-detect
@@ -56,7 +56,7 @@ pub const mod = struct {
     pub const simple_spi: u32 = 0b011;
 };
 
-/// What an unconnected MISO reads back: all ones.
+/// What an unconnected CIPO reads back: all ones.
 pub const idle_byte: u8 = 0xFF;
 
 /// Is this channel in Simple-SPI mode, the one mode in which a transmitted

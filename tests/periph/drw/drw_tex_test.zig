@@ -9,7 +9,7 @@ const texel = ra8.periph.drw_texel;
 const store_memory = @import("../store_memory.zig");
 const Guest = store_memory.Guest;
 
-/// An SRAM address a texture can live at, which memmap.masterHolds admits.
+/// An SRAM address a texture can live at, which memmap.initiatorHolds admits.
 const tex_base: u32 = 0x2200_0000;
 
 fn readFormat(code: u32) u32 {

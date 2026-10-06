@@ -19,8 +19,8 @@
 //! writes a received frame into it, so a half-built ring has the emulator
 //! marshalling the peripheral window into a frame and writing frame bytes
 //! over whatever the pointer happened to hold. Descriptor and buffer must lie
-//! in RAM a bus master reaches here, which is the on-chip SRAM and the
-//! external SDRAM through either alias; memmap.master_ram says why DTCM is
+//! in RAM a bus initiator reaches here, which is the on-chip SRAM and the
+//! external SDRAM through either alias; memmap.initiator_ram says why DTCM is
 //! not one of them.
 //!
 //! A RING THAT LINKS BACK ON ITSELF IS NOT WALKED SIXTY-FOUR TIMES. dev
@@ -143,7 +143,7 @@ pub const Dma = struct {
             self.refused.oversize += 1;
             return null;
         }
-        if (!memmap.masterHolds(head.ptr, head.ds)) {
+        if (!memmap.initiatorHolds(head.ptr, head.ds)) {
             self.refused.off_ram += 1;
             return null;
         }
@@ -172,7 +172,7 @@ pub const Dma = struct {
     fn stageInto(self: *Dma, slot: u32, len: u32) bool {
         const at = self.read(slot) orelse return false;
         if (at.ds == 0) return false;
-        if (!memmap.masterHolds(at.ptr, at.ds)) {
+        if (!memmap.initiatorHolds(at.ptr, at.ds)) {
             self.refused.off_ram += 1;
             return false;
         }
@@ -216,7 +216,7 @@ pub const Dma = struct {
     }
 
     fn read(self: *Dma, at: u32) ?desc.Desc {
-        if (!memmap.masterHolds(at, desc.size)) {
+        if (!memmap.initiatorHolds(at, desc.size)) {
             self.refused.off_ram += 1;
             return null;
         }

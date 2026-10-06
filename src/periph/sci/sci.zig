@@ -356,7 +356,7 @@ pub const Sci = struct {
 
     /// A Simple-SPI frame nothing answered still clocked one in: the channel
     /// drives the clock, so the receiver shifts the level the line sat at,
-    /// and an unconnected MISO sits high. Asynchronous channels are untouched.
+    /// and an unconnected CIPO sits high. Asynchronous channels are untouched.
     fn clockIdle(self: *Sci, index: usize) void {
         const channel = &self.channels[index];
         if (!sci_spi.simpleSpi(channel.ccr3)) return;

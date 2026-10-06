@@ -23,7 +23,7 @@ test "an I2C endpoint refuses reserved, too-wide and unknown-line addresses" {
     try std.testing.expectError(error.Malformed, endpoint.parse("i2c:riic"));
 }
 
-test "an SPI endpoint names a channel and a slave select" {
+test "an SPI endpoint names a channel and a chip select" {
     const at = try endpoint.parse("spi:spi1@ssl3");
     try std.testing.expectEqual(@as(u1, 1), at.spi.channel);
     try std.testing.expectEqual(@as(u2, 3), at.spi.select);

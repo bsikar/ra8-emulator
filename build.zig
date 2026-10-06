@@ -67,19 +67,13 @@ pub fn build(b: *std.Build) void {
     // The gate is a program of its own: build.zig owns the formatter check,
     // tools/gate.zig owns the length checks, and the tests cover its scanner
     // through the same module the gate executable is built from.
-    const gate_mod = b.createModule(.{
-        .root_source_file = b.path("tools/gate.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const gate_mod = toolModule(b, target, optimize, "tools/gate.zig");
+    // tools/terms.zig is the terminology half, tested the same way.
+    const terms_mod = toolModule(b, target, optimize, "tools/terms.zig");
 
     // tools/example_table.zig prints the RA8EMU-66 pass table; the tests read
     // its parser through the same module the executable is built from.
-    const table_mod = b.createModule(.{
-        .root_source_file = b.path("tools/example_table.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const table_mod = toolModule(b, target, optimize, "tools/example_table.zig");
     const table = b.addRunArtifact(b.addExecutable(.{ .name = "example_table", .root_module = table_mod }));
     if (b.args) |args| table.addArgs(args);
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
@@ -99,13 +93,19 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("ra8", emu);
     tests.root_module.addImport("ra8_widget", firmware.module("ra8_widget"));
     tests.root_module.addImport("gate", gate_mod);
+    tests.root_module.addImport("terms", terms_mod);
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("handoff_bench", bench_mod);
     tests.linkLibC();
     testPaths(b, tests, exe);
     unitTests(b, tests, target, optimize, emu, &exe.step);
 
-    b.step("gate", "Check formatting and file and function length").dependOn(gate(b, target));
+    b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
+}
+
+/// A tools/ program's module, shared by its executable and its tests.
+fn toolModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, path: []const u8) *std.Build.Module {
+    return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });
 }
 
 /// The serve test (RA8EMU-737) spawns the emulator this build produced.
@@ -161,6 +161,22 @@ fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     run.has_side_effects = true;
     for (paths) |path| run.addArg(path);
     run.step.dependOn(&fmt.step);
+    run.step.dependOn(terms(b, target));
+    return &run.step;
+}
+
+/// tools/terms.zig over everything we write, docs included.
+fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
+    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "docs", "panels", "README.md", "AGENTS.md" };
+    const checker = b.addExecutable(.{
+        .name = "terms",
+        .root_source_file = b.path("tools/terms.zig"),
+        .target = target,
+        .optimize = .Debug,
+    });
+    const run = b.addRunArtifact(checker);
+    run.has_side_effects = true;
+    for (paths) |path| run.addArg(path);
     return &run.step;
 }
 

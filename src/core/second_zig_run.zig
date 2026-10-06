@@ -57,7 +57,7 @@ pub const Driver = struct {
         self.store = try Store.init(lender);
         errdefer self.dropStore();
         const units = &self.second;
-        const seeded = try second_zig.bringUp(&self.core, .{ .store = &self.store.?, .master = .cpu1 }, board, .{
+        const seeded = try second_zig.bringUp(&self.core, .{ .store = &self.store.?, .initiator = .cpu1 }, board, .{
             .partitions = &units.partitions,
             .regions = &units.regions,
             .guard = &units.guard,
@@ -98,7 +98,7 @@ pub const Driver = struct {
 
     /// CPU1's memory, for what reads it after the run.
     pub fn guest(self: *const Driver) Guest {
-        return self.core.memory.asMaster(.none);
+        return self.core.memory.asInitiator(.none);
     }
 
     fn held(self: *Driver) bool {
