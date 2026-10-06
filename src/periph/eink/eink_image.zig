@@ -45,6 +45,23 @@ pub const Buffer = struct {
             }
         }
     }
+
+    /// Apply the selected waveform to a rectangle copied from the image plane.
+    pub fn refreshFrom(self: *Buffer, source: *const Buffer, x: u16, y: u16, width: u16, height: u16, mode: u16) void {
+        if (x >= self.width or y >= self.height) return;
+        const copy_width = @min(width, self.width - x);
+        const copy_height = @min(height, self.height - y);
+        var row: u32 = 0;
+        while (row < copy_height) : (row += 1) {
+            var column: u32 = 0;
+            while (column < copy_width) : (column += 1) {
+                const target_x = @as(u32, x) + column;
+                const target_y = @as(u32, y) + row;
+                const value = source.pixel(@intCast(target_x), @intCast(target_y));
+                self.set(target_x, target_y, waveformPixel(value, mode));
+            }
+        }
+    }
 };
 
 /// The host image plane and the refreshed glass plane, at the panel's
@@ -107,3 +124,15 @@ pub const RefreshHook = struct {
     context: *anyopaque,
     refreshFn: *const fn (*anyopaque) void,
 };
+
+fn waveformPixel(value: u8, mode: u16) u8 {
+    if (mode == proto.waveform.init) return 0xFF;
+    if (mode == proto.waveform.du or mode == proto.waveform.a2_m641 or mode == proto.waveform.a2_generic) {
+        return if (value >= 128) 0xFF else 0;
+    }
+    if (mode == proto.waveform.gc16) {
+        const level: u16 = (@as(u16, value) * 15 + 127) / 255;
+        return @intCast(level * 17);
+    }
+    return value;
+}
