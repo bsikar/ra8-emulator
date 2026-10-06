@@ -6,7 +6,6 @@
 //! held here so neither of the other two has to know the list. The end-of-run
 //! narration that reads this state lives next door in report.zig.
 const std = @import("std");
-
 const Tick = @import("../core/tick.zig").Tick;
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const i2c = @import("i2c.zig");
@@ -353,6 +352,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.c6.deinit();
         self.sd.deinit();
         self.card.deinit();
         self.options.deinit();

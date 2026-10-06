@@ -1,21 +1,11 @@
 //! The ESP32-C6 side of the esp-hosted SPI link, one frame at a time.
-//!
-//! Every transaction clocks one 1600-byte frame each way. The model keeps
-//! the frame the host is sending, and when it ends parses it. A frame on
-//! the private interface is the host announcing its capabilities; the
-//! silicon answers that with its Event_ESPInit boot event and services no
-//! RPC before it. The answer waits in the transmit queue and DATA_READY
-//! stays high until the host clocks it out. With nothing queued the model
-//! sends esp-hosted's idle filler. After the boot event, an RPC request on
-//! the serial interface gets its answer queued the same way, followed by
-//! any event the request raises (station start, station connected). A
-//! station data frame carrying a DHCP request gets the AP's DHCP answer.
 const frame = @import("esp_frame.zig");
 const event = @import("esp_event.zig");
 const rpc = @import("esp_rpc.zig");
 const station = @import("esp_station.zig");
 const dhcp = @import("esp_dhcp.zig");
 const gateway = @import("esp_gateway.zig");
+const net = @import("esp_net.zig");
 const Queue = @import("esp_queue.zig").Queue;
 
 /// Octets of the host capabilities announcement kept for inspection.
@@ -32,6 +22,7 @@ pub const Link = struct {
     boots_sent: u32 = 0,
     queue: Queue = .{},
     replies_sent: u32 = 0,
+    bridge: net.Bridge = .{},
 
     /// Clocks one byte in from the host and returns the byte clocked out.
     pub fn exchange(self: *Link, byte: u8) u8 {
@@ -44,6 +35,18 @@ pub const Link = struct {
             self.receive();
         }
         return out;
+    }
+
+    /// Polls live host sockets only after the esp-hosted boot handshake.
+    pub fn poll(self: *Link) void {
+        if (self.caps_seen) self.bridge.poll(&self.queue);
+    }
+
+    pub fn deinit(self: *Link) void {
+        self.bridge.deinit();
+    }
+    pub fn networkActive(self: *const Link) bool {
+        return self.bridge.active();
     }
 
     /// DATA_READY: high while the transmit queue holds a frame.
@@ -94,12 +97,14 @@ pub const Link = struct {
         _ = self.queue.push(&out);
     }
 
-    /// Answers the station's DHCP, ARP and gateway ping traffic as the AP
-    /// would; other data drops.
+    /// Answers synthetic link services first, then passes IP traffic to host sockets.
     fn forward(self: *Link, payload: []const u8) void {
         if (!self.caps_seen) return;
         var out: [frame.frame_size]u8 = undefined;
-        if (dhcp.answerFrame(&out, payload) or gateway.answerFrame(&out, payload))
+        if (dhcp.answerFrame(&out, payload) or gateway.answerFrame(&out, payload)) {
             _ = self.queue.push(&out);
+            return;
+        }
+        _ = self.bridge.forward(&self.queue, payload);
     }
 };

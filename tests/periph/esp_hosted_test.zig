@@ -64,6 +64,19 @@ test "SCI2 receives the C6 idle header in Simple-SPI mode" {
     );
 }
 
+test "a board tick raises DATA_READY for an asynchronously queued frame" {
+    var serial = sci.Sci.init();
+    var pins = gpio.Gpio.init();
+    var peer = c6.C6{};
+    peer.init(&serial, &pins);
+    var pending: [c6.frame.frame_size]u8 = undefined;
+    c6.frame.filler(&pending);
+    try std.testing.expect(peer.wire.queue.push(&pending));
+    try std.testing.expect(!pins.pinLevel(c6.data_ready_port, c6.data_ready_pin));
+    peer.tick(&pins);
+    try std.testing.expect(pins.pinLevel(c6.data_ready_port, c6.data_ready_pin));
+}
+
 test {
     _ = @import("esp_hosted/esp_frame_test.zig");
     _ = @import("esp_hosted/esp_event_test.zig");
@@ -73,6 +86,8 @@ test {
     _ = @import("esp_hosted/esp_station_test.zig");
     _ = @import("esp_hosted/esp_queue_test.zig");
     _ = @import("esp_hosted/esp_eth_test.zig");
+    _ = @import("esp_hosted/esp_dns_test.zig");
+    _ = @import("esp_hosted/esp_net_test.zig");
     _ = @import("esp_hosted/esp_dhcp_test.zig");
     _ = @import("esp_hosted/esp_gateway_test.zig");
     _ = @import("esp_hosted/esp_scan_test.zig");

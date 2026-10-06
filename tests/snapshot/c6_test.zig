@@ -91,3 +91,22 @@ test "a missing or short section leaves the C6 alone" {
     try std.testing.expect(std.meta.isError(section.load(&target, bytes.items[0 .. bytes.items.len - 3])));
     try std.testing.expectEqual(@as(u32, 0), target.c6.wire.boots_sent);
 }
+
+fn fakeLookup(_: ?*anyopaque, _: []const u8, _: *[esp_hosted.dns.max_answers][4]u8) !u8 {
+    return 0;
+}
+
+test "snapshot failure preserves the live bridge and success resets it" {
+    var board = fresh();
+    fill(&board);
+    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    defer bytes.deinit();
+    try saved(&board, &bytes);
+
+    var target = fresh();
+    target.c6.wire.bridge.resolver.lookupFn = fakeLookup;
+    try std.testing.expect(std.meta.isError(section.load(&target, bytes.items[0 .. bytes.items.len - 1])));
+    try std.testing.expect(target.c6.wire.bridge.resolver.lookupFn == fakeLookup);
+    try section.load(&target, bytes.items);
+    try std.testing.expect(target.c6.wire.bridge.resolver.lookupFn != fakeLookup);
+}

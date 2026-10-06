@@ -1,14 +1,7 @@
 //! The EK-RA8D2's SPI peer: the idle frame and sideband lines of esp-hosted.
-//!
-//! Pmod1 connects SCI2 Simple-SPI to the ESP32-C6. The ESP32-C6 peripheral
-//! firmware emits 1600-byte full-duplex frames. Its empty-queue filler starts
-//! with if_type=ESP_MAX_IF and if_num=15; the probe accepts that frame as
-//! proof that the link is alive. HANDSHAKE is on P006 and follows chip select
-//! P804. DATA_READY is on P402 and stays low with an empty transmit queue.
 const sci = @import("sci/sci.zig");
 const gpio = @import("gpio/gpio.zig");
 
-/// The esp-hosted frame codec (RA8EMU-597).
 pub const frame = @import("esp_hosted/esp_frame.zig");
 pub const event = @import("esp_hosted/esp_event.zig");
 pub const link = @import("esp_hosted/esp_link.zig");
@@ -19,6 +12,8 @@ pub const eth = @import("esp_hosted/esp_eth.zig");
 pub const dhcp = @import("esp_hosted/esp_dhcp.zig");
 pub const gateway = @import("esp_hosted/esp_gateway.zig");
 pub const scan = @import("esp_hosted/esp_scan.zig");
+pub const dns = @import("esp_hosted/esp_dns.zig");
+pub const net = @import("esp_hosted/esp_net.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
@@ -50,6 +45,13 @@ pub const C6 = struct {
         pins.setInput(4, 13, true);
     }
 
+    pub fn deinit(self: *C6) void {
+        self.wire.deinit();
+    }
+    pub fn quiet(self: *const C6) bool {
+        return !self.wire.networkActive();
+    }
+
     pub fn device(self: *C6) sci.Device {
         return .{ .context = self, .feedFn = feed, .spi_only = true, .connectFn = connectDevice, .tickFn = tickDevice };
     }
@@ -64,22 +66,24 @@ pub const C6 = struct {
         self.tick(pins);
     }
 
-    /// Track the external chip-select level and drive HANDSHAKE from it.
+    /// Polls host network traffic and refreshes the C6 sideband pins.
     pub fn tick(self: *C6, pins: *gpio.Gpio) void {
-        _ = self;
-        const direction = pins.readReg(
-            gpio.regAddress(chip_select_port, gpio.pcntr1),
-            4,
-        );
+        self.wire.poll();
+        self.updatePins(pins);
+    }
+
+    fn updatePins(self: *C6, pins: *gpio.Gpio) void {
+        const direction = pins.readReg(gpio.regAddress(chip_select_port, gpio.pcntr1), 4);
         const selected = direction & (@as(u32, 1) << chip_select_pin) != 0;
         const handshake = !selected or pins.pinLevel(chip_select_port, chip_select_pin);
         pins.setInput(handshake_port, handshake_pin, handshake);
+        pins.setInput(data_ready_port, data_ready_pin, self.wire.dataReady());
     }
 
     fn pinChanged(context: *anyopaque, pins: *gpio.Gpio, port: u8) void {
         if (port != chip_select_port) return;
         const self: *C6 = @ptrCast(@alignCast(context));
-        self.tick(pins);
+        self.updatePins(pins);
     }
 
     fn feed(context: *anyopaque, byte: u8) []const u8 {
