@@ -157,6 +157,17 @@ pub const Machine = struct {
         return self.halt(.halt_requested);
     }
 
+    /// Nothing can stop the run or be recorded before the next instruction:
+    /// running freely with no break, watch, comparator unit or pending stop.
+    /// Then `onInstruction` returns null and changes nothing, and no access
+    /// the instruction makes can trip anything, so a driver may skip both.
+    pub fn quiet(self: *const Machine) bool {
+        return self.mode == .running and !self.resumed and !self.halt_pending and
+            self.watch_pending == null and self.unit_pending == null and
+            self.monitor_pending == null and self.breaks.len == 0 and
+            self.watches.len == 0 and !self.fpb.enabled and !self.dwt.trcena;
+    }
+
     /// Decide on the instruction about to run. A returned stop means the
     /// driver must stop the CPU now, before this instruction executes.
     pub fn onInstruction(self: *Machine, event: Event) ?Stop {

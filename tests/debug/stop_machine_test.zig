@@ -219,3 +219,34 @@ test "breaks and watches are numbered from one sequence" {
     try machine.breaks.remove(1);
     try std.testing.expectEqual(@as(u32, 4), try machine.addWatch(watch));
 }
+
+test "a free run with nothing armed is quiet" {
+    var machine = Machine{};
+    try std.testing.expect(!machine.quiet());
+    machine.begin();
+    try std.testing.expect(machine.quiet());
+    machine.proceed();
+    try std.testing.expect(!machine.quiet());
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
+    try std.testing.expect(machine.quiet());
+    machine.requestHalt();
+    try std.testing.expect(!machine.quiet());
+}
+
+test "anything armed keeps a run from being quiet" {
+    var broken = Machine{};
+    _ = try broken.addBreak(.{ .address = 0x200 });
+    broken.begin();
+    try std.testing.expect(!broken.quiet());
+    var fpb_on = Machine{};
+    fpb_on.fpb.enabled = true;
+    fpb_on.begin();
+    try std.testing.expect(!fpb_on.quiet());
+    var traced = Machine{};
+    traced.dwt.trcena = true;
+    traced.begin();
+    try std.testing.expect(!traced.quiet());
+    var stepping = Machine{};
+    stepping.step();
+    try std.testing.expect(!stepping.quiet());
+}

@@ -68,6 +68,13 @@ pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
     while (left > 0) : (left -= 1) {
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
         if (clock) |counting| counting.tick(core, machine);
+        // Nothing armed: skip decoding the event. The watch bus stays armed
+        // so firmware that programs the FPB or DWT still reaches them.
+        if (machine.quiet()) {
+            if (quietStep(core, watch)) |stopped| return .{ .core = stopped };
+            retired.* += 1;
+            continue;
+        }
         const now = event(core);
         const stop = machine.onInstruction(now);
         // A unit event with halting off pends DebugMonitor, as step_hook does.
@@ -82,4 +89,12 @@ pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
         retired.* += 1;
     }
     return .count;
+}
+
+/// One instruction with nothing to stop on. The fetch window is the widest
+/// instruction at pc; no watch is set, so its exact width does not matter.
+fn quietStep(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus) ?cpu_mod.Stop {
+    if (watch) |listening| listening.arm(core.register(.pc), 4);
+    defer if (watch) |listening| listening.disarm();
+    return core.cpu.step();
 }
