@@ -20,6 +20,8 @@ const session_api = @import("debug/session_api.zig");
 const stop_machine = @import("debug/stop_machine.zig");
 const step_hook = @import("debug/step_hook.zig");
 const watch_bus = @import("debug/watch_bus.zig");
+const rtos_hook = step_hook.rtos_hook;
+const rtos_publish = step_hook.rtos_publish;
 const Cpu0 = @import("interfaces/cli/zig_memory.zig").Cpu0;
 
 pub const limits = struct {
@@ -73,6 +75,9 @@ const State = struct {
     edge: board_boundary.BoardBoundary,
     reboot: Reboot,
     display: session_display.Host,
+    tracer: ?rtos_hook.Tracer,
+    listener: rtos_hook.zig.Listener,
+    publisher: rtos_publish.Publisher,
 
     fn advance(context: *anyopaque, max_ns: u64) anyerror!void {
         const self: *State = @ptrCast(@alignCast(context));
@@ -124,6 +129,25 @@ pub const Harness = struct {
         self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);
     }
 
+    /// Publish CPU0's ThreadX switches and exception entry and return on
+    /// the session's event stream (RA8EMU-346). The tracer sits in front of
+    /// the core and is drained at each chunk boundary. Stamps are CPU0's
+    /// retired instructions, one cycle each, at the time base's rate. False
+    /// when the image has no ThreadX; call once, after open.
+    pub fn traceRtos(self: *Harness) bool {
+        const state = self.state;
+        state.tracer = rtos_hook.resolve(state.image, .{}) orelse return false;
+        const tracer = &state.tracer.?;
+        tracer.now = &state.board.time.base.retired;
+        tracer.trace.fine = &state.cpu.retired;
+        state.listener = .{ .tracer = tracer };
+        state.cpu.bus = state.listener.onBus(state.cpu.bus);
+        if (state.cpu.source) |inner| state.cpu.source = state.listener.onSource(inner);
+        state.publisher = .{ .trace = &tracer.trace, .stream = &state.session.event_stream, .inner = state.session.live.boundary, .time = &state.board.time.base };
+        state.session.live.boundary = state.publisher.hook();
+        return true;
+    }
+
     /// Let the boundary tick CPU1's board edge and take its reset requests.
     pub fn bindSecond(self: *Harness, second: *second_core.Second, second_guest: Guest) void {
         self.state.edge.second = second;
@@ -158,6 +182,7 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     state.board.clock.pace.mode = .virtual;
     try loadInput(allocator, &state.board, options.input_script);
     state.cpu0 = .{};
+    state.tracer = null;
     errdefer state.cpu0.close();
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
