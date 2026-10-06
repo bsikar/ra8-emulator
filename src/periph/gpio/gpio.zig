@@ -95,6 +95,11 @@ pub const sw2_pin: u4 = 8;
 
 pub const Gpio = struct {
     /// A listener for a driven port changing, used by devices wired to pins.
+    pub const EventTap = struct {
+        context: *anyopaque,
+        changedFn: *const fn (*anyopaque, u8, u16) void,
+    };
+
     pub const Observer = struct {
         context: *anyopaque,
         changedFn: *const fn (*anyopaque, *Gpio, u8) void,
@@ -107,6 +112,7 @@ pub const Gpio = struct {
     /// Stores into PCNTR2, which the pads drive and firmware does not.
     refused: u32 = 0,
     observer: ?Observer = null,
+    event_tap: ?EventTap = null,
     /// Device models wired to single pins with --attach.
     wired: pins.Pins = .{},
 
@@ -135,8 +141,13 @@ pub const Gpio = struct {
         self.observer = .{ .context = context, .changedFn = changedFn };
     }
 
+    pub fn observeEvents(self: *Gpio, tap: EventTap) void {
+        self.event_tap = tap;
+    }
+
     fn notify(self: *Gpio, port: u8) void {
         self.wired.portChanged(self, port);
+        if (self.event_tap) |tap| tap.changedFn(tap.context, port, self.ports[port].level());
         if (self.observer) |listener| listener.changedFn(listener.context, self, port);
     }
 

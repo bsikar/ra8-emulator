@@ -25,7 +25,7 @@ const parts = [_]Part{
     .{ .name = "transfers", .skip = &.{ "twin", "issuer" } },
     .{ .name = "transfers1", .skip = &.{ "twin", "issuer" } },
     .{ .name = "dma", .skip = &.{ "memory", "bank" } },
-    .{ .name = "pins", .skip = &.{ "observer", "wired" } },
+    .{ .name = "pins", .skip = &.{ "observer", "event_tap", "wired" } },
     .{ .name = "backup", .skip = &.{"protection"} },
     .{ .name = "battery_switch", .skip = &.{"protection"} },
 };

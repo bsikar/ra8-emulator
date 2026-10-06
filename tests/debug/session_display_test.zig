@@ -82,6 +82,8 @@ test "tap reaches GT911, settles e-ink, and returns a changed native grayscale f
     var machine = Machine{};
     const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1000 };
     var session: api.Session = .{ .live = live };
+    session.attachTimeBase(&board.time.base);
+    const event_id = session.event_stream.subscribe().?;
 
     var guest_store = try Store.init(null);
     defer guest_store.deinit();
@@ -101,6 +103,12 @@ test "tap reaches GT911, settles e-ink, and returns a changed native grayscale f
     var before = try session.frame(std.testing.allocator);
     defer before.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u32, 1072), before.width);
+    var frame_events: [2]api.Event = undefined;
+    const queued = session.event_stream.read(event_id, &frame_events).?;
+    try std.testing.expectEqual(@as(usize, 1), queued.count);
+    try std.testing.expectEqual(api.Event.Kind.lcd_frame, frame_events[0].kind);
+    try std.testing.expectEqual(@as(u32, 1072), frame_events[0].payload.frame.width);
+    try std.testing.expectEqual(@as(u16, 1448), frame_events[0].payload.frame.dirty.height);
     try std.testing.expectEqual(@as(u32, 1448), before.height);
     try session.tap(.cpu0, board.time.base.now() + 1, 300, 400);
 
