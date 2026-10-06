@@ -54,7 +54,7 @@ Part specs travel as text in the same syntax as the `--attach` and `--fault` fla
 | 0x0104 | core and trace bytes |
 | 0x0105 | core, session event kind, optional address encoded as zero when absent |
 
-LCD pixels are binary bytes for only the dirty rectangle; they are never text or base64. Transports carry the same frames over stdin/stdout, Unix domain sockets, or TCP. A desktop client owns presentation; the emulator serves no web UI.
+LCD pixels are binary bytes for only the dirty rectangle; they are never text or base64. The server sends one 0x0103 event per refreshed region and core, holding the bounding box of the refreshes since its last pass. A region with more than 262144 pixels is split by rows into several events with the same timestamp. When the server's event queue had to coalesce refreshes, it sends the whole panel instead, so a client never misses a change. A server with no display refuses the subscription. Transports carry the same frames over stdin/stdout, Unix domain sockets, or TCP. A desktop client owns presentation; the emulator serves no web UI.
 
 ## Remote hosts (RA8EMU-196)
 

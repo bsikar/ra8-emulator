@@ -11,6 +11,7 @@ const proto = @import("session_rpc.zig");
 const api = @import("../../debug/session_api.zig");
 const handlers = @import("session_handlers.zig");
 const uart_feed = @import("session_uart_feed.zig");
+const lcd_feed = @import("session_lcd_feed.zig");
 const parts = @import("session_parts.zig");
 const session_advance = @import("session_advance.zig");
 const session_files = @import("session_files.zig");
@@ -64,12 +65,13 @@ pub const Host = struct {
         return .{ .server = Server.init(wire, rx, context, proto.capabilities) };
     }
 
-    /// Answer at most one frame, then send the UART bytes and the stop
-    /// event it produced, in that order.
+    /// Answer at most one frame, then send the UART bytes, the LCD dirty
+    /// rectangles and the stop event it produced, in that order.
     pub fn poll(self: *Host, tx: []u8) rpc.Error!rpc.Step {
         const step = try self.server.poll(tx);
         const context = self.server.context;
         try uart_feed.pump(context, &self.server, tx);
+        try lcd_feed.pump(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;
             if (context.wants(stopped.core, .stop)) {
