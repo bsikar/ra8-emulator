@@ -83,7 +83,7 @@ test "a frame shows the board view with the camera pane beside it" {
     try std.testing.expectEqual(host_loop.background, shown.at(250, 120));
 }
 
-test "the loop runs until the run ends, presenting every frame" {
+test "the loop runs until the run ends, presenting only frames that changed" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{};
@@ -92,7 +92,41 @@ test "the loop runs until the run ends, presenting every frame" {
     const run = fake.run();
     while (try loop.tick(window.platform(), run)) {}
     try std.testing.expectEqual(@as(u32, 3), fake.steps);
+    // The fake board never changes, so only the first frame presents.
+    try std.testing.expectEqual(@as(u32, 1), window.presents);
+}
+
+test "an idle window presents nothing until it is resized or exposed" {
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 100 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    const run = fake.run();
+    for (0..10) |_| _ = try loop.tick(window.platform(), run);
+    try std.testing.expectEqual(@as(u32, 1), window.presents);
+    try window.feed(.{ .resize = .{ .width = 300, .height = 140 } });
+    _ = try loop.tick(window.platform(), run);
+    try std.testing.expectEqual(@as(u32, 2), window.presents);
+    try std.testing.expectEqual(@as(u32, 300), window.last.?.width);
+    try window.feed(.expose);
+    _ = try loop.tick(window.platform(), run);
     try std.testing.expectEqual(@as(u32, 3), window.presents);
+    for (0..10) |_| _ = try loop.tick(window.platform(), run);
+    try std.testing.expectEqual(@as(u32, 3), window.presents);
+}
+
+test "a board that changes presents again" {
+    var window = Headless.init(std.testing.allocator, 256, 128);
+    defer window.deinit();
+    var fake = Fake{ .steps_left = 100 };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    defer loop.deinit();
+    const run = fake.run();
+    _ = try loop.tick(window.platform(), run);
+    fake.panel[0] = 0xFF0000FF;
+    _ = try loop.tick(window.platform(), run);
+    try std.testing.expectEqual(@as(u32, 2), window.presents);
 }
 
 test "closing the window stops before the next slice runs" {

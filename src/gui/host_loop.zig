@@ -11,6 +11,7 @@
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const raster = @import("raster.zig");
+const present_gate = @import("present_gate.zig");
 const font = @import("font.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
@@ -124,6 +125,8 @@ pub const Loop = struct {
     /// Where the pointer was last seen, so a wheel over the console scrolls it.
     pointer: struct { x: i32, y: i32 } = .{ .x = -1, .y = -1 },
     quit: bool = false,
+    /// Skips presenting a list identical to the last one (RA8EMU-732).
+    gate: present_gate.Gate = .{},
 
     pub fn deinit(self: *Loop) void {
         if (self.devices) |*devices| devices.deinit();
@@ -266,6 +269,7 @@ pub const Loop = struct {
         while (window.poll()) |event| {
             switch (event) {
                 .quit => self.quit = true,
+                .expose => self.gate.force(),
                 .pointer => |at| self.pointer = .{ .x = at.x, .y = at.y },
                 .wheel => |turn| self.wheel(turn.dy, consoleArea(window, before)),
                 .key => |key| if (key.down) if (console_keys.byteOf(key.code)) |byte|
@@ -333,7 +337,6 @@ pub const Loop = struct {
         board_view.compose(self.canvas, board.panel, board.width, board.height, board.leds);
         for (self.canvas, self.pixels) |argb, *pixel| pixel.* = colorOf(argb);
         const size = window.size();
-        const frame = try self.fitFrame(size);
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
         defer list.deinit();
         try list.fill(list.bounds, background);
@@ -346,9 +349,15 @@ pub const Loop = struct {
         if (self.consoles.len > 0) try console_pick.draw(&list, strip, self.consoles, self.channel);
         const lines = if (self.consoles.len > 0) console_pick.below(strip) else strip;
         if (self.console) |log| try console_pane.draw(&list, lines, log, self.scroll.back);
-        if (try window.show(&list, font.atlas)) return;
-        raster.draw(frame, &list, font.atlas);
-        try window.present(frame);
+        const digest = present_gate.digest(&list);
+        const now = std.time.nanoTimestamp();
+        if (!self.gate.due(digest, now, window.interval())) return;
+        if (!try window.show(&list, font.atlas)) {
+            const frame = try self.fitFrame(size);
+            raster.draw(frame, &list, font.atlas);
+            try window.present(frame);
+        }
+        self.gate.presented(digest, now);
     }
 
     fn fitBoard(self: *Loop, count: usize) !void {
