@@ -113,10 +113,12 @@ fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64) Quie
     if (watch) |listening| {
         listening.ppb = .{ .needle = "" };
         listening.arm(0, 0);
+        listening.quiet = true;
         cpu.until = &listening.ppb;
     }
     defer if (watch) |listening| {
         listening.disarm();
+        listening.quiet = false;
         cpu.until = null;
     };
     const stop = cpu.run(left);

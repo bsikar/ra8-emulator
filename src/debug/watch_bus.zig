@@ -25,6 +25,9 @@ pub const WatchBus = struct {
     /// live: a quiet batch hands it to the core as its `until`, so a store
     /// that may arm the FPB or DWT ends the batch (RA8EMU-712).
     ppb: until.Until = .{ .needle = "" },
+    /// Set over a quiet stretch, where no watch or comparator is armed: only
+    /// the PPB, where the debug units live, is listened to (RA8EMU-712).
+    quiet: bool = false,
 
     pub fn view(self: *WatchBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
@@ -49,6 +52,7 @@ pub const WatchBus = struct {
         const self: *WatchBus = @ptrCast(@alignCast(ctx));
         try self.inner.read(address, into);
         if (!self.armed or self.fetching(address)) return;
+        if (self.quiet and address < ppb_base) return;
         unit_view.overlay(self.driver.machine, address, into);
         self.driver.loaded(address);
         self.driver.machine.onAccess(address, width(into.len), .read, value(into));
@@ -65,7 +69,7 @@ pub const WatchBus = struct {
         const self: *WatchBus = @ptrCast(@alignCast(ctx));
         try self.inner.write(address, bytes);
         if (!self.armed) return;
-        if (address >= ppb_base) self.ppb.seen = true;
+        if (address >= ppb_base) self.ppb.seen = true else if (self.quiet) return;
         const moved = value(bytes);
         self.driver.stored(address, moved, width(bytes.len));
         self.driver.machine.onAccess(address, width(bytes.len), .write, moved);
