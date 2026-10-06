@@ -102,9 +102,17 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("handoff_bench", bench_mod);
     tests.linkLibC();
+    testPaths(b, tests, exe);
     unitTests(b, tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting and file and function length").dependOn(gate(b, target));
+}
+
+/// The serve test (RA8EMU-737) spawns the emulator this build produced.
+fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile) void {
+    const paths = b.addOptions();
+    paths.addOptionPath("emulator", exe.getEmittedBin());
+    tests.root_module.addOptions("test_paths", paths);
 }
 
 /// `test` runs the unit tests and the harness checks; `test-exe` installs the
