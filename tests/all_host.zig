@@ -94,6 +94,7 @@ test {
     _ = @import("gui/status_bar_test.zig");
     _ = @import("gui/status_strip_test.zig");
     _ = @import("gui/speed_field_test.zig");
+    _ = @import("gui/time_readout_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
     _ = @import("gui/shell_panes_test.zig");
