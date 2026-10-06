@@ -8,7 +8,8 @@
 //! and `zig build test` never compiles it, so the tests need no SDL.
 const std = @import("std");
 const ra8 = @import("ra8");
-const c = @cImport(@cInclude("SDL3/SDL.h"));
+pub const c = @import("sdl_c.zig").c;
+pub const geometry = @import("sdl_geometry.zig");
 
 const gui = ra8.gui;
 const Event = gui.platform.Event;
