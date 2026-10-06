@@ -35,6 +35,7 @@ pub const WatchId = watch_table.Id;
 pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
 pub const Frame = session_display.Frame;
+pub const Display = session_display.Display;
 pub const Widget = widget_tree.Widget;
 pub const TapPart = tap_part.Part;
 pub const Loader = struct {

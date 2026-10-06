@@ -29,6 +29,12 @@ pub const Context = struct {
     /// The session event-stream queue UART bytes are read from while any
     /// core wants the uart topic.
     uart_feed: ?usize = null,
+    /// The event-stream queue panel refreshes are read from while any core
+    /// wants lcd_dirty (RA8EMU-789).
+    lcd_feed: ?usize = null,
+    /// Owns each captured panel frame. A server without one, or a session
+    /// without a display, refuses lcd_dirty.
+    gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.
     state: ?@import("../../board/session_state.zig").Hook = null,
 
@@ -160,13 +166,18 @@ pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
     if (args.topic == .uart and context.uart_feed == null) {
         context.uart_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
     }
+    if (args.topic == .lcd_dirty and context.lcd_feed == null) {
+        if (context.gpa == null or context.session.display == null) return .{ .err = code(app_codes.refused) };
+        context.lcd_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
+    }
     context.topics[@intFromEnum(args.core)] |= bit(args.topic);
     return ack;
 }
 
 pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
     context.topics[@intFromEnum(args.core)] &= ~bit(args.topic);
-    if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) releaseFeed(context);
+    if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) release(context, &context.uart_feed);
+    if (!context.wants(.cpu0, .lcd_dirty) and !context.wants(.cpu1, .lcd_dirty)) release(context, &context.lcd_feed);
     return ack;
 }
 
@@ -174,13 +185,14 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
 pub fn forget(context: *Context) void {
     context.topics = .{ 0, 0 };
     context.pending = null;
-    releaseFeed(context);
+    release(context, &context.uart_feed);
+    release(context, &context.lcd_feed);
 }
 
-fn releaseFeed(context: *Context) void {
-    const id = context.uart_feed orelse return;
+fn release(context: *Context, feed: *?usize) void {
+    const id = feed.* orelse return;
     context.session.unsubscribe(id);
-    context.uart_feed = null;
+    feed.* = null;
 }
 
 pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
