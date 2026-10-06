@@ -34,3 +34,4 @@ pub const plug_post = @import("gui/plug_post.zig");
 pub const speed_post = @import("gui/speed_post.zig");
 pub const widget_paint = @import("gui/widget_paint.zig");
 pub const present_gate = @import("gui/present_gate.zig");
+pub const pane_layout = @import("gui/pane_layout.zig");
