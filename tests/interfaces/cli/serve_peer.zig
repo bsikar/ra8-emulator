@@ -2,6 +2,7 @@
 //! shared by the stdio and socket tests.
 const std = @import("std");
 const ra8 = @import("ra8");
+const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const rpc = ra8.interfaces.rpc.server.rpc_lib;
 
@@ -66,3 +67,21 @@ pub const Peer = struct {
         try std.testing.expect(sp.value != 0);
     }
 };
+
+/// A serve started on a listen spec, with the address it said it bound.
+pub const Listening = struct { child: std.process.Child, bound: []const u8 };
+
+/// Start `serve --listen spec` on the fixture and read its bound address
+/// off stderr into `line`.
+pub fn listen(gpa: std.mem.Allocator, spec: []const u8, line: []u8) !Listening {
+    var child = std.process.Child.init(&.{ test_paths.emulator, "serve", "--listen", spec, image_path }, gpa);
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Ignore;
+    child.stderr_behavior = .Pipe;
+    try child.spawn();
+    errdefer _ = child.kill() catch {};
+    const said = try child.stderr.?.reader().readUntilDelimiter(line, '\n');
+    const prefix = "serve: listening on ";
+    try std.testing.expect(std.mem.startsWith(u8, said, prefix));
+    return .{ .child = child, .bound = said[prefix.len..] };
+}

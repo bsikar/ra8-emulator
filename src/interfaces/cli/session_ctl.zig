@@ -1,0 +1,126 @@
+//! `ra8_emulator ctl --connect unix:PATH|tcp:HOST:PORT [--json] COMMAND`
+//! (RA8EMU-747): one command against a running `serve`, one connection per
+//! command. serve keeps the session between clients, so a script of ctl
+//! calls drives one continuous machine.
+const std = @import("std");
+const proto = @import("../rpc/session_rpc.zig");
+const Spec = @import("serve_listen.zig").Spec;
+const Client = @import("ctl_client.zig").Client;
+const out = @import("ctl_print.zig");
+
+pub const usage =
+    \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
+    \\  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem ADDRESS LENGTH
+    \\
+;
+
+/// What `regs` reads when it is given no names.
+const default_regs = [_]proto.Register{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc, .xpsr };
+const max_regs = 32;
+
+pub const Command = union(enum) {
+    load: []const u8,
+    run: u64,
+    step,
+    pause,
+    regs: []const proto.Register,
+    mem: struct { address: u32, length: u32 },
+};
+
+pub const Request = struct { spec: Spec, json: bool, command: Command };
+
+/// Parse `argv`; `--json` may sit anywhere after the connect spec.
+pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
+    if (argv.len < 5 or !std.mem.eql(u8, argv[1], "ctl") or !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
+    const spec = try Spec.parse(argv[3]);
+    var words = std.ArrayList([]const u8).init(allocator);
+    var json = false;
+    for (argv[4..]) |word| {
+        if (std.mem.eql(u8, word, "--json")) json = true else try words.append(word);
+    }
+    if (words.items.len == 0) return error.BadArguments;
+    const command = try parseCommand(allocator, words.items[0], words.items[1..]);
+    return .{ .spec = spec, .json = json, .command = command };
+}
+
+fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
+    const eql = std.mem.eql;
+    if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
+    if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
+    if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
+    if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
+    if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
+    if (!eql(u8, name, "mem")) return error.UnknownCommand;
+    if (args.len != 2) return error.BadArguments;
+    const length = try std.fmt.parseInt(u32, args[1], 0);
+    if (length == 0) return error.BadLength;
+    return .{ .mem = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .length = length } };
+}
+
+fn parseBudget(args: []const []const u8) !u64 {
+    if (args.len == 0) return 0;
+    if (args.len == 2 and std.mem.eql(u8, args[0], "--budget")) return std.fmt.parseInt(u64, args[1], 0);
+    return error.BadArguments;
+}
+
+fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const proto.Register {
+    if (names.len == 0) return &default_regs;
+    if (names.len > max_regs) return error.TooManyRegisters;
+    const regs = try allocator.alloc(proto.Register, names.len);
+    for (names, regs) |name, *reg| reg.* = std.meta.stringToEnum(proto.Register, name) orelse return error.UnknownRegister;
+    return regs;
+}
+
+/// Run `argv` (`ra8_emulator ctl --connect ...`) and return the exit code.
+pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+    const request = parse(allocator, argv) catch |err| {
+        std.debug.print("ctl: {s}\n{s}", .{ @errorName(err), usage });
+        return 2;
+    };
+    const client = Client.open(allocator, request.spec) catch |err| return out.failed(request.json, err, 0);
+    defer client.close();
+    perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
+    return 0;
+}
+
+fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !void {
+    const w = std.io.getStdOut().writer();
+    const json = request.json;
+    switch (request.command) {
+        .load => |path| {
+            const image = try std.fs.cwd().readFileAlloc(allocator, path, proto.max_payload);
+            _ = try client.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });
+            try out.loaded(w, json, path, image.len);
+        },
+        .run => |budget| try runTo(client, w, json, budget),
+        .step => try runTo(client, w, json, null),
+        .pause => {
+            _ = try client.call(proto.Ack, proto.CoreOnly, .pause, .{ .core = .cpu0 });
+            try out.paused(w, json);
+        },
+        .regs => |regs| {
+            var values: [max_regs]out.Reg = undefined;
+            for (regs, values[0..regs.len]) |reg, *value| {
+                const read = try client.call(proto.U32, proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = reg });
+                value.* = .{ .register = reg, .value = read.value };
+            }
+            try out.registers(w, json, values[0..regs.len]);
+        },
+        .mem => |at| {
+            const args: proto.ReadMemory = .{ .core = .cpu0, .address = at.address, .length = at.length };
+            const memory = try client.call(proto.Memory, proto.ReadMemory, .read_memory, args);
+            try out.memory(w, json, at.address, memory.bytes);
+        },
+    }
+}
+
+/// Run with `budget` (or one step when null) and print the stop it ends in.
+fn runTo(client: *Client, w: anytype, json: bool, budget: ?u64) !void {
+    _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
+    if (budget) |instructions| {
+        _ = try client.call(proto.Ack, proto.Run, .run, .{ .core = .cpu0, .mode = .cont, .budget = instructions });
+    } else {
+        _ = try client.call(proto.Ack, proto.CoreOnly, .step, .{ .core = .cpu0 });
+    }
+    try out.stopped(w, json, try client.stop());
+}
