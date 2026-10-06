@@ -22,6 +22,7 @@
 //! units that saw traffic, each with its index. The other report sections
 //! join this document under RA8EMU-198's later subtasks.
 const Board = @import("../../../board/board.zig").Board;
+const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const bus_fault = @import("../../../periph/bus_fault.zig");
 const cpu_ctrl = @import("../../../periph/cpu_ctrl.zig");
 const ipc = @import("../../../periph/ipc/ipc.zig");
@@ -55,6 +56,10 @@ pub const schema = "ra8-report/1";
 pub const Run = struct {
     engine: []const u8,
     elapsed: u64,
+    /// Shared external-memory wall-clock cycles and the backing store whose
+    /// fabric owns the per-region counters.
+    elapsed_cycles: u64 = 0,
+    external: ?Guest = null,
     bus_errors: bus_fault.Tally = .{},
     /// The run's own tables (RA8EMU-378); each null when not collected.
     where: json_where.Where = .{},
@@ -80,7 +85,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try mailbox(&j, &board.mailbox);
     try j.close('}');
     try json_protect.section(&j, board);
-    try json_mem.section(&j, board);
+    try json_mem.section(&j, board, of.external, of.elapsed_cycles);
     try json_clock.section(&j, board);
     try json_timers.section(&j, board);
     try json_serial.section(&j, board);
@@ -108,6 +113,7 @@ fn run(j: anytype, board: *Board, of: Run) !void {
     try j.field("part", board.part.label());
     try j.field("engine", of.engine);
     try j.field("elapsed_instructions", of.elapsed);
+    try j.field("elapsed_cycles", of.elapsed_cycles);
     try j.open("bus", '{');
     try j.field("reads", board.bus.counters.reads);
     try j.field("writes", board.bus.counters.writes);

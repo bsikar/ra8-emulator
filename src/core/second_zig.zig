@@ -79,7 +79,7 @@ pub const SecondZig = struct {
         self.board.security = &self.cpu.banked;
         self.pending.banked = &self.cpu.banked;
         self.check = .{ .unit = units.regions };
-        self.board.armCheck(&self.check);
+        self.board.check = &self.check;
         self.cpu.mpu = &self.check;
         try self.cpu.reset(units.vector_base);
     }
@@ -127,7 +127,7 @@ pub const Own = struct {
     pub fn open(self: *Own, lender: *const Store, board: *Board, image: elf.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
-        _ = try bringUp(&self.core, .{ .store = &self.store }, board, .{
+        _ = try bringUp(&self.core, .{ .store = &self.store, .master = .cpu1 }, board, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
             .guard = &self.guard,
@@ -155,7 +155,8 @@ pub const Parts = struct {
 /// and open `core` over it reset from the image's vector table
 /// (RA8EMU-574, shared with the run path by RA8EMU-588).
 pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, image: elf.Image) !second_core.Seeded {
-    try wiring.primeWindows(board, memory, .{
+    const setup = memory.asMaster(.none);
+    try wiring.primeWindows(board, setup, .{
         .partitions = parts.partitions,
         .regions = parts.regions,
         .guard = parts.guard,
@@ -163,7 +164,7 @@ pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, ima
         .control = parts.control,
         .clears = parts.clears,
     });
-    const seeded = try second_core.seedImage(memory, image);
+    const seeded = try second_core.seedImage(setup, image);
     const units: Units = .{ .partitions = parts.partitions, .regions = parts.regions, .clears = parts.clears, .vector_base = seeded.vector_base };
     try core.openOn(memory, units, &board.bus);
     return seeded;

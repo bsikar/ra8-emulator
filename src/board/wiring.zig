@@ -135,7 +135,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
     if (self.part.hasNpu()) {
-        self.npu.memory = memory;
+        self.npu.memory = memory.asMaster(.ethos_u55);
         try self.bus.add(self.npu.block());
     }
     try self.bus.add(self.lowpower.block());

@@ -136,7 +136,7 @@ test "CPU1's Zig core stores through its Guest into CPU1's memory (RA8EMU-535)" 
     defer board.deinit();
     var core: SecondZig = undefined;
     try pair.bring(&core, &board);
-    try std.testing.expect(core.memory == .store);
+    try std.testing.expectEqual(&pair.cpu1, core.memory.store);
     try core.cpu.bus.write(code + 0x40, &.{ 0xEF, 0xBE, 0xAD, 0xDE });
     var bytes: [4]u8 = undefined;
     try pair.guest().read(code + 0x40, &bytes);

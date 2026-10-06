@@ -55,7 +55,7 @@ test "a single-core zig run loads CPU0 into its own store" {
     defer cpu0.close();
     _ = try cpu0.attachStore(&board, try elf.Image.init(&file));
     const memory = cpu0.own();
-    try std.testing.expect(memory == .store);
+    try std.testing.expectEqual(&cpu0.store.?, memory.store);
     try std.testing.expectEqual(stack, try memory.readWord(vectors));
     try std.testing.expectEqual(ra8.periph.cpuid.cpu0, try memory.readWord(ra8.periph.cpuid.address));
     // The whole option window is mapped, its last page included, with room

@@ -1,3 +1,6 @@
 # RA8D2 EK development board, profile format version 1.
 version=1
+ospi=size:268435456,width:8,clock_hz:166666667,latency_cycles:8,burst:incrementing16
+sdram=size:134217728,width:32,clock_hz:133000000,latency_cycles:3,burst:incrementing16
+memory_window_cycles=1000000
 companion=c6@uart:sci2

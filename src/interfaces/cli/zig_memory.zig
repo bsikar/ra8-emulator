@@ -13,6 +13,7 @@
 //! there is no engine arm left here: every run is on the store.
 const elf = @import("../../core/elf.zig");
 const Store = @import("../../core/cpu/memory/store.zig").Store;
+const external = @import("../../core/external_memory.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const loader = @import("../../core/cpu/memory/load.zig");
 const wiring = @import("../../board/wiring.zig");
@@ -27,6 +28,8 @@ pub const Cpu0 = struct {
     /// the image. Returns the bytes the image wrote, for the opening line.
     pub fn attachStore(self: *Cpu0, board: *Board, image: elf.Image) !u32 {
         self.store = try Store.init(null);
+        const layout = try external.Layout.init(board.external_memory);
+        try self.store.?.configureExternal(layout, &board.flash.flash);
         const memory = self.own();
         try wiring.attachBlocks(board, memory);
         try wiring.primeWindows(board, memory, wiring.cpu0Windows(board));

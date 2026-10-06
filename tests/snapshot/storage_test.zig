@@ -69,6 +69,19 @@ test "both memories round-trip with their contents" {
     try std.testing.expect(target.options.locked);
 }
 
+test "a different configured flash capacity is refused" {
+    var board = try busy();
+    defer board.deinit();
+    var list = std.ArrayList(u8).init(allocator);
+    defer list.deinit();
+    try saved(&board, &list);
+    var target = Stand.init();
+    defer target.deinit();
+    try target.flash.flash.resize(32 * 1024 * 1024);
+    try std.testing.expectError(error.BadValue, storage.load(&target, list.items));
+    try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
+}
+
 test "a sector past the part is refused" {
     var board = try busy();
     defer board.deinit();

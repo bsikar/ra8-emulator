@@ -1,41 +1,26 @@
-//! The Zig core's own memory: every region of src/core/memmap.zig on host
-//! pages (RA8EMU-480). It is the first
-//! slice of RA8EMU-255, and every run is on it now.
-//!
-//! It keeps the rules src/core/board_ram.zig keeps for the engine.
-//!
-//! A NON-SECURE VIEW IS THE SAME BYTES. Each pair in `memmap.alias_of`, and
-//! code MRAM with its bit-28 view, is one allocation answering at two
-//! addresses, so a store through one view is read back through the other.
-//!
-//! THE PAGES ARE ZEROED HERE. Reset state is a silicon fact, and a host
-//! allocator that recycles would otherwise hand a second store the first
-//! one's bytes.
-//!
-//! THE SHARED SRAM IS LENT, NOT COPIED. A second core's store borrows the
-//! `alias_of` pairs (system SRAM and SDRAM) from the first core's, so CPU1
-//! sees CPU0's stores the instant they land. Code MRAM, the TCMs and the PPB
-//! stay per core: CPU1 can load its own image, and each core has its own
-//! SCS. A borrower must not outlive the store it borrowed from.
+//! The Zig core's host-backed memory store, including profile-selected
+//! external SDRAM and the board-owned mapped OSPI array.
 const std = @import("std");
 const memmap = @import("../../memmap.zig");
+const external = @import("../../external_memory.zig");
+const nor = @import("../../../periph/xspi/xspi_flash.zig");
 const extra = @import("extra.zig");
 
 pub const Error = error{OutOfMemory};
+pub const AccessError = error{Unmapped} || Error;
 pub const MapError = extra.Error;
 
 pub const Store = struct {
-    /// Host bytes for each `memmap.ram` entry, in the same order. A view
-    /// holds the same slice as the region it is a view of.
     pages: [memmap.ram.len]?[]u8 = @splat(null),
-    /// Which entries this store allocated, and so frees.
     owned: [memmap.ram.len]bool = @splat(false),
-    /// Windows outside memmap, mapped by peripherals at attach (extra.zig).
-    /// Per core: a borrower never sees its lender's.
     extra: extra.Extra = .{},
+    layout: ?external.Layout = null,
+    flash: ?*nor.Flash = null,
+    fabric: ?*external.Fabric = null,
+    owns_external: bool = false,
 
-    /// Back every region. With a `lender`, the shared regions are the
-    /// lender's pages rather than fresh ones.
+    /// Back every fixed region. A second core borrows shared SRAM/SDRAM and
+    /// the same external fabric, while retaining private MRAM, TCM and PPB.
     pub fn init(lender: ?*const Store) Error!Store {
         var self: Store = .{};
         errdefer self.deinit();
@@ -48,74 +33,127 @@ pub const Store = struct {
             self.pages[index] = try allocate(entry.size);
             self.owned[index] = true;
         }
-        // Every view sits 0x1000_0000 above the region it views, so each
-        // one's pages exist by now.
         for (memmap.ram, 0..) |entry, index| {
             const secure = viewOf(entry.base) orelse continue;
             self.pages[index] = self.pages[indexOf(secure).?];
         }
+        if (lender) |first| {
+            self.layout = first.layout;
+            self.flash = first.flash;
+            self.fabric = first.fabric;
+        }
         return self;
     }
 
-    /// Release what this store allocated. Borrowed pages stay with their
-    /// owner, and a view's pages go with the region it views.
+    pub fn configureExternal(self: *Store, layout: external.Layout, flash: *nor.Flash) Error!void {
+        flash.resize(layout.size(.ospi)) catch return Error.OutOfMemory;
+        const bytes = try allocate(layout.size(.sdram));
+        errdefer std.heap.page_allocator.free(bytes);
+        const secure_index = indexOf(memmap.sdram_base).?;
+        if (self.owned[secure_index]) if (self.pages[secure_index]) |old| std.heap.page_allocator.free(old);
+        self.pages[secure_index] = bytes;
+        self.owned[secure_index] = false;
+        self.pages[indexOf(memmap.ns_sdram_base).?] = bytes;
+        const fabric = std.heap.page_allocator.create(external.Fabric) catch return Error.OutOfMemory;
+        fabric.* = external.Fabric.init(layout);
+        self.layout = layout;
+        self.flash = flash;
+        self.fabric = fabric;
+        self.owns_external = true;
+    }
+
     pub fn deinit(self: *Store) void {
+        if (self.owns_external) {
+            if (self.pages[indexOf(memmap.sdram_base).?]) |bytes| std.heap.page_allocator.free(bytes);
+            if (self.fabric) |fabric| std.heap.page_allocator.destroy(fabric);
+            self.pages[indexOf(memmap.sdram_base).?] = null;
+            self.pages[indexOf(memmap.ns_sdram_base).?] = null;
+        }
         for (&self.pages, &self.owned) |*held, *mine| {
             if (mine.*) if (held.*) |bytes| std.heap.page_allocator.free(bytes);
             held.* = null;
             mine.* = false;
         }
         self.extra.deinit();
+        self.layout = null;
+        self.flash = null;
+        self.fabric = null;
+        self.owns_external = false;
     }
 
-    /// Host bytes for the whole region based at `base`, either view.
     pub fn region(self: *const Store, base: u32) ?[]u8 {
         return self.pages[indexOf(base) orelse return null];
     }
 
-    /// Host bytes for `len` bytes at `address`, or null when they are not
-    /// all inside one region.
+    /// A directly addressable host span. Mapped OSPI stays behind read/write
+    /// so its erased inversion and NOR program semantics cannot be bypassed.
     pub fn span(self: *const Store, address: u32, len: usize) ?[]u8 {
+        if (self.layout) |layout| if (layout.locate(address, len)) |hit| {
+            if (hit.kind == .sdram) return self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..len];
+            return null;
+        };
+        if (self.layout) |layout| if (layout.overlaps(address, len)) return null;
         for (memmap.ram, 0..) |entry, index| {
             if (address < entry.base or address >= entry.end()) continue;
             const offset = address - entry.base;
-            if (len > entry.size - offset) return null;
             const bytes = self.pages[index] orelse return null;
+            if (offset > bytes.len or len > bytes.len - offset) return null;
             return bytes[offset..][0..len];
         }
         return self.extra.span(address, len);
     }
 
-    /// Back a window outside memmap. A range inside a memmap region, or one
-    /// touching a window already mapped, fails with Mapped.
+    pub fn read(self: *Store, master: external.Master, address: u32, into: []u8) AccessError!void {
+        if (into.len == 0) return;
+        if (self.layout) |layout| if (layout.locate(address, into.len)) |hit| {
+            switch (hit.kind) {
+                .ospi => if (!self.flash.?.readMapped(hit.offset, into)) return AccessError.Unmapped,
+                .sdram => @memcpy(into, self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..into.len]),
+            }
+            self.fabric.?.note(master, hit, .read, into.len);
+            return;
+        };
+        @memcpy(into, self.span(address, into.len) orelse return AccessError.Unmapped);
+    }
+
+    pub fn write(self: *Store, master: external.Master, address: u32, bytes: []const u8) AccessError!void {
+        if (bytes.len == 0) return;
+        if (self.layout) |layout| if (layout.locate(address, bytes.len)) |hit| {
+            switch (hit.kind) {
+                .ospi => if (!(try self.flash.?.writeMapped(hit.offset, bytes))) return AccessError.Unmapped,
+                .sdram => @memcpy(self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..bytes.len], bytes),
+            }
+            self.fabric.?.note(master, hit, .write, bytes.len);
+            return;
+        };
+        @memcpy(self.span(address, bytes.len) orelse return AccessError.Unmapped, bytes);
+    }
+
+    pub fn backed(self: *const Store, address: u32, len: usize) bool {
+        if (self.layout) |layout| if (layout.locate(address, len) != null) return true;
+        return self.span(address, len) != null;
+    }
+
     pub fn map(self: *Store, base: u32, size: u32) MapError!void {
         if (self.span(base, 1) != null) return MapError.Mapped;
+        if (external.supportedOverlap(base, size)) return MapError.Mapped;
         return self.extra.map(base, size);
     }
 };
 
-/// The base of the region `base` is the Non-secure view of, or null when it
-/// is not a view.
 fn viewOf(base: u32) ?u32 {
     if (base == memmap.ns_mram_base) return memmap.mram_base;
-    for (memmap.alias_of) |pair| {
-        if (pair.view == base) return pair.of;
-    }
+    for (memmap.alias_of) |pair| if (pair.view == base) return pair.of;
     return null;
 }
 
-/// Whether a second core shares this region with the first.
 fn shared(base: u32) bool {
-    for (memmap.alias_of) |pair| {
-        if (pair.of == base) return true;
-    }
+    for (memmap.alias_of) |pair| if (pair.of == base) return true;
     return false;
 }
 
 fn indexOf(base: u32) ?usize {
-    for (memmap.ram, 0..) |entry, index| {
-        if (entry.base == base) return index;
-    }
+    for (memmap.ram, 0..) |entry, index| if (entry.base == base) return index;
     return null;
 }
 

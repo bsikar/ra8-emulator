@@ -4,6 +4,8 @@
 //! and unmodelled.zig print; every key is always present, and per-unit
 //! lists carry only the channels or operations that saw anything.
 const Board = @import("../../../board/board.zig").Board;
+const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
+const external = @import("../../../core/external_memory.zig");
 const cache = @import("../../../periph/cache/cache.zig");
 const dmac = @import("../../../periph/dmac/dmac.zig");
 const dtc = @import("../../../periph/dtc/dtc.zig");
@@ -11,13 +13,14 @@ const dma = @import("dma.zig");
 const unmodelled = @import("unmodelled.zig");
 
 /// The whole `memory` object, keyed inside the document.
-pub fn section(j: anytype, board: *Board) !void {
+pub fn section(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !void {
     try j.open("memory", '{');
     try caches(j, &board.caches);
     try sram(j, board);
     try transfers(j, &board.dma);
     try dtc1(j, &board.transfers1);
     try worklist(j, board);
+    try externalRegions(j, board, memory, elapsed);
     try j.close('}');
 }
 
@@ -119,4 +122,35 @@ fn worklist(j: anytype, board: *Board) !void {
     }
     try j.close(']');
     try j.close('}');
+}
+
+fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !void {
+    try j.open("external_regions", '[');
+    inline for (.{ external.Kind.ospi, external.Kind.sdram }) |kind| {
+        const config = board.external_memory.region(kind);
+        const counters = if (memory) |guest| if (guest.store.fabric) |fabric| fabric.counters(kind, elapsed) else external.Counters{} else external.Counters{};
+        try j.open(null, '{');
+        try j.field("name", kind.label());
+        try j.field("base", kind.base());
+        try j.field("size_bytes", config.size);
+        try j.field("bus_width_bits", config.width);
+        try j.field("clock_hz", config.clock_hz);
+        try j.field("latency_cycles", config.latency_cycles);
+        try j.field("burst", @tagName(config.burst));
+        try j.field("memory_window_cycles", board.external_memory.window_cycles);
+        try j.field("read_high_water_bytes", counters.read_high_water_bytes);
+        try j.field("write_high_water_bytes", counters.write_high_water_bytes);
+        try j.field("bytes_read", counters.bytes_read);
+        try j.field("bytes_written", counters.bytes_written);
+        try j.field("average_read_bytes_per_second", counters.average_read_bytes_per_second);
+        try j.field("average_write_bytes_per_second", counters.average_write_bytes_per_second);
+        try j.field("peak_read_bytes_per_second", counters.peak_read_bytes_per_second);
+        try j.field("peak_write_bytes_per_second", counters.peak_write_bytes_per_second);
+        try j.open("stall_cycles", '{');
+        try j.field("cpu", counters.cpu_stall_cycles);
+        try j.field("ethos_u55", counters.ethos_u55_stall_cycles);
+        try j.close('}');
+        try j.close('}');
+    }
+    try j.close(']');
 }

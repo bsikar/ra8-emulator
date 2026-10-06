@@ -261,7 +261,7 @@ pub const Xspi = struct {
         const size = descriptor.dataSize(cdt);
         if (self.resetting.step(descriptor.opcode(cdt))) self.write_enabled = false;
         switch (@as(Opcode, @enumFromInt(descriptor.opcode(cdt)))) {
-            .read_id => self.buffer(slot.data0).* = std.mem.readInt(u24, &part.jedec, .little),
+            .read_id => self.buffer(slot.data0).* = self.flash.jedecWord(),
             .read_status => self.buffer(slot.data0).* = if (self.write_enabled) status.wel else 0,
             .write_enable => self.write_enabled = true,
             .read => self.doRead(address, size),
@@ -311,7 +311,7 @@ pub const Xspi = struct {
     /// Erase the 4 KiB sector the address falls in.
     fn doErase(self: *Xspi, address: u32) void {
         if (!self.armed()) return;
-        if (address >= part.size) {
+        if (address >= self.flash.capacity) {
             self.out_of_part +%= 1;
             return;
         }
@@ -335,7 +335,7 @@ pub const Xspi = struct {
             self.oversized +%= 1;
             return false;
         }
-        if (address >= part.size) {
+        if (address >= self.flash.capacity) {
             self.out_of_part +%= 1;
             return false;
         }
@@ -349,7 +349,7 @@ pub const Xspi = struct {
             self.oversized +%= 1;
             return false;
         }
-        if (!part.holds(address, size)) {
+        if (!self.flash.holds(address, size)) {
             self.out_of_part +%= 1;
             return false;
         }

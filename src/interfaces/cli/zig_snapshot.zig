@@ -38,6 +38,8 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     try run_file.load(bytes, store, &.{core}, clock.board);
     try systick.load(.{ clock.timebase, &clock.ns_timebase }, bytes);
     const saved = try stretch.load(bytes);
+    clock.accounted = core.retired -| saved.owed;
+    clock.wall_cycles = if (store.fabric) |fabric| fabric.wall else 0;
     clock.cycle_remainder = saved.cycle_remainder;
     if (saved.owed != 0) {
         if (saved.rate_known) {
@@ -62,7 +64,5 @@ fn save(context: *anyopaque, core: *const Cpu, owed: u32) anyerror!void {
 
 fn storeOf(clock: *const Clock) Error!*Store {
     if (clock.cpu1 != null) return Error.SecondCoreNotSaved;
-    return switch (clock.memory) {
-        .store => |store| store,
-    };
+    return clock.memory.store;
 }
