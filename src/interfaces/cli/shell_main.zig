@@ -11,6 +11,7 @@ const pane_layout = @import("../../gui/pane_layout.zig");
 const shell_loop = @import("../../gui/shell_loop.zig");
 const shell_panes = @import("../../gui/shell_panes.zig");
 const shell_console = @import("../../gui/shell_console.zig");
+const shell_board = @import("../../gui/shell_board.zig");
 const session_link = @import("../../gui/session_link.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
@@ -101,7 +102,10 @@ fn local(allocator: std.mem.Allocator, window: platform.Platform, path: []const 
     var console = shell_console.Console.init(allocator);
     defer console.deinit();
     shell.console = &console;
-    var panes: shell_panes.Panes = .{ .console = &console };
+    var board = shell_board.Board.init(allocator);
+    defer board.deinit();
+    shell.board = &board;
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board };
     shell.painter = panes.painter();
     try drive(&shell, window, path, bytes);
     link.close();
