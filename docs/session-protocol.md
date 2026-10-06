@@ -52,3 +52,25 @@ Part specs travel as text in the same syntax as the `--attach` and `--fault` fla
 | 0x0105 | core, session event kind, optional address encoded as zero when absent |
 
 LCD pixels are binary bytes for only the dirty rectangle; they are never text or base64. Transports carry the same frames over stdin/stdout, Unix domain sockets, or TCP. A desktop client owns presentation; the emulator serves no web UI.
+
+## Remote hosts (RA8EMU-196)
+
+`ctl --host NAME --image ELF` starts a `serve --stdio` for one command on the host a
+profile names, instead of connecting to a running `serve`. Each call is a fresh machine
+booted from ELF. For one long-lived session on another machine, run `serve --listen` there
+and use `ctl --connect`.
+
+Profiles live in a hosts file, read from `--hosts FILE`, else `$RA8_HOSTS`, else
+`~/.config/ra8_emulator/hosts`. One profile per line, `#` starts a comment:
+
+```
+local here
+ssh lab bsikar@labvm emulator=/opt/ra8/ra8_emulator cache=/var/cache/ra8 ssh=ssh
+```
+
+An ssh profile asks the remote `test -f CACHE/<sha256>.elf` first and copies the image over
+ssh stdin only when it is missing, then runs `EMULATOR serve --stdio CACHE/<sha256>.elf`.
+`emulator` defaults to `ra8_emulator` on the remote PATH, `cache` to
+`.cache/ra8_emulator/images` under the remote home, and `ssh` to `ssh`. A server that speaks
+another protocol version fails the handshake with `VersionMismatch` and a message saying to
+run the same build on both ends.

@@ -9,6 +9,8 @@ test {
     _ = @import("interfaces/cli/serve_listen_test.zig");
     _ = @import("interfaces/cli/session_ctl_test.zig");
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
+    _ = @import("interfaces/cli/host_profiles_test.zig");
+    _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("core/systick_bank_test.zig");
     _ = @import("harness_test.zig");

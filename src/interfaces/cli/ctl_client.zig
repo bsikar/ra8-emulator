@@ -1,9 +1,17 @@
-//! The session client `ctl --connect` speaks through (RA8EMU-747): one
-//! connection to a running `serve`, one call at a time.
+//! The session client ctl speaks through (RA8EMU-747): one link to a
+//! `serve`, one call at a time. The link is a socket to a running `serve`
+//! (`--connect`) or the pipes of one ctl starts (`--host`, RA8EMU-196).
 const std = @import("std");
+const rpc = @import("ra8_rpc");
 const proto = @import("../rpc/session_rpc.zig");
 const Connection = @import("../rpc/socket_transport.zig").Connection;
+const Child = @import("../rpc/child_transport.zig").Child;
 const Spec = @import("serve_listen.zig").Spec;
+
+/// Where the server is: a socket spec, or the argv that starts `serve --stdio`.
+pub const Target = union(enum) { socket: Spec, spawn: []const []const u8 };
+
+const Link = union(enum) { socket: Connection, child: Child };
 
 const Env = proto.Client.Env;
 const Incoming = proto.Client.Incoming;
@@ -15,27 +23,34 @@ const answer_wait_ms = 30_000;
 pub const Event = struct { topic: u16, payload: []const u8 };
 
 pub const Client = struct {
-    connection: Connection,
+    link: Link,
     rx: []u8,
     tx: []u8,
     client: proto.Client,
     /// The code of the last refusal, for the error line.
     refused: u16 = 0,
 
-    /// Connect to `spec` and finish the handshake. Buffers come from
+    /// Reach `target` and finish the handshake. Buffers come from
     /// `allocator`, which ctl runs as an arena.
-    pub fn open(allocator: std.mem.Allocator, spec: Spec) !*Client {
+    pub fn open(allocator: std.mem.Allocator, target: Target) !*Client {
         const self = try allocator.create(Client);
         self.* = .{
-            .connection = switch (spec) {
-                .unix => |path| try Connection.unix(path),
-                .tcp => |address| try Connection.tcp(address),
-            },
+            .link = undefined,
             .rx = try allocator.alloc(u8, 2 * Env.max_frame),
             .tx = try allocator.alloc(u8, Env.max_frame),
             .client = undefined,
         };
-        self.client = proto.Client.init(self.connection.transport(), self.rx, proto.capabilities);
+        switch (target) {
+            .socket => |spec| self.link = .{ .socket = switch (spec) {
+                .unix => |path| try Connection.unix(path),
+                .tcp => |address| try Connection.tcp(address),
+            } },
+            .spawn => |argv| {
+                self.link = .{ .child = undefined };
+                try self.link.child.spawn(allocator, argv);
+            },
+        }
+        self.client = proto.Client.init(self.transport(), self.rx, proto.capabilities);
         try self.client.greet(self.tx);
         while (true) switch (try self.next()) {
             .ready => return self,
@@ -44,7 +59,17 @@ pub const Client = struct {
     }
 
     pub fn close(self: *Client) void {
-        self.connection.close();
+        switch (self.link) {
+            .socket => |*connection| connection.close(),
+            .child => |*child| child.close(),
+        }
+    }
+
+    fn transport(self: *Client) rpc.Transport {
+        return switch (self.link) {
+            .socket => |*connection| connection.transport(),
+            .child => |*child| child.transport(),
+        };
     }
 
     /// The next frame from the server, or error.ServerSilent.
