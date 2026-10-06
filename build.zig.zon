@@ -4,6 +4,10 @@
     .fingerprint = 0xd7a6ec1532845ea,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{
+        .ra8_firmware = .{
+            .url = "https://github.com/bsikar/ra8-firmware/archive/aed3fba1ca697b6ec3a1e05b4b207da01f931acc.tar.gz",
+            .hash = "ra8_firmware-0.1.0-HagwjeGwnALaClbE4WQkXJG3Ir_fJeIoeJ5okIOnm3_U",
+        },
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git?ref=v0.2.6+3.2.20#0f81c0affb2584b242b2fb5744e7dfebcfd904a5",
             .hash = "sdl-0.2.6+3.2.20-7uIn9JkjfwGIQ6j3-etow2rCe-Zt16Yj-2gdp9jW7WZ9",
