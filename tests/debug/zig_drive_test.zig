@@ -142,3 +142,23 @@ test "a quiet run of a branch to itself retires exactly the instructions asked f
     try std.testing.expectEqual(@as(u64, 1000), retired);
     try std.testing.expectEqual(@as(u32, 0x08), core.register(.pc));
 }
+
+test "a quiet core asleep with nothing pending lets the rest of the chunk go by" {
+    var memory = ram();
+    memory.bytes[0x08] = 0x30; // wfi (0xBF30)
+    memory.bytes[0x09] = 0xBF;
+    memory.bytes[0x0A] = 0xFD; // b 0x08 (0xE7FD)
+    memory.bytes[0x0B] = 0xE7;
+    var fake: Fake = .{};
+    var cpu: Cpu = .{ .bus = memory.view(), .source = fake.source() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    var machine: Machine = .{};
+    machine.begin();
+    var retired: u64 = 0;
+    const ended = zig_drive.runCounted(core, &machine, 1000, null, null, &retired);
+    try std.testing.expectEqual(zig_drive.Ended.count, ended);
+    try std.testing.expectEqual(@as(u64, 1000), retired);
+    try std.testing.expect(cpu.waiting != null);
+    try std.testing.expect(cpu.retired < 4);
+}

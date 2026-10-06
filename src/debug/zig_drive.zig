@@ -104,11 +104,13 @@ const Quiet = struct { ran: u64, stop: ?cpu_mod.Stop = null };
 /// The rest of a chunk with nothing armed, through `Cpu.run`, so park loops
 /// and trips that change nothing go by at once as in a plain run
 /// (RA8EMU-712). A store into the PPB ends it, since it may arm the FPB or
-/// DWT. A sleeping core, a core already waiting on a console line, or a
-/// stretch that moved nothing goes one instruction at a time instead.
+/// DWT. A core asleep with nothing to wake it lets the rest of the chunk go
+/// by as time, as a plain run charges a sleeping stretch to the clocks. A
+/// core already waiting on a console line, or a stretch that moved nothing,
+/// goes one instruction at a time instead.
 fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64) Quiet {
     const cpu = core.cpu;
-    if (cpu.until != null or cpu.waiting != null) return quietOne(core, watch);
+    if (cpu.until != null) return quietOne(core, watch);
     const before = cpu.retired;
     if (watch) |listening| {
         listening.ppb = .{ .needle = "" };
@@ -124,6 +126,7 @@ fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64) Quie
     const stop = cpu.run(left);
     const ran = cpu.retired - before;
     if (stop != .count) return .{ .ran = ran, .stop = stop };
+    if (cpu.waiting != null) return .{ .ran = left };
     if (ran == 0) return quietOne(core, watch);
     return .{ .ran = ran };
 }
