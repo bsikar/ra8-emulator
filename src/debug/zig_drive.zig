@@ -64,6 +64,9 @@ pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
 /// caller passing the board's boundary knows how far time moved
 /// (RA8EMU-709).
 pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64) Ended {
+    // The board moved, or the debugger wrote state, since the last chunk:
+    // the poll asks the source afresh before trusting a hush again.
+    if (core.cpu.quiet) |hushing| hushing.stir();
     var left = count;
     while (left > 0) : (left -= 1) {
         _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };

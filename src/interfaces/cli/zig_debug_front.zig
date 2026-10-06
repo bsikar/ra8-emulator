@@ -14,6 +14,7 @@ const elf = @import("../../core/elf.zig");
 const BoardBus = @import("../../core/cpu/board_bus.zig").BoardBus;
 const cpu_mod = @import("../../core/cpu/cpu.zig");
 const NvicSource = @import("../../core/cpu/exception/nvic_source.zig").NvicSource;
+const QuietSource = @import("../../core/cpu/exception/quiet_source.zig").QuietSource;
 const Board = @import("../../board/board.zig").Board;
 const session_plug = @import("../../board/session_plug.zig");
 const board_speed = @import("../../board/board_speed.zig");
@@ -85,9 +86,11 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, request: debug_front.
     var machine: stop_machine.Machine = .{};
     var driver: step_hook.Driver = .{ .machine = &machine };
     var watching: watch_bus.WatchBus = .{ .inner = memory.view(), .driver = &driver };
-    var cpu: cpu_mod.Cpu = .{ .bus = watching.view() };
     var pending: NvicSource = .{};
-    cpu.source = pending.source();
+    // The poll's shortcut, as a plain run has it: the answer stands until
+    // the core touches peripheral space or a run chunk starts (RA8EMU-712).
+    var quiet: QuietSource = .{ .inner = pending.source(), .memory = watching.view() };
+    var cpu: cpu_mod.Cpu = .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     pending.banked = &cpu.banked;
     cpu.reset(vector_base) catch {
         std.debug.print("zig core: no vector table at 0x{X:0>8}\n", .{vector_base});
