@@ -1,8 +1,8 @@
 //! Covers src/gui/memory_pane.zig (RA8EMU-746): a row's columns line up,
 //! the pane rasterises to a pinned golden frame, unreadable bytes draw only
 //! muted "??" and '?', a pane too narrow draws nothing and rows stop at what
-//! was captured, and capture reads each core through a real session across
-//! the end of mapped memory.
+//! was captured, a capture from a real session rasterises to a pinned golden
+//! frame, and capture reads each core across the end of mapped memory.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -133,30 +133,58 @@ const Ram = struct {
     }
 };
 
+/// Two cores, each on its own Ram, behind one session.
+const Rig = struct {
+    memory0: Ram,
+    memory1: Ram,
+    cpu0: Cpu,
+    cpu1: Cpu,
+    machine0: Machine,
+    machine1: Machine,
+    session: api.Session,
+
+    fn init(self: *Rig) !void {
+        self.memory0 = Ram.init();
+        self.memory1 = Ram.init();
+        self.cpu0 = .{ .bus = self.memory0.view() };
+        self.cpu1 = .{ .bus = self.memory1.view() };
+        try self.cpu0.reset(0);
+        try self.cpu1.reset(0);
+        self.machine0 = .{};
+        self.machine1 = .{};
+        var live: zig_session.ZigSession = .{ .core = .{ .cpu = &self.cpu0 }, .machine = &self.machine0, .budget = 100 };
+        live.other = .{ .core = .{ .cpu = &self.cpu1 }, .machine = &self.machine1, .budget = 100, .index = 1 };
+        self.session = .{ .live = live };
+    }
+};
+
+test "a capture from a session's core rasterises to the pinned golden frame" {
+    var rig: Rig = undefined;
+    try rig.init();
+    try rig.session.write(.cpu1, 0xE0, "RA8 memory pane!");
+    const snapshot = try pane.capture(&rig.session, .cpu1, 0xE8, 4);
+    var scene = try Scene.init();
+    defer scene.deinit();
+    try scene.render(&snapshot);
+    try std.testing.expectEqual(@as(u64, 16333086650271298263), scene.digest());
+}
+
 test "capture reads each core through the session and marks unmapped bytes" {
-    var memory0 = Ram.init();
-    var memory1 = Ram.init();
-    var cpu0: Cpu = .{ .bus = memory0.view() };
-    var cpu1: Cpu = .{ .bus = memory1.view() };
-    try cpu0.reset(0);
-    try cpu1.reset(0);
-    var machine0 = Machine{};
-    var machine1 = Machine{};
-    var live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100 };
-    live.other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1, .budget = 100, .index = 1 };
-    var session: api.Session = .{ .live = live };
+    var rig: Rig = undefined;
+    try rig.init();
+    const session = &rig.session;
     try session.write(.cpu0, 0xE0, "RA8 memory pane!");
     try session.write(.cpu1, 0xE0, "second core here");
-    const zero = try pane.capture(&session, .cpu0, 0xE0, 3);
-    const one = try pane.capture(&session, .cpu1, 0xE0, 1);
+    const zero = try pane.capture(session, .cpu0, 0xE0, 3);
+    const one = try pane.capture(session, .cpu1, 0xE0, 1);
     try std.testing.expectEqualStrings("RA8 memory pane!", zero.bytes[0..16]);
     try std.testing.expectEqualStrings("second core here", one.bytes[0..16]);
     for (zero.readable[0..32]) |readable| try std.testing.expect(readable);
     for (zero.readable[32..48]) |readable| try std.testing.expect(!readable);
-    const straddle = try pane.capture(&session, .cpu0, 0xF8, 2);
+    const straddle = try pane.capture(session, .cpu0, 0xF8, 2);
     for (straddle.readable[0..8]) |readable| try std.testing.expect(readable);
     for (straddle.readable[8..32]) |readable| try std.testing.expect(!readable);
     try std.testing.expectEqual(@as(u32, 0x108), straddle.rowAddress(1));
-    const capped = try pane.capture(&session, .cpu0, 0, pane.max_rows + 5);
+    const capped = try pane.capture(session, .cpu0, 0, pane.max_rows + 5);
     try std.testing.expectEqual(pane.max_rows, capped.count);
 }
