@@ -1,7 +1,8 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains
 //! the window's events (quit, gutter drags), pumps the session link into the
 //! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
-//! picker (RA8EMU-796), whose leaf also takes clicks; a press on a leaf's
+//! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
+//! (RA8EMU-802), which takes typing; a press on a leaf's
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
@@ -18,6 +19,7 @@ const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
 const shell_camera = @import("shell_camera.zig");
 const shell_titles = @import("shell_titles.zig");
+const shell_plug = @import("shell_plug.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -33,6 +35,7 @@ pub const Shell = struct {
     board: ?*shell_board.Board = null,
     devices: ?*shell_devices.Devices = null,
     camera: ?*shell_camera.Camera = null,
+    plug: ?*shell_plug.Plug = null,
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
     open: bool = true,
@@ -92,6 +95,7 @@ pub const Shell = struct {
                 if (press.button != 1) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down or self.held != null) return;
+                if (self.plug) |plug| if (plug.press(press.x, press.y)) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.devices) |devices| {
                     if (devices.clickIn(link, &self.layout, solved, press.x, press.y)) return;
@@ -104,6 +108,9 @@ pub const Shell = struct {
                 const axis = self.layout.node(found.split).body.split.axis;
                 self.layout.drag(found, if (axis == .across) at.x else at.y);
             },
+            .text, .key => if (self.plug) |plug| {
+                _ = plug.handle(event);
+            },
             else => {},
         }
     }
@@ -115,6 +122,7 @@ pub const Shell = struct {
         if (self.board) |board| board.attach(link);
         if (self.devices) |devices| devices.attach(link);
         if (self.camera) |camera| camera.attach(link);
+        if (self.plug) |plug| _ = plug.attach(link);
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
             const arrival = link.pump() orelse return;
@@ -123,6 +131,9 @@ pub const Shell = struct {
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);
             if (self.camera) |camera| camera.observe(arrival);
+            if (self.plug) |plug| if (plug.observe(arrival)) if (self.devices) |devices| {
+                devices.want = true;
+            };
         }
     }
 
