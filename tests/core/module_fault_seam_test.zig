@@ -163,3 +163,20 @@ test "a module on CPU1 is stopped by CPU1's own MPU and CPU0 never sees the faul
     try std.testing.expectEqual(@as(u32, 0), try mine.readWord(memmap.scb.cfsr));
     try std.testing.expectEqual(@as(u32, 0), try mine.readWord(memmap.scb.mmfar));
 }
+
+test "a module on CPU0 is stopped by CPU0's own MPU and CPU1 never sees the fault" {
+    var cpu0 = try Store.init(null);
+    defer cpu0.deinit();
+    var cpu1 = try Store.init(&cpu0);
+    defer cpu1.deinit();
+    var run: Run = undefined;
+    try run.open(&cpu0);
+    try std.testing.expectEqual(Stop.count, run.cpu.run(20));
+    const mine: Guest = .{ .store = &cpu0 };
+    const theirs: Guest = .{ .store = &cpu1 };
+    try std.testing.expectEqual(layout.recovery + 2, run.cpu.regs.pc);
+    try std.testing.expectEqual(@as(u32, 0), run.cpu.regs.get(5));
+    try std.testing.expectEqual(layout.kernel_only, try mine.readWord(memmap.scb.mmfar));
+    try std.testing.expectEqual(@as(u32, 0), try theirs.readWord(memmap.scb.cfsr));
+    try std.testing.expectEqual(@as(u32, 0), try theirs.readWord(memmap.scb.mmfar));
+}
