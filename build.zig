@@ -84,21 +84,14 @@ pub fn build(b: *std.Build) void {
     if (sdl_mod) |mod| exe.root_module.addImport("gui_sdl", mod);
     guiTest(b, target, optimize, emu, gui, sdl_mod);
 
-    const tests = b.addTest(.{
-        .name = "ra8_tests",
-        .root_source_file = b.path("tests/all.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tests.root_module.addImport("ra8", emu);
-    tests.root_module.addImport("ra8_widget", firmware.module("ra8_widget"));
-    tests.root_module.addImport("gate", gate_mod);
-    tests.root_module.addImport("terms", terms_mod);
-    tests.root_module.addImport("example_table", table_mod);
-    tests.root_module.addImport("handoff_bench", bench_mod);
-    tests.linkLibC();
-    testPaths(b, tests, exe);
-    unitTests(b, tests, target, optimize, emu, &exe.step);
+    const imports: TestImports = .{ .emu = emu, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod, .bench = bench_mod };
+    // Two roots, compiled one after the other under -j1, so the peak memory of
+    // a test build is the larger half's (RA8EMU-785).
+    const tests = [_]*std.Build.Step.Compile{
+        testBinary(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe),
+        testBinary(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe),
+    };
+    unitTests(b, &tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
 }
@@ -106,6 +99,30 @@ pub fn build(b: *std.Build) void {
 /// A tools/ program's module, shared by its executable and its tests.
 fn toolModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, path: []const u8) *std.Build.Module {
     return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });
+}
+
+/// The modules every unit test root imports.
+const TestImports = struct {
+    emu: *std.Build.Module,
+    widget: *std.Build.Module,
+    gate: *std.Build.Module,
+    terms: *std.Build.Module,
+    table: *std.Build.Module,
+    bench: *std.Build.Module,
+};
+
+/// One unit test binary over `root`, with every module the tests import.
+fn testBinary(b: *std.Build, name: []const u8, root: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, imports: TestImports, exe: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    const tests = b.addTest(.{ .name = name, .root_source_file = b.path(root), .target = target, .optimize = optimize });
+    tests.root_module.addImport("ra8", imports.emu);
+    tests.root_module.addImport("ra8_widget", imports.widget);
+    tests.root_module.addImport("gate", imports.gate);
+    tests.root_module.addImport("terms", imports.terms);
+    tests.root_module.addImport("example_table", imports.table);
+    tests.root_module.addImport("handoff_bench", imports.bench);
+    tests.linkLibC();
+    testPaths(b, tests, exe);
+    return tests;
 }
 
 /// The serve test (RA8EMU-737) spawns the emulator this build produced.
@@ -116,13 +133,13 @@ fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step
 }
 
 /// `test` runs the unit tests and the harness checks; `test-exe` installs the
-/// same test binary without running it, so a cross build can run on another host.
-fn unitTests(b: *std.Build, tests: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
+/// same test binaries without running them, so a cross build can run on another host.
+fn unitTests(b: *std.Build, tests: []const *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
     const test_step = b.step("test", "Run the unit tests and compile the emulator");
-    test_step.dependOn(&b.addRunArtifact(tests).step);
+    for (tests) |binary| test_step.dependOn(&b.addRunArtifact(binary).step);
     harnessChecks(b, target, optimize, emu, test_step, exe_step);
-    const test_exe = b.step("test-exe", "Install the unit test binary without running it, for a run on another host");
-    test_exe.dependOn(&b.addInstallArtifact(tests, .{}).step);
+    const test_exe = b.step("test-exe", "Install the unit test binaries without running them, for a run on another host");
+    for (tests) |binary| test_exe.dependOn(&b.addInstallArtifact(binary, .{}).step);
 }
 
 fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, test_step: *std.Build.Step, exe_step: *std.Build.Step) void {
