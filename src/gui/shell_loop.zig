@@ -1,7 +1,8 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains
 //! the window's events (quit, gutter drags), pumps the session link into the
 //! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
-//! picker (RA8EMU-796), whose leaf also takes clicks, then draws the shell frame (RA8EMU-764) and shows it
+//! picker (RA8EMU-796), whose leaf also takes clicks; a press on a leaf's
+//! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
@@ -16,6 +17,7 @@ const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
 const shell_camera = @import("shell_camera.zig");
+const shell_titles = @import("shell_titles.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -90,6 +92,7 @@ pub const Shell = struct {
                 if (press.button != 1) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down or self.held != null) return;
+                if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 const camera = self.camera orelse return;
                 _ = camera.clickIn(&self.layout, solved, press.x, press.y);
             },
