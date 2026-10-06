@@ -90,6 +90,7 @@ test {
     _ = @import("gui/devices_panel_test.zig");
     _ = @import("gui/devices_pane_test.zig");
     _ = @import("gui/registers_pane_test.zig");
+    _ = @import("gui/memory_pane_test.zig");
     _ = @import("gui/plug_post_test.zig");
     _ = @import("gui/speed_post_test.zig");
     _ = @import("interfaces/cli/window_devices_test.zig");
