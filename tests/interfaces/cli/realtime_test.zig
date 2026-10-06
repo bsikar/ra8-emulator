@@ -63,13 +63,27 @@ test "a run skips idle stretches unless it asks for --no-idle-skip" {
     try std.testing.expect(!stepping.idle_skip);
 }
 
-test "--run-for budgets the run in virtual time at the core's rate" {
+test "--run-for is a window of the image's own milliseconds (RA8EMU-762)" {
     const week = try parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "7d" });
-    try std.testing.expectEqual(@as(?usize, 7 * 24 * 3600 * 1_000_000_000), week.instructions);
+    try std.testing.expectEqual(@as(?u64, 7 * 24 * 3600 * 1000), week.ms);
+    try std.testing.expectEqual(@as(?usize, null), week.instructions);
     try std.testing.expect(week.run_for);
     const plain = try parse(&[_][]const u8{ "emu", "a.elf", "--instructions", "100" });
     try std.testing.expect(!plain.run_for);
     const short = try parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "90m" });
-    try std.testing.expectEqual(@as(?usize, 90 * 60 * 1_000_000_000), short.instructions);
+    try std.testing.expectEqual(@as(?u64, 90 * 60 * 1000), short.ms);
     try std.testing.expectError(error.NoUnit, parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "90" }));
+}
+
+test "--run-for times a run as --ms does and keeps the 1 GHz ceiling" {
+    const ten = try parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "10s" });
+    const same = try parse(&[_][]const u8{ "emu", "a.elf", "--ms", "10000" });
+    const stop_sym = ra8.board.zig_run.stop_sym;
+    try std.testing.expectEqual(stop_sym.deadline(same).?.periods, stop_sym.deadline(ten).?.periods);
+    try std.testing.expectEqual(same.budgetFor(false), ten.budgetFor(false));
+    // An image that never arms SysTick still gets 10 s at 1 GHz, plus boot.
+    const at_1ghz = clocks.timebase.default_hz * 10;
+    try std.testing.expectEqual(at_1ghz + ra8.core.cli.budget, ten.budgetFor(false));
+    const later = try parse(&[_][]const u8{ "emu", "a.elf", "--ms", "5", "--run-for", "2s" });
+    try std.testing.expectEqual(@as(?u64, 2000), later.ms);
 }
