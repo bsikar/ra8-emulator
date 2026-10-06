@@ -42,7 +42,7 @@ test "PTPTMEC starts a unit and reads back the live enable mask" {
 test "PTPTMDC stops a unit and clears its count, and reads back zero" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
     block.write(gptp.win_base + gptp.off.ptptmdc, 4, 0b1);
     try std.testing.expectEqual(@as(u32, 0), block.read(gptp.win_base + gptp.off.ptptmdc, 4));
     try std.testing.expectEqual(@as(u32, 0), block.read(gptp.win_base + gptp.off.ptptmec, 4));
@@ -72,8 +72,8 @@ test "a stopped unit's monitoring registers read zero" {
 test "a running unit's counter advances and the L read reports nanoseconds" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz));
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
+    block.tick(timer.scale.ns_per_sec);
     block.write(unitReg(0, gptp.unit_off.ptptovcu), 4, 0);
     block.write(unitReg(0, gptp.unit_off.ptptovcm), 4, 100);
     block.write(unitReg(0, gptp.unit_off.ptptovcl), 4, 0);
@@ -81,10 +81,10 @@ test "a running unit's counter advances and the L read reports nanoseconds" {
     try std.testing.expectEqual(@as(u32, 102), block.read(unitReg(0, gptp.unit_off.ptpgptptmm), 4));
 }
 
-test "the timer follows CPU time at the programmed ESWCLK rate" {
+test "the timer follows virtual time at the programmed ESWCLK rate" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz / 2));
+    block.tick(timer.scale.ns_per_sec / 2);
     try std.testing.expectEqual(
         @as(u32, 500_000_000),
         block.read(unitReg(0, gptp.unit_off.ptpgptptml), 4),
@@ -100,16 +100,16 @@ test "fractional ESWCLK cycles carry across instruction chunks" {
         @as(u32, 4),
         block.read(unitReg(0, gptp.unit_off.ptpgptptml), 4),
     );
-    try std.testing.expectEqual(@as(u64, 0), block.cpu_cycle_remainder);
+    try std.testing.expectEqual(@as(u64, 0), block.ns_remainder);
 }
 
 test "reading L latches M and U, so a three-read sample is one instant" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
     _ = block.read(unitReg(0, gptp.unit_off.ptpgptptml), 4);
-    block.tick(@intCast(timer.scale.cpu_hz));
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
+    block.tick(timer.scale.ns_per_sec);
     try std.testing.expectEqual(@as(u32, 1), block.read(unitReg(0, gptp.unit_off.ptpgptptmm), 4));
     _ = block.read(unitReg(0, gptp.unit_off.ptpgptptml), 4);
     try std.testing.expectEqual(@as(u32, 3), block.read(unitReg(0, gptp.unit_off.ptpgptptmm), 4));
@@ -118,7 +118,7 @@ test "reading L latches M and U, so a three-read sample is one instant" {
 test "the AVTP view is the same instant in nanoseconds" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
     const low = block.read(unitReg(0, gptp.unit_off.ptpavtptml), 4);
     const high = block.read(unitReg(0, gptp.unit_off.ptpavtptmu), 4);
     const flat = (@as(u64, high) << 32) | low;
@@ -128,7 +128,7 @@ test "the AVTP view is the same instant in nanoseconds" {
 test "a halfword read of the top of a monitoring register is served, not zero" {
     var block = gptp.Gptp.init();
     started(&block, 0);
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
     block.write(unitReg(0, gptp.unit_off.ptptovcu), 4, 0);
     block.write(unitReg(0, gptp.unit_off.ptptovcm), 4, 0x1234_5678);
     block.write(unitReg(0, gptp.unit_off.ptptovcl), 4, 0);
@@ -214,8 +214,8 @@ test "a narrow store into a config register keeps the bytes around it" {
 test "the two units count independently" {
     var block = gptp.Gptp.init();
     started(&block, 1);
-    block.tick(@intCast(timer.scale.cpu_hz));
-    block.tick(@intCast(timer.scale.cpu_hz));
+    block.tick(timer.scale.ns_per_sec);
+    block.tick(timer.scale.ns_per_sec);
     try std.testing.expectEqual(@as(u32, 0), block.read(unitReg(0, gptp.unit_off.ptpgptptml), 4));
     _ = block.read(unitReg(1, gptp.unit_off.ptpgptptml), 4);
     try std.testing.expectEqual(@as(u32, 2), block.read(unitReg(1, gptp.unit_off.ptpgptptmm), 4));

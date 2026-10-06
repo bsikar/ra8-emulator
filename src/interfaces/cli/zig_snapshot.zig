@@ -37,7 +37,15 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     defer allocator.free(bytes);
     try run_file.load(bytes, store, &.{core}, clock.board);
     try systick.load(.{ clock.timebase, &clock.ns_timebase }, bytes);
-    return stretch.load(bytes);
+    const saved = try stretch.load(bytes);
+    clock.cycle_remainder = saved.cycle_remainder;
+    if (saved.owed != 0) {
+        if (saved.rate_known) {
+            clock.boundary_hz = saved.boundary_hz;
+            clock.resume_unscaled = saved.boundary_hz == null;
+        } else clock.resume_boundary = true;
+    }
+    return saved.owed;
 }
 
 fn save(context: *anyopaque, core: *const Cpu, owed: u32) anyerror!void {
@@ -48,7 +56,7 @@ fn save(context: *anyopaque, core: *const Cpu, owed: u32) anyerror!void {
     var buffered = std.io.bufferedWriter(out.writer());
     try run_file.save(buffered.writer(), store, &.{core}, clock.board);
     try systick.save(.{ clock.timebase, &clock.ns_timebase }, buffered.writer());
-    try stretch.save(owed, buffered.writer());
+    try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, buffered.writer());
     try buffered.flush();
 }
 

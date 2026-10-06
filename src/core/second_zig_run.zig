@@ -29,6 +29,8 @@ pub const Driver = struct {
     /// The board CPU1's store is handed to, so INTSELR events reach CPU1's
     /// NVIC and DTC1 (RA8EMU-614). Null before `open` and after `close`.
     board: ?*Board,
+    /// Fractional CPU1 cycles carried between fixed-cadence rounds.
+    cycle_remainder: u64 = 0,
 
     /// CPU1 from the image at `path`, on `board`, ready to take
     /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
@@ -43,6 +45,7 @@ pub const Driver = struct {
         self.ns_timebase = .{ .words = systick_bank.non_secure_words };
         self.store = null;
         self.board = null;
+        self.cycle_remainder = 0;
         return self.openOwn(lender, board, image);
     }
 
@@ -102,6 +105,11 @@ pub const Driver = struct {
     /// CPU1's turn for one CPU0 round of `round` instructions. A core that
     /// has stopped stays stopped.
     pub fn round(self: *Driver, round_size: u32) void {
+        self.roundAt(round_size, clocks.timebase.default_hz);
+    }
+
+    /// CPU1's turn with retired instructions charged at its running rate.
+    pub fn roundAt(self: *Driver, round_size: u32, hz: u64) void {
         const second = &self.second;
         if (second.state.fault != null or self.held()) return;
         if (second.state.unvectored) {
@@ -117,8 +125,11 @@ pub const Driver = struct {
         const stopped = self.core.turn(share);
         const ran = self.core.cpu.retired - before;
         second.state.ran += @intCast(ran);
-        second.state.timebase.advance(self.core.memory, @intCast(ran)) catch {};
-        self.ns_timebase.advanceSysTick(self.core.memory, @intCast(ran)) catch {};
+        const value = ran * hz + self.cycle_remainder;
+        self.cycle_remainder = value % clocks.timebase.default_hz;
+        const cycles: u32 = @intCast(value / clocks.timebase.default_hz);
+        second.state.timebase.advance(self.core.memory, cycles) catch {};
+        self.ns_timebase.advanceSysTick(self.core.memory, cycles) catch {};
         second.state.pc = self.core.cpu.regs.pc;
         second.takeResetRequest(self.core.memory);
         if (stopped != .count) second.state.fault = .{ .pc = second.state.pc, .detail = @tagName(stopped) };

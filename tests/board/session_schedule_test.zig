@@ -93,3 +93,34 @@ test "a fault schedule applies every event at its exact virtual time" {
     try std.testing.expect(try core.readWord(counts_at + 4) > 0);
     try std.testing.expect(try core.readWord(counts_at + 8) > 0);
 }
+
+const ScaledBoundary = struct {
+    fn width(_: *anyopaque) u32 {
+        return 500_000;
+    }
+
+    fn close(_: *anyopaque, _: u32) anyerror!void {}
+
+    fn cycles(_: *anyopaque, count: u64) u64 {
+        return count * 2;
+    }
+};
+
+test "a fault schedule converts its cycle edge to an instruction width" {
+    var diag = fault_schedule.Diagnostic{};
+    const plan = try fault_schedule.parse(std.testing.allocator, text, &diag);
+    defer plan.deinit(std.testing.allocator);
+    var marker: u8 = 0;
+    var session: api.Session = .{ .live = undefined };
+    var clock: ra8.periph.clocks.timebase.TimeBase = .{};
+    var applier: session_schedule.Applier = .{
+        .events = plan.events,
+        .session = &session,
+        .clock = &clock,
+        .inner = .{ .context = &marker, .widthFn = ScaledBoundary.width, .closeFn = ScaledBoundary.close, .cyclesFn = ScaledBoundary.cycles },
+        .next = 1,
+    };
+    const boundary = applier.boundary();
+    try std.testing.expectEqual(@as(u32, 246_914), boundary.widthFn(boundary.context));
+    try std.testing.expectEqual(@as(u64, 10), boundary.cyclesFn.?(boundary.context, 5));
+}

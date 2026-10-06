@@ -51,6 +51,75 @@ test "closing a boundary charges the clocks and wraps SysTick into ICSR" {
     try std.testing.expect(timebase.ticks > 0);
 }
 
+test "closing a boundary charges cycles at the image core clock" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try attach(&board, core);
+    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.selects = 1;
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
+    var timed: ra8.core.deadline.Deadline = .{ .periods = 1000 };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    try core.writeWord(memmap.syst.rvr, 7999);
+    try core.writeWord(memmap.syst.csr, 0x7);
+    try std.testing.expectEqual(@as(u32, 50_000), clock.width());
+
+    board.time.base.setRate(ra8.periph.clocks.timebase.default_hz);
+    clock.resume_boundary = true;
+    clock.boundary_hz = null;
+    try std.testing.expectEqual(@as(u32, 8000), clock.width());
+    try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, board.time.base.hz);
+    clock.resume_boundary = false;
+    clock.boundary_hz = null;
+    _ = clock.width();
+    try std.testing.expectEqual(@as(u64, 8_000_000), board.time.base.hz);
+    const gptp = ra8.periph.gptp;
+    const gptp_timer = ra8.periph.gptp_timer;
+    const unit = gptp.win_base + gptp.unitOffset(0);
+    board.ptp.write(unit + gptp.unit_off.ptptivc, 4, 4 << gptp_timer.scale.subns_shift);
+    board.ptp.write(gptp.win_base + gptp.off.ptptmec, 4, 1);
+    try clock.close(1000);
+    try std.testing.expectEqual(@as(u64, 8), timebase.elapsed);
+    try std.testing.expectEqual(@as(u64, 8), board.time.base.retired);
+    try std.testing.expectEqual(@as(u32, 1000), board.ptp.read(unit + gptp.unit_off.ptpgptptml, 4));
+    try clock.close(4000);
+    try std.testing.expectEqual(@as(u64, 40), timebase.elapsed);
+    try std.testing.expectEqual(@as(u64, 40), board.time.base.retired);
+    try std.testing.expect(!clock.done());
+    try clock.close(999_995_000);
+    try std.testing.expectEqual(@as(u64, 8_000_000), timebase.elapsed);
+    try std.testing.expectEqual(@as(u64, 1000), timebase.ticks);
+    try std.testing.expect(clock.done());
+}
+
+test "a SysTick rearm discards the current boundary rate" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try attach(&board, core);
+    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.selects = 1;
+    var timebase: ra8.periph.clocks.Clocks = .{};
+    var timed: ra8.core.deadline.Deadline = .{ .periods = 1 };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    try core.writeWord(memmap.syst.rvr, 7999);
+    try core.writeWord(memmap.syst.csr, 0x7);
+    _ = clock.width();
+    try std.testing.expectEqual(@as(?u64, 8_000_000), clock.boundary_hz);
+
+    const boundary = clock.boundary();
+    boundary.abortFn.?(boundary.context);
+    try std.testing.expectEqual(@as(?u64, null), clock.boundary_hz);
+    board.time.base.setRate(ra8.periph.clocks.timebase.default_hz);
+    _ = clock.width();
+    try std.testing.expectEqual(@as(u64, 8_000_000), board.time.base.hz);
+}
+
 fn profileInstruction(context: *anyopaque, address: u32) void {
     const table: *profile.Table = @ptrCast(@alignCast(context));
     table.instruction(address);

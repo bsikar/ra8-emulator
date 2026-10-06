@@ -91,13 +91,13 @@ const alias_offset: u32 = 0x0002_0000;
 /// firmware reads are the PPB words themselves, which is why every field below
 /// is a count of what this model did rather than a shadow of a register.
 pub const Clocks = struct {
-    /// Instructions charged per advance. A field rather than a constant so a
-    /// test can run a short chunk; the default is the C tree's chunk.
+    /// Instructions in a normal run boundary. A field rather than a constant
+    /// so a test can run a short chunk; the default is the C tree's chunk.
     per_chunk: u32 = chunk_instructions,
     /// Which SysTick timer this base counts down.
     words: Words = .{},
-    /// Modelled cycles this run covered, one per instruction. Unconditional,
-    /// because time passes whether or not the firmware is watching it: this
+    /// Modelled core cycles this run covered. Unconditional, because time
+    /// passes whether or not the firmware is watching it: this
     /// is the run's own account of how far it got, and it is the only field
     /// here that every image has.
     elapsed: u64 = 0,
@@ -137,8 +137,8 @@ pub const Clocks = struct {
         return hit;
     }
 
-    /// How many instructions apart the armed SysTick periods are, or zero
-    /// when nothing is armed to ask for a boundary at all.
+    /// How many core cycles apart the armed SysTick periods are, or zero when
+    /// nothing is armed to ask for a boundary at all.
     ///
     /// The run loop reads this to keep a boundary from being wider than the
     /// period it is meant to deliver. A wrap sets COUNTFLAG and pends the
@@ -148,9 +148,8 @@ pub const Clocks = struct {
     /// `ra8_delay_ms` then loops on) advances once where the part advances it
     /// many times, and every delay built on it runs long by that ratio.
     ///
-    /// The period is reload + 1 ticks and a tick is charged per instruction,
-    /// so the two are the same number. A disabled counter or a zero reload
-    /// never wraps and asks for nothing.
+    /// The period is reload + 1 core cycles. A disabled counter or a zero
+    /// reload never wraps and asks for nothing.
     pub fn period(self: *const Clocks, core: anytype) u32 {
         const csr = core.readWord(self.words.csr) catch return 0;
         if (csr & csr_enable == 0) return 0;
@@ -159,7 +158,7 @@ pub const Clocks = struct {
         return reload + 1;
     }
 
-    /// How many instructions until the armed counter next wraps, or zero
+    /// How many core cycles until the armed counter next wraps, or zero
     /// when it never will. A counter at CVR reaches zero on its CVR-th tick,
     /// or a full period after it was left at zero (`wrap`, RA8EMU-657), so
     /// this, not `period()`, is the edge a sleeping stretch may
@@ -172,7 +171,7 @@ pub const Clocks = struct {
         return if (current != 0) current else self.period(core);
     }
 
-    /// Charge `instructions` worth of time. `core` is anything that can read
+    /// Charge `cycles` worth of time. `core` is anything that can read
     /// and write a PPB word; the engine is one.
     ///
     /// The run's own count moves first and always. The two bases below are
@@ -181,10 +180,10 @@ pub const Clocks = struct {
     /// reload. An image that arms neither still spends time here, and saying
     /// so is the difference between a run that did nothing and a run whose
     /// firmware asked for no clock.
-    pub fn advance(self: *Clocks, core: anytype, instructions: u32) !void {
-        self.elapsed += instructions;
-        try self.advanceCycleCounter(core, instructions);
-        try self.advanceSysTick(core, instructions);
+    pub fn advance(self: *Clocks, core: anytype, cycles: u32) !void {
+        self.elapsed += cycles;
+        try self.advanceCycleCounter(core, cycles);
+        try self.advanceSysTick(core, cycles);
     }
 
     /// DWT_CYCCNT counts only while DEMCR.TRCENA and DWT_CTRL.CYCCNTENA are

@@ -30,7 +30,7 @@ fn busy() Stand {
     board.pwm_delay.gtdlycr = 0x11;
     board.pwm_delay.codes[1][0][1] = 0x2F;
     board.ptp.starts = 4;
-    board.ptp.cpu_cycle_remainder = 17;
+    board.ptp.ns_remainder = 17;
     board.watchdog.armed = true;
     board.watchdog.counter = 0x3FFF;
     board.heartbeat.option_word = 0xFFFF_FFFE;

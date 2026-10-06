@@ -9,13 +9,16 @@ const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
+const sysclk = @import("../../periph/sysclk/sysclk.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
 const scs_route = @import("../../core/cpu/scs_route.zig");
 const sleep_pace = @import("../../core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
+const core_clock = @import("../../board/core_clock.zig");
 const fault_file = @import("fault_file.zig");
 const quiet_due = @import("../../board/quiet_due.zig");
 const cli = @import("cli.zig");
+const clock_rate = @import("zig_clock_rate.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
 const json_run = @import("report/json_run.zig");
@@ -111,9 +114,14 @@ pub const Clock = struct {
     paced_out: bool = false,
     /// `--save-state` / `--load-state` (RA8EMU-696): zig_snapshot.zig.
     state: state_args.Options = .{},
+    resume_boundary: bool = false,
+    resume_unscaled: bool = false,
+    /// Rates selected when the current boundary opened.
+    boundary_hz: ?u64 = null,
+    cycle_remainder: u64 = 0,
 
     pub fn boundary(self: *Clock) boot.Boundary {
-        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
+        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .abortFn = abortThunk, .cyclesFn = cyclesThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
     }
 
     /// A sleeping CPU0's width: to the nearest armed SysTick period, the
@@ -122,7 +130,13 @@ pub const Clock = struct {
     /// it keeps the normal width, as does a board with a block mid-work.
     pub fn asleepWidth(self: *Clock, normal: u32) u32 {
         if (self.cpu1 != null or !quiet_due.quietUntilDue(self.board)) return normal;
-        const edges = [_]u64{ self.timebase.untilWrap(self.memory), self.ns_timebase.untilWrap(self.memory), board_edge.cyclesToDue(self.board), quiet_due.vsyncDue(self.board), quiet_due.gptDue(self.board) };
+        const edges = [_]u64{
+            self.instructionsForCycles(self.timebase.untilWrap(self.memory)),
+            self.instructionsForCycles(self.ns_timebase.untilWrap(self.memory)),
+            self.instructionsForCycles(board_edge.cyclesToDue(self.board)),
+            self.instructionsForCycles(quiet_due.vsyncDue(self.board)),
+            self.instructionsForCycles(quiet_due.gptDue(self.board)),
+        };
         return sleep_pace.width(normal, true, &edges);
     }
 
@@ -151,23 +165,46 @@ pub const Clock = struct {
         if (clocks.soak_fault.kind(latched)) |fault| soak.note(fault, self.board.time.base.now());
         soak.check(self.memory, self.board.time.base.now());
     }
-
-    /// The run's chunk, cut down to the armed SysTick period
-    /// so a stretch never swallows more than one wrap.
-    pub fn width(self: *const Clock) u32 {
-        const period = systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory));
+    /// The chunk, cut down so a stretch never swallows a SysTick wrap.
+    pub fn width(self: *Clock) u32 {
+        const period_cycles = systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory));
+        const period: u32 = @intCast(@min(self.instructionsForCycles(period_cycles), std.math.maxInt(u32)));
         if (period != 0 and period < self.timebase.per_chunk) return period;
         return self.timebase.per_chunk;
     }
+    fn instructionsForCycles(self: *Clock, cycles: u64) u64 {
+        if (cycles == 0 or !self.rateScaled()) return cycles;
+        return clock_rate.instructions(cycles, self.boundary_hz.?, self.cycle_remainder);
+    }
+    fn rateScaled(self: *Clock) bool {
+        if (self.boundary_hz != null) return true;
+        if (self.resume_unscaled) return false;
+        if (self.timed == null or systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory)) == 0) return false;
+        if (!self.resume_boundary) core_clock.retune(self.board);
+        self.boundary_hz = self.board.time.base.hz;
+        return true;
+    }
 
-    /// Charge the stretch to the clocks, then tick the blocks, in that order.
+    /// Charge at the image rate, then tick the blocks.
     pub fn close(self: *Clock, instructions: u32) !void {
-        try self.timebase.advance(self.memory, instructions);
-        try self.ns_timebase.advanceSysTick(self.memory, instructions);
-        try self.board.tick(self.memory, instructions);
+        const rate_scaled = self.rateScaled();
+        const cycles = if (rate_scaled) scaled: {
+            const value = @as(u64, instructions) * self.boundary_hz.? + self.cycle_remainder;
+            self.cycle_remainder = value % clocks.timebase.default_hz;
+            break :scaled @as(u32, @intCast(value / clocks.timebase.default_hz));
+        } else instructions;
+        try self.timebase.advance(self.memory, cycles);
+        try self.ns_timebase.advanceSysTick(self.memory, cycles);
+        try self.board.tick(self.memory, cycles);
+        self.resume_boundary = false;
+        self.resume_unscaled = false;
         if (frames_out.Armed.of(self.board)) |armed| try armed.pollSettle(self.board.time.base.now());
-        if (self.cpu1) |second| second.round(instructions);
+        if (self.cpu1) |second| if (rate_scaled)
+            second.roundAt(instructions, self.boundary_hz.?)
+        else
+            second.round(instructions);
         if (self.pace) |pace| self.paced_out = !pace.charge(instructions);
+        self.boundary_hz = null;
     }
 };
 
@@ -197,6 +234,13 @@ fn doneThunk(context: *anyopaque) bool {
 fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
     const self: *Clock = @ptrCast(@alignCast(context));
     return self.close(instructions);
+}
+
+fn abortThunk(context: *anyopaque) void {
+    const self: *Clock = @ptrCast(@alignCast(context));
+    self.resume_boundary = false;
+    self.resume_unscaled = false;
+    self.boundary_hz = null;
 }
 
 /// Run, then print what the board has to say.
@@ -348,4 +392,9 @@ fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.z
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
         .cpu1 = if (cpu1) |pair| rtos_hook.second.sideOn(pair.guest()) else null,
     };
+}
+
+fn cyclesThunk(context: *anyopaque, cycles: u64) u64 {
+    const self: *Clock = @ptrCast(@alignCast(context));
+    return self.instructionsForCycles(cycles);
 }

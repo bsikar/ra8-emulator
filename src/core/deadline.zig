@@ -1,16 +1,12 @@
 //! How long a run lasts in modelled time, rather than in instructions.
 //!
-//! A budget counted in instructions cannot express "four seconds", because
-//! the two are not a fixed ratio across this corpus. The model charges one
-//! DWT cycle per instruction, and `ra8_time_init` arms SysTick at
-//! `cpu_hz / 1000`, so instructions per modelled millisecond is whatever
-//! clock the firmware brought the part up on. Measured over the images this
-//! tree runs: `doc_demo`, `gpt_one_shot_demo` and `gpt_irq_demo` all reach
-//! cpuclk0 and spend 1,000,000 instructions per SysTick period, while
-//! `blink` never leaves the slower source it resets on and spends about
-//! 8,400. One instruction number is therefore four seconds for one of them
-//! and eight minutes for the other, and the suite that drives this asks for
-//! its window in seconds (`HIL_PROBE_SECONDS`).
+//! A budget counted in instructions cannot express "four seconds" directly.
+//! The run boundary scales its fixed instruction cadence into DWT and SysTick
+//! cycles at the image's running core clock, and `ra8_time_init` arms SysTick
+//! at `cpu_hz / 1000`. A millisecond therefore takes the same instruction
+//! budget while the cycle count follows the image: 1,000,000 cycles at
+//! cpuclk0, about 8,400 on a reset-clock image. The suite that drives this
+//! asks for its window in seconds (`HIL_PROBE_SECONDS`).
 //!
 //! So a timed run is bounded by the firmware's own tick instead. A SysTick
 //! period is a millisecond because `ra8_time_init` armed it to be one; this

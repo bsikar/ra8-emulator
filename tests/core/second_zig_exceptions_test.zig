@@ -36,6 +36,7 @@ const Pair = struct {
         driver.second = .{ .state = .{ .vector_base = vectors } };
         driver.board = null;
         driver.ns_timebase = .{ .words = systick_bank.non_secure_words };
+        driver.cycle_remainder = 0;
         driver.store = try Store.init(&self.cpu0);
         errdefer driver.close();
         const memory = self.cpu1();

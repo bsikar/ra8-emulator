@@ -39,16 +39,11 @@ pub const watched_budget: usize = 200_000_000;
 /// Instructions one modelled millisecond costs at the fastest core clock
 /// this corpus reaches, which is what bounds a `--ms` run.
 ///
-/// The deadline itself is counted in SysTick periods, not here: this is only
-/// the ceiling that keeps an image which never arms SysTick from running to
-/// no end at all. cpuclk0 comes up at 1 GHz, the model charges one cycle per
-/// instruction, and `ra8_time_init` arms SysTick at `cpu_hz / 1000`, so a
-/// period there is a million instructions: measured on `doc_demo`,
-/// `gpt_one_shot_demo` and `gpt_irq_demo`, all of which report exactly 50
-/// periods in a 50,000,000-instruction run. Nothing in the corpus runs a
-/// faster core, so no timed run is cut short by this; a slower one, like
-/// `blink` at about 8,400 instructions a period, reaches its deadline long
-/// before the ceiling.
+/// The deadline itself is counted in SysTick periods, not here. Once SysTick
+/// is armed, the Zig boundary scales this fixed cadence into cycles at the
+/// image's rate. The ceiling keeps an image which never arms SysTick from
+/// running forever; `budget` extra instructions leave room for boot and for
+/// the boundary cut where firmware arms the timer.
 pub const instructions_per_ms: usize = 1_000_000;
 
 pub const Options = struct {
@@ -236,7 +231,9 @@ pub const Options = struct {
 /// over, so the boot before SysTick arms never ends a 1 GHz run a period
 /// short (RA8EMU-526). It saturates rather than wraps into a short budget.
 pub fn ceilingFor(milliseconds: u64) usize {
-    const wanted = (milliseconds +| 1) *| @as(u64, instructions_per_ms);
+    if (milliseconds == 0) return 0;
+    const window = milliseconds *| @as(u64, instructions_per_ms);
+    const wanted = window +| @as(u64, budget);
     return std.math.cast(usize, wanted) orelse std.math.maxInt(usize);
 }
 

@@ -7,8 +7,9 @@
 //! which loses under one nanosecond per change.
 //!
 //! Until the clock tree feeds the rate (RA8EMU-515), it is the part's CPU0
-//! ceiling, 1 GHz (core/part_clock.zig), the same one-cycle-per-instruction
-//! charge periph/clocks.zig already makes.
+//! ceiling, 1 GHz (core/part_clock.zig). Normal runs charge one cycle per
+//! instruction; the `--ms` boundary scales its fixed instruction cadence into
+//! cycles at the selected rate.
 pub const ns_per_s: u64 = 1_000_000_000;
 
 /// CPU0's maximum clock on both modelled parts (RA8D2 Table 1.14, RA8P1

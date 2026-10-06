@@ -54,10 +54,10 @@ test "a watched run gets the larger budget, because it stops on its counter" {
     try std.testing.expect(mod.watched_budget > mod.budget);
 }
 
-test "a timed run's ceiling leaves one period for the boot before SysTick arms" {
+test "a timed run's ceiling leaves the default budget for boot" {
     const options = try parse(&[_][]const u8{ "emu", "a.elf", "--ms", "1000" });
-    try std.testing.expectEqual(@as(usize, 1001) * mod.instructions_per_ms, options.budgetFor(false));
-    try std.testing.expectEqual(@as(usize, mod.instructions_per_ms), mod.ceilingFor(0));
+    try std.testing.expectEqual(@as(usize, 1000) * mod.instructions_per_ms + mod.budget, options.budgetFor(false));
+    try std.testing.expectEqual(@as(usize, 0), mod.ceilingFor(0));
     try std.testing.expectEqual(std.math.maxInt(usize), mod.ceilingFor(std.math.maxInt(u64)));
 }
 
@@ -303,4 +303,11 @@ test "--camera-source picks the CEU's source; unknown kinds are refused" {
     try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.image, still.camera.kind);
     try std.testing.expectEqualStrings("pic.ppm", still.camera.arg);
     try std.testing.expectError(error.BadValue, parse(&.{ "ra8", "app.elf", "--camera-source", "image" }));
+}
+
+test "a timed run gets its window after boot headroom" {
+    try std.testing.expectEqual(@as(usize, 0), mod.ceilingFor(0));
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--ms", "1" });
+    try std.testing.expectEqual(mod.budget + mod.instructions_per_ms, options.budgetFor(false));
+    try std.testing.expectEqual(std.math.maxInt(usize), mod.ceilingFor(std.math.maxInt(u64)));
 }
