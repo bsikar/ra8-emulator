@@ -16,11 +16,13 @@ var queue: u8 = 0;
 var sends: usize = 0;
 var stops: usize = 0;
 var releases: usize = 0;
+var device_count: usize = 1;
 
 fn reset() void {
     sends = 0;
     stops = 0;
     releases = 0;
+    device_count = 1;
 }
 
 fn class(_: [*:0]const u8) callconv(.c) Id {
@@ -34,7 +36,8 @@ fn msgSend(_: Id, sel: Id, _: usize, _: usize) callconv(.c) usize {
     sends += 1;
     if (std.mem.eql(u8, name, "stopRunning")) stops += 1;
     if (std.mem.eql(u8, name, "release")) releases += 1;
-    if (std.mem.eql(u8, name, "count") or std.mem.startsWith(u8, name, "can")) return 1;
+    if (std.mem.eql(u8, name, "count")) return device_count;
+    if (std.mem.startsWith(u8, name, "can")) return 1;
     return @intFromPtr(&objects[1]);
 }
 fn allocate(_: Id, _: [*:0]const u8, _: usize) callconv(.c) Id {
@@ -87,6 +90,16 @@ test "a denied permission says where to fix it and opens nothing" {
     try std.testing.expectError(error.PrivacyBlocked, openAnswering(.denied, "", .allowed, "", &said));
     try std.testing.expect(std.mem.indexOf(u8, said.items, "Privacy & Security") != null);
     try std.testing.expectEqual(@as(usize, 0), sends);
+}
+
+test "no camera returns cleanly and frees the partial capture" {
+    reset();
+    device_count = 0;
+    var said = std.ArrayList(u8).init(allocator);
+    defer said.deinit();
+    try std.testing.expectError(error.NoDevice, openAnswering(.authorized, "", .allowed, "", &said));
+    try std.testing.expectEqual(@as(usize, 0), stops);
+    try std.testing.expectEqual(@as(usize, 0), releases);
 }
 
 test "an allowed open runs the session and close stops and releases it" {
