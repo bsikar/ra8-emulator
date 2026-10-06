@@ -21,6 +21,16 @@ pub fn stopped(w: anytype, json: bool, stop: proto.Stopped) !void {
     try w.print("{s} stopped: {s} at 0x{x:0>8}\n", .{ core, reason, stop.address });
 }
 
+pub fn advanced(w: anytype, json: bool, moved: proto.Advanced) !void {
+    const core = @tagName(moved.core);
+    const reason = @tagName(moved.reason);
+    if (json) return w.print(
+        "{{\"advanced\":{{\"core\":\"{s}\",\"from_ns\":{d},\"to_ns\":{d},\"reason\":\"{s}\",\"pc\":{d}}}}}\n",
+        .{ core, moved.from_ns, moved.to_ns, reason, moved.address },
+    );
+    try w.print("{s} advanced {d} ns to {d} ns: {s} at 0x{x:0>8}\n", .{ core, moved.to_ns - moved.from_ns, moved.to_ns, reason, moved.address });
+}
+
 pub fn paused(w: anytype, json: bool) !void {
     try w.writeAll(if (json) "{\"paused\":true}\n" else "paused\n");
 }

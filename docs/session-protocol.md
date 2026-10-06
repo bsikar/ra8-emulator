@@ -6,7 +6,7 @@ The emulator uses the shared `ra8_rpc` framing and codec. Frames are binary:
 - `u16` frame kind, little-endian
 - the kind-specific body, encoded in declaration order with no padding
 
-The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads and bit 1 the part methods (plug, unplug, set_fault, clear_fault).
+The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads and bit 1 the part methods (plug, unplug, set_fault, clear_fault), and bit 2 `advance`.
 
 Request, response, and event envelopes use the shared library's u32 request id, u16 method/topic, and binary argument payload. A response carries either the reply bytes or an application error. Events are pushed independently of outstanding requests. Request ids correlate out-of-order responses. `run` acknowledges when the core starts; the later stop is a `stop` event.
 
@@ -37,6 +37,7 @@ Request, response, and event envelopes use the shared library's u32 request id, 
 | 0x0114 | unplug | core, length-prefixed `ENDPOINT` text | acknowledgement |
 | 0x0115 | set_fault | core, length-prefixed `MODEL@ENDPOINT=MODE` or `@ENDPOINT=MODE` text | acknowledgement |
 | 0x0116 | clear_fault | core, length-prefixed `ENDPOINT` text | acknowledgement |
+| 0x0117 | advance | core, `u64` virtual nanoseconds | core, `from_ns`, `to_ns`, stop reason, PC |
 
 Part specs travel as text in the same syntax as the `--attach` and `--fault` flags, and the server parses them with the same parsers, so the two cannot drift. A spec that does not parse is refused as bad arguments; one the board cannot honour (an unknown endpoint, a mode that does not fit the part's bus) is refused with the session's refusal code. Capability bit 1 announces these four methods.
 
@@ -74,3 +75,7 @@ ssh stdin only when it is missing, then runs `EMULATOR serve --stdio CACHE/<sha2
 `.cache/ra8_emulator/images` under the remote home, and `ssh` to `ssh`. A server that speaks
 another protocol version fails the handshake with `VersionMismatch` and a message saying to
 run the same build on both ends.
+
+## Advance
+
+`advance` (RA8EMU-654) runs a core until board time has moved the given virtual nanoseconds, then replies with where it began and ended and how it stopped. The server converts the duration with the board's own rate, so a client never needs it. A breakpoint, watchpoint, pause or fault ends it early with that stop and the time reached. The core's run budget is put back afterwards. A sleeping core goes by in wide chunks (RA8EMU-767), so ten minutes of WFI cost well under a host second. `ctl advance 600s` sends it; with `--json` it prints `{"advanced":{"core":"cpu0","from_ns":N,"to_ns":M,"reason":"count","pc":P}}`. Capability bit 2 announces it.

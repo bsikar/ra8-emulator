@@ -216,6 +216,7 @@ test {
     _ = @import("interfaces/rpc/session_rpc_test.zig");
     _ = @import("interfaces/rpc/stdio_transport_test.zig");
     _ = @import("interfaces/rpc/session_server_test.zig");
+    _ = @import("interfaces/rpc/session_advance_test.zig");
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
     std.testing.refAllDecls(ra8.periph);
