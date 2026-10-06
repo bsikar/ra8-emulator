@@ -193,5 +193,6 @@ pub const interfaces = struct {
         pub const session = @import("interfaces/rpc/session_rpc.zig");
         pub const stdio = @import("interfaces/rpc/stdio_transport.zig");
         pub const socket = @import("interfaces/rpc/socket_transport.zig");
+        pub const server = @import("interfaces/rpc/session_server.zig");
     };
 };

@@ -1,0 +1,197 @@
+//! The session RPC handlers: one thin adapter per method onto the Session
+//! API (RA8EMU-735). Handlers never see bytes; session_server.zig routes.
+const std = @import("std");
+const rpc = @import("ra8_rpc");
+const proto = @import("session_rpc.zig");
+const api = @import("../../debug/session_api.zig");
+const stop_machine = @import("../../debug/stop_machine.zig");
+
+/// Refusal codes this message set adds above the library's own.
+pub const app_codes = struct {
+    /// The Session refused the call; the error name went to stderr.
+    pub const refused: u16 = 0x0100;
+    /// The call named a core this session has no image for.
+    pub const no_core: u16 = 0x0101;
+    /// A read asked for more bytes than one reply carries.
+    pub const too_long: u16 = 0x0102;
+};
+
+const topic_count = @typeInfo(proto.Topic).@"enum".fields.len;
+
+pub const Context = struct {
+    session: *api.Session,
+    /// Holds read_memory replies; its length caps one read.
+    scratch: []u8,
+    /// The stop the last run or step ended in, until Host.poll sends it.
+    pending: ?proto.Stopped = null,
+    /// Subscribed topics per core, one bit per Topic in declaration order.
+    topics: [2]u8 = .{ 0, 0 },
+
+    pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
+        return self.topics[@intFromEnum(of)] & bit(topic) != 0;
+    }
+};
+
+fn bit(topic: proto.Topic) u8 {
+    const index = @intFromEnum(topic) - @intFromEnum(proto.Topic.stop);
+    std.debug.assert(index < topic_count);
+    return @as(u8, 1) << @intCast(index);
+}
+
+const Ack = rpc.Outcome(proto.Ack);
+const ack: Ack = .{ .ok = .{ .accepted = 1 } };
+
+fn code(value: u16) rpc.Code {
+    return @enumFromInt(value);
+}
+
+fn refuse(comptime Reply: type, err: anyerror) rpc.Outcome(Reply) {
+    if (err == error.CoreNotAttached) return .{ .err = code(app_codes.no_core) };
+    return .{ .err = code(app_codes.refused) };
+}
+
+fn core(of: proto.Core) api.Core {
+    return @enumFromInt(@intFromEnum(of));
+}
+
+fn register(of: proto.Register) ?api.Register {
+    return std.meta.stringToEnum(api.Register, @tagName(of));
+}
+
+pub fn load(context: *Context, args: proto.Load) Ack {
+    context.session.load(core(args.core), args.image) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn run(context: *Context, args: proto.Run) Ack {
+    const session = context.session;
+    if (args.budget != 0) {
+        session.setRunBudget(core(args.core), args.budget) catch |err| return refuse(proto.Ack, err);
+    }
+    const mode = std.meta.stringToEnum(api.Run, @tagName(args.mode)) orelse return .{ .err = .bad_args };
+    const ended = session.run(core(args.core), mode) catch |err| return refuse(proto.Ack, err);
+    context.pending = stopped(session, args.core, ended);
+    return ack;
+}
+
+pub fn step(context: *Context, args: proto.CoreOnly) Ack {
+    return run(context, .{ .core = args.core, .mode = .step, .budget = 0 });
+}
+
+pub fn pause(context: *Context, args: proto.CoreOnly) Ack {
+    context.session.pause(core(args.core)) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+/// Thousandths of the default rate; zero is `max`, the unpaced speed.
+pub fn setSpeed(context: *Context, args: proto.SetSpeed) Ack {
+    const factor: ?f64 = if (args.milli == 0) null else @as(f64, @floatFromInt(args.milli)) / 1000.0;
+    context.session.setSpeed(core(args.core), factor) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn setRunBudget(context: *Context, args: proto.RunBudget) Ack {
+    context.session.setRunBudget(core(args.core), args.instructions) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn readRegister(context: *Context, args: proto.ReadRegister) rpc.Outcome(proto.U32) {
+    const which = register(args.register) orelse return .{ .err = .bad_args };
+    const value = context.session.register(core(args.core), which) catch |err| return refuse(proto.U32, err);
+    return .{ .ok = .{ .value = value } };
+}
+
+pub fn writeRegister(context: *Context, args: proto.WriteRegister) Ack {
+    const which = register(args.register) orelse return .{ .err = .bad_args };
+    context.session.setRegister(core(args.core), which, args.value) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn readMemory(context: *Context, args: proto.ReadMemory) rpc.Outcome(proto.Memory) {
+    if (args.length > context.scratch.len) return .{ .err = code(app_codes.too_long) };
+    const into = context.scratch[0..args.length];
+    context.session.read(core(args.core), args.address, into) catch |err| return refuse(proto.Memory, err);
+    return .{ .ok = .{ .bytes = into } };
+}
+
+pub fn writeMemory(context: *Context, args: proto.WriteMemory) Ack {
+    context.session.write(core(args.core), args.address, args.bytes) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn setBreakpoint(context: *Context, args: proto.Point) rpc.Outcome(proto.U32) {
+    const id = context.session.setBreakpoint(core(args.core), .{ .address = args.address }) catch |err|
+        return refuse(proto.U32, err);
+    return .{ .ok = .{ .value = id } };
+}
+
+pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
+    context.session.clearBreakpoint(core(args.core), args.id) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32) {
+    if (args.last < args.first) return .{ .err = .bad_args };
+    const kind = std.meta.stringToEnum(@FieldType(@import("../../debug/watch_table.zig").Watch, "kind"), @tagName(args.access)) orelse
+        return .{ .err = .bad_args };
+    const id = context.session.setWatchpoint(core(args.core), .{ .first = args.first, .last = args.last, .kind = kind }) catch |err|
+        return refuse(proto.U32, err);
+    return .{ .ok = .{ .value = id } };
+}
+
+pub fn clearWatchpoint(context: *Context, args: proto.PointId) Ack {
+    context.session.clearWatchpoint(core(args.core), args.id) catch |err| return refuse(proto.Ack, err);
+    return ack;
+}
+
+/// Replies 0 when the id was a breakpoint and 1 when it was a watchpoint.
+pub fn removePoint(context: *Context, args: proto.PointId) rpc.Outcome(proto.U32) {
+    const removed = context.session.removePoint(core(args.core), args.id) catch |err| return refuse(proto.U32, err);
+    return .{ .ok = .{ .value = @intFromEnum(removed) } };
+}
+
+pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
+    if (!context.session.hasCore(core(args.core))) return .{ .err = code(app_codes.no_core) };
+    context.topics[@intFromEnum(args.core)] |= bit(args.topic);
+    return ack;
+}
+
+pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
+    context.topics[@intFromEnum(args.core)] &= ~bit(args.topic);
+    return ack;
+}
+
+pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
+    _ = args;
+    const ns = context.session.now() catch |err| return refuse(proto.U64, err);
+    return .{ .ok = .{ .value = ns } };
+}
+
+pub fn interrupt(context: *Context, args: proto.CoreOnly) rpc.Outcome(proto.Stopped) {
+    const stop = context.session.interrupt(core(args.core)) catch |err| return refuse(proto.Stopped, err);
+    return .{ .ok = stopped(context.session, args.core, .{ .stop = stop }) };
+}
+
+/// The wire form of how a run ended, at the PC it left.
+pub fn stopped(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
+    const pc = session.register(core(of), .pc) catch 0;
+    return switch (ended) {
+        .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },
+        .core => |stop| .{ .core = of, .reason = .core_fault, .address = pc, .detail = @intFromEnum(std.meta.activeTag(stop)) },
+        .stop => |stop| .{ .core = of, .reason = reason(stop), .address = pc, .detail = detail(stop) },
+    };
+}
+
+fn reason(stop: stop_machine.Stop) proto.StopReason {
+    return std.meta.stringToEnum(proto.StopReason, @tagName(stop)) orelse .halt_requested;
+}
+
+fn detail(stop: stop_machine.Stop) u32 {
+    return switch (stop) {
+        .watchpoint => |hit| hit.id,
+        inline else => |value| switch (@typeInfo(@TypeOf(value))) {
+            .int => @truncate(value),
+            else => 0,
+        },
+    };
+}
