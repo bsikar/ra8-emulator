@@ -90,3 +90,21 @@ test "with nothing to stop on, the run ends on the core's own stop" {
     try std.testing.expect(zig_drive.run(core, &machine, 2) == .count);
     try std.testing.expectEqual(@as(u32, 0x10), zig_drive.run(core, &machine, 100).core.unknown.address);
 }
+
+test "a quiet run still stops for a halt or a break armed between runs" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    var machine = Machine{};
+    machine.begin();
+    try std.testing.expect(machine.quiet());
+    try std.testing.expect(zig_drive.run(core, &machine, 1) == .count);
+    machine.requestHalt();
+    try std.testing.expect(zig_drive.run(core, &machine, 100).stop == .halt_requested);
+    try std.testing.expectEqual(@as(u32, 0x0A), core.register(.pc));
+    const id = try machine.breaks.add(.{ .address = 0x0E });
+    machine.proceed();
+    try std.testing.expectEqual(id, zig_drive.run(core, &machine, 100).stop.breakpoint);
+    try std.testing.expectEqual(@as(u64, 2), cpu.retired);
+}
