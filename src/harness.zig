@@ -1,0 +1,195 @@
+//! Public owner for a firmware image, its Zig core, board, and debug session.
+const std = @import("std");
+const elf = @import("core/elf.zig");
+const part = @import("core/part.zig");
+const BoardBus = @import("core/cpu/board_bus.zig").BoardBus;
+const cpu_mod = @import("core/cpu/cpu.zig");
+const NvicSource = @import("core/cpu/exception/nvic_source.zig").NvicSource;
+const QuietSource = @import("core/cpu/exception/quiet_source.zig").QuietSource;
+const Guest = @import("core/cpu/memory/guest.zig").Guest;
+const Board = @import("board/board.zig").Board;
+const option_memory = @import("board/option_memory.zig");
+const Reboot = @import("core/reboot.zig").Reboot;
+const session_plug = @import("board/session_plug.zig");
+const board_boundary = @import("board/board_boundary.zig");
+const session_display = @import("board/session_display.zig");
+const debug_session = @import("debug/session.zig");
+const session_api = @import("debug/session_api.zig");
+const stop_machine = @import("debug/stop_machine.zig");
+const step_hook = @import("debug/step_hook.zig");
+const watch_bus = @import("debug/watch_bus.zig");
+const Cpu0 = @import("interfaces/cli/zig_memory.zig").Cpu0;
+
+pub const limits = struct {
+    pub const max_elf_bytes = 64 * 1024 * 1024;
+    pub const max_input_bytes = 1024 * 1024;
+};
+
+pub const Options = struct {
+    elf_path: []const u8,
+    device: part.Part = .ra8p1,
+    input_script: ?[]const u8 = null,
+    settle_window_ns: u64 = 50_000_000,
+};
+
+const LoaderState = struct {
+    cpu: [2]?*cpu_mod.Cpu = .{ null, null },
+    memory: [2]?Guest = .{ null, null },
+
+    fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
+        const self: *LoaderState = @ptrCast(@alignCast(context));
+        const image = try elf.Image.init(bytes);
+        const index = @intFromEnum(core);
+        const cpu = self.cpu[index] orelse return error.CoreNotAttached;
+        const memory = self.memory[index] orelse return error.CoreNotAttached;
+        var segment_index: u16 = 0;
+        while (segment_index < image.segmentCount()) : (segment_index += 1) {
+            const segment = image.loadSegment(segment_index) orelse continue;
+            try memory.write(segment.paddr, segment.bytes);
+        }
+        try cpu.reset(image.vectorBase() orelse return error.NoVectorTable);
+    }
+};
+
+const State = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    image: elf.Image,
+    board: Board,
+    cpu0: Cpu0,
+    memory: BoardBus,
+    machine: stop_machine.Machine,
+    driver: step_hook.Driver,
+    watching: watch_bus.WatchBus,
+    cpu: cpu_mod.Cpu,
+    pending: NvicSource,
+    quiet: QuietSource,
+    loading: LoaderState,
+    session: session_api.Session,
+    plugs_arena: std.heap.ArenaAllocator,
+    plugs: session_plug.Plugs,
+    edge: board_boundary.BoardBoundary,
+    reboot: Reboot,
+    display: session_display.Host,
+
+    fn advance(context: *anyopaque, max_ns: u64) anyerror!void {
+        const self: *State = @ptrCast(@alignCast(context));
+        const selected = self.session.currentCore();
+        try self.session.switchTo(.cpu0);
+        defer self.session.switchTo(selected) catch {};
+        const started = self.board.time.base.now();
+        const deadline = started +| max_ns;
+        const budget = self.session.live.budget;
+        defer self.session.live.budget = budget;
+        while (self.board.time.base.now() < deadline) {
+            const remaining = self.board.time.base.cyclesUntil(deadline);
+            self.session.live.budget = @max(1, @min(budget, remaining));
+            const before = self.board.time.base.now();
+            _ = try self.session.run(.cpu0, .cont);
+            if (self.board.time.base.now() <= before) return error.NoVirtualProgress;
+        }
+    }
+};
+
+/// Owns the heap-stable emulator state. Do not copy a live Harness value.
+pub const Harness = struct {
+    state: *State,
+
+    pub fn session(self: *Harness) *session_api.Session {
+        return &self.state.session;
+    }
+
+    pub fn image(self: *const Harness) elf.Image {
+        return self.state.image;
+    }
+
+    pub fn board(self: *Harness) *Board {
+        return &self.state.board;
+    }
+
+    pub fn guest(self: *Harness) Guest {
+        return self.state.cpu0.own();
+    }
+
+    pub fn primaryCpu(self: *Harness) *cpu_mod.Cpu {
+        return &self.state.cpu;
+    }
+
+    pub fn attachCore(self: *Harness, core: session_api.Core, cpu: *cpu_mod.Cpu, core_guest: Guest) void {
+        const index = @intFromEnum(core);
+        self.state.loading.cpu[index] = cpu;
+        self.state.loading.memory[index] = core_guest;
+        self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);
+    }
+
+    pub fn deinit(self: *Harness) void {
+        const state = self.state;
+        state.display.deinit();
+        state.plugs.deinit();
+        state.plugs_arena.deinit();
+        state.cpu0.close();
+        state.board.deinit();
+        state.allocator.free(state.bytes);
+        state.allocator.destroy(state);
+        self.* = undefined;
+    }
+};
+
+/// Open and load one ELF with the board ticker and display attached.
+pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
+    if (options.settle_window_ns == 0) return error.InvalidSettleWindow;
+    const state = try allocator.create(State);
+    errdefer allocator.destroy(state);
+    state.allocator = allocator;
+    state.bytes = try std.fs.cwd().readFileAlloc(allocator, options.elf_path, limits.max_elf_bytes);
+    errdefer allocator.free(state.bytes);
+    state.image = try elf.Image.init(state.bytes);
+    state.board = Board.init(allocator);
+    errdefer state.board.deinit();
+    state.board.part = options.device;
+    state.board.clock.pace.mode = .virtual;
+    try loadInput(allocator, &state.board, options.input_script);
+    state.cpu0 = .{};
+    errdefer state.cpu0.close();
+    _ = try state.cpu0.attachStore(&state.board, state.image);
+    const vector = state.image.vectorBase() orelse return error.NoVectorTable;
+    option_memory.apply(&state.board, state.cpu0.own());
+    state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.? } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
+    state.machine = .{};
+    state.driver = .{ .machine = &state.machine };
+    state.watching = .{ .inner = state.memory.view(), .driver = &state.driver };
+    state.pending = .{};
+    state.quiet = .{ .inner = state.pending.source(), .memory = state.watching.view() };
+    state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
+    state.pending.banked = &state.cpu.banked;
+    try state.cpu.reset(vector);
+    state.loading = .{};
+    state.loading.cpu[0] = &state.cpu;
+    state.loading.memory[0] = state.cpu0.own();
+    state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };
+    state.session.attachInputScript(&state.board.input_script);
+    state.session.attachLoader(.{ .context = &state.loading, .loadFn = LoaderState.load });
+    state.plugs_arena = std.heap.ArenaAllocator.init(allocator);
+    errdefer state.plugs_arena.deinit();
+    state.plugs = session_plug.Plugs.init(&state.board, state.plugs_arena.allocator());
+    state.session.attachPlugs(state.plugs.hook());
+    state.reboot = .{ .vector_base = vector };
+    state.board.reboot = &state.reboot;
+    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot };
+    state.session.live.boundary = state.edge.hook();
+    state.session.attachTimeBase(&state.board.time.base);
+    state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
+    state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });
+    errdefer state.display.deinit();
+    state.display.settled.window_ns = options.settle_window_ns;
+    state.session.attachDisplay(state.display.interface());
+    try state.session.load(.cpu0, state.bytes);
+    return .{ .state = state };
+}
+
+fn loadInput(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8) !void {
+    const named = path orelse return;
+    const text = try std.fs.cwd().readFileAlloc(allocator, named, limits.max_input_bytes);
+    defer allocator.free(text);
+    try board.input_script.parse(text);
+}

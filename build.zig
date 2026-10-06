@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
 
     // One library module, reached as "ra8" by the executable and by the
     // tests, so neither has to walk relative paths into src/.
-    const emu = b.createModule(.{
+    const emu = b.addModule("ra8", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -98,9 +98,27 @@ pub fn build(b: *std.Build) void {
     tests.linkLibC();
     const test_step = b.step("test", "Run the unit tests and compile the emulator");
     test_step.dependOn(&b.addRunArtifact(tests).step);
-    test_step.dependOn(&exe.step);
+    harnessChecks(b, target, optimize, emu, test_step, &exe.step);
 
     b.step("gate", "Check formatting and file and function length").dependOn(gate(b, target));
+}
+
+fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, test_step: *std.Build.Step, exe_step: *std.Build.Step) void {
+    const consumer = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "run" });
+    consumer.setCwd(b.path("tests/consumer"));
+    const consumer_step = b.step("consumer-smoke", "Build and run the public harness consumer");
+    consumer_step.dependOn(&consumer.step);
+    test_step.dependOn(&consumer.step);
+    test_step.dependOn(exe_step);
+    const harness_tests = b.addTest(.{
+        .root_source_file = b.path("tests/harness_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    harness_tests.root_module.addImport("ra8", emu);
+    harness_tests.linkLibC();
+    const harness_step = b.step("harness-test", "Run public harness behavior tests");
+    harness_step.dependOn(&b.addRunArtifact(harness_tests).step);
 }
 
 /// The light gate AGENTS.md promises and nothing more: `zig fmt --check` over

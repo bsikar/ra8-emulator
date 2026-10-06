@@ -28,7 +28,6 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const cpu_choice = @import("../../core/cpu/choice.zig");
 const zig_debug_front = @import("zig_debug_front.zig");
-const elf = @import("../../core/elf.zig");
 const script = @import("../../debug/script.zig");
 
 pub const usage =
@@ -143,24 +142,10 @@ pub fn refused(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     return run(allocator, argv, request);
 }
 
-/// Load the image and hand the request to the Zig core's debugger
-/// (src/interfaces/cli/zig_debug_front.zig).
+/// Hand the image path to the public harness-backed Zig debugger.
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Request) !u8 {
     _ = argv;
-    const image = readImage(allocator, request.image) orelse return 1;
-    return zig_debug_front.run(allocator, image, request, std.io.getStdOut().writer());
-}
-
-/// An image read and checked, or null after saying why it could not be.
-fn readImage(allocator: std.mem.Allocator, path: []const u8) ?elf.Image {
-    const bytes = std.fs.cwd().readFileAlloc(allocator, path, limits.max_file) catch |err| {
-        std.debug.print("cannot read {s}: {s}\n", .{ path, @errorName(err) });
-        return null;
-    };
-    return elf.Image.init(bytes) catch |err| {
-        std.debug.print("{s} is not a loadable image: {s}\n", .{ path, @errorName(err) });
-        return null;
-    };
+    return zig_debug_front.run(allocator, request, std.io.getStdOut().writer());
 }
 
 /// Prompt, read a line, apply it, until `quit` or the end of input.

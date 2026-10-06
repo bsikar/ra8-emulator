@@ -114,6 +114,7 @@ pub const core = struct {
         pub const exception = @import("core/cpu/exception/all.zig");
     };
 };
+pub const harness = @import("harness.zig");
 pub const periph = @import("periph.zig");
 pub const gui = @import("gui.zig");
 pub const board = struct {

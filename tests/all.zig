@@ -6,6 +6,7 @@ test {
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/probe_ctl_test.zig");
     _ = @import("core/systick_bank_test.zig");
+    _ = @import("harness_test.zig");
     _ = @import("snapshot/file_test.zig");
     _ = @import("snapshot/memory_test.zig");
     _ = @import("snapshot/fields_test.zig");

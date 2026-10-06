@@ -9,6 +9,7 @@ const commands = ra8.core.commands;
 const memmap = ra8.core.memmap;
 const session = ra8.core.debug_session;
 const stop_machine = ra8.core.stop_machine;
+const Session = ra8.core.session_api.Session;
 const step_hook = ra8.core.step_hook;
 const zig_script = step_hook.zig_script;
 
@@ -85,7 +86,8 @@ fn zig(into: *std.ArrayList(u8)) !void {
     var cpu: Cpu = .{ .bus = memory.view() };
     cpu.regs.xpsr = ra8.core.cpu.regs.xpsr_bits.thumb;
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = image.budget } } };
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = image.budget } };
+    var target: zig_script.ZigScript = .{ .session = &live };
     target.session.live.core.setRegister(.sp, image.stack);
     target.session.live.core.setRegister(.pc, image.reset & ~@as(u32, 1));
     try play(&target, into);
@@ -127,7 +129,8 @@ test "a command the Zig core does not carry out yet says so" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = &live };
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
     _ = try target.apply(.{ .halting = true }, out.writer());
@@ -138,7 +141,8 @@ test "core 1 with no second core says so and the session carries on" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = &live };
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
     try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, out.writer()));
@@ -149,7 +153,8 @@ test "plug and unplug wire a part in and out through the board mid-script" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = &live };
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -197,7 +202,8 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
     var memory: Sram = .{};
     var cpu: Cpu = .{ .bus = memory.view() };
     var machine: stop_machine.Machine = .{};
-    var target: zig_script.ZigScript = .{ .session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } } };
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = &live };
     var time = ra8.periph.clocks.Time{};
     time.base.advance(1000);
     var wall = FakeWall{};

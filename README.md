@@ -26,6 +26,29 @@ zig build gate                  # zig fmt --check plus the file/function length 
 ```
 
 Run the binary with no arguments and it prints every option it takes.
+### Public harness
+
+Zig packages can depend on this repository by path and import its registered
+`ra8` module. The harness owns the ELF bytes, CPU0, board, and display wiring:
+
+```zig
+const ra8 = @import("ra8");
+
+var emulator = try ra8.harness.open(allocator, .{
+    .elf_path = "zig-out/image/ra8_ui.elf",
+    .input_script = "flows/shell.input",
+});
+defer emulator.deinit();
+
+const session = emulator.session();
+try session.waitSettled(2_000_000_000);
+var frame = try session.frame(allocator);
+defer frame.deinit(allocator);
+```
+
+`Options.device` defaults to `ra8p1`; `settle_window_ns` defaults to 50 ms.
+Frames are native panel-resolution grayscale bytes and are owned by the caller.
+
 
 ### Toolchain
 

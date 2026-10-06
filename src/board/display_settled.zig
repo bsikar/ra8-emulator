@@ -46,9 +46,7 @@ pub const Detector = struct {
         return !panel.film.busy();
     }
 
-    pub fn resetWait(self: *Detector) void {
-        self.emitted = false;
-    }
+    pub fn resetWait(_: *Detector) void {}
 };
 
 fn sameImage(previous: []const u32, current: []const u32) bool {

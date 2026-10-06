@@ -236,7 +236,7 @@ pub const Session = struct {
         const cpu = self.live.core.cpu;
         const retired_before = cpu.retired;
         const ended = try self.live.go(command);
-        try self.advanceBoard(core, cpu.retired - retired_before);
+        if (self.live.boundary == null) try self.advanceBoard(core, cpu.retired - retired_before);
         self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
         if (ended == .core) self.publish(.{ .core = core, .kind = .fault, .payload = .{ .fault = .{ .cause = @intFromEnum(std.meta.activeTag(ended.core)) } } });
         return ended;

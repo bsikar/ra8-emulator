@@ -56,6 +56,7 @@ pub const Devices = struct {
     }
 
     pub fn deinit(self: *Devices) void {
+        self.plugs.deinit();
         self.arena.deinit();
     }
 
