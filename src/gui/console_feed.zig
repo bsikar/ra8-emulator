@@ -5,7 +5,9 @@
 //! a short lock. The window drains the outbox into one console_log.Log per
 //! channel. Unlike the board snapshot, nothing here may be skipped, so the
 //! outbox is a queue, bounded by `limit`: past it, new bytes are counted
-//! in `lost` rather than kept, and the window can say so.
+//! in `lost` rather than kept, and the window can say so. A tap that was
+//! already on the SCI (the session event stream, RA8EMU-192) goes in `next`
+//! and still sees every byte, so both read the same sends at the same time.
 const std = @import("std");
 const console_log = @import("console_log.zig");
 const Tap = @import("../periph/sci/sci_tap.zig").Tap;
@@ -32,6 +34,8 @@ pub const Feed = struct {
     lost: u64 = 0,
     /// Window side only: the drained outbox, kept for its capacity.
     inbox: std.ArrayListUnmanaged(Byte) = .empty,
+    /// Engine side: the tap this one replaced on the SCI, called after.
+    next: ?Tap = null,
 
     pub fn deinit(self: *Feed) void {
         self.batch.deinit(self.allocator);
@@ -50,6 +54,7 @@ pub const Feed = struct {
         self.batch.append(self.allocator, entry) catch {
             self.batch_lost += 1;
         };
+        if (self.next) |next| next.sent(next.ctx, channel, byte);
     }
 
     /// Engine side, at a park: hand the batch to the window.

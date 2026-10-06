@@ -61,8 +61,10 @@ pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Boa
     screen.feed = &feed;
     var typed = console_keys.Typed{};
     screen.typed = &typed;
+    const prior = board.serial.tap;
+    feed.next = prior;
     board.serial.tap = feed.tap();
-    defer board.serial.tap = null;
+    defer board.serial.tap = prior;
     var loop = host_loop.Loop{ .allocator = allocator };
     defer loop.deinit();
     loop.pane.seed(camera);
