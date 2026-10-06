@@ -1,27 +1,22 @@
 //! Host stdin polled at board boundaries and queued on the console SCI.
-const std = @import("std");
 const sci = @import("sci.zig");
 const sci_reply = @import("sci_reply.zig");
+const host_read = @import("../host_read.zig");
 
 pub const Input = struct {
     enabled: bool = false,
-    fd: std.posix.fd_t = 0,
+    /// The handle read; null means the process's own stdin.
+    fd: ?host_read.Handle = null,
     /// `--console-reply`: typed after its prompt, with or without stdin.
     reply: sci_reply.Reply = .{},
 
-    /// Move bytes waiting on the host input descriptor into SCI8's RX ring.
-    /// A zero timeout keeps the emulator run loop in control of progress.
+    /// Move bytes waiting on the host input handle into SCI8's RX ring.
+    /// The read never waits, which keeps the run loop in control of progress.
     pub fn poll(self: *Input, unit: *sci.Sci) void {
         self.reply.poll(unit);
         if (!self.enabled) return;
-        var descriptors = [_]std.posix.pollfd{
-            .{ .fd = self.fd, .events = std.posix.POLL.IN, .revents = 0 },
-        };
-        const ready = std.posix.poll(&descriptors, 0) catch return;
-        if (ready == 0 or descriptors[0].revents & std.posix.POLL.IN == 0) return;
-
         var bytes: [256]u8 = undefined;
-        const count = std.posix.read(self.fd, &bytes) catch return;
+        const count = host_read.read(self.fd orelse host_read.stdin(), &bytes) orelse return;
         if (count == 0) {
             self.enabled = false;
             return;
