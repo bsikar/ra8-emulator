@@ -12,6 +12,7 @@ const api = @import("../../debug/session_api.zig");
 const handlers = @import("session_handlers.zig");
 const uart_feed = @import("session_uart_feed.zig");
 const parts = @import("session_parts.zig");
+const session_advance = @import("session_advance.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -44,6 +45,7 @@ const routes = .{
     .{ @intFromEnum(M.unplug), parts.unplug },
     .{ @intFromEnum(M.set_fault), parts.setFault },
     .{ @intFromEnum(M.clear_fault), parts.clearFault },
+    .{ @intFromEnum(M.advance), session_advance.advance },
 };
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);

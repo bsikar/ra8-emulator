@@ -23,6 +23,7 @@ pub const usage =
     \\            speed FACTOR|max | break ADDRESS | break --clear ID
     \\            watch ADDRESS read|write|access | watch --clear ID
     \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
+    \\            advance 500ms|600s
     \\            plug MODEL@ENDPOINT | unplug ENDPOINT
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
@@ -35,6 +36,8 @@ const max_regs = 32;
 pub const Command = union(enum) {
     load: []const u8,
     run: u64,
+    /// Virtual nanoseconds of board time to run through (RA8EMU-654).
+    advance: u64,
     step,
     pause,
     regs: []const proto.Register,
@@ -105,6 +108,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     const eql = std.mem.eql;
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
+    if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
     if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
@@ -120,6 +124,12 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     const length = try std.fmt.parseInt(u32, args[1], 0);
     if (length == 0) return error.BadLength;
     return .{ .mem = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .length = length } };
+}
+
+/// A duration in `events --timeout` syntax, as virtual nanoseconds.
+fn parseAdvance(word: []const u8) !u64 {
+    const ms: u64 = @intCast(try events.parseDuration(word));
+    return ms * std.time.ns_per_ms;
 }
 
 fn parseBudget(args: []const []const u8) !u64 {
@@ -190,6 +200,10 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 
             try out.loaded(w, json, path, image.len);
         },
         .run => |budget| try runTo(client, w, json, budget),
+        .advance => |ns| {
+            const moved = try client.call(proto.Advanced, proto.Advance, .advance, .{ .core = .cpu0, .ns = ns });
+            try out.advanced(w, json, moved);
+        },
         .step => try runTo(client, w, json, null),
         .pause => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .pause, .{ .core = .cpu0 });
