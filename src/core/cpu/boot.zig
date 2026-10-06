@@ -87,6 +87,10 @@ pub const Snapshot = struct {
     context: *anyopaque,
     loadFn: ?*const fn (context: *anyopaque, core: *cpu_mod.Cpu) anyerror!u32 = null,
     saveFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu, owed: u32) anyerror!void = null,
+    /// `--snapshot-at` (RA8EMU-769): asked after each closed stretch, where
+    /// the run owes its clocks nothing, and `atFn` writes the run there.
+    dueFn: ?*const fn (context: *anyopaque) bool = null,
+    atFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu) anyerror!void = null,
 };
 
 /// Instructions a stretch retired but has not charged to the clocks yet
@@ -226,7 +230,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     if (watch.snapshot) |hook| if (hook.loadFn) |load| {
         owed.in = try load(hook.context, &cpu);
     };
-    const stopped = try stretches(&cpu, budget, boundary, until, &owed);
+    const stopped = try stretches(&cpu, budget, boundary, until, &owed, watch.snapshot);
     if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu, owed.out);
     if (owed.out != 0) if (boundary) |edge| try edge.closeFn(edge.context, owed.out);
     if (ran) |count| count.* = cpu.retired;
@@ -242,7 +246,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
 /// The budget in stretches, each closed by the boundary. A stretch the core
 /// stops inside is not closed: it never ran to its edge. `owed` carries a
 /// stretch across a save and a load (RA8EMU-700).
-pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until, owed: *Owed) !cpu_mod.Stop {
+pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until, owed: *Owed, snapshot: ?Snapshot) !cpu_mod.Stop {
     const edge = boundary orelse return cpu.run(budget);
     var left = budget;
     var carry = owed.in;
@@ -275,8 +279,16 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         carry = 0;
         if (edge.doneFn) |done| if (done(edge.context)) return .count;
         if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
+        if (snapshot) |hook| try midway(hook, cpu);
     }
     return .count;
+}
+
+/// A `--snapshot-at` write, once its time has come (RA8EMU-769).
+fn midway(hook: Snapshot, cpu: *const cpu_mod.Cpu) !void {
+    const due = hook.dueFn orelse return;
+    const write = hook.atFn orelse return;
+    if (due(hook.context)) try write(hook.context, cpu);
 }
 
 /// The next stretch's width: the boundary's, reached to the next edge by

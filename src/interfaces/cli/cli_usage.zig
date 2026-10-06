@@ -78,6 +78,10 @@ pub const text =
     \\                     to FILE.cpu1) as text a reader can take back
     \\  --save-state PATH  write the whole run to PATH once the budget is spent
     \\  --load-state PATH  start from a run --save-state wrote (not with --cpu1)
+    \\  --snapshot-at TIME:PATH
+    \\                     write the run to PATH at the first boundary at or
+    \\                     past virtual TIME (100ns, 40us, 500ms, 2s) and go on
+    \\  --restore PATH     start from a file --snapshot-at wrote (as --load-state)
     \\  --frame-out PATH   write what the panel shows at the end as a PNG
     \\  --panel-only       write just the panel, at its own size
     \\  --frames-out DIR   write numbered P6 panel frames
