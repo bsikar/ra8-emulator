@@ -56,6 +56,10 @@ pub const overrides = [_]Override{
     // double the first seen to pass on both backends (RA8EMU-494).
     .{ .image = "txm_table_cpu1.elf", .instructions = "20000000" },
     .{ .image = "txm_rpc_cpu1.elf", .instructions = "60000000" },
+    // A module on each core with calls over the mailbox, then CPU1's module
+    // killed and ten M85 ticks after it (RA8EMU-159). The last line lands
+    // by 60M on both backends, not at 40M; the budget is double that.
+    .{ .image = "txm_dual_mailbox.elf", .instructions = "120000000" },
     // The SD examples provision, mount and read back a FAT card (RA8EMU-82).
     // Each budget is the first doubling from 5M seen to reach the PASS line on
     // both backends; epub_toc needs 80M on --cpu zig (RA8EMU-123).
