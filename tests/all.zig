@@ -74,6 +74,7 @@ test {
     _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("gui/draw_list_test.zig");
+    _ = @import("gui/geometry_test.zig");
     _ = @import("gui/triple_buffer_test.zig");
     _ = @import("gui/board_snapshot_test.zig");
     _ = @import("gui/source_swap_test.zig");
