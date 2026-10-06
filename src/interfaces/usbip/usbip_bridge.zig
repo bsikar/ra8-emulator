@@ -94,7 +94,7 @@ pub const Bridge = struct {
     }
 };
 
-fn readable(handle: std.posix.fd_t) bool {
+fn readable(handle: std.posix.socket_t) bool {
     var fds = [_]std.posix.pollfd{.{ .fd = handle, .events = std.posix.POLL.IN, .revents = 0 }};
     const ready = std.posix.poll(&fds, 0) catch return false;
     return ready > 0;
