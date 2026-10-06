@@ -207,6 +207,7 @@ test {
     _ = @import("cpuid_test.zig");
     _ = @import("fault_status_test.zig");
     _ = @import("fault_clear_test.zig");
+    _ = @import("afsr_test.zig");
     _ = @import("fault_route_test.zig");
     _ = @import("bus_fault_test.zig");
     _ = @import("exec_priority_test.zig");

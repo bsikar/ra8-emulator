@@ -10,9 +10,11 @@ const Words = struct {
     cfsr: u32 = 0,
     hfsr: u32 = 0,
     sfsr: u32 = 0,
+    afsr: u32 = 0,
 
     fn at(self: *Words, address: u32) *u32 {
         if (address == fault_clear.sfsr) return &self.sfsr;
+        if (address == memmap.scb.afsr) return &self.afsr;
         return if (address == memmap.scb.cfsr) &self.cfsr else &self.hfsr;
     }
 
@@ -121,4 +123,12 @@ test "a zero written to SFSR leaves every SecureFault bit standing" {
     words.store(&clears, fault_clear.sfsr, 4, 0);
     try clears.apply(&words);
     try std.testing.expectEqual(@as(u32, 0x10), words.sfsr);
+}
+
+test "writing AFSR back to itself clears the bits it read" {
+    var words = Words{ .afsr = 0x0008_0000 };
+    var clears = fault_clear.Clears.init();
+    words.store(&clears, memmap.scb.afsr, 4, words.afsr);
+    try clears.apply(&words);
+    try std.testing.expectEqual(@as(u32, 0), words.afsr);
 }

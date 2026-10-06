@@ -52,6 +52,7 @@ fn expectTaken(instr: u16, enabled: bool) !void {
         try std.testing.expectEqual(@as(u32, if (enabled) 5 else 3), ipsr(&cpu));
         try std.testing.expectEqual(preciserr | bfarvalid, ram.word(memmap.scb.cfsr));
         try std.testing.expectEqual(hole, ram.word(memmap.scb.bfar));
+        try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.afsr));
         try std.testing.expectEqual(if (enabled) 0 else forced, ram.word(memmap.scb.hfsr));
         // The faulting instruction is the stacked return address.
         try std.testing.expectEqual(fixture.code, ram.word(fixture.msp_top - 8));
@@ -151,4 +152,19 @@ test "a refused fetch escalates to forced HardFault when BusFault is disabled" {
     try std.testing.expectEqual(hard_handler, cpu.regs.pc);
     try std.testing.expectEqual(@as(u32, 1 << 8), ram.word(memmap.scb.cfsr));
     try std.testing.expectEqual(forced, ram.word(memmap.scb.hfsr));
+}
+
+test "a refused load from the ITCM window also raises AFSR.PPOISON" {
+    for (profiles) |profile| {
+        var ram: fixture.Ram = .{};
+        ram.putWord(memmap.scb.shcsr, busfaultena);
+        var miss: u32 = 0;
+        var cpu = try bootWith(&ram, profile, ldr_r1_r0, &miss);
+        cpu.regs.low[0] = 0;
+        try std.testing.expectEqual(@as(?Stop, null), cpu.step());
+        try std.testing.expectEqual(bus_handler, cpu.regs.pc);
+        try std.testing.expectEqual(preciserr | bfarvalid, ram.word(memmap.scb.cfsr));
+        try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.bfar));
+        try std.testing.expectEqual(@as(u32, 1 << 19), ram.word(memmap.scb.afsr));
+    }
 }

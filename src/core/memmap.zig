@@ -168,6 +168,9 @@ pub const scb = struct {
     pub const hfsr: u32 = 0xE000_ED2C;
     pub const mmfar: u32 = 0xE000_ED34;
     pub const bfar: u32 = 0xE000_ED38;
+    /// AFSR: IMPLEMENTATION DEFINED auxiliary fault status, write one to
+    /// clear (src/periph/afsr.zig says which bits this model raises).
+    pub const afsr: u32 = 0xE000_ED3C;
     pub const demcr: u32 = 0xE000_EDFC;
 };
 

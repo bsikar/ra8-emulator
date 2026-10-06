@@ -200,6 +200,7 @@ pub const rtt_line = @import("periph/rtt/rtt_line.zig");
 pub const scb = @import("periph/scb.zig");
 pub const cpuid = @import("periph/cpuid.zig");
 pub const fault_status = @import("periph/fault_status.zig");
+pub const afsr = @import("periph/afsr.zig");
 pub const sci = @import("periph/sci/sci.zig");
 pub const sau = @import("periph/sau.zig");
 pub const scs_alias = @import("periph/scs_alias.zig");

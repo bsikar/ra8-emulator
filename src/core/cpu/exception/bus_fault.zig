@@ -13,6 +13,7 @@ const std = @import("std");
 const memmap = @import("../../memmap.zig");
 const fault_route = @import("../../../periph/fault_route.zig");
 const status = @import("../../../periph/fault_status.zig");
+const afsr = @import("../../../periph/afsr.zig");
 const active = @import("active.zig");
 const dispatch = @import("dispatch.zig");
 const fault = @import("fault.zig");
@@ -60,6 +61,8 @@ fn raise(cpu: *Cpu, pc: u32, bits: u32, bfar: ?u32) Error!bool {
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, at, .little);
         cpu.bus.write(memmap.scb.bfar, &bytes) catch {};
+        const aux = afsr.forData(at);
+        if (aux != 0) fault.orInto(cpu.bus, memmap.scb.afsr, aux);
     }
     if (route.escalated) fault.orInto(cpu.bus, memmap.scb.hfsr, status.Hard.forced.bit());
     cpu.regs.pc = pc;
