@@ -7,12 +7,17 @@ test "off Darwin the flags are the std.posix values" {
     if (builtin.os.tag.isDarwin()) return error.SkipZigTest;
     try std.testing.expectEqual(@as(u32, std.posix.MSG.PEEK), flags.peek);
     try std.testing.expectEqual(@as(u32, std.posix.MSG.DONTWAIT), flags.dontwait);
+    try std.testing.expectEqual(@as(u32, std.posix.MSG.TRUNC), flags.trunc);
+    const nosignal: u32 = if (@hasDecl(std.posix.MSG, "NOSIGNAL")) std.posix.MSG.NOSIGNAL else 0;
+    try std.testing.expectEqual(nosignal, flags.nosignal);
 }
 
 test "on Darwin the flags are the sys/socket.h values" {
     if (!builtin.os.tag.isDarwin()) return error.SkipZigTest;
     try std.testing.expectEqual(@as(u32, 0x2), flags.peek);
     try std.testing.expectEqual(@as(u32, 0x80), flags.dontwait);
+    try std.testing.expectEqual(@as(u32, 0x10), flags.trunc);
+    try std.testing.expectEqual(@as(u32, 0x80000), flags.nosignal);
 }
 
 test "peek and dontwait are distinct single bits" {

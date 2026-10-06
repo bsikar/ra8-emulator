@@ -6,6 +6,7 @@ const frame = @import("esp_frame.zig");
 const Queue = @import("esp_queue.zig").Queue;
 const tape = @import("esp_tape.zig");
 const Sock = @import("esp_sock.zig").Sock;
+const socket_flags = @import("../../interfaces/socket_flags.zig");
 
 pub const capacity: usize = 8;
 
@@ -98,7 +99,7 @@ pub const Bridge = struct {
         }
         if (queue.len >= 2) return;
         var payload: [eth.udp_payload_max + 1]u8 = undefined;
-        const got = flow.sock.recv(&payload, std.posix.MSG.TRUNC) catch |err| switch (err) {
+        const got = flow.sock.recv(&payload, socket_flags.trunc) catch |err| switch (err) {
             error.WouldBlock => return,
             else => {
                 flow.close();

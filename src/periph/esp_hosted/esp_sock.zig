@@ -2,6 +2,7 @@
 //! replayed from a tape with no host socket at all (RA8EMU-560).
 const std = @import("std");
 const tape = @import("esp_tape.zig");
+const socket_flags = @import("../../interfaces/socket_flags.zig");
 
 const posix = std.posix;
 pub const invalid_socket: posix.socket_t = -1;
@@ -95,5 +96,5 @@ fn openSocket(kind: u32) !posix.socket_t {
 }
 
 fn sendFlags() u32 {
-    return if (comptime @hasDecl(posix.MSG, "NOSIGNAL")) posix.MSG.NOSIGNAL else 0;
+    return socket_flags.nosignal;
 }
