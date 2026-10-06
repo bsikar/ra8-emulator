@@ -184,3 +184,11 @@ pub const snapshot = struct {
     pub const board = @import("snapshot/board.zig");
     pub const run = @import("snapshot/run.zig");
 };
+
+pub const interfaces = struct {
+    pub const rpc = struct {
+        pub const session = @import("interfaces/rpc/session_rpc.zig");
+        pub const stdio = @import("interfaces/rpc/stdio_transport.zig");
+        pub const socket = @import("interfaces/rpc/socket_transport.zig");
+    };
+};

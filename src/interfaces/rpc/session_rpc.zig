@@ -1,0 +1,99 @@
+//! Session RPC messages carried by the shared RA8 wire protocol (RA8EMU-194).
+const rpc = @import("ra8_rpc");
+
+pub const protocol_version: u16 = 1;
+pub const capabilities: u32 = 0x0000_0001;
+pub const max_payload = 1_048_576;
+
+pub const Method = enum(u16) {
+    load = 0x0100,
+    run = 0x0101,
+    pause = 0x0102,
+    step = 0x0103,
+    set_speed = 0x0104,
+    read_register = 0x0105,
+    write_register = 0x0106,
+    read_memory = 0x0107,
+    write_memory = 0x0108,
+    set_breakpoint = 0x0109,
+    clear_breakpoint = 0x010a,
+    set_watchpoint = 0x010b,
+    clear_watchpoint = 0x010c,
+    subscribe = 0x010d,
+    unsubscribe = 0x010e,
+    now = 0x010f,
+    interrupt = 0x0110,
+    set_run_budget = 0x0111,
+    remove_point = 0x0112,
+};
+pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
+pub const Core = enum(u8) { cpu0, cpu1 };
+pub const Register = enum(u8) { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp, r4, r5, r6, r7, r8, r9, r10, r11, msp, basepri, faultmask, control, fpscr };
+pub const RunMode = enum(u8) { run, cont, step, next, finish };
+pub const StopReason = enum(u8) { stepped, breakpoint, watchpoint, halt_requested, unit_break, unit_watch, count, core_fault };
+pub const Access = enum(u8) { read, write, access };
+pub const EventKind = enum(u8) { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged };
+
+pub const Load = struct {
+    core: Core,
+    image: []const u8,
+    pub const max_len = .{ .image = max_payload };
+};
+pub const Run = struct { core: Core, mode: RunMode, budget: u64 };
+pub const CoreOnly = struct { core: Core };
+pub const SetSpeed = struct { core: Core, milli: u64 };
+pub const ReadRegister = struct { core: Core, register: Register };
+pub const WriteRegister = struct { core: Core, register: Register, value: u32 };
+pub const ReadMemory = struct { core: Core, address: u32, length: u32 };
+pub const Memory = struct {
+    bytes: []const u8,
+    pub const max_len = .{ .bytes = max_payload };
+};
+pub const WriteMemory = struct {
+    core: Core,
+    address: u32,
+    bytes: []const u8,
+    pub const max_len = .{ .bytes = max_payload };
+};
+pub const Point = struct { core: Core, address: u32 };
+pub const PointId = struct { core: Core, id: u32 };
+pub const Watch = struct { core: Core, first: u32, last: u32, access: Access };
+pub const Subscription = struct { core: Core, topic: Topic };
+pub const Now = struct { core: Core };
+pub const RunBudget = struct { core: Core, instructions: u64 };
+pub const U64 = struct { value: u64 };
+pub const U32 = struct { value: u32 };
+pub const Bool = struct { value: u8 };
+pub const Ack = struct { accepted: u8 };
+pub const Stopped = struct { core: Core, reason: StopReason, address: u32, detail: u32 };
+pub const Uart = struct {
+    core: Core,
+    channel: u8,
+    bytes: []const u8,
+    pub const max_len = .{ .bytes = 4096 };
+};
+pub const DirtyRect = struct {
+    core: Core,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+    virtual_ns: u64,
+    pixels: []const u8,
+    pub const max_len = .{ .pixels = 262144 };
+};
+pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
+pub const Trace = struct {
+    core: Core,
+    bytes: []const u8,
+    pub const max_len = .{ .bytes = 4096 };
+};
+
+pub const Client = rpc.Client(32, max_payload);
+pub const Error = rpc.Error;
+pub fn encode(comptime T: type, value: T, out: []u8) ![]u8 {
+    return rpc.codec.encode(T, value, out);
+}
+pub fn decode(comptime T: type, bytes: []const u8) !T {
+    return rpc.codec.decode(T, bytes);
+}

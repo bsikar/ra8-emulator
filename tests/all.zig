@@ -188,8 +188,11 @@ test {
     _ = @import("core/second_wait_test.zig");
     _ = @import("core/module_fault_seam_test.zig");
     _ = @import("tools/all_test.zig");
+    _ = @import("interfaces/rpc/session_rpc_test.zig");
+    _ = @import("interfaces/rpc/stdio_transport_test.zig");
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
     std.testing.refAllDecls(ra8.periph);
     std.testing.refAllDecls(ra8.board);
+    std.testing.refAllDecls(ra8.interfaces.rpc);
 }

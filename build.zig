@@ -41,6 +41,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    const rpc_mod = b.dependency("ra8_firmware", .{}).module("ra8_rpc");
+    emu.addImport("ra8_rpc", rpc_mod);
 
     const exe = b.addExecutable(.{
         .name = "ra8_emulator",
