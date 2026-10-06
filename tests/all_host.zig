@@ -97,6 +97,7 @@ test {
     _ = @import("gui/shell_board_test.zig");
     _ = @import("gui/shell_devices_test.zig");
     _ = @import("gui/shell_camera_test.zig");
+    _ = @import("gui/shell_titles_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/unmodelled_test.zig");
     _ = @import("interfaces/cli/report/watchdog_test.zig");

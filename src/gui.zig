@@ -27,6 +27,7 @@ pub const shell_console = @import("gui/shell_console.zig");
 pub const shell_board = @import("gui/shell_board.zig");
 pub const shell_devices = @import("gui/shell_devices.zig");
 pub const shell_camera = @import("gui/shell_camera.zig");
+pub const shell_titles = @import("gui/shell_titles.zig");
 pub const triple_buffer = @import("gui/triple_buffer.zig");
 pub const board_snapshot = @import("gui/board_snapshot.zig");
 pub const source_swap = @import("gui/source_swap.zig");
