@@ -2,6 +2,7 @@
 const std = @import("std");
 const served = @import("../rpc/session_server.zig");
 const Stdio = @import("../rpc/stdio_transport.zig").Stdio;
+const socket_flags = @import("../socket_flags.zig");
 
 /// How long an idle server waits on its peer before checking again.
 const idle_wait_ms = 20;
@@ -39,7 +40,7 @@ fn closed(fd: std.posix.fd_t, link: Link) !bool {
     if (revents & std.posix.POLL.IN == 0) return revents & std.posix.POLL.HUP != 0;
     if (link == .pipe) return false;
     var byte: [1]u8 = undefined;
-    const flags = std.posix.MSG.PEEK | std.posix.MSG.DONTWAIT;
+    const flags = socket_flags.peek | socket_flags.dontwait;
     const got = std.posix.recvfrom(fd, &byte, flags, null, null) catch |err| return err != error.WouldBlock;
     return got == 0;
 }

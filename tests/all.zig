@@ -3,6 +3,7 @@
 //! (tests/periph/crc_test.zig covers src/periph/crc.zig).
 const std = @import("std");
 test {
+    _ = @import("interfaces/socket_flags_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/probe_ctl_test.zig");
     _ = @import("interfaces/cli/serve_listen_test.zig");
