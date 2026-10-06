@@ -26,6 +26,9 @@ pub const Context = struct {
     pending: ?proto.Stopped = null,
     /// Subscribed topics per core, one bit per Topic in declaration order.
     topics: [2]u8 = .{ 0, 0 },
+    /// The session event-stream queue UART bytes are read from while any
+    /// core wants the uart topic.
+    uart_feed: ?usize = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@intFromEnum(of)] & bit(topic) != 0;
@@ -152,13 +155,30 @@ pub fn removePoint(context: *Context, args: proto.PointId) rpc.Outcome(proto.U32
 
 pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
     if (!context.session.hasCore(core(args.core))) return .{ .err = code(app_codes.no_core) };
+    if (args.topic == .uart and context.uart_feed == null) {
+        context.uart_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
+    }
     context.topics[@intFromEnum(args.core)] |= bit(args.topic);
     return ack;
 }
 
 pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
     context.topics[@intFromEnum(args.core)] &= ~bit(args.topic);
+    if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) releaseFeed(context);
     return ack;
+}
+
+/// Drop every subscription, as a new connection starts with none.
+pub fn forget(context: *Context) void {
+    context.topics = .{ 0, 0 };
+    context.pending = null;
+    releaseFeed(context);
+}
+
+fn releaseFeed(context: *Context) void {
+    const id = context.uart_feed orelse return;
+    context.session.unsubscribe(id);
+    context.uart_feed = null;
 }
 
 pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {

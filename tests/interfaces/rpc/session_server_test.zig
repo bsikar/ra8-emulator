@@ -67,6 +67,10 @@ const Wire = struct {
     host: served.Host = undefined,
     /// The stop event the last call produced, if any.
     stop: ?proto.Stopped = null,
+    /// UART bytes the last call's events carried, and the topics in arrival order.
+    uart: std.BoundedArray(u8, 64) = .{},
+    channels: std.BoundedArray(u8, 8) = .{},
+    topics: std.BoundedArray(proto.Topic, 8) = .{},
 
     fn init(gpa: std.mem.Allocator) !*Wire {
         const self = try gpa.create(Wire);
@@ -100,16 +104,31 @@ const Wire = struct {
     fn finish(self: *Wire) !Env.Result {
         try std.testing.expectEqual(rpc.Step.answered, try self.host.poll(self.tx));
         self.stop = null;
+        self.uart.len = 0;
+        self.channels.len = 0;
+        self.topics.len = 0;
         var result: ?Env.Result = null;
         while (try self.client.poll(self.tx)) |incoming| switch (incoming) {
             .response => |response| result = response.result,
-            .event => |event| {
-                try std.testing.expectEqual(@intFromEnum(proto.Topic.stop), event.topic);
-                self.stop = try proto.decode(proto.Stopped, event.payload);
-            },
+            .event => |event| try self.record(event.topic, event.payload),
             .ready => return error.Unexpected,
         };
         return result orelse error.NoResponse;
+    }
+
+    fn record(self: *Wire, topic: u16, payload: []const u8) !void {
+        const known: proto.Topic = @enumFromInt(topic);
+        try self.topics.append(known);
+        switch (known) {
+            .stop => self.stop = try proto.decode(proto.Stopped, payload),
+            .uart => {
+                const sent = try proto.decode(proto.Uart, payload);
+                try std.testing.expectEqual(proto.Core.cpu0, sent.core);
+                try self.channels.append(sent.channel);
+                try self.uart.appendSlice(sent.bytes);
+            },
+            else => return error.Unexpected,
+        }
     }
 };
 
@@ -201,4 +220,41 @@ test "the server refuses unknown methods, missing cores, oversized reads and sta
 
     _ = try reply(proto.Ack, try wire.call(proto.Run, .run, .{ .core = .cpu0, .mode = .step, .budget = 0 }));
     try std.testing.expect(wire.stop == null);
+}
+
+fn sendUart(session: *api.Session, channel: u8, text: []const u8) void {
+    for (text) |byte| session.event_stream.publish(.{ .core = .cpu0, .kind = .uart_byte, .payload = .{ .uart = .{ .channel = channel, .byte = byte } } });
+}
+
+test "uart bytes reach a client only while it subscribes, in order and before the stop" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var session: api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    var scratch: [8]u8 = undefined;
+    var context: served.Context = .{ .session = &session, .scratch = &scratch };
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&context);
+    const pc: proto.ReadRegister = .{ .core = .cpu0, .register = .pc };
+
+    sendUart(&session, 3, "early");
+    _ = try reply(proto.U32, try wire.call(proto.ReadRegister, .read_register, pc));
+    try std.testing.expectEqual(@as(usize, 0), wire.uart.len);
+
+    _ = try reply(proto.Ack, try wire.call(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .uart }));
+    _ = try reply(proto.Ack, try wire.call(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop }));
+    sendUart(&session, 3, "hi");
+    sendUart(&session, 4, "!");
+    _ = try reply(proto.Ack, try wire.call(proto.Run, .run, .{ .core = .cpu0, .mode = .step, .budget = 0 }));
+    try std.testing.expectEqualStrings("hi!", wire.uart.slice());
+    try std.testing.expectEqualSlices(u8, &.{ 3, 4 }, wire.channels.slice());
+    try std.testing.expectEqualSlices(proto.Topic, &.{ .uart, .uart, .stop }, wire.topics.slice());
+
+    _ = try reply(proto.Ack, try wire.call(proto.Subscription, .unsubscribe, .{ .core = .cpu0, .topic = .uart }));
+    try std.testing.expect(context.uart_feed == null);
+    sendUart(&session, 3, "late");
+    _ = try reply(proto.U32, try wire.call(proto.ReadRegister, .read_register, pc));
+    try std.testing.expectEqual(@as(usize, 0), wire.uart.len);
 }
