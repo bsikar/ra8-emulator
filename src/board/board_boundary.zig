@@ -9,6 +9,8 @@ const Reboot = @import("../core/reboot.zig").Reboot;
 const systick_bank = @import("../core/systick_bank.zig");
 const clocks = @import("../periph/clocks.zig");
 const zig_boundary = @import("../debug/zig_boundary.zig");
+const second_core = @import("../core/second_core.zig");
+const registry = @import("../periph/registry.zig");
 
 pub const BoardBoundary = struct {
     board: *Board,
@@ -17,6 +19,9 @@ pub const BoardBoundary = struct {
     reboot: ?*Reboot = null,
     timebase: clocks.Clocks = .{},
     ns_timebase: clocks.Clocks = .{ .words = systick_bank.non_secure_words },
+    selected: ?*const u8 = null,
+    second: ?*second_core.Second = null,
+    second_memory: ?Guest = null,
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
         return .{ .context = self, .tickFn = tick };
@@ -26,7 +31,9 @@ pub const BoardBoundary = struct {
         const self: *BoardBoundary = @ptrCast(@alignCast(context));
         try self.timebase.advance(self.core, instructions);
         try self.ns_timebase.advanceSysTick(self.core, instructions);
-        try self.board.tick(self.core, instructions);
+        const issuer: registry.Issuer = if (self.selected) |selected| @enumFromInt(selected.*) else .cpu0;
+        try self.board.tickFrom(self.core, instructions, issuer);
+        if (issuer == .cpu1) if (self.second) |unit| unit.takeResetRequest(self.second_memory.?);
         const pending = self.reboot orelse return;
         if (!pending.requested) return;
         const cpu = self.cpu orelse return error.NoRebootCore;

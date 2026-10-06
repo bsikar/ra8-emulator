@@ -3,11 +3,11 @@
 //! stage, timing controller and system counters, as one `display` section.
 //!
 //! Not saved, because it is wiring: `domain` (the power domain controller
-//! pointer), `memory` (the guest memory handle), and on the output stage the
-//! host frame `capture` buffer and the `vsync` hook a frames-out run
-//! installs. A load keeps the target board's own. The mixer's stage and
-//! palette pointers are per-call arguments, never stored, so nothing needs
-//! re-pointing.
+//! pointer), `memory` (the guest memory handle), `event_hook`, and on the
+//! output stage the host frame `capture` buffer and the `vsync` hook a
+//! frames-out run installs. A load keeps the target board's own. The mixer's
+//! stage and palette pointers are per-call arguments, never stored, so
+//! nothing needs re-pointing.
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
@@ -15,7 +15,7 @@ const clut = @import("../periph/glcdc/glcdc_clut.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-const wiring = .{ "domain", "memory", "output" };
+const wiring = .{ "domain", "memory", "output", "event_hook" };
 const host = .{ "capture", "vsync" };
 
 pub fn save(board: anytype, writer: anytype) !void {

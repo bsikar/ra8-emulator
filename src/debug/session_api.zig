@@ -24,10 +24,9 @@ const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const session_speed = @import("session_speed.zig");
 const event_sources = @import("session_event_sources.zig");
-
 pub const Core = @import("session_event_stream.zig").Core;
 pub const EventStream = @import("session_event_stream.zig").Stream;
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManyListeners };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("break_table.zig").Id;
@@ -36,12 +35,10 @@ pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
 pub const Frame = session_display.Frame;
 pub const Widget = widget_tree.Widget;
-
 pub const Loader = struct {
     context: *anyopaque,
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
 };
-
 /// Sets or clears (null) a fault mode on a part the board has on `at`
 /// (RA8EMU-520). The board owns the parts, so it does the wrapping.
 pub const FaultHook = struct {
@@ -57,23 +54,13 @@ pub const PlugHook = struct {
 pub const Endpoint = endpoint.Endpoint;
 pub const FaultMode = fault_spec.Mode;
 pub const SpeedHook = session_speed.Hook;
-
+pub const EventClock = struct { context: *anyopaque, nowFn: *const fn (*anyopaque) u64 };
 pub const Event = @import("session_event_stream.zig").Event;
-
-pub const Listener = struct {
-    context: *anyopaque,
-    receive: *const fn (*anyopaque, Event) void,
-};
-
-pub const limits = struct {
-    pub const listeners: usize = 8;
-};
-
 const BoardRun = struct { tick: BoardTick, guest: Guest };
-
 pub const Session = struct {
     live: zig_session.ZigSession,
     time_base: ?*const TimeBase = null,
+    event_clock: ?EventClock = null,
     loader: ?Loader = null,
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
@@ -82,16 +69,17 @@ pub const Session = struct {
     plugs: ?PlugHook = null,
     speed: ?SpeedHook = null,
     widget_tree_addresses: [2]?u32 = .{ null, null },
-    listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
     event_stream: EventStream = .{},
     event_sources: event_sources.Sources = .{},
-
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
     pub fn attachTimeBase(self: *Session, time_base: *const TimeBase) void {
         self.time_base = time_base;
         self.event_sources.bind(&self.event_stream, time_base);
+    }
+    pub fn attachEventClock(self: *Session, clock: EventClock) void {
+        self.event_clock = clock;
     }
     /// Virtual nanoseconds since the attached board began its run.
     pub fn now(self: *const Session) Error!u64 {
@@ -100,11 +88,9 @@ pub const Session = struct {
     pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
         self.input_script = script;
     }
-
     pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
         self.board_ticks[@intFromEnum(core)] = .{ .tick = tick, .guest = guest };
     }
-
     pub fn attachDisplay(self: *Session, display: session_display.Display) void {
         self.display = display;
     }
@@ -149,9 +135,7 @@ pub const Session = struct {
 
     pub fn frame(self: *Session, allocator: std.mem.Allocator) anyerror!Frame {
         const display = self.display orelse return session_display.Error.NoDisplay;
-        const captured = try display.frame(allocator);
-        self.publish(.{ .core = self.currentCore(), .kind = .lcd_frame, .payload = .{ .frame = .{ .width = captured.width, .height = captured.height, .generation = self.now() catch 0, .dirty = .{ .x = 0, .y = 0, .width = @intCast(@min(captured.width, std.math.maxInt(u16))), .height = @intCast(@min(captured.height, std.math.maxInt(u16))) } } } });
-        return captured;
+        return display.frame(allocator);
     }
 
     /// Load image bytes through the board-specific loader, then publish it.
@@ -238,7 +222,22 @@ pub const Session = struct {
         const ended = try self.live.go(command);
         if (self.live.boundary == null) try self.advanceBoard(core, cpu.retired - retired_before);
         self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
-        if (ended == .core) self.publish(.{ .core = core, .kind = .fault, .payload = .{ .fault = .{ .cause = @intFromEnum(std.meta.activeTag(ended.core)) } } });
+        if (ended == .core) {
+            const address: ?u32 = switch (ended.core) {
+                .count => null,
+                .unknown => |instruction| instruction.address,
+                inline else => |at| at,
+            };
+            self.publish(.{
+                .core = core,
+                .kind = .fault,
+                .address = address,
+                .payload = .{ .fault = .{
+                    .cause = @intFromEnum(std.meta.activeTag(ended.core)),
+                    .address = address,
+                } },
+            });
+        }
         return ended;
     }
 
@@ -373,17 +372,19 @@ pub const Session = struct {
         try self.live.machine.itm.flush(out, final);
     }
 
-    pub fn subscribe(self: *Session, listener: Listener) Error!usize {
-        for (&self.listeners, 0..) |*slot, index| {
-            if (slot.* != null) continue;
-            slot.* = listener;
-            return index;
-        }
-        return Error.TooManyListeners;
+    /// Reserve a bounded event queue while the engine is stopped.
+    pub fn subscribe(self: *Session) Error!usize {
+        return self.event_stream.subscribe() orelse Error.TooManySubscribers;
     }
 
+    /// Release a subscription while the engine is stopped.
     pub fn unsubscribe(self: *Session, id: usize) void {
-        if (id < self.listeners.len) self.listeners[id] = null;
+        self.event_stream.unsubscribe(id);
+    }
+
+    /// Copy queued events without running subscriber code on the engine thread.
+    pub fn pollEvents(self: *Session, id: usize, out: []Event) ?@import("session_event_stream.zig").Read {
+        return self.event_stream.read(id, out);
     }
 
     fn select(self: *Session, core: Core) anyerror!void {
@@ -393,8 +394,7 @@ pub const Session = struct {
     /// Publish a board observation into bounded subscriber queues.
     fn publish(self: *Session, event: Event) void {
         var stamped = event;
-        stamped.virtual_ns = self.now() catch 0;
+        stamped.virtual_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else self.now() catch 0;
         self.event_stream.publish(stamped);
-        for (self.listeners) |slot| if (slot) |listener| listener.receive(listener.context, stamped);
     }
 };

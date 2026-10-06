@@ -34,6 +34,7 @@ pub const Devices = struct {
     speed: speed_post.SpeedPost = .{},
     board: *Board,
     session: session_api.Session = .{ .live = undefined },
+    event_ns: std.atomic.Value(u64) = .init(0),
     rows: [request.max + 2]devices_panel.Row = undefined,
     panel: devices_panel.Panel = undefined,
 
@@ -41,6 +42,8 @@ pub const Devices = struct {
     pub fn init(self: *Devices, allocator: std.mem.Allocator, board: *Board, attaches: []const request.Request, click: bool) void {
         self.* = .{ .arena = .init(allocator), .plugs = undefined, .board = board };
         self.plugs = session_plug.Plugs.init(board, self.arena.allocator());
+        self.event_ns.store(board.time.base.now(), .monotonic);
+        self.session.attachEventClock(.{ .context = self, .nowFn = eventNow });
         self.session.attachPlugs(self.post.hook());
         var count: usize = 0;
         if (click) {
@@ -71,8 +74,14 @@ pub const Devices = struct {
     /// Engine side, at each park: apply what the pane queued, then any
     /// speed change against the host clock.
     pub fn park(self: *Devices) void {
+        self.event_ns.store(self.board.time.base.now(), .release);
         _ = self.post.apply(self.plugs.hook());
         const clock = pacing.hostClock() catch return;
         _ = self.speed.apply(&self.board.time, clock);
+    }
+
+    fn eventNow(context: *anyopaque) u64 {
+        const self: *Devices = @ptrCast(@alignCast(context));
+        return self.event_ns.load(.acquire);
     }
 };

@@ -1,83 +1,176 @@
 //! Engine-thread source adapters for session events (RA8EMU-192).
+const std = @import("std");
 const stream_mod = @import("session_event_stream.zig");
 const sci = @import("../periph/sci/sci.zig");
 const gpio = @import("../periph/gpio/gpio.zig");
+const registry = @import("../periph/registry.zig");
 const TimeBase = @import("../periph/time/timebase.zig").TimeBase;
 const reset = @import("../periph/reset.zig");
-const BoardEventSink = @import("../board/event_sink.zig").EventSink;
+const board_events = @import("../board/event_sink.zig");
+const eink = @import("../periph/eink/eink.zig");
+const glcdc = @import("../periph/glcdc/glcdc.zig");
+const wdt = @import("../periph/wdt/wdt.zig");
+const iwdt = @import("../periph/iwdt/iwdt.zig");
 
 pub const Core = stream_mod.Core;
 pub const Event = stream_mod.Event;
 const Stream = stream_mod.Stream;
-
-const Context = struct { sources: *Sources, core: Core };
+const Context = struct { sources: *Sources, core: ?Core };
 
 pub const Sources = struct {
     stream: ?*Stream = null,
     time_base: ?*const TimeBase = null,
-    uart_contexts: [2]Context = undefined,
-    gpio_contexts: [2]Context = undefined,
-    reset_contexts: [2]Context = undefined,
-    gpio_levels: [2][gpio.port_count]u16 = [_][gpio.port_count]u16{[_]u16{0} ** gpio.port_count} ** 2,
-    led_levels: [2][gpio.led_count]bool = [_][gpio.led_count]bool{[_]bool{false} ** gpio.led_count} ** 2,
+    issuer: ?*const registry.Issuer = null,
+    uart_context: Context = undefined,
+    gpio_context: Context = undefined,
+    gpio_levels: [gpio.port_count]u16 = [_]u16{0} ** gpio.port_count,
+    active_core: Core = .cpu0,
+    observation: board_events.Observation = .{},
+    eink_active: bool = false,
+    board_panel: ?*const eink.Panel = null,
+    attached_eink: ?*const ?*eink.Panel = null,
 
     pub fn bind(self: *Sources, stream: *Stream, time_base: *const TimeBase) void {
         self.stream = stream;
         self.time_base = time_base;
     }
 
-    pub fn uartTap(self: *Sources, core: Core) sci.Tap {
-        const id = @intFromEnum(core);
-        self.uart_contexts[id] = .{ .sources = self, .core = core };
-        return .{ .ctx = &self.uart_contexts[id], .sent = uartSent };
+    pub fn bindBoard(self: *Sources, issuer: *const registry.Issuer, pins: *const gpio.Gpio, initial: board_events.Observation, board_panel: *const eink.Panel, attached_eink: *const ?*eink.Panel) void {
+        self.issuer = issuer;
+        self.observation = initial;
+        self.board_panel = board_panel;
+        self.attached_eink = attached_eink;
+        for (0..gpio.port_count) |port| {
+            const levels = pins.portLevel(@intCast(port));
+            self.gpio_levels[port] = levels;
+        }
     }
 
-    pub fn gpioTap(self: *Sources, core: Core) gpio.Gpio.EventTap {
-        const id = @intFromEnum(core);
-        self.gpio_contexts[id] = .{ .sources = self, .core = core };
-        return .{ .context = &self.gpio_contexts[id], .changedFn = gpioChanged };
+    pub fn uartTap(self: *Sources, core: ?Core) sci.Tap {
+        self.uart_context = .{ .sources = self, .core = core };
+        return .{ .ctx = &self.uart_context, .sent = uartSent };
     }
 
-    pub fn boardEventSink(self: *Sources, core: Core) BoardEventSink {
-        const id = @intFromEnum(core);
-        self.reset_contexts[id] = .{ .sources = self, .core = core };
-        return .{ .context = &self.reset_contexts[id], .resetFn = resetOccurred };
+    pub fn gpioTap(self: *Sources, core: ?Core) gpio.Gpio.EventTap {
+        self.gpio_context = .{ .sources = self, .core = core };
+        return .{ .context = &self.gpio_context, .changedFn = gpioChanged };
     }
 
-    pub fn publish(self: *Sources, event: Event) void {
+    pub fn boardEventSink(self: *Sources) board_events.EventSink {
+        return .{ .context = self, .observeFn = observed, .resetFn = resetOccurred };
+    }
+
+    pub fn einkHook(self: *Sources) eink.Panel.EventHook {
+        return .{ .context = self, .refreshFn = einkRefreshed };
+    }
+
+    pub fn glcdcHook(self: *Sources) glcdc.Glcdc.EventHook {
+        return .{ .context = self, .frameFn = glcdcFrame };
+    }
+
+    pub fn watchdogHook(self: *Sources) wdt.Wdt.EventHook {
+        return .{ .context = self, .refreshErrorFn = watchdogRefreshError, .underflowFn = watchdogUnderflow };
+    }
+
+    pub fn independentWatchdogHook(self: *Sources) iwdt.Iwdt.EventHook {
+        return .{ .context = self, .underflowFn = independentWatchdogUnderflow };
+    }
+
+    fn currentCore(self: *const Sources, fallback: ?Core) Core {
+        if (fallback) |core| return core;
+        const found = self.issuer orelse return .cpu0;
+        return @enumFromInt(@intFromEnum(found.*));
+    }
+
+    fn publish(self: *Sources, event: Event) void {
+        self.publishAt(event, if (self.time_base) |clock| clock.now() else 0);
+    }
+
+    fn publishAt(self: *Sources, event: Event, at_ns: u64) void {
         var stamped = event;
-        stamped.virtual_ns = if (self.time_base) |clock| clock.now() else 0;
+        stamped.virtual_ns = at_ns;
         if (self.stream) |stream| stream.publish(stamped);
     }
 
     fn uartSent(context: *anyopaque, channel: usize, byte: u8) void {
         const source: *Context = @ptrCast(@alignCast(context));
-        source.sources.publish(.{ .core = source.core, .kind = .uart_byte, .payload = .{ .uart = .{ .channel = @intCast(channel), .byte = byte } } });
+        source.sources.publish(.{ .core = source.sources.currentCore(source.core), .kind = .uart_byte, .payload = .{ .uart = .{ .channel = @intCast(channel), .byte = byte } } });
     }
 
-    fn gpioChanged(context: *anyopaque, port: u8, levels: u16) void {
+    fn gpioChanged(context: *anyopaque, port: u8, levels: u16, changed: u16, origin: gpio.Gpio.EventOrigin) void {
         const source: *Context = @ptrCast(@alignCast(context));
-        const core_index = @intFromEnum(source.core);
-        const changed = source.sources.gpio_levels[core_index][port] ^ levels;
-        source.sources.gpio_levels[core_index][port] = levels;
-        if (changed != 0) source.sources.publish(.{ .core = source.core, .kind = .gpio_changed, .payload = .{ .gpio = .{ .port = port, .changed = changed, .levels = levels } } });
+        const core = if (origin == .external) source.sources.active_core else source.sources.currentCore(source.core);
+        source.sources.gpio_levels[port] = levels;
+        if (changed != 0) source.sources.publish(.{ .core = core, .kind = .gpio_changed, .payload = .{ .gpio = .{ .port = port, .changed = changed, .levels = levels } } });
         for (gpio.leds, 0..) |led, index| {
             if (led.port != port or changed & (@as(u16, 1) << led.pin) == 0) continue;
             const high = levels & (@as(u16, 1) << led.pin) != 0;
-            source.sources.led_levels[core_index][index] = high;
-            source.sources.publish(.{ .core = source.core, .kind = .led_changed, .payload = .{ .led = .{ .index = @intCast(index), .level = high } } });
+            source.sources.publish(.{ .core = core, .kind = .led_changed, .payload = .{ .led = .{ .index = @intCast(index), .level = high } } });
         }
     }
 
-    fn resetOccurred(context: *anyopaque, cause: reset.Source, at_ns: u64) void {
-        const source: *Context = @ptrCast(@alignCast(context));
+    fn observed(context: *anyopaque, issuer: registry.Issuer, at_ns: u64, latest: board_events.Observation) void {
+        _ = at_ns;
+        const self: *Sources = @ptrCast(@alignCast(context));
+        self.active_core = @enumFromInt(@intFromEnum(issuer));
+        self.observation = latest;
+    }
+
+    fn einkRefreshed(context: *anyopaque, panel: *const eink.Panel) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
+        const active = if (self.attached_eink) |attached| attached.* orelse self.board_panel else self.board_panel;
+        if (active != panel) return;
+        if (self.board_panel == panel) self.eink_active = true;
+        const dirty = panel.latestRefresh();
+        self.publish(.{ .core = self.currentCore(null), .kind = .lcd_frame, .payload = .{ .frame = .{
+            .width = panel.planes.geometry.width,
+            .height = panel.planes.geometry.height,
+            .generation = panel.refreshes,
+            .dirty = .{ .x = dirty.x, .y = dirty.y, .width = dirty.width, .height = dirty.height },
+        } } });
+    }
+
+    fn glcdcFrame(context: *anyopaque, display: *glcdc.Glcdc) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
+        if (self.eink_active) return;
+        if (self.attached_eink) |attached| if (attached.* != null) return;
+        const width = display.panelWidth();
+        const height = display.panelHeight();
+        self.publish(.{ .core = self.active_core, .kind = .lcd_frame, .payload = .{ .frame = .{
+            .width = width,
+            .height = height,
+            .generation = display.system.frames,
+            .dirty = .{
+                .x = 0,
+                .y = 0,
+                .width = @intCast(@min(width, std.math.maxInt(u16))),
+                .height = @intCast(@min(height, std.math.maxInt(u16))),
+            },
+        } } });
+    }
+
+    fn watchdogRefreshError(context: *anyopaque) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
+        self.publish(.{ .core = self.currentCore(null), .kind = .watchdog, .payload = .{ .watchdog = .wdt } });
+    }
+
+    fn watchdogUnderflow(context: *anyopaque) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
+        self.publish(.{ .core = self.active_core, .kind = .watchdog, .payload = .{ .watchdog = .wdt } });
+    }
+
+    fn independentWatchdogUnderflow(context: *anyopaque) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
+        self.publish(.{ .core = self.active_core, .kind = .watchdog, .payload = .{ .watchdog = .iwdt } });
+    }
+
+    fn resetOccurred(context: *anyopaque, issuer: registry.Issuer, cause: reset.Source, at_ns: u64) void {
+        const self: *Sources = @ptrCast(@alignCast(context));
         const reset_kind: @FieldType(Event.Payload, "reset") = switch (cause) {
             .software => .software,
             .watchdog => .watchdog,
             .iwdt => .iwdt,
         };
-        if (cause == .watchdog) source.sources.publish(.{ .core = source.core, .virtual_ns = at_ns, .kind = .watchdog, .payload = .{ .watchdog = .wdt } });
-        if (cause == .iwdt) source.sources.publish(.{ .core = source.core, .virtual_ns = at_ns, .kind = .watchdog, .payload = .{ .watchdog = .iwdt } });
-        source.sources.publish(.{ .core = source.core, .virtual_ns = at_ns, .kind = .reset, .payload = .{ .reset = reset_kind } });
+        self.publishAt(.{ .core = @enumFromInt(@intFromEnum(issuer)), .kind = .reset, .payload = .{ .reset = reset_kind } }, at_ns);
     }
 };

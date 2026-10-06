@@ -73,17 +73,6 @@ const Cuts = struct {
     }
 };
 
-const Events = struct {
-    kinds: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Events = @ptrCast(@alignCast(context));
-        if (self.seen < self.kinds.len) self.kinds[self.seen] = event.kind;
-        self.seen += 1;
-    }
-};
-
 test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -99,8 +88,7 @@ test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     var plugs = session_plug.Plugs.init(&board, arena.allocator());
     var session: api.Session = .{ .live = undefined };
     session.attachPlugs(plugs.hook());
-    var events: Events = .{};
-    _ = try session.subscribe(.{ .context = &events, .receive = Events.receive });
+    const subscription = try session.subscribe();
     try session.plug(.cpu0, gauge_at, "max17048");
 
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
@@ -131,8 +119,10 @@ test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     try std.testing.expect(back.acks > out.acks + 1);
     try std.testing.expect(back.nacks <= out.nacks + 1);
     try std.testing.expectEqual(@as(u32, 2), back.changes);
-    try std.testing.expectEqual(@as(usize, 3), events.seen);
-    try std.testing.expectEqual(api.Event.Kind.plugged, events.kinds[0]);
-    try std.testing.expectEqual(api.Event.Kind.unplugged, events.kinds[1]);
-    try std.testing.expectEqual(api.Event.Kind.plugged, events.kinds[2]);
+    var events: [3]api.Event = undefined;
+    const got = session.pollEvents(subscription, &events).?;
+    try std.testing.expectEqual(@as(usize, 3), got.count);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[0].kind);
+    try std.testing.expectEqual(api.Event.Kind.unplugged, events[1].kind);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[2].kind);
 }

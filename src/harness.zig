@@ -12,6 +12,8 @@ const option_memory = @import("board/option_memory.zig");
 const Reboot = @import("core/reboot.zig").Reboot;
 const session_plug = @import("board/session_plug.zig");
 const board_boundary = @import("board/board_boundary.zig");
+const session_events = @import("board/session_events.zig");
+const second_core = @import("core/second_core.zig");
 const session_display = @import("board/session_display.zig");
 const debug_session = @import("debug/session.zig");
 const session_api = @import("debug/session_api.zig");
@@ -122,6 +124,12 @@ pub const Harness = struct {
         self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);
     }
 
+    /// Let the boundary tick CPU1's board edge and take its reset requests.
+    pub fn bindSecond(self: *Harness, second: *second_core.Second, second_guest: Guest) void {
+        self.state.edge.second = second;
+        self.state.edge.second_memory = second_guest;
+    }
+
     pub fn deinit(self: *Harness) void {
         const state = self.state;
         state.display.deinit();
@@ -175,9 +183,9 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     state.session.attachPlugs(state.plugs.hook());
     state.reboot = .{ .vector_base = vector };
     state.board.reboot = &state.reboot;
-    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot };
+    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index };
     state.session.live.boundary = state.edge.hook();
-    state.session.attachTimeBase(&state.board.time.base);
+    session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
     state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });
     errdefer state.display.deinit();

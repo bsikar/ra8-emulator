@@ -141,7 +141,7 @@ pub const Second = struct {
     /// (RA8EMU-59). `memory` is CPU1's own, where its AIRCR lives.
     pub fn takeResetRequest(self: *Second, memory: Guest) void {
         const asked = self.control.poll(memory) catch false;
-        if (asked) if (self.state.board) |board| board.requestReset(.software);
+        if (asked) if (self.state.board) |board| board.requestResetFrom(.software, .cpu1);
     }
 };
 

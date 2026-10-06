@@ -15,6 +15,7 @@ const pin_irq = @import("../periph/icu/icu_pin_irq.zig");
 const agt_sched = @import("../periph/agt/agt_sched.zig");
 const gpt_sched = @import("../periph/gpt/gpt_sched.zig");
 const rtc_sched = @import("../periph/rtc/rtc_sched.zig");
+const event_sink = @import("event_sink.zig");
 /// Whether a sleeping core may run to the next queued event: src/board/quiet_due.zig.
 pub const quiet_due = @import("quiet_due.zig");
 
@@ -27,12 +28,39 @@ pub fn cyclesToDue(context: *anyopaque) u64 {
     return board.time.base.cyclesUntil(at);
 }
 
+pub fn observation(self: *Board) event_sink.Observation {
+    const panel = self.asks.attached_eink orelse &self.panel;
+    const dirty = panel.latestRefresh();
+    return .{
+        .wdt_underflows = self.watchdog.underflows,
+        .wdt_refresh_errors = self.watchdog.early,
+        .iwdt_underflows = self.heartbeat.underflows,
+        .glcdc_frames = self.display.system.frames,
+        .glcdc_width = self.display.panelWidth(),
+        .glcdc_height = self.display.panelHeight(),
+        .eink_refreshes = panel.refreshes,
+        .eink_width = panel.planes.geometry.width,
+        .eink_height = panel.planes.geometry.height,
+        .eink_dirty = .{
+            .x = dirty.x,
+            .y = dirty.y,
+            .width = dirty.width,
+            .height = dirty.height,
+        },
+    };
+}
+
 /// The watchdog counts, a block with an event due raises it into the event
 /// links, a reset the watchdog asked for is recorded as the boot cause, then
 /// any line still latched re-pends. The controller picks straight
 /// afterwards, so an interrupt raised here is entered in the same boundary
 /// rather than a chunk later.
 pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
+    return tickFrom(self, core, instructions, .cpu0);
+}
+
+pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("../periph/registry.zig").Issuer) !void {
+    if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
     const elapsed_ns = self.time.base.now() - before_ns;
@@ -53,7 +81,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     self.usb.tick();
     if (self.display.output.vsync) |*frame| frame.tick(self.time.base.now());
     core_clock.retune(self);
-    try takeResetRequests(self, core);
+    try takeResetRequestsFrom(self, core, issuer);
     for (self.serial.channels) |channel| {
         if (channel.device) |device| device.tick(&self.pins);
     }
@@ -128,27 +156,36 @@ pub fn raise(self: *Board, core: Guest, event: u16) !void {
 /// so nothing else would look at them: the cache geometry, and the MPU's
 /// TYPE and CTRL.
 pub fn takeResetRequests(self: *Board, core: anytype) !void {
+    return takeResetRequestsFrom(self, core, .cpu0);
+}
+
+pub fn takeResetRequestsFrom(self: *Board, core: anytype, issuer: @import("../periph/registry.zig").Issuer) !void {
     if (self.watchdog.reset_requested) {
         self.watchdog.reset_requested = false;
         self.time.soak.note(.watchdog_reset, self.time.base.now());
-        resetFor(self, .watchdog);
+        resetForFrom(self, .watchdog, issuer);
     }
     if (self.heartbeat.reset_requested) {
         self.heartbeat.reset_requested = false;
         self.time.soak.note(.iwdt_reset, self.time.base.now());
-        resetFor(self, .iwdt);
+        resetForFrom(self, .iwdt, issuer);
     }
+    if (issuer == .cpu1) return;
     try self.clears.apply(core);
     try self.caches.poll(core);
     try self.regions.poll(core);
-    if (try self.control.poll(core)) resetFor(self, .software);
+    if (try self.control.poll(core)) resetForFrom(self, .software, issuer);
 }
 
 /// Latch one cause and ask for the reboot. The interrupt latches go down on
 /// the way past: a line still pending would be entered before the firmware
 /// coming back up has put its vector table back.
 pub fn resetFor(self: *Board, source: reset.Source) void {
-    if (self.event_sink) |sink| sink.resetFn(sink.context, source, self.time.base.now());
+    resetForFrom(self, source, .cpu0);
+}
+
+pub fn resetForFrom(self: *Board, source: reset.Source, issuer: @import("../periph/registry.zig").Issuer) void {
+    if (self.event_sink) |sink| sink.resetFn(sink.context, issuer, source, self.time.base.now());
     self.causes.request(source);
     self.events.clearLatches();
     self.second_core.reset();

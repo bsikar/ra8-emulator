@@ -42,12 +42,10 @@ pub const backdrop = @import("glcdc_backdrop.zig");
 const tcon = @import("glcdc_tcon.zig");
 const sys = @import("glcdc_sys.zig");
 const update = @import("glcdc_latch.zig");
-
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
 pub const win_base: u32 = 0x4034_2000;
 pub const win_span: u32 = 0x1500;
-
 /// Register byte offsets inside the window (ra8_glcdc_regs.h).
 pub const off = struct {
     /// BG_EN: background-plane operation enable, the output stage.
@@ -66,7 +64,6 @@ pub const off = struct {
     /// BG.BGC: the background colour under both graphics layers.
     pub const bg_bgc: u32 = 0x1014;
 };
-
 /// Field masks this file reads. The FLM field positions the descriptor
 /// decode applies live with the decode, in glcdc_frame.zig.
 pub const field = struct {
@@ -75,7 +72,6 @@ pub const field = struct {
     /// FLMRD.RENB, bit 0: this layer fetches from its framebuffer.
     pub const renb: u32 = descriptor.field.renb;
 };
-
 /// FLM6.FORMAT codes, and the decode behind them. Re-exported so a caller
 /// that only knows the block still names the format through it.
 pub const Format = pixel.Format;
@@ -99,6 +95,8 @@ const words = win_span / 4;
 /// The display controller: the register window, the power domain it lives
 /// in, and the counters behind the end-of-run line.
 pub const Glcdc = struct {
+    pub const EventHook = struct { context: *anyopaque, frameFn: *const fn (*anyopaque, *Glcdc) void };
+
     /// The domain gate, held as a pointer so the answer is the board's live
     /// PDCTRGD rather than a copy of it taken at construction.
     domain: *const pdctr.Pdctr,
@@ -123,6 +121,7 @@ pub const Glcdc = struct {
     /// The system control block: the pixel clock gate and the status word a
     /// driver polls a frame on.
     system: sys.Syscnt = .{},
+    event_hook: ?EventHook = null,
     /// Writes accepted into the register window.
     writes: u32 = 0,
     /// Writes discarded because the graphics domain was gated off.
@@ -296,6 +295,7 @@ pub const Glcdc = struct {
     /// waiting on it, and the picture is what the report prints.
     pub fn frameLanded(self: *Glcdc, picture: scan.Picture) ?scan.Picture {
         self.system.completeFrame();
+        if (self.event_hook) |hook| hook.frameFn(hook.context, self);
         return self.scanner.record(picture);
     }
 

@@ -22,15 +22,14 @@ const Rig = struct {
         .{ .at = gauge_at, .part = null },
         .{ .at = modem_at, .part = null },
     },
-    events: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
+    subscription: usize = undefined,
 
     fn setUp(self: *Rig) !void {
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         self.board = Board.init(std.testing.allocator);
         self.plugs = session_plug.Plugs.init(&self.board, self.arena.allocator());
         self.session.attachPlugs(self.plugs.hook());
-        _ = try self.session.subscribe(.{ .context = self, .receive = receive });
+        self.subscription = try self.session.subscribe();
     }
 
     fn tearDown(self: *Rig) void {
@@ -40,12 +39,6 @@ const Rig = struct {
 
     fn panel(self: *Rig) devices.Panel {
         return .{ .session = &self.session, .rows = &self.rows };
-    }
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Rig = @ptrCast(@alignCast(context));
-        if (self.seen < self.events.len) self.events[self.seen] = event.kind;
-        self.seen += 1;
     }
 
     fn gaugeAnswers(self: *Rig) bool {
@@ -67,10 +60,12 @@ test "the panel unplugs the gauge and plugs it back through the session" {
     try std.testing.expect(rig.rows[row].part == null);
     try panel.toggle(row, "max17048");
     try std.testing.expect(rig.gaugeAnswers());
-    try std.testing.expectEqual(@as(usize, 3), rig.seen);
-    try std.testing.expectEqual(api.Event.Kind.plugged, rig.events[0]);
-    try std.testing.expectEqual(api.Event.Kind.unplugged, rig.events[1]);
-    try std.testing.expectEqual(api.Event.Kind.plugged, rig.events[2]);
+    var events: [3]api.Event = undefined;
+    const got = rig.session.pollEvents(rig.subscription, &events).?;
+    try std.testing.expectEqual(@as(usize, 3), got.count);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[0].kind);
+    try std.testing.expectEqual(api.Event.Kind.unplugged, events[1].kind);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[2].kind);
 }
 
 test "a refused change leaves the row showing what is on the line" {
@@ -84,7 +79,8 @@ test "a refused change leaves the row showing what is on the line" {
     try panel.plug(1, "modem");
     try std.testing.expectError(error.ChannelTaken, panel.plug(1, "modem"));
     try std.testing.expectEqualStrings("modem", rig.rows[1].part.?);
-    try std.testing.expectEqual(@as(usize, 1), rig.seen);
+    var events: [1]api.Event = undefined;
+    try std.testing.expectEqual(@as(usize, 1), rig.session.pollEvents(rig.subscription, &events).?.count);
     try std.testing.expect(panel.find(.{ .uart = .{ .channel = 4 } }) == null);
 }
 

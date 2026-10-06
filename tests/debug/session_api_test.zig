@@ -53,17 +53,6 @@ const LoadLog = struct {
     }
 };
 
-const Events = struct {
-    count: usize = 0,
-    last: ?api.Event = null,
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Events = @ptrCast(@alignCast(context));
-        self.count += 1;
-        self.last = event;
-    }
-};
-
 const ClockBoard = struct {
     base: *timebase.TimeBase,
 
@@ -108,6 +97,31 @@ test "session now exposes board virtual nanoseconds across a run" {
     try std.testing.expectEqual(@as(u64, 1), try session.now());
 }
 
+test "core fault event keeps the core, stop address, order and virtual time" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 };
+    var session: api.Session = .{ .live = live };
+    var base: timebase.TimeBase = .{};
+    session.attachTimeBase(&base);
+    try session.setRegister(.cpu0, .pc, memory.bytes.len);
+    const subscription = try session.subscribe();
+
+    const ended = try session.step(.cpu0);
+    try std.testing.expectEqual(.core, std.meta.activeTag(ended));
+    try std.testing.expectEqual(@as(u32, memory.bytes.len), ended.core.bus_fault);
+    var events: [2]api.Event = undefined;
+    const got = session.pollEvents(subscription, &events).?;
+    try std.testing.expectEqual(@as(usize, 2), got.count);
+    try std.testing.expectEqual(api.Event.Kind.stopped, events[0].kind);
+    try std.testing.expectEqual(api.Event.Kind.fault, events[1].kind);
+    try std.testing.expectEqual(api.Core.cpu0, events[1].core);
+    try std.testing.expectEqual(@as(u64, 0), events[1].virtual_ns);
+    try std.testing.expectEqual(@as(?u32, memory.bytes.len), events[1].payload.fault.address);
+}
+
 test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, and breakpoints" {
     var memory0 = Ram.init();
     var memory1 = Ram.init();
@@ -123,9 +137,8 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     var session: api.Session = .{ .live = live };
     var loader: LoadLog = .{};
     session.attachLoader(.{ .context = &loader, .loadFn = LoadLog.load });
-    const slow_subscriber = session.event_stream.subscribe().?;
-    var events: Events = .{};
-    _ = try session.subscribe(.{ .context = &events, .receive = Events.receive });
+    const slow_subscriber = try session.subscribe();
+    const observer = try session.subscribe();
     try std.testing.expect(session.hasCore(.cpu0));
     try std.testing.expect(session.hasCore(.cpu1));
 
@@ -155,14 +168,17 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     try std.testing.expectEqual(@as(u32, 0x0A), try session.register(.cpu0, .pc));
     _ = try session.register(.cpu1, .pc);
     try std.testing.expectEqual(@as(u64, 2_000_000), session.live.budget);
-    try std.testing.expect(events.count >= 8);
     var queued_events: [32]api.Event = undefined;
-    const delivered = session.event_stream.read(slow_subscriber, &queued_events).?;
+    const observed = session.pollEvents(observer, &queued_events).?;
+    try std.testing.expect(observed.count >= 8);
+    const delivered = session.pollEvents(slow_subscriber, &queued_events).?;
     try std.testing.expect(delivered.count >= 8);
     try std.testing.expectEqual(@as(u64, 0), queued_events[0].virtual_ns);
     try session.pause(.cpu0);
-    try std.testing.expectEqual(api.Event.Kind.paused, events.last.?.kind);
-    try std.testing.expectEqual(api.Core.cpu0, events.last.?.core);
+    const paused = session.pollEvents(observer, &queued_events).?;
+    try std.testing.expectEqual(@as(usize, 1), paused.count);
+    try std.testing.expectEqual(api.Event.Kind.paused, queued_events[0].kind);
+    try std.testing.expectEqual(api.Core.cpu0, queued_events[0].core);
 }
 
 test "session input calls advance the board and expose firmware touch reports" {

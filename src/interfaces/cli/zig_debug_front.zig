@@ -78,6 +78,7 @@ const Other = struct {
         self.paired = opened.primaryCpu();
         target.session.live.other = .{ .core = .{ .cpu = &pair.core.cpu }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = target.session.live.budget };
         opened.attachCore(.cpu1, &pair.core.cpu, pair.guest());
+        opened.bindSecond(&pair.second, pair.guest());
         try target.session.load(.cpu1, target.other_image.?.bytes);
         try target.session.switchTo(.cpu0);
     }

@@ -17,6 +17,7 @@ const spi = @import("../periph/spi/spi.zig");
 const session_api = @import("../debug/session_api.zig");
 const plug = @import("plug.zig");
 const Board = @import("board.zig").Board;
+const eink = @import("../periph/eink/eink.zig");
 
 pub const Error = error{NothingFitted};
 
@@ -39,11 +40,19 @@ const max_instances = 256;
 pub const Plugs = struct {
     board: *Board,
     arena: std.mem.Allocator,
+    panels: [spi.channel_count]?*eink.Panel = [_]?*eink.Panel{null} ** spi.channel_count,
 
     instances: [max_instances]catalog.Instance = undefined,
     instance_count: usize = 0,
     pub fn init(board: *Board, arena: std.mem.Allocator) Plugs {
-        return .{ .board = board, .arena = arena };
+        var self: Plugs = .{ .board = board, .arena = arena };
+        if (board.asks.attached_eink) |panel| {
+            for (board.asks.asked[0..board.asks.count]) |asked| {
+                if (!std.mem.eql(u8, asked.name, parts.panel_name) or asked.at != .spi) continue;
+                self.panels[asked.at.spi.channel] = panel;
+            }
+        }
+        return self;
     }
 
     pub fn deinit(self: *Plugs) void {
@@ -75,6 +84,12 @@ pub const Plugs = struct {
             };
         }
         try plug.one(self.board, made.device, at);
+        if (std.mem.eql(u8, wanted, parts.panel_name)) {
+            const panel: *eink.Panel = @ptrCast(@alignCast(made.state));
+            panel.event_hook = self.board.panel.event_hook;
+            self.panels[at.spi.channel] = panel;
+            self.board.asks.attached_eink = panel;
+        }
     }
 
     fn setErased(context: *anyopaque, at: endpoint.Endpoint, name: ?[]const u8) anyerror!void {
@@ -92,6 +107,16 @@ pub const Plugs = struct {
                 const part = unit.device orelse return Error.NothingFitted;
                 if (floating.holds(part)) return Error.NothingFitted;
                 unit.device = floating.device;
+                if (self.panels[where.channel]) |removed| {
+                    self.panels[where.channel] = null;
+                    if (self.board.asks.attached_eink == removed) {
+                        self.board.asks.attached_eink = null;
+                        for (self.panels) |panel| if (panel) |remaining| {
+                            self.board.asks.attached_eink = remaining;
+                            break;
+                        };
+                    }
+                }
             },
             .uart => |where| {
                 const unit = &self.board.serial.channels[where.channel];

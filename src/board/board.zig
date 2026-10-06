@@ -368,24 +368,27 @@ pub const Board = struct {
     pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
         return boundary.tick(self, core, instructions);
     }
-
+    pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: periph.Issuer) !void {
+        return boundary.tickFrom(self, core, instructions, issuer);
+    }
     /// One event, offered to the links, the transfer controller and the core.
     pub fn raise(self: *Board, core: Guest, event: u16) !void {
         return boundary.raise(self, core, event);
     }
-
     /// Whoever asked for a reset this boundary, plus the PPB windows that are
     /// polled rather than hooked.
     pub fn takeResetRequests(self: *Board, core: anytype) !void {
         return boundary.takeResetRequests(self, core);
     }
-
     /// A reset another core asked for, latched and handed to the run loop
     /// the way CPU0's own request is (RA8EMU-59).
     pub fn requestReset(self: *Board, source: reset.Source) void {
         boundary.resetFor(self, source);
     }
 
+    pub fn requestResetFrom(self: *Board, source: reset.Source, issuer: periph.Issuer) void {
+        boundary.resetForFrom(self, source, issuer);
+    }
     pub fn ticker(self: *Board) Tick {
         return .{ .context = self, .tickFn = tickThunk, .dueFn = boundary.cyclesToDue };
     }

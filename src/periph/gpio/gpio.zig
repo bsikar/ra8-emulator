@@ -94,10 +94,11 @@ pub const sw1_pin: u4 = 9;
 pub const sw2_pin: u4 = 8;
 
 pub const Gpio = struct {
-    /// A listener for a driven port changing, used by devices wired to pins.
+    pub const EventOrigin = enum { firmware, external };
+    /// A listener for a live port level changing.
     pub const EventTap = struct {
         context: *anyopaque,
-        changedFn: *const fn (*anyopaque, u8, u16) void,
+        changedFn: *const fn (*anyopaque, u8, u16, u16, EventOrigin) void,
     };
 
     pub const Observer = struct {
@@ -130,8 +131,9 @@ pub const Gpio = struct {
         self.led_level = .{0} ** led_count;
         self.led_edges = .{0} ** led_count;
         self.refused = 0;
-        self.setInput(sw_port, sw1_pin, true);
-        self.setInput(sw_port, sw2_pin, true);
+        const switches = (@as(u16, 1) << sw1_pin) | (@as(u16, 1) << sw2_pin);
+        self.ports[sw_port].in_ovr = switches;
+        self.ports[sw_port].in_lvl = switches;
         self.wired.reconnect(self);
     }
 
@@ -145,14 +147,16 @@ pub const Gpio = struct {
         self.event_tap = tap;
     }
 
-    fn notify(self: *Gpio, port: u8) void {
+    fn notify(self: *Gpio, port: u8, before: u16, origin: EventOrigin) void {
         self.wired.portChanged(self, port);
-        if (self.event_tap) |tap| tap.changedFn(tap.context, port, self.ports[port].level());
+        const levels = self.ports[port].level();
+        if (self.event_tap) |tap| tap.changedFn(tap.context, port, levels, before ^ levels, origin);
         if (self.observer) |listener| listener.changedFn(listener.context, self, port);
     }
 
     pub fn setInput(self: *Gpio, port: u8, pin: u4, high: bool) void {
         if (port >= port_count) return;
+        const before = self.ports[port].level();
         const bit = @as(u16, 1) << pin;
         self.ports[port].in_ovr |= bit;
         if (high) {
@@ -160,6 +164,7 @@ pub const Gpio = struct {
         } else {
             self.ports[port].in_lvl &= ~bit;
         }
+        if (self.ports[port].level() != before) self.notify(port, before, .external);
     }
 
     /// Stop driving a pin from outside (a part unplugged, RA8EMU-212): it
@@ -168,11 +173,16 @@ pub const Gpio = struct {
     /// input reads low with nothing driving it.
     pub fn release(self: *Gpio, port: u8, pin: u4) void {
         if (port >= port_count) return;
+        const before = self.ports[port].level();
         const bit = @as(u16, 1) << pin;
         self.ports[port].in_ovr &= ~bit;
         self.ports[port].in_lvl &= ~bit;
         const switch_pin = pin == sw1_pin or pin == sw2_pin;
-        if (port == sw_port and switch_pin) self.setInput(port, pin, true);
+        if (port == sw_port and switch_pin) {
+            self.ports[port].in_ovr |= bit;
+            self.ports[port].in_lvl |= bit;
+        }
+        if (self.ports[port].level() != before) self.notify(port, before, .external);
     }
 
     pub fn getInput(self: *const Gpio, port: u8, pin: u4) bool {
@@ -184,6 +194,11 @@ pub const Gpio = struct {
     pub fn pinLevel(self: *const Gpio, port: u8, pin: u4) bool {
         if (port >= port_count) return false;
         return (self.ports[port].level() & (@as(u16, 1) << pin)) != 0;
+    }
+
+    pub fn portLevel(self: *const Gpio, port: u8) u16 {
+        if (port >= port_count) return 0;
+        return self.ports[port].level();
     }
 
     pub fn ledLevel(self: *const Gpio, index: usize) u1 {
@@ -265,12 +280,13 @@ pub const Gpio = struct {
         }
         switch (word) {
             regs.off.pcntr1 => {
+                const before = self.ports[index].level();
                 const current = (@as(u32, self.ports[index].podr) << half_shift) |
                     @as(u32, self.ports[index].pdr);
                 const next = regs.merge(current, lane, width, value);
                 self.ports[index].pdr = @truncate(next & half_mask);
                 self.setLatch(index, @truncate((next >> half_shift) & half_mask));
-                self.notify(@intCast(index));
+                self.notify(@intCast(index), before, .firmware);
             },
             regs.off.pcntr3 => {
                 // POSR sets, PORR clears, in that order, so a word that names
@@ -278,6 +294,7 @@ pub const Gpio = struct {
                 // hardware's clear-dominant pair does. The strobe does not
                 // read back, so a narrow store names only its own half and
                 // the other half is no set and no clear, not a stale value.
+                const before = self.ports[index].level();
                 const named = regs.merge(0, lane, width, value);
                 const posr: u16 = @truncate(named & half_mask);
                 const porr: u16 = @truncate((named >> half_shift) & half_mask);
@@ -285,7 +302,7 @@ pub const Gpio = struct {
                 latch |= posr;
                 latch &= ~porr;
                 self.setLatch(index, latch);
-                self.notify(@intCast(index));
+                self.notify(@intCast(index), before, .firmware);
             },
             // PCNTR4 is the event output link: writable on silicon, not
             // modelled here, so the store is taken and forgotten rather than
