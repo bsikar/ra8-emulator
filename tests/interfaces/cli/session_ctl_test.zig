@@ -5,38 +5,15 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
 const serve_peer = @import("serve_peer.zig");
+const ctl_run = @import("ctl_run.zig");
+const Answer = ctl_run.Answer;
+const run = ctl_run.run;
+const expectInteger = ctl_run.expectInteger;
+const stream = ctl_run.stream;
+const uart_image = ctl_run.uart_image;
 const ctl = ra8.core.session_ctl;
 const Term = std.process.Child.Term;
 const Value = std.json.Value;
-
-/// One ctl run: its exit code and its stdout parsed as one JSON object.
-const Answer = struct {
-    term: Term,
-    parsed: std.json.Parsed(Value),
-    fn field(self: *const Answer, name: []const u8) Value {
-        return self.parsed.value.object.get(name).?;
-    }
-    fn deinit(self: *Answer) void {
-        self.parsed.deinit();
-    }
-};
-
-fn run(gpa: std.mem.Allocator, spec: []const u8, words: []const []const u8) !Answer {
-    var argv = std.ArrayList([]const u8).init(gpa);
-    defer argv.deinit();
-    try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
-    try argv.appendSlice(words);
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
-    defer gpa.free(result.stdout);
-    defer gpa.free(result.stderr);
-    const parsed = try std.json.parseFromSlice(Value, gpa, result.stdout, .{ .allocate = .alloc_always });
-    return .{ .term = result.term, .parsed = parsed };
-}
-
-fn expectInteger(value: Value) !i64 {
-    try std.testing.expect(value == .integer);
-    return value.integer;
-}
 
 test "ctl --json drives load, run, step, pause, regs and mem against a running serve" {
     const gpa = std.testing.allocator;
@@ -239,32 +216,6 @@ test "ctl load takes a firmware image with option-setting segments and resets to
     try std.testing.expectEqual(Term{ .Exited = 0 }, regs.term);
     const pc = regs.field("registers").object.get("pc").?;
     try std.testing.expectEqual(@as(i64, 0x02000AFC), try expectInteger(pc));
-}
-
-const uart_image = "tests/fixtures/uart/uart_irq_echo.elf";
-
-/// One ctl run's exit code and the UART text and last line its JSON lines carried.
-const Stream = struct { term: Term, text: std.ArrayList(u8), last: std.ArrayList(u8) };
-
-fn stream(gpa: std.mem.Allocator, spec: []const u8, words: []const []const u8) !Stream {
-    var argv = std.ArrayList([]const u8).init(gpa);
-    defer argv.deinit();
-    try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
-    try argv.appendSlice(words);
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
-    defer gpa.free(result.stdout);
-    defer gpa.free(result.stderr);
-    var got: Stream = .{ .term = result.term, .text = .init(gpa), .last = .init(gpa) };
-    var lines = std.mem.tokenizeScalar(u8, result.stdout, '\n');
-    while (lines.next()) |line| {
-        got.last.clearRetainingCapacity();
-        try got.last.appendSlice(line);
-        const parsed = try std.json.parseFromSlice(Value, gpa, line, .{});
-        defer parsed.deinit();
-        const uart = parsed.value.object.get("uart") orelse continue;
-        try got.text.appendSlice(uart.object.get("text").?.string);
-    }
-    return got;
 }
 
 test "ctl events waits for a UART line and times out on one that never comes" {
