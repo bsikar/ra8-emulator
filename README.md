@@ -61,6 +61,10 @@ try session.tapWidgetPart(allocator, .cpu0, 1_700_000_000, "chrome.bars.pager", 
 Frames are native panel-resolution grayscale bytes and are owned by the caller.
 
 
+Linux builds as is. macOS and Windows each need a couple of open fixes, and
+Windows is cross-compiled from another host; [Platforms](docs/platforms.md)
+has the details and the same image's speed on all three.
+
 ### Toolchain
 
 Zig **0.14.1**, matching `ARG ZIG_VERSION` in ra8-firmware's
@@ -175,3 +179,4 @@ what gets fixed. Running the real binary far longer than a bench run is how it
 earns its keep: it has caught a module-stop reference leak that only faults
 after a counter saturates, and USB demos silently stalling because their memory
 pool could not satisfy a class's cache-safe buffer.
+
