@@ -15,6 +15,8 @@ pub const usage =
     \\            speed FACTOR|max | break ADDRESS | break --clear ID
     \\            watch ADDRESS read|write|access | watch --clear ID
     \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
+    \\            plug MODEL@ENDPOINT | unplug ENDPOINT
+    \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
 ;
 
@@ -36,7 +38,11 @@ pub const Command = union(enum) {
     set_watch: struct { address: u32, access: proto.Access },
     clear_watch: u32,
     events: events.Options,
+    /// A part spec in `--attach`/`--fault` syntax, parsed by the server.
+    part: Part,
 };
+
+pub const Part = struct { method: proto.Method, text: []const u8 };
 
 pub const Request = struct { spec: Spec, json: bool, command: Command };
 
@@ -65,6 +71,9 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "break")) return parseBreak(args);
     if (eql(u8, name, "watch")) return parseWatch(args);
     if (eql(u8, name, "events")) return .{ .events = try events.parse(args) };
+    if (eql(u8, name, "plug")) return part(.plug, args);
+    if (eql(u8, name, "unplug")) return part(.unplug, args);
+    if (eql(u8, name, "fault")) return parseFault(args);
     if (!eql(u8, name, "mem")) return error.UnknownCommand;
     if (args.len != 2) return error.BadArguments;
     const length = try std.fmt.parseInt(u32, args[1], 0);
@@ -97,6 +106,16 @@ fn parseWatch(args: []const []const u8) !Command {
     if (std.mem.eql(u8, args[0], "--clear")) return .{ .clear_watch = try std.fmt.parseInt(u32, args[1], 0) };
     const access = std.meta.stringToEnum(proto.Access, args[1]) orelse return error.UnknownAccess;
     return .{ .set_watch = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .access = access } };
+}
+
+fn part(method: proto.Method, args: []const []const u8) !Command {
+    if (args.len != 1) return error.BadArguments;
+    return .{ .part = .{ .method = method, .text = args[0] } };
+}
+
+fn parseFault(args: []const []const u8) !Command {
+    if (args.len == 2 and std.mem.eql(u8, args[0], "--clear")) return part(.clear_fault, args[1..]);
+    return part(.set_fault, args);
 }
 
 fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const proto.Register {
@@ -163,6 +182,10 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 
         },
         .clear_break => |id| try clear(client, w, json, .clear_breakpoint, id),
         .clear_watch => |id| try clear(client, w, json, .clear_watchpoint, id),
+        .part => |asked| {
+            _ = try client.call(proto.Ack, proto.PartSpec, asked.method, .{ .core = .cpu0, .text = asked.text });
+            try out.part(w, json, asked.method, asked.text);
+        },
     }
     return 0;
 }

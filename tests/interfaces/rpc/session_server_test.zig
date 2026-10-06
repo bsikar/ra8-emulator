@@ -258,3 +258,33 @@ test "uart bytes reach a client only while it subscribes, in order and before th
     _ = try reply(proto.U32, try wire.call(proto.ReadRegister, .read_register, pc));
     try std.testing.expectEqual(@as(usize, 0), wire.uart.len);
 }
+
+test "part methods parse their spec, refuse a bad one and refuse a board with no hooks" {
+    var memory = Ram.init();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var session: api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    var scratch: [8]u8 = undefined;
+    var context: served.Context = .{ .session = &session, .scratch = &scratch };
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&context);
+
+    const bad = @intFromEnum(rpc.Code.bad_args);
+    const typo = try wire.call(proto.PartSpec, .plug, .{ .core = .cpu0, .text = "nosuch@i2c:riic@0x36" });
+    try std.testing.expectEqual(bad, try refusal(typo));
+    const no_mode = try wire.call(proto.PartSpec, .set_fault, .{ .core = .cpu0, .text = "@i2c:riic@0x36" });
+    try std.testing.expectEqual(bad, try refusal(no_mode));
+    const no_endpoint = try wire.call(proto.PartSpec, .unplug, .{ .core = .cpu0, .text = "riic" });
+    try std.testing.expectEqual(bad, try refusal(no_endpoint));
+
+    // A bare session has neither hook, so a well-formed spec is refused.
+    const refused = served.app_codes.refused;
+    const plug = try wire.call(proto.PartSpec, .plug, .{ .core = .cpu0, .text = "max17048@i2c:riic@0x36" });
+    try std.testing.expectEqual(refused, try refusal(plug));
+    const fault = try wire.call(proto.PartSpec, .set_fault, .{ .core = .cpu0, .text = "@i2c:riic@0x36=nack:2" });
+    try std.testing.expectEqual(refused, try refusal(fault));
+    const clear = try wire.call(proto.PartSpec, .clear_fault, .{ .core = .cpu0, .text = "i2c:riic@0x36" });
+    try std.testing.expectEqual(refused, try refusal(clear));
+}

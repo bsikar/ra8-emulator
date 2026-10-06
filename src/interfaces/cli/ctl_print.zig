@@ -69,6 +69,19 @@ pub fn cleared(w: anytype, json: bool, id: u32) !void {
     try w.print("cleared {d}\n", .{id});
 }
 
+/// A plug, unplug or fault the server accepted, keyed by what changed.
+pub fn part(w: anytype, json: bool, method: proto.Method, spec: []const u8) !void {
+    const key = switch (method) {
+        .plug => "plugged",
+        .unplug => "unplugged",
+        .set_fault => "fault_set",
+        .clear_fault => "fault_cleared",
+        else => unreachable,
+    };
+    if (json) return w.print("{{\"{s}\":{}}}\n", .{ key, std.json.fmt(spec, .{}) });
+    try w.print("{s} {s}\n", .{ key, spec });
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(json: bool, err: anyerror, code: u16) u8 {

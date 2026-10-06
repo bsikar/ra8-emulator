@@ -12,6 +12,7 @@ const Board = @import("board/board.zig").Board;
 const option_memory = @import("board/option_memory.zig");
 const Reboot = @import("core/reboot.zig").Reboot;
 const session_plug = @import("board/session_plug.zig");
+const session_faults = @import("board/session_faults.zig");
 const board_boundary = @import("board/board_boundary.zig");
 const session_events = @import("board/session_events.zig");
 const second_core = @import("core/second_core.zig");
@@ -71,6 +72,7 @@ const State = struct {
     session: session_api.Session,
     plugs_arena: std.heap.ArenaAllocator,
     plugs: session_plug.Plugs,
+    faults: session_faults.Faults,
     edge: board_boundary.BoardBoundary,
     reboot: Reboot,
     display: session_display.Host,
@@ -205,6 +207,8 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     errdefer state.plugs_arena.deinit();
     state.plugs = session_plug.Plugs.init(&state.board, state.plugs_arena.allocator());
     state.session.attachPlugs(state.plugs.hook());
+    state.faults = session_faults.Faults.init(&state.board, state.plugs_arena.allocator());
+    state.session.attachFaults(state.faults.hook());
     state.reboot = .{ .vector_base = vector };
     state.board.reboot = &state.reboot;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index };

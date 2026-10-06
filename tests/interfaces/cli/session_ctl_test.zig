@@ -308,3 +308,49 @@ test "ctl events parses topics, the text to wait for and durations" {
     try std.testing.expectError(error.UnknownTopic, events.parse(&.{ "--topic", "lcd" }));
     try std.testing.expectError(error.BadArguments, events.parse(&.{"--until"}));
 }
+
+test "ctl --json plugs a part, faults it, clears it, unplugs it and refuses a typo" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/parts.sock", .{tmp.sub_path});
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var served = try serve_peer.listen(gpa, spec, &line);
+    defer _ = served.child.kill() catch {};
+
+    const steps = [_]struct { words: []const []const u8, key: []const u8, value: []const u8 }{
+        .{ .words = &.{ "plug", "max17048@i2c:riic@0x36" }, .key = "plugged", .value = "max17048@i2c:riic@0x36" },
+        .{ .words = &.{ "fault", "max17048@i2c:riic@0x36=nack:2" }, .key = "fault_set", .value = "max17048@i2c:riic@0x36=nack:2" },
+        .{ .words = &.{ "fault", "--clear", "i2c:riic@0x36" }, .key = "fault_cleared", .value = "i2c:riic@0x36" },
+        .{ .words = &.{ "unplug", "i2c:riic@0x36" }, .key = "unplugged", .value = "i2c:riic@0x36" },
+    };
+    for (steps) |step| {
+        var answer = try run(gpa, spec, step.words);
+        defer answer.deinit();
+        try std.testing.expectEqual(Term{ .Exited = 0 }, answer.term);
+        try std.testing.expectEqualStrings(step.value, answer.field(step.key).string);
+    }
+
+    var typo = try run(gpa, spec, &.{ "plug", "nosuch@i2c:riic@0x36" });
+    defer typo.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 1 }, typo.term);
+    try std.testing.expectEqualStrings("Refused", typo.field("error").string);
+}
+
+test "ctl parse: plug, unplug and fault" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = [_][]const u8{ "ra8", "ctl", "--connect", "unix:/s" };
+    const plug = try ctl.parse(a, &(base ++ [_][]const u8{ "plug", "button@gpio:p005" }));
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.plug, plug.command.part.method);
+    try std.testing.expectEqualStrings("button@gpio:p005", plug.command.part.text);
+    const clear = try ctl.parse(a, &(base ++ [_][]const u8{ "fault", "--clear", "i2c:riic@0x36" }));
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.clear_fault, clear.command.part.method);
+    const set = try ctl.parse(a, &(base ++ [_][]const u8{ "fault", "@i2c:riic@0x37=nack:2" }));
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.set_fault, set.command.part.method);
+    try std.testing.expectError(error.BadArguments, ctl.parse(a, &(base ++ [_][]const u8{"unplug"})));
+}
