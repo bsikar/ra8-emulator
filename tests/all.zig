@@ -128,6 +128,7 @@ test {
     _ = @import("gui/status_strip_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
+    _ = @import("gui/shell_panes_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/debug_boundary_test.zig");
     _ = @import("board/debug_boundary_sleep_test.zig");

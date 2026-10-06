@@ -22,6 +22,7 @@ pub const status_bar = @import("gui/status_bar.zig");
 pub const status_strip = @import("gui/status_strip.zig");
 pub const shell_frame = @import("gui/shell_frame.zig");
 pub const shell_loop = @import("gui/shell_loop.zig");
+pub const shell_panes = @import("gui/shell_panes.zig");
 pub const triple_buffer = @import("gui/triple_buffer.zig");
 pub const board_snapshot = @import("gui/board_snapshot.zig");
 pub const source_swap = @import("gui/source_swap.zig");
