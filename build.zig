@@ -86,7 +86,9 @@ pub fn build(b: *std.Build) void {
 
     usbipAttach(b, target, optimize);
     const bench_mod = handoffBench(b, target, optimize, emu);
-    if (guiHello(b, target, optimize, emu, gui)) |sdl_mod| exe.root_module.addImport("gui_sdl", sdl_mod);
+    const sdl_mod = guiHello(b, target, optimize, emu, gui);
+    if (sdl_mod) |mod| exe.root_module.addImport("gui_sdl", mod);
+    guiTest(b, target, optimize, emu, gui, sdl_mod);
 
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/all.zig"),
@@ -202,4 +204,20 @@ fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     if (b.args) |args| run.addArgs(args);
     step.dependOn(&run.step);
     return sdl_mod;
+}
+
+/// The SDL-backed GUI tests (RA8EMU-733): the geometry presenter against
+/// the CPU golden on SDL's software renderer, headless. Kept out of
+/// `zig build test` so the tests need no SDL.
+fn guiTest(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, enabled: bool, sdl_mod: ?*std.Build.Module) void {
+    const step = b.step("gui-test", "Run the SDL-backed GUI tests (needs -Dgui)");
+    if (!enabled) {
+        step.dependOn(&b.addFail("gui-test needs SDL3: run `zig build gui-test -Dgui`").step);
+        return;
+    }
+    const sdl = sdl_mod orelse return;
+    const mod = b.createModule(.{ .root_source_file = b.path("tests/gui/sdl_geometry_test.zig"), .target = target, .optimize = optimize });
+    mod.addImport("ra8", emu);
+    mod.addImport("gui_sdl", sdl);
+    step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);
 }
