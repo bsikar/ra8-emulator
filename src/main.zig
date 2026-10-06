@@ -34,11 +34,18 @@ pub fn main() !u8 {
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return ra8.core.session_ctl.run(allocator, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(argv);
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return shell(allocator, argv);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
     const image = openImage(allocator, options.path) catch return 1;
     // Only a -Dgui build compiles src/gui_window.zig and links SDL.
     if (build_options.gui) ra8.board.window_main.opener = @import("gui_window.zig").opener;
     return ra8.board.zig_run.main_path.run(allocator, image, options);
+}
+
+/// The docked debugger shell, in this build's window when it has one.
+fn shell(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+    if (build_options.gui) ra8.board.window_main.opener = @import("gui_window.zig").opener;
+    return ra8.core.shell_main.run(allocator, argv);
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused

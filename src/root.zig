@@ -13,6 +13,7 @@ pub const core = struct {
     pub const serve_listen = @import("interfaces/cli/serve_listen.zig");
     pub const session_ctl = @import("interfaces/cli/session_ctl.zig");
     pub const host_profiles = @import("interfaces/cli/host_profiles.zig");
+    pub const shell_main = @import("interfaces/cli/shell_main.zig");
     pub const host_spawn = @import("interfaces/cli/host_spawn.zig");
     pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
