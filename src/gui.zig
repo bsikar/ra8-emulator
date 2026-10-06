@@ -20,6 +20,7 @@ pub const host_loop = @import("gui/host_loop.zig");
 pub const session_link = @import("gui/session_link.zig");
 pub const status_bar = @import("gui/status_bar.zig");
 pub const status_strip = @import("gui/status_strip.zig");
+pub const speed_field = @import("gui/speed_field.zig");
 pub const shell_frame = @import("gui/shell_frame.zig");
 pub const shell_loop = @import("gui/shell_loop.zig");
 pub const shell_panes = @import("gui/shell_panes.zig");
