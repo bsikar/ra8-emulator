@@ -217,3 +217,26 @@ test "ctl parse: speed, break and watch" {
     try std.testing.expectEqual(@as(u32, 2), unwatch.command.clear_watch);
     try std.testing.expectError(error.UnknownAccess, ctl.parse(a, &(base ++ [_][]const u8{ "watch", "0", "poke" })));
 }
+
+test "ctl load takes a firmware image with option-setting segments and resets to its vector" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/load.sock", .{tmp.sub_path});
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var served = try serve_peer.listen(gpa, spec, &line);
+    defer _ = served.child.kill() catch {};
+
+    // uart_irq_echo carries OFS, SAS, BPS and OTP segments beside its code.
+    var loaded = try run(gpa, spec, &.{ "load", "tests/fixtures/uart/uart_irq_echo.elf" });
+    defer loaded.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    var regs = try run(gpa, spec, &.{ "regs", "pc" });
+    defer regs.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, regs.term);
+    const pc = regs.field("registers").object.get("pc").?;
+    try std.testing.expectEqual(@as(i64, 0x02000AFC), try expectInteger(pc));
+}
