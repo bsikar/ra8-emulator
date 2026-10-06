@@ -2,6 +2,8 @@
 //! Board.tick wants the guest events are pended on; under the debugger
 //! that is CPU0's memory, the same guest a plain run ticks with. CPU1's
 //! lines are re-pended by the boundary itself (events.rependOn).
+//! A sleeping CPU0 may reach to the board's next edge (RA8EMU-767), as a
+//! plain run's idle skip does (src/interfaces/cli/zig_run.zig asleepWidth).
 const Board = @import("board.zig").Board;
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const Cpu = @import("../core/cpu/cpu.zig").Cpu;
@@ -11,6 +13,9 @@ const clocks = @import("../periph/clocks.zig");
 const zig_boundary = @import("../debug/zig_boundary.zig");
 const second_core = @import("../core/second_core.zig");
 const registry = @import("../periph/registry.zig");
+const quiet_due = @import("quiet_due.zig");
+const board_edge = @import("boundary.zig");
+const sleep_pace = @import("../core/sleep_pace.zig");
 
 pub const BoardBoundary = struct {
     board: *Board,
@@ -24,7 +29,26 @@ pub const BoardBoundary = struct {
     second_memory: ?Guest = null,
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
-        return .{ .context = self, .tickFn = tick };
+        return .{ .context = self, .tickFn = tick, .sleepFn = asleep };
+    }
+
+    /// A sleeping CPU0's width: whole chunks to the nearest SysTick wrap of
+    /// either bank, queued board event, vsync or GPT edge. Board time here
+    /// is one cycle per instruction, so the edges need no scaling. CPU1
+    /// bound or selected, or a block that moves per boundary, keeps `normal`.
+    fn asleep(context: *anyopaque, normal: u32) u32 {
+        const self: *BoardBoundary = @ptrCast(@alignCast(context));
+        if (self.second != null) return normal;
+        if (self.selected) |selected| if (selected.* != @intFromEnum(registry.Issuer.cpu0)) return normal;
+        if (!quiet_due.quietUntilDue(self.board)) return normal;
+        const edges = [_]u64{
+            self.timebase.untilWrap(self.core),
+            self.ns_timebase.untilWrap(self.core),
+            board_edge.cyclesToDue(self.board),
+            quiet_due.vsyncDue(self.board),
+            quiet_due.gptDue(self.board),
+        };
+        return sleep_pace.width(normal, true, &edges);
     }
 
     fn tick(context: *anyopaque, instructions: u32) anyerror!void {

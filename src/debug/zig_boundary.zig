@@ -10,6 +10,7 @@ const zig_cycles = @import("zig_cycles.zig");
 const zig_drive = @import("zig_drive.zig");
 const stop_machine = @import("stop_machine.zig");
 const watch_bus = @import("watch_bus.zig");
+const sleep_pace = @import("../core/sleep_pace.zig");
 
 /// Instructions between boundaries when the board names none.
 pub const default_chunk: u32 = 1024;
@@ -21,6 +22,9 @@ pub const Boundary = struct {
     context: *anyopaque,
     tickFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
     chunk: u32 = default_chunk,
+    /// How far past `normal` the next chunk may reach while the core sleeps
+    /// with nothing to wake it (RA8EMU-767). Null keeps every chunk at `chunk`.
+    sleepFn: ?*const fn (context: *anyopaque, normal: u32) u32 = null,
 
     fn tick(self: Boundary, instructions: u64) Error!void {
         if (instructions == 0) return;
@@ -30,10 +34,10 @@ pub const Boundary = struct {
 
 /// As zig_drive.runClocked, passing `edge` after every chunk.
 pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, edge: Boundary) Error!zig_drive.Ended {
-    const width: u64 = @max(edge.chunk, 1);
+    const normal: u32 = @max(edge.chunk, 1);
     var left = count;
     while (left > 0) {
-        const want = @min(left, width);
+        const want = @min(left, widthOf(core, machine, edge, normal));
         var retired: u64 = 0;
         const ended = zig_drive.runCounted(core, machine, want, watch, clock, &retired);
         try edge.tick(retired);
@@ -43,4 +47,14 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, w
         }
     }
     return .count;
+}
+
+/// The next chunk's width: `normal`, reached to the board's next edge by its
+/// `sleepFn` while the core sleeps with nothing to wake it, as a plain run's
+/// stretch is (src/core/cpu/boot.zig widthOf). Anything armed in the stop
+/// machine keeps the normal width, so a stop lands where it always did.
+fn widthOf(core: zig_core.ZigCore, machine: *stop_machine.Machine, edge: Boundary, normal: u32) u64 {
+    const reach = edge.sleepFn orelse return normal;
+    if (!machine.quiet() or !sleep_pace.still(core.cpu)) return normal;
+    return @max(normal, reach(edge.context, normal));
 }
