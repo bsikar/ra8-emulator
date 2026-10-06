@@ -237,6 +237,8 @@ pub const Cpu = struct {
                 },
                 error.Integrity => self.chainedSecure(exception.secure.invalidIntegrity, value, address),
                 error.SecureReturn => self.chainedSecure(exception.secure.invalidReturn, value, address),
+                error.MemManageUnstack => self.derivedUnstack(.munstkerr, value, address),
+                error.BusUnstack => self.derivedUnstack(.unstkerr, value, address),
                 else => .{ .bus_fault = address },
             };
             exception.dispatch.left(self) catch return .{ .bus_fault = address };
@@ -254,7 +256,10 @@ pub const Cpu = struct {
         }
         return null;
     }
-
+    fn derivedUnstack(self: *Cpu, cause: exception.fault.Cause, value: u32, address: u32) ?Stop {
+        exception.fault.unstack(self, cause, value) catch return .{ .bus_fault = address };
+        return null;
+    }
     /// Take a UsageFault caused by the current instruction, or stop.
     fn usageFault(self: *Cpu, cause: exception.fault.Cause, address: u32, otherwise: Stop) ?Stop {
         exception.fault.usage(self, cause, address) catch return otherwise;
@@ -279,7 +284,7 @@ pub const Cpu = struct {
     }
 
     /// A negative execution priority: HardFault, NMI, or FAULTMASK set.
-    fn boosted(self: *const Cpu) bool {
+    pub fn boosted(self: *const Cpu) bool {
         return self.regs.faultmask != 0 or exception.fault.inHardFaultOrNmi(self);
     }
 

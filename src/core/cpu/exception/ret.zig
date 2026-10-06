@@ -10,10 +10,11 @@ const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
 const Vpr = @import("../mve/predicate.zig").Vpr;
 const exc_return = @import("exc_return.zig");
 const callee = @import("callee.zig");
+const stack_fault = @import("stack_fault.zig");
 
 /// SecureReturn: a Non-secure handler named a Secure exception (EXC_RETURN.ES
 /// set), which the core takes as SecureFault INVER (RA8EMU-472).
-pub const Error = bus.Error || error{ InvalidReturn, Integrity, SecureReturn };
+pub const Error = bus.Error || stack_fault.UnstackError || error{ InvalidReturn, Integrity, SecureReturn };
 
 /// The xPSR bits a return restores: the flags, ICI/IT, T, GE and IPSR.
 /// Bit 9 is the frame's realignment marker, not state.
@@ -25,18 +26,28 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     // The return is made in the state the exception was taken to, then
     // switches to the state whose stack holds the frame (S).
     if (target.secure != (cpu.banked.current == .secure)) return error.InvalidReturn;
+    // Exception return clears FAULTMASK in the returning exception's bank,
+    // except when returning from NMI (DDI0553 ExceptionReturn).
+    if (cpu.active.running()) |returning| {
+        if (returning.number != 2) cpu.regs.faultmask = 0;
+    }
     cpu.banked.switchTo(&cpu.regs, if (target.secure_stack) .secure else .non_secure);
     const r = &cpu.regs;
     cpu.exclusive = null;
+    stack_fault.beginReturn(cpu, target.thread);
+    defer stack_fault.end(cpu);
     var at = if (target.psp) r.psp else r.msp;
     if (target.secure_stack and !target.secure) {
-        const hidden = try callee.pop(cpu.bus, at, target.fp);
+        const hidden = callee.pop(cpu.bus, at, target.fp) catch |err| switch (err) {
+            error.Integrity => return error.Integrity,
+            else => return stack_fault.unstackError(cpu),
+        };
         for (hidden.callee, 4..) |word, i| r.low[i] = word;
         at = hidden.sp;
     }
     const popped: frame.Popped = if (target.fp) blk: {
         const ts = target.secure_stack and cpu.fp.context.fpccr.ts == 1;
-        const ext = try fp_frame.pop(cpu.bus, at, ts);
+        const ext = fp_frame.pop(cpu.bus, at, ts) catch return stack_fault.unstackError(cpu);
         if (target.thread != (ext.frame[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
         if (cpu.fp.context.fpccr.lspact == 1) {
             // Lazy stacking never triggered: the handler ran no FP
@@ -47,7 +58,7 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
         break :blk .{ .frame = ext.frame, .sp = ext.sp };
     } else blk: {
         if (cpu.fp.context.fpccr.clronret == 1) clearCallerSaved(cpu);
-        break :blk try frame.pop(cpu.bus, at);
+        break :blk frame.pop(cpu.bus, at) catch return stack_fault.unstackError(cpu);
     };
     const f = popped.frame;
     // Returning to Thread mode with an exception number stacked, or to

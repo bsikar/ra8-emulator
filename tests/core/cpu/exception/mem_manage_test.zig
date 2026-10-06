@@ -179,6 +179,7 @@ test "the background without PRIVDEFENA refuses privileged code too" {
 /// background while the instruction itself may still be fetched.
 fn backgroundOnly(ctrl: u32) mpu.Mpu {
     var unit = unitOf(ctrl);
+    mapExceptionStack(&unit);
     unit.table[0] = mpu.Region.fromPair(fixture.code | mpu.field.rbar_ap_unprivileged, ((fixture.code + 0xFF) & mpu.field.address) | mpu.field.rlar_enable);
     return unit;
 }
@@ -268,11 +269,20 @@ fn executeNever(ctrl: u32) mpu.Mpu {
     return unit;
 }
 
-/// Every region dropped, so the code falls to the background.
+/// Application regions dropped, so code falls to the background. The
+/// exception stack stays mapped so the test isolates the fetch fault.
 fn nothingMapped(ctrl: u32) mpu.Mpu {
     var unit = mpu.Mpu{};
+    mapExceptionStack(&unit);
     unit.ctrl = ctrl;
     return unit;
+}
+
+fn mapExceptionStack(unit: *mpu.Mpu) void {
+    unit.table[7] = mpu.Region.fromPair(
+        fixture.msp_top - 0x20,
+        ((fixture.msp_top - 1) & mpu.field.address) | mpu.field.rlar_enable,
+    );
 }
 
 test "a fetch from an execute-never region is MemManage IACCVIOL, privileged or not" {
