@@ -14,6 +14,7 @@ const watch_bus = step_hook.watch_bus;
 const zig_drive = step_hook.zig_drive;
 const zig_script = step_hook.zig_script;
 const dwt = ra8.core.dwt;
+const watch_table = ra8.core.watch_table;
 const Store = ra8.core.cpu.memory.store.Store;
 
 /// The program tests/debug/zig_script_test.zig uses: a loop at +0x18
@@ -223,4 +224,24 @@ test "a trapped divide by zero reads DIVBYZERO back at CFSR through the watched 
     try std.testing.expectEqual(@as(?ra8.core.cpu.cpu.Stop, null), cpu.step());
     try std.testing.expectEqual(@as(u32, 1 << 25), cpu.regs.low[3] & (1 << 25));
     try std.testing.expectEqual(@as(u32, 1 << 25), rig.board.faults().cfsr);
+}
+
+test "a quiet bus listens only to the PPB, and a store there ends the stretch" {
+    var memory: Memory = .{};
+    var machine: stop_machine.Machine = .{};
+    machine.begin();
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var listening: watch_bus.WatchBus = .{ .inner = memory.view(), .driver = &driver };
+    _ = try machine.addWatch(try watch_table.Watch.span(image.base + 0x100, 4, .write));
+    listening.arm(0, 0);
+    listening.quiet = true;
+    const view = listening.view();
+    try view.write(image.base + 0x100, &[_]u8{ 1, 0, 0, 0 });
+    try std.testing.expect(machine.watch_pending == null);
+    try std.testing.expect(!listening.ppb.seen);
+    try view.write(dwt.base + 4, &[_]u8{ 0, 0, 0, 0 });
+    try std.testing.expect(listening.ppb.seen);
+    listening.quiet = false;
+    try view.write(image.base + 0x100, &[_]u8{ 2, 0, 0, 0 });
+    try std.testing.expect(machine.watch_pending != null);
 }
