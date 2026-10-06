@@ -3,6 +3,9 @@
 //! SysTick bases the run keeps beside the board (src/snapshot/systick.zig)
 //! and what the run owed its clocks (src/snapshot/stretch.zig, RA8EMU-700).
 //!
+//! `--snapshot-at` writes the same file at the first closed stretch at or
+//! past its time, owing nothing, and the run goes on (RA8EMU-769).
+//!
 //! A run with `--cpu1` is refused: the second core lives in its own driver
 //! and its state is not in the file yet.
 const std = @import("std");
@@ -26,6 +29,8 @@ pub fn hook(clock: *Clock) ?boot.Snapshot {
         .context = clock,
         .loadFn = if (clock.state.load != null) load else null,
         .saveFn = if (clock.state.save != null) save else null,
+        .dueFn = if (clock.state.at != null) due else null,
+        .atFn = if (clock.state.at != null) writeAt else null,
     };
 }
 
@@ -52,8 +57,25 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
 
 fn save(context: *anyopaque, core: *const Cpu, owed: u32) anyerror!void {
     const clock: *Clock = @ptrCast(@alignCast(context));
+    try write(clock, core, clock.state.save.?, owed);
+}
+
+fn due(context: *anyopaque) bool {
+    const clock: *Clock = @ptrCast(@alignCast(context));
+    const wanted = clock.state.at orelse return false;
+    return !wanted.written and clock.board.time.base.now() >= wanted.ns;
+}
+
+fn writeAt(context: *anyopaque, core: *const Cpu) anyerror!void {
+    const clock: *Clock = @ptrCast(@alignCast(context));
+    const at = &clock.state.at.?;
+    at.written = true;
+    try write(clock, core, at.path, 0);
+}
+
+fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     const store = try storeOf(clock);
-    var out = try std.fs.cwd().createFile(clock.state.save.?, .{});
+    var out = try std.fs.cwd().createFile(path, .{});
     defer out.close();
     var buffered = std.io.bufferedWriter(out.writer());
     try run_file.save(buffered.writer(), store, &.{core}, clock.board);
