@@ -78,6 +78,7 @@ test {
     _ = @import("gui/board_snapshot_test.zig");
     _ = @import("gui/source_swap_test.zig");
     _ = @import("gui/raster_test.zig");
+    _ = @import("gui/widget_paint_test.zig");
     _ = @import("gui/font_test.zig");
     _ = @import("gui/headless_test.zig");
     _ = @import("gui/camera_panel_test.zig");
