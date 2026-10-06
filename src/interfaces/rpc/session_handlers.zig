@@ -5,6 +5,7 @@ const rpc = @import("ra8_rpc");
 const proto = @import("session_rpc.zig");
 const api = @import("../../debug/session_api.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
+const camera_registry = @import("../../periph/camera/camera_registry.zig");
 
 /// Refusal codes this message set adds above the library's own.
 pub const app_codes = struct {
@@ -17,6 +18,12 @@ pub const app_codes = struct {
 };
 
 /// Writes the fitted parts as `MODEL@ENDPOINT` lines into the buffer given.
+/// Installs a camera source for set_camera_source (RA8EMU-795).
+pub const Camera = struct {
+    context: *anyopaque,
+    setFn: *const fn (*anyopaque, camera_registry.Spec) anyerror!void,
+};
+
 pub const Listing = struct {
     context: *anyopaque,
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
@@ -45,6 +52,8 @@ pub const Context = struct {
     state: ?@import("../../board/session_state.zig").Hook = null,
     /// Writes the fitted parts for list_parts; a server without one refuses it.
     listing: ?Listing = null,
+    /// Changes the camera source; a server without one refuses it.
+    camera: ?Camera = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@intFromEnum(of)] & bit(topic) != 0;

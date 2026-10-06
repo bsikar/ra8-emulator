@@ -13,6 +13,7 @@ const handlers = @import("session_handlers.zig");
 const uart_feed = @import("session_uart_feed.zig");
 const lcd_feed = @import("session_lcd_feed.zig");
 const parts = @import("session_parts.zig");
+const session_camera = @import("session_camera.zig");
 const session_advance = @import("session_advance.zig");
 const session_files = @import("session_files.zig");
 
@@ -48,6 +49,7 @@ const routes = .{
     .{ @intFromEnum(M.set_fault), parts.setFault },
     .{ @intFromEnum(M.clear_fault), parts.clearFault },
     .{ @intFromEnum(M.list_parts), parts.listParts },
+    .{ @intFromEnum(M.set_camera_source), session_camera.setCameraSource },
     .{ @intFromEnum(M.advance), session_advance.advance },
     .{ @intFromEnum(M.snapshot), session_files.snapshot },
     .{ @intFromEnum(M.restore), session_files.restore },
