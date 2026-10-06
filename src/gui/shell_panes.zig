@@ -5,7 +5,8 @@
 //! RA8EMU-772. The console leaf shows the console's log once it holds output
 //! (RA8EMU-787), and the board leaf the panel image once a frame has arrived
 //! (RA8EMU-790), and the devices leaf the fitted parts once the session has
-//! listed them (RA8EMU-792). An empty leaf stays blank.
+//! listed them (RA8EMU-792), and the camera leaf its source picker
+//! (RA8EMU-796). An empty leaf stays blank.
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
 const pane_layout = @import("pane_layout.zig");
@@ -14,6 +15,7 @@ const console_pane = @import("console_pane.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
+const shell_camera = @import("shell_camera.zig");
 
 const Rect = draw_list.Rect;
 
@@ -33,6 +35,7 @@ pub const Panes = struct {
     console: ?*const shell_console.Console = null,
     board: ?*const shell_board.Board = null,
     devices: ?*const shell_devices.Devices = null,
+    camera: ?*const shell_camera.Camera = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -56,6 +59,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     if (pane.kind == .devices) if (self.devices) |devices| {
         if (devices.answered and devices.note() == null) return shell_devices.draw(list, body, devices);
     };
+    if (pane.kind == .camera) if (self.camera) |camera| return shell_camera.draw(list, body, camera);
     if (pane.kind == .board) if (self.board) |board| {
         if (board.hasFrame()) return list.image(shell_board.fitIn(body, board.width, board.height), board.image());
     };
