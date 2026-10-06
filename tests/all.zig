@@ -127,6 +127,7 @@ test {
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/debug_boundary_test.zig");
+    _ = @import("board/debug_boundary_sleep_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");
     _ = @import("board/plug_test.zig");
