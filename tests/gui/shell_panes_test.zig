@@ -49,7 +49,8 @@ test "the two-core shell shows each leaf's note in muted ink in its body" {
     var pixels = try raster.Framebuffer.init(gpa, width, height);
     defer pixels.deinit(gpa);
     const status: ra8.gui.status_bar.Status = .{};
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = width, .height = height, .painter = panes.painter() });
+    var painter: panes.Panes = .{};
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = width, .height = height, .painter = painter.painter() });
     raster.draw(&pixels, &list, font.atlas);
     try std.testing.expectEqual(@as(usize, 4), solved.panes.items.len);
     for (solved.panes.items) |leaf| {

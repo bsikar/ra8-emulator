@@ -2,11 +2,14 @@
 //! frame (RA8EMU-764) by the leaf's kind. The shell reaches its session only
 //! over the link, and no pane has a feed there yet, so each body names the
 //! feed it waits for; each feed replaces its note in its own change under
-//! RA8EMU-772. An empty leaf stays blank.
+//! RA8EMU-772. The console leaf shows the console's log once it holds output
+//! (RA8EMU-787). An empty leaf stays blank.
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
 const pane_layout = @import("pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
+const console_pane = @import("console_pane.zig");
+const shell_console = @import("shell_console.zig");
 
 const Rect = draw_list.Rect;
 
@@ -21,12 +24,14 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
     };
 }
 
-/// The painter needs no state of its own; the frame wants a context anyway.
-var stateless: u8 = 0;
+/// The feeds the panes draw from; a missing one leaves its note up.
+pub const Panes = struct {
+    console: ?*const shell_console.Console = null,
 
-pub fn painter() shell_frame.Painter {
-    return .{ .context = &stateless, .paint = paint };
-}
+    pub fn painter(self: *Panes) shell_frame.Painter {
+        return .{ .context = self, .paint = paint };
+    }
+};
 
 /// Where the note's text starts in `body`: inset by the frame's pad and
 /// centred down the body. Null when the body cannot hold one row.
@@ -38,7 +43,10 @@ pub fn noteAt(body: Rect) ?struct { x: i32, y: i32, room: u32 } {
 }
 
 fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane, body: Rect) anyerror!void {
-    _ = context;
+    const self: *Panes = @ptrCast(@alignCast(context));
+    if (pane.kind == .console) if (self.console) |console| {
+        if (console.hasOutput()) return console_pane.draw(list, body, &console.log, 0);
+    };
     const note = waitingFor(pane.kind) orelse return;
     const at = noteAt(body) orelse return;
     try font.draw(list, at.x, at.y, font.fit(note, at.room), shell_frame.muted);
