@@ -45,6 +45,11 @@ pub const Active = struct {
     pub fn running(self: *const Active) ?Entry {
         return if (self.depth == 0) null else self.stack[self.depth - 1];
     }
+
+    /// The handler that will be running after the innermost one returns.
+    pub fn returningTo(self: *const Active) ?Entry {
+        return if (self.depth < 2) null else self.stack[self.depth - 2];
+    }
 };
 
 /// The group-priority half of `priority` under PRIGROUP: bits [prigroup:0]

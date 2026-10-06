@@ -17,14 +17,28 @@ const target = @import("target.zig");
 const callee = @import("callee.zig");
 const State = @import("../../banked.zig").State;
 const sysreg = @import("../sysreg.zig");
+const stack_fault = @import("stack_fault.zig");
 
 /// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
 pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
 
 pub const Number = u9;
 
-/// Take exception `number`, with `return_address` stacked as where to resume.
+pub const Result = struct {
+    overflow: bool,
+    from: State,
+    failed: ?stack_fault.Failure = null,
+};
+
+/// Take an exception directly. Dispatch uses takeDetailed to route any
+/// derived stacking fault; callers that enter a known-good test frame only
+/// need the stack-limit result.
 pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
+    return (try takeDetailed(cpu, number, return_address)).overflow;
+}
+
+/// Take exception `number`, retaining whether moving its frame faulted.
+pub fn takeDetailed(cpu: *Cpu, number: Number, return_address: u32) bus.Error!Result {
     const r = &cpu.regs;
     cpu.exclusive = null;
     const from_secure = cpu.banked.current == .secure;
@@ -48,27 +62,33 @@ pub fn take(cpu: *Cpu, number: Number, return_address: u32) bus.Error!bool {
     const at = frameAddress(r.sp(), size);
     const limit = r.spLimit();
     const overflow = limit != 0 and at < limit;
+    var failed: ?stack_fault.Failure = null;
     if (overflow) {
         // DDI0553 B3.21: exception entry sets SP to the limit and does not
-        // push frame words below it. The derived STKOF UsageFault is selected
-        // by dispatch after the original entry has established its context.
-        // A lazy FP entry still records its context, with SPLIMVIOL set so
-        // the deferred push writes nothing (RA8EMU-621).
+        // push frame words below it. Dispatch selects the derived STKOF.
         r.setSp(limit);
         if (fp and cpu.fp.context.fpccr.lspen == 1) armLazy(cpu, at, from_secure, true);
     } else {
-        const pushed = if (fp)
-            try pushFp(cpu, stacked, from_secure, ts)
+        stack_fault.beginEntry(cpu, number);
+        defer stack_fault.end(cpu);
+        const pushed = (if (fp)
+            pushFp(cpu, stacked, from_secure, ts)
         else
-            try frame.push(cpu.bus, r.sp(), stacked);
+            frame.push(cpu.bus, r.sp(), stacked)) catch blk: {
+            failed = stack_fault.failure(cpu);
+            break :blk at;
+        };
         r.setSp(pushed);
-        if (from_secure and !to_secure) try hideSecure(cpu, fp, ts);
+        if (failed == null and from_secure and !to_secure) hideSecure(cpu, fp, ts) catch {
+            failed = stack_fault.failure(cpu);
+        };
     }
+    if (from_secure and !to_secure and (overflow or failed != null)) scrubSecure(cpu, ts);
     r.lr = exc_return.forEntry(from);
     cpu.banked.switchTo(r, if (to_secure) .secure else .non_secure);
     r.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
-    return overflow;
+    return .{ .overflow = overflow, .from = if (from_secure) .secure else .non_secure, .failed = failed };
 }
 
 /// A Non-secure exception over Secure code: stack R4-R11 under the
@@ -81,7 +101,11 @@ fn hideSecure(cpu: *Cpu, fp: bool, ts: bool) bus.Error!void {
     var saved: callee.Callee = undefined;
     for (&saved, 4..) |*word, i| word.* = r.low[i];
     r.setSp(try callee.push(cpu.bus, r.sp(), saved, fp));
-    for (0..13) |i| r.low[i] = 0;
+    scrubSecure(cpu, ts);
+}
+
+fn scrubSecure(cpu: *Cpu, ts: bool) void {
+    for (0..13) |i| cpu.regs.low[i] = 0;
     if (ts and cpu.fp.context.fpccr.lspact == 0) {
         for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0);
         cpu.fp.fpscr = @TypeOf(cpu.fp.fpscr).fromBits(0);
@@ -136,8 +160,19 @@ fn fpContext(cpu: *const Cpu, ts: bool) fp_frame.Fp {
 
 /// Redirect an in-progress entry to a derived exception without stacking
 /// again. LR already contains EXC_RETURN for the interrupted context.
-pub fn retarget(cpu: *Cpu, number: Number) bus.Error!void {
-    const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
+pub fn retarget(cpu: *Cpu, number: Number, from_state: State) bus.Error!void {
+    const was = cpu.banked.current;
+    cpu.banked.current = from_state;
+    const to_secure = target.secure(cpu, number);
+    const handler = handlerOf(cpu, number) catch |err| {
+        cpu.banked.current = was;
+        return err;
+    };
+    cpu.banked.current = was;
+    const es = exc_return.bits.es;
+    cpu.regs.lr = if (to_secure) cpu.regs.lr | es else cpu.regs.lr & ~es;
+    cpu.banked.switchTo(&cpu.regs, if (to_secure) .secure else .non_secure);
+    cpu.regs.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
 }
 
@@ -148,6 +183,7 @@ pub fn chain(cpu: *Cpu, number: Number, lr: u32) bus.Error!void {
     cpu.exclusive = null;
     const handler = try cpu.bus.readWord(vectorTable(cpu) +% @as(u32, number) * 4);
     cpu.regs.lr = lr;
+    cpu.regs.control &= ~(regs_mod.control_bits.spsel | regs_mod.control_bits.fpca);
     land(cpu, number, handler);
 }
 

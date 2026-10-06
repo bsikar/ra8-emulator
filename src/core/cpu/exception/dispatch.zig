@@ -12,6 +12,7 @@ const active = @import("active.zig");
 const entry = @import("entry.zig");
 const fault = @import("fault.zig");
 const quiet_source = @import("quiet_source.zig");
+const stack_fault = @import("stack_fault.zig");
 
 /// Take the pending winner if it may preempt. True when one was taken.
 pub const Error = fault.Error;
@@ -20,11 +21,11 @@ pub fn poll(cpu: *Cpu) Error!bool {
     if (cpu.quiet) |q| if (q.hushed and (q.clear or q.holds(key(cpu)))) return false;
     const now = key(cpu);
     const external = if (cpu.source) |from| try from.winner(cpu.bus) else null;
-    const pending_fault = fault.pendingUsage(cpu.bus);
+    const pending_fault = fault.pending(cpu.bus);
     if (external == null and pending_fault == null) return hush(cpu, now, true);
     const split = prigroup(cpu.bus);
     const fault_first = if (pending_fault) |pending|
-        external == null or active.group(pending.priority, split) < active.group(external.?.priority, split)
+        external == null or fault.precedes(pending, external.?)
     else
         false;
     const winner = if (fault_first) pending_fault else external;
@@ -39,8 +40,7 @@ pub fn poll(cpu: *Cpu) Error!bool {
     defer cpu.entering_non_secure = false;
     const handler = entry.handlerOf(cpu, candidate.number) catch return false;
     if (handler == 0) return false;
-    if (selected_fault) fault.clearUsagePending(cpu.bus);
-    try enterInternal(cpu, candidate, r.pc, false, !selected_fault);
+    try enterInternal(cpu, candidate, r.pc, if (selected_fault) .pending_fault else .source);
     return true;
 }
 
@@ -67,28 +67,40 @@ pub fn prigroup(on: bus.Bus) u3 {
 
 /// Enter `which` with `return_address` stacked, and record it active.
 pub fn enter(cpu: *Cpu, which: active.Entry, return_address: u32) Error!void {
-    try enterInternal(cpu, which, return_address, true, true);
+    try enterInternal(cpu, which, return_address, .synchronous);
 }
 
-fn enterInternal(cpu: *Cpu, which: active.Entry, return_address: u32, derive: bool, notify_source: bool) Error!void {
-    const overflow = try entry.take(cpu, which.number, return_address);
-    if (overflow and derive) {
-        const derived = try fault.derivedEntry(cpu, .stkof);
+const Origin = enum { synchronous, source, pending_fault };
+
+fn enterInternal(cpu: *Cpu, which: active.Entry, return_address: u32, origin: Origin) Error!void {
+    const result = try entry.takeDetailed(cpu, which.number, return_address);
+    const cause: ?fault.Cause = if (result.failed) |failed|
+        stack_fault.cause(failed, .stacking)
+    else if (result.overflow)
+        .stkof
+    else
+        null;
+    if (cause) |derived_cause| {
+        const derived = try fault.derivedIn(cpu, derived_cause, result.from);
         if (derivedWins(derived, which, prigroup(cpu.bus))) {
-            try entry.retarget(cpu, derived.number);
+            if (origin == .synchronous) try fault.pendException(cpu, which.number);
+            try entry.retarget(cpu, derived.number, result.from);
             _ = cpu.active.push(derived);
             return;
         }
-        try fault.pendUsage(cpu);
+        if (origin == .pending_fault) fault.clearPending(cpu.bus, which.number);
+        try fault.pendIn(cpu, derived_cause, result.from);
+    } else if (origin == .pending_fault) {
+        fault.clearPending(cpu.bus, which.number);
     }
     _ = cpu.active.push(which);
-    if (notify_source) {
+    if (origin != .pending_fault) {
         if (cpu.source) |from| try from.taken(cpu.bus, which.number);
     }
 }
 
 fn derivedWins(derived: active.Entry, original: active.Entry, split: u3) bool {
-    if (derived.number == 3) return true;
+    if (derived.number == 3) return original.number != 2 and original.number != 3;
     return active.group(derived.priority, split) < active.group(original.priority, split);
 }
 
