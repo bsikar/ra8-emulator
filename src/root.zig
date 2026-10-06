@@ -25,6 +25,7 @@ pub const core = struct {
     pub const memmap = @import("core/memmap.zig");
     pub const external_memory = @import("core/external_memory.zig");
     pub const sweep_cli = @import("interfaces/cli/sweep_cli.zig");
+    pub const sweep_elf = @import("interfaces/cli/sweep_elf.zig");
     pub const sizing = struct {
         pub const workload = @import("sizing/workload.zig");
         pub const matrix = @import("sizing/matrix.zig");
