@@ -1,7 +1,8 @@
 //! The SDL3 backend behind platform.zig (RA8EMU-616, docs/adr/0001-gui-stack.md).
 //! It owns one window, one renderer and one streaming texture, and
-//! presents the CPU-rasterized framebuffer as that texture, so the window
-//! shows exactly the pixels the golden tests check.
+//! draws each frame's list through SDL geometry (sdl_geometry.zig). The
+//! CPU-rasterized framebuffer, shown as a streaming texture, is the
+//! fallback: RA8_GUI_CPU forces it and a geometry failure falls back to it.
 //!
 //! This file is its own module, built only by `zig build gui-hello -Dgui`.
 //! It reaches the rest of the GUI through "ra8", never by relative import,
@@ -22,6 +23,9 @@ pub const Sdl = struct {
     renderer: *c.SDL_Renderer,
     texture: ?*c.SDL_Texture = null,
     texture_size: Size = .{ .width = 0, .height = 0 },
+    /// The geometry path (RA8EMU-739); null runs the CPU texture path,
+    /// forced by RA8_GUI_CPU or taken when the renderer fails geometry.
+    presenter: ?geometry.Presenter = null,
 
     pub fn init(title: [:0]const u8, width: u32, height: u32) Error!Sdl {
         if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return fail(Error.SdlInit);
@@ -34,10 +38,15 @@ pub const Sdl = struct {
         _ = c.SDL_SetRenderVSync(renderer, 1);
         // Shifted characters reach the console pane as text events.
         _ = c.SDL_StartTextInput(window);
-        return .{ .window = window, .renderer = renderer };
+        var self = Sdl{ .window = window, .renderer = renderer };
+        if (!cpuForced()) {
+            self.presenter = geometry.Presenter.init(std.heap.page_allocator, renderer);
+        }
+        return self;
     }
 
     pub fn deinit(self: *Sdl) void {
+        if (self.presenter) |*p| p.deinit();
         if (self.texture) |t| c.SDL_DestroyTexture(t);
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
@@ -53,6 +62,7 @@ pub const Sdl = struct {
         .size = size,
         .scale = scale,
         .present = present,
+        .show = show,
     };
 
     fn from(ctx: *anyopaque) *Sdl {
@@ -90,6 +100,21 @@ pub const Sdl = struct {
         if (!c.SDL_RenderPresent(self.renderer)) return fail(Error.SdlPresent);
     }
 
+    /// One frame through geometry. A failure drops to the CPU path for
+    /// the rest of the run, so a renderer without geometry still draws.
+    fn show(ctx: *anyopaque, list: *const gui.draw_list.DrawList, atlas: ?gui.raster.Atlas) anyerror!bool {
+        const self = from(ctx);
+        const presenter = if (self.presenter) |*p| p else return false;
+        presenter.frame(list, atlas) catch {
+            std.log.warn("gui: geometry drawing failed, using the CPU path", .{});
+            presenter.deinit();
+            self.presenter = null;
+            return false;
+        };
+        if (!c.SDL_RenderPresent(self.renderer)) return fail(Error.SdlPresent);
+        return true;
+    }
+
     /// The streaming texture, recreated when the framebuffer changes size.
     /// RGBA32 is the byte order of draw_list.Color on every host.
     fn textureFor(self: *Sdl, width: u32, height: u32) Error!*c.SDL_Texture {
@@ -111,6 +136,13 @@ pub const Sdl = struct {
         return t;
     }
 };
+
+/// RA8_GUI_CPU set to anything but empty or "0" forces the CPU path.
+fn cpuForced() bool {
+    const value = std.process.getEnvVarOwned(std.heap.page_allocator, "RA8_GUI_CPU") catch return false;
+    defer std.heap.page_allocator.free(value);
+    return value.len > 0 and !std.mem.eql(u8, value, "0");
+}
 
 /// One SDL event as a platform event, or null for the ones the GUI ignores.
 fn translate(ev: *const c.SDL_Event) ?Event {

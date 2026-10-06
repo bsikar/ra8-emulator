@@ -171,3 +171,35 @@ test "image textures not drawn in a frame are dropped at the next frame" {
     try textures.beginFrame();
     try std.testing.expectEqual(@as(u32, 0), textures.images.count());
 }
+
+test "the presenter clears to opaque black and draws the list like raster.draw" {
+    var list = draw_list.DrawList.init(std.testing.allocator, width, height);
+    defer list.deinit();
+    const texels = [_]Color{Color.rgb(9, 99, 199)} ** 6;
+    try scene(&list, .{ .tint = 255, .textured = true }, &texels);
+    const coverage = [_]u8{255} ** 16;
+    const atlas = raster.Atlas{ .width = 4, .height = 4, .coverage = &coverage };
+    var want = try golden(&list, atlas);
+    defer want.deinit(std.testing.allocator);
+    const surface = c.SDL_CreateSurface(width, height, c.SDL_PIXELFORMAT_RGBA32) orelse return error.SdlSurface;
+    defer c.SDL_DestroySurface(surface);
+    const renderer = c.SDL_CreateSoftwareRenderer(surface) orelse return error.SdlRenderer;
+    defer c.SDL_DestroyRenderer(renderer);
+    var presenter = sdl.geometry.Presenter.init(std.testing.allocator, renderer);
+    defer presenter.deinit();
+    try presenter.frame(&list, atlas);
+    try presenter.frame(&list, atlas);
+    try std.testing.expectEqual(@as(u32, 1), presenter.textures.images.count());
+    const read = c.SDL_RenderReadPixels(renderer, null) orelse return error.SdlRead;
+    defer c.SDL_DestroySurface(read);
+    const rgba = c.SDL_ConvertSurface(read, c.SDL_PIXELFORMAT_RGBA32) orelse return error.SdlConvert;
+    defer c.SDL_DestroySurface(rgba);
+    const bytes: [*]const u8 = @ptrCast(rgba.*.pixels.?);
+    const pitch: usize = @intCast(rgba.*.pitch);
+    var got: [width * height]Color = undefined;
+    for (0..height) |y| {
+        const row: [*]const Color = @ptrCast(@alignCast(bytes + y * pitch));
+        @memcpy(got[y * width ..][0..width], row[0..width]);
+    }
+    try std.testing.expectEqual(@as(u8, 0), worst(want.pixels, &got));
+}

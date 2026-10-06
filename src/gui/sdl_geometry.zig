@@ -89,6 +89,44 @@ pub const Textures = struct {
     }
 };
 
+/// One window's geometry path: the batch rebuilt each frame and the
+/// textures it draws with.
+pub const Presenter = struct {
+    renderer: *c.SDL_Renderer,
+    batch: geometry.Batch,
+    textures: Textures,
+    atlas_coverage: ?[*]const u8 = null,
+
+    pub fn init(allocator: std.mem.Allocator, renderer: *c.SDL_Renderer) Presenter {
+        return .{
+            .renderer = renderer,
+            .batch = geometry.Batch.init(allocator),
+            .textures = Textures.init(allocator, renderer),
+        };
+    }
+
+    pub fn deinit(self: *Presenter) void {
+        self.textures.deinit();
+        self.batch.deinit();
+    }
+
+    /// Clear to opaque black and draw `list`; the caller presents. The
+    /// atlas uploads again only when its coverage moves.
+    pub fn frame(self: *Presenter, list: *const draw_list.DrawList, atlas: ?raster.Atlas) Error!void {
+        if (atlas) |cells| {
+            if (self.atlas_coverage != cells.coverage.ptr) {
+                try self.textures.setAtlas(cells);
+                self.atlas_coverage = cells.coverage.ptr;
+            }
+        }
+        try self.batch.build(list, atlas);
+        try self.textures.beginFrame();
+        _ = c.SDL_SetRenderDrawColor(self.renderer, 0, 0, 0, 255);
+        if (!c.SDL_RenderClear(self.renderer)) return fail(Error.SdlDraw);
+        try draw(self.renderer, &self.textures, &self.batch);
+    }
+};
+
 /// Draw every run of `batch` in order, then clear the clip rect. Glyph
 /// runs draw nothing until an atlas is set, as raster.draw without one.
 pub fn draw(renderer: *c.SDL_Renderer, textures: *Textures, batch: *const geometry.Batch) Error!void {

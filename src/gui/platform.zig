@@ -2,6 +2,7 @@
 //! input events in, an RGBA framebuffer out. SDL3 is one backend
 //! (RA8EMU-616); headless.zig is another, for tests and the board's
 //! golden images. Nothing above this seam knows which one it has.
+const draw_list = @import("draw_list.zig");
 const raster = @import("raster.zig");
 
 pub const Size = struct { width: u32, height: u32 };
@@ -44,6 +45,9 @@ pub const Platform = struct {
         size: *const fn (ctx: *anyopaque) Size,
         scale: *const fn (ctx: *anyopaque) f32,
         present: *const fn (ctx: *anyopaque, frame: *const raster.Framebuffer) anyerror!void,
+        /// Draws and shows a list on the backend itself (SDL geometry,
+        /// RA8EMU-739). Null, or false back, means rasterize and present.
+        show: ?*const fn (ctx: *anyopaque, list: *const draw_list.DrawList, atlas: ?raster.Atlas) anyerror!bool = null,
     };
 
     /// The next input event, or null once this frame's events are drained.
@@ -64,5 +68,13 @@ pub const Platform = struct {
     /// Show `frame`; the backend copies what it needs before returning.
     pub fn present(self: Platform, frame: *const raster.Framebuffer) !void {
         return self.vtable.present(self.ctx, frame);
+    }
+
+    /// Show `list` drawn by the backend. False when the backend has no
+    /// such path or gave it up, so the caller rasterizes into a
+    /// framebuffer and calls present: the CPU path stays the fallback.
+    pub fn show(self: Platform, list: *const draw_list.DrawList, atlas: ?raster.Atlas) !bool {
+        const backend_show = self.vtable.show orelse return false;
+        return backend_show(self.ctx, list, atlas);
     }
 };
