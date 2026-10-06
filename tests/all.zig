@@ -103,6 +103,7 @@ test {
     _ = @import("gui/camera_thumb_test.zig");
     _ = @import("gui/host_loop_test.zig");
     _ = @import("gui/present_gate_test.zig");
+    _ = @import("gui/pane_layout_test.zig");
     _ = @import("gui/host_loop_devices_test.zig");
     _ = @import("gui/thread_priority_test.zig");
     _ = @import("gui/console_log_test.zig");
