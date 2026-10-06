@@ -91,6 +91,7 @@ pub fn build(b: *std.Build) void {
     guiTest(b, target, optimize, emu, gui, sdl_mod);
 
     const tests = b.addTest(.{
+        .name = "ra8_tests",
         .root_source_file = b.path("tests/all.zig"),
         .target = target,
         .optimize = optimize,
@@ -101,11 +102,19 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("handoff_bench", bench_mod);
     tests.linkLibC();
-    const test_step = b.step("test", "Run the unit tests and compile the emulator");
-    test_step.dependOn(&b.addRunArtifact(tests).step);
-    harnessChecks(b, target, optimize, emu, test_step, &exe.step);
+    unitTests(b, tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting and file and function length").dependOn(gate(b, target));
+}
+
+/// `test` runs the unit tests and the harness checks; `test-exe` installs the
+/// same test binary without running it, so a cross build can run on another host.
+fn unitTests(b: *std.Build, tests: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
+    const test_step = b.step("test", "Run the unit tests and compile the emulator");
+    test_step.dependOn(&b.addRunArtifact(tests).step);
+    harnessChecks(b, target, optimize, emu, test_step, exe_step);
+    const test_exe = b.step("test-exe", "Install the unit test binary without running it, for a run on another host");
+    test_exe.dependOn(&b.addInstallArtifact(tests, .{}).step);
 }
 
 fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, test_step: *std.Build.Step, exe_step: *std.Build.Step) void {
