@@ -3,7 +3,7 @@
 //!
 //! Unplugging leaves each line the way a missing part would. An I2C part
 //! leaves its line's registry, so its address phase goes unacknowledged. An
-//! SPI channel gets a stand-in that reads MISO floating high (the
+//! SPI channel gets a stand-in that reads CIPO floating high (the
 //! controller's own empty-channel read is left alone, which keeps recorded
 //! runs identical). A UART channel goes silent. A GPIO pin goes back to its
 //! pull state.
@@ -21,7 +21,7 @@ const eink = @import("../periph/eink/eink.zig");
 
 pub const Error = error{NothingFitted};
 
-/// What an unplugged SPI select reads: nothing drives MISO, so it floats.
+/// What an unplugged SPI select reads: nothing drives CIPO, so it floats.
 pub const floating = struct {
     var unused: u8 = 0;
 

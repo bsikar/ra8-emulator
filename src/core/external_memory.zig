@@ -176,13 +176,13 @@ pub fn supportedOverlap(address: u32, len: usize) bool {
         overlap(sdram_alias_base, 128 * 1024 * 1024, address, len);
 }
 
-pub const Master = enum(u2) {
+pub const Initiator = enum(u2) {
     none,
     cpu0,
     cpu1,
     ethos_u55,
 
-    fn timedIndex(self: Master) ?usize {
+    fn timedIndex(self: Initiator) ?usize {
         return switch (self) {
             .none => null,
             .cpu0 => 0,
@@ -261,34 +261,34 @@ pub const Fabric = struct {
         }
     }
 
-    pub fn takePending(self: *Fabric, master: Master) u64 {
-        const index = master.timedIndex() orelse return 0;
+    pub fn takePending(self: *Fabric, initiator: Initiator) u64 {
+        const index = initiator.timedIndex() orelse return 0;
         const value = self.pending[index];
         self.pending[index] = 0;
         return value;
     }
 
-    pub fn note(self: *Fabric, master: Master, hit: Hit, direction: Direction, len: usize) void {
-        const master_index = master.timedIndex() orelse return;
+    pub fn note(self: *Fabric, initiator: Initiator, hit: Hit, direction: Direction, len: usize) void {
+        const initiator_index = initiator.timedIndex() orelse return;
         if (len == 0) return;
         const region_index: usize = @intFromEnum(hit.kind);
         const config = self.layout.config.region(hit.kind);
         const region = &self.regions[region_index];
-        region.ready[master_index] = @max(region.ready[master_index], self.wall);
+        region.ready[initiator_index] = @max(region.ready[initiator_index], self.wall);
         var left = len;
         var offset = hit.offset;
         while (left != 0) {
             const burst_bytes: usize = if (config.burst == .single) 1 else 16;
             const bytes = @min(left, burst_bytes);
             const service = serviceCycles(config, bytes);
-            const start = @max(region.ready[master_index], region.available);
+            const start = @max(region.ready[initiator_index], region.available);
             const end = satAdd(start, service);
-            const stalled = end -| region.ready[master_index];
-            region.ready[master_index] = end;
+            const stalled = end -| region.ready[initiator_index];
+            region.ready[initiator_index] = end;
             region.available = end;
             region.latest = @max(region.latest, end);
-            region.stalls[master_index] = satAdd(region.stalls[master_index], stalled);
-            self.pending[master_index] = satAdd(self.pending[master_index], stalled);
+            region.stalls[initiator_index] = satAdd(region.stalls[initiator_index], stalled);
+            self.pending[initiator_index] = satAdd(self.pending[initiator_index], stalled);
             addWindow(region, self.layout.config.window_cycles, end, direction, bytes);
             left -= bytes;
             offset += @intCast(bytes);

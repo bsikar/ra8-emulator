@@ -127,7 +127,7 @@ pub const Own = struct {
     pub fn open(self: *Own, lender: *const Store, board: *Board, image: elf.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
-        _ = try bringUp(&self.core, .{ .store = &self.store, .master = .cpu1 }, board, .{
+        _ = try bringUp(&self.core, .{ .store = &self.store, .initiator = .cpu1 }, board, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
             .guard = &self.guard,
@@ -155,7 +155,7 @@ pub const Parts = struct {
 /// and open `core` over it reset from the image's vector table
 /// (RA8EMU-574, shared with the run path by RA8EMU-588).
 pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, image: elf.Image) !second_core.Seeded {
-    const setup = memory.asMaster(.none);
+    const setup = memory.asInitiator(.none);
     try wiring.primeWindows(board, setup, .{
         .partitions = parts.partitions,
         .regions = parts.regions,

@@ -79,10 +79,10 @@ test "Ethos-U55 DMA is charged to shared external SDRAM" {
     var source: [256]u8 = undefined;
     for (&source, 0..) |*byte_value, index| byte_value.* = @truncate(index);
     try plain.write(0x6800_0000, &source);
-    const ethos = plain.asMaster(.ethos_u55);
+    const ethos = plain.asInitiator(.ethos_u55);
     const sdram_regions: dma.Regions = .{ 0x6800_0000, 0x6800_1000, 0, 0, 0, 0, 0, 0 };
     try std.testing.expectEqual(@as(u64, 256), try dma.copy(&ethos, &sdram_regions, .{}, .{ .index = 1 }, .{ .len = 256 }));
-    const cpu = plain.asMaster(.cpu0);
+    const cpu = plain.asInitiator(.cpu0);
     var word: [4]u8 = undefined;
     try cpu.read(0x6800_0000, &word);
     const counters = store.fabric.?.counters(.sdram, 0);

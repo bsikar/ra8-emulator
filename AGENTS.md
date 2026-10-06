@@ -77,9 +77,17 @@ sentinel returns.
 
 ## The build gate is light
 
-`build.zig` carries `zig fmt --check` and simple file and function length
-checks, and nothing else. This is deliberately not ra8-firmware's gate set: the
+`build.zig` carries `zig fmt --check`, simple file and function length
+checks, and a terminology check (`tools/terms.zig`), and nothing else. This is deliberately not ra8-firmware's gate set: the
 emulator is a tool, and a heavy gate here would cost more than it catches.
+
+## Terminology
+
+The emulator uses ra8-firmware's inclusive vocabulary: bus initiator for
+anything that drives the fabric, controller and peripheral for SPI and I2C
+roles, CS (chip select) for the select line, and COPI and CIPO for the data
+lines. `zig build gate` fails on the old words (tools/terms.zig lists them), so
+a hardware manual's name is reworded rather than copied.
 
 ## Commits and pull requests
 

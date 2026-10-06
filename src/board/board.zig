@@ -150,7 +150,7 @@ pub const Board = struct {
     /// The peripheral clock source selects, built in attach() for the same
     /// reason the two below are: each needs this board's own protection.
     branches: ckcr.Ckcr,
-    /// The chip-level security attribution: which bus masters, master-MPU
+    /// The chip-level security attribution: which bus initiators, bus-initiator MPU
     /// windows and CPUs the Secure boot gave away. Built in attach(): every
     /// store is PRC4-gated, so it needs this board's own protection.
     chip_attribution: cpscu.Unit,

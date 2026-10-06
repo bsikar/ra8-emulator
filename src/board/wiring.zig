@@ -135,7 +135,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
     if (self.part.hasNpu()) {
-        self.npu.memory = memory.asMaster(.ethos_u55);
+        self.npu.memory = memory.asInitiator(.ethos_u55);
         try self.bus.add(self.npu.block());
     }
     try self.bus.add(self.lowpower.block());
@@ -315,7 +315,7 @@ fn attachProtected(self: *Board) !void {
     self.mailbox.protect(&self.protection);
     try self.bus.add(self.mailbox.attributionBlock());
     // The rest of the CPSCU attribution the boot writes in the same scope:
-    // the bus masters, the master MPUs and the second CPU, behind PRC4 too.
+    // the bus initiators, the bus-initiator MPUs and the second CPU, behind PRC4 too.
     self.chip_attribution = cpscu.Unit.init(&self.protection);
     try self.bus.add(self.chip_attribution.block());
     for (self.sram_attribution.blocks()) |window| try self.bus.add(window);

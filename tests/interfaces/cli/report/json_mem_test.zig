@@ -71,7 +71,7 @@ test "external region report exposes timed access counters" {
     config.sdram.size = 1024 * 1024;
     try fix.board.flash.flash.resize(config.ospi.size);
     try fix.store.configureExternal(try ra8.core.external_memory.Layout.init(config), &fix.board.flash.flash);
-    const cpu = fix.memory().asMaster(.cpu0);
+    const cpu = fix.memory().asInitiator(.cpu0);
     var bytes: [4]u8 = undefined;
     try cpu.read(0x6800_0010, &bytes);
     var buf = std.ArrayList(u8).init(std.testing.allocator);

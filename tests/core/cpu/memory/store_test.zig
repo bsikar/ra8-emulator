@@ -151,7 +151,7 @@ test "configured external memory shares NOR and instruments SDRAM aliases" {
     var store = try Store.init(null);
     defer store.deinit();
     try store.configureExternal(try ra8.core.external_memory.Layout.init(config), &board.flash.flash);
-    const cpu = ra8.core.cpu.memory.guest.Guest{ .store = &store, .master = .cpu0 };
+    const cpu = ra8.core.cpu.memory.guest.Guest{ .store = &store, .initiator = .cpu0 };
     try cpu.write(0x8000_0010, &.{0x0f});
     try std.testing.expectEqual(@as(u8, 0x0f), board.flash.flash.byte(0x10));
     var byte: [1]u8 = undefined;

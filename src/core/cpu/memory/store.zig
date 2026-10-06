@@ -103,27 +103,27 @@ pub const Store = struct {
         return self.extra.span(address, len);
     }
 
-    pub fn read(self: *Store, master: external.Master, address: u32, into: []u8) AccessError!void {
+    pub fn read(self: *Store, initiator: external.Initiator, address: u32, into: []u8) AccessError!void {
         if (into.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, into.len)) |hit| {
             switch (hit.kind) {
                 .ospi => if (!self.flash.?.readMapped(hit.offset, into)) return AccessError.Unmapped,
                 .sdram => @memcpy(into, self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..into.len]),
             }
-            self.fabric.?.note(master, hit, .read, into.len);
+            self.fabric.?.note(initiator, hit, .read, into.len);
             return;
         };
         @memcpy(into, self.span(address, into.len) orelse return AccessError.Unmapped);
     }
 
-    pub fn write(self: *Store, master: external.Master, address: u32, bytes: []const u8) AccessError!void {
+    pub fn write(self: *Store, initiator: external.Initiator, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
                 .ospi => if (!(try self.flash.?.writeMapped(hit.offset, bytes))) return AccessError.Unmapped,
                 .sdram => @memcpy(self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..bytes.len], bytes),
             }
-            self.fabric.?.note(master, hit, .write, bytes.len);
+            self.fabric.?.note(initiator, hit, .write, bytes.len);
             return;
         };
         @memcpy(self.span(address, bytes.len) orelse return AccessError.Unmapped, bytes);

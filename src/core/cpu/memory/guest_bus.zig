@@ -9,7 +9,7 @@ pub const GuestBus = union(enum) {
     /// The bus over `memory`. `fast` opens direct internal MRAM/SRAM only;
     /// external memory remains on the vtable so timing is never bypassed.
     pub fn of(memory: *const Guest, fast: bool) GuestBus {
-        return .{ .store = .{ .store = memory.store, .master = memory.master, .fast_enabled = fast } };
+        return .{ .store = .{ .store = memory.store, .initiator = memory.initiator, .fast_enabled = fast } };
     }
 
     pub fn view(self: *GuestBus) bus.Bus {

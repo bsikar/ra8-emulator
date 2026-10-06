@@ -5,7 +5,7 @@
 //! the thing the window describes, and since the decode below is the only
 //! reader of the FLM field positions, they live here beside it rather than
 //! in the window's own offset table. A descriptor whose BASE is outside every
-//! RAM window a bus master can reach is not a framebuffer however well
+//! RAM window a bus initiator can reach is not a framebuffer however well
 //! formed the rest of it reads, and a descriptor whose last line runs past
 //! the end of the window it started in is the failure the scan refuses on.
 const memmap = @import("../../core/memmap.zig");
@@ -15,8 +15,8 @@ const scan = @import("glcdc_scan.zig");
 /// A RAM window a framebuffer may legally live in on this board.
 pub const Window = memmap.Window;
 
-/// The controller fetches over the fabric like any other bus master, so the
-/// RAM it may be pointed at is `memmap.master_ram` and nothing else: the
+/// The controller fetches over the fabric like any other bus initiator, so the
+/// RAM it may be pointed at is `memmap.initiator_ram` and nothing else: the
 /// on-chip SRAM and the external SDRAM through both of its aliases.
 ///
 /// This used to be a private table of its own, and it disagreed with the
@@ -27,7 +27,7 @@ pub const Window = memmap.Window;
 /// not carry the Non-secure SDRAM alias at all, so a framebuffer at
 /// 0x7800_0000, which the loader maps as RAM like any other, was not a
 /// framebuffer here however well formed the descriptor was.
-pub const ram_windows = memmap.master_ram;
+pub const ram_windows = memmap.initiator_ram;
 
 /// Sanity cap on a decoded dimension, so a half-programmed layer does not
 /// read back as a plausible 60000-pixel-wide panel.
@@ -118,11 +118,11 @@ pub fn shapeOf(frame: Framebuffer) scan.Shape {
 /// framebuffer whose base is fine and whose last line is past the end of
 /// the window is the failure this answers.
 pub fn windowEnd(address: u32) ?u32 {
-    const window = memmap.masterWindow(address) orelse return null;
+    const window = memmap.initiatorWindow(address) orelse return null;
     return window.end;
 }
 
 /// Whether an address points into a RAM window a framebuffer can live in.
 pub fn addressIsRam(address: u32) bool {
-    return memmap.masterWindow(address) != null;
+    return memmap.initiatorWindow(address) != null;
 }

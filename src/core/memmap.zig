@@ -6,7 +6,7 @@
 //! THE NON-SECURE ALIAS IS PART OF THE MAP, not a detail of TrustZone. The
 //! IDAU on this part splits the space by address bit 28: the Secure view of a
 //! region and the Non-secure view of the same bytes sit 0x1000_0000 apart, so
-//! a permanent-Non-secure master reaches SRAM at 0x3200_0000 rather than at
+//! a permanent-Non-secure initiator reaches SRAM at 0x3200_0000 rather than at
 //! 0x2200_0000. The firmware states that bit three times over. The peripheral
 //! window's pair is already named in src/periph/registry.zig
 //! (`ns_offset`, 0x4000_0000 and 0x5000_0000), and `cpu1_pingpong_ipc`'s own
@@ -95,7 +95,7 @@ pub const sdram_end: u32 = 0x6C00_0000;
 pub const ns_offset: u32 = 0x1000_0000;
 
 /// The Non-secure view of the system SRAM, which is where a
-/// permanent-Non-secure master writes.
+/// permanent-Non-secure initiator writes.
 pub const ns_sram_base: u32 = sram_base + ns_offset;
 pub const ns_sram_end: u32 = ns_sram_base + (sram_end - sram_base);
 pub const ns_sdram_base: u32 = sdram_base + ns_offset;
@@ -262,7 +262,7 @@ pub const Window = struct {
     }
 };
 
-/// The RAM a bus master other than the CPU can reach: the on-chip SRAM and
+/// The RAM a bus initiator other than the CPU can reach: the on-chip SRAM and
 /// the external SDRAM, each through both its Secure and its Non-secure view.
 ///
 /// DTCM is deliberately not here. It is the core's own tightly coupled
@@ -272,7 +272,7 @@ pub const Window = struct {
 /// is here. The peripheral window is not here either, for the same reason it
 /// never was: it is registers, not somewhere a frame may be read out of or
 /// written into.
-pub const master_ram = [_]Window{
+pub const initiator_ram = [_]Window{
     .{ .base = sram_base, .end = sram_end },
     .{ .base = ns_sram_base, .end = ns_sram_end },
     .{ .base = sdram_base, .end = sdram_end },
@@ -281,8 +281,8 @@ pub const master_ram = [_]Window{
 
 /// The RAM a debug probe can read and write over the debug port: every
 /// region the loader maps as RAM, the core's own TCM included. The probe
-/// is not a bus master on the fabric, it reaches memory through the core,
-/// so the `master_ram` exclusions do not apply to it. The peripheral window
+/// is not a bus initiator on the fabric, it reaches memory through the core,
+/// so the `initiator_ram` exclusions do not apply to it. The peripheral window
 /// is still not here: registers are not somewhere a log ring lives.
 pub const debug_ram = [_]Window{
     .{ .base = dtcm_base, .end = dtcm_end },
@@ -294,7 +294,7 @@ pub const debug_ram = [_]Window{
 
 /// Whether a span of `len` bytes at `at` is RAM a debug probe may read or
 /// write. A model that follows a pointer out of a structure the firmware
-/// published for a probe asks this rather than `masterHolds`.
+/// published for a probe asks this rather than `initiatorHolds`.
 pub fn debugHolds(at: u32, len: u32) bool {
     if (len == 0) return false;
     for (debug_ram) |window| {
@@ -303,12 +303,12 @@ pub fn debugHolds(at: u32, len: u32) bool {
     return false;
 }
 
-/// Whether a span of `len` bytes at `at` is somewhere a bus master may read
+/// Whether a span of `len` bytes at `at` is somewhere a bus initiator may read
 /// or write. A model that follows a pointer the firmware gave it asks this
 /// first, because a half-built descriptor points anywhere.
-pub fn masterHolds(at: u32, len: u32) bool {
+pub fn initiatorHolds(at: u32, len: u32) bool {
     if (len == 0) return false;
-    for (master_ram) |window| {
+    for (initiator_ram) |window| {
         if (window.holds(at, len)) return true;
     }
     return false;
@@ -316,11 +316,11 @@ pub fn masterHolds(at: u32, len: u32) bool {
 
 /// The window an address sits in, or null when it sits in none. A model
 /// that walks forward from a base it was handed (a scan-out down a
-/// framebuffer, a walk along a ring) asks this instead of `masterHolds`,
+/// framebuffer, a walk along a ring) asks this instead of `initiatorHolds`,
 /// because it needs to know where the room runs out, not only that the
 /// first byte is in it.
-pub fn masterWindow(at: u32) ?Window {
-    for (master_ram) |window| {
+pub fn initiatorWindow(at: u32) ?Window {
+    for (initiator_ram) |window| {
         if (at >= window.base and at < window.end) return window;
     }
     return null;

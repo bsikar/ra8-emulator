@@ -1,12 +1,12 @@
 //! Where a pluggable device model attaches: an I2C line and address, an SPI
-//! channel and slave select, an SCI channel, or a GPIO pin.
+//! channel and chip select, an SCI channel, or a GPIO pin.
 //!
 //! The text form is what a run's config and `--attach` name, so it reads the
 //! way the board and the HUM name things:
 //!
 //!   i2c:riic@0x36     the RIIC controller's line, 7-bit address 0x36
 //!   i2c:touch@0x6B    the I3C channel in legacy I2C mode (the touch line)
-//!   spi:spi1@ssl0     SPI_B channel 1, slave select SSL0
+//!   spi:spi1@ssl0     SPI_B channel 1, chip select SSL0
 //!   uart:sci3         SCI channel 3
 //!   gpio:P006         port 0, pin 06 (the RA pin name)
 //!

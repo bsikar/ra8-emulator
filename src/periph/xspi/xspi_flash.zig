@@ -48,7 +48,7 @@ pub const Flash = struct {
     }
 
     /// Select the profile capacity and establish all access storage before a
-    /// CPU or bus master can touch the part.
+    /// CPU or bus initiator can touch the part.
     pub fn resize(self: *Flash, capacity: u32) !void {
         if (self.capacity == capacity and self.inverted.len != 0) return;
         const bytes = try self.allocator.alloc(u8, capacity);
