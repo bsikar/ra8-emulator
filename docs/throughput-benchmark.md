@@ -154,7 +154,14 @@ against 5.81 / 5.80 s and 5.78 / 5.68 s with `--no-idle-skip`. Skip pays
 off on images that sleep longer than one stretch between edges (an RTC
 alarm, a long timer), as in the table above.
 
-`--run-for` budgets at the 1 GHz default rather than the image's clock
-(RA8EMU-762), so for an image left on its 8.4 MHz reset clock it runs
-about 119 times the asked-for time. Use `--ms` to compare such images
-until that is fixed.
+Until RA8EMU-762, `--run-for` budgeted instructions at the 1 GHz default
+rather than the image's clock, so an image left on its 8.4 MHz reset clock
+ran about 119 times the asked-for time (`--run-for 10s` on `blink_hal` was
+1,190,476 SysTick periods instead of 10,000). Every `bench_speed.sh` row in
+this file was recorded before that fix. Rows for images that switch to
+cpuclk0 at 1 GHz are unaffected; rows for images that stay on the reset
+clock (blink, the HIL probes) measured about 119x their stated virtual time,
+so their speed column reads that much too high. `--run-for` now times the
+run in the image's own SysTick milliseconds, exactly as `--ms` does, and an
+image that never arms SysTick still ends on the same 1 GHz instruction
+ceiling as before.

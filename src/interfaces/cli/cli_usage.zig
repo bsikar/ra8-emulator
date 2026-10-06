@@ -160,8 +160,8 @@ pub const text =
     \\                     and report achieved speed and drift
     \\  --speed F          pace at F times real time (0.1, 0.25, 5, 100...),
     \\                     or max for an unpaced run (the default)
-    \\  --run-for D        run D of virtual time (30s, 90m, 12h, 7d), in
-    \\                     place of --instructions
+    \\  --run-for D        run D of the image's own time (30s, 90m, 12h,
+    \\                     7d), counted as --ms counts it
     \\  --no-idle-skip     a core asleep in WFI/WFE with nothing pending
     \\                     crosses every boundary instead of running
     \\                     straight to its next edge (the default;

@@ -95,6 +95,32 @@ test "closing a boundary charges cycles at the image core clock" {
     try std.testing.expect(clock.done());
 }
 
+test "--run-for ends after its duration of a reset-clock image's own time (RA8EMU-762)" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const core: Guest = .{ .store = &store };
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try attach(&board, core);
+    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.selects = 1;
+    const options = try ra8.core.cli.parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "1s" });
+    var timed = zig_run.stop_sym.deadline(options) orelse return error.TestExpectedDeadline;
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 1_000_000 };
+    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    try core.writeWord(memmap.syst.rvr, 7999);
+    try core.writeWord(memmap.syst.csr, 0x7);
+    var closes: usize = 0;
+    while (!clock.done()) : (closes += 1) {
+        if (closes > 4000) return error.TestDeadlineNeverMet;
+        try clock.close(clock.width());
+    }
+    try std.testing.expectEqual(@as(u64, 8_000_000), board.time.base.hz);
+    try std.testing.expectEqual(@as(u64, 1000), timebase.ticks);
+    const now = board.time.base.now();
+    try std.testing.expect(now >= std.time.ns_per_s and now < std.time.ns_per_s + std.time.ns_per_ms);
+}
+
 test "a SysTick rearm discards the current boundary rate" {
     var store = try Store.init(null);
     defer store.deinit();

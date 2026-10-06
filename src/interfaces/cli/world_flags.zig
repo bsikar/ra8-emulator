@@ -66,7 +66,7 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     } else if (std.mem.eql(u8, flag, "--speed")) {
         options.speed = try speedArg(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--run-for")) {
-        options.instructions = try runFor(try next(argv, index));
+        options.ms = try runFor(try next(argv, index));
         options.run_for = true;
     } else if (std.mem.eql(u8, flag, "--idle-skip") or std.mem.eql(u8, flag, "--no-idle-skip")) {
         options.idle_skip = flag[2] == 'i';
@@ -153,14 +153,18 @@ fn speedArg(text: []const u8) !?u64 {
     };
 }
 
-/// One `--run-for` duration as a cycle budget at the timebase's rate. A bad
-/// one says why before the run starts.
-fn runFor(text: []const u8) !usize {
+/// One `--run-for` duration as a `--ms` window (RA8EMU-762). The run then
+/// ends after that much of the image's own time, counted in its SysTick
+/// periods at whatever clock it runs, and the instruction ceiling `--ms`
+/// sizes covers an image that never arms SysTick. Durations are whole
+/// seconds or more, so the milliseconds are exact. A bad one says why
+/// before the run starts.
+fn runFor(text: []const u8) !u64 {
     const ns = duration.parse(text) catch |err| {
         std.debug.print("--run-for {s}: {s}\n", .{ text, duration.describe(err) });
         return err;
     };
-    return @intCast(duration.cycles(ns, timebase.default_hz));
+    return ns / std.time.ns_per_ms;
 }
 
 /// One `--rtc-start` value. A bad one says why before the run starts.
