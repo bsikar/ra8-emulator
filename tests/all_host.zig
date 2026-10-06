@@ -61,6 +61,8 @@ test {
     _ = @import("gui/disasm_pane_test.zig");
     _ = @import("gui/source_pane_test.zig");
     _ = @import("gui/stack_pane_test.zig");
+    _ = @import("gui/hex_entry_test.zig");
+    _ = @import("gui/pane_edit_test.zig");
     _ = @import("gui/plug_post_test.zig");
     _ = @import("gui/speed_post_test.zig");
     _ = @import("interfaces/cli/window_devices_test.zig");
