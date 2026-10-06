@@ -68,16 +68,19 @@ pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
     // the poll asks the source afresh before trusting a hush again.
     if (core.cpu.quiet) |hushing| hushing.stir();
     var left = count;
-    while (left > 0) : (left -= 1) {
-        _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
-        if (clock) |counting| counting.tick(core, machine);
-        // Nothing armed: skip decoding the event. The watch bus stays armed
+    while (left > 0) {
+        // Nothing armed: run as a plain run does. The watch bus stays armed
         // so firmware that programs the FPB or DWT still reaches them.
         if (machine.quiet()) {
-            if (quietStep(core, watch)) |stopped| return .{ .core = stopped };
-            retired.* += 1;
+            if (clock) |counting| counting.tick(core, machine);
+            const went = quietRun(core, watch, left);
+            retired.* += went.ran;
+            left -= went.ran;
+            if (went.stop) |stopped| return .{ .core = stopped };
             continue;
         }
+        _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
+        if (clock) |counting| counting.tick(core, machine);
         const now = event(core);
         const stop = machine.onInstruction(now);
         // A unit event with halting off pends DebugMonitor, as step_hook does.
@@ -90,8 +93,44 @@ pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
         defer if (watch) |listening| listening.disarm();
         if (core.cpu.step()) |stopped| return .{ .core = stopped };
         retired.* += 1;
+        left -= 1;
     }
     return .count;
+}
+
+/// What a quiet stretch did: instructions retired, and the core's own stop.
+const Quiet = struct { ran: u64, stop: ?cpu_mod.Stop = null };
+
+/// The rest of a chunk with nothing armed, through `Cpu.run`, so park loops
+/// and trips that change nothing go by at once as in a plain run
+/// (RA8EMU-712). A store into the PPB ends it, since it may arm the FPB or
+/// DWT. A sleeping core, a core already waiting on a console line, or a
+/// stretch that moved nothing goes one instruction at a time instead.
+fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64) Quiet {
+    const cpu = core.cpu;
+    if (cpu.until != null or cpu.waiting != null) return quietOne(core, watch);
+    const before = cpu.retired;
+    if (watch) |listening| {
+        listening.ppb = .{ .needle = "" };
+        listening.arm(0, 0);
+        cpu.until = &listening.ppb;
+    }
+    defer if (watch) |listening| {
+        listening.disarm();
+        cpu.until = null;
+    };
+    const stop = cpu.run(left);
+    const ran = cpu.retired - before;
+    if (stop != .count) return .{ .ran = ran, .stop = stop };
+    if (ran == 0) return quietOne(core, watch);
+    return .{ .ran = ran };
+}
+
+/// One quiet instruction, its interrupt poll first.
+fn quietOne(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus) Quiet {
+    _ = dispatch.poll(core.cpu) catch return .{ .ran = 0, .stop = .{ .bus_fault = core.register(.pc) } };
+    if (quietStep(core, watch)) |stopped| return .{ .ran = 0, .stop = stopped };
+    return .{ .ran = 1 };
 }
 
 /// One instruction with nothing to stop on. The fetch window is the widest

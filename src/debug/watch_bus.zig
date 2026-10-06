@@ -10,6 +10,7 @@
 const std = @import("std");
 const bus = @import("../core/cpu/bus.zig");
 const step_hook = @import("step_hook.zig");
+const until = @import("../core/until.zig");
 /// Re-exported for tests/debug/unit_view_test.zig.
 pub const unit_view = @import("unit_view.zig");
 
@@ -20,6 +21,10 @@ pub const WatchBus = struct {
     /// The instruction now running, whose fetch is not an access.
     fetch_from: u32 = 0,
     fetch_len: u32 = 0,
+    /// Seen once an armed store lands in the PPB, where the debug units
+    /// live: a quiet batch hands it to the core as its `until`, so a store
+    /// that may arm the FPB or DWT ends the batch (RA8EMU-712).
+    ppb: until.Until = .{ .needle = "" },
 
     pub fn view(self: *WatchBus) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
@@ -60,11 +65,15 @@ pub const WatchBus = struct {
         const self: *WatchBus = @ptrCast(@alignCast(ctx));
         try self.inner.write(address, bytes);
         if (!self.armed) return;
+        if (address >= ppb_base) self.ppb.seen = true;
         const moved = value(bytes);
         self.driver.stored(address, moved, width(bytes.len));
         self.driver.machine.onAccess(address, width(bytes.len), .write, moved);
     }
 };
+
+/// Where the Private Peripheral Bus starts.
+const ppb_base: u32 = 0xE000_0000;
 
 fn width(len: usize) u8 {
     return @intCast(@min(len, std.math.maxInt(u8)));
