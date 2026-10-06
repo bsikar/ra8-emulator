@@ -56,11 +56,20 @@
 //! and blue by 2.0 s (RA8EMU-489).
 //! usb_host_file_ops mounts a drive on the HS host jack: a blank FAT12
 //! stick there and two seconds let it finish all nine file steps.
+//! txm_sd_hello_m85 reads a signed module off the SDHI card, so it runs
+//! with `--sd-dir` on the directory beside it named in card_dirs; the
+//! modules corpus copies txm_hello_m33.ra8app there (RA8EMU-158). With no
+//! such directory it runs on the bare card and reports "FAIL open".
 const std = @import("std");
 
 pub const Extra = struct {
     image: []const u8,
     flags: []const []const u8,
+};
+
+pub const CardDir = struct {
+    image: []const u8,
+    dir: []const u8,
 };
 
 pub const CardImage = struct {
@@ -81,6 +90,11 @@ const usb_stick = [_][]const u8{ "--usb-disk", "blank", "--ms", "2000" };
 
 pub const card_images = [_]CardImage{
     .{ .image = "import_reader.elf", .environment = "RA8_EMU_IMPORT_READER_IMG" },
+};
+
+/// Images whose SDHI card is built from a directory next to the image.
+pub const card_dirs = [_]CardDir{
+    .{ .image = "txm_sd_hello_m85.elf", .dir = "txm_sd_hello_m85.sd" },
 };
 
 /// Images that need hardware the default board does not fit, and the flags
@@ -122,4 +136,12 @@ pub fn flags(image: []const u8) []const []const u8 {
         if (std.mem.eql(u8, entry.image, image)) return entry.flags;
     }
     return &.{};
+}
+
+/// The card directory name beside image, when it has one.
+pub fn cardDir(image: []const u8) ?[]const u8 {
+    for (card_dirs) |entry| {
+        if (std.mem.eql(u8, entry.image, image)) return entry.dir;
+    }
+    return null;
 }

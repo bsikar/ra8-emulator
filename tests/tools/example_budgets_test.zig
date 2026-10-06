@@ -95,3 +95,8 @@ test "threadx_blink runs long enough for thread A's second toggle" {
     try std.testing.expectEqualStrings("600000000", budgets.pick("threadx_blink.elf", null).?);
     try std.testing.expectEqualStrings("600000000", budgets.pick("threadx_blink.elf", "2000000").?);
 }
+
+test "txm_sd_hello_m85 gets the module images' budget" {
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_sd_hello_m85.elf", null).?);
+    try std.testing.expectEqualStrings("60000000", budgets.pick("txm_sd_hello_m85.elf", "2000000").?);
+}
