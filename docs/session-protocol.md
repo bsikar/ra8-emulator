@@ -6,7 +6,7 @@ The emulator uses the shared `ra8_rpc` framing and codec. Frames are binary:
 - `u16` frame kind, little-endian
 - the kind-specific body, encoded in declaration order with no padding
 
-The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads.
+The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads and bit 1 the part methods (plug, unplug, set_fault, clear_fault).
 
 Request, response, and event envelopes use the shared library's u32 request id, u16 method/topic, and binary argument payload. A response carries either the reply bytes or an application error. Events are pushed independently of outstanding requests. Request ids correlate out-of-order responses. `run` acknowledges when the core starts; the later stop is a `stop` event.
 
@@ -33,6 +33,12 @@ Request, response, and event envelopes use the shared library's u32 request id, 
 | 0x0110 | interrupt | core | stop result |
 | 0x0111 | set_run_budget | core, instruction budget | acknowledgement |
 | 0x0112 | remove_point | core, point id | breakpoint or watchpoint kind |
+| 0x0113 | plug | core, length-prefixed `MODEL@ENDPOINT` text | acknowledgement |
+| 0x0114 | unplug | core, length-prefixed `ENDPOINT` text | acknowledgement |
+| 0x0115 | set_fault | core, length-prefixed `MODEL@ENDPOINT=MODE` or `@ENDPOINT=MODE` text | acknowledgement |
+| 0x0116 | clear_fault | core, length-prefixed `ENDPOINT` text | acknowledgement |
+
+Part specs travel as text in the same syntax as the `--attach` and `--fault` flags, and the server parses them with the same parsers, so the two cannot drift. A spec that does not parse is refused as bad arguments; one the board cannot honour (an unknown endpoint, a mode that does not fit the part's bus) is refused with the session's refusal code. Capability bit 1 announces these four methods.
 
 ## Events
 

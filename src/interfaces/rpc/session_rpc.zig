@@ -2,7 +2,8 @@
 const rpc = @import("ra8_rpc");
 
 pub const protocol_version: u16 = 1;
-pub const capabilities: u32 = 0x0000_0001;
+/// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
+pub const capabilities: u32 = 0x0000_0003;
 pub const max_payload = 1_048_576;
 
 pub const Method = enum(u16) {
@@ -25,6 +26,10 @@ pub const Method = enum(u16) {
     interrupt = 0x0110,
     set_run_budget = 0x0111,
     remove_point = 0x0112,
+    plug = 0x0113,
+    unplug = 0x0114,
+    set_fault = 0x0115,
+    clear_fault = 0x0116,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -81,6 +86,13 @@ pub const DirtyRect = struct {
     virtual_ns: u64,
     pixels: []const u8,
     pub const max_len = .{ .pixels = 262144 };
+};
+/// A part spec in the CLI's own syntax: `MODEL@ENDPOINT` for plug,
+/// `ENDPOINT` for unplug and clear_fault, `MODEL@ENDPOINT=MODE` for set_fault.
+pub const PartSpec = struct {
+    core: Core,
+    text: []const u8,
+    pub const max_len = .{ .text = 256 };
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const Trace = struct {
