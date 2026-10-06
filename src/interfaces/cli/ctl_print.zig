@@ -44,6 +44,31 @@ pub fn memory(w: anytype, json: bool, address: u32, bytes: []const u8) !void {
     try w.print("0x{x:0>8}: {}\n", .{ address, hex });
 }
 
+/// `milli` is thousandths of the default rate; zero is `max`.
+pub fn speed(w: anytype, json: bool, milli: u64) !void {
+    if (milli == 0) return w.writeAll(if (json) "{\"speed\":\"max\"}\n" else "speed max\n");
+    const factor = @as(f64, @floatFromInt(milli)) / 1000.0;
+    if (json) return w.print("{{\"speed\":{d}}}\n", .{factor});
+    try w.print("speed {d}x\n", .{factor});
+}
+
+/// A breakpoint or watchpoint the server accepted, with its id.
+pub fn point(w: anytype, json: bool, kind: []const u8, id: u32, address: u32, access: ?proto.Access) !void {
+    if (json) {
+        try w.print("{{\"{s}\":{d},\"address\":{d}", .{ kind, id, address });
+        if (access) |how| try w.print(",\"access\":\"{s}\"", .{@tagName(how)});
+        return w.writeAll("}\n");
+    }
+    try w.print("{s} {d} at 0x{x:0>8}", .{ kind, id, address });
+    if (access) |how| try w.print(" on {s}", .{@tagName(how)});
+    try w.writeAll("\n");
+}
+
+pub fn cleared(w: anytype, json: bool, id: u32) !void {
+    if (json) return w.print("{{\"cleared\":{d}}}\n", .{id});
+    try w.print("cleared {d}\n", .{id});
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(json: bool, err: anyerror, code: u16) u8 {

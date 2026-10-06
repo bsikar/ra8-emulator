@@ -11,6 +11,8 @@ const out = @import("ctl_print.zig");
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
     \\  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem ADDRESS LENGTH
+    \\            speed FACTOR|max | break ADDRESS | break --clear ID
+    \\            watch ADDRESS read|write|access | watch --clear ID
     \\
 ;
 
@@ -25,6 +27,12 @@ pub const Command = union(enum) {
     pause,
     regs: []const proto.Register,
     mem: struct { address: u32, length: u32 },
+    /// Thousandths of the default rate; zero is `max`.
+    speed: u64,
+    set_break: u32,
+    clear_break: u32,
+    set_watch: struct { address: u32, access: proto.Access },
+    clear_watch: u32,
 };
 
 pub const Request = struct { spec: Spec, json: bool, command: Command };
@@ -50,6 +58,9 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
     if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
+    if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
+    if (eql(u8, name, "break")) return parseBreak(args);
+    if (eql(u8, name, "watch")) return parseWatch(args);
     if (!eql(u8, name, "mem")) return error.UnknownCommand;
     if (args.len != 2) return error.BadArguments;
     const length = try std.fmt.parseInt(u32, args[1], 0);
@@ -61,6 +72,27 @@ fn parseBudget(args: []const []const u8) !u64 {
     if (args.len == 0) return 0;
     if (args.len == 2 and std.mem.eql(u8, args[0], "--budget")) return std.fmt.parseInt(u64, args[1], 0);
     return error.BadArguments;
+}
+
+/// `max`, or a positive factor of the default rate kept to thousandths.
+fn parseSpeed(word: []const u8) !u64 {
+    if (std.mem.eql(u8, word, "max")) return 0;
+    const factor = try std.fmt.parseFloat(f64, word);
+    if (!std.math.isFinite(factor) or factor < 0.001 or factor > 1e9) return error.BadSpeed;
+    return @intFromFloat(@round(factor * 1000.0));
+}
+
+fn parseBreak(args: []const []const u8) !Command {
+    if (args.len == 1) return .{ .set_break = try std.fmt.parseInt(u32, args[0], 0) };
+    if (args.len == 2 and std.mem.eql(u8, args[0], "--clear")) return .{ .clear_break = try std.fmt.parseInt(u32, args[1], 0) };
+    return error.BadArguments;
+}
+
+fn parseWatch(args: []const []const u8) !Command {
+    if (args.len != 2) return error.BadArguments;
+    if (std.mem.eql(u8, args[0], "--clear")) return .{ .clear_watch = try std.fmt.parseInt(u32, args[1], 0) };
+    const access = std.meta.stringToEnum(proto.Access, args[1]) orelse return error.UnknownAccess;
+    return .{ .set_watch = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .access = access } };
 }
 
 fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const proto.Register {
@@ -111,7 +143,32 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !voi
             const memory = try client.call(proto.Memory, proto.ReadMemory, .read_memory, args);
             try out.memory(w, json, at.address, memory.bytes);
         },
+        .speed => |milli| {
+            _ = try client.call(proto.Ack, proto.SetSpeed, .set_speed, .{ .core = .cpu0, .milli = milli });
+            try out.speed(w, json, milli);
+        },
+        .set_break => |address| {
+            const id = try client.call(proto.U32, proto.Point, .set_breakpoint, .{ .core = .cpu0, .address = address });
+            try out.point(w, json, "breakpoint", id.value, address, null);
+        },
+        .set_watch => |at| {
+            const last = std.math.add(u32, at.address, watch_bytes - 1) catch return error.BadAddress;
+            const args: proto.Watch = .{ .core = .cpu0, .first = at.address, .last = last, .access = at.access };
+            const id = try client.call(proto.U32, proto.Watch, .set_watchpoint, args);
+            try out.point(w, json, "watchpoint", id.value, at.address, at.access);
+        },
+        .clear_break => |id| try clear(client, w, json, .clear_breakpoint, id),
+        .clear_watch => |id| try clear(client, w, json, .clear_watchpoint, id),
     }
+}
+
+/// Bytes a `watch` covers from its address, the same span the debugger's
+/// own watch command uses.
+const watch_bytes = 4;
+
+fn clear(client: *Client, w: anytype, json: bool, method: proto.Method, id: u32) !void {
+    _ = try client.call(proto.Ack, proto.PointId, method, .{ .core = .cpu0, .id = id });
+    try out.cleared(w, json, id);
 }
 
 /// Run with `budget` (or one step when null) and print the stop it ends in.
