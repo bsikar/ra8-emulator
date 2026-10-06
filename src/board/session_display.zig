@@ -59,8 +59,18 @@ pub const Host = struct {
     pub fn waitSettled(self: *Host, timeout_ns: u64) !void {
         const started = self.board.time.base.now();
         self.settled.resetWait();
-        if (einkPanel(self.board)) |panel| return self.waitEink(panel, started, timeout_ns);
-        return self.waitGlcdc(started, timeout_ns);
+        while (true) {
+            if (einkPanel(self.board)) |panel| return self.waitEink(panel, started, timeout_ns);
+            if (try frames_out.FrameCapture.init(self.allocator, self.board)) |capture_value| {
+                var capture = capture_value;
+                capture.deinit(self.board);
+                return self.waitGlcdc(started, timeout_ns);
+            }
+            const now = self.board.time.base.now();
+            const elapsed = now -| started;
+            if (elapsed >= timeout_ns) return Error.Timeout;
+            try self.advanceOne(@min(self.quantum_ns, timeout_ns - elapsed), now);
+        }
     }
 
     fn waitEink(self: *Host, panel: *eink.Panel, started: u64, timeout_ns: u64) !void {

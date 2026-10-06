@@ -9,6 +9,7 @@
 //! pull state.
 const std = @import("std");
 const endpoint = @import("../periph/model/endpoint.zig");
+const catalog = @import("../periph/model/catalog.zig");
 const parts = @import("../periph/model/parts.zig");
 const fault_lines = @import("../periph/model/fault_lines.zig");
 const riic_bus = @import("../periph/riic/riic_bus.zig");
@@ -34,12 +35,22 @@ pub const floating = struct {
     }
 };
 
+const max_instances = 256;
 pub const Plugs = struct {
     board: *Board,
     arena: std.mem.Allocator,
 
+    instances: [max_instances]catalog.Instance = undefined,
+    instance_count: usize = 0,
     pub fn init(board: *Board, arena: std.mem.Allocator) Plugs {
         return .{ .board = board, .arena = arena };
+    }
+
+    pub fn deinit(self: *Plugs) void {
+        while (self.instance_count > 0) {
+            self.instance_count -= 1;
+            catalog.Catalog.destroy(self.arena, self.instances[self.instance_count]);
+        }
     }
 
     pub fn hook(self: *Plugs) session_api.PlugHook {
@@ -49,7 +60,14 @@ pub const Plugs = struct {
     /// Put a fresh `name` on `at`, or take what is there off it when null.
     pub fn set(self: *Plugs, at: endpoint.Endpoint, name: ?[]const u8) !void {
         const wanted = name orelse return self.unplug(at);
+        if (self.instance_count == self.instances.len) return error.TooManyInstances;
         const made = try parts.all.make(self.arena, wanted, at);
+        self.instances[self.instance_count] = made;
+        self.instance_count += 1;
+        errdefer {
+            self.instance_count -= 1;
+            catalog.Catalog.destroy(self.arena, made);
+        }
         if (at == .spi) {
             const unit = &self.board.spi.channels[at.spi.channel];
             if (unit.device) |part| if (floating.holds(part)) {

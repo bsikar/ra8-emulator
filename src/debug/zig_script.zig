@@ -20,7 +20,7 @@ pub const Error = error{ Unsupported, MissingPart };
 const Temporary = std.BoundedArray(break_table.Id, break_table.limits.capacity);
 
 pub const ZigScript = struct {
-    session: session_api.Session,
+    session: *session_api.Session,
     image: ?elf.Image = null,
     temporary: Temporary = .{},
     /// The parked core's image and temporary breaks, swapped in by `core`.
