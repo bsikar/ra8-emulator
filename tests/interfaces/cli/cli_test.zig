@@ -54,6 +54,13 @@ test "a watched run gets the larger budget, because it stops on its counter" {
     try std.testing.expect(mod.watched_budget > mod.budget);
 }
 
+test "a timed run's ceiling leaves one period for the boot before SysTick arms" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--ms", "1000" });
+    try std.testing.expectEqual(@as(usize, 1001) * mod.instructions_per_ms, options.budgetFor(false));
+    try std.testing.expectEqual(@as(usize, mod.instructions_per_ms), mod.ceilingFor(0));
+    try std.testing.expectEqual(std.math.maxInt(usize), mod.ceilingFor(std.math.maxInt(u64)));
+}
+
 test "a counter that did not resolve watches nothing, so it keeps the default" {
     const options = try parse(&[_][]const u8{ "emu", "a.elf", "--stop-sym", "g_absent", "5" });
     try std.testing.expectEqual(mod.budget, options.budgetFor(false));
