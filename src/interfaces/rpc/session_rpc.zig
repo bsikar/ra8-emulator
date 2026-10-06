@@ -34,6 +34,7 @@ pub const Method = enum(u16) {
     advance = 0x0117,
     snapshot = 0x0118,
     restore = 0x0119,
+    list_parts = 0x011a,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -108,6 +109,11 @@ pub const PartSpec = struct {
     core: Core,
     text: []const u8,
     pub const max_len = .{ .text = 256 };
+};
+/// The fitted parts, one `MODEL@ENDPOINT` line each (RA8EMU-791).
+pub const PartList = struct {
+    text: []const u8,
+    pub const max_len = .{ .text = 4096 };
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const Trace = struct {

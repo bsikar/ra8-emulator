@@ -56,6 +56,7 @@ test {
     _ = @import("board/session_faults_test.zig");
     _ = @import("board/session_line_faults_test.zig");
     _ = @import("board/session_plug_test.zig");
+    _ = @import("board/session_plug_list_test.zig");
     _ = @import("board/gauge_replug_test.zig");
     _ = @import("board/session_schedule_test.zig");
     _ = @import("board/wiring_test.zig");

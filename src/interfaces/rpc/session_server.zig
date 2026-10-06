@@ -47,6 +47,7 @@ const routes = .{
     .{ @intFromEnum(M.unplug), parts.unplug },
     .{ @intFromEnum(M.set_fault), parts.setFault },
     .{ @intFromEnum(M.clear_fault), parts.clearFault },
+    .{ @intFromEnum(M.list_parts), parts.listParts },
     .{ @intFromEnum(M.advance), session_advance.advance },
     .{ @intFromEnum(M.snapshot), session_files.snapshot },
     .{ @intFromEnum(M.restore), session_files.restore },
