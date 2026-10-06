@@ -135,3 +135,26 @@ test, and one host measurement is not a general guarantee.
 Requested factors below an image's unpaced result can be paced. Requests above
 it run as fast as the host permits; the pacer reports the slip and does not
 burst afterwards (RA8EMU-181).
+
+### Why idle skip does not speed up blink (RA8EMU-730)
+
+Idle skip widens a sleeping core's stretch only when every known edge
+(both SysTick banks, the board queue, vsync, the GPT) lies beyond the
+normal width. A SysTick-driven image like `blink_hal` already has its
+stretch cut at the tick, so the nearest edge equals the normal width on
+every boundary and there is nothing to skip: on `blink_hal --ms 300000`
+the skip was asked 280,000 times and widened none. Both modes retire the
+same instructions, because a sleeping core retires none in either.
+
+Before RA8EMU-730 each of those calls still looked up all five edges, so
+skip ran a few percent slower than `--no-idle-skip`. It now stops at the
+first edge inside the stretch. Measured on a ReleaseFast build, `blink_hal
+--ms 300000`, two runs each: skip went from 6.11 / 5.91 s to 5.83 / 5.87 s,
+against 5.81 / 5.80 s and 5.78 / 5.68 s with `--no-idle-skip`. Skip pays
+off on images that sleep longer than one stretch between edges (an RTC
+alarm, a long timer), as in the table above.
+
+`--run-for` budgets at the 1 GHz default rather than the image's clock
+(RA8EMU-762), so for an image left on its 8.4 MHz reset clock it runs
+about 119 times the asked-for time. Use `--ms` to compare such images
+until that is fixed.
