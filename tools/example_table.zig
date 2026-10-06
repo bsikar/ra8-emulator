@@ -360,6 +360,7 @@ fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8
     var env = try std.process.getEnvMap(allocator);
     defer env.deinit();
     if (options.cardImage(image, &env)) |card| try argv.appendSlice(&.{ "--sd", card });
+    if (try cardDirPath(allocator, path)) |dir| try argv.appendSlice(&.{ "--sd-dir", dir });
     if (halves.cpu1) |cpu1| try argv.appendSlice(&.{ "--cpu1", cpu1 });
     if (halves.ns) |ns| try argv.appendSlice(&.{ "--ns", ns });
     if (run.probe) |wanted| try argv.appendSlice(&.{ probes.flag(wanted.symbol), wanted.symbol });
@@ -379,4 +380,12 @@ fn runImage(allocator: std.mem.Allocator, emulator: []const u8, path: []const u8
         .max_output_bytes = 16 * 1024 * 1024,
     });
     return std.mem.concat(allocator, u8, &.{ result.stdout, "\n", result.stderr });
+}
+
+/// The existing card directory beside path that options.cardDir names.
+fn cardDirPath(allocator: std.mem.Allocator, path: []const u8) !?[]const u8 {
+    const name = options.cardDir(std.fs.path.basename(path)) orelse return null;
+    const dir = try std.fs.path.join(allocator, &.{ std.fs.path.dirname(path) orelse ".", name });
+    std.fs.cwd().access(dir, .{}) catch return null;
+    return dir;
 }

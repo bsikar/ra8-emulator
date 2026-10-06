@@ -110,3 +110,9 @@ test "usb_host_file_ops gets a blank stick on the host jack" {
     try std.testing.expectEqualStrings("--ms", flags[2]);
     try std.testing.expectEqualStrings("2000", flags[3]);
 }
+
+test "the SD hello module image reads its card from the directory beside it" {
+    try std.testing.expectEqualStrings("txm_sd_hello_m85.sd", options.cardDir("txm_sd_hello_m85.elf").?);
+    try std.testing.expectEqual(@as(?[]const u8, null), options.cardDir("txm_manager_m85.elf"));
+    try std.testing.expectEqual(@as(usize, 0), options.flags("txm_sd_hello_m85.elf").len);
+}
