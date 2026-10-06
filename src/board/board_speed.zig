@@ -15,9 +15,13 @@ pub const BoardSpeed = struct {
 
     /// Re-anchor the pacer at the current virtual time, so time carries on
     /// and only its rate against the wall changes; an unpaced board starts
-    /// pacing here.
-    fn set(context: *anyopaque, milli: u64) anyerror!void {
+    /// pacing here, and `max` (null) drops the pacer.
+    fn set(context: *anyopaque, wanted: ?u64) anyerror!void {
         const self: *BoardSpeed = @ptrCast(@alignCast(context));
+        const milli = wanted orelse {
+            self.time.pacing = null;
+            return;
+        };
         const now_ns = self.time.base.now();
         if (self.time.pacing) |*pacing| {
             pacing.setSpeed(now_ns, milli);

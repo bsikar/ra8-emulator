@@ -84,9 +84,10 @@ pub const ZigScript = struct {
 
     /// `speed FACTOR`: the run budget scales, and a paced run's pacer moves
     /// to the new rate from here on (RA8EMU-184).
-    fn speed(self: *ZigScript, factor: f64, out: anytype) !void {
-        try self.session.setSpeed(self.session.currentCore(), factor);
-        try out.print("Speed {d}x\n", .{factor});
+    fn speed(self: *ZigScript, wanted: ?f64, out: anytype) !void {
+        try self.session.setSpeed(self.session.currentCore(), wanted);
+        if (wanted) |factor| return out.print("Speed {d}x\n", .{factor});
+        try out.writeAll("Speed max\n");
     }
 
     /// As session.zig's switchTo: say which core has the session and where

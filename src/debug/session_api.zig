@@ -260,8 +260,8 @@ pub const Session = struct {
     }
 
     /// Scale this core's run rate (1 is the default) and, with a speed hook,
-    /// the pacer; the range is --speed's (session_speed.zig).
-    pub fn setSpeed(self: *Session, core: Core, factor: f64) anyerror!void {
+    /// the pacer; the range is --speed's (session_speed.zig), null is `max`.
+    pub fn setSpeed(self: *Session, core: Core, factor: ?f64) anyerror!void {
         const change = try session_speed.Change.of(factor, debug_session.limits.default_budget);
         try self.setRunBudget(core, change.budget);
         if (self.speed) |hook| try hook.setFn(hook.context, change.milli);

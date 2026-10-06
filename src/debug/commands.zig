@@ -31,7 +31,7 @@
 //! core 0|1                    which CPU the next commands act on
 //! plug NAME@ENDPOINT          wire a fresh part in mid-run
 //! unplug ENDPOINT             take the part on ENDPOINT off mid-run
-//! speed FACTOR                pace the run at FACTOR times real time
+//! speed FACTOR                pace the run at FACTOR times real time, or max
 //! quit                q
 //! ```
 //!
@@ -105,8 +105,9 @@ pub const Command = union(enum) {
     plug: []const u8,
     /// `unplug ENDPOINT`, kept as written.
     unplug: []const u8,
-    /// `speed FACTOR`: the session checks the range (RA8EMU-184).
-    speed: f64,
+    /// `speed FACTOR`: the session checks the range (RA8EMU-184). Null is
+    /// `speed max`, an unpaced run as with `--speed max` (RA8EMU-714).
+    speed: ?f64,
     quit,
 };
 
@@ -208,7 +209,7 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .halting => .{ .halting = try onOff(try required(words)) },
         .plug => .{ .plug = try required(words) },
         .unplug => .{ .unplug = try required(words) },
-        .speed => .{ .speed = try factor(try required(words)) },
+        .speed => .{ .speed = try speedFactor(try required(words)) },
         .quit => .quit,
     };
     if (words.next() != null) return Error.ExtraArgument;
@@ -258,11 +259,13 @@ fn required(words: *Words) Error![]const u8 {
     return words.next() orelse Error.MissingArgument;
 }
 
-/// A count or an id, decimal or `0x` hex.
-fn factor(text: []const u8) Error!f64 {
+/// A speed factor, or null for `max`.
+fn speedFactor(text: []const u8) Error!?f64 {
+    if (std.mem.eql(u8, text, "max")) return null;
     return std.fmt.parseFloat(f64, text) catch Error.BadNumber;
 }
 
+/// A count or an id, decimal or `0x` hex.
 fn number(text: []const u8) Error!u32 {
     return std.fmt.parseInt(u32, text, 0) catch Error.BadNumber;
 }
