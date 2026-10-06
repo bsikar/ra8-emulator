@@ -104,6 +104,7 @@ test {
     _ = @import("gui/shell_field_test.zig");
     _ = @import("gui/shell_plug_test.zig");
     _ = @import("gui/shell_camera_test.zig");
+    _ = @import("gui/shell_camera_file_test.zig");
     _ = @import("gui/shell_titles_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/unmodelled_test.zig");

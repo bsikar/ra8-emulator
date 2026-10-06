@@ -3,8 +3,9 @@
 //! pick sent to the session with set_camera_source (RA8EMU-795). The webcam
 //! passes the panel's own consent dialog first, so only then does the ask
 //! carry allow_webcam. The panel's ring follows the source the session runs:
-//! a refusal, or a kind that needs a file the shell cannot pick yet, puts it
-//! back on the last source the session took.
+//! a refusal, or a kind that still needs a file, puts it back on the last
+//! source the session took. The kind that needed a file is kept in `wants`
+//! for the leaf's file field (RA8EMU-799).
 const std = @import("std");
 const proto = @import("../interfaces/rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
@@ -32,12 +33,17 @@ pub const Camera = struct {
     asked: ?u32 = null,
     asked_kind: Kind = .gradient,
     status: Status = .idle,
+    /// The kind last picked without a file, waiting for its path.
+    wants: ?Kind = null,
 
     /// Send the panel's newest pick, once per change, while connected.
     pub fn attach(self: *Camera, link: *session_link.Link) void {
         if (link.state != .connected or self.panel.changes == self.seen) return;
         self.seen = self.panel.changes;
-        const spec = camera_open.spec(self.panel, self.args) catch return self.back(.needs_file);
+        const spec = camera_open.spec(self.panel, self.args) catch {
+            self.wants = self.panel.active;
+            return self.back(.needs_file);
+        };
         var buffer: [proto.CameraSource.max_len.text]u8 = undefined;
         const text = specText(&buffer, spec) catch return self.back(.refused);
         const args: proto.CameraSource = .{ .text = text, .allow_webcam = @intFromBool(spec.allow_webcam) };
@@ -76,7 +82,7 @@ pub const Camera = struct {
             .asking => "asking the session to switch",
             .switched => "the session switched source",
             .refused => "the session refused that source",
-            .needs_file => "that source needs a file; the shell cannot pick one yet",
+            .needs_file => "that source needs a file: type its path below, then Enter",
         };
     }
 
