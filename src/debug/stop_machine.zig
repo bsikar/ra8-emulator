@@ -159,13 +159,15 @@ pub const Machine = struct {
 
     /// Nothing can stop the run or be recorded before the next instruction:
     /// running freely with no break, watch, comparator unit or pending stop.
+    /// TRCENA alone only lets DWT_CYCCNT count, which the clocks do anyway,
+    /// so it is quiet until a comparator is given something to match.
     /// Then `onInstruction` returns null and changes nothing, and no access
     /// the instruction makes can trip anything, so a driver may skip both.
     pub fn quiet(self: *const Machine) bool {
         return self.mode == .running and !self.resumed and !self.halt_pending and
             self.watch_pending == null and self.unit_pending == null and
             self.monitor_pending == null and self.breaks.len == 0 and
-            self.watches.len == 0 and !self.fpb.enabled and !self.dwt.trcena;
+            self.watches.len == 0 and !self.fpb.enabled and !dwtArmed(&self.dwt);
     }
 
     /// Decide on the instruction about to run. A returned stop means the
@@ -268,4 +270,14 @@ pub const Machine = struct {
 
 fn clear(address: u32) u32 {
     return address & ~breakpoint.limits.thumb_bit;
+}
+
+/// Whether a DWT comparator can match: TRCENA on and one of the core's
+/// comparators given a MATCH code (RA8EMU-712).
+fn dwtArmed(unit: *const dwt.Dwt) bool {
+    if (!unit.trcena) return false;
+    for (unit.functions[0..unit.numcomp]) |function| {
+        if (function & dwt.function_bits.match_mask != 0) return true;
+    }
+    return false;
 }

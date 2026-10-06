@@ -244,9 +244,22 @@ test "anything armed keeps a run from being quiet" {
     try std.testing.expect(!fpb_on.quiet());
     var traced = Machine{};
     traced.dwt.trcena = true;
+    traced.dwt.functions[0] = 0b0100; // MATCH: instruction address
     traced.begin();
     try std.testing.expect(!traced.quiet());
     var stepping = Machine{};
     stepping.step();
     try std.testing.expect(!stepping.quiet());
+}
+
+test "trace enabled with no comparator set stays quiet, a set comparator does not" {
+    var machine = Machine{};
+    machine.begin();
+    try std.testing.expect(machine.quiet());
+    machine.dwt.trcena = true;
+    try std.testing.expect(machine.quiet());
+    machine.dwt.functions[1] = 0b0100; // MATCH: instruction address
+    try std.testing.expect(!machine.quiet());
+    machine.dwt.trcena = false;
+    try std.testing.expect(machine.quiet());
 }
