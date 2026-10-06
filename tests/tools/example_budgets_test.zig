@@ -52,6 +52,11 @@ test "the M85 module manager images run long enough for ten runs and the fault" 
     try std.testing.expectEqualStrings("60000000", budgets.pick("txm_fault_m85.elf", "2000000").?);
 }
 
+test "txm_helium_m85 runs long enough for ten Helium switches" {
+    try std.testing.expectEqualStrings("30000000", budgets.pick("txm_helium_m85.elf", null).?);
+    try std.testing.expectEqualStrings("30000000", budgets.pick("txm_helium_m85.elf", "2000000").?);
+}
+
 test "txm_reload_cpu1 runs long enough for two loads of ten runs each" {
     try std.testing.expectEqualStrings("120000000", budgets.pick("txm_reload_cpu1.elf", null).?);
     try std.testing.expectEqualStrings("120000000", budgets.pick("txm_reload_cpu1.elf", "2000000").?);
