@@ -43,6 +43,9 @@ pub const overrides = [_]Override{
     // (RA8EMU-152).
     .{ .image = "txm_manager_m85.elf", .instructions = "60000000" },
     .{ .image = "txm_fault_m85.elf", .instructions = "60000000" },
+    // Helium Q0-Q7 and VPR across ten kernel/module switches on the M85:
+    // PASS by 12M on the Zig core; the budget is 30M (RA8EMU-716).
+    .{ .image = "txm_helium_m85.elf", .instructions = "30000000" },
     // Two loads of the same module, ten runs each, with a stop and an unload
     // between them (RA8EMU-157).
     .{ .image = "txm_reload_cpu1.elf", .instructions = "120000000" },
