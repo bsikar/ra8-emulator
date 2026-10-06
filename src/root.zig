@@ -150,6 +150,7 @@ pub const board = struct {
     pub const usb_plug = @import("board/usb_plug.zig");
     pub const session_faults = @import("board/session_faults.zig");
     pub const session_plug = @import("board/session_plug.zig");
+    pub const camera_install = @import("board/camera_install.zig");
     pub const board_speed = @import("board/board_speed.zig");
     pub const session_events = @import("board/session_events.zig");
     pub const board_boundary = @import("board/board_boundary.zig");
@@ -219,5 +220,6 @@ pub const interfaces = struct {
         pub const advance = @import("interfaces/rpc/session_advance.zig");
         pub const files = @import("interfaces/rpc/session_files.zig");
         pub const parts = @import("interfaces/rpc/session_parts.zig");
+        pub const camera = @import("interfaces/rpc/session_camera.zig");
     };
 };

@@ -11,6 +11,9 @@ const served = @import("../rpc/session_server.zig");
 const loop = @import("serve_loop.zig");
 const listen = @import("serve_listen.zig");
 const session_plug = @import("../../board/session_plug.zig");
+const camera_install = @import("../../board/camera_install.zig");
+const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const Board = @import("../../board/board.zig").Board;
 
 pub const usage =
     \\usage: ra8_emulator serve --stdio <firmware.elf>
@@ -47,6 +50,8 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     };
     var context: served.Context = .{ .session = owner.session(), .scratch = try allocator.alloc(u8, proto.max_payload), .state = owner.stateFiles(), .gpa = allocator };
     context.listing = .{ .context = owner.plugs(), .listFn = listParts };
+    var camera: Camera = .{ .board = owner.board(), .allocator = allocator };
+    context.camera = .{ .context = &camera, .setFn = Camera.set };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(spec, &context, buffers),
@@ -62,3 +67,14 @@ fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {
     const plugs: *session_plug.Plugs = @ptrCast(@alignCast(context));
     return plugs.list(out);
 }
+
+/// The board and allocator set_camera_source opens sources with.
+const Camera = struct {
+    board: *Board,
+    allocator: std.mem.Allocator,
+
+    fn set(context: *anyopaque, spec: camera_registry.Spec) anyerror!void {
+        const self: *Camera = @ptrCast(@alignCast(context));
+        try camera_install.install(self.board, self.allocator, spec);
+    }
+};
