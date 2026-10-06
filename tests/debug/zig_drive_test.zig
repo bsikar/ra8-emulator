@@ -126,3 +126,19 @@ test "a run chunk starts by forgetting the interrupt poll's last answer" {
     try std.testing.expect(zig_drive.runCounted(core, &machine, 0, null, null, &retired) == .count);
     try std.testing.expect(!quiet.hushed);
 }
+
+test "a quiet run of a branch to itself retires exactly the instructions asked for" {
+    var memory = ram();
+    memory.bytes[0x08] = 0xFE; // b . (0xE7FE)
+    memory.bytes[0x09] = 0xE7;
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    var machine: Machine = .{};
+    machine.begin();
+    var retired: u64 = 0;
+    const ended = zig_drive.runCounted(core, &machine, 1000, null, null, &retired);
+    try std.testing.expectEqual(zig_drive.Ended.count, ended);
+    try std.testing.expectEqual(@as(u64, 1000), retired);
+    try std.testing.expectEqual(@as(u32, 0x08), core.register(.pc));
+}
