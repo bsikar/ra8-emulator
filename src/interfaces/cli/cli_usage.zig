@@ -2,6 +2,7 @@
 //! so src/interfaces/cli/cli.zig stays one purpose and under its cap.
 pub const text =
     \\usage: ra8_emulator <firmware.elf> [--instructions N] [--part NAME]
+    \\       ra8_emulator --map <firmware.elf>
     \\       ra8_emulator serve --stdio <firmware.elf>
     \\       ra8_emulator serve --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
     \\       ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] load|run|advance|step|pause|regs|mem|snapshot|restore ...
