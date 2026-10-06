@@ -69,6 +69,7 @@ pub const core = struct {
     pub const widget_tree = @import("debug/widget_tree.zig");
     pub const session_tap_part = @import("debug/session_tap_part.zig");
     pub const boot_slots = @import("debug/boot_slots.zig");
+    pub const sections = @import("debug/sections.zig");
     pub const watch_table = @import("debug/watch_table.zig");
     pub const call_decode = @import("debug/call_decode.zig");
     pub const step_hook = @import("debug/step_hook.zig");
