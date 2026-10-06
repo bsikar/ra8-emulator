@@ -1,7 +1,8 @@
 //! UART bytes for subscribed clients (RA8EMU-758). The session event stream
 //! (RA8EMU-192) already carries every byte the firmware writes to an SCI
 //! channel; this drains it and sends each run of bytes on one core and
-//! channel as one `uart` event.
+//! channel as one `uart` event, stamped with the virtual time of its last
+//! byte (RA8EMU-774).
 const std = @import("std");
 const proto = @import("session_rpc.zig");
 const api = @import("../../debug/session_api.zig");
@@ -10,7 +11,7 @@ const Context = @import("session_handlers.zig").Context;
 /// Events read from the stream per pass, and so the most bytes one event carries.
 const batch = 64;
 
-const Run = struct { core: proto.Core = .cpu0, channel: u8 = 0, len: usize = 0 };
+const Run = struct { core: proto.Core = .cpu0, channel: u8 = 0, virtual_ns: u64 = 0, len: usize = 0 };
 
 /// Send every queued UART byte a subscribed core wrote through `server`.
 pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
@@ -34,6 +35,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
             }
             run.core = of;
             run.channel = uart.channel;
+            run.virtual_ns = event.virtual_ns;
             bytes[run.len] = uart.byte;
             run.len += 1;
         }
@@ -43,6 +45,6 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
 }
 
 fn send(server: anytype, run: Run, bytes: *const [batch]u8, tx: []u8) !void {
-    const event: proto.Uart = .{ .core = run.core, .channel = run.channel, .bytes = bytes[0..run.len] };
+    const event: proto.Uart = .{ .core = run.core, .channel = run.channel, .virtual_ns = run.virtual_ns, .bytes = bytes[0..run.len] };
     try server.emit(proto.Uart, @intFromEnum(proto.Topic.uart), event, tx);
 }

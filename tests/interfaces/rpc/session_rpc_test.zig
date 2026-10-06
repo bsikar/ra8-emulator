@@ -30,7 +30,7 @@ test "every request, result, and event message round-trips" {
     try roundTrip(protocol.Bool, .{ .value = 1 });
     try roundTrip(protocol.Ack, .{ .accepted = 1 });
     try roundTrip(protocol.Stopped, .{ .core = .cpu0, .reason = .breakpoint, .address = 0x1234, .detail = 7 });
-    try roundTrip(protocol.Uart, .{ .core = .cpu1, .channel = 2, .bytes = "uart" });
+    try roundTrip(protocol.Uart, .{ .core = .cpu1, .channel = 2, .virtual_ns = 5, .bytes = "uart" });
     try roundTrip(protocol.DirtyRect, .{ .core = .cpu0, .x = 1, .y = 2, .width = 2, .height = 2, .virtual_ns = 9, .pixels = "gray" });
     try roundTrip(protocol.SessionEvent, .{ .core = .cpu1, .kind = .loaded, .address = 0x1000 });
     try roundTrip(protocol.Trace, .{ .core = .cpu1, .bytes = "trace" });
