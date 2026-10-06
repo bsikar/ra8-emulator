@@ -49,6 +49,16 @@ pub const arg = struct {
     pub const vcom_value: u16 = 1;
 };
 
+/// The vendor LUT selectors used by the panel driver. A2 is mode 4 on
+/// M641 LUTs and mode 6 on the generic LUT.
+pub const waveform = struct {
+    pub const init: u16 = 0;
+    pub const du: u16 = 1;
+    pub const gc16: u16 = 2;
+    pub const a2_m641: u16 = 4;
+    pub const a2_generic: u16 = 6;
+};
+
 pub const vcom = struct {
     pub const get: u16 = 0x0000;
     pub const set: u16 = 0x0001;

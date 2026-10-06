@@ -323,12 +323,13 @@ pub const Panel = struct {
         }
         if (self.data_index != proto.arg.display_waveform) return;
         self.last_waveform = word;
-        if (self.planes.ready()) self.planes.glass.copyRectFrom(
+        if (self.planes.ready()) self.planes.glass.refreshFrom(
             &self.planes.image,
             self.display_args[proto.arg.display_x],
             self.display_args[proto.arg.display_y],
             self.display_args[proto.arg.display_width],
             self.display_args[proto.arg.display_height],
+            word,
         );
         self.refreshes +%= 1;
         self.film.start();
