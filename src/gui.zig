@@ -18,6 +18,7 @@ pub const camera_media_row = @import("gui/camera_media_row.zig");
 pub const camera_thumb = @import("gui/camera_thumb.zig");
 pub const host_loop = @import("gui/host_loop.zig");
 pub const session_link = @import("gui/session_link.zig");
+pub const status_bar = @import("gui/status_bar.zig");
 pub const triple_buffer = @import("gui/triple_buffer.zig");
 pub const board_snapshot = @import("gui/board_snapshot.zig");
 pub const source_swap = @import("gui/source_swap.zig");
