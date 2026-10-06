@@ -120,6 +120,7 @@ test {
     _ = @import("gui/console_scroll_test.zig");
     _ = @import("gui/session_link_test.zig");
     _ = @import("gui/status_bar_test.zig");
+    _ = @import("gui/status_strip_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/debug_boundary_test.zig");
     _ = @import("board/quiet_due_test.zig");
