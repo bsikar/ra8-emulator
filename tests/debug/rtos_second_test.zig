@@ -22,6 +22,7 @@ const zig_code: u32 = vectors + 0x200;
 fn bring(driver: *Driver, board: *Board) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
     driver.board = null;
+    driver.cycle_remainder = 0;
     driver.store = try ra8.core.cpu.memory.store.Store.init(null);
     errdefer driver.close();
     const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &driver.store.? };

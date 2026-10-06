@@ -5,9 +5,8 @@
 //! for the debugger. It wraps the run's own boundary rather than touching
 //! the run loop: each stretch is cut short so it ends exactly on the next
 //! event's virtual time, and at that boundary every event due is applied
-//! in file order. Time is the board's TimeBase (RA8EMU-179), which counts
-//! one cycle per retired instruction, so a stretch of N instructions
-//! moves it by exactly the cycles `cyclesUntil` asked for.
+//! in file order. Time is the board's TimeBase (RA8EMU-179); the wrapped
+//! boundary converts its cycle edge when instructions and cycles differ.
 const std = @import("std");
 const boot = @import("../core/cpu/boot.zig");
 const api = @import("../debug/session_api.zig");
@@ -28,7 +27,9 @@ pub const Applier = struct {
             .context = self,
             .widthFn = widthThunk,
             .closeFn = closeThunk,
+            .abortFn = if (self.inner.abortFn != null) abortThunk else null,
             .reboot = self.inner.reboot,
+            .cyclesFn = if (self.inner.cyclesFn != null) cyclesThunk else null,
             .doneFn = if (self.inner.doneFn != null) doneThunk else null,
             .sleepFn = if (self.inner.sleepFn != null) sleepThunk else null,
         };
@@ -52,7 +53,8 @@ pub const Applier = struct {
     /// `normal` cut so the stretch ends on the next event, never below one.
     fn cap(self: *const Applier, normal: u32) u32 {
         const left = self.untilNext() orelse return normal;
-        return @intCast(@max(1, @min(normal, left)));
+        const instructions = if (self.inner.cyclesFn) |convert| convert(self.inner.context, left) else left;
+        return @intCast(@max(1, @min(normal, instructions)));
     }
 
     fn applyDue(self: *Applier) !void {
@@ -89,6 +91,11 @@ fn closeThunk(context: *anyopaque, instructions: u32) anyerror!void {
     try self.applyDue();
 }
 
+fn abortThunk(context: *anyopaque) void {
+    const self = of(context);
+    self.inner.abortFn.?(self.inner.context);
+}
+
 fn doneThunk(context: *anyopaque) bool {
     const self = of(context);
     return self.inner.doneFn.?(self.inner.context);
@@ -97,4 +104,9 @@ fn doneThunk(context: *anyopaque) bool {
 fn sleepThunk(context: *anyopaque, normal: u32) u32 {
     const self = of(context);
     return self.cap(self.inner.sleepFn.?(self.inner.context, normal));
+}
+
+fn cyclesThunk(context: *anyopaque, cycles: u64) u64 {
+    const self = of(context);
+    return self.inner.cyclesFn.?(self.inner.context, cycles);
 }

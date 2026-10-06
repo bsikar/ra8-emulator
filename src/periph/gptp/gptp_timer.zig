@@ -18,7 +18,7 @@
 //! and the seconds it belonged to are in the seconds field.
 const std = @import("std");
 
-/// The GPTP clock, fixed-point scale, and the board's CPU clock.
+/// The GPTP clock and fixed-point scale.
 pub const scale = struct {
     /// ESWCLK = PLL1P / 4 on this part.
     pub const eswclk_hz: u64 = 250_000_000;
@@ -26,8 +26,6 @@ pub const scale = struct {
     pub const subns_shift: u6 = 27;
     pub const ns_per_sec: u64 = 1_000_000_000;
     pub const one_second_fixed: u64 = ns_per_sec << subns_shift;
-    /// The emulated core runs at one instruction per 1 GHz clock cycle.
-    pub const cpu_hz: u64 = 1_000_000_000;
 };
 
 /// Field widths of the 78-bit GPTP time: nanoseconds in [29:0], seconds
@@ -91,10 +89,10 @@ pub const Unit = struct {
     pub fn advance(self: *Unit, increment: u32, esw_cycles: u64) void {
         if (!self.enabled or increment == 0) return;
         self.ticks +%= 1;
-        self.fixed += @as(u64, increment) * esw_cycles;
-        const whole = self.fixed / scale.one_second_fixed;
-        self.acc_sec +%= whole;
-        self.fixed -= whole * scale.one_second_fixed;
+        const total = @as(u128, self.fixed) + @as(u128, increment) * esw_cycles;
+        const whole = total / scale.one_second_fixed;
+        self.acc_sec +%= @truncate(whole);
+        self.fixed = @intCast(total % scale.one_second_fixed);
     }
 
     /// Stage the 78-bit offset. Returns whether the nanoseconds field held

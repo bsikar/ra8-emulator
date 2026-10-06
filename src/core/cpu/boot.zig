@@ -46,6 +46,11 @@ pub const Boundary = struct {
     context: *anyopaque,
     widthFn: *const fn (context: *anyopaque) u32,
     closeFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
+    /// Discard boundary-local state when a SysTick rearm cuts a stretch.
+    abortFn: ?*const fn (context: *anyopaque) void = null,
+    /// Convert a cycle edge to the instruction width that reaches it. Null
+    /// means the boundary charges one cycle per instruction.
+    cyclesFn: ?*const fn (context: *anyopaque, cycles: u64) u64 = null,
     /// The reset a block asked for at this boundary (a watchdog underflow,
     /// AIRCR.SYSRESETREQ), performed before the next stretch (RA8EMU-508).
     reboot: ?*Reboot = null,
@@ -256,6 +261,7 @@ pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*U
         // stretch from the period now armed (RA8EMU-464). What the stretch carried in goes uncharged with it,
         // so a loaded run hands those instructions back to its budget, as the run left whole never spent them (RA8EMU-701).
         if (cpu.cut) |cut| if (cut.take()) {
+            if (edge.abortFn) |abort| abort(edge.context);
             left = left - 1 + carry;
             carry = 0;
             continue;

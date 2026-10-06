@@ -22,6 +22,7 @@ const stack: u32 = vectors + 0x800;
 fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
     driver.board = null;
+    driver.cycle_remainder = 0;
     driver.store = try Store.init(null);
     errdefer driver.close();
     const memory: Guest = .{ .store = &driver.store.? };
@@ -194,4 +195,31 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     var stream = std.io.fixedBufferStream(&fault_line);
     try ra8.periph.fault_status.line(stream.writer(), words);
     try std.testing.expectEqualStrings("", stream.getWritten());
+}
+
+test "a divided CPU1 charges cycles for the CPU0 boundary duration" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    defer driver.close();
+
+    var dividers: u16 = 0x2020;
+    driver.second.state.dividers = &dividers;
+    driver.roundAt(1000, ra8.periph.clocks.timebase.default_hz);
+    try std.testing.expectEqual(@as(usize, 250), driver.second.state.ran);
+    try std.testing.expectEqual(@as(u64, 250), driver.second.state.timebase.elapsed);
+}
+
+test "CPU1 preserves fractional cycles across a default-rate round" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var driver: Driver = undefined;
+    try bring(&driver, &board, &.{0xE7FE});
+    defer driver.close();
+
+    driver.roundAt(1, 8_000_000);
+    driver.round(1);
+    driver.roundAt(124, 8_000_000);
+    try std.testing.expectEqual(@as(u64, 2), driver.second.state.timebase.elapsed);
 }

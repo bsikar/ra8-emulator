@@ -24,9 +24,10 @@
 //! `gpt.step_per_tick` (16385) per boundary, so a tenth of the old spacing is
 //! about a third of a count per instruction, and silicon counting at PCLKD
 //! against a core at roughly one instruction per cycle is the same order.
-//! Nothing else changes: the clocks charge one instruction of time per
-//! instruction executed either way, so a budget still buys the same number of
-//! cycles, just delivered in smaller pieces.
+//! Normally the clocks charge one cycle per instruction. A `--ms` run instead
+//! prices that fixed instruction cadence in cycles at the image's running
+//! core clock, so its elapsed-cycle report follows the image without changing
+//! the instruction safety ceiling.
 const std = @import("std");
 
 /// Instructions between two boundaries.

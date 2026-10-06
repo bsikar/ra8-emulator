@@ -58,8 +58,9 @@ pub const Table = struct {
         return left.address < right.address;
     }
 
-    /// Add an instruction and cycle charge. The emulator's current timing
-    /// model charges one cycle per virtual instruction.
+    /// Add an instruction and its virtual CPU-work charge. Profile cycles are
+    /// deliberately one per retired instruction, not the board-clock cycles a
+    /// timed run reports after scaling.
     pub fn add(self: *Table, address: u32, instructions: u64, cycles: u64) void {
         for (self.sites[0..self.used]) |*site| {
             if (site.address == address) {

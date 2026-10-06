@@ -75,7 +75,7 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import(".
     agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
     try agt_sched.arm(&self.interval, &self.time.queue, self.time.base.now());
     gpt_sched.tickFor(&self.pwm, before_ns, self.time.base.now());
-    self.ptp.tick(instructions);
+    self.ptp.tick(elapsed_ns);
     self.trace.tick();
     self.rswitch.tick();
     self.usb.tick();

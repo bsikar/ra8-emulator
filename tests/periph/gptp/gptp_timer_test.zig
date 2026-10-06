@@ -128,6 +128,20 @@ test "the sub-second accumulator never reaches one second" {
     try std.testing.expectEqual(@as(u32, 16), unit.ticks);
 }
 
+test "a long elapsed span does not overflow the fixed-point product" {
+    var unit = timer.Unit{};
+    unit.start();
+    const increment = std.math.maxInt(u32);
+    const cycles = std.math.maxInt(u64);
+    unit.advance(increment, cycles);
+    const total = @as(u128, increment) * cycles;
+    try std.testing.expectEqual(
+        @as(u64, @truncate(total / timer.scale.one_second_fixed)),
+        unit.acc_sec,
+    );
+    try std.testing.expectEqual(@as(u64, @intCast(total % timer.scale.one_second_fixed)), unit.fixed);
+}
+
 test "a unit that never ran says so" {
     var unit = timer.Unit{};
     try std.testing.expect(!unit.ran());
