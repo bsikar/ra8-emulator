@@ -100,6 +100,7 @@ test {
     _ = @import("gui/thread_priority_test.zig");
     _ = @import("gui/console_log_test.zig");
     _ = @import("gui/console_feed_test.zig");
+    _ = @import("gui/console_stamp_test.zig");
     _ = @import("gui/console_pane_test.zig");
     _ = @import("gui/console_keys_test.zig");
     _ = @import("gui/console_save_test.zig");
