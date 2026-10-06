@@ -6,6 +6,7 @@
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
 const debug_session = @import("session.zig");
+const socket_flags = @import("../interfaces/socket_flags.zig");
 
 /// Instructions per run chunk under gdb: small enough that an interrupt
 /// lands promptly, large enough that polling costs nothing measurable.
@@ -24,7 +25,7 @@ pub const Socket = struct {
         const ready = std.posix.poll(&fds, 0) catch return false;
         if (ready == 0) return false;
         var byte: [1]u8 = undefined;
-        const peeked = std.posix.recv(self.handle, &byte, std.posix.MSG.PEEK) catch return false;
+        const peeked = std.posix.recv(self.handle, &byte, socket_flags.peek) catch return false;
         if (peeked == 0 or byte[0] != packet.interrupt) return false;
         _ = std.posix.recv(self.handle, &byte, 0) catch return false;
         return true;

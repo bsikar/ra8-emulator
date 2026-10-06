@@ -199,6 +199,7 @@ pub const snapshot = struct {
 };
 
 pub const interfaces = struct {
+    pub const socket_flags = @import("interfaces/socket_flags.zig");
     pub const rpc = struct {
         pub const session = @import("interfaces/rpc/session_rpc.zig");
         pub const stdio = @import("interfaces/rpc/stdio_transport.zig");
