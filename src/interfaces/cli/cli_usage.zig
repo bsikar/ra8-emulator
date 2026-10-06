@@ -5,6 +5,7 @@ pub const text =
     \\       ra8_emulator serve --stdio <firmware.elf>
     \\       ra8_emulator serve --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
     \\       ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] load|run|step|pause|regs|mem ...
+    \\       ra8_emulator ctl --host NAME [--hosts FILE] --image ELF [--json] load|run|step|pause|regs|mem ...
     \\       ra8_emulator ctl probe HOST PORT capabilities|registers|read ADDRESS LENGTH|halt|step|resume
     \\       ra8_emulator ctl cpu-load <firmware.elf> [--from N --to N]
     \\                    [--sd IMAGE | --sd-save IMAGE] [--sd-size MB] [--sd-new FS[:LABEL]] [--trace-sd]

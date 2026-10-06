@@ -85,12 +85,32 @@ pub fn part(w: anytype, json: bool, method: proto.Method, spec: []const u8) !voi
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(json: bool, err: anyerror, code: u16) u8 {
+    const why = explain(err);
     if (json) {
-        std.io.getStdOut().writer().print("{{\"error\":\"{s}\",\"code\":{d}}}\n", .{ @errorName(err), code }) catch {};
+        const w = std.io.getStdOut().writer();
+        w.print("{{\"error\":\"{s}\",\"code\":{d}", .{ @errorName(err), code }) catch {};
+        if (why.len != 0) w.print(",\"message\":{}", .{std.json.fmt(why, .{})}) catch {};
+        w.writeAll("}\n") catch {};
+    } else if (why.len != 0) {
+        std.debug.print("ctl: {s} (code {d}): {s}\n", .{ @errorName(err), code, why });
     } else {
         std.debug.print("ctl: {s} (code {d})\n", .{ @errorName(err), code });
     }
     return 1;
+}
+
+/// A sentence for the failures a user can act on, else empty.
+pub fn explain(err: anyerror) []const u8 {
+    return switch (err) {
+        error.VersionMismatch => "the server speaks another session protocol version; run the same ra8_emulator build on both ends",
+        error.UnknownHost => "no profile of that name in the hosts file",
+        error.BadHostsLine => "the hosts file has a malformed profile line",
+        error.NoHostsFile => "no hosts file at --hosts FILE, $RA8_HOSTS or ~/.config/ra8_emulator/hosts",
+        error.HostUnreachable => "ssh could not reach the host",
+        error.CopyFailed => "copying the image to the host failed",
+        error.ImageUnreadable => "cannot read the image",
+        else => "",
+    };
 }
 
 pub fn uart(w: anytype, json: bool, sent: proto.Uart) !void {

@@ -2,15 +2,23 @@
 //! (RA8EMU-747): one command against a running `serve`, one connection per
 //! command. serve keeps the session between clients, so a script of ctl
 //! calls drives one continuous machine.
+//!
+//! `ctl --host NAME --image ELF` (RA8EMU-196) instead starts a `serve
+//! --stdio` on the profile's host for this one command, so each call is a
+//! fresh machine booted from ELF.
 const std = @import("std");
 const proto = @import("../rpc/session_rpc.zig");
 const Spec = @import("serve_listen.zig").Spec;
-const Client = @import("ctl_client.zig").Client;
+const ctl_client = @import("ctl_client.zig");
+const Client = ctl_client.Client;
+const profiles = @import("host_profiles.zig");
+const host_spawn = @import("host_spawn.zig");
 const out = @import("ctl_print.zig");
 pub const events = @import("ctl_events.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
+    \\       ra8_emulator ctl --host NAME [--hosts FILE] --image ELF [--json] COMMAND
     \\  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem ADDRESS LENGTH
     \\            speed FACTOR|max | break ADDRESS | break --clear ID
     \\            watch ADDRESS read|write|access | watch --clear ID
@@ -44,20 +52,53 @@ pub const Command = union(enum) {
 
 pub const Part = struct { method: proto.Method, text: []const u8 };
 
-pub const Request = struct { spec: Spec, json: bool, command: Command };
+/// A profile from the hosts file and the image its `serve` boots.
+pub const Host = struct { name: []const u8, hosts: ?[]const u8, image: []const u8 };
 
-/// Parse `argv`; `--json` may sit anywhere after the connect spec.
+pub const Where = union(enum) { connect: Spec, host: Host };
+
+pub const Request = struct { where: Where, json: bool, command: Command };
+
+/// Parse `argv`; `--json`, `--hosts` and `--image` may sit anywhere after
+/// the connect spec or host name.
 pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
-    if (argv.len < 5 or !std.mem.eql(u8, argv[1], "ctl") or !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
-    const spec = try Spec.parse(argv[3]);
+    if (argv.len < 5 or !std.mem.eql(u8, argv[1], "ctl")) return error.BadArguments;
+    const by_host = std.mem.eql(u8, argv[2], "--host");
+    if (!by_host and !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
     var words = std.ArrayList([]const u8).init(allocator);
     var json = false;
-    for (argv[4..]) |word| {
-        if (std.mem.eql(u8, word, "--json")) json = true else try words.append(word);
+    var hosts: ?[]const u8 = null;
+    var image: ?[]const u8 = null;
+    var index: usize = 4;
+    while (index < argv.len) : (index += 1) {
+        const word = argv[index];
+        if (std.mem.eql(u8, word, "--json")) {
+            json = true;
+        } else if (std.mem.eql(u8, word, "--hosts") or std.mem.eql(u8, word, "--image")) {
+            index += 1;
+            if (index == argv.len) return error.BadArguments;
+            if (word[2] == 'h') hosts = argv[index] else image = argv[index];
+        } else try words.append(word);
     }
     if (words.items.len == 0) return error.BadArguments;
     const command = try parseCommand(allocator, words.items[0], words.items[1..]);
-    return .{ .spec = spec, .json = json, .command = command };
+    if (!by_host) {
+        if (hosts != null or image != null) return error.BadArguments;
+        return .{ .where = .{ .connect = try Spec.parse(argv[3]) }, .json = json, .command = command };
+    }
+    const host: Host = .{ .name = argv[3], .hosts = hosts, .image = image orelse return error.MissingImage };
+    return .{ .where = .{ .host = host }, .json = json, .command = command };
+}
+
+/// The link `where` names: a socket, or a `serve --stdio` started for it.
+fn target(allocator: std.mem.Allocator, where: Where) !ctl_client.Target {
+    switch (where) {
+        .connect => |spec| return .{ .socket = spec },
+        .host => |host| {
+            const profile = try profiles.load(allocator, host.hosts, host.name);
+            return .{ .spawn = try host_spawn.serveArgv(allocator, profile, host.image) };
+        },
+    }
 }
 
 fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
@@ -126,13 +167,14 @@ fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const p
     return regs;
 }
 
-/// Run `argv` (`ra8_emulator ctl --connect ...`) and return the exit code.
+/// Run `argv` (`ra8_emulator ctl --connect|--host ...`) and return the exit code.
 pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     const request = parse(allocator, argv) catch |err| {
         std.debug.print("ctl: {s}\n{s}", .{ @errorName(err), usage });
         return 2;
     };
-    const client = Client.open(allocator, request.spec) catch |err| return out.failed(request.json, err, 0);
+    const reach = target(allocator, request.where) catch |err| return out.failed(request.json, err, 0);
+    const client = Client.open(allocator, reach) catch |err| return out.failed(request.json, err, 0);
     defer client.close();
     return perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
 }

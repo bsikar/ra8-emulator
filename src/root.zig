@@ -12,6 +12,8 @@ pub const core = struct {
     pub const serve_main = @import("interfaces/cli/serve_main.zig");
     pub const serve_listen = @import("interfaces/cli/serve_listen.zig");
     pub const session_ctl = @import("interfaces/cli/session_ctl.zig");
+    pub const host_profiles = @import("interfaces/cli/host_profiles.zig");
+    pub const host_spawn = @import("interfaces/cli/host_spawn.zig");
     pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
     pub const csel = @import("core/csel.zig");
@@ -204,6 +206,7 @@ pub const interfaces = struct {
         pub const session = @import("interfaces/rpc/session_rpc.zig");
         pub const stdio = @import("interfaces/rpc/stdio_transport.zig");
         pub const socket = @import("interfaces/rpc/socket_transport.zig");
+        pub const child = @import("interfaces/rpc/child_transport.zig");
         pub const server = @import("interfaces/rpc/session_server.zig");
     };
 };
