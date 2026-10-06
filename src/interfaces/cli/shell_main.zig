@@ -15,6 +15,7 @@ const shell_board = @import("../../gui/shell_board.zig");
 const shell_devices = @import("../../gui/shell_devices.zig");
 const shell_camera = @import("../../gui/shell_camera.zig");
 const shell_plug = @import("../../gui/shell_plug.zig");
+const shell_camera_file = @import("../../gui/shell_camera_file.zig");
 const session_link = @import("../../gui/session_link.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
@@ -115,7 +116,10 @@ fn local(allocator: std.mem.Allocator, window: platform.Platform, path: []const 
     var plug: shell_plug.Plug = .{};
     try plug.init();
     shell.plug = &plug;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug };
+    var camera_file: shell_camera_file.CameraFile = .{};
+    try camera_file.init();
+    shell.camera_file = &camera_file;
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug, .camera_file = &camera_file };
     shell.painter = panes.painter();
     try drive(&shell, window, path, bytes);
     link.close();

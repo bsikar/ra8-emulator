@@ -55,6 +55,11 @@ pub const Panel = struct {
         return self.active == .webcam;
     }
 
+    /// The active source's file changed, so the runner opens it again.
+    pub fn reopen(self: *Panel) void {
+        self.changes += 1;
+    }
+
     fn switchTo(self: *Panel, kind: Kind) void {
         self.active = kind;
         self.changes += 1;
