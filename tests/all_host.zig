@@ -93,6 +93,7 @@ test {
     _ = @import("gui/shell_panes_test.zig");
     _ = @import("gui/shell_console_test.zig");
     _ = @import("gui/shell_board_test.zig");
+    _ = @import("gui/shell_devices_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/unmodelled_test.zig");
     _ = @import("interfaces/cli/report/watchdog_test.zig");
