@@ -133,16 +133,27 @@ pub const Clock = struct {
     /// board's next queued event, the panel's next vsync or the GPT's next
     /// wrap, turn or match. CPU1 shares each boundary, so a run with
     /// it keeps the normal width, as does a board with a block mid-work.
+    /// The first edge at or inside `normal` settles it, so the rest are not
+    /// looked up: a ticking image's stretch already ends at the tick (RA8EMU-730).
     pub fn asleepWidth(self: *Clock, normal: u32) u32 {
         if (self.cpu1 != null or !quiet_due.quietUntilDue(self.board)) return normal;
-        const edges = [_]u64{
-            self.instructionsForCycles(self.timebase.untilWrap(self.memory)),
-            self.instructionsForCycles(self.ns_timebase.untilWrap(self.memory)),
-            self.instructionsForCycles(board_edge.cyclesToDue(self.board)),
-            self.instructionsForCycles(quiet_due.vsyncDue(self.board)),
-            self.instructionsForCycles(quiet_due.gptDue(self.board)),
-        };
+        var edges: [5]u64 = undefined;
+        for (&edges, 0..) |*edge, which| {
+            edge.* = self.instructionsForCycles(self.edgeCycles(which));
+            if (edge.* != 0 and edge.* <= normal) return normal;
+        }
         return sleep_pace.width(normal, true, &edges);
+    }
+
+    /// Cycles until edge `which` of the five `asleepWidth` weighs; 0 is none.
+    fn edgeCycles(self: *Clock, which: usize) u64 {
+        return switch (which) {
+            0 => self.timebase.untilWrap(self.memory),
+            1 => self.ns_timebase.untilWrap(self.memory),
+            2 => board_edge.cyclesToDue(self.board),
+            3 => quiet_due.vsyncDue(self.board),
+            else => quiet_due.gptDue(self.board),
+        };
     }
 
     /// Has a soak event (a watchdog reset, or a fault latched since the last
