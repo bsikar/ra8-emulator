@@ -6,7 +6,7 @@ The emulator uses the shared `ra8_rpc` framing and codec. Frames are binary:
 - `u16` frame kind, little-endian
 - the kind-specific body, encoded in declaration order with no padding
 
-The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads and bit 1 the part methods (plug, unplug, set_fault, clear_fault, list_parts), bit 2 `advance`, bit 3 `snapshot` and `restore`, and bit 4 `set_camera_source`.
+The shared library defines `hello=1`, `request=2`, `response=3`, `event=4`, and `fault=5`; magic is `RA8R`, version is `1`. The peer exchanges hello frames before requests. A magic or version mismatch produces a fault frame. Capability bits are intersected by the clients; bit 0 announces LCD dirty-rectangle payloads and bit 1 the part methods (plug, unplug, set_fault, clear_fault, list_parts), bit 2 `advance`, bit 3 `snapshot` and `restore`, bit 4 `set_camera_source`, and bit 5 `map`.
 
 Request, response, and event envelopes use the shared library's u32 request id, u16 method/topic, and binary argument payload. A response carries either the reply bytes or an application error. Events are pushed independently of outstanding requests. Request ids correlate out-of-order responses. `run` acknowledges when the core starts; the later stop is a `stop` event.
 
@@ -42,6 +42,7 @@ Request, response, and event envelopes use the shared library's u32 request id, 
 | 0x0119 | restore | path on the serving host | ack |
 | 0x011a | list_parts | core | length-prefixed text: one `MODEL@ENDPOINT` line per fitted part, the run's `--attach` asks then the session's plugs, an unplugged endpoint dropped; `too_long` past 4096 bytes |
 | 0x011b | set_camera_source | length-prefixed text in `--camera-source` syntax (`gradient`, `image:PATH`, `video:PATH[,loop]`, `pipe:...`, `webcam[:N|PATH]`), u8 allow_webcam | ack; the CEU captures from the new source and the old one is closed. `bad_args` when the text does not parse, `refused` when the source cannot be opened (the old source stays) or a webcam is named without allow_webcam=1 (the session never asks on its terminal, which is the wire under `--stdio`) |
+| 0x011c | map | core, u8 json | length-prefixed text: the memory map of the image the core last loaded (the opened ELF until a `load` replaces it) over the EK-RA8D2 linker regions. json=0 gives exactly what `ra8_emulator --map ELF` prints; json=1 gives one object `{"regions":[{"name","base","size","used","sections":[{"name","vma","lma","size","kind","copy"}]}],"stack":{"base","size","region"}\|null,"outside":{"count","bytes","sections"}}`, a stored section (`.data`) listed again under its load region with copy `load`. `refused` when the core has no image, `too_long` past 65536 bytes |
 
 Part specs travel as text in the same syntax as the `--attach` and `--fault` flags, and the server parses them with the same parsers, so the two cannot drift. A spec that does not parse is refused as bad arguments; one the board cannot honour (an unknown endpoint, a mode that does not fit the part's bus) is refused with the session's refusal code. Capability bit 1 announces these four methods.
 

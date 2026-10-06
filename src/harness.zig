@@ -40,8 +40,12 @@ pub const Options = struct {
 };
 
 const LoaderState = struct {
+    allocator: std.mem.Allocator,
     cpu: [2]?*cpu_mod.Cpu = .{ null, null },
     memory: [2]?Guest = .{ null, null },
+    /// An owned copy of each core's last loaded image, for the memory map
+    /// (RA8EMU-794); replaced on every load.
+    loaded: [2]?[]u8 = .{ null, null },
 
     fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
         const self: *LoaderState = @ptrCast(@alignCast(context));
@@ -53,6 +57,13 @@ const LoaderState = struct {
         // loads with, so option-setting segments land (RA8EMU-760).
         _ = try memory_load.image(memory, image);
         try cpu.reset(image.vectorBase() orelse return error.NoVectorTable);
+        const copy = try self.allocator.dupe(u8, bytes);
+        if (self.loaded[index]) |old| self.allocator.free(old);
+        self.loaded[index] = copy;
+    }
+
+    fn deinit(self: *LoaderState) void {
+        for (self.loaded) |kept| if (kept) |bytes| self.allocator.free(bytes);
     }
 };
 
@@ -111,6 +122,13 @@ pub const Harness = struct {
 
     pub fn image(self: *const Harness) elf.Image {
         return self.state.image;
+    }
+
+    /// The image a core last loaded (the opened one, until a session load
+    /// replaces it), or null when nothing loaded on that core.
+    pub fn loadedImage(self: *const Harness, core: session_api.Core) ?elf.Image {
+        const bytes = self.state.loading.loaded[@intFromEnum(core)] orelse return null;
+        return elf.Image.init(bytes) catch null;
     }
 
     pub fn board(self: *Harness) *Board {
@@ -174,6 +192,7 @@ pub const Harness = struct {
         state.plugs_arena.deinit();
         state.cpu0.close();
         state.board.deinit();
+        state.loading.deinit();
         state.allocator.free(state.bytes);
         state.allocator.destroy(state);
         self.* = undefined;
@@ -209,7 +228,8 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
     state.pending.banked = &state.cpu.banked;
     try state.cpu.reset(vector);
-    state.loading = .{};
+    state.loading = .{ .allocator = allocator };
+    errdefer state.loading.deinit();
     state.loading.cpu[0] = &state.cpu;
     state.loading.memory[0] = state.cpu0.own();
     state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };

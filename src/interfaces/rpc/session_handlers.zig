@@ -24,6 +24,13 @@ pub const Camera = struct {
     setFn: *const fn (*anyopaque, camera_registry.Spec) anyerror!void,
 };
 
+/// Writes the memory map of a core's last loaded image (RA8EMU-794): the
+/// core index, JSON or text, and the buffer to write into.
+pub const Mapping = struct {
+    context: *anyopaque,
+    mapFn: *const fn (*anyopaque, usize, bool, []u8) anyerror![]const u8,
+};
+
 pub const Listing = struct {
     context: *anyopaque,
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
@@ -54,6 +61,8 @@ pub const Context = struct {
     listing: ?Listing = null,
     /// Changes the camera source; a server without one refuses it.
     camera: ?Camera = null,
+    /// Writes the memory map for `map`; a server without one refuses it.
+    mapping: ?Mapping = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@intFromEnum(of)] & bit(topic) != 0;

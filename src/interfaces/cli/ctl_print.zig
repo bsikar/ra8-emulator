@@ -98,6 +98,12 @@ pub fn files(w: anytype, json: bool, method: proto.Method, path: []const u8) !vo
     try w.print("{s} {s}\n", .{ key, path });
 }
 
+/// The memory map: the server's JSON object under "map", or its text as is.
+pub fn map(w: anytype, json: bool, text: []const u8) !void {
+    if (json) return w.print("{{\"map\":{s}}}\n", .{text});
+    try w.writeAll(text);
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(json: bool, err: anyerror, code: u16) u8 {

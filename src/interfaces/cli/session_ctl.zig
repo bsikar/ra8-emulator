@@ -26,6 +26,7 @@ pub const usage =
     \\            advance 500ms|600s
     \\            plug MODEL@ENDPOINT | unplug ENDPOINT
     \\            snapshot PATH | restore PATH (paths on the serving host)
+    \\            map (the memory map of the image last loaded)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
 ;
@@ -54,6 +55,8 @@ pub const Command = union(enum) {
     part: Part,
     /// A run file on the serving host (RA8EMU-768).
     files: Files,
+    /// The memory map of the last loaded image (RA8EMU-794).
+    map,
 };
 
 pub const Part = struct { method: proto.Method, text: []const u8 };
@@ -116,6 +119,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
+    if (eql(u8, name, "map")) return if (args.len == 0) .map else error.BadArguments;
     if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
     if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
     if (eql(u8, name, "break")) return parseBreak(args);
@@ -252,6 +256,10 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 
         .files => |asked| {
             _ = try client.call(proto.Ack, proto.StatePath, asked.method, .{ .path = asked.path });
             try out.files(w, json, asked.method, asked.path);
+        },
+        .map => {
+            const map = try client.call(proto.MapText, proto.MapAsk, .map, .{ .core = .cpu0, .json = @intFromBool(json) });
+            try out.map(w, json, map.text);
         },
     }
     return 0;
