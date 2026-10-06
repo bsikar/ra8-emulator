@@ -7,12 +7,14 @@ const proto = @import("../rpc/session_rpc.zig");
 const Spec = @import("serve_listen.zig").Spec;
 const Client = @import("ctl_client.zig").Client;
 const out = @import("ctl_print.zig");
+pub const events = @import("ctl_events.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
     \\  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem ADDRESS LENGTH
     \\            speed FACTOR|max | break ADDRESS | break --clear ID
     \\            watch ADDRESS read|write|access | watch --clear ID
+    \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
     \\
 ;
 
@@ -33,6 +35,7 @@ pub const Command = union(enum) {
     clear_break: u32,
     set_watch: struct { address: u32, access: proto.Access },
     clear_watch: u32,
+    events: events.Options,
 };
 
 pub const Request = struct { spec: Spec, json: bool, command: Command };
@@ -61,6 +64,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
     if (eql(u8, name, "break")) return parseBreak(args);
     if (eql(u8, name, "watch")) return parseWatch(args);
+    if (eql(u8, name, "events")) return .{ .events = try events.parse(args) };
     if (!eql(u8, name, "mem")) return error.UnknownCommand;
     if (args.len != 2) return error.BadArguments;
     const length = try std.fmt.parseInt(u32, args[1], 0);
@@ -111,14 +115,14 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
     };
     const client = Client.open(allocator, request.spec) catch |err| return out.failed(request.json, err, 0);
     defer client.close();
-    perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
-    return 0;
+    return perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
 }
 
-fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !void {
+fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 {
     const w = std.io.getStdOut().writer();
     const json = request.json;
     switch (request.command) {
+        .events => |options| return events.watch(client, w, json, options),
         .load => |path| {
             const image = try std.fs.cwd().readFileAlloc(allocator, path, proto.max_payload);
             _ = try client.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });
@@ -160,6 +164,7 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !voi
         .clear_break => |id| try clear(client, w, json, .clear_breakpoint, id),
         .clear_watch => |id| try clear(client, w, json, .clear_watchpoint, id),
     }
+    return 0;
 }
 
 /// Bytes a `watch` covers from its address, the same span the debugger's

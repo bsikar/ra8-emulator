@@ -240,3 +240,71 @@ test "ctl load takes a firmware image with option-setting segments and resets to
     const pc = regs.field("registers").object.get("pc").?;
     try std.testing.expectEqual(@as(i64, 0x02000AFC), try expectInteger(pc));
 }
+
+const uart_image = "tests/fixtures/uart/uart_irq_echo.elf";
+
+/// One ctl run's exit code and the UART text and last line its JSON lines carried.
+const Stream = struct { term: Term, text: std.ArrayList(u8), last: std.ArrayList(u8) };
+
+fn stream(gpa: std.mem.Allocator, spec: []const u8, words: []const []const u8) !Stream {
+    var argv = std.ArrayList([]const u8).init(gpa);
+    defer argv.deinit();
+    try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
+    try argv.appendSlice(words);
+    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
+    defer gpa.free(result.stdout);
+    defer gpa.free(result.stderr);
+    var got: Stream = .{ .term = result.term, .text = .init(gpa), .last = .init(gpa) };
+    var lines = std.mem.tokenizeScalar(u8, result.stdout, '\n');
+    while (lines.next()) |line| {
+        got.last.clearRetainingCapacity();
+        try got.last.appendSlice(line);
+        const parsed = try std.json.parseFromSlice(Value, gpa, line, .{});
+        defer parsed.deinit();
+        const uart = parsed.value.object.get("uart") orelse continue;
+        try got.text.appendSlice(uart.object.get("text").?.string);
+    }
+    return got;
+}
+
+test "ctl events waits for a UART line and times out on one that never comes" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/events.sock", .{tmp.sub_path});
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var served = try serve_peer.listen(gpa, spec, &line);
+    defer _ = served.child.kill() catch {};
+    var loaded = try run(gpa, spec, &.{ "load", uart_image });
+    defer loaded.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+
+    const ready = try stream(gpa, spec, &.{ "events", "--until", "uart_irq_echo ready", "--timeout", "60s" });
+    defer ready.text.deinit();
+    defer ready.last.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, ready.term);
+    try std.testing.expect(std.mem.indexOf(u8, ready.text.items, "uart_irq_echo ready") != null);
+
+    const never = try stream(gpa, spec, &.{ "events", "--until", "never printed", "--timeout", "1s" });
+    defer never.text.deinit();
+    defer never.last.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 1 }, never.term);
+    try std.testing.expect(std.mem.startsWith(u8, never.last.items, "{\"timeout\""));
+}
+
+test "ctl events parses topics, the text to wait for and durations" {
+    const events = ctl.events;
+    try std.testing.expectEqual(@as(i64, 500), try events.parseDuration("500ms"));
+    try std.testing.expectEqual(@as(i64, 30_000), try events.parseDuration("30s"));
+    try std.testing.expectEqual(@as(i64, 2_000), try events.parseDuration("2"));
+    try std.testing.expectError(error.BadDuration, events.parseDuration("0s"));
+    const options = try events.parse(&.{ "--topic", "stop", "--until", "ready" });
+    try std.testing.expect(options.stop and options.uart);
+    try std.testing.expectEqualStrings("ready", options.until.?);
+    try std.testing.expect((try events.parse(&.{})).uart);
+    try std.testing.expectError(error.UnknownTopic, events.parse(&.{ "--topic", "lcd" }));
+    try std.testing.expectError(error.BadArguments, events.parse(&.{"--until"}));
+}

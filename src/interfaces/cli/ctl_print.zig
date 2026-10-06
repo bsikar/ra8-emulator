@@ -79,3 +79,13 @@ pub fn failed(json: bool, err: anyerror, code: u16) u8 {
     }
     return 1;
 }
+
+pub fn uart(w: anytype, json: bool, sent: proto.Uart) !void {
+    if (!json) return w.writeAll(sent.bytes);
+    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"text\":{}}}}}\n", .{ @tagName(sent.core), sent.channel, std.json.fmt(sent.bytes, .{}) });
+}
+
+pub fn timeout(w: anytype, json: bool, until: []const u8) !void {
+    if (json) return w.print("{{\"timeout\":{{\"until\":{}}}}}\n", .{std.json.fmt(until, .{})});
+    try w.print("\ntimed out waiting for {s}\n", .{until});
+}

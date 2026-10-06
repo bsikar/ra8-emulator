@@ -11,6 +11,9 @@ const Incoming = proto.Client.Incoming;
 /// How long ctl waits for any one answer before giving up.
 const answer_wait_ms = 30_000;
 
+/// One event frame; the payload lives until the next read.
+pub const Event = struct { topic: u16, payload: []const u8 };
+
 pub const Client = struct {
     connection: Connection,
     rx: []u8,
@@ -70,11 +73,24 @@ pub const Client = struct {
         };
     }
 
+    /// The next event the server sends, or null once `wait_ms` passes.
+    pub fn event(self: *Client, wait_ms: i64) !?Event {
+        const deadline = std.time.milliTimestamp() + wait_ms;
+        while (std.time.milliTimestamp() < deadline) {
+            if (try self.client.poll(self.tx)) |incoming| switch (incoming) {
+                .event => |sent| return .{ .topic = sent.topic, .payload = sent.payload },
+                else => {},
+            };
+            std.time.sleep(std.time.ns_per_ms);
+        }
+        return null;
+    }
+
     /// The next stop event the server sends.
     pub fn stop(self: *Client) !proto.Stopped {
         while (true) switch (try self.next()) {
-            .event => |event| if (event.topic == @intFromEnum(proto.Topic.stop)) {
-                return try proto.decode(proto.Stopped, event.payload);
+            .event => |frame| if (frame.topic == @intFromEnum(proto.Topic.stop)) {
+                return try proto.decode(proto.Stopped, frame.payload);
             },
             else => {},
         };
