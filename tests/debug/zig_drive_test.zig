@@ -6,6 +6,8 @@ const Cpu = ra8.core.cpu.cpu.Cpu;
 const zig_core = ra8.core.step_hook.zig_core;
 const zig_drive = ra8.core.step_hook.zig_drive;
 const Machine = ra8.core.stop_machine.Machine;
+const QuietSource = ra8.core.cpu.exception.quiet_source.QuietSource;
+const Fake = @import("../core/cpu/exception/fake_source.zig").Fake;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
@@ -107,4 +109,20 @@ test "a quiet run still stops for a halt or a break armed between runs" {
     machine.proceed();
     try std.testing.expectEqual(id, zig_drive.run(core, &machine, 100).stop.breakpoint);
     try std.testing.expectEqual(@as(u64, 2), cpu.retired);
+}
+
+test "a run chunk starts by forgetting the interrupt poll's last answer" {
+    var memory = ram();
+    var fake: Fake = .{};
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = memory.view() };
+    var cpu: Cpu = .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    var machine = Machine{};
+    machine.begin();
+    try std.testing.expect(zig_drive.run(core, &machine, 1) == .count);
+    try std.testing.expect(quiet.hushed);
+    var retired: u64 = 0;
+    try std.testing.expect(zig_drive.runCounted(core, &machine, 0, null, null, &retired) == .count);
+    try std.testing.expect(!quiet.hushed);
 }
