@@ -104,6 +104,7 @@ test {
     _ = @import("gui/console_pick_test.zig");
     _ = @import("gui/console_scroll_test.zig");
     _ = @import("board/board_test.zig");
+    _ = @import("board/debug_boundary_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");
     _ = @import("board/plug_test.zig");
