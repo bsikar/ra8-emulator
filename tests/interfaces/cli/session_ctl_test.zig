@@ -305,3 +305,16 @@ test "ctl parse: plug, unplug and fault" {
     try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.set_fault, set.command.part.method);
     try std.testing.expectError(error.BadArguments, ctl.parse(a, &(base ++ [_][]const u8{"unplug"})));
 }
+
+test "ctl parse: snapshot and restore take one path" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const saved = try ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "snapshot", "/tmp/run.ra8snap", "--json" });
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.snapshot, saved.command.files.method);
+    try std.testing.expectEqualStrings("/tmp/run.ra8snap", saved.command.files.path);
+    try std.testing.expect(saved.json);
+    const back = try ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "restore", "run.ra8snap" });
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.restore, back.command.files.method);
+    try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "restore" }));
+}

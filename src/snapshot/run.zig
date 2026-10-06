@@ -22,6 +22,13 @@ pub fn save(writer: anytype, store: *const Store, cores: []const *const Cpu, boa
     for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
 }
 
+/// Refuses a file a load would refuse before touching anything: another
+/// part, or no memory section. A live restore checks before it wipes.
+pub fn check(bytes: []const u8, board: anytype) !void {
+    try board_snap.partOf(board.part, bytes);
+    _ = try file.Reader.find(bytes, .memory) orelse return Error.Missing;
+}
+
 /// Fills a fresh run from a whole file. Every core asked for must have its
 /// section; extra cores in the file are ignored.
 pub fn load(bytes: []const u8, store: *Store, cores: []const *Cpu, board: anytype) !void {

@@ -31,6 +31,34 @@ test "public harness opens real display firmware, taps, settles, and frames" {
     try std.testing.expect(!std.mem.eql(u8, before.pixels, after.pixels));
 }
 
+test "RA8EMU-768: restore returns the session to a saved screen, frame for frame" {
+    if (builtin.mode != .ReleaseFast) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    defer std.testing.allocator.free(dir);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "screen.ra8snap" });
+    defer std.testing.allocator.free(path);
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image_path, .input_script = input_path });
+    defer opened.deinit();
+
+    try opened.session().waitSettled(2_000_000_000);
+    var saved = try opened.session().frame(std.testing.allocator);
+    defer saved.deinit(std.testing.allocator);
+    try opened.stateFiles().save(path);
+
+    try opened.session().waitSettled(2_000_000_000);
+    var moved = try opened.session().frame(std.testing.allocator);
+    defer moved.deinit(std.testing.allocator);
+    try std.testing.expect(!std.mem.eql(u8, saved.pixels, moved.pixels));
+
+    try opened.stateFiles().restore(path);
+    var back = try opened.session().frame(std.testing.allocator);
+    defer back.deinit(std.testing.allocator);
+    try std.testing.expectEqual(saved.virtual_ns, back.virtual_ns);
+    try std.testing.expectEqualSlices(u8, saved.pixels, back.pixels);
+}
+
 test "public harness rejects a zero settle window before opening the image" {
     const result = ra8.harness.open(std.testing.allocator, .{
         .elf_path = image_path,

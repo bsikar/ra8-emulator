@@ -81,6 +81,17 @@ pub const Store = struct {
         self.owns_external = false;
     }
 
+    /// Zero every region this store owns and drop the windows it mapped,
+    /// so a live store reads as a fresh one before a snapshot fills it
+    /// (RA8EMU-768). Borrowed regions are the lender's to clear.
+    pub fn wipe(self: *Store) void {
+        for (self.pages, self.owned) |held, mine| {
+            if (mine) if (held) |bytes| @memset(bytes, 0);
+        }
+        if (self.owns_external) if (self.region(memmap.sdram_base)) |bytes| @memset(bytes, 0);
+        self.extra.deinit();
+    }
+
     pub fn region(self: *const Store, base: u32) ?[]u8 {
         return self.pages[indexOf(base) orelse return null];
     }

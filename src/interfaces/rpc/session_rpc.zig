@@ -3,7 +3,8 @@ const rpc = @import("ra8_rpc");
 
 pub const protocol_version: u16 = 1;
 /// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
-pub const capabilities: u32 = 0x0000_0007;
+/// Bit 2: advance. Bit 3: snapshot and restore.
+pub const capabilities: u32 = 0x0000_000F;
 pub const max_payload = 1_048_576;
 
 pub const Method = enum(u16) {
@@ -31,6 +32,8 @@ pub const Method = enum(u16) {
     set_fault = 0x0115,
     clear_fault = 0x0116,
     advance = 0x0117,
+    snapshot = 0x0118,
+    restore = 0x0119,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -75,6 +78,11 @@ pub const Ack = struct { accepted: u8 };
 pub const Advance = struct { core: Core, ns: u64 };
 /// Where an advance began and ended in virtual time, and how it stopped.
 pub const Advanced = struct { core: Core, from_ns: u64, to_ns: u64, reason: StopReason, address: u32 };
+/// A run file on the serving host, for snapshot and restore (RA8EMU-768).
+pub const StatePath = struct {
+    path: []const u8,
+    pub const max_len = .{ .path = 4096 };
+};
 pub const Stopped = struct { core: Core, reason: StopReason, address: u32, detail: u32 };
 pub const Uart = struct {
     core: Core,

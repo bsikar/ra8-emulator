@@ -211,5 +211,6 @@ pub const interfaces = struct {
         pub const child = @import("interfaces/rpc/child_transport.zig");
         pub const server = @import("interfaces/rpc/session_server.zig");
         pub const advance = @import("interfaces/rpc/session_advance.zig");
+        pub const files = @import("interfaces/rpc/session_files.zig");
     };
 };

@@ -29,6 +29,8 @@ pub const Context = struct {
     /// The session event-stream queue UART bytes are read from while any
     /// core wants the uart topic.
     uart_feed: ?usize = null,
+    /// The run file's snapshot and restore, when the server has one.
+    state: ?@import("../../board/session_state.zig").Hook = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@intFromEnum(of)] & bit(topic) != 0;

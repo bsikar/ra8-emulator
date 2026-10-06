@@ -17,6 +17,7 @@ const board_boundary = @import("board/board_boundary.zig");
 const session_events = @import("board/session_events.zig");
 const second_core = @import("core/second_core.zig");
 const session_display = @import("board/session_display.zig");
+const session_state = @import("board/session_state.zig");
 const debug_session = @import("debug/session.zig");
 const session_api = @import("debug/session_api.zig");
 const stop_machine = @import("debug/stop_machine.zig");
@@ -74,6 +75,7 @@ const State = struct {
     plugs: session_plug.Plugs,
     faults: session_faults.Faults,
     edge: board_boundary.BoardBoundary,
+    files: session_state.Files,
     reboot: Reboot,
     display: session_display.Host,
     tracer: ?rtos_hook.Tracer,
@@ -149,6 +151,11 @@ pub const Harness = struct {
         return true;
     }
 
+    /// Snapshot and restore of this run's file (RA8EMU-768).
+    pub fn stateFiles(self: *Harness) session_state.Hook {
+        return self.state.files.hook();
+    }
+
     /// Let the boundary tick CPU1's board edge and take its reset requests.
     pub fn bindSecond(self: *Harness, second: *second_core.Second, second_guest: Guest) void {
         self.state.edge.second = second;
@@ -213,6 +220,7 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     state.board.reboot = &state.reboot;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index };
     state.session.live.boundary = state.edge.hook();
+    state.files = .{ .allocator = allocator, .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
     state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });
