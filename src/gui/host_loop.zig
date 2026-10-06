@@ -346,6 +346,7 @@ pub const Loop = struct {
         if (self.consoles.len > 0) try console_pick.draw(&list, strip, self.consoles, self.channel);
         const lines = if (self.consoles.len > 0) console_pick.below(strip) else strip;
         if (self.console) |log| try console_pane.draw(&list, lines, log, self.scroll.back);
+        if (try window.show(&list, font.atlas)) return;
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);
     }

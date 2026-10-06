@@ -5,6 +5,8 @@
 //!   gui-hello              run until the window is closed or Escape
 //!   gui-hello --frames N   present N frames and exit (a smoke run; with
 //!                          SDL_VIDEO_DRIVER=offscreen it needs no display)
+//!
+//! Frames draw through SDL geometry; RA8_GUI_CPU=1 forces the CPU path.
 const std = @import("std");
 const ra8 = @import("ra8");
 const sdl = @import("gui_sdl");
@@ -46,10 +48,12 @@ pub fn main() !void {
         }
         list.clear();
         try scene(&list, size);
+        if (try window.show(&list, null)) continue;
         gui.raster.draw(&frame, &list, null);
         try window.present(&frame);
     }
-    std.debug.print("gui-hello: {d} frames at {d}x{d}\n", .{ shown, size.width, size.height });
+    const path = if (backend.presenter != null) "geometry" else "cpu";
+    std.debug.print("gui-hello: {d} frames at {d}x{d} through {s}\n", .{ shown, size.width, size.height, path });
 }
 
 /// --frames N, or null to run until closed.
