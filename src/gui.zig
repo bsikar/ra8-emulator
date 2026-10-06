@@ -36,6 +36,7 @@ pub const devices_panel = @import("gui/devices_panel.zig");
 pub const devices_pane = @import("gui/devices_pane.zig");
 pub const registers_pane = @import("gui/registers_pane.zig");
 pub const memory_pane = @import("gui/memory_pane.zig");
+pub const disasm_pane = @import("gui/disasm_pane.zig");
 pub const plug_post = @import("gui/plug_post.zig");
 pub const speed_post = @import("gui/speed_post.zig");
 pub const widget_paint = @import("gui/widget_paint.zig");
