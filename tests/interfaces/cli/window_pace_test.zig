@@ -11,14 +11,45 @@ const Engine = struct {
     stretch: u64,
     total: u64,
     ran: u64 = 0,
+    gate: ?*Gate = null,
 
     fn run(self: *Engine) void {
         defer self.pacer.finish();
         if (!self.pacer.charge(0)) return;
+        if (self.gate) |gate| gate.hold();
         while (self.ran < self.total) {
             self.ran += self.stretch;
             if (!self.pacer.charge(self.stretch)) return;
         }
+    }
+};
+
+/// Lets a test hold the engine after it takes a grant but before it spends it.
+const Gate = struct {
+    mutex: std.Thread.Mutex = .{},
+    changed: std.Thread.Condition = .{},
+    arrived: bool = false,
+    released: bool = false,
+
+    fn hold(self: *Gate) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.arrived = true;
+        self.changed.broadcast();
+        while (!self.released) self.changed.wait(&self.mutex);
+    }
+
+    fn waitArrived(self: *Gate) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        while (!self.arrived) self.changed.wait(&self.mutex);
+    }
+
+    fn release(self: *Gate) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.released = true;
+        self.changed.broadcast();
     }
 };
 
@@ -97,20 +128,29 @@ test "the park hook runs on the engine at each park and once at the end" {
 
 test "a grant never waits and never runs the engine more than a frame ahead" {
     var pacer = Pacer{ .per_frame = 100 };
-    var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300 };
+    var gate = Gate{};
+    var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300, .gate = &gate };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
+    defer thread.join();
+    defer pacer.stop();
     waitParked(&pacer);
-    try std.testing.expect(pacer.grant());
-    // Before the engine has taken the grant, another one is no top-up.
+
+    const first = pacer.grant();
+    gate.waitArrived();
     pacer.mutex.lock();
-    const left = pacer.left;
+    const before = pacer.left;
     pacer.mutex.unlock();
-    try std.testing.expect(pacer.grant());
+    const second = pacer.grant();
     pacer.mutex.lock();
-    try std.testing.expect(pacer.left <= left);
+    const after = pacer.left;
     pacer.mutex.unlock();
+    gate.release();
+
+    try std.testing.expect(first);
+    try std.testing.expect(second);
+    try std.testing.expectEqual(@as(u64, 100), before);
+    try std.testing.expectEqual(before, after);
     while (pacer.grant()) std.Thread.yield() catch {};
-    thread.join();
     try std.testing.expectEqual(@as(u64, 300), engine.ran);
     try std.testing.expect(!pacer.grant());
 }
