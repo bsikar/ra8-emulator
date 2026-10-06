@@ -25,6 +25,7 @@ pub const usage =
     \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
     \\            advance 500ms|600s
     \\            plug MODEL@ENDPOINT | unplug ENDPOINT
+    \\            snapshot PATH | restore PATH (paths on the serving host)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
 ;
@@ -51,9 +52,13 @@ pub const Command = union(enum) {
     events: events.Options,
     /// A part spec in `--attach`/`--fault` syntax, parsed by the server.
     part: Part,
+    /// A run file on the serving host (RA8EMU-768).
+    files: Files,
 };
 
 pub const Part = struct { method: proto.Method, text: []const u8 };
+
+pub const Files = struct { method: proto.Method, path: []const u8 };
 
 /// A profile from the hosts file and the image its `serve` boots.
 pub const Host = struct { name: []const u8, hosts: ?[]const u8, image: []const u8 };
@@ -119,6 +124,8 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "plug")) return part(.plug, args);
     if (eql(u8, name, "unplug")) return part(.unplug, args);
     if (eql(u8, name, "fault")) return parseFault(args);
+    if (eql(u8, name, "snapshot")) return if (args.len == 1) .{ .files = .{ .method = .snapshot, .path = args[0] } } else error.BadArguments;
+    if (eql(u8, name, "restore")) return if (args.len == 1) .{ .files = .{ .method = .restore, .path = args[0] } } else error.BadArguments;
     if (!eql(u8, name, "mem")) return error.UnknownCommand;
     if (args.len != 2) return error.BadArguments;
     const length = try std.fmt.parseInt(u32, args[1], 0);
@@ -241,6 +248,10 @@ fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 
         .part => |asked| {
             _ = try client.call(proto.Ack, proto.PartSpec, asked.method, .{ .core = .cpu0, .text = asked.text });
             try out.part(w, json, asked.method, asked.text);
+        },
+        .files => |asked| {
+            _ = try client.call(proto.Ack, proto.StatePath, asked.method, .{ .path = asked.path });
+            try out.files(w, json, asked.method, asked.path);
         },
     }
     return 0;

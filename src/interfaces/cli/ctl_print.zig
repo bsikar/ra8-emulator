@@ -92,6 +92,12 @@ pub fn part(w: anytype, json: bool, method: proto.Method, spec: []const u8) !voi
     try w.print("{s} {s}\n", .{ key, spec });
 }
 
+pub fn files(w: anytype, json: bool, method: proto.Method, path: []const u8) !void {
+    const key = if (method == .snapshot) "snapshot" else "restored";
+    if (json) return w.print("{{\"{s}\":{}}}\n", .{ key, std.json.fmt(path, .{}) });
+    try w.print("{s} {s}\n", .{ key, path });
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(json: bool, err: anyerror, code: u16) u8 {

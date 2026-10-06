@@ -44,7 +44,7 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
         .rx = try allocator.alloc(u8, 2 * Env.max_frame),
         .tx = try allocator.alloc(u8, Env.max_frame),
     };
-    var context: served.Context = .{ .session = owner.session(), .scratch = try allocator.alloc(u8, proto.max_payload) };
+    var context: served.Context = .{ .session = owner.session(), .scratch = try allocator.alloc(u8, proto.max_payload), .state = owner.stateFiles() };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(spec, &context, buffers),
