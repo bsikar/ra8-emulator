@@ -33,6 +33,7 @@ pub fn quietUntilDue(board: *const Board) bool {
     if (!board.usb.quiet()) return false;
     if (!board.rswitch.quiet() or !board.ptp.quiet()) return false;
     if (!board.npu.quiet() or !board.adc.quiet()) return false;
+    if (!board.c6.quiet()) return false;
     return board.can.quiet() and board.mailbox.quiet();
 }
 

@@ -1,16 +1,14 @@
-//! The board's ESP32-C6 companion in a snapshot (RA8EMU-687): the reply
-//! byte and the esp-hosted link (frames, offset, caps, counters and the
-//! reply queue), as one `c6` section.
+//! The board's ESP32-C6 companion in a snapshot (RA8EMU-687).
 //!
-//! Not saved, because it is wiring: `pins` (the GPIO block init points it
-//! at). A load keeps the target board's own.
+//! Live host sockets are runtime resources: successful load closes and clears
+//! them, while a failed load leaves the target bridge untouched.
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-const wiring = .{"pins"};
+const wiring = .{ "pins", "wire.bridge" };
 
 pub fn save(board: anytype, writer: anytype) !void {
     var counter = std.io.countingWriter(std.io.null_writer);
@@ -19,14 +17,15 @@ pub fn save(board: anytype, writer: anytype) !void {
     try fields.writeExcept(writer, board.c6, wiring);
 }
 
-/// All or nothing: the C6 changes only once the whole section read cleanly
-/// and the link's offset, caps and queue fit their buffers.
+/// All or nothing: failed parsing leaves emulated state and live sockets alone.
 pub fn load(board: anytype, bytes: []const u8) Error!void {
     const section = try file.Reader.find(bytes, .c6) orelse return Error.Missing;
     var cursor: fields.Cursor = .{ .bytes = section.payload };
-    var copy = board.c6;
+    var copy: @TypeOf(board.c6) = .{ .pins = board.c6.pins };
     try fields.readOver(&cursor, &copy, wiring);
     if (!cursor.done() or !fits(copy.wire)) return Error.BadValue;
+    board.c6.deinit();
+    copy.wire.bridge = .{};
     board.c6 = copy;
 }
 

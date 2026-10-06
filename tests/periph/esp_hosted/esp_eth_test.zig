@@ -56,3 +56,47 @@ test "frames that are not UDP over IPv4 are not read" {
     try std.testing.expect(eth.udp(tcp[0..len]) == null);
     try std.testing.expect(eth.udp(buf[0..20]) == null);
 }
+
+test "TCP frames round-trip fields and checksums" {
+    var buf: [ra8.periph.esp_hosted.frame.max_payload]u8 = undefined;
+    const len = eth.tcpFrame(
+        &buf,
+        route,
+        0x10203040,
+        0x50607080,
+        eth.TcpFlag.syn | eth.TcpFlag.ack,
+        1460,
+        "hello",
+    ).?;
+    const ip = eth.ipv4(buf[0..len]).?;
+    const segment = eth.tcp(ip).?;
+    try std.testing.expectEqual(@as(u32, 0x10203040), segment.seq);
+    try std.testing.expectEqual(@as(u32, 0x50607080), segment.ack);
+    try std.testing.expectEqual(eth.TcpFlag.syn | eth.TcpFlag.ack, segment.flags);
+    try std.testing.expectEqual(@as(u16, 1460), segment.window);
+    try std.testing.expectEqualSlices(u8, "hello", segment.data);
+}
+
+test "bad checksums fragments and oversize payloads are refused" {
+    var buf: [ra8.periph.esp_hosted.frame.max_payload]u8 = undefined;
+    const len = eth.tcpFrame(&buf, route, 1, 2, eth.TcpFlag.ack, 4, "x").?;
+    var bad_ip = buf;
+    bad_ip[eth.eth_header + 10] ^= 1;
+    try std.testing.expect(eth.ipv4(bad_ip[0..len]) == null);
+    var fragment = buf;
+    fragment[eth.eth_header + 6] = 0x20;
+    try std.testing.expect(eth.ipv4(fragment[0..len]) == null);
+    var bad_tcp = buf;
+    bad_tcp[len - 1] ^= 1;
+    try std.testing.expect(eth.tcp(eth.ipv4(bad_tcp[0..len]).?) == null);
+    const too_big = [_]u8{0} ** (eth.tcp_payload_max + 1);
+    try std.testing.expect(eth.tcpFrame(&buf, route, 0, 0, 0, 0, &too_big) == null);
+}
+
+test "a zero UDP checksum is accepted" {
+    var buf: [64]u8 = undefined;
+    const len = sample(&buf);
+    buf[eth.eth_header + eth.ip_header + 6] = 0;
+    buf[eth.eth_header + eth.ip_header + 7] = 0;
+    try std.testing.expectEqualSlices(u8, "hello", eth.udp(buf[0..len]).?.data);
+}
