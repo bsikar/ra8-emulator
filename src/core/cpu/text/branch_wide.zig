@@ -1,5 +1,5 @@
 //! Text for the branch_wide group: B<cond>.W (T3), B.W (T4) and BL, in
-//! Capstone 5's spelling, printed as the absolute target: `beq.w #0x2000104`,
+//! the spelling the parity digests pin, printed as the absolute target: `beq.w #0x2000104`,
 //! `b.w #0x2000100`, `bl #0x2000104`.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

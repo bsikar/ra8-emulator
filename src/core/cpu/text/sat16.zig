@@ -1,4 +1,4 @@
-//! Text for the sat16 group: SSAT16 and USAT16. Capstone prints the
+//! Text for the sat16 group: SSAT16 and USAT16. We print the
 //! saturate position as the bit count, sat_imm + 1 for SSAT16.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

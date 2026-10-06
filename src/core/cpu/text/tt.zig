@@ -1,5 +1,5 @@
-//! Text for the tt group: TT, TTT, TTA and TTAT Rd, Rn, in Capstone 5's
-//! spelling (no `.w`). The fields come from src/core/tt.zig's decode, the
+//! Text for the tt group: TT, TTT, TTA and TTAT Rd, Rn, in the spelling
+//! the parity digests pin (no `.w`). The fields come from src/core/tt.zig's decode, the
 //! one the executor uses.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

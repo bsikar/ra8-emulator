@@ -1,5 +1,5 @@
 //! Text for the ldrd_strd group: `ldrd`/`strd rt, rt2` with an immediate
-//! offset, in Capstone 5's spelling. No form carries `.w`.
+//! offset, in the spelling the parity digests pin. No form carries `.w`.
 //!
 //! An offset form drops a zero added offset (`[r0]`) and prints a subtracted
 //! one in hex, zero included (`#-0x0`). A pre-indexed form keeps a zero

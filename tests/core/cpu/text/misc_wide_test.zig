@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/misc_wide.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/misc_wide.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every op2 for each Rm copy 0 to 15, with Rd r0, r12 and SP (unclaimed).
 const hw2 = blk: {
@@ -16,10 +16,10 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "REV, REV16, RBIT and REVSH print the way Capstone does" {
-    try capstone.expectWideGroupMatches("misc_wide", 0xFFF0, 0xFA90, &hw2);
+test "REV, REV16, RBIT and REVSH match their parity digests" {
+    try parity.expectWideGroupMatches("misc_wide", 0xFFF0, 0xFA90, &hw2);
 }
 
-test "CLZ prints the way Capstone does" {
-    try capstone.expectWideGroupMatches("misc_wide", 0xFFF0, 0xFAB0, &hw2);
+test "CLZ matches its parity digest" {
+    try parity.expectWideGroupMatches("misc_wide", 0xFFF0, 0xFAB0, &hw2);
 }

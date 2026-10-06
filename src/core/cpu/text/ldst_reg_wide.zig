@@ -1,6 +1,6 @@
 //! Text for the ldst_reg_wide group: the 32-bit register-offset loads and
-//! stores, `ldr.w rt, [rn, rm]` or `[rn, rm, lsl #n]` in Capstone 5's
-//! spelling. Every form carries `.w`, and a zero shift is left out.
+//! stores, `ldr.w rt, [rn, rm]` or `[rn, rm, lsl #n]` in the spelling
+//! the parity digests pin. Every form carries `.w`, and a zero shift is left out.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 const Fields = @import("../ops/ldst_reg_wide.zig").Fields;

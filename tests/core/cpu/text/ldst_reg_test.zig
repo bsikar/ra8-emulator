@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/ldst_reg.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/ldst_reg.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every 16-bit ldst_reg encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("ldst_reg");
+test "every 16-bit ldst_reg encoding matches its parity digest" {
+    try parity.expectGroupMatches("ldst_reg");
 }

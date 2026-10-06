@@ -2,7 +2,7 @@
 //! registers cleared, then VPR, which is always cleared: `vscclrm {s0-s3,
 //! vpr}`, `vscclrm {d8-d15, vpr}`, `vscclrm {s5, vpr}`, or `vscclrm {vpr}`
 //! for an empty run. The run comes from the executor's own `run`, so text and
-//! execution cannot disagree. Capstone 5 reads the encoding as a VLDMIA.
+//! execution cannot disagree. We read the encoding as a VLDMIA.
 const Instr = @import("../instr.zig").Instr;
 const ops = @import("../ops/vscclrm.zig");
 const text = @import("text.zig");

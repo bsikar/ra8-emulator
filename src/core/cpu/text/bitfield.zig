@@ -1,5 +1,5 @@
 //! Text for the bitfield group: SBFX, UBFX, BFI and BFC (BFI with Rn of
-//! PC). Capstone prints the field as lsb and width, both as ordinary
+//! PC). We print the field as lsb and width, both as ordinary
 //! immediates; the insert's width comes from its msb.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

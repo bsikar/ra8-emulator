@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/usad8.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/usad8.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every Ra (1111 is USAD8, SP unclaimed) with Rd r0 and r12 and Rm r2 and
 /// r12, plus SP as Rd and a set hw2[4] (unclaimed).
@@ -17,6 +17,6 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "USAD8 and USADA8 print the way Capstone does" {
-    try capstone.expectWideGroupMatches("usad8", 0xFFF0, 0xFB70, &hw2);
+test "USAD8 and USADA8 match their parity digests" {
+    try parity.expectWideGroupMatches("usad8", 0xFFF0, 0xFB70, &hw2);
 }

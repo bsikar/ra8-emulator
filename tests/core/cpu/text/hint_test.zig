@@ -1,9 +1,9 @@
-//! Covers src/core/cpu/text/hint.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/hint.zig against its parity digest.
+const parity = @import("parity.zig");
 const v81m = @import("v81m.zig");
 
-test "every 16-bit hint encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("hint");
+test "every 16-bit hint encoding matches its parity digest" {
+    try parity.expectGroupMatches("hint");
 }
 
 test "BTI T1 uses its Armv8.1-M alias" {
@@ -22,6 +22,6 @@ const wide = blk: {
     break :blk out;
 };
 
-test "every other 32-bit hint encoding prints the way Capstone does" {
-    try capstone.expectWideGroupMatches("hint", 0xFFFF, 0xF3AF, &wide);
+test "every other 32-bit hint encoding matches its parity digest" {
+    try parity.expectWideGroupMatches("hint", 0xFFFF, 0xF3AF, &wide);
 }

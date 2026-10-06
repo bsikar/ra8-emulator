@@ -1,5 +1,5 @@
 //! Text for the ldm_stm_wide group: the 32-bit load and store multiple, in
-//! Capstone 5's spelling. The increment-after forms carry `.w` (`stm.w`,
+//! the spelling the parity digests pin. The increment-after forms carry `.w` (`stm.w`,
 //! `ldm.w`); the decrement-before forms do not (`stmdb`, `ldmdb`).
 //! STMDB SP! and LDM SP! with two or more registers print as `push.w` and
 //! `pop.w`; with one register they keep the plain spelling.

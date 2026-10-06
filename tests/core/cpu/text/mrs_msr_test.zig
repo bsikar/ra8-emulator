@@ -1,8 +1,9 @@
-//! Covers src/core/cpu/text/mrs_msr.zig: against Capstone for every SYSm it
-//! decodes, and by name for the PAC key registers Capstone 5 cannot decode.
+//! Covers src/core/cpu/text/mrs_msr.zig: against its parity digest for every SYSm it
+//! decodes, and by name for the PAC key registers the reference
+//! disassembler could not decode.
 const std = @import("std");
 const ra8 = @import("ra8");
-const capstone = @import("capstone.zig");
+const parity = @import("parity.zig");
 const Instr = ra8.core.cpu.instr.Instr;
 
 /// Every SYSm the group claims except the PAC keys, plus 0x0C (unclaimed).
@@ -23,16 +24,16 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "MRS prints the way Capstone does for every SYSm" {
-    try capstone.expectWideGroupMatches("mrs_msr", 0xFFFF, 0xF3EF, &hw2);
+test "MRS matches its parity digest for every SYSm" {
+    try parity.expectWideGroupMatches("mrs_msr", 0xFFFF, 0xF3EF, &hw2);
 }
 
-test "MSR prints the way Capstone does for every SYSm and mask" {
-    try capstone.expectWideGroupMatches("mrs_msr", 0xFFF0, 0xF380, &hw2);
+test "MSR matches its parity digest for every SYSm and mask" {
+    try parity.expectWideGroupMatches("mrs_msr", 0xFFF0, 0xF380, &hw2);
 }
 
 fn expectText(hw1: u16, hw2_value: u16, want: []const u8) !void {
-    const instr: Instr = .{ .address = capstone.address, .hw1 = hw1, .hw2 = hw2_value, .size = 4 };
+    const instr: Instr = .{ .address = parity.address, .hw1 = hw1, .hw2 = hw2_value, .size = 4 };
     const got = ra8.core.cpu.decode.text.disasm.one(instr) orelse return error.Unclaimed;
     try std.testing.expectEqualStrings(want, got.slice());
 }

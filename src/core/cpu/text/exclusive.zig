@@ -1,5 +1,5 @@
 //! Text for the exclusive group: LDREX and STREX with their byte, halfword
-//! and acquire/release forms, and CLREX, in Capstone 5's spelling. No form
+//! and acquire/release forms, and CLREX, in the spelling the parity digests pin. No form
 //! carries `.w`.
 //!
 //! A store prints its status register first (`strex r2, r0, [r1]`). Only

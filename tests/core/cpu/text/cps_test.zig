@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/cps.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/cps.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every 16-bit cps encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("cps");
+test "every 16-bit cps encoding matches its parity digest" {
+    try parity.expectGroupMatches("cps");
 }

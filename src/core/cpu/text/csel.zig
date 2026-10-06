@@ -3,7 +3,7 @@
 //! zero register) CSINC, CSINV and CSNEG print as CINC, CINV and CNEG; with
 //! both the zero register, CSINC and CSINV print as CSET and CSETM. An alias
 //! carries the inverted condition. Register 0b1111 in Rn or Rm prints `zr`.
-//! Capstone 5 has no Armv8.1-M, so these are tested against the Arm ARM.
+//! the reference disassembler had no Armv8.1-M, so these are tested against the Arm ARM.
 const Instr = @import("../instr.zig").Instr;
 const csel = @import("../../csel.zig");
 const text = @import("text.zig");

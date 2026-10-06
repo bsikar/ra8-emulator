@@ -1,8 +1,9 @@
-//! Text for the mrs_msr group: MRS and MSR (register), in Capstone 5's
-//! spelling. The APSR-family MSR names its mask (`msr apsr_nzcvq, r4`,
+//! Text for the mrs_msr group: MRS and MSR (register), in the spelling
+//! the parity digests pin. The APSR-family MSR names its mask (`msr apsr_nzcvq, r4`,
 //! `_g`, `_nzcvqg`); every other register prints bare (`mrs r3, msp_ns`).
 //!
-//! Capstone 5 cannot decode the PAC key registers (SYSm 0x20 to 0x27), so
+//! The reference disassembler could not decode the PAC key registers
+//! (SYSm 0x20 to 0x27), so
 //! those print the Arm names `pac_key_p_0` to `pac_key_u_3` with no check
 //! against it.
 const Instr = @import("../instr.zig").Instr;

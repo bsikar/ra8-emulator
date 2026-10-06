@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/add_sub.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/add_sub.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every add_sub encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("add_sub");
+test "every add_sub encoding matches its parity digest" {
+    try parity.expectGroupMatches("add_sub");
 }

@@ -1,4 +1,4 @@
-//! Text for the ldr_literal group: LDR Rt, [pc, #imm], 16-bit. Capstone keeps
+//! Text for the ldr_literal group: LDR Rt, [pc, #imm], 16-bit. We keep
 //! the `#0` here even though it drops it for other zero offsets.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

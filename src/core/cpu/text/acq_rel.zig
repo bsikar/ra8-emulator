@@ -1,5 +1,5 @@
 //! Text for the acq_rel group: LDA, LDAB, LDAH, STL, STLB and STLH, in
-//! Capstone 5's spelling. No form carries `.w` or an offset: `lda r0, [r1]`.
+//! the spelling the parity digests pin. No form carries `.w` or an offset: `lda r0, [r1]`.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 const acq_rel = @import("../ops/acq_rel.zig");

@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/sel.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/sel.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every Rm with Rd r0, r12 and SP (unclaimed), plus a set hw2[4] (unclaimed).
 const hw2 = blk: {
@@ -15,6 +15,6 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "SEL prints the way Capstone does" {
-    try capstone.expectWideGroupMatches("sel", 0xFFF0, 0xFAA0, &hw2);
+test "SEL matches its parity digest" {
+    try parity.expectWideGroupMatches("sel", 0xFFF0, 0xFAA0, &hw2);
 }

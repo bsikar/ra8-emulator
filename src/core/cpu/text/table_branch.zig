@@ -1,4 +1,4 @@
-//! Text for the table_branch group: TBB and TBH, in Capstone 5's spelling.
+//! Text for the table_branch group: TBB and TBH, in the spelling the parity digests pin.
 //! TBH names its scaling: `tbb [r1, r0]`, `tbh [pc, lr, lsl #1]`.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

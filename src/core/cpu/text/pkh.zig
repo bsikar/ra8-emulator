@@ -1,4 +1,4 @@
-//! Text for the pkh group, in Capstone 5's spelling: PKHBT drops a zero
+//! Text for the pkh group, in the spelling the parity digests pin: PKHBT drops a zero
 //! shift (`pkhbt r0, r1, r2`) and prints `lsl #n` otherwise; PKHTB always
 //! prints its shift, with #0 shown as `asr #0x20`.
 const Instr = @import("../instr.zig").Instr;

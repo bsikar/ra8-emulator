@@ -1,6 +1,6 @@
 //! Checks one printer over every encoding its decode group claims, at a fixed
 //! address, against the digest its sweep reached when every encoding printed
-//! as Capstone 5 does (tests/core/cpu/text/digest.zig).
+//! as the reference disassembler did (tests/core/cpu/text/digest.zig).
 const std = @import("std");
 const ra8 = @import("ra8");
 const decode = ra8.core.cpu.decode;
@@ -13,8 +13,8 @@ pub fn expectGroupMatches(group: []const u8) !void {
     try expectGroupMatchesExcept(group, &.{});
 }
 
-/// As expectGroupMatches, skipping the encodings in `skip`: ones Capstone 5
-/// could not decode, which a by-name test covers instead.
+/// As expectGroupMatches, skipping the encodings in `skip`: ones the
+/// reference disassembler could not decode, which a by-name test covers instead.
 pub fn expectGroupMatchesExcept(group: []const u8, skip: []const u16) !void {
     var sweep: digest.Sweep = .{};
     var hw: u32 = 0;

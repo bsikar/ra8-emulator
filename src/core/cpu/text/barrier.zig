@@ -1,8 +1,8 @@
 //! Text for the barrier group: dsb, dmb and isb with their option.
 //!
-//! DSB and DMB name the options Capstone 5 names (the store and full
+//! DSB and DMB name the options we name (the store and full
 //! options, not the load-only ones) and print the rest as an immediate.
-//! Capstone prints DSB option 0b1100 as the Armv8-R `dfb` alias, so this
+//! We print DSB option 0b1100 as the Armv8-R `dfb` alias, so this
 //! does too: the text has to match it for the parity checks. ISB names
 //! only `sy` and prints every other option in hex.
 const Instr = @import("../instr.zig").Instr;
@@ -10,7 +10,7 @@ const text = @import("text.zig");
 const barrier = @import("../ops/barrier.zig");
 
 /// Option names for DSB and DMB, indexed by the option; null prints `#n`.
-/// Capstone 5 leaves the load-only options (oshld, nshld, ishld, ld) as
+/// We leave the load-only options (oshld, nshld, ishld, ld) as
 /// immediates, so they are null here too.
 const option_names = [16]?[]const u8{
     null, null, "oshst", "osh",

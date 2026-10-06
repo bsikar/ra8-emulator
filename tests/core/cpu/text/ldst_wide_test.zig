@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/ldst_wide.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/ldst_wide.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// For Rt = r1: imm12 edges, then the imm8 offset, pre-indexed,
 /// post-indexed (both signs, around the decimal/hex switch at 10) and
@@ -16,6 +16,6 @@ const hw2 = [_]u16{
     0x0D04, 0x0004, 0x1004 | 0x0040,
 };
 
-test "ldst_wide prints the way Capstone does in every addressing form" {
-    try capstone.expectWideGroupMatches("ldst_wide", 0xFE00, 0xF800, &hw2);
+test "ldst_wide matches its parity digest in every addressing form" {
+    try parity.expectWideGroupMatches("ldst_wide", 0xFE00, 0xF800, &hw2);
 }

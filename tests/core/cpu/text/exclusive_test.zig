@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/exclusive.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/exclusive.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// The word forms with zero, decimal, hex and largest offsets and a status
 /// register; every narrow and acquire/release op3 for loads and stores;
@@ -10,10 +10,10 @@ const hw2 = [_]u16{
     0x1FC2, 0x1FD2, 0x1FE2, 0xDF00, 0x1D00, 0x1F41, 0x8F2F,
 };
 
-test "exclusive prints the way Capstone does for every form" {
-    try capstone.expectWideGroupMatches("exclusive", 0xFF60, 0xE840, &hw2);
+test "exclusive matches its parity digest for every form" {
+    try parity.expectWideGroupMatches("exclusive", 0xFF60, 0xE840, &hw2);
 }
 
-test "clrex prints the way Capstone does" {
-    try capstone.expectWideGroupMatches("exclusive", 0xFFFF, 0xF3BF, &hw2);
+test "clrex matches its parity digest" {
+    try parity.expectWideGroupMatches("exclusive", 0xFFFF, 0xF3BF, &hw2);
 }

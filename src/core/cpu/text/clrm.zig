@@ -1,7 +1,7 @@
 //! Text for the clrm group (Armv8.1-M), in Arm ARM syntax: `clrm {r0, lr,
 //! apsr}`, R0 to R12 low first, then LR, then APSR when hw2[15] is set.
 //! Register names follow the rest of this disassembler (r9-r12 as sb, sl, fp
-//! and ip). Capstone 5 reads the encoding as an LDM from PC.
+//! and ip). We read the encoding as an LDM from PC.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 

@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/ldr_literal_wide.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/ldr_literal_wide.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Zero, decimal and hex offsets around the ten boundary, the largest
 /// offset, Rt of SP and PC, and a few other registers.
@@ -9,6 +9,6 @@ const hw2 = [_]u16{
     0xC008, 0x3400, 0x2001, 0xE00C,
 };
 
-test "ldr_literal_wide prints the way Capstone does for every size and sign" {
-    try capstone.expectWideGroupMatches("ldr_literal_wide", 0xFE1F, 0xF81F, &hw2);
+test "ldr_literal_wide matches its parity digest for every size and sign" {
+    try parity.expectWideGroupMatches("ldr_literal_wide", 0xFE1F, 0xF81F, &hw2);
 }

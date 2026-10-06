@@ -1,7 +1,7 @@
 //! Text for the preload group: pld, pldw and pli in their immediate,
 //! negative-immediate, literal and register forms.
 //!
-//! Capstone 5 drops a zero imm12 offset (`pld [r0]`) except on the literal
+//! We drop a zero imm12 offset (`pld [r0]`) except on the literal
 //! form (`pld [pc, #0]`), and prints every subtracted offset in hex, zero
 //! included (`#-0x0`, `#-0x4`). An added offset follows the usual
 //! decimal-below-ten rule.

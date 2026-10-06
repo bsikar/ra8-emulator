@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/dsp_dual.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/dsp_dual.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every Ra (1111 is the multiply-only form, SP unclaimed) with and without X,
 /// Rd/Rm low and high, plus SP as Rd and nonzero hw2[7:5] (unclaimed).
@@ -21,10 +21,10 @@ fn table() [16 * 2 * 2 + 2]u16 {
 
 const hw2 = table();
 
-test "SMLAD and SMUAD print the way Capstone does" {
-    try capstone.expectWideGroupMatches("dsp_dual", 0xFFF0, 0xFB20, &hw2);
+test "SMLAD and SMUAD match their parity digests" {
+    try parity.expectWideGroupMatches("dsp_dual", 0xFFF0, 0xFB20, &hw2);
 }
 
-test "SMLSD and SMUSD print the way Capstone does" {
-    try capstone.expectWideGroupMatches("dsp_dual", 0xFFF0, 0xFB40, &hw2);
+test "SMLSD and SMUSD match their parity digests" {
+    try parity.expectWideGroupMatches("dsp_dual", 0xFFF0, 0xFB40, &hw2);
 }
