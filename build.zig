@@ -84,23 +84,38 @@ pub fn build(b: *std.Build) void {
     if (sdl_mod) |mod| exe.root_module.addImport("gui_sdl", mod);
     guiTest(b, target, optimize, emu, gui, sdl_mod);
 
-    const tests = b.addTest(.{
-        .name = "ra8_tests",
-        .root_source_file = b.path("tests/all.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tests.root_module.addImport("ra8", emu);
-    tests.root_module.addImport("ra8_widget", firmware.module("ra8_widget"));
-    tests.root_module.addImport("gate", gate_mod);
-    tests.root_module.addImport("terms", terms_mod);
-    tests.root_module.addImport("example_table", table_mod);
-    tests.root_module.addImport("handoff_bench", bench_mod);
-    tests.linkLibC();
-    testPaths(b, tests, exe);
-    unitTests(b, tests, target, optimize, emu, &exe.step);
+    const imports = [_]std.Build.Module.Import{
+        .{ .name = "ra8", .module = emu },
+        .{ .name = "ra8_widget", .module = firmware.module("ra8_widget") },
+        .{ .name = "gate", .module = gate_mod },
+        .{ .name = "terms", .module = terms_mod },
+        .{ .name = "example_table", .module = table_mod },
+        .{ .name = "handoff_bench", .module = bench_mod },
+    };
+    var tests: [suites.len]*std.Build.Step.Compile = undefined;
+    for (suites, &tests) |suite, *compile| {
+        compile.* = testSuite(b, target, optimize, suite, &imports);
+        testPaths(b, compile.*, exe);
+    }
+    unitTests(b, &tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
+}
+
+/// The test roots, one binary each (RA8EMU-786): a single binary of every test
+/// outgrew a 3 GB box's compile, so the tests split by top-level directory.
+const Suite = struct { name: []const u8, root: []const u8 };
+const suites = [_]Suite{
+    .{ .name = "ra8_tests", .root = "tests/all.zig" },
+    .{ .name = "ra8_tests_io", .root = "tests/all_io.zig" },
+    .{ .name = "ra8_tests_gui", .root = "tests/all_gui.zig" },
+};
+
+fn testSuite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, suite: Suite, imports: []const std.Build.Module.Import) *std.Build.Step.Compile {
+    const compile = b.addTest(.{ .name = suite.name, .root_source_file = b.path(suite.root), .target = target, .optimize = optimize });
+    for (imports) |import| compile.root_module.addImport(import.name, import.module);
+    compile.linkLibC();
+    return compile;
 }
 
 /// A tools/ program's module, shared by its executable and its tests.
@@ -116,13 +131,13 @@ fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step
 }
 
 /// `test` runs the unit tests and the harness checks; `test-exe` installs the
-/// same test binary without running it, so a cross build can run on another host.
-fn unitTests(b: *std.Build, tests: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
+/// same test binaries without running them, so a cross build can run on another host.
+fn unitTests(b: *std.Build, tests: []const *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
     const test_step = b.step("test", "Run the unit tests and compile the emulator");
-    test_step.dependOn(&b.addRunArtifact(tests).step);
+    for (tests) |compile| test_step.dependOn(&b.addRunArtifact(compile).step);
     harnessChecks(b, target, optimize, emu, test_step, exe_step);
-    const test_exe = b.step("test-exe", "Install the unit test binary without running it, for a run on another host");
-    test_exe.dependOn(&b.addInstallArtifact(tests, .{}).step);
+    const test_exe = b.step("test-exe", "Install the unit test binaries without running them, for a run on another host");
+    for (tests) |compile| test_exe.dependOn(&b.addInstallArtifact(compile, .{}).step);
 }
 
 fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, test_step: *std.Build.Step, exe_step: *std.Build.Step) void {

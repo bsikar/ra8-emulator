@@ -1,51 +1,13 @@
-//! The test root. `zig build test` compiles this file, so every test file
-//! under tests/ is listed here, on the path of the source file it covers
-//! (tests/periph/crc_test.zig covers src/periph/crc.zig).
+//! The core test root: every test file under tests/ outside interfaces/,
+//! snapshot/ and gui/, on the path of the source file it covers
+//! (tests/periph/crc_test.zig covers src/periph/crc.zig). `zig build test`
+//! builds this root, tests/all_io.zig and tests/all_gui.zig as three binaries
+//! so no single compile outgrows a small box.
 const std = @import("std");
 test {
-    _ = @import("interfaces/socket_flags_test.zig");
-    _ = @import("interfaces/cli/eink_log_test.zig");
-    _ = @import("interfaces/cli/probe_ctl_test.zig");
-    _ = @import("interfaces/cli/serve_listen_test.zig");
-    _ = @import("interfaces/cli/session_ctl_test.zig");
-    _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
-    _ = @import("interfaces/cli/host_profiles_test.zig");
-    _ = @import("interfaces/cli/shell_main_test.zig");
-    _ = @import("interfaces/cli/ctl_host_test.zig");
-    _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("core/systick_bank_test.zig");
     _ = @import("harness_test.zig");
-    _ = @import("snapshot/file_test.zig");
-    _ = @import("snapshot/memory_test.zig");
-    _ = @import("snapshot/fields_test.zig");
-    _ = @import("snapshot/cpu_test.zig");
-    _ = @import("snapshot/time_test.zig");
-    _ = @import("snapshot/units_test.zig");
-    _ = @import("snapshot/timers_test.zig");
-    _ = @import("snapshot/serial_test.zig");
-    _ = @import("snapshot/sd_test.zig");
-    _ = @import("snapshot/wire_test.zig");
-    _ = @import("snapshot/raster_test.zig");
-    _ = @import("snapshot/display_test.zig");
-    _ = @import("snapshot/panel_test.zig");
-    _ = @import("snapshot/clocks_test.zig");
-    _ = @import("snapshot/security_test.zig");
-    _ = @import("snapshot/controllers_test.zig");
-    _ = @import("snapshot/storage_test.zig");
-    _ = @import("snapshot/signals_test.zig");
-    _ = @import("snapshot/datapath_test.zig");
-    _ = @import("snapshot/media_test.zig");
-    _ = @import("snapshot/wired_test.zig");
-    _ = @import("snapshot/channels_test.zig");
-    _ = @import("snapshot/usb_test.zig");
-    _ = @import("snapshot/rswitch_test.zig");
-    _ = @import("snapshot/npu_test.zig");
-    _ = @import("snapshot/systick_test.zig");
-    _ = @import("snapshot/stretch_test.zig");
-    _ = @import("snapshot/c6_test.zig");
-    _ = @import("snapshot/board_test.zig");
     _ = @import("board/profile_test.zig");
-    _ = @import("snapshot/run_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
@@ -81,54 +43,6 @@ test {
     _ = @import("core/cpu/ops_test.zig");
     _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
-    _ = @import("gui/draw_list_test.zig");
-    _ = @import("gui/geometry_test.zig");
-    _ = @import("gui/triple_buffer_test.zig");
-    _ = @import("gui/board_snapshot_test.zig");
-    _ = @import("gui/source_swap_test.zig");
-    _ = @import("gui/raster_test.zig");
-    _ = @import("gui/widget_paint_test.zig");
-    _ = @import("gui/font_test.zig");
-    _ = @import("gui/headless_test.zig");
-    _ = @import("gui/camera_panel_test.zig");
-    _ = @import("gui/devices_panel_test.zig");
-    _ = @import("gui/devices_pane_test.zig");
-    _ = @import("gui/registers_pane_test.zig");
-    _ = @import("gui/memory_pane_test.zig");
-    _ = @import("gui/disasm_pane_test.zig");
-    _ = @import("gui/plug_post_test.zig");
-    _ = @import("gui/speed_post_test.zig");
-    _ = @import("interfaces/cli/window_devices_test.zig");
-    _ = @import("gui/camera_switch_test.zig");
-    _ = @import("gui/camera_open_test.zig");
-    _ = @import("gui/camera_devices_test.zig");
-    _ = @import("gui/camera_consent_store_test.zig");
-    _ = @import("gui/camera_media_test.zig");
-    _ = @import("gui/camera_view_test.zig");
-    _ = @import("gui/camera_pane_test.zig");
-    _ = @import("gui/camera_device_row_test.zig");
-    _ = @import("gui/camera_media_row_test.zig");
-    _ = @import("gui/camera_thumb_test.zig");
-    _ = @import("gui/host_loop_test.zig");
-    _ = @import("gui/present_gate_test.zig");
-    _ = @import("gui/pane_layout_test.zig");
-    _ = @import("gui/host_loop_devices_test.zig");
-    _ = @import("gui/thread_priority_test.zig");
-    _ = @import("gui/console_log_test.zig");
-    _ = @import("gui/console_feed_test.zig");
-    _ = @import("gui/console_stamp_test.zig");
-    _ = @import("gui/console_pane_test.zig");
-    _ = @import("gui/console_keys_test.zig");
-    _ = @import("gui/console_save_test.zig");
-    _ = @import("gui/platform_test.zig");
-    _ = @import("gui/console_pick_test.zig");
-    _ = @import("gui/console_scroll_test.zig");
-    _ = @import("gui/session_link_test.zig");
-    _ = @import("gui/status_bar_test.zig");
-    _ = @import("gui/status_strip_test.zig");
-    _ = @import("gui/shell_frame_test.zig");
-    _ = @import("gui/shell_loop_test.zig");
-    _ = @import("gui/shell_panes_test.zig");
     _ = @import("board/board_test.zig");
     _ = @import("board/debug_boundary_test.zig");
     _ = @import("board/debug_boundary_sleep_test.zig");
@@ -145,20 +59,6 @@ test {
     _ = @import("board/gauge_replug_test.zig");
     _ = @import("board/session_schedule_test.zig");
     _ = @import("board/wiring_test.zig");
-    _ = @import("interfaces/cli/report/dma_test.zig");
-    _ = @import("interfaces/cli/report/unmodelled_test.zig");
-    _ = @import("interfaces/cli/report/watchdog_test.zig");
-    _ = @import("interfaces/cli/report/dtc1_test.zig");
-    _ = @import("interfaces/cli/report/usb_test.zig");
-    _ = @import("interfaces/cli/report/part_test.zig");
-    _ = @import("interfaces/cli/report/run_test.zig");
-    _ = @import("interfaces/cli/report/dumps_test.zig");
-    _ = @import("interfaces/cli/zig_run_test.zig");
-    _ = @import("interfaces/cli/zig_watch_test.zig");
-    _ = @import("interfaces/cli/itm_console_test.zig");
-    _ = @import("interfaces/cli/zig_stop_test.zig");
-    _ = @import("interfaces/cli/zig_break_test.zig");
-    _ = @import("interfaces/cli/zig_undefined_test.zig");
     _ = @import("periph/all.zig");
     _ = @import("core/banked_test.zig");
     _ = @import("core/board_ram_test.zig");
@@ -169,9 +69,6 @@ test {
     _ = @import("core/second_zig_run_test.zig");
     _ = @import("core/second_zig_exceptions_test.zig");
     _ = @import("core/cadence_test.zig");
-    _ = @import("interfaces/cli/cli_test.zig");
-    _ = @import("interfaces/usbip/usbip_wire_test.zig");
-    _ = @import("interfaces/usbip/usbip_export_test.zig");
     _ = @import("debug/all.zig");
     _ = @import("core/elf_test.zig");
     _ = @import("core/idle_test.zig");
@@ -190,7 +87,6 @@ test {
     _ = @import("core/sleep_pace_test.zig");
     _ = @import("core/tz_test.zig");
     _ = @import("core/undefined_ops_test.zig");
-    _ = @import("interfaces/cli/debug_front_test.zig");
     _ = @import("core/stop_test.zig");
     _ = @import("core/until_test.zig");
     _ = @import("core/deadline_test.zig");
@@ -204,8 +100,6 @@ test {
     _ = @import("core/memmap_test.zig");
     _ = @import("core/external_memory_test.zig");
     _ = @import("sizing/sweep_test.zig");
-    _ = @import("interfaces/cli/sweep_cli_test.zig");
-    _ = @import("interfaces/cli/sweep_elf_test.zig");
     _ = @import("core/pages_test.zig");
     _ = @import("core/part_test.zig");
     _ = @import("core/part_map_test.zig");
@@ -217,14 +111,8 @@ test {
     _ = @import("core/second_wait_test.zig");
     _ = @import("core/module_fault_seam_test.zig");
     _ = @import("tools/all_test.zig");
-    _ = @import("interfaces/rpc/session_rpc_test.zig");
-    _ = @import("interfaces/rpc/stdio_transport_test.zig");
-    _ = @import("interfaces/rpc/session_server_test.zig");
-    _ = @import("interfaces/rpc/session_advance_test.zig");
-    _ = @import("interfaces/rpc/session_files_test.zig");
     const ra8 = @import("ra8");
     std.testing.refAllDecls(ra8.core);
     std.testing.refAllDecls(ra8.periph);
     std.testing.refAllDecls(ra8.board);
-    std.testing.refAllDecls(ra8.interfaces.rpc);
 }

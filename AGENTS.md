@@ -60,8 +60,10 @@ src/periph/crc.zig   ->  tests/periph/crc_test.zig
 src/core/elf.zig     ->  tests/core/elf_test.zig
 ```
 
-`tests/all.zig` is the test root and lists every test file, so `zig build test`
-runs everything. A test file reaches the code under test through the `ra8`
+Three test roots list every test file between them, each built as its own
+binary so `zig build test` runs everything without one huge compile:
+`tests/all_io.zig` lists tests/interfaces/ and tests/snapshot/,
+`tests/all_gui.zig` lists tests/gui/, and `tests/all.zig` lists the rest. A test file reaches the code under test through the `ra8`
 module (`const crc = ra8.periph.crc;`), never through a relative path into
 `src/`. A decl a test needs is `pub`; a fixture the test owns lives in the test
 file.
