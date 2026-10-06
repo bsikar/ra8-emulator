@@ -7,6 +7,7 @@ const cpu_mod = @import("core/cpu/cpu.zig");
 const NvicSource = @import("core/cpu/exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("core/cpu/exception/quiet_source.zig").QuietSource;
 const Guest = @import("core/cpu/memory/guest.zig").Guest;
+const memory_load = @import("core/cpu/memory/load.zig");
 const Board = @import("board/board.zig").Board;
 const option_memory = @import("board/option_memory.zig");
 const Reboot = @import("core/reboot.zig").Reboot;
@@ -46,11 +47,9 @@ const LoaderState = struct {
         const index = @intFromEnum(core);
         const cpu = self.cpu[index] orelse return error.CoreNotAttached;
         const memory = self.memory[index] orelse return error.CoreNotAttached;
-        var segment_index: u16 = 0;
-        while (segment_index < image.segmentCount()) : (segment_index += 1) {
-            const segment = image.loadSegment(segment_index) orelse continue;
-            try memory.write(segment.paddr, segment.bytes);
-        }
+        // The same map, option-window claim and write a `--cpu zig` run
+        // loads with, so option-setting segments land (RA8EMU-760).
+        _ = try memory_load.image(memory, image);
         try cpu.reset(image.vectorBase() orelse return error.NoVectorTable);
     }
 };
