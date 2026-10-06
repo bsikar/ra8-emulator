@@ -318,9 +318,7 @@ pub const Panel = struct {
     }
 
     fn takeDisplayArg(self: *Panel, word: u16) void {
-        if (self.data_index < self.display_args.len) {
-            self.display_args[self.data_index] = word;
-        }
+        if (self.data_index < self.display_args.len) self.display_args[self.data_index] = word;
         if (self.data_index != proto.arg.display_waveform) return;
         self.last_waveform = word;
         if (self.planes.ready()) self.planes.glass.refreshFrom(
