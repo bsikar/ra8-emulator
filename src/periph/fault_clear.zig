@@ -1,4 +1,4 @@
-//! Write-one-to-clear on CFSR, HFSR and SFSR.
+//! Write-one-to-clear on CFSR, HFSR, SFSR and AFSR.
 //!
 //! Every bit in CFSR (0xE000_ED28), HFSR (0xE000_ED2C) and SFSR
 //! (0xE000_EDE4) is cleared by writing a one to it, and a zero leaves it
@@ -44,6 +44,7 @@ pub const Clears = struct {
     cfsr: Pending = .{},
     hfsr: Pending = .{},
     sfsr: Pending = .{},
+    afsr: Pending = .{},
     /// How many stores were latched, for a report or a test to read.
     stores: u32 = 0,
 
@@ -58,6 +59,7 @@ pub const Clears = struct {
             memmap.scb.cfsr => &self.cfsr,
             memmap.scb.hfsr => &self.hfsr,
             sfsr => &self.sfsr,
+            memmap.scb.afsr => &self.afsr,
             else => null,
         };
     }
@@ -83,6 +85,7 @@ pub const Clears = struct {
         try settle(&self.cfsr, core, memmap.scb.cfsr);
         try settle(&self.hfsr, core, memmap.scb.hfsr);
         try settle(&self.sfsr, core, sfsr);
+        try settle(&self.afsr, core, memmap.scb.afsr);
     }
 };
 
