@@ -145,3 +145,53 @@ test "a DTCE slot on CPU1's table is served by DTC1" {
     try std.testing.expectEqual(@as(u32, 1), board.transfers1.activations);
     try std.testing.expectEqual(@as(u32, 0), board.transfers.activations);
 }
+
+const pingpong_bytes = @embedFile("../fixtures/trustzone/cpu1_pingpong_ipc.elf");
+const pingpong_cpu1_bytes = @embedFile("../fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+
+test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "cpu1.elf", .data = pingpong_cpu1_bytes });
+    const cpu1_path = try tmp.dir.realpathAlloc(std.testing.allocator, "cpu1.elf");
+    defer std.testing.allocator.free(cpu1_path);
+
+    const image = try ra8.core.elf.Image.init(pingpong_bytes);
+    var store = try Store.init(null);
+    defer store.deinit();
+    const memory: Guest = .{ .store = &store };
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.attachBlocks(&board, memory);
+    try ra8.board.wiring.primeWindows(&board, memory, ra8.board.wiring.cpu0Windows(&board));
+    _ = try ra8.core.cpu.memory.load.image(memory, image);
+
+    var driver: Driver = undefined;
+    try driver.open(std.testing.allocator, &board, cpu1_path, memory);
+    defer driver.close();
+    var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
+    var clock: ra8.board.zig_run.Clock = .{ .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };
+    var final: ra8.core.cpu.boot.Regs = .{};
+    const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
+    _ = try ra8.core.cpu.boot.start(std.io.null_writer, .zig, memory, &board.bus, vector_base, 100_000, &timebase.ticks, .{
+        .boundary = clock.boundary(),
+        .partitions = &board.partitions,
+        .idau = &board.idau,
+        .regions = &board.regions,
+        .regions_ns = &board.regions_ns,
+        .clears = &board.clears,
+        .final = &final,
+    });
+
+    try std.testing.expect(final.pc >= 0x1208_0000 and final.pc < 0x1209_0000);
+    try std.testing.expectEqual(@as(?ra8.core.fault.Fault, null), driver.second.state.fault);
+    const words: ra8.periph.fault_status.Words = .{
+        .cfsr = try memory.readWord(memmap.scb.cfsr),
+        .hfsr = try memory.readWord(memmap.scb.hfsr),
+        .sfsr = try memory.readWord(ra8.periph.fault_status.secure.sfsr),
+    };
+    var fault_line: [128]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&fault_line);
+    try ra8.periph.fault_status.line(stream.writer(), words);
+    try std.testing.expectEqualStrings("", stream.getWritten());
+}
