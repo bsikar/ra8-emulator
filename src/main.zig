@@ -30,6 +30,7 @@ pub fn main() !u8 {
     defer arena.deinit();
     const allocator = arena.allocator();
     const argv = try std.process.argsAlloc(allocator);
+    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return ra8.core.probe_ctl.run(allocator, argv);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
     const image = openImage(allocator, options.path) catch return 1;
     // Only a -Dgui build compiles src/gui_window.zig and links SDL.
