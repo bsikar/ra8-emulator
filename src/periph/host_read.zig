@@ -5,11 +5,12 @@
 //! On POSIX that is poll() with a zero timeout ahead of the read. Windows has
 //! no poll() for pipes or files, so there the handle goes through the camera
 //! pipe's reader (pipe_windows.zig): PeekNamedPipe for a pipe, and a plain
-//! read for a file, which never waits. An interactive Windows console is not
-//! a pipe or a file and is RA8EMU-723's job.
+//! read for a file, which never waits. An interactive Windows console is
+//! neither, and goes through host_console.zig (RA8EMU-723).
 const std = @import("std");
 const builtin = @import("builtin");
 const pipe_windows = @import("camera/pipe_windows.zig");
+const host_console = @import("host_console.zig");
 
 pub const Handle = std.posix.fd_t;
 const is_windows = builtin.os.tag == .windows;
@@ -31,7 +32,10 @@ pub fn open(path: []const u8) !Handle {
 /// waiting (or the read failed) and the caller asks again next boundary;
 /// 0 means end of input; anything else is the count read.
 pub fn read(handle: Handle, into: []u8) ?usize {
-    if (is_windows) return pipe_windows.readNow(handle, true, into) catch null;
+    if (is_windows) {
+        if (host_console.isConsole(handle)) return host_console.read(handle, into);
+        return pipe_windows.readNow(handle, true, into) catch null;
+    }
     var fds = [_]std.posix.pollfd{
         .{ .fd = handle, .events = std.posix.POLL.IN, .revents = 0 },
     };
