@@ -13,40 +13,47 @@ const clocks = @import("../periph/clocks.zig");
 
 pub const SpeedPost = struct {
     mutex: std.Thread.Mutex = .{},
-    /// The latest factor asked for, in thousandths; an older one waiting
-    /// is dropped, since only where the slider ended up matters.
-    pending: ?u64 = null,
+    /// The latest factor asked for; an older one waiting is dropped, since
+    /// only where the slider ended up matters.
+    pending: ?Asked = null,
+
+    /// A factor in thousandths, or null for `max`, an unpaced run.
+    pub const Asked = struct { milli: ?u64 };
 
     /// Window side: the session's speed hook, which leaves the factor here.
     pub fn hook(self: *SpeedPost) session_api.SpeedHook {
         return .{ .context = self, .setFn = post };
     }
 
-    fn post(context: *anyopaque, milli: u64) anyerror!void {
+    fn post(context: *anyopaque, milli: ?u64) anyerror!void {
         const self: *SpeedPost = @ptrCast(@alignCast(context));
         self.mutex.lock();
         defer self.mutex.unlock();
-        self.pending = milli;
+        self.pending = .{ .milli = milli };
     }
 
     /// Engine side, at a park: move `time` to the waiting factor. Returns
     /// the factor applied, or null when none was waiting.
-    pub fn apply(self: *SpeedPost, time: *clocks.Time, clock: clocks.pacer.Clock) ?u64 {
-        const milli = self.take() orelse return null;
+    pub fn apply(self: *SpeedPost, time: *clocks.Time, clock: clocks.pacer.Clock) ?Asked {
+        const asked = self.take() orelse return null;
+        const milli = asked.milli orelse {
+            time.pacing = null;
+            return asked;
+        };
         const now_ns = time.base.now();
         if (time.pacing) |*pacing| {
             pacing.setSpeed(now_ns, milli);
         } else {
             time.pacing = clocks.pacing.Pacing.start(clock, now_ns, milli);
         }
-        return milli;
+        return asked;
     }
 
-    fn take(self: *SpeedPost) ?u64 {
+    fn take(self: *SpeedPost) ?Asked {
         self.mutex.lock();
         defer self.mutex.unlock();
-        const milli = self.pending;
+        const asked = self.pending;
         self.pending = null;
-        return milli;
+        return asked;
     }
 };

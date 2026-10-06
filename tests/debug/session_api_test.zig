@@ -308,10 +308,10 @@ fn firmwareReport(panel: *gt911.Panel) ?gt911.Contact {
 }
 
 const SpeedLog = struct {
-    milli: [4]u64 = undefined,
+    milli: [4]?u64 = undefined,
     count: usize = 0,
 
-    fn set(context: *anyopaque, milli: u64) anyerror!void {
+    fn set(context: *anyopaque, milli: ?u64) anyerror!void {
         const self: *SpeedLog = @ptrCast(@alignCast(context));
         self.milli[self.count] = milli;
         self.count += 1;
@@ -331,6 +331,8 @@ test "a speed change reaches the attached hook in thousandths; a refused one rea
     try session.setSpeed(.cpu0, 5);
     try std.testing.expectError(error.InvalidSpeed, session.setSpeed(.cpu0, 0));
     try std.testing.expectError(error.InvalidSpeed, session.setSpeed(.cpu0, 2_000_000));
-    try std.testing.expectEqualSlices(u64, &.{ 250, 5000 }, log.milli[0..log.count]);
+    try std.testing.expectEqualSlices(?u64, &.{ 250, 5000 }, log.milli[0..log.count]);
     try std.testing.expectEqual(@as(u64, 5_000_000), session.live.budget);
+    try session.setSpeed(.cpu0, null);
+    try std.testing.expectEqualSlices(?u64, &.{ 250, 5000, null }, log.milli[0..log.count]);
 }

@@ -212,11 +212,14 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
     try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
     _ = try target.apply((try commands.parse("speed 0")).?, out.writer());
     try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
+    _ = try target.apply((try commands.parse("speed max")).?, out.writer());
+    try std.testing.expect(time.pacing == null);
     try std.testing.expectEqual(before, time.base.now());
     const want =
         \\Speed 0.25x
         \\Speed 5x
         \\error: InvalidSpeed
+        \\Speed max
         \\
     ;
     try std.testing.expectEqualStrings(want, out.items);
