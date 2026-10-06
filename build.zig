@@ -41,8 +41,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    const rpc_mod = b.dependency("ra8_firmware", .{}).module("ra8_rpc");
-    emu.addImport("ra8_rpc", rpc_mod);
+    const firmware = b.dependency("ra8_firmware", .{});
+    emu.addImport("ra8_rpc", firmware.module("ra8_rpc"));
+    emu.addImport("ra8_widget", firmware.module("ra8_widget"));
+    emu.addImport("ra8_widget_host", firmware.module("ra8_widget_host"));
 
     const exe = b.addExecutable(.{
         .name = "ra8_emulator",
@@ -92,6 +94,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     tests.root_module.addImport("ra8", emu);
+    tests.root_module.addImport("ra8_widget", firmware.module("ra8_widget"));
     tests.root_module.addImport("gate", gate_mod);
     tests.root_module.addImport("example_table", table_mod);
     tests.root_module.addImport("handoff_bench", bench_mod);
