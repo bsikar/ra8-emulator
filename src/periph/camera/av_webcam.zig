@@ -64,10 +64,23 @@ const AvCapture = struct {
 
 /// Asks (unless allowed), checks the permission and opens device N.
 pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+    const n = try preflight(arg, grant, reader, writer);
+    return openPrepared(allocator, host, n, writer, format_control);
+}
+
+/// Validates the device and gets consent before opening host camera libraries.
+pub fn preflight(arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype) !u32 {
     const n = index(arg) orelse return error.BadDevice;
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
     if (consent.decide(grant, named, reader, writer) == .refused) return error.WebcamRefused;
+    return n;
+}
+
+/// Opens a device after `preflight` has validated its index and consent.
+pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+    var name: [24]u8 = undefined;
+    const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
     try permission.gate(host.permission, writer);
     const cap = try allocator.create(AvCapture);
     cap.* = .{ .allocator = allocator, .box = frame.Mailbox.init(allocator, .uyvy, session.width, session.height) catch |err| {
@@ -96,12 +109,16 @@ pub const system_path = "/usr/lib/libSystem.B.dylib";
 pub fn system() ?Host {
     if (builtin.os.tag != .macos) return null;
     var av = std.DynLib.open(permission.avfoundation_path) catch return null;
+    var keep_libraries = false;
+    defer if (!keep_libraries) av.close();
     var cv = std.DynLib.open(delegate.corevideo_path) catch return null;
+    defer if (!keep_libraries) cv.close();
     var sys = std.DynLib.open(system_path) catch return null;
+    defer if (!keep_libraries) sys.close();
     const video = av.lookup(*const objc.Id, "AVMediaTypeVideo") orelse return null;
     const preset = av.lookup(*const objc.Id, "AVCaptureSessionPreset640x480") orelse return null;
     const key = cv.lookup(*const objc.Id, "kCVPixelBufferPixelFormatTypeKey") orelse return null;
-    return .{
+    const host: Host = .{
         .rt = objc.host() orelse return null,
         .media = delegate.host() orelse return null,
         .syms = .{
@@ -112,4 +129,6 @@ pub fn system() ?Host {
         },
         .permission = permission.host(),
     };
+    keep_libraries = true;
+    return host;
 }

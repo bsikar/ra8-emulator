@@ -75,8 +75,9 @@ pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Gr
         return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer, format_control);
     }
     if (builtin.os.tag == .macos) {
+        const n = try av_webcam.preflight(arg, grant, reader, writer);
         const host = av_webcam.system() orelse return error.NoCaptureIo;
-        return av_webcam.openWith(allocator, host, arg, grant, reader, writer, format_control);
+        return av_webcam.openPrepared(allocator, host, n, writer, format_control);
     }
     return openV4l2(allocator, arg, grant, reader, writer, format_control);
 }

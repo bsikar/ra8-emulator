@@ -1,6 +1,7 @@
 //! Covers src/periph/camera/webcam_open.zig without a camera: the gate,
 //! the device name and the refusals from ordinary device nodes.
 const std = @import("std");
+const builtin = @import("builtin");
 const ra8 = @import("ra8");
 const webcam = ra8.periph.ceu.camera.webcam;
 const opener = webcam.opener;
@@ -16,8 +17,10 @@ fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u
 test "a refused question opens nothing" {
     var said = std.ArrayList(u8).init(allocator);
     defer said.deinit();
-    try std.testing.expectError(error.WebcamRefused, openAnswering("/nonexistent/video9", .ask, "n\n", &said));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "open the host camera /nonexistent/video9?") != null);
+    const arg = if (builtin.os.tag == .macos) "0" else "/nonexistent/video9";
+    try std.testing.expectError(error.WebcamRefused, openAnswering(arg, .ask, "n\n", &said));
+    const question = if (builtin.os.tag == .macos) "webcam 0" else "open the host camera /nonexistent/video9?";
+    try std.testing.expect(std.mem.indexOf(u8, said.items, question) != null);
 }
 
 test "a yes reaches the device, and a node that is not V4L2 is refused" {
