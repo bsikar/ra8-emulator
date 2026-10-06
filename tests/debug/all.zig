@@ -16,11 +16,13 @@ test {
     _ = @import("core_view_test.zig");
     _ = @import("zig_session_test.zig");
     _ = @import("session_api_test.zig");
+    _ = @import("session_tap_part_test.zig");
     _ = @import("widget_tree_test.zig");
     _ = @import("session_event_stream_test.zig");
     _ = @import("zig_cycles_test.zig");
     _ = @import("session_report_test.zig");
     _ = @import("session_api_test.zig");
+    _ = @import("session_tap_part_test.zig");
     _ = @import("session_display_test.zig");
     _ = @import("session_speed_test.zig");
     _ = @import("zig_script_test.zig");
