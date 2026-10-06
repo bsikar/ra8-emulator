@@ -58,6 +58,7 @@ pub const eink = @import("periph/eink/eink.zig");
 pub const eink_refresh = @import("periph/eink/eink_refresh.zig");
 pub const eink_busy = @import("periph/eink/eink_busy.zig");
 pub const eink_wire = @import("periph/eink/eink_wire.zig");
+pub const eink_image = @import("periph/eink/eink_image.zig");
 pub const exc_return = @import("periph/exc_return.zig");
 pub const elc = @import("periph/elc/elc.zig");
 pub const elc_regs = @import("periph/elc/elc_regs.zig");

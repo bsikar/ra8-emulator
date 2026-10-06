@@ -70,6 +70,7 @@ test {
     _ = @import("eink/eink_test.zig");
     _ = @import("eink/eink_full_load_test.zig");
     _ = @import("eink/eink_image_test.zig");
+    _ = @import("eink/eink_ghost_test.zig");
     _ = @import("eink/eink_wire_test.zig");
     _ = @import("elc/elc_regs_test.zig");
     _ = @import("elc/elc_route_test.zig");
