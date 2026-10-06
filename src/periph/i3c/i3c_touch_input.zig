@@ -19,6 +19,7 @@ const std = @import("std");
 const gt911 = @import("i3c_gt911.zig");
 const gpio = @import("../gpio/gpio.zig");
 const pin_irq = @import("../icu/icu_pin_irq.zig");
+const host_read = @import("../host_read.zig");
 
 /// The host-side name of each user switch, the pin it drives and the IRQ
 /// channel that pin feeds.
@@ -32,7 +33,7 @@ pub const line_bytes: usize = 32;
 
 pub const Input = struct {
     enabled: bool = false,
-    fd: std.posix.fd_t = -1,
+    fd: ?host_read.Handle = null,
     line: [line_bytes]u8 = undefined,
     len: usize = 0,
     /// The current line ran past line_bytes and is being skipped.
@@ -51,22 +52,23 @@ pub const Input = struct {
     /// Open PATH for reading without blocking, so a FIFO with no writer yet
     /// does not hold up the run.
     pub fn open(self: *Input, path: []const u8) !void {
-        self.fd = std.posix.open(path, .{ .NONBLOCK = true }, 0) catch |err| {
+        self.fd = host_read.open(path) catch |err| {
             std.debug.print("--touch @{s}: {s}\n", .{ path, @errorName(err) });
             return err;
         };
         self.enabled = true;
     }
 
-    /// Move every complete line waiting on the descriptor onto the panel.
+    /// Move every complete line waiting on the handle onto the panel.
     /// A partial line waits for its newline. End of file stops the polling
     /// once anything has arrived; before that it is a FIFO whose writer has
     /// not opened yet, so it is asked again next boundary.
     pub fn poll(self: *Input, panel: *gt911.Panel, pins: *gpio.Gpio) void {
         if (!self.enabled) return;
+        const fd = self.fd orelse return;
         var bytes: [256]u8 = undefined;
         while (true) {
-            const count = std.posix.read(self.fd, &bytes) catch return;
+            const count = host_read.read(fd, &bytes) orelse return;
             if (count == 0) {
                 if (self.seen) self.enabled = false;
                 return;
