@@ -1,6 +1,6 @@
 //! `ctl --connect ... --json` against a spawned `serve --listen` on a temp
-//! Unix path (RA8EMU-747): each command's JSON shape, a refusal, and the
-//! usage refusal.
+//! Unix path (RA8EMU-747, RA8EMU-750): each command's JSON shape, a
+//! refusal, and the usage refusal.
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
@@ -103,6 +103,72 @@ test "ctl --json drives load, run, step, pause, regs and mem against a running s
     try std.testing.expectEqual(@as(i64, ra8.interfaces.rpc.server.app_codes.too_long), try expectInteger(refused.field("code")));
 }
 
+fn stoppedAt(answer: *const Answer) !struct { reason: []const u8, pc: i64 } {
+    const stop = answer.field("stopped").object;
+    return .{ .reason = stop.get("reason").?.string, .pc = try expectInteger(stop.get("pc").?) };
+}
+
+test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops a run" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/ctl.sock", .{tmp.sub_path});
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var served = try serve_peer.listen(gpa, spec, &line);
+    defer _ = served.child.kill() catch {};
+
+    var loaded = try run(gpa, spec, &.{ "load", serve_peer.image_path });
+    defer loaded.deinit();
+    var stepped = try run(gpa, spec, &.{"step"});
+    defer stepped.deinit();
+    const second = (try stoppedAt(&stepped)).pc;
+
+    // Reload so the run starts from reset again and meets the breakpoint
+    // on the second instruction.
+    var again = try run(gpa, spec, &.{ "load", serve_peer.image_path });
+    defer again.deinit();
+    const at = try std.fmt.allocPrint(gpa, "{d}", .{second});
+    defer gpa.free(at);
+    var set = try run(gpa, spec, &.{ "break", at });
+    defer set.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, set.term);
+    const id = try expectInteger(set.field("breakpoint"));
+    try std.testing.expectEqual(second, try expectInteger(set.field("address")));
+
+    var hit = try run(gpa, spec, &.{ "run", "--budget", "1000" });
+    defer hit.deinit();
+    const stop = try stoppedAt(&hit);
+    try std.testing.expectEqualStrings("breakpoint", stop.reason);
+    try std.testing.expectEqual(second, stop.pc);
+
+    const which = try std.fmt.allocPrint(gpa, "{d}", .{id});
+    defer gpa.free(which);
+    var gone = try run(gpa, spec, &.{ "break", "--clear", which });
+    defer gone.deinit();
+    try std.testing.expectEqual(id, try expectInteger(gone.field("cleared")));
+
+    var watch = try run(gpa, spec, &.{ "watch", "0x20000000", "write" });
+    defer watch.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, watch.term);
+    try std.testing.expectEqualStrings("write", watch.field("access").string);
+    try std.testing.expectEqual(@as(i64, 0x2000_0000), try expectInteger(watch.field("address")));
+    const watch_id = try std.fmt.allocPrint(gpa, "{d}", .{try expectInteger(watch.field("watchpoint"))});
+    defer gpa.free(watch_id);
+    var unwatched = try run(gpa, spec, &.{ "watch", "--clear", watch_id });
+    defer unwatched.deinit();
+    try std.testing.expectEqual(Term{ .Exited = 0 }, unwatched.term);
+
+    var fast = try run(gpa, spec, &.{ "speed", "100" });
+    defer fast.deinit();
+    try std.testing.expectEqual(@as(i64, 100), try expectInteger(fast.field("speed")));
+    var max = try run(gpa, spec, &.{ "speed", "max" });
+    defer max.deinit();
+    try std.testing.expectEqualStrings("max", max.field("speed").string);
+}
+
 test "ctl with a bad command prints its usage and exits 2" {
     const result = try std.process.Child.run(.{
         .allocator = std.testing.allocator,
@@ -129,4 +195,25 @@ test "ctl parse: --json anywhere, register names, budgets and memory reads" {
     try std.testing.expectError(error.UnknownRegister, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "regs", "r99" }));
     try std.testing.expectError(error.BadLength, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "mem", "0", "0" }));
     try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "--json" }));
+}
+
+test "ctl parse: speed, break and watch" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = [_][]const u8{ "ra8", "ctl", "--connect", "unix:/s" };
+    const half = try ctl.parse(a, &(base ++ [_][]const u8{ "speed", "0.5" }));
+    try std.testing.expectEqual(@as(u64, 500), half.command.speed);
+    const max = try ctl.parse(a, &(base ++ [_][]const u8{ "speed", "max" }));
+    try std.testing.expectEqual(@as(u64, 0), max.command.speed);
+    try std.testing.expectError(error.BadSpeed, ctl.parse(a, &(base ++ [_][]const u8{ "speed", "0" })));
+    const brk = try ctl.parse(a, &(base ++ [_][]const u8{ "break", "0x100" }));
+    try std.testing.expectEqual(@as(u32, 0x100), brk.command.set_break);
+    const unbrk = try ctl.parse(a, &(base ++ [_][]const u8{ "break", "--clear", "3" }));
+    try std.testing.expectEqual(@as(u32, 3), unbrk.command.clear_break);
+    const watch = try ctl.parse(a, &(base ++ [_][]const u8{ "watch", "0x20000000", "access" }));
+    try std.testing.expectEqual(ra8.interfaces.rpc.session.Access.access, watch.command.set_watch.access);
+    const unwatch = try ctl.parse(a, &(base ++ [_][]const u8{ "watch", "--clear", "2" }));
+    try std.testing.expectEqual(@as(u32, 2), unwatch.command.clear_watch);
+    try std.testing.expectError(error.UnknownAccess, ctl.parse(a, &(base ++ [_][]const u8{ "watch", "0", "poke" })));
 }
