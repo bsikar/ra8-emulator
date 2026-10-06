@@ -58,7 +58,8 @@ pub const Buffer = struct {
                 const target_x = @as(u32, x) + column;
                 const target_y = @as(u32, y) + row;
                 const value = source.pixel(@intCast(target_x), @intCast(target_y));
-                self.set(target_x, target_y, waveformPixel(value, mode));
+                const previous = self.pixel(@intCast(target_x), @intCast(target_y));
+                self.set(target_x, target_y, waveformPixel(value, previous, mode));
             }
         }
     }
@@ -125,14 +126,27 @@ pub const RefreshHook = struct {
     refreshFn: *const fn (*anyopaque) void,
 };
 
-fn waveformPixel(value: u8, mode: u16) u8 {
+/// The glass level a waveform leaves, given the old glass level. DU and A2
+/// only drive pixels whose state changes: one already within `ghost_reach`
+/// of its target is left alone, and one that flips keeps 1/8 of its old
+/// distance as residue. GC16 and INIT drive every pixel and leave none.
+pub fn waveformPixel(value: u8, previous: u8, mode: u16) u8 {
     if (mode == proto.waveform.init) return 0xFF;
     if (mode == proto.waveform.du or mode == proto.waveform.a2_m641 or mode == proto.waveform.a2_generic) {
-        return if (value >= 128) 0xFF else 0;
+        return ghost(if (value >= 128) 0xFF else 0, previous);
     }
     if (mode == proto.waveform.gc16) {
         const level: u16 = (@as(u16, value) * 15 + 127) / 255;
         return @intCast(level * 17);
     }
     return value;
+}
+
+/// Levels within which a fast waveform leaves a pixel undriven.
+pub const ghost_reach: u8 = 31;
+
+fn ghost(target: u8, previous: u8) u8 {
+    const distance = @as(i16, previous) - target;
+    if (@abs(distance) <= ghost_reach) return previous;
+    return @intCast(@as(i16, target) + @divTrunc(distance, 8));
 }

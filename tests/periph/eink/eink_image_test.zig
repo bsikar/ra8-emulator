@@ -65,7 +65,7 @@ test "a resized panel allocates and clips at its own geometry" {
     try std.testing.expectEqual(@as(usize, 0), panel.planes.image.pixels.len);
 }
 
-test "DU and both A2 LUT modes quantize the refreshed glass to black and white" {
+test "DU and both A2 LUT modes quantize to black and white over the blank glass" {
     const modes = [_]u16{ proto.waveform.du, proto.waveform.a2_m641, proto.waveform.a2_generic };
     for (modes) |mode| {
         var panel = eink.Panel.init();
@@ -74,7 +74,9 @@ test "DU and both A2 LUT modes quantize the refreshed glass to black and white" 
         data(&panel, 0x407F);
         data(&panel, 0x80FF);
         refresh(&panel, 4, 1, mode);
-        const expected = [_]u8{ 0, 0, 0xFF, 0xFF };
+        // The glass starts black, so the white pair flips and keeps an
+        // eighth of the old black as residue (RA8EMU-559).
+        const expected = [_]u8{ 0, 0, 0xE0, 0xE0 };
         for (expected, 0..) |value, x| {
             try std.testing.expectEqual(value, panel.planes.glass.pixel(@intCast(x), 0));
         }
