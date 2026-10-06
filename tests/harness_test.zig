@@ -56,3 +56,38 @@ test "public harness cleans up an invalid ELF" {
         return error.ExpectedTruncated;
     } else |err| try std.testing.expect(err == error.Truncated);
 }
+
+test "public harness streams ThreadX switches and exceptions in time order" {
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    defer opened.deinit();
+    try std.testing.expect(opened.traceRtos());
+    const session = opened.session();
+    const id = try session.subscribe();
+    session.live.budget = 2_000_000;
+    _ = try session.run(.cpu0, .cont);
+
+    var events: [256]ra8.core.session_event_stream.Event = undefined;
+    const read = session.pollEvents(id, &events) orelse return error.NoEvents;
+    var switches: usize = 0;
+    var entries: usize = 0;
+    var last: u64 = 0;
+    for (events[0..read.count]) |event| {
+        switch (event.kind) {
+            .rtos_switch => switches += 1,
+            .isr_enter => entries += 1,
+            .rtos_idle, .isr_leave => {},
+            else => continue,
+        }
+        try std.testing.expect(event.virtual_ns >= last);
+        last = event.virtual_ns;
+    }
+    try std.testing.expect(switches > 0);
+    try std.testing.expect(entries > 0);
+    try std.testing.expect(last > 0);
+}
+
+test "public harness reports no RTOS trace for an image without ThreadX" {
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image_path });
+    defer opened.deinit();
+    try std.testing.expect(!opened.traceRtos());
+}
