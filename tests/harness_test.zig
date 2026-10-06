@@ -91,3 +91,74 @@ test "public harness reports no RTOS trace for an image without ThreadX" {
     defer opened.deinit();
     try std.testing.expect(!opened.traceRtos());
 }
+
+const StreamEvent = ra8.core.session_event_stream.Event;
+
+fn isRtos(event: StreamEvent) bool {
+    return switch (event.kind) {
+        .rtos_switch, .rtos_idle, .isr_enter, .isr_leave => true,
+        else => false,
+    };
+}
+
+test "public harness streams the same RTOS events --trace-rtos records" {
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    defer opened.deinit();
+    try std.testing.expect(opened.traceRtos());
+    const session = opened.session();
+    const id = try session.subscribe();
+    var seen: [256]StreamEvent = undefined;
+    var count: usize = 0;
+    var batch: [128]StreamEvent = undefined;
+    for (0..10) |_| {
+        session.live.budget = 200_000;
+        _ = try session.run(.cpu0, .cont);
+        const read = session.pollEvents(id, &batch) orelse return error.NoEvents;
+        try std.testing.expectEqual(@as(u64, 0), read.dropped);
+        for (batch[0..read.count]) |event| {
+            if (!isRtos(event) or count == seen.len) continue;
+            seen[count] = event;
+            count += 1;
+        }
+    }
+    const state = opened.state;
+    const recorded = state.tracer.?.trace.list();
+    const shared = @min(count, recorded.len);
+    try std.testing.expect(shared > 0);
+    for (seen[0..shared], recorded[0..shared]) |got, want| {
+        const kind: StreamEvent.Kind = switch (want.kind) {
+            .switch_to => .rtos_switch,
+            .idle => .rtos_idle,
+            .enter => .isr_enter,
+            .leave => .isr_leave,
+        };
+        try std.testing.expectEqual(kind, got.kind);
+        try std.testing.expectEqual(ra8.core.session_event_stream.Core.cpu0, got.core);
+        try std.testing.expectEqual(@as(u1, 0), want.core);
+        try std.testing.expectEqual(state.publisher.nsOf(want.when), got.virtual_ns);
+        try std.testing.expectEqual(want.thread, got.payload.rtos.thread);
+        try std.testing.expectEqual(want.exception, got.payload.rtos.exception);
+    }
+}
+
+fn retiredAfter(stall: bool) !struct { retired: u64, recorded: usize, dropped: u64, total: usize } {
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    defer opened.deinit();
+    try std.testing.expect(opened.traceRtos());
+    const session = opened.session();
+    const id = if (stall) try session.subscribe() else null;
+    session.live.budget = 2_000_000;
+    _ = try session.run(.cpu0, .cont);
+    var batch: [ra8.core.session_event_stream.capacity]StreamEvent = undefined;
+    const dropped = if (id) |held| (session.pollEvents(held, &batch) orelse return error.NoEvents).dropped else 0;
+    const trace = &opened.state.tracer.?.trace;
+    return .{ .retired = opened.primaryCpu().retired, .recorded = trace.len, .dropped = dropped, .total = trace.len + trace.dropped };
+}
+
+test "a subscriber that never reads does not change the run" {
+    const free = try retiredAfter(false);
+    const stalled = try retiredAfter(true);
+    try std.testing.expectEqual(free.retired, stalled.retired);
+    try std.testing.expectEqual(free.recorded, stalled.recorded);
+    if (stalled.total > ra8.core.session_event_stream.capacity) try std.testing.expect(stalled.dropped > 0);
+}
