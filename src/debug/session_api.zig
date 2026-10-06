@@ -23,8 +23,10 @@ const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const session_speed = @import("session_speed.zig");
+const event_sources = @import("session_event_sources.zig");
 
-pub const Core = enum(u8) { cpu0 = 0, cpu1 = 1 };
+pub const Core = @import("session_event_stream.zig").Core;
+pub const EventStream = @import("session_event_stream.zig").Stream;
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManyListeners };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
@@ -56,14 +58,7 @@ pub const Endpoint = endpoint.Endpoint;
 pub const FaultMode = fault_spec.Mode;
 pub const SpeedHook = session_speed.Hook;
 
-pub const Event = struct {
-    core: Core,
-    kind: Kind,
-    address: ?u32 = null,
-    ended: ?Ended = null,
-
-    pub const Kind = enum { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged };
-};
+pub const Event = @import("session_event_stream.zig").Event;
 
 pub const Listener = struct {
     context: *anyopaque,
@@ -88,24 +83,24 @@ pub const Session = struct {
     speed: ?SpeedHook = null,
     widget_tree_addresses: [2]?u32 = .{ null, null },
     listeners: [limits.listeners]?Listener = [_]?Listener{null} ** limits.listeners,
+    event_stream: EventStream = .{},
+    event_sources: event_sources.Sources = .{},
 
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
-    /// Bind the board's shared virtual time base to this session.
     pub fn attachTimeBase(self: *Session, time_base: *const TimeBase) void {
         self.time_base = time_base;
+        self.event_sources.bind(&self.event_stream, time_base);
     }
     /// Virtual nanoseconds since the attached board began its run.
     pub fn now(self: *const Session) Error!u64 {
         return (self.time_base orelse return Error.NoTime).now();
     }
-    /// Bind timed input to the board script that the boundary dispatches.
     pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
         self.input_script = script;
     }
 
-    /// Advance one core's board at the end of each run command.
     pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
         self.board_ticks[@intFromEnum(core)] = .{ .tick = tick, .guest = guest };
     }
@@ -135,14 +130,12 @@ pub const Session = struct {
         self.plugs = hook;
     }
 
-    /// Put a fresh `name` on `at` mid-run, as if it were just wired in.
     pub fn plug(self: *Session, core: Core, at: Endpoint, name: []const u8) anyerror!void {
         const hook = self.plugs orelse return Error.NoPlugs;
         try hook.plugFn(hook.context, at, name);
         self.publish(.{ .core = core, .kind = .plugged });
     }
 
-    /// Take whatever is on `at` off it mid-run.
     pub fn unplug(self: *Session, core: Core, at: Endpoint) anyerror!void {
         const hook = self.plugs orelse return Error.NoPlugs;
         try hook.plugFn(hook.context, at, null);
@@ -156,7 +149,9 @@ pub const Session = struct {
 
     pub fn frame(self: *Session, allocator: std.mem.Allocator) anyerror!Frame {
         const display = self.display orelse return session_display.Error.NoDisplay;
-        return display.frame(allocator);
+        const captured = try display.frame(allocator);
+        self.publish(.{ .core = self.currentCore(), .kind = .lcd_frame, .payload = .{ .frame = .{ .width = captured.width, .height = captured.height, .generation = self.now() catch 0, .dirty = .{ .x = 0, .y = 0, .width = @intCast(@min(captured.width, std.math.maxInt(u16))), .height = @intCast(@min(captured.height, std.math.maxInt(u16))) } } } });
+        return captured;
     }
 
     /// Load image bytes through the board-specific loader, then publish it.
@@ -243,6 +238,7 @@ pub const Session = struct {
         const ended = try self.live.go(command);
         try self.advanceBoard(core, cpu.retired - retired_before);
         self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
+        if (ended == .core) self.publish(.{ .core = core, .kind = .fault, .payload = .{ .fault = .{ .cause = @intFromEnum(std.meta.activeTag(ended.core)) } } });
         return ended;
     }
 
@@ -394,7 +390,11 @@ pub const Session = struct {
         return self.live.switchTo(@intFromEnum(core));
     }
 
+    /// Publish a board observation into bounded subscriber queues.
     fn publish(self: *Session, event: Event) void {
-        for (self.listeners) |slot| if (slot) |listener| listener.receive(listener.context, event);
+        var stamped = event;
+        stamped.virtual_ns = self.now() catch 0;
+        self.event_stream.publish(stamped);
+        for (self.listeners) |slot| if (slot) |listener| listener.receive(listener.context, stamped);
     }
 };

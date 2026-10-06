@@ -123,6 +123,7 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     var session: api.Session = .{ .live = live };
     var loader: LoadLog = .{};
     session.attachLoader(.{ .context = &loader, .loadFn = LoadLog.load });
+    const slow_subscriber = session.event_stream.subscribe().?;
     var events: Events = .{};
     _ = try session.subscribe(.{ .context = &events, .receive = Events.receive });
     try std.testing.expect(session.hasCore(.cpu0));
@@ -155,6 +156,10 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     _ = try session.register(.cpu1, .pc);
     try std.testing.expectEqual(@as(u64, 2_000_000), session.live.budget);
     try std.testing.expect(events.count >= 8);
+    var queued_events: [32]api.Event = undefined;
+    const delivered = session.event_stream.read(slow_subscriber, &queued_events).?;
+    try std.testing.expect(delivered.count >= 8);
+    try std.testing.expectEqual(@as(u64, 0), queued_events[0].virtual_ns);
     try session.pause(.cpu0);
     try std.testing.expectEqual(api.Event.Kind.paused, events.last.?.kind);
     try std.testing.expectEqual(api.Core.cpu0, events.last.?.core);

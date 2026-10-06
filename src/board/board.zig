@@ -341,6 +341,8 @@ pub const Board = struct {
     /// Where a reset this board decides on is left for the engine to perform.
     /// main.zig points it at the run's seam; a test's board leaves it null.
     reboot: ?*reboot.Reboot = null,
+    /// Optional session event sink; excluded from board snapshots as wiring.
+    event_sink: ?@import("event_sink.zig").EventSink = null,
     /// Which part this board is. main.zig sets it from the command line
     /// before attach(); a test's board is an RA8D2 unless it says otherwise.
     part: part.Part = .ra8d2,

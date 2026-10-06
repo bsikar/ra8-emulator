@@ -2,6 +2,7 @@
 pub const core = struct {
     pub const board_ram = @import("core/board_ram.zig");
     pub const session = @import("core/session.zig");
+    pub const session_event_stream = @import("debug/session_event_stream.zig");
     pub const second_core = @import("core/second_core.zig");
     pub const cadence = @import("core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");
@@ -130,6 +131,7 @@ pub const board = struct {
     pub const session_faults = @import("board/session_faults.zig");
     pub const session_plug = @import("board/session_plug.zig");
     pub const board_speed = @import("board/board_speed.zig");
+    pub const session_events = @import("board/session_events.zig");
     pub const board_boundary = @import("board/board_boundary.zig");
     pub const session_schedule = @import("board/session_schedule.zig");
     pub const report = @import("interfaces/cli/report.zig");

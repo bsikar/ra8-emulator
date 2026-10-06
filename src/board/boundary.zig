@@ -148,6 +148,7 @@ pub fn takeResetRequests(self: *Board, core: anytype) !void {
 /// the way past: a line still pending would be entered before the firmware
 /// coming back up has put its vector table back.
 pub fn resetFor(self: *Board, source: reset.Source) void {
+    if (self.event_sink) |sink| sink.resetFn(sink.context, source, self.time.base.now());
     self.causes.request(source);
     self.events.clearLatches();
     self.second_core.reset();
