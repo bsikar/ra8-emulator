@@ -17,6 +17,7 @@ pub const core = struct {
     pub const long_shift = @import("core/long_shift.zig");
     pub const lob = @import("core/lob.zig");
     pub const memmap = @import("core/memmap.zig");
+    pub const external_memory = @import("core/external_memory.zig");
     pub const mpu_guard = @import("core/mpu_guard.zig");
     pub const pages = @import("core/pages.zig");
     pub const part = @import("core/part.zig");

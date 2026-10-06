@@ -13,12 +13,14 @@
 const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const store_mod = @import("../core/cpu/memory/store.zig");
+const external = @import("../core/external_memory.zig");
 const file = @import("file.zig");
+const fields = @import("fields.zig");
 
 pub const Store = store_mod.Store;
 pub const page: u32 = 0x1000;
 
-pub const Error = error{ Truncated, Unbacked, SizeMismatch, OutOfMemory };
+pub const Error = fields.Error || error{ Unbacked, SizeMismatch, LayoutMismatch, OutOfMemory };
 
 /// Writes the memory section of `store`.
 pub fn save(store: *const Store, writer: anytype) !void {
@@ -28,14 +30,19 @@ pub fn save(store: *const Store, writer: anytype) !void {
         if (!store.owned[index]) continue;
         try saveRegion(entry.base, store.pages[index].?, writer);
     }
+    if (store.owns_external) try saveRegion(memmap.sdram_base, store.region(memmap.sdram_base).?, writer);
     for (store.extra.windows) |held| {
         const window = held orelse continue;
         try saveRegion(window.base, window.bytes, writer);
     }
+    const state: ?external.State = if (store.fabric) |fabric| fabric.state() else null;
+    try fields.write(writer, state);
 }
 
 /// Fills `store`, freshly made, from a memory section's payload.
 pub fn load(store: *Store, payload: []const u8) Error!void {
+    // Validate the complete shape before changing a byte or mapping a window.
+    try validate(store, payload);
     var at: usize = 0;
     const count = try int(payload, &at);
     for (0..count) |_| {
@@ -45,13 +52,46 @@ pub fn load(store: *Store, payload: []const u8) Error!void {
         const pages = try int(payload, &at);
         for (0..pages) |_| {
             const offset = try int(payload, &at);
-            if (offset >= len) return Error.Truncated;
             const size = @min(page, len - offset);
-            if (payload.len - at < size) return Error.Truncated;
             @memcpy(bytes[offset..][0..size], payload[at..][0..size]);
             at += size;
         }
     }
+    var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
+    const state = try fields.read(?external.State, &cursor);
+    if (state) |saved| store.fabric.?.restore(saved);
+}
+
+fn validate(store: *const Store, payload: []const u8) Error!void {
+    var at: usize = 0;
+    const count = try int(payload, &at);
+    for (0..count) |_| {
+        const base = try int(payload, &at);
+        const len = try int(payload, &at);
+        if (fixedBacking(store, base)) |bytes| {
+            if (bytes.len != len) return Error.SizeMismatch;
+        }
+        const pages = try int(payload, &at);
+        for (0..pages) |_| {
+            const offset = try int(payload, &at);
+            if (offset >= len) return Error.Truncated;
+            const size = @min(page, len - offset);
+            if (payload.len - at < size) return Error.Truncated;
+            at += size;
+        }
+    }
+    var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
+    const state = try fields.read(?external.State, &cursor);
+    if ((state != null) != (store.fabric != null)) return Error.LayoutMismatch;
+    if (state) |saved| {
+        if (!std.meta.eql(saved.config, store.fabric.?.layout.config)) return Error.LayoutMismatch;
+    }
+    if (!cursor.done()) return Error.Truncated;
+}
+
+fn fixedBacking(store: *const Store, base: u32) ?[]u8 {
+    for (memmap.ram) |entry| if (entry.base == base) return store.region(base);
+    return null;
 }
 
 fn saveRegion(base: u32, bytes: []const u8, writer: anytype) !void {
@@ -90,10 +130,19 @@ fn payloadLen(store: *const Store) u64 {
     for (memmap.ram, 0..) |_, index| {
         if (store.owned[index]) len += regionLen(store.pages[index].?);
     }
+    if (store.owns_external) len += regionLen(store.region(memmap.sdram_base).?);
     for (store.extra.windows) |held| {
         if (held) |window| len += regionLen(window.bytes);
     }
+    len += stateLen(store);
     return len;
+}
+
+fn stateLen(store: *const Store) u64 {
+    var counter = std.io.countingWriter(std.io.null_writer);
+    const state: ?external.State = if (store.fabric) |fabric| fabric.state() else null;
+    fields.write(counter.writer(), state) catch unreachable;
+    return counter.bytes_written;
 }
 
 fn regionLen(bytes: []const u8) u64 {
@@ -109,6 +158,7 @@ fn regionLen(bytes: []const u8) u64 {
 fn regionCount(store: *const Store) u32 {
     var count: u32 = 0;
     for (store.owned) |mine| count += @intFromBool(mine);
+    count += @intFromBool(store.owns_external);
     for (store.extra.windows) |held| count += @intFromBool(held != null);
     return count;
 }

@@ -7,7 +7,6 @@
 //! of one image share pages, and a page already backed is refused.
 const elf = @import("../../elf.zig");
 const pages = @import("../../pages.zig");
-const board_ram = @import("../../board_ram.zig");
 const option_window = @import("../../../periph/mram/mram_window.zig");
 const Guest = @import("guest.zig").Guest;
 
@@ -19,7 +18,7 @@ pub const Error = error{ MapFailed, WriteFailed };
 pub fn image(memory: Guest, loaded: elf.Image) Error!u32 {
     const needed = pages.forImage(loaded) catch return Error.MapFailed;
     for (needed.items()) |range| {
-        if (board_ram.covers(range.base, range.size())) continue;
+        if (memory.backed(range.base, range.size())) continue;
         if (option_window.claim(memory, range.base, range.size())) continue;
         memory.map(range.base, range.size()) catch return Error.MapFailed;
     }

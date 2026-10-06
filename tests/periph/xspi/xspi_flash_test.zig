@@ -98,6 +98,15 @@ test "the sector of an address is its 4 KiB block" {
     try std.testing.expect(!flash.part.holds(flash.part.size - 7, 8));
 }
 
+test "configured capacity changes bounds and JEDEC density together" {
+    var memory = flash.Flash.init(std.testing.allocator);
+    defer memory.deinit();
+    try memory.resize(1024 * 1024);
+    try std.testing.expect(memory.holds(1024 * 1024 - 1, 1));
+    try std.testing.expect(!memory.holds(1024 * 1024, 1));
+    try std.testing.expectEqual(@as(u8, 20), memory.jedecId()[2]);
+}
+
 test "the page of an address is its 256-byte block" {
     try std.testing.expectEqual(@as(u32, 0x1000), flash.part.pageOf(0x1000));
     try std.testing.expectEqual(@as(u32, 0x1000), flash.part.pageOf(0x10FF));

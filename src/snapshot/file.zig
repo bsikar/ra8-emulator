@@ -8,8 +8,8 @@
 const std = @import("std");
 
 pub const magic = "RA8SNAP\x00".*;
-/// Version 2 widens the IT8951 data cursor in the panel section.
-pub const version: u32 = 2;
+/// Version 3 adds external-memory fabric configuration and timing state.
+pub const version: u32 = 3;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated };
 

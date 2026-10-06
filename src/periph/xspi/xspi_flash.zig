@@ -1,148 +1,153 @@
-//! The NOR array behind XSPI0: what a program can and cannot do to a byte
-//! that is already there.
-//!
-//! The part is an ISS1 IS25LX512M, 64 MiB, in 4 KiB sectors. Almost none of
-//! it is ever touched: a run programs a journal header and a few pages and
-//! leaves the other sixty-something megabytes erased. So the array is
-//! sparse, one sector allocated the first time something is written into it
-//! and freed again when an erase puts it back to 0xFF. A sector nobody holds
-//! reads as erased, which is what a fresh part does.
-//!
-//! dev keeps the whole 64 MiB as one static array, inverted so the zero page
-//! stands for the erased part and a warm reboot only has to sweep the dirty
-//! prefix. That works, and it is the kind of trick a language with a BSS
-//! invites. Here the sector map says the same thing without the inversion to
-//! hold in your head, and a reset frees what it held rather than clearing it.
-//!
-//! NOR semantics are the point of this file. A program only ever clears
-//! bits, so writing 0x0F over 0x33 leaves 0x03 and never restores a one; the
-//! only way back to 0xFF is a sector erase. LevelX depends on exactly that:
-//! it marks a block used by clearing a bit in a header it wrote earlier.
-//!
-//! THE OTHER NOR SEMANTIC IS THE PAGE. A page program walks a counter that
-//! is only as wide as a page, so a program that runs past the end of its
-//! 256-byte page WRAPS TO THE START OF THAT PAGE and overwrites what it
-//! already wrote. It does not spill into the next page, and it cannot leave
-//! the page it started in. A read is the opposite and streams straight on
-//! across pages and sectors, which is why the two paths do not share this
-//! arithmetic.
+//! Configurable NOR array behind XSPI0, stored inverted so fresh erased flash
+//! is demand-zero host memory and mapped accesses allocate nothing.
 const std = @import("std");
 
-/// The part this models.
 pub const part = struct {
-    /// 512 Mbit, the full IS25LX512M.
     pub const size: u32 = 0x400_0000;
-    /// The erase unit of opcode 0x20.
     pub const sector_len: u32 = 0x1000;
-    /// What an untouched byte reads as.
     pub const erased: u8 = 0xFF;
-    /// The JEDEC triplet RDID answers with: manufacturer, type, capacity.
     pub const jedec = [3]u8{ 0x9D, 0x5A, 0x1A };
-
-    /// The program unit. A page program addresses within one of these and
-    /// wraps inside it; it never crosses into the next.
     pub const page_len: u32 = 0x100;
 
     pub fn sectorOf(address: u32) u32 {
         return address / sector_len;
     }
 
-    /// The first address of the page an address falls in.
     pub fn pageOf(address: u32) u32 {
         return address & ~(page_len - 1);
     }
 
-    /// Where the nth byte of a page program starting at `address` lands.
-    /// Past the end of the page that is the start of the same page, not the
-    /// next one.
     pub fn programStep(address: u32, index: u32) u32 {
         return pageOf(address) + ((address +% index) % page_len);
     }
 
-    /// Whether a program of `len` bytes from `address` runs past the end of
-    /// its page and so wraps.
+    pub fn holds(address: u32, len: u32) bool {
+        return @as(u64, address) + len <= size;
+    }
     pub fn crossesPage(address: u32, len: u32) bool {
         if (len == 0) return false;
         return (address % page_len) + len > page_len;
     }
-
-    pub fn holds(address: u32, len: u32) bool {
-        return @as(u64, address) + @as(u64, len) <= @as(u64, size);
-    }
 };
 
-const Sector = [part.sector_len]u8;
-
-/// A sparse NOR array: the sectors something has written to, by sector
-/// index. Everything else is erased.
 pub const Flash = struct {
     allocator: std.mem.Allocator,
-    sectors: std.AutoHashMap(u32, *Sector),
+    capacity: u32 = part.size,
+    inverted: []u8 = &.{},
+    dirty: []u8 = &.{},
 
     pub fn init(allocator: std.mem.Allocator) Flash {
-        return .{
-            .allocator = allocator,
-            .sectors = std.AutoHashMap(u32, *Sector).init(allocator),
-        };
+        return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *Flash) void {
-        self.release();
-        self.sectors.deinit();
+        if (self.inverted.len != 0) self.allocator.free(self.inverted);
+        if (self.dirty.len != 0) self.allocator.free(self.dirty);
+        self.inverted = &.{};
+        self.dirty = &.{};
     }
 
-    /// Sectors currently held. A run that only read the part holds none.
+    /// Select the profile capacity and establish all access storage before a
+    /// CPU or bus master can touch the part.
+    pub fn resize(self: *Flash, capacity: u32) !void {
+        if (self.capacity == capacity and self.inverted.len != 0) return;
+        const bytes = try self.allocator.alloc(u8, capacity);
+        errdefer self.allocator.free(bytes);
+        const sectors = capacity / part.sector_len;
+        const bits = try self.allocator.alloc(u8, (sectors + 7) / 8);
+        if (self.inverted.len != 0) self.allocator.free(self.inverted);
+        if (self.dirty.len != 0) self.allocator.free(self.dirty);
+        @memset(bytes, 0);
+        @memset(bits, 0);
+        self.capacity = capacity;
+        self.inverted = bytes;
+        self.dirty = bits;
+    }
+
+    pub fn holds(self: *const Flash, address: u32, len: u32) bool {
+        return @as(u64, address) + len <= self.capacity;
+    }
+
     pub fn live(self: *const Flash) u32 {
-        return self.sectors.count();
+        var total: u32 = 0;
+        for (self.dirty) |bits| total += @popCount(bits);
+        return total;
     }
 
-    /// The content byte at an address. Beyond the part, and in a sector
-    /// nobody has written to, that is the erased value.
     pub fn byte(self: *const Flash, address: u32) u8 {
-        if (address >= part.size) return part.erased;
-        const sector = self.sectors.get(part.sectorOf(address)) orelse return part.erased;
-        return sector[address % part.sector_len];
+        if (address >= self.capacity or self.inverted.len == 0) return part.erased;
+        return ~self.inverted[address];
     }
 
-    /// Program one byte: NOR clears bits and never sets them, so the stored
-    /// value is what was there AND what was asked for. A byte that would
-    /// change nothing does not make the model hold a sector for it.
+    /// JEDEC manufacturer/type plus the byte-capacity exponent for this
+    /// profile's power-of-two part.
+    pub fn jedecId(self: *const Flash) [3]u8 {
+        return .{ part.jedec[0], part.jedec[1], @intCast(std.math.log2_int(u32, self.capacity)) };
+    }
+
+    pub fn jedecWord(self: *const Flash) u24 {
+        const id = self.jedecId();
+        return std.mem.readInt(u24, &id, .little);
+    }
+
     pub fn program(self: *Flash, address: u32, value: u8) !void {
-        if (address >= part.size) return;
-        const current = self.byte(address);
-        const next = current & value;
-        if (next == current) return;
-        const sector = try self.hold(part.sectorOf(address));
-        sector[address % part.sector_len] = next;
+        if (address >= self.capacity) return;
+        try self.ensure();
+        const next = self.inverted[address] | ~value;
+        if (next == self.inverted[address]) return;
+        self.inverted[address] = next;
+        self.mark(part.sectorOf(address), true);
     }
 
-    /// Erase the sector an address falls in, back to 0xFF. Dropping the
-    /// sector is the erase: an absent one already reads erased.
     pub fn erase(self: *Flash, address: u32) void {
-        if (address >= part.size) return;
-        const index = part.sectorOf(address);
-        if (self.sectors.fetchRemove(index)) |held| self.allocator.destroy(held.value);
+        if (address >= self.capacity or self.inverted.len == 0) return;
+        const first = part.sectorOf(address) * part.sector_len;
+        @memset(self.inverted[first..][0..part.sector_len], 0);
+        self.mark(part.sectorOf(address), false);
     }
 
-    /// Back to a fresh part, holding nothing.
     pub fn reset(self: *Flash) void {
-        self.release();
-        self.sectors.clearRetainingCapacity();
+        if (self.inverted.len != 0) @memset(self.inverted, 0);
+        if (self.dirty.len != 0) @memset(self.dirty, 0);
     }
 
-    /// Free every sector the map is holding, leaving the map itself alone.
-    fn release(self: *Flash) void {
-        var held = self.sectors.valueIterator();
-        while (held.next()) |sector| self.allocator.destroy(sector.*);
+    pub fn readMapped(self: *const Flash, address: u32, into: []u8) bool {
+        if (!self.holds(address, @intCast(into.len))) return false;
+        for (into, 0..) |*value, index| value.* = self.byte(address + @as(u32, @intCast(index)));
+        return true;
     }
 
-    /// The sector for an index, allocated erased if this is the first write
-    /// into it.
-    fn hold(self: *Flash, index: u32) !*Sector {
-        if (self.sectors.get(index)) |sector| return sector;
-        const sector = try self.allocator.create(Sector);
-        @memset(sector, part.erased);
-        try self.sectors.put(index, sector);
-        return sector;
+    pub fn writeMapped(self: *Flash, address: u32, bytes: []const u8) !bool {
+        if (!self.holds(address, @intCast(bytes.len))) return false;
+        try self.ensure();
+        for (bytes, 0..) |value, index| try self.program(address + @as(u32, @intCast(index)), value);
+        return true;
+    }
+
+    pub fn sectorDirty(self: *const Flash, index: u32) bool {
+        if (index / 8 >= self.dirty.len) return false;
+        return self.dirty[index / 8] & (@as(u8, 1) << @intCast(index % 8)) != 0;
+    }
+
+    pub fn readSector(self: *const Flash, index: u32, out: *[part.sector_len]u8) void {
+        const first = index * part.sector_len;
+        for (out, 0..) |*value, offset| value.* = self.byte(first + @as(u32, @intCast(offset)));
+    }
+
+    pub fn loadSector(self: *Flash, index: u32, bytes: *const [part.sector_len]u8) !void {
+        if (index >= self.capacity / part.sector_len) return error.OutOfMemory;
+        try self.ensure();
+        const first = index * part.sector_len;
+        for (bytes, 0..) |value, offset| self.inverted[first + offset] = ~value;
+        self.mark(index, true);
+    }
+
+    fn ensure(self: *Flash) !void {
+        if (self.inverted.len == 0) try self.resize(self.capacity);
+    }
+
+    fn mark(self: *Flash, index: u32, set: bool) void {
+        const bit = @as(u8, 1) << @intCast(index % 8);
+        if (set) self.dirty[index / 8] |= bit else self.dirty[index / 8] &= ~bit;
     }
 };

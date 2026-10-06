@@ -1,6 +1,4 @@
-//! The Zig core's memory bus over a memory.Guest (RA8EMU-534): the core's
-//! own store. The board bus and a bare run sit on this. The engine arm went
-//! with RA8EMU-607.
+//! The Zig core's memory bus over a memory.Guest (RA8EMU-534).
 const bus = @import("../bus.zig");
 const MemoryBus = @import("memory_bus.zig").MemoryBus;
 const Guest = @import("guest.zig").Guest;
@@ -8,11 +6,10 @@ const Guest = @import("guest.zig").Guest;
 pub const GuestBus = union(enum) {
     store: MemoryBus,
 
-    /// The bus over `memory`. `fast` opens the direct MRAM/SRAM path.
+    /// The bus over `memory`. `fast` opens direct internal MRAM/SRAM only;
+    /// external memory remains on the vtable so timing is never bypassed.
     pub fn of(memory: *const Guest, fast: bool) GuestBus {
-        return switch (memory.*) {
-            .store => |held| .{ .store = .{ .store = held, .fast_enabled = fast } },
-        };
+        return .{ .store = .{ .store = memory.store, .master = memory.master, .fast_enabled = fast } };
     }
 
     pub fn view(self: *GuestBus) bus.Bus {

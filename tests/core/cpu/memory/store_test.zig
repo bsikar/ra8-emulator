@@ -140,3 +140,27 @@ test "the PPB is backed per store and starts zeroed (RA8EMU-416)" {
     defer other.deinit();
     try std.testing.expectEqual(@as(u32, 0), get(&other, memmap.scb.ccr));
 }
+
+test "configured external memory shares NOR and instruments SDRAM aliases" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var config = ra8.core.external_memory.Config{};
+    config.ospi.size = 1024 * 1024;
+    config.sdram.size = 1024 * 1024;
+    try board.flash.flash.resize(config.ospi.size);
+    var store = try Store.init(null);
+    defer store.deinit();
+    try store.configureExternal(try ra8.core.external_memory.Layout.init(config), &board.flash.flash);
+    const cpu = ra8.core.cpu.memory.guest.Guest{ .store = &store, .master = .cpu0 };
+    try cpu.write(0x8000_0010, &.{0x0f});
+    try std.testing.expectEqual(@as(u8, 0x0f), board.flash.flash.byte(0x10));
+    var byte: [1]u8 = undefined;
+    try cpu.read(0x7800_0020, &byte);
+    try std.testing.expect(cpu.backed(0x8000_0000, 4));
+    try std.testing.expectError(error.Unmapped, cpu.read(0x6810_0000, &byte));
+    try std.testing.expectError(error.Mapped, cpu.map(0x680F_FFFF, 2));
+    try std.testing.expectError(error.Mapped, cpu.map(0x8010_0000, 0x1000));
+    const counters = store.fabric.?.counters(.sdram, 100);
+    try std.testing.expectEqual(@as(u64, 1), counters.bytes_read);
+    try std.testing.expectEqual(@as(u64, 0x21), counters.read_high_water_bytes);
+}

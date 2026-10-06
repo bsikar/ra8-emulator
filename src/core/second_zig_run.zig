@@ -31,6 +31,9 @@ pub const Driver = struct {
     board: ?*Board,
     /// Fractional CPU1 cycles carried between fixed-cadence rounds.
     cycle_remainder: u64 = 0,
+    /// CPU1 cycles charged by the last round, for the shared 1 ns wall clock
+    /// (RA8EMU-643).
+    last_ran: u64 = 0,
 
     /// CPU1 from the image at `path`, on `board`, ready to take
     /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
@@ -54,7 +57,7 @@ pub const Driver = struct {
         self.store = try Store.init(lender);
         errdefer self.dropStore();
         const units = &self.second;
-        const seeded = try second_zig.bringUp(&self.core, .{ .store = &self.store.? }, board, .{
+        const seeded = try second_zig.bringUp(&self.core, .{ .store = &self.store.?, .master = .cpu1 }, board, .{
             .partitions = &units.partitions,
             .regions = &units.regions,
             .guard = &units.guard,
@@ -95,7 +98,7 @@ pub const Driver = struct {
 
     /// CPU1's memory, for what reads it after the run.
     pub fn guest(self: *const Driver) Guest {
-        return self.core.memory;
+        return self.core.memory.asMaster(.none);
     }
 
     fn held(self: *Driver) bool {
@@ -110,6 +113,8 @@ pub const Driver = struct {
 
     /// CPU1's turn with retired instructions charged at its running rate.
     pub fn roundAt(self: *Driver, round_size: u32, hz: u64) void {
+        self.last_ran = 0;
+        if (round_size == 0) return;
         const second = &self.second;
         if (second.state.fault != null or self.held()) return;
         if (second.state.unvectored) {
@@ -128,10 +133,20 @@ pub const Driver = struct {
         const value = ran * hz + self.cycle_remainder;
         self.cycle_remainder = value % clocks.timebase.default_hz;
         const cycles: u32 = @intCast(value / clocks.timebase.default_hz);
+        self.last_ran = cycles;
         second.state.timebase.advance(self.core.memory, cycles) catch {};
         self.ns_timebase.advanceSysTick(self.core.memory, cycles) catch {};
         second.state.pc = self.core.cpu.regs.pc;
         second.takeResetRequest(self.core.memory);
         if (stopped != .count) second.state.fault = .{ .pc = second.state.pc, .detail = @tagName(stopped) };
+    }
+    pub fn advanceTime(self: *Driver, cycles: u64) void {
+        var left = cycles;
+        while (left != 0) {
+            const piece: u32 = @intCast(@min(left, std.math.maxInt(u32)));
+            self.second.state.timebase.advance(self.core.memory, piece) catch {};
+            self.ns_timebase.advanceSysTick(self.core.memory, piece) catch {};
+            left -= piece;
+        }
     }
 };

@@ -64,3 +64,30 @@ test "an address past 32 bits is refused before any access" {
     var memory = Memory{};
     try std.testing.expectError(error.AddressTooHigh, dma.copy(&memory, &regions, .{}, .{}, .{ .src = 0xFFFF_FFFF, .len = 4 }));
 }
+
+test "Ethos-U55 DMA is charged to shared external SDRAM" {
+    var board = ra8.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var config = ra8.core.external_memory.Config{};
+    config.ospi.size = 1024 * 1024;
+    config.sdram = .{ .size = 1024 * 1024, .width = 32, .clock_hz = 100_000_000, .latency_cycles = 1, .burst = .incrementing16 };
+    var store = try ra8.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const layout = try ra8.core.external_memory.Layout.init(config);
+    try store.configureExternal(layout, &board.flash.flash);
+    const plain = ra8.core.cpu.memory.guest.Guest{ .store = &store };
+    var source: [256]u8 = undefined;
+    for (&source, 0..) |*byte_value, index| byte_value.* = @truncate(index);
+    try plain.write(0x6800_0000, &source);
+    const ethos = plain.asMaster(.ethos_u55);
+    const sdram_regions: dma.Regions = .{ 0x6800_0000, 0x6800_1000, 0, 0, 0, 0, 0, 0 };
+    try std.testing.expectEqual(@as(u64, 256), try dma.copy(&ethos, &sdram_regions, .{}, .{ .index = 1 }, .{ .len = 256 }));
+    const cpu = plain.asMaster(.cpu0);
+    var word: [4]u8 = undefined;
+    try cpu.read(0x6800_0000, &word);
+    const counters = store.fabric.?.counters(.sdram, 0);
+    try std.testing.expectEqual(@as(u64, 260), counters.bytes_read);
+    try std.testing.expectEqual(@as(u64, 256), counters.bytes_written);
+    try std.testing.expect(counters.ethos_u55_stall_cycles != 0);
+    try std.testing.expect(counters.cpu_stall_cycles > ra8.core.external_memory.serviceCycles(config.sdram, 4));
+}

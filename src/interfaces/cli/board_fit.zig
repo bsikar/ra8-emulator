@@ -23,6 +23,8 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
     board.time.soak.armed = options.run_for;
     const profile_fits = try loadProfile(allocator, options.board_profile);
+    board.external_memory = profile_fits.memory;
+    try board.flash.flash.resize(profile_fits.memory.ospi.size);
     var asks: [profile.max_fits + request.max]request.Request = undefined;
     var count: usize = 0;
     for (profile_fits.fits[0..profile_fits.count]) |fitted| {

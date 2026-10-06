@@ -50,6 +50,45 @@ test "a quiet board has every memory key and empty lists" {
     const work = top.object.get("unmodelled").?;
     try std.testing.expectEqual(@as(i64, 0), try int(work, "total"));
     try std.testing.expectEqual(@as(usize, 0), work.object.get("lowest").?.array.items.len);
+    const regions = top.object.get("external_regions").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), regions.len);
+    for (regions) |region| {
+        for ([_][]const u8{
+            "name",                        "base",          "size_bytes",                    "bus_width_bits",                 "clock_hz",
+            "latency_cycles",              "burst",         "memory_window_cycles",          "read_high_water_bytes",          "write_high_water_bytes",
+            "bytes_read",                  "bytes_written", "average_read_bytes_per_second", "average_write_bytes_per_second", "peak_read_bytes_per_second",
+            "peak_write_bytes_per_second", "stall_cycles",
+        }) |key| try std.testing.expect(region.object.get(key) != null);
+    }
+}
+
+test "external region report exposes timed access counters" {
+    var fix: Fixture = undefined;
+    try fix.open();
+    defer fix.close();
+    var config = ra8.core.external_memory.Config{};
+    config.ospi.size = 1024 * 1024;
+    config.sdram.size = 1024 * 1024;
+    try fix.board.flash.flash.resize(config.ospi.size);
+    try fix.store.configureExternal(try ra8.core.external_memory.Layout.init(config), &fix.board.flash.flash);
+    const cpu = fix.memory().asMaster(.cpu0);
+    var bytes: [4]u8 = undefined;
+    try cpu.read(0x6800_0010, &bytes);
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+    try json_run.document(buf.writer(), &fix.board, .{
+        .engine = "zig",
+        .elapsed = 1,
+        .elapsed_cycles = 100,
+        .external = cpu,
+    });
+    const doc = try std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+    defer doc.deinit();
+    const regions = doc.value.object.get("memory").?.object.get("external_regions").?.array.items;
+    const sdram = regions[1];
+    try std.testing.expectEqual(@as(i64, 4), try int(sdram, "bytes_read"));
+    try std.testing.expectEqual(@as(i64, 0x14), try int(sdram, "read_high_water_bytes"));
+    try std.testing.expect(try int(sdram.object.get("stall_cycles").?, "cpu") > 0);
 }
 
 test "a busy DMAC channel is listed with its index, shape and counts" {

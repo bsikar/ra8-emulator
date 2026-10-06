@@ -159,6 +159,8 @@ pub const Board = struct {
     /// CMSAMON/SFSAMON, the code MRAM and SiP flash split the OEM programmed.
     /// An unset CMS keeps the IDAU's bit-28 answer for code (RA8EMU-389/420).
     memory_monitors: pscu.samon.Unit = .{},
+    /// OSPI/SDRAM geometry and timing from the board profile (RA8EMU-643).
+    external_memory: @import("../core/external_memory.zig").Config = .{},
     /// The IDAU over those words and address bit 28 (RA8EMU-277). Pointed
     /// at sram_attribution in attach(), where the board's address is final.
     idau: sau.idau.Map = .{},
@@ -360,7 +362,6 @@ pub const Board = struct {
         self.bus.deinit();
         self.panel.deinit();
     }
-
     /// The chunk boundary, peripheral side. What actually happens there is
     /// next door in boundary.zig: the order the blocks are stepped in and
     /// where an event goes is its own subject, and this file is the list of
@@ -385,7 +386,6 @@ pub const Board = struct {
     pub fn requestReset(self: *Board, source: reset.Source) void {
         boundary.resetFor(self, source);
     }
-
     pub fn requestResetFrom(self: *Board, source: reset.Source, issuer: periph.Issuer) void {
         boundary.resetForFrom(self, source, issuer);
     }

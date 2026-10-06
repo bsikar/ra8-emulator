@@ -123,7 +123,10 @@ pub const text =
     \\  --charge           report the charger attached, so the charge rate
     \\                     the gauge answers with is positive
     \\  --click            fit the Click module: LSM6DSO 0x6B, MAX17048 0x36
-    \\  --board-profile PATH  use a versioned board profile file
+    \\  --board-profile PATH  use a version-1 board profile; optional ospi=
+    \\                     and sdram= lines set size,width,clock_hz,
+    \\                     latency_cycles,burst; memory_window_cycles=N
+    \\                     sets the report bandwidth window
     \\  --detach c6        remove the default companion MCU
     \\  --attach M@E       attach model M (lsm6dso, max17048, eink, modem, c6,
     \\                     button, led) at endpoint E: i2c:riic@0x37, spi:spi1@ssl0,

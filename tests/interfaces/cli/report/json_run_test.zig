@@ -41,6 +41,7 @@ test "a quiet board has every run and cores key, and empty unit lists" {
     try has(run, "part", .string);
     try std.testing.expectEqualStrings("zig", run.object.get("engine").?.string);
     try std.testing.expectEqual(@as(i64, 42), try int(run, "elapsed_instructions"));
+    try std.testing.expectEqual(@as(i64, 0), try int(run, "elapsed_cycles"));
     for ([_][]const u8{ "reads", "writes", "unmodelled_registers" }) |key| _ = try int(run.object.get("bus").?, key);
     try std.testing.expectEqual(@as(i64, 2), try int(run.object.get("bus_faults").?, "raised"));
     try std.testing.expectEqual(@as(i64, 1), try int(run.object.get("bus_faults").?, "escalated"));

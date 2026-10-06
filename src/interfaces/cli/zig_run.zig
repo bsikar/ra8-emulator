@@ -19,6 +19,7 @@ const fault_file = @import("fault_file.zig");
 const quiet_due = @import("../../board/quiet_due.zig");
 const cli = @import("cli.zig");
 const clock_rate = @import("zig_clock_rate.zig");
+const wall = @import("zig_wall.zig");
 const Board = @import("../../board/board.zig").Board;
 const report_run = @import("report/run.zig");
 const json_run = @import("report/json_run.zig");
@@ -119,6 +120,10 @@ pub const Clock = struct {
     /// Rates selected when the current boundary opened.
     boundary_hz: ?u64 = null,
     cycle_remainder: u64 = 0,
+    /// Common 1 ns external-memory fabric time and retired instructions
+    /// already closed into it.
+    wall_cycles: u64 = 0,
+    accounted: u64 = 0,
 
     pub fn boundary(self: *Clock) boot.Boundary {
         return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .abortFn = abortThunk, .cyclesFn = cyclesThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
@@ -176,7 +181,7 @@ pub const Clock = struct {
         if (cycles == 0 or !self.rateScaled()) return cycles;
         return clock_rate.instructions(cycles, self.boundary_hz.?, self.cycle_remainder);
     }
-    fn rateScaled(self: *Clock) bool {
+    pub fn rateScaled(self: *Clock) bool {
         if (self.boundary_hz != null) return true;
         if (self.resume_unscaled) return false;
         if (self.timed == null or systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory)) == 0) return false;
@@ -185,26 +190,8 @@ pub const Clock = struct {
         return true;
     }
 
-    /// Charge at the image rate, then tick the blocks.
     pub fn close(self: *Clock, instructions: u32) !void {
-        const rate_scaled = self.rateScaled();
-        const cycles = if (rate_scaled) scaled: {
-            const value = @as(u64, instructions) * self.boundary_hz.? + self.cycle_remainder;
-            self.cycle_remainder = value % clocks.timebase.default_hz;
-            break :scaled @as(u32, @intCast(value / clocks.timebase.default_hz));
-        } else instructions;
-        try self.timebase.advance(self.memory, cycles);
-        try self.ns_timebase.advanceSysTick(self.memory, cycles);
-        try self.board.tick(self.memory, cycles);
-        self.resume_boundary = false;
-        self.resume_unscaled = false;
-        if (frames_out.Armed.of(self.board)) |armed| try armed.pollSettle(self.board.time.base.now());
-        if (self.cpu1) |second| if (rate_scaled)
-            second.roundAt(instructions, self.boundary_hz.?)
-        else
-            second.round(instructions);
-        if (self.pace) |pace| self.paced_out = !pace.charge(instructions);
-        self.boundary_hz = null;
+        return wall.close(self, instructions);
     }
 };
 
@@ -278,7 +265,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
     defer audio.deinit();
     var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory, &board.bus, vector_base, budget, &ran, .{
+    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory.asMaster(.cpu0), &board.bus, vector_base, budget, &ran, .{
         .boundary = try fault_file.boundary(ends.schedule, clock.boundary()),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -298,6 +285,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         .snapshot = zig_snapshot.hook(&clock),
         .peer = if (clock.cpu1) |second| &second.core.cpu else null,
     });
+    try wall.finish(&clock, ran);
     if (options.console) try itm_port.flush(out, true);
     const watched = try postBootReport(out, &clock, &watcher, &final, image, options, ends, retire.at, budget);
     if (options.cpu == .zig) {
@@ -308,7 +296,7 @@ pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clo
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .elapsed_cycles = clock.wall_cycles, .external = clock.memory, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
         } else try report_run.zigCore(out, board, timebase.*, ran, clock.bus_tally);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.

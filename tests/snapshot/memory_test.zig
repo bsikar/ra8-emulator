@@ -55,6 +55,42 @@ test "only non-zero pages are written" {
     try std.testing.expect(list.items.len < 2 * memory.page);
 }
 
+test "external fabric counters and pending contention survive a snapshot" {
+    var config = ra8.core.external_memory.Config{};
+    config.ospi.size = 1024 * 1024;
+    config.sdram.size = 1024 * 1024;
+    const layout = try ra8.core.external_memory.Layout.init(config);
+    var flash1 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    defer flash1.deinit();
+    var first = try memory.Store.init(null);
+    defer first.deinit();
+    try first.configureExternal(layout, &flash1);
+    first.fabric.?.note(.cpu0, layout.locate(0x6800_0040, 4).?, .read, 4);
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+    try snapshot(&first, &list);
+
+    var flash2 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    defer flash2.deinit();
+    var second = try memory.Store.init(null);
+    defer second.deinit();
+    try second.configureExternal(layout, &flash2);
+    const section = (try file.Reader.find(list.items, .memory)).?;
+    try memory.load(&second, section.payload);
+    const counters = second.fabric.?.counters(.sdram, 0);
+    try std.testing.expectEqual(@as(u64, 4), counters.bytes_read);
+    try std.testing.expect(second.fabric.?.takePending(.cpu0) != 0);
+
+    var changed = config;
+    changed.sdram.width = 16;
+    var flash3 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    defer flash3.deinit();
+    var mismatched = try memory.Store.init(null);
+    defer mismatched.deinit();
+    try mismatched.configureExternal(try ra8.core.external_memory.Layout.init(changed), &flash3);
+    try std.testing.expectError(error.LayoutMismatch, memory.load(&mismatched, section.payload));
+}
+
 test "a second core saves its own regions, not the SRAM it borrows" {
     var first = try memory.Store.init(null);
     defer first.deinit();
