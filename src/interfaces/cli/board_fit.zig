@@ -10,6 +10,15 @@ const usb_plug = @import("../../board/usb_plug.zig");
 const pacing = @import("../../periph/time/pacing.zig");
 const profile = @import("../../board/profile.zig");
 const request = @import("../../periph/model/request.zig");
+const tape = @import("../../periph/esp_hosted/esp_tape.zig");
+
+/// A replay that met a request it has no recording for fails the run.
+pub fn tapeVerdict(board: *const Board, code: u8) u8 {
+    const misses = board.c6.tapeMisses();
+    if (misses == 0) return code;
+    std.debug.print("net-replay: {d} request(s) had no recording\n", .{misses});
+    return if (code == 0) 1 else code;
+}
 
 pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
     board.part = options.part;
@@ -36,6 +45,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     count += options.attach_count;
     board.asks.keep(allocator, asks[0..count]);
     if (options.usb_loop) board.usb.loopBack();
+    if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(spec.dir, spec.mode));
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     try cli.card_setup.prepareSdhi(board, options.sdhi);

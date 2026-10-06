@@ -4,9 +4,10 @@ const dhcp = @import("esp_dhcp.zig");
 const eth = @import("esp_eth.zig");
 const frame = @import("esp_frame.zig");
 const Queue = @import("esp_queue.zig").Queue;
+const tape = @import("esp_tape.zig");
+const Sock = @import("esp_sock.zig").Sock;
 
 pub const capacity: usize = 8;
-const invalid_socket: std.posix.socket_t = -1;
 
 const Key = struct {
     src_ip: [4]u8,
@@ -22,7 +23,7 @@ const Key = struct {
 
 const Flow = struct {
     used: bool = false,
-    fd: std.posix.socket_t = invalid_socket,
+    sock: Sock = .{},
     key: Key = undefined,
     route: eth.Route = undefined,
     generation: u64 = 0,
@@ -30,7 +31,7 @@ const Flow = struct {
     pending_len: usize = 0,
 
     fn close(self: *Flow) void {
-        if (self.fd != invalid_socket) std.posix.close(self.fd);
+        self.sock.close();
         self.* = .{};
     }
 };
@@ -50,18 +51,19 @@ pub const Bridge = struct {
         return false;
     }
 
-    pub fn forward(self: *Bridge, ip: eth.Ipv4, datagram: eth.Udp) void {
+    pub fn forward(self: *Bridge, run: *tape.Tape, ip: eth.Ipv4, datagram: eth.Udp) void {
         const key = makeKey(ip, datagram.src_port, datagram.dst_port);
-        const index = self.find(key) orelse self.allocate(key, replyRoute(ip, datagram.src_port, datagram.dst_port)) orelse return;
+        const index = self.find(key) orelse self.allocate(run, key, replyRoute(ip, datagram.src_port, datagram.dst_port)) orelse return;
         const flow = &self.flows[index];
         if (flow.pending_len != 0 or datagram.data.len > flow.pending.len) return;
-        const sent = std.posix.send(flow.fd, datagram.data, 0) catch |err| switch (err) {
+        const sent = flow.sock.send(datagram.data) catch |err| switch (err) {
             error.WouldBlock => {
                 @memcpy(flow.pending[0..datagram.data.len], datagram.data);
                 flow.pending_len = datagram.data.len;
                 return;
             },
             else => {
+                if (err == error.ReplayDiverged) run.miss("guest sent a datagram the recording does not have", .{});
                 flow.close();
                 return;
             },
@@ -69,18 +71,19 @@ pub const Bridge = struct {
         if (sent == datagram.data.len) self.touch(flow) else flow.close();
     }
 
-    pub fn poll(self: *Bridge, queue: *Queue) void {
-        for (0..capacity) |step| self.pollOne(queue, (self.cursor + step) % capacity);
+    pub fn poll(self: *Bridge, run: *tape.Tape, queue: *Queue) void {
+        for (0..capacity) |step| self.pollOne(run, queue, (self.cursor + step) % capacity);
         self.cursor = (self.cursor + 1) % capacity;
     }
 
-    fn pollOne(self: *Bridge, queue: *Queue, index: usize) void {
+    fn pollOne(self: *Bridge, run: *tape.Tape, queue: *Queue, index: usize) void {
         const flow = &self.flows[index];
         if (!flow.used) return;
         if (flow.pending_len != 0) {
-            const sent = std.posix.send(flow.fd, flow.pending[0..flow.pending_len], 0) catch |err| switch (err) {
+            const sent = flow.sock.send(flow.pending[0..flow.pending_len]) catch |err| switch (err) {
                 error.WouldBlock => return,
                 else => {
+                    if (err == error.ReplayDiverged) run.miss("guest sent a datagram the recording does not have", .{});
                     flow.close();
                     return;
                 },
@@ -95,7 +98,7 @@ pub const Bridge = struct {
         }
         if (queue.len >= 2) return;
         var payload: [eth.udp_payload_max + 1]u8 = undefined;
-        const got = std.posix.recv(flow.fd, &payload, std.posix.MSG.TRUNC) catch |err| switch (err) {
+        const got = flow.sock.recv(&payload, std.posix.MSG.TRUNC) catch |err| switch (err) {
             error.WouldBlock => return,
             else => {
                 flow.close();
@@ -108,7 +111,7 @@ pub const Bridge = struct {
         if (queueEthernet(queue, ethernet[0..len])) self.touch(flow);
     }
 
-    fn allocate(self: *Bridge, key: Key, route: eth.Route) ?usize {
+    fn allocate(self: *Bridge, run: *tape.Tape, key: Key, route: eth.Route) ?usize {
         var index: usize = 0;
         var oldest: u64 = std.math.maxInt(u64);
         for (&self.flows, 0..) |*flow, i| {
@@ -123,13 +126,10 @@ pub const Bridge = struct {
         }
         const flow = &self.flows[index];
         if (flow.used) flow.close();
-        const fd = openSocket() catch return null;
-        const address = hostAddress(key.dst_ip, key.dst_port);
-        std.posix.connect(fd, &address.any, address.getOsSockLen()) catch {
-            std.posix.close(fd);
-            return null;
-        };
-        flow.* = .{ .used = true, .fd = fd, .key = key, .route = route };
+        var sock: Sock = .{};
+        const host = tape.Key{ .proto = .udp, .ip = key.dst_ip, .port = key.dst_port };
+        _ = sock.connect(run, host, hostAddress(key.dst_ip, key.dst_port)) catch return null;
+        flow.* = .{ .used = true, .sock = sock, .key = key, .route = route };
         self.touch(flow);
         return index;
     }
@@ -144,10 +144,6 @@ pub const Bridge = struct {
         return null;
     }
 };
-
-fn openSocket() !std.posix.socket_t {
-    return std.posix.socket(std.posix.AF.INET, std.posix.SOCK.DGRAM | std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC, 0);
-}
 
 fn hostAddress(destination: [4]u8, port: u16) std.net.Address {
     const host = if (std.mem.eql(u8, &destination, &dhcp.server_ip)) [4]u8{ 127, 0, 0, 1 } else destination;

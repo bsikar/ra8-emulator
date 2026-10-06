@@ -84,6 +84,9 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         const name = try next(argv, index);
         if (!std.mem.eql(u8, name, "c6")) return error.UnknownFittedPart;
         options.detach_c6 = true;
+    } else if (std.mem.eql(u8, flag, "--net-record") or std.mem.eql(u8, flag, "--net-replay")) {
+        if (options.net_tape != null) return error.NetTapeTwice;
+        options.net_tape = .{ .dir = try next(argv, index), .mode = if (std.mem.eql(u8, flag, "--net-record")) .record else .replay };
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--fault")) {
