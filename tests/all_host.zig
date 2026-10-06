@@ -59,6 +59,7 @@ test {
     _ = @import("gui/memory_pane_test.zig");
     _ = @import("gui/disasm_pane_test.zig");
     _ = @import("gui/source_pane_test.zig");
+    _ = @import("gui/stack_pane_test.zig");
     _ = @import("gui/plug_post_test.zig");
     _ = @import("gui/speed_post_test.zig");
     _ = @import("interfaces/cli/window_devices_test.zig");

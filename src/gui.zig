@@ -43,6 +43,7 @@ pub const registers_pane = @import("gui/registers_pane.zig");
 pub const memory_pane = @import("gui/memory_pane.zig");
 pub const disasm_pane = @import("gui/disasm_pane.zig");
 pub const source_pane = @import("gui/source_pane.zig");
+pub const stack_pane = @import("gui/stack_pane.zig");
 pub const plug_post = @import("gui/plug_post.zig");
 pub const speed_post = @import("gui/speed_post.zig");
 pub const widget_paint = @import("gui/widget_paint.zig");
