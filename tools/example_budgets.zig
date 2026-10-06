@@ -38,6 +38,11 @@ pub const overrides = [_]Override{
     .{ .image = "txm_manager_cpu1.elf", .instructions = "60000000" },
     // The fault, the kill and ten manager ticks after it (RA8EMU-313).
     .{ .image = "txm_fault_cpu1.elf", .instructions = "60000000" },
+    // The same two module checks with the module manager on the M85 (CPU0):
+    // both print PASS by 30M on the Zig core; the budget is double that
+    // (RA8EMU-152).
+    .{ .image = "txm_manager_m85.elf", .instructions = "60000000" },
+    .{ .image = "txm_fault_m85.elf", .instructions = "60000000" },
     // Two loads of the same module, ten runs each, with a stop and an unload
     // between them (RA8EMU-157).
     .{ .image = "txm_reload_cpu1.elf", .instructions = "120000000" },
