@@ -24,14 +24,14 @@ const Rig = struct {
         .{ .at = gauge_at, .part = null },
         .{ .at = modem_at, .part = null },
     },
-    seen: usize = 0,
+    subscription: usize = undefined,
 
     fn setUp(self: *Rig) !void {
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         self.board = Board.init(std.testing.allocator);
         self.plugs = session_plug.Plugs.init(&self.board, self.arena.allocator());
         self.session.attachPlugs(self.post.hook());
-        _ = try self.session.subscribe(.{ .context = self, .receive = receive });
+        self.subscription = try self.session.subscribe();
     }
 
     fn tearDown(self: *Rig) void {
@@ -41,11 +41,6 @@ const Rig = struct {
 
     fn panel(self: *Rig) devices.Panel {
         return .{ .session = &self.session, .rows = &self.rows };
-    }
-
-    fn receive(context: *anyopaque, _: api.Event) void {
-        const self: *Rig = @ptrCast(@alignCast(context));
-        self.seen += 1;
     }
 
     fn park(self: *Rig) usize {
@@ -64,7 +59,6 @@ test "changes wait for the engine's park, then land in order" {
     var panel = rig.panel();
     try panel.plug(0, "max17048");
     try std.testing.expect(!rig.gaugeAnswers());
-    try std.testing.expectEqual(@as(usize, 1), rig.seen);
     try std.testing.expectEqual(@as(usize, 1), rig.park());
     try std.testing.expect(rig.gaugeAnswers());
     try panel.click(0);
@@ -75,7 +69,8 @@ test "changes wait for the engine's park, then land in order" {
     try panel.click(0);
     try std.testing.expectEqual(@as(usize, 1), rig.park());
     try std.testing.expect(!rig.gaugeAnswers());
-    try std.testing.expectEqual(@as(usize, 4), rig.seen);
+    var events: [4]api.Event = undefined;
+    try std.testing.expectEqual(@as(usize, 4), rig.session.pollEvents(rig.subscription, &events).?.count);
     try std.testing.expectEqual(@as(usize, 0), rig.park());
 }
 

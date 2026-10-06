@@ -4,15 +4,15 @@
 //! section.
 //!
 //! Each plane is width, height, byte count, then its pixel bytes. Not
-//! saved, because it is wiring: `refresh_hook` (the host window's repaint
-//! callback) and the planes' `allocator`. A load keeps the target's.
+//! saved, because they are wiring: `refresh_hook`, `refresh_log_hook`, and
+//! `event_hook` callbacks, plus the planes' `allocator`. A load keeps the target's.
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 
-const wiring = .{ "planes", "refresh_hook", "refresh_log_hook" };
+const wiring = .{ "planes", "refresh_hook", "refresh_log_hook", "event_hook" };
 const buffers = .{ "allocator", "image", "glass" };
 const max_side: u16 = 4096;
 

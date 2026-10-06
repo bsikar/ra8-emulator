@@ -118,6 +118,12 @@ pub const window_end_percent = [4]u8{ 75, 50, 25, 0 };
 pub const max_count: u32 = status.cntval;
 
 pub const Wdt = struct {
+    pub const EventHook = struct {
+        context: *anyopaque,
+        refreshErrorFn: *const fn (*anyopaque) void,
+        underflowFn: *const fn (*anyopaque) void,
+    };
+
     wdtcr: u16 = 0,
     wdtrcr: u8 = 0,
     wdtcstpr: u8 = 0,
@@ -147,6 +153,7 @@ pub const Wdt = struct {
     /// already had its one write.
     locked_writes: u32 = 0,
 
+    event_hook: ?EventHook = null,
     pub fn init() Wdt {
         return .{};
     }
@@ -252,6 +259,7 @@ pub const Wdt = struct {
         }
         self.armed = false;
         self.underflows +%= 1;
+        if (self.event_hook) |hook| hook.underflowFn(hook.context);
         self.flags |= status.undff;
         if (self.wdtrcr & reset_control.rstirqs != 0) self.reset_requested = true;
     }
@@ -264,6 +272,7 @@ pub const Wdt = struct {
         if (self.last_rr != refresh.first or byte != refresh.second) return;
         if (self.armed and !self.windowOpen()) {
             self.early +%= 1;
+            if (self.event_hook) |hook| hook.refreshErrorFn(hook.context);
             self.flags |= status.refef;
             if (self.wdtrcr & reset_control.rstirqs != 0) self.reset_requested = true;
             return;

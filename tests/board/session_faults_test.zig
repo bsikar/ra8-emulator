@@ -18,8 +18,7 @@ const Rig = struct {
     faults: session_faults.Faults = undefined,
     session: api.Session = .{ .live = undefined },
     at: model.endpoint.Endpoint = undefined,
-    events: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
+    subscription: usize = undefined,
 
     fn setUp(self: *Rig) !void {
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -30,18 +29,12 @@ const Rig = struct {
         self.at = ask.at;
         self.faults = session_faults.Faults.init(&self.board, self.arena.allocator());
         self.session.attachFaults(self.faults.hook());
-        _ = try self.session.subscribe(.{ .context = self, .receive = receive });
+        self.subscription = try self.session.subscribe();
     }
 
     fn tearDown(self: *Rig) void {
         self.board.deinit();
         self.arena.deinit();
-    }
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Rig = @ptrCast(@alignCast(context));
-        if (self.seen < self.events.len) self.events[self.seen] = event.kind;
-        self.seen += 1;
     }
 
     fn registry(self: *Rig) *ra8.periph.riic_bus.Registry {
@@ -79,9 +72,11 @@ test "disconnected refuses the address phase, and clearing brings it back" {
     try std.testing.expect(!rig.part().acks());
     try rig.clear();
     try std.testing.expect(rig.part().acks());
-    try std.testing.expectEqual(@as(usize, 2), rig.seen);
-    try std.testing.expectEqual(api.Event.Kind.fault_set, rig.events[0]);
-    try std.testing.expectEqual(api.Event.Kind.fault_cleared, rig.events[1]);
+    var events: [2]api.Event = undefined;
+    const got = rig.session.pollEvents(rig.subscription, &events).?;
+    try std.testing.expectEqual(@as(usize, 2), got.count);
+    try std.testing.expectEqual(api.Event.Kind.fault_set, events[0].kind);
+    try std.testing.expectEqual(api.Event.Kind.fault_cleared, events[1].kind);
 }
 
 test "stuck and garbage rewrite reads; clearing restores the part's own byte" {

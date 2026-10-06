@@ -1,11 +1,22 @@
 //! Connect board observations to the core-addressed session event stream (RA8EMU-192).
 const Board = @import("board.zig").Board;
+const boundary = @import("boundary.zig");
 const api = @import("../debug/session_api.zig");
 
-/// Attach the non-blocking event sources for one board/core pair.
-pub fn attach(board: *Board, session: *api.Session, core: api.Core) void {
+/// Attach non-blocking sources; each callback reads the board bus issuer.
+pub fn attach(board: *Board, session: *api.Session) void {
     session.attachTimeBase(&board.time.base);
-    board.pins.observeEvents(session.event_sources.gpioTap(core));
-    board.event_sink = session.event_sources.boardEventSink(core);
-    board.serial.tap = session.event_sources.uartTap(core);
+    session.event_sources.bindBoard(&board.bus.issuer, &board.pins, boundary.observation(board), &board.panel, &board.asks.attached_eink);
+    board.pins.observeEvents(session.event_sources.gpioTap(null));
+    board.event_sink = session.event_sources.boardEventSink();
+    board.serial.tap = session.event_sources.uartTap(null);
+    board.panel.event_hook = session.event_sources.einkHook();
+    if (board.asks.attached_eink) |panel| panel.event_hook = session.event_sources.einkHook();
+    board.display.event_hook = session.event_sources.glcdcHook();
+    board.watchdog.event_hook = session.event_sources.watchdogHook();
+    board.heartbeat.event_hook = session.event_sources.independentWatchdogHook();
+}
+
+pub fn current(board: *Board) @import("event_sink.zig").Observation {
+    return boundary.observation(board);
 }

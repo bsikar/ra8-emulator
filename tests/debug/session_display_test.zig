@@ -10,6 +10,8 @@ const Guest = ra8.core.cpu.memory.guest.Guest;
 const Machine = ra8.core.stop_machine.Machine;
 const zig_session = ra8.core.step_hook.zig_session;
 const gt911 = ra8.periph.i3c_gt911;
+const eink = ra8.periph.eink;
+const eink_wire = ra8.periph.eink_wire;
 
 const Ram = struct {
     bytes: [64]u8 = [_]u8{0} ** 64,
@@ -82,8 +84,8 @@ test "tap reaches GT911, settles e-ink, and returns a changed native grayscale f
     var machine = Machine{};
     const live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1000 };
     var session: api.Session = .{ .live = live };
-    session.attachTimeBase(&board.time.base);
-    const event_id = session.event_stream.subscribe().?;
+    ra8.board.session_events.attach(&board, &session);
+    const event_id = try session.subscribe();
 
     var guest_store = try Store.init(null);
     defer guest_store.deinit();
@@ -99,16 +101,20 @@ test "tap reaches GT911, settles e-ink, and returns a changed native grayscale f
     });
     defer host.deinit();
     session.attachDisplay(host.interface());
+    refreshPanel(&board.panel, 0, 0, 1072, 1448);
 
     var before = try session.frame(std.testing.allocator);
     defer before.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u32, 1072), before.width);
-    var frame_events: [2]api.Event = undefined;
-    const queued = session.event_stream.read(event_id, &frame_events).?;
-    try std.testing.expectEqual(@as(usize, 1), queued.count);
-    try std.testing.expectEqual(api.Event.Kind.lcd_frame, frame_events[0].kind);
-    try std.testing.expectEqual(@as(u32, 1072), frame_events[0].payload.frame.width);
-    try std.testing.expectEqual(@as(u16, 1448), frame_events[0].payload.frame.dirty.height);
+    var frame_events: [4]api.Event = undefined;
+    const queued = session.pollEvents(event_id, &frame_events).?;
+    var frame_event: ?api.Event = null;
+    for (frame_events[0..queued.count]) |event| {
+        if (event.kind == .lcd_frame) frame_event = event;
+    }
+    try std.testing.expect(frame_event != null);
+    try std.testing.expectEqual(@as(u32, 1072), frame_event.?.payload.frame.width);
+    try std.testing.expectEqual(@as(u16, 1448), frame_event.?.payload.frame.dirty.height);
     try std.testing.expectEqual(@as(u32, 1448), before.height);
     try session.tap(.cpu0, board.time.base.now() + 1, 300, 400);
 
@@ -139,6 +145,22 @@ test "session display reports a timeout when no refresh settles" {
     var session: api.Session = .{ .live = undefined };
     session.attachDisplay(host.interface());
     try std.testing.expectError(error.Timeout, session.waitSettled(2_000_000));
+}
+
+fn panelWord(panel: *eink.Panel, value: u16) void {
+    _ = panel.exchange(@intCast(value >> 8));
+    _ = panel.exchange(@intCast(value & 0xFF));
+}
+
+fn panelData(panel: *eink.Panel, value: u16) void {
+    panelWord(panel, eink_wire.preamble.write);
+    panelWord(panel, value);
+}
+
+fn refreshPanel(panel: *eink.Panel, x: u16, y: u16, width: u16, height: u16) void {
+    panelWord(panel, eink_wire.preamble.command);
+    panelWord(panel, @intFromEnum(eink_wire.Command.display_area));
+    for ([_]u16{ x, y, width, height, 2 }) |value| panelData(panel, value);
 }
 
 fn firmwareReport(panel: *gt911.Panel) ?gt911.Contact {

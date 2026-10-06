@@ -20,26 +20,19 @@ const Rig = struct {
     board: Board,
     plugs: session_plug.Plugs = undefined,
     session: api.Session = .{ .live = undefined },
-    events: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
+    subscription: usize = undefined,
 
     fn setUp(self: *Rig) !void {
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         self.board = Board.init(std.testing.allocator);
         self.plugs = session_plug.Plugs.init(&self.board, self.arena.allocator());
         self.session.attachPlugs(self.plugs.hook());
-        _ = try self.session.subscribe(.{ .context = self, .receive = receive });
+        self.subscription = try self.session.subscribe();
     }
 
     fn tearDown(self: *Rig) void {
         self.board.deinit();
         self.arena.deinit();
-    }
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Rig = @ptrCast(@alignCast(context));
-        if (self.seen < self.events.len) self.events[self.seen] = event.kind;
-        self.seen += 1;
     }
 
     fn gaugeAnswers(self: *Rig) bool {
@@ -65,10 +58,12 @@ test "an unplugged gauge stops acknowledging, and comes back when plugged" {
     try std.testing.expect(!rig.gaugeAnswers());
     try rig.session.plug(.cpu0, gauge_at, "max17048");
     try std.testing.expect(rig.gaugeAnswers());
-    try std.testing.expectEqual(@as(usize, 3), rig.seen);
-    try std.testing.expectEqual(api.Event.Kind.plugged, rig.events[0]);
-    try std.testing.expectEqual(api.Event.Kind.unplugged, rig.events[1]);
-    try std.testing.expectEqual(api.Event.Kind.plugged, rig.events[2]);
+    var events: [3]api.Event = undefined;
+    const got = rig.session.pollEvents(rig.subscription, &events).?;
+    try std.testing.expectEqual(@as(usize, 3), got.count);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[0].kind);
+    try std.testing.expectEqual(api.Event.Kind.unplugged, events[1].kind);
+    try std.testing.expectEqual(api.Event.Kind.plugged, events[2].kind);
 }
 
 test "an unplugged panel leaves MISO floating, and a new panel replaces it" {
@@ -138,5 +133,6 @@ test "empty endpoints, taken endpoints, unknown parts and GPIO are refused" {
     const pin: Endpoint = .{ .gpio = .{ .port = 1, .pin = 6 } };
     try std.testing.expectError(empty, rig.session.unplug(.cpu0, pin));
     try std.testing.expectError(error.WrongEndpoint, rig.session.plug(.cpu0, gauge_at, "led"));
-    try std.testing.expectEqual(@as(usize, 3), rig.seen);
+    var events: [3]api.Event = undefined;
+    try std.testing.expectEqual(@as(usize, 3), rig.session.pollEvents(rig.subscription, &events).?.count);
 }

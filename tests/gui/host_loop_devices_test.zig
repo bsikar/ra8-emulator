@@ -47,8 +47,7 @@ const Rig = struct {
     session: api.Session = .{ .live = undefined },
     rows: [1]devices.Row = .{.{ .at = gauge_at, .part = null }},
     panel: devices.Panel = undefined,
-    kinds: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
+    subscription: usize = undefined,
 
     fn setUp(self: *Rig) !void {
         self.arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -56,18 +55,12 @@ const Rig = struct {
         self.plugs = session_plug.Plugs.init(&self.board, self.arena.allocator());
         self.session.attachPlugs(self.post.hook());
         self.panel = .{ .session = &self.session, .rows = &self.rows };
-        _ = try self.session.subscribe(.{ .context = self, .receive = receive });
+        self.subscription = try self.session.subscribe();
     }
 
     fn tearDown(self: *Rig) void {
         self.board.deinit();
         self.arena.deinit();
-    }
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Rig = @ptrCast(@alignCast(context));
-        self.kinds[self.seen] = event.kind;
-        self.seen += 1;
     }
 
     fn park(self: *Rig) usize {
@@ -114,7 +107,10 @@ test "clicking the gauge's row unplugs it mid-run and a second click plugs it ba
     try std.testing.expect(rig.gaugeAnswers());
     try std.testing.expectEqualStrings("max17048", rig.rows[0].part.?);
     const want = [_]api.Event.Kind{ .plugged, .unplugged, .plugged };
-    try std.testing.expectEqualSlices(api.Event.Kind, &want, rig.kinds[0..rig.seen]);
+    var events: [want.len]api.Event = undefined;
+    const got = rig.session.pollEvents(rig.subscription, &events).?;
+    try std.testing.expectEqual(want.len, got.count);
+    for (events, want) |event, kind| try std.testing.expectEqual(kind, event.kind);
 }
 
 test "a click outside the devices pane changes nothing" {

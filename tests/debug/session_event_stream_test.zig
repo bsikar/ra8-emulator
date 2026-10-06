@@ -5,22 +5,99 @@ const api = @import("ra8").core.session_api;
 const sci = @import("ra8").periph.sci;
 const gpio = @import("ra8").periph.gpio;
 
-test "slow subscriber is bounded, reports loss and coalesces frames" {
+test "a stalled subscriber cannot backpressure the producer and keeps the newest window" {
     var stream: stream_api.Stream = .{};
     const id = stream.subscribe().?;
     for (0..stream_api.capacity + 10) |i| stream.publish(.{
         .core = .cpu0,
         .virtual_ns = i,
-        .kind = if (i % 2 == 0) .lcd_frame else .uart_byte,
-        .payload = if (i % 2 == 0)
-            .{ .frame = .{ .width = 2, .height = 2, .generation = i, .dirty = .{ .x = 0, .y = 0, .width = 2, .height = 2 } } }
-        else
-            .{ .uart = .{ .channel = 8, .byte = @intCast(i) } },
+        .kind = .uart_byte,
+        .payload = .{ .uart = .{ .channel = 8, .byte = @truncate(i) } },
     });
     var out: [stream_api.capacity]stream_api.Event = undefined;
-    const result = stream.read(id, &out).?;
-    try std.testing.expect(result.count > 0 and result.count <= stream_api.capacity);
-    try std.testing.expect(result.dropped > 0);
+    const overflowed = stream.read(id, &out).?;
+    try std.testing.expectEqual(stream_api.capacity, overflowed.count);
+    try std.testing.expectEqual(@as(u64, 10), overflowed.dropped);
+    try std.testing.expectEqual(@as(u64, 10), out[0].virtual_ns);
+    try std.testing.expectEqual(@as(u64, stream_api.capacity + 9), out[overflowed.count - 1].virtual_ns);
+    const drained = stream.read(id, &out).?;
+    try std.testing.expectEqual(@as(usize, 0), drained.count);
+    try std.testing.expectEqual(@as(u64, 0), drained.dropped);
+}
+
+test "frame coalescing keeps the newest frame in core and time order" {
+    var stream: stream_api.Stream = .{};
+    const id = stream.subscribe().?;
+    stream.publish(frame(.cpu0, 1));
+    stream.publish(.{ .core = .cpu0, .virtual_ns = 2, .kind = .uart_byte, .payload = .{ .uart = .{ .channel = 8, .byte = 'A' } } });
+    stream.publish(frame(.cpu1, 3));
+    stream.publish(frame(.cpu0, 4));
+    var events: [4]stream_api.Event = undefined;
+    const result = stream.read(id, &events).?;
+    try std.testing.expectEqual(@as(usize, 3), result.count);
+    try std.testing.expectEqual(@as(u64, 1), result.dropped);
+    try std.testing.expectEqual(stream_api.Event.Kind.uart_byte, events[0].kind);
+    try std.testing.expectEqual(@as(u64, 2), events[0].virtual_ns);
+    try std.testing.expectEqual(stream_api.Core.cpu1, events[1].core);
+    try std.testing.expectEqual(@as(u64, 3), events[1].payload.frame.generation);
+    try std.testing.expectEqual(stream_api.Core.cpu0, events[2].core);
+    try std.testing.expectEqual(@as(u64, 4), events[2].payload.frame.generation);
+}
+
+fn frame(core: stream_api.Core, generation: u64) stream_api.Event {
+    return .{
+        .core = core,
+        .virtual_ns = generation,
+        .kind = .lcd_frame,
+        .payload = .{ .frame = .{ .width = 2, .height = 2, .generation = generation, .dirty = .{ .x = 0, .y = 0, .width = 2, .height = 2 } } },
+    };
+}
+
+const ConcurrentPublish = struct {
+    stream: *stream_api.Stream,
+    done: std.atomic.Value(bool) = .init(false),
+
+    fn run(self: *ConcurrentPublish) void {
+        for (0..10_000) |i| self.stream.publish(.{
+            .core = .cpu0,
+            .virtual_ns = i,
+            .kind = .uart_byte,
+            .payload = .{ .uart = .{ .channel = 0, .byte = @truncate(i) } },
+        });
+        self.done.store(true, .release);
+    }
+};
+
+test "engine publication and subscriber polling share a bounded queue safely" {
+    var stream: stream_api.Stream = .{};
+    const id = stream.subscribe().?;
+    var producer = ConcurrentPublish{ .stream = &stream };
+    const thread = try std.Thread.spawn(.{}, ConcurrentPublish.run, .{&producer});
+    var delivered: u64 = 0;
+    var dropped: u64 = 0;
+    var last: ?u64 = null;
+    var events: [16]stream_api.Event = undefined;
+    while (!producer.done.load(.acquire)) {
+        const got = stream.read(id, &events).?;
+        dropped += got.dropped;
+        for (events[0..got.count]) |event| {
+            if (last) |before| try std.testing.expect(event.virtual_ns > before);
+            last = event.virtual_ns;
+            delivered += 1;
+        }
+    }
+    thread.join();
+    while (true) {
+        const got = stream.read(id, &events).?;
+        dropped += got.dropped;
+        for (events[0..got.count]) |event| {
+            if (last) |before| try std.testing.expect(event.virtual_ns > before);
+            last = event.virtual_ns;
+            delivered += 1;
+        }
+        if (got.count == 0) break;
+    }
+    try std.testing.expectEqual(@as(u64, 10_000), delivered + dropped);
 }
 
 test "each hardware event kind carries a virtual timestamp and source data" {
@@ -56,7 +133,7 @@ test "SCI, GPIO and LED taps publish timestamped source events" {
     var base: @import("ra8").periph.clocks.timebase.TimeBase = .{};
     var session: api.Session = .{ .live = undefined };
     session.attachTimeBase(&base);
-    const subscription = session.event_stream.subscribe().?;
+    const subscription = try session.subscribe();
     var serial = sci.Sci.init();
     serial.tap = session.event_sources.uartTap(.cpu1);
     serial.write(sci.win_base + 8 * sci.stride + sci.off_ccr0, 4, sci.ccr0.te);
@@ -66,7 +143,7 @@ test "SCI, GPIO and LED taps publish timestamped source events" {
     pins.observeEvents(session.event_sources.gpioTap(.cpu1));
     pins.applyWrite(gpio.regAddress(6, gpio.pcntr1), 4, (@as(u32, 1) << 16) | 1);
     var events: [4]stream_api.Event = undefined;
-    const got = session.event_stream.read(subscription, &events).?;
+    const got = session.pollEvents(subscription, &events).?;
     try std.testing.expectEqual(@as(usize, 3), got.count);
     try std.testing.expectEqual(stream_api.Event.Kind.uart_byte, events[0].kind);
     try std.testing.expectEqual(@as(u64, 0), events[0].virtual_ns);

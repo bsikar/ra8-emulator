@@ -88,6 +88,11 @@ pub const full_scale: u16 = iwdt_status.field.cntval;
 pub const counts_per_tick: u16 = 1024;
 
 pub const Iwdt = struct {
+    pub const EventHook = struct {
+        context: *anyopaque,
+        underflowFn: *const fn (*anyopaque) void,
+    };
+
     iwdtcr: u16 = 0,
     iwdtrcr: u8 = 0,
     iwdtcstpr: u8 = 0,
@@ -124,6 +129,7 @@ pub const Iwdt = struct {
     bad_acks: u32 = 0,
     /// Stores to IWDTSR that carried counter bits, which never land.
     frozen_writes: u32 = 0,
+    event_hook: ?EventHook = null,
 
     pub fn init() Iwdt {
         return .{};
@@ -168,6 +174,7 @@ pub const Iwdt = struct {
         }
         self.counter = full_scale;
         self.underflows +%= 1;
+        if (self.event_hook) |hook| hook.underflowFn(hook.context);
         self.flags |= iwdt_status.field.undff;
         if (self.iwdtrcr & reset_control.rstirqs != 0) {
             self.reset_requested = true;

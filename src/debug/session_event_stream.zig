@@ -1,4 +1,10 @@
-//! Bounded per-subscriber queues for session events (RA8EMU-192).
+//! Bounded per-subscriber queues for timestamped session events (RA8EMU-192).
+//!
+//! Subscribe and unsubscribe while the engine is stopped, then poll from a
+//! consumer thread. Producers never wait for a consumer: an event is reported
+//! as dropped if polling owns the queue, full queues discard their oldest
+//! event, and queued LCD frames coalesce per core. Remaining events preserve
+//! publication order.
 const std = @import("std");
 
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -27,36 +33,44 @@ pub const subscribers = 8;
 pub const Read = struct { count: usize, dropped: u64 };
 const Queue = struct {
     items: [capacity]Event = undefined,
+    mutex: std.Thread.Mutex = .{},
+    dropped: std.atomic.Value(u64) = .init(0),
     head: usize = 0,
     len: usize = 0,
-    dropped: u64 = 0,
     fn push(self: *Queue, event: Event) void {
+        if (!self.mutex.tryLock()) {
+            _ = self.dropped.fetchAdd(1, .monotonic);
+            return;
+        }
+        defer self.mutex.unlock();
         if (event.kind == .lcd_frame) {
             for (0..self.len) |i| {
                 const at = (self.head + i) % capacity;
-                if (self.items[at].kind == .lcd_frame and self.items[at].core == event.core) {
-                    self.items[at] = event;
-                    self.dropped += 1;
-                    return;
+                if (self.items[at].kind != .lcd_frame or self.items[at].core != event.core) continue;
+                for (i..self.len - 1) |move| {
+                    self.items[(self.head + move) % capacity] = self.items[(self.head + move + 1) % capacity];
                 }
+                self.len -= 1;
+                _ = self.dropped.fetchAdd(1, .monotonic);
+                break;
             }
         }
         if (self.len == capacity) {
             self.head = (self.head + 1) % capacity;
             self.len -= 1;
-            self.dropped += 1;
+            _ = self.dropped.fetchAdd(1, .monotonic);
         }
         self.items[(self.head + self.len) % capacity] = event;
         self.len += 1;
     }
     fn read(self: *Queue, out: []Event) Read {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         const count = @min(self.len, out.len);
         for (0..count) |i| out[i] = self.items[(self.head + i) % capacity];
         self.head = (self.head + count) % capacity;
         self.len -= count;
-        const dropped = self.dropped;
-        self.dropped = 0;
-        return .{ .count = count, .dropped = dropped };
+        return .{ .count = count, .dropped = self.dropped.swap(0, .monotonic) };
     }
 };
 pub const Stream = struct {

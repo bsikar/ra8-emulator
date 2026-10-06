@@ -29,17 +29,6 @@ const text =
     \\377777ns  clear  i2c:riic@0x36
 ;
 
-const Events = struct {
-    kinds: [8]api.Event.Kind = undefined,
-    seen: usize = 0,
-
-    fn receive(context: *anyopaque, event: api.Event) void {
-        const self: *Events = @ptrCast(@alignCast(context));
-        if (self.seen < self.kinds.len) self.kinds[self.seen] = event.kind;
-        self.seen += 1;
-    }
-};
-
 test "a fault schedule applies every event at its exact virtual time" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -61,8 +50,8 @@ test "a fault schedule applies every event at its exact virtual time" {
     var session: api.Session = .{ .live = undefined };
     session.attachPlugs(plugs.hook());
     session.attachFaults(faults.hook());
-    var events: Events = .{};
-    _ = try session.subscribe(.{ .context = &events, .receive = Events.receive });
+    session.attachTimeBase(&board.time.base);
+    const subscription = try session.subscribe();
 
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
     var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
@@ -93,8 +82,13 @@ test "a fault schedule applies every event at its exact virtual time" {
     for (plan.events, applied) |event, at| try std.testing.expectEqual(event.at_ns, at);
 
     const want = [_]api.Event.Kind{ .plugged, .unplugged, .plugged, .fault_set, .fault_cleared };
-    try std.testing.expectEqual(want.len, events.seen);
-    try std.testing.expectEqualSlices(api.Event.Kind, &want, events.kinds[0..want.len]);
+    var events: [want.len]api.Event = undefined;
+    const got = session.pollEvents(subscription, &events).?;
+    try std.testing.expectEqual(want.len, got.count);
+    for (events, want, plan.events) |event, kind, scheduled| {
+        try std.testing.expectEqual(kind, event.kind);
+        try std.testing.expectEqual(scheduled.at_ns, event.virtual_ns);
+    }
     // The firmware lived through it: it saw the gauge go and come back.
     try std.testing.expect(try core.readWord(counts_at + 4) > 0);
     try std.testing.expect(try core.readWord(counts_at + 8) > 0);

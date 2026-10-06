@@ -71,27 +71,23 @@ pub const lut = busy;
 /// Which SPI_B channel the panel is wired to. The model's own rule; see the
 /// header.
 pub const line_channel: usize = 0;
-
 /// The panel's ready line, driven from the board so an HRDY poll reads a
 /// level rather than a floating zero. Matches the epaper app's busy pin.
 pub const hrdy = struct {
     pub const port: u8 = 4;
     pub const pin: u4 = 1;
 };
-
 /// How many host registers the model keeps. Small on purpose: the driver
 /// touches a handful, and one nothing ever wrote reads zero anyway.
 pub const register_slots: usize = 8;
-
 /// What the next assembled word means.
 const State = enum { preamble, command, data };
-
 const Register = struct {
     address: u16 = 0,
     value: u16 = 0,
 };
-
 pub const Panel = struct {
+    pub const EventHook = struct { context: *anyopaque, refreshFn: *const fn (*anyopaque, *const Panel) void };
     state: State = .preamble,
     /// A high byte is latched and waiting for the low byte behind it.
     high: ?u8 = null,
@@ -111,6 +107,7 @@ pub const Panel = struct {
     vcom_direction: u16 = 0,
     vcom_mv: u16 = proto.vcom.power_on_mv,
     info_index: u16 = 0,
+
     /// The rectangle the load in flight declared, and the pixels left in it.
     load_width: u16 = 0,
     load_height: u16 = 0,
@@ -122,6 +119,7 @@ pub const Panel = struct {
     planes: image.Planes = .{},
     refresh_hook: ?image.RefreshHook = null,
     refresh_log_hook: ?refresh.LogHook = null,
+    event_hook: ?EventHook = null,
     loaded_pixels: u32 = 0,
     display_args: [5]u16 = .{0} ** 5,
     /// The film: busy while a refresh is still being driven.
@@ -332,9 +330,12 @@ pub const Panel = struct {
         self.refreshes +%= 1;
         self.film.start();
         if (self.refresh_hook) |hook| hook.refreshFn(hook.context);
+        if (self.event_hook) |hook| hook.refreshFn(hook.context, self);
         refresh.notify(self.refresh_log_hook, self.display_args, word);
     }
-
+    pub fn latestRefresh(self: *const Panel) refresh.Event {
+        return .{ .x = self.display_args[proto.arg.display_x], .y = self.display_args[proto.arg.display_y], .width = self.display_args[proto.arg.display_width], .height = self.display_args[proto.arg.display_height], .waveform = self.last_waveform };
+    }
     /// What the next read burst carries. A refused command answers zero: the
     /// panel is asleep and is not driving the line at all.
     fn readValue(self: *Panel) u16 {
