@@ -33,3 +33,18 @@ arm-none-eabi-strip -g -o tz_nsc_cgc_usb_ns.elf zig-out/arm/tz_nsc_cgc_usb_ns.el
 
 If the image is rebuilt, re-read the four addresses above and update
 `tests/interfaces/cli/tz_pair_test.zig`.
+
+`cpu1_pingpong_ipc.elf` and `cpu1_pingpong_ipc_cpu1.elf` are the two-core
+RA8EMU-507 fixture, built from ra8-firmware `7806ccf` and stripped of debug
+sections. The Secure CPU0 image includes its Non-secure half at the RA8 IDAU's
+`0x1208_0000` alias. `tests/core/second_zig_run_test.zig` runs both cores,
+proves CPU0 reaches that target, and checks that the externally reported CFSR,
+HFSR and SFSR words all remain clear.
+
+Rebuild them with the same toolchain and command above, then strip both files:
+
+```sh
+arm-none-eabi-strip -g -o cpu1_pingpong_ipc.elf zig-out/arm/cpu1_pingpong_ipc.elf
+arm-none-eabi-strip -g -o cpu1_pingpong_ipc_cpu1.elf \
+  zig-out/arm/cpu1_pingpong_ipc_cpu1.elf
+```
