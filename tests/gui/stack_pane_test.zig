@@ -1,0 +1,130 @@
+//! Covers src/gui/stack_pane.zig (RA8EMU-744) on the uart_irq_echo fixture,
+//! the one image with .debug_frame, .debug_line and .symtab: a core stopped
+//! inside ra8_sci_init walks out through its callers with names and lines,
+//! a capture with no image still has the pcs, a click maps to its frame, a
+//! pane too narrow draws nothing, and the stop rasterises to a pinned
+//! golden frame.
+const std = @import("std");
+const ra8 = @import("ra8");
+
+const draw_list = ra8.gui.draw_list;
+const raster = ra8.gui.raster;
+const font = ra8.gui.font;
+const pane = ra8.gui.stack_pane;
+
+const Rect = draw_list.Rect;
+/// Room for 64 characters past the pc and six rows.
+const area = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 2 + @as(i32, @intCast(font.textWidth(pane.name_at + 48))), .h = 2 * pane.pad + 6 * pane.row_h };
+
+const image_path = "tests/fixtures/uart/uart_irq_echo.elf";
+/// ra8_sci_init's first instruction (its symbol is 0x02001A71).
+const sci_init: u32 = 0x0200_1A70;
+const golden: u64 = 5426307049046444676;
+
+/// The fixture stopped on ra8_sci_init's first instruction.
+fn stopped() !ra8.harness.Harness {
+    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image_path });
+    errdefer opened.deinit();
+    const session = opened.session();
+    _ = try session.setBreakpoint(.cpu0, .{ .address = sci_init });
+    session.live.budget = 200_000;
+    _ = try session.run(.cpu0, .cont);
+    try std.testing.expectEqual(sci_init, try session.register(.cpu0, .pc));
+    return opened;
+}
+
+const Scene = struct {
+    list: draw_list.DrawList,
+    frame: raster.Framebuffer,
+
+    fn init() !Scene {
+        const w: u32 = @intCast(area.w);
+        const h: u32 = @intCast(area.h);
+        return .{ .list = draw_list.DrawList.init(std.testing.allocator, w, h), .frame = try raster.Framebuffer.init(std.testing.allocator, w, h) };
+    }
+
+    fn deinit(self: *Scene) void {
+        self.list.deinit();
+        self.frame.deinit(std.testing.allocator);
+    }
+
+    fn render(self: *Scene, snapshot: *const pane.Snapshot, selected: usize) !void {
+        try pane.draw(&self.list, area, snapshot, selected);
+        raster.draw(&self.frame, &self.list, font.atlas);
+    }
+
+    fn digest(self: *const Scene) u64 {
+        return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(self.frame.pixels));
+    }
+};
+
+test "the gutter, number, pc and function columns line up" {
+    try std.testing.expectEqual(@as(usize, 2), pane.number_at);
+    try std.testing.expectEqual(@as(usize, 6), pane.pc_at);
+    try std.testing.expectEqual(@as(usize, 16), pane.name_at);
+    try std.testing.expectEqual(@as(usize, 6), pane.rows(area));
+    try std.testing.expectEqual(pane.pad + 2 * pane.row_h, pane.rowRect(area, 2).y);
+}
+
+test "a stop inside ra8_sci_init walks out through its callers with lines" {
+    var opened = try stopped();
+    defer opened.deinit();
+    const snapshot = try pane.capture(opened.session(), .cpu0, opened.image());
+    try std.testing.expectEqual(@as(usize, 4), snapshot.count);
+    const top = &snapshot.frames[0];
+    try std.testing.expectEqual(sci_init, top.pc);
+    try std.testing.expectEqualStrings("ra8_sci_init", top.name());
+    try std.testing.expectEqual(@as(u32, 0), top.offset);
+    for (snapshot.frames[0..snapshot.count]) |*frame| {
+        try std.testing.expect(frame.name_len != 0);
+        try std.testing.expect(!frame.interrupted);
+    }
+    try std.testing.expectEqualStrings("ra8_sci.c", top.file());
+    try std.testing.expectEqual(@as(u32, 411), top.line);
+    const callers = [_][]const u8{ "uart_irq_setup_or_halt", "main", "Reset_Handler" };
+    const lines = [_]u32{ 275, 299, 529 };
+    for (callers, lines, snapshot.frames[1..4]) |called, line, *frame| {
+        try std.testing.expectEqualStrings(called, frame.name());
+        try std.testing.expectEqual(line, frame.line);
+        try std.testing.expect(frame.offset != 0);
+    }
+}
+
+test "with no image the frames carry only their pcs" {
+    var opened = try stopped();
+    defer opened.deinit();
+    const named = try pane.capture(opened.session(), .cpu0, opened.image());
+    const bare = try pane.capture(opened.session(), .cpu0, null);
+    try std.testing.expect(bare.count >= 1);
+    try std.testing.expectEqual(named.frames[0].pc, bare.frames[0].pc);
+    for (bare.frames[0..bare.count]) |*frame| {
+        try std.testing.expectEqual(@as(usize, 0), frame.name_len);
+        try std.testing.expectEqual(@as(u32, 0), frame.line);
+    }
+}
+
+test "a click picks the frame on its row and nothing past the last" {
+    var snapshot: pane.Snapshot = .{ .count = 3 };
+    try std.testing.expectEqual(@as(?usize, 0), pane.frameAt(area, &snapshot, pane.pad));
+    try std.testing.expectEqual(@as(?usize, 2), pane.frameAt(area, &snapshot, pane.rowRect(area, 2).y + 1));
+    try std.testing.expectEqual(@as(?usize, null), pane.frameAt(area, &snapshot, pane.rowRect(area, 3).y + 1));
+    try std.testing.expectEqual(@as(?usize, null), pane.frameAt(area, &snapshot, 0));
+}
+
+test "a pane too narrow draws nothing" {
+    var list = draw_list.DrawList.init(std.testing.allocator, 64, 64);
+    defer list.deinit();
+    const snapshot: pane.Snapshot = .{ .count = 1 };
+    try pane.draw(&list, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = 64 }, &snapshot, 0);
+    try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
+}
+
+test "the stop rasterises to the pinned golden frame" {
+    var opened = try stopped();
+    defer opened.deinit();
+    const snapshot = try pane.capture(opened.session(), .cpu0, opened.image());
+    var scene = try Scene.init();
+    defer scene.deinit();
+    try scene.render(&snapshot, 1);
+    try std.testing.expectEqual(golden, scene.digest());
+}
