@@ -131,6 +131,9 @@ pub const text =
     \\                     latency_cycles,burst; memory_window_cycles=N
     \\                     sets the report bandwidth window
     \\  --detach c6        remove the default companion MCU
+    \\  --net-record DIR   save every C6 host exchange under DIR
+    \\  --net-replay DIR   answer the C6 from DIR, never the network; a
+    \\                     request with no recording fails the run
     \\  --attach M@E       attach model M (lsm6dso, max17048, eink, modem, c6,
     \\                     button, led) at endpoint E: i2c:riic@0x37, spi:spi1@ssl0,
     \\                     uart:sci3, gpio:P006 (up to 4 times); eink:WxH@E

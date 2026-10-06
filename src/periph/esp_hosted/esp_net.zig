@@ -7,9 +7,10 @@ const frame = @import("esp_frame.zig");
 const dhcp = @import("esp_dhcp.zig");
 const Queue = @import("esp_queue.zig").Queue;
 const udp_net = @import("esp_udp.zig");
+const tape = @import("esp_tape.zig");
+const Sock = @import("esp_sock.zig").Sock;
 
 pub const tcp_capacity: usize = 8;
-const invalid_socket: std.posix.socket_t = -1;
 const guest_window: u16 = eth.tcp_payload_max;
 pub const network_queue_limit: usize = 2;
 
@@ -32,7 +33,7 @@ const Control = enum { none, syn_ack, ack, window_update, fin, reset };
 
 const TcpFlow = struct {
     state: TcpState = .empty,
-    fd: std.posix.socket_t = invalid_socket,
+    sock: Sock = .{},
     key: Key = undefined,
     route: eth.Route = undefined,
     opening_syn: u32 = 0,
@@ -50,7 +51,7 @@ const TcpFlow = struct {
     pending_at: usize = 0,
 
     fn close(self: *TcpFlow) void {
-        if (self.fd != invalid_socket) std.posix.close(self.fd);
+        self.sock.close();
         self.* = .{};
     }
 };
@@ -61,11 +62,13 @@ pub const Bridge = struct {
     resolver: dns.Resolver = .{},
     tcp_cursor: usize = 0,
     dns_bridge: dns_host.Host = .{},
+    tape: tape.Tape = .{},
 
     pub fn deinit(self: *Bridge) void {
         for (&self.tcp_flows) |*flow| flow.close();
         self.udp_bridge.deinit();
         self.dns_bridge.deinit();
+        self.tape.deinit();
         self.tcp_cursor = 0;
     }
     pub fn active(self: *const Bridge) bool {
@@ -80,8 +83,8 @@ pub const Bridge = struct {
         if (ip.protocol == eth.proto_udp) {
             const datagram = eth.udp(ethernet) orelse return .handled;
             if (datagram.dst_port == dns.port and std.mem.eql(u8, &ip.dst_ip, &dhcp.server_ip)) {
-                self.forwardDns(ip, datagram);
-            } else self.udp_bridge.forward(ip, datagram);
+                self.forwardDns(queue, ip, datagram);
+            } else self.udp_bridge.forward(&self.tape, ip, datagram);
             return .handled;
         }
         if (ip.protocol == eth.proto_tcp) {
@@ -94,19 +97,24 @@ pub const Bridge = struct {
 
     /// Advances every live nonblocking socket without waiting.
     pub fn poll(self: *Bridge, queue: *Queue) void {
-        self.dns_bridge.poll(queue, network_queue_limit);
+        self.dns_bridge.poll(&self.tape, queue, network_queue_limit);
         for (0..tcp_capacity) |step| {
             if (queue.len >= network_queue_limit) break;
             const index = (self.tcp_cursor + step) % tcp_capacity;
             self.pollTcp(queue, index);
         }
         self.tcp_cursor = (self.tcp_cursor + 1) % tcp_capacity;
-        if (queue.len < network_queue_limit) self.udp_bridge.poll(queue);
+        if (queue.len < network_queue_limit) self.udp_bridge.poll(&self.tape, queue);
     }
 
-    fn forwardDns(self: *Bridge, ip: eth.Ipv4, datagram: eth.Udp) void {
+    fn forwardDns(self: *Bridge, queue: *Queue, ip: eth.Ipv4, datagram: eth.Udp) void {
         const route = replyRoute(ip, datagram.src_port, datagram.dst_port);
-        self.dns_bridge.start(datagram.data, route, self.resolver);
+        if (self.tape.mode != .replay) return self.dns_bridge.start(datagram.data, route, self.resolver);
+        var answer: [eth.udp_payload_max]u8 = undefined;
+        const recorded = self.tape.loadDns(datagram.data, &answer) orelse return;
+        var ethernet: [frame.max_payload]u8 = undefined;
+        const len = eth.udpFrame(&ethernet, route, recorded) orelse return;
+        _ = queueEthernet(queue, ethernet[0..len]);
     }
 
     fn forwardTcp(self: *Bridge, queue: *Queue, ip: eth.Ipv4, segment: eth.Tcp) void {
@@ -188,23 +196,14 @@ pub const Bridge = struct {
             .guest_ack = 0xC6000000 +% @as(u32, @intCast(index)) +% 1,
             .receive_window = window,
         };
-        flow.fd = openSocket(std.posix.SOCK.STREAM) catch {
+        const host = tape.Key{ .proto = .tcp, .ip = key.dst_ip, .port = key.dst_port };
+        const opened = flow.sock.connect(&self.tape, host, hostAddress(key.dst_ip, key.dst_port)) catch {
             flow.state = .reset_pending;
             flow.control = .reset;
             self.queueControl(queue, index);
             return;
         };
-        const address = hostAddress(key.dst_ip, key.dst_port);
-        std.posix.connect(flow.fd, &address.any, address.getOsSockLen()) catch |err| switch (err) {
-            error.WouldBlock => return,
-            else => {
-                std.posix.close(flow.fd);
-                flow.fd = invalid_socket;
-                flow.state = .reset_pending;
-                flow.control = .reset;
-                self.queueControl(queue, index);
-            },
-        };
+        if (opened == .pending) return;
         flow.state = .established;
         flow.control = .syn_ack;
         self.queueControl(queue, index);
@@ -218,25 +217,21 @@ pub const Bridge = struct {
             return;
         }
         if (flow.state == .connecting) {
-            var descriptors = [_]std.posix.pollfd{.{ .fd = flow.fd, .events = std.posix.POLL.OUT, .revents = 0 }};
-            const ready = std.posix.poll(&descriptors, 0) catch {
+            const done = flow.sock.ready() catch {
                 self.hardTcpError(index);
                 return;
             };
-            if (ready == 0) return;
-            std.posix.getsockoptError(flow.fd) catch {
-                self.hardTcpError(index);
-                return;
-            };
+            if (!done) return;
             flow.state = .established;
             flow.control = .syn_ack;
             self.queueControl(queue, index);
             return;
         }
         if (flow.pending_at < flow.pending_len) {
-            const sent = std.posix.send(flow.fd, flow.pending[flow.pending_at..flow.pending_len], sendFlags()) catch |err| switch (err) {
+            const sent = flow.sock.send(flow.pending[flow.pending_at..flow.pending_len]) catch |err| switch (err) {
                 error.WouldBlock => return,
                 else => {
+                    if (err == error.ReplayDiverged) self.tape.miss("guest sent bytes the recording does not have", .{});
                     self.hardTcpError(index);
                     return;
                 },
@@ -250,7 +245,7 @@ pub const Bridge = struct {
             return;
         }
         if (flow.shutdown_pending) {
-            std.posix.shutdown(flow.fd, .send) catch {
+            flow.sock.shutdownSend() catch {
                 self.hardTcpError(index);
                 return;
             };
@@ -265,7 +260,7 @@ pub const Bridge = struct {
         if (in_flight >= flow.receive_window) return;
         const available: usize = @intCast(flow.receive_window - @as(u16, @intCast(in_flight)));
         var payload: [eth.tcp_payload_max]u8 = undefined;
-        const got = std.posix.recv(flow.fd, payload[0..@min(payload.len, available)], 0) catch |err| switch (err) {
+        const got = flow.sock.recv(payload[0..@min(payload.len, available)], 0) catch |err| switch (err) {
             error.WouldBlock => return,
             else => {
                 self.hardTcpError(index);
@@ -320,8 +315,7 @@ pub const Bridge = struct {
 
     fn hardTcpError(self: *Bridge, index: usize) void {
         const flow = &self.tcp_flows[index];
-        if (flow.fd != invalid_socket) std.posix.close(flow.fd);
-        flow.fd = invalid_socket;
+        flow.sock.close();
         flow.control = .reset;
         if (flow.state == .connecting) flow.state = .reset_pending;
     }
@@ -354,20 +348,6 @@ pub const Bridge = struct {
         return null;
     }
 };
-
-fn openSocket(kind: u32) !std.posix.socket_t {
-    const fd = try std.posix.socket(std.posix.AF.INET, kind | std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC, 0);
-    errdefer std.posix.close(fd);
-    if (comptime @hasDecl(std.posix.SO, "NOSIGPIPE")) {
-        const enabled: c_int = 1;
-        try std.posix.setsockopt(fd, std.posix.SOL.SOCKET, std.posix.SO.NOSIGPIPE, std.mem.asBytes(&enabled));
-    }
-    return fd;
-}
-
-fn sendFlags() u32 {
-    return if (comptime @hasDecl(std.posix.MSG, "NOSIGNAL")) std.posix.MSG.NOSIGNAL else 0;
-}
 
 fn hostAddress(destination: [4]u8, port: u16) std.net.Address {
     const host = if (std.mem.eql(u8, &destination, &dhcp.server_ip)) [4]u8{ 127, 0, 0, 1 } else destination;

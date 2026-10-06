@@ -20,6 +20,7 @@ const Cpu0 = @import("zig_memory.zig").Cpu0;
 
 /// Fitting the board is shared with main's engine path.
 pub const fit = @import("board_fit.zig").fit;
+const fit_verdict = @import("board_fit.zig").tapeVerdict;
 
 /// The whole run, in the order main's engine path takes it: fit the board,
 /// load, announce, then run on the Zig core.
@@ -54,8 +55,8 @@ pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options)
         .undefined_sites = if (swept) |*found| found else null,
         .schedule = if (options.faults != null) &schedule.applier else null,
     };
-    if (options.frames.live) return window_main.show(allocator, .{ .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends });
-    return zig_run.run(out, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends);
+    if (options.frames.live) return fit_verdict(&board, try window_main.show(allocator, .{ .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
+    return fit_verdict(&board, try zig_run.run(out, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends));
 }
 
 /// CPU0's store, the console tap, the profile table and option memory: what

@@ -14,6 +14,8 @@ pub const gateway = @import("esp_hosted/esp_gateway.zig");
 pub const scan = @import("esp_hosted/esp_scan.zig");
 pub const dns = @import("esp_hosted/esp_dns.zig");
 pub const net = @import("esp_hosted/esp_net.zig");
+pub const tape = @import("esp_hosted/esp_tape.zig");
+pub const sock = @import("esp_hosted/esp_sock.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
@@ -47,6 +49,14 @@ pub const C6 = struct {
 
     pub fn deinit(self: *C6) void {
         self.wire.deinit();
+    }
+    /// Records or replays the C6's host traffic (RA8EMU-560).
+    pub fn useTape(self: *C6, run: tape.Tape) void {
+        self.wire.bridge.tape = run;
+    }
+    /// Replay requests that had no recording; a run with any must fail.
+    pub fn tapeMisses(self: *const C6) u32 {
+        return self.wire.bridge.tape.missed();
     }
     pub fn quiet(self: *const C6) bool {
         return !self.wire.networkActive();

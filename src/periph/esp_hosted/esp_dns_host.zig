@@ -4,6 +4,7 @@ const dns = @import("esp_dns.zig");
 const eth = @import("esp_eth.zig");
 const frame = @import("esp_frame.zig");
 const Queue = @import("esp_queue.zig").Queue;
+const tape = @import("esp_tape.zig");
 
 const State = enum(u8) { running, ready };
 
@@ -17,6 +18,8 @@ const Job = struct {
     request: [eth.udp_payload_max]u8 = undefined,
     request_len: usize,
     response: [frame.frame_size]u8 = undefined,
+    answer: [eth.udp_payload_max]u8 = undefined,
+    answer_len: usize = 0,
 
     fn release(self: *Job) void {
         if (self.refs.fetchSub(1, .acq_rel) == 1) std.heap.page_allocator.destroy(self);
@@ -40,7 +43,8 @@ pub const Host = struct {
         self.thread = thread;
     }
 
-    pub fn poll(self: *Host, queue: *Queue, limit: usize) void {
+    /// Hands a finished answer to the guest; a recording run also keeps it.
+    pub fn poll(self: *Host, tapes: *tape.Tape, queue: *Queue, limit: usize) void {
         const job = self.job orelse return;
         if (job.state.load(.acquire) != .ready) return;
         if (job.valid and queue.len >= limit) return;
@@ -48,6 +52,7 @@ pub const Host = struct {
         self.thread = null;
         self.job = null;
         if (job.valid) _ = queue.push(&job.response);
+        if (job.valid and tapes.mode == .record) tapes.storeDns(job.request[0..job.request_len], job.answer[0..job.answer_len]);
         job.release();
     }
 
@@ -77,6 +82,8 @@ pub const Host = struct {
         }
         if (!job.canceled.load(.acquire)) {
             if (valid) job.response = hosted;
+            if (valid) job.answer_len = payload_len.?;
+            if (valid) @memcpy(job.answer[0..job.answer_len], payload[0..job.answer_len]);
             job.valid = valid;
         }
         job.state.store(.ready, .release);
