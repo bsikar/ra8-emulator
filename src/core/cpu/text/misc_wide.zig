@@ -1,5 +1,5 @@
 //! Text for the misc_wide group: REV, REV16, RBIT, REVSH and CLZ (32-bit),
-//! in Capstone 5's spelling. The byte reversals carry `.w`; RBIT and CLZ
+//! in the spelling the parity digests pin. The byte reversals carry `.w`; RBIT and CLZ
 //! have no narrow form and print bare: `rev.w r0, r1`, `clz r0, r1`.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

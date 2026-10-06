@@ -1,5 +1,5 @@
-//! One instruction as UAL text, in the shape Capstone prints it (RA8EMU-253):
-//! the mnemonic, one space, then the operands. Registers use Capstone's names
+//! One instruction as UAL text, in the shape we print it (RA8EMU-253):
+//! the mnemonic, one space, then the operands. Registers use the standard UAL names
 //! (r9-r12 are sb, sl, fp and ip) and an immediate under ten is decimal, any
 //! other is lowercase hex.
 const std = @import("std");
@@ -15,10 +15,10 @@ pub const conds = [15][]const u8{
     "hi", "ls", "ge", "lt", "gt", "le", "al",
 };
 
-/// Capstone prints immediates below this in decimal.
+/// We print immediates below this in decimal.
 pub const decimal_below: u32 = 10;
 
-/// Room for Capstone's longest text: a 31-byte mnemonic, a space and a
+/// Room for the longest text: a 31-byte mnemonic, a space and a
 /// 159-byte operand string (cs_insn holds them in 32 and 160 bytes).
 pub const capacity = 192;
 
@@ -44,7 +44,7 @@ pub const Text = struct {
         if (value < decimal_below) self.put("#{d}", .{value}) else self.put("#0x{x}", .{value});
     }
 
-    /// An immediate Capstone reads as signed: one with bit 31 set prints as
+    /// An immediate we read as signed: one with bit 31 set prints as
     /// its negative, `#-1` or `#-0x7b000000`.
     pub fn signedImm(self: *Text, value: u32) void {
         if (value >> 31 == 0) return self.imm(value);

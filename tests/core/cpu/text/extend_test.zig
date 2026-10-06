@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/extend.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/extend.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every extend encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("extend");
+test "every extend encoding matches its parity digest" {
+    try parity.expectGroupMatches("extend");
 }

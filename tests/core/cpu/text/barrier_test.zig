@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/barrier.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/barrier.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every hw2 from 0x8F00 to 0x8FFF: DSB, DMB and ISB with each option,
 /// plus the neighbouring rows the group leaves unclaimed.
@@ -9,6 +9,6 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "barrier prints the way Capstone does for every option" {
-    try capstone.expectWideGroupMatches("barrier", 0xFFFF, 0xF3BF, &hw2);
+test "barrier matches its parity digest for every option" {
+    try parity.expectWideGroupMatches("barrier", 0xFFFF, 0xF3BF, &hw2);
 }

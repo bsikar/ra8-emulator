@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/pkh.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/pkh.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// PKHBT and PKHTB with shifts 0, 1, 9, 10, 16 and 31, Rd and Rm low and high,
 /// plus SP as Rd, PC as Rm and set hw2[15] or hw2[4] (all unclaimed).
@@ -9,6 +9,6 @@ const hw2 = [_]u16{
     0x0D02, 0x000F, 0x8002, 0x0012,
 };
 
-test "PKHBT and PKHTB print the way Capstone does" {
-    try capstone.expectWideGroupMatches("pkh", 0xFFF0, 0xEAC0, &hw2);
+test "PKHBT and PKHTB match their parity digests" {
+    try parity.expectWideGroupMatches("pkh", 0xFFF0, 0xEAC0, &hw2);
 }

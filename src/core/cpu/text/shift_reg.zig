@@ -1,5 +1,5 @@
 //! Text for the shift_reg group: LSL, LSR, ASR and ROR by a register, the
-//! 32-bit forms. Each has a 16-bit twin, so Capstone writes `.w` on all.
+//! 32-bit forms. Each has a 16-bit twin, so we write `.w` on all.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 const Fields = @import("../ops/shift_reg.zig").Fields;

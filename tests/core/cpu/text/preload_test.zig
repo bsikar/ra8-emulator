@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/preload.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/preload.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// The imm12 edges, the T2 negative imm8 edges, register offsets with each
 /// shift and the SP/PC Rm the group leaves unclaimed, and a few hw2 that are
@@ -10,6 +10,6 @@ const hw2 = [_]u16{
     0xF022, 0xF03E, 0xF00D, 0xF00F, 0xFE04, 0xF840, 0xFD04,
 };
 
-test "preload prints the way Capstone does in every form" {
-    try capstone.expectWideGroupMatches("preload", 0xFE50, 0xF810, &hw2);
+test "preload matches its parity digest in every form" {
+    try parity.expectWideGroupMatches("preload", 0xFE50, 0xF810, &hw2);
 }

@@ -1,5 +1,5 @@
 //! Text for the saturate group: SSAT and USAT with an optional shift of Rn.
-//! Capstone prints the saturate position as the bit count (sat_imm + 1 for
+//! We print the saturate position as the bit count (sat_imm + 1 for
 //! SSAT), and the shift amount as an ordinary immediate; LSL #0 is omitted.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

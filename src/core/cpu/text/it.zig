@@ -5,7 +5,7 @@ const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
-    // firstcond 1111 is UNDEFINED on the core (RA8EMU-281). Capstone prints
+    // firstcond 1111 is UNDEFINED on the core (RA8EMU-281). We print
     // it as firstcond 1110, AL with that letter rule, and so does this.
     const firstcond: u4 = @min(@as(u4, @intCast((instr.hw1 >> 4) & 0xF)), 0xE);
     const mask: u4 = @intCast(instr.hw1 & 0xF);

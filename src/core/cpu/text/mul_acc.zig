@@ -1,5 +1,5 @@
 //! Text for the mul_acc group: mul Rd, Rn, Rm (Ra = PC) and mla/mls Rd, Rn,
-//! Rm, Ra. Capstone prints no .w on any of them.
+//! Rm, Ra. We print no .w on any of them.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 const Fields = @import("../ops/mul_acc.zig").Fields;

@@ -1,5 +1,5 @@
 //! Text for the extend_wide group: SXTH/UXTH/SXTB/UXTB.W and the SXTAH,
-//! UXTAH, SXTAB and UXTAB accumulating forms. Capstone puts .w only on the
+//! UXTAH, SXTAB and UXTAB accumulating forms. We put .w only on the
 //! plain forms (they have 16-bit encodings) and prints a nonzero rotation
 //! as ", ror #8|16|24" in decimal.
 const Instr = @import("../instr.zig").Instr;

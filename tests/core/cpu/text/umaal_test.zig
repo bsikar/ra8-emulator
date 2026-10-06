@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/umaal.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/umaal.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every Rm with RdLo/RdHi pairs low, high and swapped, plus RdLo == RdHi,
 /// SP or PC in either, and another hw2[7:4] row (all unclaimed).
@@ -17,6 +17,6 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "UMAAL prints the way Capstone does" {
-    try capstone.expectWideGroupMatches("umaal", 0xFFF0, 0xFBE0, &hw2);
+test "UMAAL matches its parity digest" {
+    try parity.expectWideGroupMatches("umaal", 0xFFF0, 0xFBE0, &hw2);
 }

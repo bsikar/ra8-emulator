@@ -1,4 +1,4 @@
-//! Text for the sel group: SEL Rd, Rn, Rm (no `.w`, as Capstone 5 prints it).
+//! Text for the sel group: SEL Rd, Rn, Rm (no `.w`, as we print it).
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 

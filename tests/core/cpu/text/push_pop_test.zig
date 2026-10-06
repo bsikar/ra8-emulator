@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/push_pop.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/push_pop.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every 16-bit push_pop encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("push_pop");
+test "every 16-bit push_pop encoding matches its parity digest" {
+    try parity.expectGroupMatches("push_pop");
 }

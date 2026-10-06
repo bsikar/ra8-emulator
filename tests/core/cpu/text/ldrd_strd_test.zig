@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/ldrd_strd.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/ldrd_strd.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Zero, decimal and hex offsets around the ten boundary, the largest
 /// offset, SP and PC as Rt or Rt2, Rt equal to Rt2, and Rt or Rt2 equal to
@@ -10,6 +10,6 @@ const hw2 = [_]u16{
     0x1002, 0x2104, 0xC7E0, 0x6540,
 };
 
-test "ldrd_strd prints the way Capstone does for every addressing mode" {
-    try capstone.expectWideGroupMatches("ldrd_strd", 0xFE40, 0xE840, &hw2);
+test "ldrd_strd matches its parity digest for every addressing mode" {
+    try parity.expectWideGroupMatches("ldrd_strd", 0xFE40, 0xE840, &hw2);
 }

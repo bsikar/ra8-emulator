@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/branch_wide.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/branch_wide.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Each form (B<cond>.W, B.W, BL) with every J1/J2 pairing and the low and
 /// high imm11, plus a misc-control hw2 (unclaimed when cond is 0b111x).
@@ -10,6 +10,6 @@ const hw2 = [_]u16{
     0x8F4F,
 };
 
-test "branch_wide prints the way Capstone does for every hw1" {
-    try capstone.expectWideGroupMatches("branch_wide", 0xF800, 0xF000, &hw2);
+test "branch_wide matches its parity digest for every hw1" {
+    try parity.expectWideGroupMatches("branch_wide", 0xF800, 0xF000, &hw2);
 }

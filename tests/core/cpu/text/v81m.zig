@@ -1,5 +1,5 @@
 //! Helper for the Armv8.1-M printer tests, which check against Arm ARM syntax
-//! because Capstone 5 has no Armv8.1-M.
+//! because the reference disassembler had no Armv8.1-M.
 const std = @import("std");
 const ra8 = @import("ra8");
 const disasm = ra8.core.cpu.decode.text.disasm;

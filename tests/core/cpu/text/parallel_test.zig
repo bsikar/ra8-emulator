@@ -1,5 +1,5 @@
-//! Covers src/core/cpu/text/parallel.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/parallel.zig against its parity digest.
+const parity = @import("parity.zig");
 
 /// Every U and op2 (op2 11 unclaimed) with Rd/Rm low, high and mixed, plus SP
 /// as Rd and a set hw2[7] (both unclaimed).
@@ -19,6 +19,6 @@ const hw2 = blk: {
     break :blk out;
 };
 
-test "the parallel adds and subtracts print the way Capstone does" {
-    try capstone.expectWideGroupMatches("parallel", 0xFF80, 0xFA80, &hw2);
+test "the parallel adds and subtracts match their parity digests" {
+    try parity.expectWideGroupMatches("parallel", 0xFF80, 0xFA80, &hw2);
 }

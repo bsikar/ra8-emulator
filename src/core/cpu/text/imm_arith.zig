@@ -1,6 +1,6 @@
 //! Text for the imm_arith group: ADD, ADC, SBC, SUB and RSB with a modified
 //! immediate, and CMN and CMP (ADD and SUB with Rd of PC and S set).
-//! Capstone writes `.w` on ADD, SUB, RSB, CMN and CMP, the forms that also
+//! We write `.w` on ADD, SUB, RSB, CMN and CMP, the forms that also
 //! have a 16-bit encoding, and not on ADC or SBC.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

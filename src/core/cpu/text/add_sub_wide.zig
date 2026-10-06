@@ -1,5 +1,5 @@
 //! Text for the add_sub_wide group: ADDW and SUBW with a plain 12-bit
-//! immediate. Capstone keeps the ADDW/SUBW spelling for Rn of PC too rather
+//! immediate. We keep the ADDW/SUBW spelling for Rn of PC too rather
 //! than print ADR.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

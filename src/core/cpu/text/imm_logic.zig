@@ -1,7 +1,7 @@
 //! Text for the imm_logic group: AND, BIC, ORR, ORN and EOR with a modified
 //! immediate, and their aliases TST and TEQ (Rd of PC with S set) and MOV
-//! and MVN (Rn of PC). Capstone writes `.w` only on TST, TEQ and MOV, the
-//! forms that also have a 16-bit encoding. Capstone prints the immediate of
+//! and MVN (Rn of PC). We write `.w` only on TST, TEQ and MOV, the
+//! forms that also have a 16-bit encoding. We print the immediate of
 //! TST, TEQ, MOV and ORN as signed (`#-1`), the rest as unsigned.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
@@ -29,7 +29,7 @@ pub fn print(instr: Instr, out: *text.Text) void {
         return out.imm(value(instr));
     }
     out.put("{s}{s} {s}, {s}, ", .{ mnemonics[f.opcode], s, text.names[f.rd], text.names[f.rn] });
-    // Capstone reads ORN's immediate as signed and the others as unsigned.
+    // We read ORN's immediate as signed and the others as unsigned.
     if (f.opcode == opcodes.orn) out.signedImm(value(instr)) else out.imm(value(instr));
 }
 

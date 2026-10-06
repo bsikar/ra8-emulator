@@ -1,5 +1,5 @@
 //! Text for the extend_b16 group: SXTB16/UXTB16 and SXTAB16/UXTAB16.
-//! These have no 16-bit forms, so Capstone prints no .w; a nonzero rotation
+//! These have no 16-bit forms, so we print no .w; a nonzero rotation
 //! prints as ", ror #8|16|24" in decimal.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

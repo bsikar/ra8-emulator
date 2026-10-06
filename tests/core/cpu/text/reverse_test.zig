@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/reverse.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/reverse.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every reverse encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("reverse");
+test "every reverse encoding matches its parity digest" {
+    try parity.expectGroupMatches("reverse");
 }

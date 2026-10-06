@@ -1,5 +1,5 @@
 //! Text for the hint group. 16-bit: NOP, YIELD, WFE, WFI and SEV by name, and
-//! any other hint as `hint #n`. 32-bit, in Capstone 5's spelling: the named
+//! any other hint as `hint #n`. 32-bit, in the spelling the parity digests pin: the named
 //! hints 0-4 and ESB with a `.w` suffix, `csdb`, `bti`, `dbg #n` for 0xF0-0xFF,
 //! and `hint.w #n` for the rest.
 const Instr = @import("../instr.zig").Instr;

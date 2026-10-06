@@ -1,5 +1,5 @@
 //! Text for the ldst_wide group: the 32-bit single-register loads and
-//! stores with an immediate offset, in Capstone 5's spelling.
+//! stores with an immediate offset, in the spelling the parity digests pin.
 //!
 //! The imm12 forms carry `.w` and drop a zero offset. The imm8 forms do
 //! not: an offset form prints a subtracted offset in hex (`#-0x4`), a

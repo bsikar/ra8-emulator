@@ -1,5 +1,5 @@
 //! Text for the ldr_literal_wide group: the 32-bit literal loads
-//! `ldr{s}{b,h}.w rt, [pc, #imm]` in Capstone 5's spelling. Every form
+//! `ldr{s}{b,h}.w rt, [pc, #imm]` in the spelling the parity digests pin. Every form
 //! carries `.w` and keeps a zero offset (`[pc, #0]`). A subtracted offset is
 //! always hex, zero included (`#-0x0`); an added one follows the usual
 //! decimal-below-ten rule.

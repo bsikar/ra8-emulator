@@ -3,7 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const text = ra8.core.cpu.decode.text.text;
 
-test "registers use Capstone's names" {
+test "registers use the standard UAL names" {
     try std.testing.expectEqualStrings("sb", text.names[9]);
     try std.testing.expectEqualStrings("ip", text.names[12]);
     try std.testing.expectEqualStrings("pc", text.names[15]);

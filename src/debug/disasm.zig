@@ -3,7 +3,7 @@
 //! When a run ends on a fault the PC alone is not much of an answer. Give this
 //! the bytes at the PC and it gives back "str r1, [r0]", decoded by the Zig
 //! core's own table and printed by its group printers (RA8EMU-17), in the
-//! spelling the Capstone parity tests pin. No C is involved (RA8EMU-249).
+//! spelling the parity digest tests pin. No C is involved (RA8EMU-249).
 const Instr = @import("../core/cpu/instr.zig").Instr;
 const printers = @import("../core/cpu/text/disasm.zig");
 const text = @import("../core/cpu/text/text.zig");

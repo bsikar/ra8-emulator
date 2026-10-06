@@ -1,6 +1,6 @@
-//! Covers src/core/cpu/text/svc.zig against Capstone.
-const capstone = @import("capstone.zig");
+//! Covers src/core/cpu/text/svc.zig against its parity digest.
+const parity = @import("parity.zig");
 
-test "every 16-bit svc encoding prints the way Capstone does" {
-    try capstone.expectGroupMatches("svc");
+test "every 16-bit svc encoding matches its parity digest" {
+    try parity.expectGroupMatches("svc");
 }

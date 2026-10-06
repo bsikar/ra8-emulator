@@ -1,5 +1,5 @@
 //! Text for the parallel group: {s,q,sh,u,uq,uh}{add8,add16,asx,sub8,sub16,sax}
-//! Rd, Rn, Rm, in Capstone 5's spelling.
+//! Rd, Rn, Rm, in the spelling the parity digests pin.
 const std = @import("std");
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");

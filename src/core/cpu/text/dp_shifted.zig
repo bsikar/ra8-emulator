@@ -1,7 +1,7 @@
 //! Text for the dp_shifted group: the 32-bit data processing forms with a
 //! shifted register, and their aliases TST, TEQ, CMN and CMP (Rd of PC with
 //! S set), MOV/LSL/LSR/ASR/ROR/RRX (ORR with Rn of PC) and MVN (ORN with Rn
-//! of PC). Capstone writes `.w` on everything but ORN, RSB and RRX, which
+//! of PC). We write `.w` on everything but ORN, RSB and RRX, which
 //! have no 16-bit twin. The shift suffix is decimal; the shift aliases print
 //! their amount as an ordinary immediate.
 const Instr = @import("../instr.zig").Instr;

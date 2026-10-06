@@ -1,7 +1,8 @@
 //! A running digest of one printer sweep: every encoding a group claims, with
 //! the text we print for it, hashed in sweep order. The fixture in
 //! tests/fixtures/disasm/digests.zig holds the value each sweep must reach; it
-//! was captured while every swept encoding printed exactly as Capstone 5 does.
+//! was captured while every swept encoding printed exactly as the reference
+//! disassembler printed it (RA8EMU-708).
 const std = @import("std");
 const ra8 = @import("ra8");
 const Instr = ra8.core.cpu.instr.Instr;

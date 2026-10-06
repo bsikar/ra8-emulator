@@ -1,7 +1,7 @@
 //! Text for the long_shift group (Armv8.1-M), in Arm ARM syntax: `lsll
 //! rdalo, rdahi, #imm`, and LSRL and ASRL the same way. The fields come from
 //! the executor's own `fields`, so text and execution cannot disagree.
-//! Capstone 5 reads these as ORRS with PC.
+//! We read these as ORRS with PC.
 const Instr = @import("../instr.zig").Instr;
 const ops = @import("../ops/long_shift.zig");
 const text = @import("text.zig");

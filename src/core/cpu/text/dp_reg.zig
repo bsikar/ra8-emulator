@@ -1,6 +1,6 @@
 //! Text for the dp_reg group: the sixteen two-register data-processing
-//! opcodes. RSBS prints its implied #0 and MULS repeats Rd at the end, the way
-//! Capstone does.
+//! opcodes. RSBS prints its implied #0 and MULS repeats Rd at the end, as
+//! UAL disassemblers conventionally do.
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 

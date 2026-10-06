@@ -1,5 +1,5 @@
 //! Text for the sat_arith group: qadd, qdadd, qsub and qdsub, printed as
-//! Rd, Rm, Rn (the operand order the Arm ARM and Capstone use).
+//! Rd, Rm, Rn (the operand order the Arm ARM uses).
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 const sat = @import("../ops/sat_arith.zig");
