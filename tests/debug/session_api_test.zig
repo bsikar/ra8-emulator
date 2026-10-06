@@ -277,6 +277,16 @@ test "session lists widgets and taps the named widget center" {
     _ = try session.step(.cpu0);
     try std.testing.expectEqual(gt911.Contact{ .x = 250, .y = 325 }, firmwareReport(&panel).?);
     try std.testing.expectError(error.WidgetNotFound, session.tapWidget(std.testing.allocator, .cpu0, 100_000_000, "missing"));
+    try std.testing.expectError(error.BadPart, session.tapWidgetPart(std.testing.allocator, .cpu0, 100_000_000, "settings_button", .{ .cell = 0 }));
+
+    try session.tapWidgetPart(std.testing.allocator, .cpu0, 150_000_000, "settings_button", .{ .at = .{ .x_pct = 10, .y_pct = 80 } });
+    var report: ?gt911.Contact = null;
+    for (0..4) |_| {
+        _ = try session.step(.cpu0);
+        report = firmwareReport(&panel) orelse continue;
+        if (report.?.x != 250) break;
+    }
+    try std.testing.expectEqual(gt911.Contact{ .x = 210, .y = 340 }, report.?);
 }
 
 fn widgetTreeElf(out: []u8, address: u32) void {

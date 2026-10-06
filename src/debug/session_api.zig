@@ -22,6 +22,7 @@ const TimeBase = @import("../periph/time/timebase.zig").TimeBase;
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
+const tap_part = @import("session_tap_part.zig");
 const session_speed = @import("session_speed.zig");
 const event_sources = @import("session_event_sources.zig");
 pub const Core = @import("session_event_stream.zig").Core;
@@ -35,6 +36,7 @@ pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
 pub const Frame = session_display.Frame;
 pub const Widget = widget_tree.Widget;
+pub const TapPart = tap_part.Part;
 pub const Loader = struct {
     context: *anyopaque,
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
@@ -160,22 +162,15 @@ pub const Session = struct {
 
     /// Tap the center of the uniquely named widget at virtual time `at_ns`.
     pub fn tapWidget(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8) anyerror!void {
+        try self.tapWidgetPart(allocator, core, at_ns, name, .centre);
+    }
+
+    /// Tap one part (cell, row, pager control, point) of a named widget.
+    pub fn tapWidgetPart(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8, part: TapPart) anyerror!void {
         const tree = try self.widgets(allocator, core);
         defer allocator.free(tree);
-
-        var found: ?*const Widget = null;
-        for (tree) |*widget| {
-            if (!std.mem.eql(u8, widget.nameSlice(), name)) continue;
-            if (found != null) return error.AmbiguousWidget;
-            found = widget;
-        }
-        const widget = found orelse return error.WidgetNotFound;
-        const rect = widget.rect;
-        if (rect.w <= 0 or rect.h <= 0) return error.InvalidWidgetRect;
-        const x = @as(i64, rect.x) + @divTrunc(rect.w, 2);
-        const y = @as(i64, rect.y) + @divTrunc(rect.h, 2);
-        if (x < 0 or x > std.math.maxInt(u16) or y < 0 or y > std.math.maxInt(u16)) return error.InvalidWidgetRect;
-        try self.tap(core, at_ns, @intCast(x), @intCast(y));
+        const point = try tap_part.aim(try tap_part.find(tree, name), part);
+        try self.tap(core, at_ns, point.x, point.y);
     }
 
     /// Queue a panel-pixel tap for virtual board time `at_ns`.

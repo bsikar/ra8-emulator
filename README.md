@@ -46,6 +46,17 @@ var frame = try session.frame(allocator);
 defer frame.deinit(allocator);
 ```
 
+Taps aim at widgets the firmware publishes on ra8_widget's debug tree, by name,
+and can target one part of a widget: a cell of a segmented control or nav bar,
+a list row, a pager's previous or next control, or a point inside it:
+
+```zig
+try session.tapWidget(allocator, .cpu0, 500_000_000, "settings_button");
+try session.tapWidgetPart(allocator, .cpu0, 900_000_000, "shell.tabs", .{ .cell = 2 });
+try session.tapWidgetPart(allocator, .cpu0, 1_300_000_000, "apps.list", .{ .row = 0 });
+try session.tapWidgetPart(allocator, .cpu0, 1_700_000_000, "chrome.bars.pager", .next);
+```
+
 `Options.device` defaults to `ra8p1`; `settle_window_ns` defaults to 50 ms.
 Frames are native panel-resolution grayscale bytes and are owned by the caller.
 
