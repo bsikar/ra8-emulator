@@ -1,11 +1,98 @@
-//! Covers the host-independent parts of src/periph/camera/pipe_windows.zig:
-//! how a Win32 read error maps to the capture's next step, and how a pipe
-//! argument becomes a `\\.\pipe\` name. The server itself needs Windows.
+//! Covers src/periph/camera/pipe_windows.zig: Win32 error and name handling,
+//! plus a Windows-host stream through a real named pipe.
 const std = @import("std");
+const builtin = @import("builtin");
 const ra8 = @import("ra8");
 
-const win = ra8.periph.ceu.camera.pipe.pipe_windows;
+const camera = ra8.periph.ceu.camera;
+const pipe = camera.pipe;
+const win = pipe.pipe_windows;
 const Win32Error = std.os.windows.Win32Error;
+
+const Live = if (builtin.os.tag == .windows) struct {
+    const windows = std.os.windows;
+    const kernel32 = windows.kernel32;
+    const generic_write: windows.DWORD = 0x4000_0000;
+    const open_existing: windows.DWORD = 3;
+
+    extern "kernel32" fn CloseHandle(handle: windows.HANDLE) callconv(.winapi) windows.BOOL;
+    extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) windows.DWORD;
+
+    const Client = struct {
+        handle: windows.HANDLE,
+        open: bool = true,
+
+        fn connect(name: []const u8) !Client {
+            var full_buf: [256]u8 = undefined;
+            const full = try win.fullName(&full_buf, name);
+            var wide: [256:0]u16 = undefined;
+            const len = try std.unicode.utf8ToUtf16Le(&wide, full);
+            wide[len] = 0;
+            const handle = kernel32.CreateFileW(wide[0..len :0], generic_write, 0, null, open_existing, 0, null);
+            if (handle == windows.INVALID_HANDLE_VALUE) {
+                std.debug.print("CreateFileW for camera pipe failed: {d}\n", .{@intFromEnum(kernel32.GetLastError())});
+                return error.OpenFailed;
+            }
+            return .{ .handle = handle };
+        }
+
+        fn write(self: Client, bytes: []const u8) !void {
+            var written: windows.DWORD = 0;
+            if (kernel32.WriteFile(self.handle, bytes.ptr, @intCast(bytes.len), &written, null) == 0) {
+                std.debug.print("WriteFile to camera pipe failed: {d}\n", .{@intFromEnum(kernel32.GetLastError())});
+                return error.WriteFailed;
+            }
+            if (written != bytes.len) {
+                std.debug.print("short camera pipe write: {d} of {d}\n", .{ written, bytes.len });
+                return error.ShortWrite;
+            }
+        }
+
+        fn close(self: *Client) void {
+            if (!self.open) return;
+            _ = CloseHandle(self.handle);
+            self.open = false;
+        }
+    };
+
+    fn processId() windows.DWORD {
+        return GetCurrentProcessId();
+    }
+} else struct {};
+
+fn expectLine(source: camera.frame_source.FrameSource, expected: [4]u8) !void {
+    source.frame(0, .{ .width = 4, .lines = 1 });
+    var line: [4]u8 = undefined;
+    source.fill(0, 0, &line);
+    try std.testing.expectEqualSlices(u8, &expected, &line);
+}
+
+test "real Windows named pipe streams frames without administrator rights" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+
+    var name_buf: [96]u8 = undefined;
+    const name = try std.fmt.bufPrint(&name_buf, "ra8emu-585-{d}-{d}", .{ Live.processId(), std.time.nanoTimestamp() });
+    var arg_buf: [128]u8 = undefined;
+    const arg = try std.fmt.bufPrint(&arg_buf, "{s},2x1,rgb24", .{name});
+    var format_control: u8 = 0x6F;
+    const loaded = try pipe.PipeSource.load(std.testing.allocator, arg, &format_control);
+    const capture = loaded.source();
+    defer capture.close();
+
+    try expectLine(capture, .{ 0x00, 0x00, 0x00, 0x00 });
+
+    var client = try Live.Client.connect(name);
+    defer client.close();
+    try client.write(&.{ 255, 0, 0, 255, 0, 0 });
+    try expectLine(capture, .{ 0x00, 0xF8, 0x00, 0xF8 });
+    try client.write(&.{ 0, 0, 255, 0, 0, 255 });
+    try expectLine(capture, .{ 0x1F, 0x00, 0x1F, 0x00 });
+    try std.testing.expectEqual(@as(u64, 2), loaded.frames);
+
+    client.close();
+    try expectLine(capture, .{ 0x1F, 0x00, 0x1F, 0x00 });
+    try std.testing.expect(loaded.closed);
+}
 
 test "an empty nowait pipe would block, a listening one waits for its writer" {
     try std.testing.expectEqual(win.Outcome.would_block, win.outcome(Win32Error.NO_DATA));
