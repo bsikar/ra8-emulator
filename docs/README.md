@@ -9,6 +9,7 @@
 
 - [Platforms](platforms.md): what builds on Linux, macOS and Windows, what each still needs, and the same image's speed on three hosts.
 - [Throughput benchmark](throughput-benchmark.md)
+- [Memory layout](memory-layout.md): the EK-RA8D2 regions, run and load addresses, the stack, and the A/B layouts of the DFU bootloader and ra8_ota, with `--map` output.
 
 ## Engineering notes
 
