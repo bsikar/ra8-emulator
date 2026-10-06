@@ -12,6 +12,7 @@ test {
     _ = @import("interfaces/cli/shell_main_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
+    _ = @import("interfaces/cli/map_main_test.zig");
     _ = @import("snapshot/file_test.zig");
     _ = @import("snapshot/memory_test.zig");
     _ = @import("snapshot/fields_test.zig");
