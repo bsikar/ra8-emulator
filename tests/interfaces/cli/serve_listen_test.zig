@@ -24,7 +24,7 @@ test "serve --listen tcp::0 binds localhost, serves a client and exits 0 on SIGT
     try std.testing.expect(std.mem.startsWith(u8, started.bound, "tcp:127.0.0.1:"));
     const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
     const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
-    var connection = try Connection.tcp(try std.net.Address.parseIp4("127.0.0.1", port));
+    var connection = try Connection.tcp(std.testing.io, try std.Io.net.IpAddress.parse("127.0.0.1", port));
     try session(gpa, &started.child, &connection);
 }
 
@@ -39,7 +39,7 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     var line: [256]u8 = undefined;
     var started = try serve_peer.listen(gpa, spec, &line);
     try std.testing.expectEqualStrings(spec, started.bound);
-    var connection = try Connection.unix(path);
+    var connection = try Connection.unix(std.testing.io, path);
     try session(gpa, &started.child, &connection);
     try std.testing.expectError(error.FileNotFound, tmp.dir.access("serve.sock", .{}));
 }
@@ -60,10 +60,10 @@ test "serve --listen with a bad spec prints its usage and exits 2" {
 
 test "listen specs: an empty host and localhost bind loopback, a bracketed v6 literal parses" {
     const Spec = ra8.core.serve_listen.Spec;
-    const loopback = try std.net.Address.parseIp4("127.0.0.1", 7000);
-    try std.testing.expect((try Spec.parse("tcp::7000")).tcp.eql(loopback));
-    try std.testing.expect((try Spec.parse("tcp:localhost:7000")).tcp.eql(loopback));
-    try std.testing.expect((try Spec.parse("tcp:[::1]:7000")).tcp.eql(try std.net.Address.parseIp6("::1", 7000)));
+    const loopback = try std.Io.net.IpAddress.parse("127.0.0.1", 7000);
+    try std.testing.expect((try Spec.parse("tcp::7000")).tcp.eql(&loopback));
+    try std.testing.expect((try Spec.parse("tcp:localhost:7000")).tcp.eql(&loopback));
+    try std.testing.expect((try Spec.parse("tcp:[::1]:7000")).tcp.eql(&(try std.Io.net.IpAddress.parse("::1", 7000))));
     try std.testing.expectEqualStrings("/tmp/s", (try Spec.parse("unix:/tmp/s")).unix);
     try std.testing.expectError(error.BadListen, Spec.parse("tcp::70000"));
 }

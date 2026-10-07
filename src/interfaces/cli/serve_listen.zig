@@ -12,7 +12,7 @@ const accept_wait_ms = 20;
 
 pub const Spec = union(enum) {
     unix: []const u8,
-    tcp: std.net.Address,
+    tcp: std.Io.net.IpAddress,
 
     pub fn parse(text: []const u8) !Spec {
         if (std.mem.startsWith(u8, text, "unix:")) {
@@ -26,33 +26,32 @@ pub const Spec = union(enum) {
         const port = std.fmt.parseInt(u16, rest[colon + 1 ..], 10) catch return error.BadListen;
         const host = std.mem.trim(u8, rest[0..colon], "[]");
         const named = if (host.len == 0 or std.mem.eql(u8, host, "localhost")) "127.0.0.1" else host;
-        return .{ .tcp = std.net.Address.parseIp(named, port) catch return error.BadListen };
+        return .{ .tcp = std.Io.net.IpAddress.parse(named, port) catch return error.BadListen };
     }
 };
 
 /// Bind `spec` and answer clients one after another until a stop signal.
-pub fn serve(spec: Spec, context: *served.Context, buffers: loop.Buffers) !void {
-    const address = switch (spec) {
-        .unix => |path| try std.net.Address.initUnix(path),
-        .tcp => |tcp| tcp,
+pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buffers) !void {
+    var server = switch (spec) {
+        .unix => |path| try (try std.Io.net.UnixAddress.init(path)).listen(io, .{}),
+        .tcp => |*tcp| try tcp.listen(io, .{ .reuse_address = true }),
     };
-    var server = try address.listen(.{ .reuse_address = spec == .tcp });
-    defer server.deinit();
+    defer server.deinit(io);
     defer switch (spec) {
-        .unix => |path| std.fs.cwd().deleteFile(path) catch {},
+        .unix => |path| std.Io.Dir.cwd().deleteFile(io, path) catch {},
         .tcp => {},
     };
     catchStops();
     switch (spec) {
         .unix => |path| std.debug.print("serve: listening on unix:{s}\n", .{path}),
-        .tcp => std.debug.print("serve: listening on tcp:{}\n", .{server.listen_address}),
+        .tcp => std.debug.print("serve: listening on tcp:{f}\n", .{server.socket.address}),
     }
     while (!loop.stopping.load(.acquire)) {
-        if (!try ready(server.stream.handle)) continue;
-        const client = try server.accept();
-        var connection: Connection = .{ .stream = client.stream };
+        if (!try ready(server.socket.handle)) continue;
+        const client = try server.accept(io);
+        var connection: Connection = .{ .stream = client, .io = io };
         defer connection.close();
-        loop.answer(context, connection.transport(), client.stream.handle, .socket, buffers) catch |err| {
+        loop.answer(context, connection.transport(), client.socket.handle, .socket, buffers) catch |err| {
             std.debug.print("serve: client dropped: {s}\n", .{@errorName(err)});
         };
     }
@@ -68,13 +67,13 @@ fn ready(fd: std.posix.fd_t) !bool {
 fn catchStops() void {
     const action: std.posix.Sigaction = .{
         .handler = .{ .handler = onStop },
-        .mask = std.posix.empty_sigset,
+        .mask = std.posix.sigemptyset(),
         .flags = 0,
     };
     std.posix.sigaction(std.posix.SIG.TERM, &action, null);
     std.posix.sigaction(std.posix.SIG.INT, &action, null);
 }
 
-fn onStop(_: i32) callconv(.c) void {
+fn onStop(_: std.posix.SIG) callconv(.c) void {
     loop.stopping.store(true, .release);
 }
