@@ -46,7 +46,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     count += options.attach_count;
     board.asks.keep(allocator, asks[0..count]);
     if (options.usb_loop) board.usb.loopBack();
-    if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(spec.dir, spec.mode));
+    if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(io, spec.dir, spec.mode));
     board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     try cli.card_setup.prepareSdhi(board, options.sdhi);
