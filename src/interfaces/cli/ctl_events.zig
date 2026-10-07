@@ -75,12 +75,12 @@ const Window = struct {
 pub fn watch(client: *Client, w: anytype, json: bool, options: Options) !u8 {
     if (options.uart) _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .uart });
     _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
-    const deadline = std.time.milliTimestamp() + options.timeout_ms;
+    const deadline = client.nowMs() + options.timeout_ms;
     var window: Window = .{};
-    while (std.time.milliTimestamp() < deadline) {
+    while (client.nowMs() < deadline) {
         _ = try client.call(proto.Ack, proto.Run, .run, .{ .core = .cpu0, .mode = .cont, .budget = chunk });
         while (true) {
-            const left = deadline - std.time.milliTimestamp();
+            const left = deadline - client.nowMs();
             const sent = try client.event(@max(left, 1)) orelse return timedOut(w, json, options);
             if (sent.topic == @backingInt(proto.Topic.uart)) {
                 const uart = try proto.decode(proto.Uart, sent.payload);

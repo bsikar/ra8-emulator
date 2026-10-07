@@ -27,6 +27,8 @@ pub const Client = struct {
     rx: []u8,
     tx: []u8,
     client: proto.Client,
+    /// The io the client was opened with; its clock paces every wait.
+    io: std.Io,
     /// The code of the last refusal, for the error line.
     refused: u16 = 0,
 
@@ -39,6 +41,7 @@ pub const Client = struct {
             .rx = try allocator.alloc(u8, 2 * Env.max_frame),
             .tx = try allocator.alloc(u8, Env.max_frame),
             .client = undefined,
+            .io = io,
         };
         switch (target) {
             .socket => |spec| self.link = .{ .socket = switch (spec) {
@@ -72,12 +75,17 @@ pub const Client = struct {
         };
     }
 
+    /// Milliseconds on the monotonic clock, for deadlines.
+    pub fn nowMs(self: *const Client) i64 {
+        return std.Io.Timestamp.now(self.io, .awake).toMilliseconds();
+    }
+
     /// The next frame from the server, or error.ServerSilent.
     fn next(self: *Client) !Incoming {
-        const deadline = std.time.milliTimestamp() + answer_wait_ms;
-        while (std.time.milliTimestamp() < deadline) {
+        const deadline = self.nowMs() + answer_wait_ms;
+        while (self.nowMs() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| return incoming;
-            std.time.sleep(std.time.ns_per_ms);
+            try self.io.sleep(.fromMilliseconds(1), .awake);
         }
         return error.ServerSilent;
     }
@@ -100,13 +108,13 @@ pub const Client = struct {
 
     /// The next event the server sends, or null once `wait_ms` passes.
     pub fn event(self: *Client, wait_ms: i64) !?Event {
-        const deadline = std.time.milliTimestamp() + wait_ms;
-        while (std.time.milliTimestamp() < deadline) {
+        const deadline = self.nowMs() + wait_ms;
+        while (self.nowMs() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| switch (incoming) {
                 .event => |sent| return .{ .topic = sent.topic, .payload = sent.payload },
                 else => {},
             };
-            std.time.sleep(std.time.ns_per_ms);
+            try self.io.sleep(.fromMilliseconds(1), .awake);
         }
         return null;
     }
