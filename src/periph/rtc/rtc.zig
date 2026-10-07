@@ -52,7 +52,6 @@
 //! rtc_source.zig, which carries the rule and says what is still not
 //! modelled there.
 const std = @import("std");
-const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const periph = @import("../registry.zig");
 const clock = @import("rtc_clock.zig");
@@ -128,7 +127,7 @@ pub const event = struct {
 pub const seconds_per_tick: u8 = 1;
 
 /// Both events can come due in the same boundary.
-pub const Due = Bounded(u16, 2);
+pub const Due = @import("../../core/bounded.zig").Bounded(u16, 2);
 
 /// The modelled RTC: the register shadow firmware reads, the binary time
 /// behind it, and what the run should be told happened.
