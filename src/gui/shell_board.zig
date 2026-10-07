@@ -39,7 +39,7 @@ pub const Board = struct {
             .event => |event| event,
             .response => return,
         };
-        if (event.topic != @intFromEnum(proto.Topic.lcd_dirty)) return;
+        if (event.topic != @backingInt(proto.Topic.lcd_dirty)) return;
         const rect = proto.decode(proto.DirtyRect, event.payload) catch return;
         if (rect.core != .cpu0 or rect.pixels.len != @as(usize, rect.width) * rect.height) return;
         try self.cover(@as(u32, rect.x) + rect.width, @as(u32, rect.y) + rect.height);

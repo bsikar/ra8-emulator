@@ -3,10 +3,10 @@ const ra8 = @import("ra8");
 const select = ra8.core.fpu.select;
 
 test "the cc field values match the encoding" {
-    try std.testing.expectEqual(@as(u2, 0b00), @intFromEnum(select.Cond.eq));
-    try std.testing.expectEqual(@as(u2, 0b01), @intFromEnum(select.Cond.vs));
-    try std.testing.expectEqual(@as(u2, 0b10), @intFromEnum(select.Cond.ge));
-    try std.testing.expectEqual(@as(u2, 0b11), @intFromEnum(select.Cond.gt));
+    try std.testing.expectEqual(@as(u2, 0b00), @backingInt(select.Cond.eq));
+    try std.testing.expectEqual(@as(u2, 0b01), @backingInt(select.Cond.vs));
+    try std.testing.expectEqual(@as(u2, 0b10), @backingInt(select.Cond.ge));
+    try std.testing.expectEqual(@as(u2, 0b11), @backingInt(select.Cond.gt));
 }
 
 test "C never changes the outcome" {

@@ -55,7 +55,7 @@ pub fn fields(instr: Instr) ?Fields {
     const unsigned = instr.hw1 >> 12 & 1 == 1;
     const kind = kindOf(@intCast(instr.hw2 >> 8 & 0xF), unsigned) orelse return null;
     const size: Size = if (imm6 >= 32) .word else if (imm6 >= 16) .half else .byte;
-    const esize: u7 = @as(u7, 8) << @intFromEnum(size);
+    const esize: u7 = @as(u7, 8) << @backingInt(size);
     return .{
         .qd = @intCast(instr.hw2 >> 13),
         .qm = @intCast(instr.hw2 >> 1 & 7),

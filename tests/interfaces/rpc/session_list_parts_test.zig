@@ -22,7 +22,7 @@ const Stub = struct {
 fn code(outcome: anytype) u16 {
     return switch (outcome) {
         .ok => 0,
-        .err => |refused| @intFromEnum(refused),
+        .err => |refused| @backingInt(refused),
     };
 }
 

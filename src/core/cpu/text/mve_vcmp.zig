@@ -10,7 +10,7 @@ pub fn print(instr: Instr, out: *text.Text) void {
 
 pub fn printPredicated(instr: Instr, out: *text.Text, suffix: []const u8) void {
     const f = ops.fields(instr) orelse return;
-    const width = ([_][]const u8{ "8", "16", "32" })[@intFromEnum(f.size)];
+    const width = ([_][]const u8{ "8", "16", "32" })[@backingInt(f.size)];
     const signedness: []const u8 = switch (f.cond) {
         .cs, .hi => "u",
         .ge, .lt, .gt, .le => "s",

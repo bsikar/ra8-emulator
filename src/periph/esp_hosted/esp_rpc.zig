@@ -120,14 +120,14 @@ pub fn request(proto: []const u8) Error!Request {
             values[@intCast(number - 1)] = try r.varint();
         } else try r.skip(wire);
     }
-    if (values[0] != @intFromEnum(event.Kind.request)) return Error.NotRequest;
+    if (values[0] != @backingInt(event.Kind.request)) return Error.NotRequest;
     return .{ .id = @truncate(values[1]), .uid = @truncate(values[2]) };
 }
 
 /// Writes an `Rpc` response envelope carrying `body` as payload `id`.
 pub fn response(w: *event.Writer, id: u32, uid: u32, body: []const u8) Error!void {
     try w.key(1, wire_varint);
-    try w.varint(@intFromEnum(event.Kind.response));
+    try w.varint(@backingInt(event.Kind.response));
     try w.key(2, wire_varint);
     try w.varint(id);
     try w.key(3, wire_varint);

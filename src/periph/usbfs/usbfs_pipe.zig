@@ -52,11 +52,11 @@ pub const Pipe = struct {
     }
 
     pub fn kind(self: Pipe) Kind {
-        return @enumFromInt(@as(u2, @truncate(self.config >> cfg.kind_shift)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate(self.config >> cfg.kind_shift))));
     }
 
     pub fn pid(self: Pipe) Pid {
-        return @enumFromInt(@as(u2, @truncate(self.control & ctr.pid)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate(self.control & ctr.pid))));
     }
 
     /// The data toggle the next packet carries.

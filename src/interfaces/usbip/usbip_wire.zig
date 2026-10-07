@@ -94,7 +94,7 @@ pub const Device = struct {
         const tail = out[path_len + busid_len ..];
         std.mem.writeInt(u32, tail[0..4], self.busnum, .big);
         std.mem.writeInt(u32, tail[4..8], self.devnum, .big);
-        std.mem.writeInt(u32, tail[8..12], @intFromEnum(self.speed), .big);
+        std.mem.writeInt(u32, tail[8..12], @backingInt(self.speed), .big);
         std.mem.writeInt(u16, tail[12..14], self.vendor, .big);
         std.mem.writeInt(u16, tail[14..16], self.product, .big);
         std.mem.writeInt(u16, tail[16..18], self.bcd_device, .big);

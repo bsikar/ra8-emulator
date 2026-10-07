@@ -124,7 +124,7 @@ test "CPU1 selected keeps the normal width" {
     var idle: Idle = .{};
     const core = try idle.open();
     defer idle.close();
-    const cpu1: u8 = @intFromEnum(ra8.periph.registry.Issuer.cpu1);
+    const cpu1: u8 = @backingInt(ra8.periph.registry.Issuer.cpu1);
     var edge: BoardBoundary = .{ .board = &idle.board, .core = core, .selected = &cpu1 };
     const hook = edge.hook();
     try std.testing.expectEqual(idler.chunk, hook.sleepFn.?(hook.context, idler.chunk));

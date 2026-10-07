@@ -106,8 +106,8 @@ pub fn decode(size: u32, stream: [header.words]u32) Reject!Command {
 /// The opcode a first word names, or null for one this model does not run.
 fn opcode(word: u32) ?Op {
     return switch (word & header.op_mask) {
-        @intFromEnum(Op.copy) => .copy,
-        @intFromEnum(Op.add_constant) => .add_constant,
+        @backingInt(Op.copy) => .copy,
+        @backingInt(Op.add_constant) => .add_constant,
         else => null,
     };
 }
@@ -130,7 +130,7 @@ pub const Check = struct {
 /// image that wants to lay one down.
 pub fn encode(command: Command) [header.words]u32 {
     return .{
-        header.magic | @intFromEnum(command.op),
+        header.magic | @backingInt(command.op),
         command.source,
         command.destination,
         command.count,

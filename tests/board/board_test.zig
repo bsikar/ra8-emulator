@@ -259,7 +259,7 @@ test "a boundary retunes the time base to CPU0's clock from the tree" {
     try attached(&unit, memory);
     // The EK-RA8D2 quickstart: PLL1 at 1 GHz, CPU0 /2 and CPU1 /4.
     unit.plls.pll1 = .{ .ccr = 0xFA02, .ccr2 = 0x451 };
-    unit.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.pll1);
+    unit.tree.cksel = @backingInt(ra8.periph.sysclk.Source.pll1);
     unit.tree.divcr2 = 0x2021;
     unit.tree.selects = 1;
     try unit.tick(memory, 1_000);
@@ -275,7 +275,7 @@ test "an untouched tree and one the rate table cannot price leave the time base 
     try attached(&unit, memory);
     try unit.tick(memory, 1_000);
     try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, unit.time.base.hz);
-    unit.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.loco);
+    unit.tree.cksel = @backingInt(ra8.periph.sysclk.Source.loco);
     unit.tree.selects = 1;
     try unit.tick(memory, 1_000);
     try std.testing.expectEqual(ra8.periph.clocks.timebase.default_hz, unit.time.base.hz);

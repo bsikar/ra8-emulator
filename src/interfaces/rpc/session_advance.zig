@@ -22,7 +22,7 @@ const max_rounds = 64;
 pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     if (args.ns == 0) return .{ .err = .bad_args };
     const session = context.session;
-    const which: api.Core = @enumFromInt(@intFromEnum(args.core));
+    const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
     const base = session.time_base orelse return refuse(error.NoTime);
     const from = base.now();
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = .bad_args };
@@ -54,12 +54,12 @@ fn rounds(session: *api.Session, which: api.Core, target: u64) !api.Ended {
 /// The run budget `which` holds now, whether it has the session or is parked.
 fn budgetOf(session: *const api.Session, which: api.Core) !u64 {
     const live = &session.live;
-    if (live.index == @intFromEnum(which)) return live.budget;
+    if (live.index == @backingInt(which)) return live.budget;
     const parked = live.other orelse return error.CoreNotAttached;
     return parked.budget;
 }
 
 fn refuse(err: anyerror) Outcome {
-    if (err == error.CoreNotAttached) return .{ .err = @enumFromInt(handlers.app_codes.no_core) };
-    return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    if (err == error.CoreNotAttached) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
 }

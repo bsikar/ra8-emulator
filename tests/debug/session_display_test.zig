@@ -159,7 +159,7 @@ fn panelData(panel: *eink.Panel, value: u16) void {
 
 fn refreshPanel(panel: *eink.Panel, x: u16, y: u16, width: u16, height: u16) void {
     panelWord(panel, eink_wire.preamble.command);
-    panelWord(panel, @intFromEnum(eink_wire.Command.display_area));
+    panelWord(panel, @backingInt(eink_wire.Command.display_area));
     for ([_]u16{ x, y, width, height, 2 }) |value| panelData(panel, value);
 }
 

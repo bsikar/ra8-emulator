@@ -81,7 +81,7 @@ pub fn writeHeader(writer: anytype) !void {
 
 /// The section's kind and length; its `len` payload bytes follow.
 pub fn writeSectionHeader(writer: anytype, kind: Kind, len: u64) !void {
-    try writer.writeInt(u32, @intFromEnum(kind), .little);
+    try writer.writeInt(u32, @backingInt(kind), .little);
     try writer.writeInt(u64, len, .little);
 }
 
@@ -102,7 +102,7 @@ pub const Reader = struct {
     /// The next section, or null at the end.
     pub fn next(self: *Reader) Error!?Section {
         if (self.at == self.bytes.len) return null;
-        const kind: Kind = @enumFromInt(try self.int(u32));
+        const kind: Kind = @fromBackingInt(@intCast(try self.int(u32)));
         const len = try self.int(u64);
         if (len > self.bytes.len - self.at) return Error.Truncated;
         const payload = self.bytes[self.at..][0..@intCast(len)];

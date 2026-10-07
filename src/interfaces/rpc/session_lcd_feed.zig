@@ -40,7 +40,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
         const held = pending orelse continue;
         const rect = clip(if (whole) full(frame) else held.rect, frame);
         if (rect.width == 0 or rect.height == 0) continue;
-        try send(server, @enumFromInt(index), rect, held.virtual_ns, frame, chunk, tx);
+        try send(server, @fromBackingInt(@intCast(index)), rect, held.virtual_ns, frame, chunk, tx);
     }
 }
 
@@ -54,9 +54,9 @@ fn note(context: *const Context, due: *[2]?Due, event: api.Event) void {
         .frame => |refreshed| refreshed,
         else => return,
     };
-    const of: proto.Core = @enumFromInt(@intFromEnum(event.core));
+    const of: proto.Core = @fromBackingInt(@intCast(@backingInt(event.core)));
     if (!context.wants(of, .lcd_dirty)) return;
-    const slot = &due[@intFromEnum(of)];
+    const slot = &due[@backingInt(of)];
     const rect = if (slot.*) |held| merge(held.rect, frame.dirty) else frame.dirty;
     slot.* = .{ .rect = rect, .virtual_ns = event.virtual_ns };
 }
@@ -105,6 +105,6 @@ fn send(server: anytype, of: proto.Core, rect: Rect, virtual_ns: u64, frame: api
             .virtual_ns = virtual_ns,
             .pixels = chunk[0 .. @as(usize, rows) * rect.width],
         };
-        try server.emit(proto.DirtyRect, @intFromEnum(proto.Topic.lcd_dirty), event, tx);
+        try server.emit(proto.DirtyRect, @backingInt(proto.Topic.lcd_dirty), event, tx);
     }
 }

@@ -58,7 +58,7 @@ test "with no pipe selected the window reads zero and drops writes" {
 test "PIPEnCTR keeps PID and ACLRM per pipe" {
     var device = usbfs.Device{};
     const ctr4 = regs.reg.pipectr + 2 * 3;
-    device.write(at(ctr4), 2, @intFromEnum(pipe.Pid.buf) | pipe.ctr.aclrm);
+    device.write(at(ctr4), 2, @backingInt(pipe.Pid.buf) | pipe.ctr.aclrm);
     try std.testing.expectEqual(pipe.Pid.buf, device.pipes.get(4).?.pid());
     try std.testing.expectEqual(@as(u32, 1 | pipe.ctr.aclrm), device.read(at(ctr4), 2));
     try std.testing.expectEqual(@as(u32, 0), device.read(at(regs.reg.pipectr), 2));

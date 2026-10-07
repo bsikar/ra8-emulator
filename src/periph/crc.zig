@@ -108,7 +108,7 @@ pub const Crc = struct {
     }
 
     pub fn gps(self: *const Crc) Gps {
-        return @enumFromInt(self.cr0 & gps_mask);
+        return @fromBackingInt(@intCast(self.cr0 & gps_mask));
     }
 
     /// Untouched units stay out of the end-of-run report.

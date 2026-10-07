@@ -32,7 +32,7 @@ fn request(buf: []u8, id: u32, uid: u32) ![]const u8 {
     var proto_buf: [32]u8 = undefined;
     var proto: event.Writer = .{ .buf = &proto_buf };
     try proto.key(1, 0);
-    try proto.varint(@intFromEnum(event.Kind.request));
+    try proto.varint(@backingInt(event.Kind.request));
     try proto.key(2, 0);
     try proto.varint(id);
     try proto.key(3, 0);

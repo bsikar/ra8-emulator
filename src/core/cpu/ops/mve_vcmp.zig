@@ -46,7 +46,7 @@ pub fn fields(instr: Instr) ?Fields {
         .qm = @intCast(instr.hw2 >> 1 & 7),
         .rm = rm,
         .scalar = scalar,
-        .size = @enumFromInt(size),
+        .size = @fromBackingInt(@intCast(size)),
         .cond = mve.compare.condOf(instr.hw2 & 0x1000 != 0, fc0, instr.hw2 & 0x0080 != 0),
         .mask = vpst.mask(instr),
     };

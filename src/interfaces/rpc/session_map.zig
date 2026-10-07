@@ -10,13 +10,13 @@ const handlers = @import("session_handlers.zig");
 const refused = handlers.app_codes.refused;
 
 pub fn map(context: *handlers.Context, args: proto.MapAsk) rpc.Outcome(proto.MapText) {
-    const mapping = context.mapping orelse return .{ .err = @enumFromInt(refused) };
+    const mapping = context.mapping orelse return .{ .err = @fromBackingInt(@intCast(refused)) };
     const room = @min(context.scratch.len, proto.MapText.max_len.text);
-    const core = @intFromEnum(args.core);
+    const core = @backingInt(args.core);
     const text = mapping.mapFn(mapping.context, core, args.json != 0, context.scratch[0..room]) catch |err| {
-        if (err == error.NoSpaceLeft) return .{ .err = @enumFromInt(handlers.app_codes.too_long) };
+        if (err == error.NoSpaceLeft) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.too_long)) };
         std.debug.print("serve: map: {s}\n", .{@errorName(err)});
-        return .{ .err = @enumFromInt(refused) };
+        return .{ .err = @fromBackingInt(@intCast(refused)) };
     };
     return .{ .ok = .{ .text = text } };
 }

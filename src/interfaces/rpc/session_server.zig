@@ -26,35 +26,35 @@ pub const app_codes = handlers.app_codes;
 
 const M = proto.Method;
 const routes = .{
-    .{ @intFromEnum(M.load), handlers.load },
-    .{ @intFromEnum(M.run), handlers.run },
-    .{ @intFromEnum(M.pause), handlers.pause },
-    .{ @intFromEnum(M.step), handlers.step },
-    .{ @intFromEnum(M.set_speed), handlers.setSpeed },
-    .{ @intFromEnum(M.read_register), handlers.readRegister },
-    .{ @intFromEnum(M.write_register), handlers.writeRegister },
-    .{ @intFromEnum(M.read_memory), handlers.readMemory },
-    .{ @intFromEnum(M.write_memory), handlers.writeMemory },
-    .{ @intFromEnum(M.set_breakpoint), handlers.setBreakpoint },
-    .{ @intFromEnum(M.clear_breakpoint), handlers.clearBreakpoint },
-    .{ @intFromEnum(M.set_watchpoint), handlers.setWatchpoint },
-    .{ @intFromEnum(M.clear_watchpoint), handlers.clearWatchpoint },
-    .{ @intFromEnum(M.subscribe), handlers.subscribe },
-    .{ @intFromEnum(M.unsubscribe), handlers.unsubscribe },
-    .{ @intFromEnum(M.now), handlers.now },
-    .{ @intFromEnum(M.interrupt), handlers.interrupt },
-    .{ @intFromEnum(M.set_run_budget), handlers.setRunBudget },
-    .{ @intFromEnum(M.remove_point), handlers.removePoint },
-    .{ @intFromEnum(M.plug), parts.plug },
-    .{ @intFromEnum(M.unplug), parts.unplug },
-    .{ @intFromEnum(M.set_fault), parts.setFault },
-    .{ @intFromEnum(M.clear_fault), parts.clearFault },
-    .{ @intFromEnum(M.list_parts), parts.listParts },
-    .{ @intFromEnum(M.set_camera_source), session_camera.setCameraSource },
-    .{ @intFromEnum(M.map), session_map.map },
-    .{ @intFromEnum(M.advance), session_advance.advance },
-    .{ @intFromEnum(M.snapshot), session_files.snapshot },
-    .{ @intFromEnum(M.restore), session_files.restore },
+    .{ @backingInt(M.load), handlers.load },
+    .{ @backingInt(M.run), handlers.run },
+    .{ @backingInt(M.pause), handlers.pause },
+    .{ @backingInt(M.step), handlers.step },
+    .{ @backingInt(M.set_speed), handlers.setSpeed },
+    .{ @backingInt(M.read_register), handlers.readRegister },
+    .{ @backingInt(M.write_register), handlers.writeRegister },
+    .{ @backingInt(M.read_memory), handlers.readMemory },
+    .{ @backingInt(M.write_memory), handlers.writeMemory },
+    .{ @backingInt(M.set_breakpoint), handlers.setBreakpoint },
+    .{ @backingInt(M.clear_breakpoint), handlers.clearBreakpoint },
+    .{ @backingInt(M.set_watchpoint), handlers.setWatchpoint },
+    .{ @backingInt(M.clear_watchpoint), handlers.clearWatchpoint },
+    .{ @backingInt(M.subscribe), handlers.subscribe },
+    .{ @backingInt(M.unsubscribe), handlers.unsubscribe },
+    .{ @backingInt(M.now), handlers.now },
+    .{ @backingInt(M.interrupt), handlers.interrupt },
+    .{ @backingInt(M.set_run_budget), handlers.setRunBudget },
+    .{ @backingInt(M.remove_point), handlers.removePoint },
+    .{ @backingInt(M.plug), parts.plug },
+    .{ @backingInt(M.unplug), parts.unplug },
+    .{ @backingInt(M.set_fault), parts.setFault },
+    .{ @backingInt(M.clear_fault), parts.clearFault },
+    .{ @backingInt(M.list_parts), parts.listParts },
+    .{ @backingInt(M.set_camera_source), session_camera.setCameraSource },
+    .{ @backingInt(M.map), session_map.map },
+    .{ @backingInt(M.advance), session_advance.advance },
+    .{ @backingInt(M.snapshot), session_files.snapshot },
+    .{ @backingInt(M.restore), session_files.restore },
 };
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
@@ -80,7 +80,7 @@ pub const Host = struct {
         if (context.pending) |stopped| {
             context.pending = null;
             if (context.wants(stopped.core, .stop)) {
-                try self.server.emit(proto.Stopped, @intFromEnum(proto.Topic.stop), stopped, tx);
+                try self.server.emit(proto.Stopped, @backingInt(proto.Topic.stop), stopped, tx);
             }
         }
         return step;

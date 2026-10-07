@@ -24,7 +24,7 @@ pub const Access = enum(u2) {
 
 /// The CP10 field of a CPACR value.
 pub fn access(cpacr: u32) Access {
-    return @enumFromInt(@as(u2, @truncate(cpacr >> (cp * 2))));
+    return @fromBackingInt(@intCast(@as(u2, @truncate(cpacr >> (cp * 2)))));
 }
 
 /// What the check needs: the CPACR of the current Security state, NSACR,

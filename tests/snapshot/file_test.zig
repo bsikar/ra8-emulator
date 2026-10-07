@@ -6,7 +6,7 @@ const file = ra8.snapshot.file;
 fn build(list: *std.ArrayList(u8)) !void {
     const writer = list.writer();
     try file.writeHeader(writer);
-    try file.writeSectionHeader(writer, @enumFromInt(77), 3);
+    try file.writeSectionHeader(writer, @fromBackingInt(@intCast(77)), 3);
     try writer.writeAll("abc");
     try file.writeSectionHeader(writer, .memory, 2);
     try writer.writeAll("xy");
@@ -18,7 +18,7 @@ test "sections come back in order, and an unknown kind is just skipped" {
     try build(&list);
     var reader = try file.Reader.open(list.items);
     const first = (try reader.next()).?;
-    try std.testing.expectEqual(@as(u32, 77), @intFromEnum(first.kind));
+    try std.testing.expectEqual(@as(u32, 77), @backingInt(first.kind));
     try std.testing.expectEqualStrings("abc", first.payload);
     try std.testing.expectEqualStrings("xy", (try reader.next()).?.payload);
     try std.testing.expect(try reader.next() == null);

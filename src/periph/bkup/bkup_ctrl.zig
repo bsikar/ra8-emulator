@@ -129,13 +129,13 @@ const specs = [slot_count]Spec{
 /// The register at `offset`, or null when nothing in the file lives there.
 pub fn slotOf(offset: u32) ?Slot {
     for (&specs, 0..) |spec, index| {
-        if (spec.offset == offset) return @enumFromInt(index);
+        if (spec.offset == offset) return @fromBackingInt(@intCast(index));
     }
     return null;
 }
 
 pub fn nameOf(slot: Slot) []const u8 {
-    return specs[@intFromEnum(slot)].name;
+    return specs[@backingInt(slot)].name;
 }
 
 /// The retained bytes of the file, and what the run did to them.
@@ -160,7 +160,7 @@ pub const Control = struct {
     }
 
     pub fn get(self: *const Control, slot: Slot) u8 {
-        return self.regs[@intFromEnum(slot)];
+        return self.regs[@backingInt(slot)];
     }
 
     /// Drive a bit the silicon owns rather than the firmware: a monitor level,
@@ -168,7 +168,7 @@ pub const Control = struct {
     /// yet; the seam is here so the block that does is not tempted to make the
     /// firmware's own store do it.
     pub fn raise(self: *Control, slot: Slot, mask: u8) void {
-        self.regs[@intFromEnum(slot)] |= mask;
+        self.regs[@backingInt(slot)] |= mask;
     }
 
     pub fn vbaeSet(self: *const Control) bool {
@@ -186,8 +186,8 @@ pub const Control = struct {
     /// zero, and everything else keeps what it had.
     pub fn write(self: *Control, offset: u32, value: u8) void {
         const slot = slotOf(offset) orelse return;
-        const spec = specs[@intFromEnum(slot)];
-        const register = &self.regs[@intFromEnum(slot)];
+        const spec = specs[@backingInt(slot)];
+        const register = &self.regs[@backingInt(slot)];
         const before = register.*;
         register.* = (before & ~spec.writable) | (value & spec.writable);
         const falling = before & spec.clearable & ~value;

@@ -106,7 +106,7 @@ const Wire = struct {
     }
 
     fn call(self: *Wire, comptime Args: type, method: proto.Method, args: Args) !Env.Result {
-        _ = try self.client.call(Args, @intFromEnum(method), args, 0, self.tx);
+        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
         try std.testing.expectEqual(rpc.Step.answered, try self.host.poll(self.tx));
         self.got.len = 0;
         var result: ?Env.Result = null;
@@ -124,7 +124,7 @@ const Wire = struct {
     }
 
     fn record(self: *Wire, topic: u16, payload: []const u8) !void {
-        try std.testing.expectEqual(@intFromEnum(proto.Topic.lcd_dirty), topic);
+        try std.testing.expectEqual(@backingInt(proto.Topic.lcd_dirty), topic);
         const sent = try proto.decode(proto.DirtyRect, payload);
         try std.testing.expectEqual(proto.Core.cpu0, sent.core);
         try std.testing.expectEqual(@as(usize, sent.width) * sent.height, sent.pixels.len);

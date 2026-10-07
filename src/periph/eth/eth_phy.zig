@@ -122,7 +122,7 @@ pub const Phy = struct {
             return regs.withData(done, idle_data);
         }
         const index = (mpsm >> regs.rmac.pra_shift) & regs.rmac.pra_mask;
-        const op: regs.Op = @enumFromInt(@as(u2, @truncate((mpsm >> regs.rmac.pop_shift))));
+        const op: regs.Op = @fromBackingInt(@intCast(@as(u2, @truncate((mpsm >> regs.rmac.pop_shift)))));
         switch (op) {
             .read => {
                 self.reads += 1;

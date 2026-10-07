@@ -33,7 +33,7 @@ pub fn printPredicated(instr: Instr, out: *text.Text, pred: []const u8) void {
         const sign = if (instr.hw1 >> 12 & 1 == 1) "u" else "s";
         break :blk if (f.element == .half) (if (sign[0] == 'u') ".u16" else ".s16") else if (sign[0] == 'u') ".u32" else ".s32";
     } else if (f.element == .half) ".16" else ".32";
-    const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@intFromEnum(f.memory)));
+    const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@backingInt(f.memory)));
     const add = instr.hw1 >> 7 & 1 == 1;
     const pre = instr.hw1 >> 8 & 1 == 1;
     const writeback = instr.hw1 >> 5 & 1 == 1;

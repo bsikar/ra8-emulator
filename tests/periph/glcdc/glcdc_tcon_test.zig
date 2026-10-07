@@ -18,11 +18,11 @@ fn programmed() tcon.Tcon {
     var unit = tcon.Tcon{};
     _ = unit.latch(tcon.off.tim, 0);
     _ = unit.latch(tcon.off.stva1, panel.v_sync);
-    _ = unit.latch(tcon.off.stva2, @intFromEnum(tcon.Signal.stva) | tcon.field.invert);
+    _ = unit.latch(tcon.off.stva2, @backingInt(tcon.Signal.stva) | tcon.field.invert);
     _ = unit.latch(tcon.off.stha1, panel.h_sync);
-    _ = unit.latch(tcon.off.stha2, @intFromEnum(tcon.Signal.de));
+    _ = unit.latch(tcon.off.stha2, @backingInt(tcon.Signal.de));
     _ = unit.latch(tcon.off.stvb1, (panel.v_sync + panel.v_back) << tcon.field.start_shift | panel.v_active);
-    _ = unit.latch(tcon.off.stvb2, @intFromEnum(tcon.Signal.stha) | tcon.field.invert);
+    _ = unit.latch(tcon.off.stvb2, @backingInt(tcon.Signal.stha) | tcon.field.invert);
     _ = unit.latch(tcon.off.sthb1, (panel.h_sync + panel.h_back) << tcon.field.start_shift | panel.h_active);
     _ = unit.latch(tcon.off.sthb2, 0);
     _ = unit.latch(tcon.off.de, 0);

@@ -125,7 +125,7 @@ pub const Unit = struct {
     }
 
     pub fn wordOf(self: *const Unit, register: Register) u32 {
-        return self.words[@intFromEnum(register)];
+        return self.words[@backingInt(register)];
     }
 
     /// True once any initiator has been handed to the Non-Secure world.

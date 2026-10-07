@@ -159,7 +159,7 @@ pub const Regs = struct {
     }
 
     pub fn read(self: *const Regs, name: Name) u32 {
-        const n = @intFromEnum(name);
+        const n = @backingInt(name);
         if (n <= 15) return self.get(@intCast(n));
         return switch (name) {
             .msp => self.msp,
@@ -176,7 +176,7 @@ pub const Regs = struct {
     /// Write a register by name, keeping only the bits the architecture
     /// implements: one for PRIMASK and FAULTMASK, eight for BASEPRI.
     pub fn write(self: *Regs, name: Name, value: u32) void {
-        const n = @intFromEnum(name);
+        const n = @backingInt(name);
         if (n <= 15) return self.set(@intCast(n), value);
         switch (name) {
             .msp => self.msp = value & ~@as(u32, 3),

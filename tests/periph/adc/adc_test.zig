@@ -13,7 +13,7 @@ fn unit() adc.Adc {
 fn enrol(block: *adc.Adc, slot: usize, group: u32, source: u32, format: scan.Format) void {
     const word = (source << scan.chcr.cnvcs_shift) | group;
     block.write(adc.slotAddress(slot), 4, word);
-    const code: u32 = @intFromEnum(format);
+    const code: u32 = @backingInt(format);
     block.write(adc.formatAddress(slot), 4, code << scan.opcrc.adprc_shift);
 }
 

@@ -89,13 +89,13 @@ test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
 
     const panel = board.asks.attached_eink.?;
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(proto.Command.load_area));
+    word(panel, @backingInt(proto.Command.load_area));
     for ([_]u16{ 0x0030, 0, 0, 2, 1, 0x2211 }) |value| {
         word(panel, proto.preamble.write);
         word(panel, value);
     }
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(proto.Command.display_area));
+    word(panel, @backingInt(proto.Command.display_area));
     for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
         word(panel, proto.preamble.write);
         word(panel, value);
@@ -136,13 +136,13 @@ test "with no attach and no GLCDC frame, frame-out saves the board's refreshed e
     board.panel.planes.resize(.{ .width = 16, .height = 8 });
     const panel = &board.panel;
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(proto.Command.load_area));
+    word(panel, @backingInt(proto.Command.load_area));
     for ([_]u16{ 0x0030, 0, 0, 2, 1, 0x2211 }) |value| {
         word(panel, proto.preamble.write);
         word(panel, value);
     }
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(proto.Command.display_area));
+    word(panel, @backingInt(proto.Command.display_area));
     for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
         word(panel, proto.preamble.write);
         word(panel, value);

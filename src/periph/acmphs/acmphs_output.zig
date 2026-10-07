@@ -51,7 +51,7 @@ pub const Edge = enum(u2) {
     both = 3,
 
     pub fn of(cmpctl: u8) Edge {
-        return @enumFromInt(@as(u2, @truncate((cmpctl & mask.ceg) >> 3)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate((cmpctl & mask.ceg) >> 3))));
     }
 
     pub fn name(self: Edge) []const u8 {

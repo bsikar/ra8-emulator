@@ -15,8 +15,8 @@ test "every named register resolves to its own slot" {
     };
     for (offsets) |offset| {
         const slot = ctrl.slotOf(offset) orelse return error.Unmapped;
-        try std.testing.expect(!seen[@intFromEnum(slot)]);
-        seen[@intFromEnum(slot)] = true;
+        try std.testing.expect(!seen[@backingInt(slot)]);
+        seen[@backingInt(slot)] = true;
     }
     for (seen) |hit| try std.testing.expect(hit);
 }
@@ -132,7 +132,7 @@ test "a reset takes the file back to its reset row" {
 test "every slot has a name" {
     var index: usize = 0;
     while (index < ctrl.slot_count) : (index += 1) {
-        const slot: ctrl.Slot = @enumFromInt(index);
+        const slot: ctrl.Slot = @fromBackingInt(@intCast(index));
         try std.testing.expect(ctrl.nameOf(slot).len != 0);
     }
 }

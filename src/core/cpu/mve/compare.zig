@@ -13,7 +13,7 @@ pub const Cond = enum(u3) { eq, ne, cs, hi, ge, lt, gt, le };
 /// The condition an encoding's three condition bits name.
 pub fn condOf(signed: bool, fc0: bool, fc1: bool) Cond {
     const index = @as(u3, @intFromBool(signed)) << 2 | @as(u3, @intFromBool(fc0)) << 1 | @intFromBool(fc1);
-    return @enumFromInt(index);
+    return @fromBackingInt(@intCast(index));
 }
 
 /// One element's comparison.

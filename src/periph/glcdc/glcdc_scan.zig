@@ -93,7 +93,7 @@ pub const Scanner = struct {
     }
 
     fn refuse(self: *Scanner, why: Refusal) ?Picture {
-        self.refused[@intFromEnum(why)] += 1;
+        self.refused[@backingInt(why)] += 1;
         self.last_refusal = why;
         return null;
     }
@@ -115,7 +115,7 @@ pub const Scanner = struct {
     }
 
     pub fn count(self: *const Scanner, why: Refusal) u32 {
-        return self.refused[@intFromEnum(why)];
+        return self.refused[@backingInt(why)];
     }
 
     /// No layer is fetching from anything that looks like a framebuffer.

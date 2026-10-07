@@ -76,7 +76,7 @@ pub const Writer = struct {
 /// Packs `Rpc{msg_type, msg_id, payload[msg_id] = body}`; uid stays zero.
 pub fn rpc(w: *Writer, kind: Kind, id: u32, body: []const u8) Error!void {
     try w.key(1, wire_varint);
-    try w.varint(@intFromEnum(kind));
+    try w.varint(@backingInt(kind));
     try w.key(2, wire_varint);
     try w.varint(id);
     try w.field(id, body);

@@ -67,7 +67,7 @@ pub const Desc = struct {
         const high: u32 = raw[layout.ds_high] & layout.nibble;
         return .{
             .ds = @as(u32, raw[layout.ds_low]) | (high << 8),
-            .dt = @enumFromInt(@as(u4, @truncate(raw[layout.dt] >> layout.dt_shift))),
+            .dt = @fromBackingInt(@intCast(@as(u4, @truncate(raw[layout.dt] >> layout.dt_shift)))),
             .ptr = std.mem.readInt(u32, raw[layout.ptr..][0..4], .little),
         };
     }
@@ -87,7 +87,7 @@ pub fn free(dt: Dt) bool {
 
 /// Byte 2 carrying `dt`, with the bits below it kept.
 pub fn dtByte(old: u8, dt: Dt) u8 {
-    const code: u8 = @intFromEnum(dt);
+    const code: u8 = @backingInt(dt);
     return (old & layout.nibble) | (code << layout.dt_shift);
 }
 

@@ -83,7 +83,7 @@ pub const Source = enum(u8) {
 /// reads as undivided PCLKB anywhere else rather than silently parking a
 /// channel that would then never count at all.
 pub fn sourceOf(mr1: u8, channel: usize) Source {
-    const selected: Source = @enumFromInt(mr1 & field.tck);
+    const selected: Source = @fromBackingInt(@intCast(mr1 & field.tck));
     if (selected.cascaded() and channel != cascade.high) return .pclkb;
     return selected;
 }

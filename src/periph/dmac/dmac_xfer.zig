@@ -68,10 +68,10 @@ pub const Plan = struct {
 
     pub fn decode(dmtmd: u16, dmamd: u16) Plan {
         return .{
-            .mode = @enumFromInt(@as(u2, @truncate(dmtmd >> field.md_shift))),
-            .width = @enumFromInt(@as(u2, @truncate(dmtmd >> field.sz_shift))),
-            .source = @enumFromInt(@as(u2, @truncate(dmamd >> field.sm_shift))),
-            .destination = @enumFromInt(@as(u2, @truncate(dmamd >> field.dm_shift))),
+            .mode = @fromBackingInt(@intCast(@as(u2, @truncate(dmtmd >> field.md_shift)))),
+            .width = @fromBackingInt(@intCast(@as(u2, @truncate(dmtmd >> field.sz_shift)))),
+            .source = @fromBackingInt(@intCast(@as(u2, @truncate(dmamd >> field.sm_shift)))),
+            .destination = @fromBackingInt(@intCast(@as(u2, @truncate(dmamd >> field.dm_shift)))),
         };
     }
 

@@ -46,14 +46,14 @@ fn move(f: dp.Fields, s: []const u8, out: *text.Text) void {
     if (f.kind == .ror and f.imm5 == 0) {
         return out.put("rrx{s} {s}, {s}", .{ s, text.names[f.rd], text.names[f.rm] });
     }
-    out.put("{s}{s}.w {s}, {s}, ", .{ kinds[@intFromEnum(f.kind)], s, text.names[f.rd], text.names[f.rm] });
+    out.put("{s}{s}.w {s}, {s}, ", .{ kinds[@backingInt(f.kind)], s, text.names[f.rd], text.names[f.rm] });
     out.imm(amount(f));
 }
 
 fn suffix(f: dp.Fields, out: *text.Text) void {
     if (f.kind == .lsl and f.imm5 == 0) return;
     if (f.kind == .ror and f.imm5 == 0) return out.put(", rrx", .{});
-    out.put(", {s} #{d}", .{ kinds[@intFromEnum(f.kind)], amount(f) });
+    out.put(", {s} #{d}", .{ kinds[@backingInt(f.kind)], amount(f) });
 }
 
 /// LSR and ASR encode a shift of 32 as zero.

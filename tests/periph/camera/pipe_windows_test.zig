@@ -30,7 +30,7 @@ const Live = if (builtin.os.tag == .windows) struct {
             wide[len] = 0;
             const handle = kernel32.CreateFileW(wide[0..len :0], generic_write, 0, null, open_existing, 0, null);
             if (handle == windows.INVALID_HANDLE_VALUE) {
-                std.debug.print("CreateFileW for camera pipe failed: {d}\n", .{@intFromEnum(kernel32.GetLastError())});
+                std.debug.print("CreateFileW for camera pipe failed: {d}\n", .{@backingInt(kernel32.GetLastError())});
                 return error.OpenFailed;
             }
             return .{ .handle = handle };
@@ -39,7 +39,7 @@ const Live = if (builtin.os.tag == .windows) struct {
         fn write(self: Client, bytes: []const u8) !void {
             var written: windows.DWORD = 0;
             if (kernel32.WriteFile(self.handle, bytes.ptr, @intCast(bytes.len), &written, null) == 0) {
-                std.debug.print("WriteFile to camera pipe failed: {d}\n", .{@intFromEnum(kernel32.GetLastError())});
+                std.debug.print("WriteFile to camera pipe failed: {d}\n", .{@backingInt(kernel32.GetLastError())});
                 return error.WriteFailed;
             }
             if (written != bytes.len) {

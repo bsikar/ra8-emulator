@@ -31,7 +31,7 @@ pub const Fields = struct {
         if (instr.size != 4 or instr.hw1 & encodings.hw1_mask != encodings.hw1_space) return null;
         if (instr.hw2 & encodings.hw2_mask != encodings.hw2_space) return null;
         return .{
-            .kind = @enumFromInt((instr.hw1 >> 5) & 0x3),
+            .kind = @fromBackingInt(@intCast((instr.hw1 >> 5) & 0x3)),
             .s = instr.hw1 & 0x10 != 0,
             .rn = @intCast(instr.hw1 & 0xF),
             .rd = @intCast((instr.hw2 >> 8) & 0xF),

@@ -19,7 +19,7 @@ const Color = draw_list.Color;
 fn dirty(board: *Board, rect: proto.DirtyRect) !void {
     var bytes: [4096]u8 = undefined;
     const payload = try proto.encode(proto.DirtyRect, rect, &bytes);
-    try board.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.lcd_dirty), .payload = payload } });
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.lcd_dirty), .payload = payload } });
 }
 
 fn gray(level: u8) Color {
@@ -65,7 +65,7 @@ test "responses, other topics, the other core and short payloads leave the image
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     try board.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "x" } } });
-    try board.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.uart), .payload = "x" } });
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } });
     try dirty(&board, .{ .core = .cpu1, .x = 0, .y = 0, .width = 1, .height = 1, .virtual_ns = 1, .pixels = &.{5} });
     try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 2, .height = 2, .virtual_ns = 1, .pixels = &.{5} });
     try std.testing.expect(!board.hasFrame());

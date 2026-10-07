@@ -48,7 +48,7 @@ pub const KeySize = enum(u2) {
     bits256 = 3,
 
     pub fn of(reg00: u32) KeySize {
-        return @enumFromInt(@as(u2, @truncate((reg00 & mask.key_size) >> 24)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate((reg00 & mask.key_size) >> 24))));
     }
 
     pub fn bits(self: KeySize) u16 {
@@ -79,7 +79,7 @@ pub const Mode = enum(u2) {
     other3 = 3,
 
     pub fn of(reg00: u32) Mode {
-        return @enumFromInt(@as(u2, @truncate((reg00 & mask.mode) >> 28)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate((reg00 & mask.mode) >> 28))));
     }
 
     pub fn name(self: Mode) []const u8 {

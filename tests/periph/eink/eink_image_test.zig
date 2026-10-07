@@ -12,7 +12,7 @@ fn word(panel: *eink.Panel, value: u16) void {
 
 fn command(panel: *eink.Panel, code: proto.Command) void {
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(code));
+    word(panel, @backingInt(code));
 }
 
 fn data(panel: *eink.Panel, value: u16) void {

@@ -14,7 +14,7 @@ fn word(panel: *eink.Panel, value: u16) void {
 /// A command word behind its preamble.
 fn command(panel: *eink.Panel, code: proto.Command) void {
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(code));
+    word(panel, @backingInt(code));
 }
 
 /// A data word behind its preamble.

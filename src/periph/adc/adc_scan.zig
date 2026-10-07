@@ -111,7 +111,7 @@ pub const Slot = struct {
 /// The data format a slot's ADDOPCRCn word selects.
 pub fn format(opcrc_word: u32) Format {
     const code: u2 = @truncate((opcrc_word & opcrc.adprc_mask) >> opcrc.adprc_shift);
-    return @enumFromInt(code);
+    return @fromBackingInt(@intCast(code));
 }
 
 /// The ideal result for an armed self-diagnosis mode. Anything that is not

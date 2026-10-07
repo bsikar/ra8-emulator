@@ -4,7 +4,7 @@ const ra8 = @import("ra8");
 const frame = ra8.periph.esp_hosted.frame;
 
 test "filler frame matches the model's idle header" {
-    try std.testing.expectEqual(ra8.periph.esp_hosted.idle_header, @as(u8, @intFromEnum(frame.Interface.max_if)) | 0xF0);
+    try std.testing.expectEqual(ra8.periph.esp_hosted.idle_header, @as(u8, @backingInt(frame.Interface.max_if)) | 0xF0);
 }
 
 test "filler frame is 0xF8 then zeros and parses as filler" {

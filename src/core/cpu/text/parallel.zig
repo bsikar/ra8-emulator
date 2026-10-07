@@ -26,6 +26,6 @@ const mnemonics = blk: {
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = parallel.Fields.of(instr) orelse return;
     const u = @intFromBool(!f.signed);
-    const name = mnemonics[u][@intFromEnum(f.mode)][@intFromEnum(f.shape)];
+    const name = mnemonics[u][@backingInt(f.mode)][@backingInt(f.shape)];
     out.regs3(name, f.rd, f.rn, f.rm);
 }

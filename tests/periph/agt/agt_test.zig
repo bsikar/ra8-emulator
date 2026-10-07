@@ -168,7 +168,7 @@ test "a block answers on its own window and nowhere else" {
 
 /// AGT1's TCK = 101b, the cascade encoding, written with the count stopped.
 fn cascadeHigh(unit: *agt.Agt) void {
-    unit.write(ch1 + agt.off.mr1, 1, @intFromEnum(agt.source.Source.agt0_underflow));
+    unit.write(ch1 + agt.off.mr1, 1, @backingInt(agt.source.Source.agt0_underflow));
 }
 
 test "the cascade pair started in the documented order loses nothing" {

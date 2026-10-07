@@ -16,16 +16,14 @@ fn setMode(x: u32) void {
     asm volatile ("vmsr fpscr, %[x]"
         :
         : [x] "r" (x),
-        : "memory"
-    );
+        : .{ .memory = true });
 }
 
 fn flags() void {
     store(asm volatile ("vmrs %[x], fpscr"
         : [x] "=r" (-> u32),
         :
-        : "memory"
-    ) & fpscr_mask);
+        : .{ .memory = true }) & fpscr_mask);
 }
 
 fn binary(comptime insn: []const u8, mode: u32, a: u32, b: u32) void {
@@ -34,8 +32,7 @@ fn binary(comptime insn: []const u8, mode: u32, a: u32, b: u32) void {
         : [r] "=r" (-> u32),
         : [a] "r" (a),
           [b] "r" (b),
-        : "s0", "s1", "memory"
-    ));
+        : .{ .s0 = true, .s1 = true, .memory = true }));
     flags();
 }
 
@@ -44,8 +41,7 @@ fn unary(comptime insn: []const u8, mode: u32, x: u32, mask: u32) void {
     store(asm volatile ("vmov s0, %[x]\n" ++ insn ++ "\nvmov %[r], s0"
         : [r] "=r" (-> u32),
         : [x] "r" (x),
-        : "s0", "memory"
-    ) & mask);
+        : .{ .s0 = true, .memory = true }) & mask);
     flags();
 }
 
@@ -81,8 +77,7 @@ fn modesAndHalf() void {
         : [d] "r" (@as(u32, 0x3C00)),
           [n] "r" (@as(u32, 0x4000)),
           [m] "r" (@as(u32, 0x4200)),
-        : "s0", "s1", "s2", "memory"
-    ) & 0xFFFF);
+        : .{ .s0 = true, .s1 = true, .s2 = true, .memory = true }) & 0xFFFF);
     flags();
     binary("vadd.f16 s0, s0, s1", 0x0008_0000, 0x0001, 0); // FZ16 input
 }

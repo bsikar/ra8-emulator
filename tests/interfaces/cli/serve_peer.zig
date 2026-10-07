@@ -42,7 +42,7 @@ pub const Peer = struct {
 
     /// Call `method` and decode its `Reply`, skipping any events on the way.
     fn call(self: *Peer, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
-        _ = try self.client.call(Args, @intFromEnum(method), args, 0, self.tx);
+        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
         while (true) switch (try self.next()) {
             .response => |response| return switch (response.result) {
                 .ok => |bytes| try proto.decode(Reply, bytes),

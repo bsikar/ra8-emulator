@@ -92,7 +92,7 @@ pub const Source = enum(u32) {
 
 /// The source GTCR selects.
 pub fn sourceOf(cr: u32) Source {
-    return @enumFromInt(cr & field.tpcs);
+    return @fromBackingInt(@intCast(cr & field.tpcs));
 }
 
 /// The counts one chunk boundary stands for at this source. The result is

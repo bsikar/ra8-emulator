@@ -23,7 +23,7 @@ const banner = "uart_irq_echo ready";
 fn uart(console: *Console, text: []const u8, at_ns: u64) !void {
     var bytes: [proto.max_payload]u8 = undefined;
     const payload = try proto.encode(proto.Uart, .{ .core = .cpu0, .channel = 8, .virtual_ns = at_ns, .bytes = text }, &bytes);
-    try console.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.uart), .payload = payload } });
+    try console.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = payload } });
 }
 
 test "uart events land in the log at their own board time" {
@@ -44,7 +44,7 @@ test "responses and other topics leave the log alone" {
     var console = Console.init(std.testing.allocator);
     defer console.deinit();
     try console.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "hi\n" } } });
-    try console.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.stop), .payload = "hi\n" } });
+    try console.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.stop), .payload = "hi\n" } });
     try std.testing.expect(!console.hasOutput());
 }
 

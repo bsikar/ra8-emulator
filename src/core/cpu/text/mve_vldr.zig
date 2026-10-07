@@ -30,7 +30,7 @@ pub fn printPredicated(instr: Instr, out: *text.Text, pred: []const u8) void {
     const rn = text.names[instr.hw1 & 15];
     const root = if (load) "vldr" else "vstr";
     const dtype = if (load) (if (size == .byte) ".u8" else if (size == .half) ".u16" else ".u32") else if (size == .byte) ".8" else if (size == .half) ".16" else ".32";
-    const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@intFromEnum(size)));
+    const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@backingInt(size)));
     const add = instr.hw1 >> 7 & 1 == 1;
     const pre = instr.hw1 >> 8 & 1 == 1;
     const writeback = instr.hw1 >> 5 & 1 == 1;

@@ -126,7 +126,7 @@ pub const Writer = struct {
     pub fn put(self: *Writer, dir: Dir, bytes: []const u8) void {
         if (bytes.len == 0 and dir != .closed) return;
         var head: [header_len]u8 = undefined;
-        head[0] = @intFromEnum(dir);
+        head[0] = @backingInt(dir);
         std.mem.writeInt(u32, head[1..5], @intCast(bytes.len), .little);
         self.file.writeAll(&head) catch |err| return warnWrite(err);
         self.file.writeAll(bytes) catch |err| warnWrite(err);

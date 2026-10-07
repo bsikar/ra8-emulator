@@ -17,7 +17,7 @@ fn data(panel: *eink.Panel, value: u16) void {
 
 fn refresh(panel: *eink.Panel, x: u16, y: u16, width: u16, height: u16, mode: u16) void {
     word(panel, proto.preamble.command);
-    word(panel, @intFromEnum(proto.Command.display_area));
+    word(panel, @backingInt(proto.Command.display_area));
     data(panel, x);
     data(panel, y);
     data(panel, width);

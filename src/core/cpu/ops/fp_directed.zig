@@ -115,7 +115,7 @@ fn execFor(comptime kind: Kind, comptime fmt: Format) op.Exec {
 
 fn sel(comptime fmt: Format, cpu: *Cpu, instr: Instr, m: fmt.Bits()) fmt.Bits() {
     const double = comptime fmt.width() == 64;
-    const cond: fpu.select.Cond = @enumFromInt(instr.hw1 >> 4 & 0b11);
+    const cond: fpu.select.Cond = @fromBackingInt(@intCast(instr.hw1 >> 4 & 0b11));
     const nzcv: u4 = @intCast(cpu.regs.xpsr >> 28);
     const n = fp_regs.read(fmt, &cpu.fp.bank, nReg(instr, double));
     return fpu.select.select(fmt.Bits(), cond, nzcv, n, m);

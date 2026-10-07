@@ -42,7 +42,7 @@ pub const Header = struct {
 
     pub fn decode(bytes: *const [header_size]u8) Header {
         return .{
-            .interface = @enumFromInt(@as(u4, @truncate(bytes[0]))),
+            .interface = @fromBackingInt(@intCast(@as(u4, @truncate(bytes[0])))),
             .if_num = @truncate(bytes[0] >> 4),
             .flags = bytes[1],
             .len = std.mem.readInt(u16, bytes[2..4], .little),
@@ -55,7 +55,7 @@ pub const Header = struct {
     }
 
     pub fn encode(self: Header, out: *[header_size]u8) void {
-        out[0] = @as(u8, @intFromEnum(self.interface)) | @as(u8, self.if_num) << 4;
+        out[0] = @as(u8, @backingInt(self.interface)) | @as(u8, self.if_num) << 4;
         out[1] = self.flags;
         std.mem.writeInt(u16, out[2..4], self.len, .little);
         std.mem.writeInt(u16, out[4..6], self.offset, .little);

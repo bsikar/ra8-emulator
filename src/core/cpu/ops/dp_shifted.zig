@@ -54,7 +54,7 @@ pub const Fields = struct {
             .rn = @intCast(instr.hw1 & 0xF),
             .rd = @intCast((instr.hw2 >> 8) & 0xF),
             .rm = @intCast(instr.hw2 & 0xF),
-            .kind = @enumFromInt((instr.hw2 >> 4) & 0x3),
+            .kind = @fromBackingInt(@intCast((instr.hw2 >> 4) & 0x3)),
             .imm5 = (imm3 << 2) | imm2,
         };
     }

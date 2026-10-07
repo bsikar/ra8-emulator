@@ -58,7 +58,7 @@ test "closing a boundary charges cycles at the image core clock" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try attach(&board, core);
-    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.cksel = @backingInt(ra8.periph.sysclk.Source.moco);
     board.tree.selects = 1;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
     var timed: ra8.core.deadline.Deadline = .{ .periods = 1000 };
@@ -102,7 +102,7 @@ test "--run-for ends after its duration of a reset-clock image's own time (RA8EM
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try attach(&board, core);
-    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.cksel = @backingInt(ra8.periph.sysclk.Source.moco);
     board.tree.selects = 1;
     const options = try ra8.core.cli.parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "1s" });
     var timed = zig_run.stop_sym.deadline(options) orelse return error.TestExpectedDeadline;
@@ -128,7 +128,7 @@ test "a SysTick rearm discards the current boundary rate" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try attach(&board, core);
-    board.tree.cksel = @intFromEnum(ra8.periph.sysclk.Source.moco);
+    board.tree.cksel = @backingInt(ra8.periph.sysclk.Source.moco);
     board.tree.selects = 1;
     var timebase: ra8.periph.clocks.Clocks = .{};
     var timed: ra8.core.deadline.Deadline = .{ .periods = 1 };

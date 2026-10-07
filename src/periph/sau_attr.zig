@@ -30,7 +30,7 @@ pub const State = enum(u2) {
     secure = 2,
 
     fn stricter(a: State, b: State) State {
-        return if (@intFromEnum(a) >= @intFromEnum(b)) a else b;
+        return if (@backingInt(a) >= @backingInt(b)) a else b;
     }
 };
 

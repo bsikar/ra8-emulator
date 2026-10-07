@@ -8,12 +8,12 @@ pub const Size = enum(u2) { byte = 0, half = 1, word = 2 };
 
 /// The element width in bits: 8, 16 or 32.
 pub fn bits(size: Size) u8 {
-    return @as(u8, 8) << @intFromEnum(size);
+    return @as(u8, 8) << @backingInt(size);
 }
 
 /// How many elements of that size a 128-bit vector holds: 16, 8 or 4.
 pub fn lanes(size: Size) u8 {
-    return @as(u8, 16) >> @intFromEnum(size);
+    return @as(u8, 16) >> @backingInt(size);
 }
 
 pub fn read(bank: *const Bank, q: u3) u128 {

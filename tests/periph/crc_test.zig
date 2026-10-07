@@ -20,7 +20,7 @@ fn feedSlice(unit: *Crc, bytes: []const u8) void {
 }
 test "CRC-32 over the check string matches the standard remainder" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     // The unit applies no seed: the driver pre-seeds CRCDOR and inverts the
     // readback, so the raw remainder here is the complement of 0xCBF4_3926.
     unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
@@ -32,7 +32,7 @@ test "CRC-32 over the check string matches the standard remainder" {
 
 test "CRC-32C uses the Castagnoli polynomial, not CRC-32" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32c));
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32c));
     unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     feedSlice(&unit, check);
     try std.testing.expectEqual(@as(u32, 0xE306_9283), unit.read(regAddress(off_dor), 4) ^ 0xFFFF_FFFF);
@@ -40,29 +40,29 @@ test "CRC-32C uses the Castagnoli polynomial, not CRC-32" {
 
 test "the reflected and MSB-first modes each hit their standard check value" {
     var arc = Crc.init();
-    arc.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc16));
+    arc.write(regAddress(off_cr0), 1, @backingInt(Gps.crc16));
     feedSlice(&arc, check);
     try std.testing.expectEqual(@as(u32, 0xBB3D), arc.read(regAddress(off_dor), 4));
 
     var ccitt = Crc.init();
-    ccitt.write(regAddress(off_cr0), 1, @intFromEnum(Gps.ccitt));
+    ccitt.write(regAddress(off_cr0), 1, @backingInt(Gps.ccitt));
     feedSlice(&ccitt, check);
     try std.testing.expectEqual(@as(u32, 0x31C3), ccitt.read(regAddress(off_dor), 4));
 
     var small = Crc.init();
-    small.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc8));
+    small.write(regAddress(off_cr0), 1, @backingInt(Gps.crc8));
     feedSlice(&small, check);
     try std.testing.expectEqual(@as(u32, 0xF4), small.read(regAddress(off_dor), 4));
 }
 
 test "a word feed folds four bytes LSB-first, the order the driver packs them" {
     var byte_fed = Crc.init();
-    byte_fed.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    byte_fed.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     byte_fed.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     feedSlice(&byte_fed, check);
 
     var word_fed = Crc.init();
-    word_fed.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    word_fed.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     word_fed.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     word_fed.write(regAddress(off_dir), 4, 0x3433_3231); // "1234"
     word_fed.write(regAddress(off_dir), 4, 0x3837_3635); // "5678"
@@ -74,14 +74,14 @@ test "a word feed folds four bytes LSB-first, the order the driver packs them" {
 
 test "DORCLR clears the remainder and GPS=0 calculates nothing" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     feedSlice(&unit, "abc");
     try std.testing.expect(unit.dor != 0);
 
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     try std.testing.expectEqual(@as(u32, 0), unit.read(regAddress(off_dor), 4));
 
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.none));
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.none));
     feedSlice(&unit, "abc");
     try std.testing.expectEqual(@as(u32, 0), unit.read(regAddress(off_dor), 4));
     // The bytes still went in, even though nothing folded them.
@@ -116,7 +116,7 @@ test "the unit answers on the bus, in both windows, once it is ungated" {
     var unit = Crc.init();
     try bus.add(unit.block());
 
-    bus.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    bus.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     bus.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     bus.write(periph.ns_base + (regAddress(off_dir) - periph.base), 4, 0x3433_3231);
     bus.write(regAddress(off_dir), 4, 0x3837_3635);
@@ -136,7 +136,7 @@ test "GPS is read back out of CRCCR0, masked to its three bits" {
 
 test "DORCLR does not stay in the shadow, so a readback is the settings alone" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     // ra8_crc_get_status reads the whole byte: 0x04 on the bench, not 0x84.
     try std.testing.expectEqual(@as(u32, 0x04), unit.read(regAddress(off_cr0), 1));
     try std.testing.expectEqual(Gps.crc32, unit.gps());
@@ -144,7 +144,7 @@ test "DORCLR does not stay in the shadow, so a readback is the settings alone" {
 
 test "ra8_crc_reset's read-modify-write still clears, and keeps the polynomial" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32));
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32));
     unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
 
     const readback: u8 = @truncate(unit.read(regAddress(off_cr0), 1));
@@ -157,7 +157,7 @@ test "ra8_crc_reset's read-modify-write still clears, and keeps the polynomial" 
 
 test "a read-modify-write that does not name DORCLR leaves the remainder alone" {
     var unit = Crc.init();
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     unit.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
 
     // ra8_crc_set_bit_order: fold LMS in on top of whatever CRCCR0 reads.
@@ -172,12 +172,12 @@ test "a read-modify-write that does not name DORCLR leaves the remainder alone" 
 
 test "a running remainder survives a bit-order store mid-calculation" {
     var straight = Crc.init();
-    straight.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    straight.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     straight.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     feedSlice(&straight, check);
 
     var interrupted = Crc.init();
-    interrupted.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    interrupted.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     interrupted.write(regAddress(off_dor), 4, 0xFFFF_FFFF);
     feedSlice(&interrupted, check[0..4]);
     const readback: u8 = @truncate(interrupted.read(regAddress(off_cr0), 1));
@@ -191,7 +191,7 @@ test "a running remainder survives a bit-order store mid-calculation" {
 test "a unit that only ever had its remainder cleared still reports" {
     var unit = Crc.init();
     try std.testing.expect(unit.quiet());
-    unit.write(regAddress(off_cr0), 1, @intFromEnum(Gps.crc32) | dorclr);
+    unit.write(regAddress(off_cr0), 1, @backingInt(Gps.crc32) | dorclr);
     try std.testing.expect(!unit.quiet());
     try std.testing.expectEqual(@as(u32, 0), unit.bytes);
 }

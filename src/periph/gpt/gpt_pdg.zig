@@ -82,7 +82,7 @@ pub const Pdg = struct {
     }
 
     pub fn code(self: *const Pdg, edge: Edge, n: usize, pin: Pin) u16 {
-        return self.codes[@intFromEnum(edge)][n][@intFromEnum(pin)];
+        return self.codes[@backingInt(edge)][n][@backingInt(pin)];
     }
 
     pub fn read(self: *const Pdg, address: u32, width: u3) u32 {

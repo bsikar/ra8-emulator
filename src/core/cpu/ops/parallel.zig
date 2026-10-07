@@ -51,7 +51,7 @@ pub const Fields = struct {
         return .{
             .shape = shape,
             .signed = instr.hw2 & 0x40 == 0,
-            .mode = @enumFromInt(op2),
+            .mode = @fromBackingInt(@intCast(op2)),
             .rn = @intCast(instr.hw1 & 0xF),
             .rd = @intCast((instr.hw2 >> 8) & 0xF),
             .rm = @intCast(instr.hw2 & 0xF),

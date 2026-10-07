@@ -212,13 +212,13 @@ test "with no attach, the board's own e-ink refreshes become the sequence" {
 
 fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void {
     panelWord(panel, proto.preamble.command);
-    panelWord(panel, @intFromEnum(proto.Command.load_area));
+    panelWord(panel, @backingInt(proto.Command.load_area));
     for ([_]u16{ 0x0030, 0, 0, 2, 1, pixels }) |value| {
         panelWord(panel, proto.preamble.write);
         panelWord(panel, value);
     }
     panelWord(panel, proto.preamble.command);
-    panelWord(panel, @intFromEnum(proto.Command.display_area));
+    panelWord(panel, @backingInt(proto.Command.display_area));
     for ([_]u16{ 0, 0, 2, 1, 2 }) |value| {
         panelWord(panel, proto.preamble.write);
         panelWord(panel, value);

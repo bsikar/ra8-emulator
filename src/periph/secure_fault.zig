@@ -36,7 +36,7 @@ pub const Cause = enum(u3) {
     lserr = 7,
 
     pub fn bit(self: Cause) u32 {
-        return @as(u32, 1) << @intFromEnum(self);
+        return @as(u32, 1) << @backingInt(self);
     }
 
     /// Whether this cause reports the address it went for in SFAR.

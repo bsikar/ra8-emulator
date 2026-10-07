@@ -12,7 +12,7 @@ fn commit(stage: *out.Stage) void {
 }
 
 fn setFormat(stage: *out.Stage, format: out.Format) void {
-    const code: u32 = @intFromEnum(format);
+    const code: u32 = @backingInt(format);
     _ = stage.latch(out.off.set, code << out.field.format_shift);
     commit(stage);
 }
@@ -35,7 +35,7 @@ test "a fresh stage is quiet and its defaults are identity" {
 
 test "a shadow write is pending until vlatch commits it" {
     var stage = out.Stage{};
-    _ = stage.latch(out.off.set, @as(u32, @intFromEnum(out.Format.rgb565)) << out.field.format_shift);
+    _ = stage.latch(out.off.set, @as(u32, @backingInt(out.Format.rgb565)) << out.field.format_shift);
     try std.testing.expect(stage.pending());
     // The panel is still driven from the old format.
     try std.testing.expectEqual(out.Format.rgb888, stage.live.format());
@@ -85,8 +85,8 @@ test "alpha is not an output channel and survives" {
 
 test "the dither pattern moves pixels by their position" {
     var stage = out.Stage{};
-    _ = stage.latch(out.off.set, @as(u32, @intFromEnum(out.Format.rgb565)) << out.field.format_shift);
-    const sel: u32 = @as(u32, @intFromEnum(out.Dither.pattern)) << out.field.dither_shift;
+    _ = stage.latch(out.off.set, @as(u32, @backingInt(out.Format.rgb565)) << out.field.format_shift);
+    const sel: u32 = @as(u32, @backingInt(out.Dither.pattern)) << out.field.dither_shift;
     // PA=0, PB=3, PC=0, PD=3 across the 2x2 cell.
     _ = stage.latch(out.off.pdtha, sel | (3 << 2) | (3 << 6));
     commit(&stage);
@@ -98,8 +98,8 @@ test "the dither pattern moves pixels by their position" {
 
 test "truncation does not dither" {
     var stage = out.Stage{};
-    _ = stage.latch(out.off.set, @as(u32, @intFromEnum(out.Format.rgb565)) << out.field.format_shift);
-    _ = stage.latch(out.off.pdtha, @as(u32, @intFromEnum(out.Dither.truncate)) << out.field.dither_shift);
+    _ = stage.latch(out.off.set, @as(u32, @backingInt(out.Format.rgb565)) << out.field.format_shift);
+    _ = stage.latch(out.off.pdtha, @as(u32, @backingInt(out.Dither.truncate)) << out.field.dither_shift);
     commit(&stage);
     _ = stage.apply(0xFF_10_10_10, 1, 1);
     try std.testing.expectEqual(@as(u32, 0), stage.dithered);

@@ -41,7 +41,7 @@ pub const Machine = struct {
 
     pub fn command(self: *Machine, value: u32) void {
         self.commands += 1;
-        const wanted: Mode = @enumFromInt(@as(u2, @truncate(value)));
+        const wanted: Mode = @fromBackingInt(@intCast(@as(u2, @truncate(value))));
         if (!reachable(self.mode, wanted)) {
             self.refused += 1;
             self.last_refused = wanted;
@@ -54,7 +54,7 @@ pub const Machine = struct {
     /// What the status register reports: where the machine actually is, not
     /// what it was last asked for.
     pub fn status(self: *const Machine) u32 {
-        return @intFromEnum(self.mode);
+        return @backingInt(self.mode);
     }
 
     pub fn operational(self: *const Machine) bool {

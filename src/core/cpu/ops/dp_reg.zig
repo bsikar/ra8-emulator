@@ -52,7 +52,7 @@ const Outcome = struct {
 };
 
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
-    const opcode: Opcode = @enumFromInt((instr.hw1 >> 6) & 0xF);
+    const opcode: Opcode = @fromBackingInt(@intCast((instr.hw1 >> 6) & 0xF));
     const rdn: u4 = @intCast(instr.hw1 & 0x7);
     const rm: u4 = @intCast((instr.hw1 >> 3) & 0x7);
     const out = compute(opcode, cpu.regs.get(rdn), cpu.regs.get(rm), flags.carry(&cpu.regs));

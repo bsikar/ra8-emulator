@@ -64,7 +64,7 @@ pub fn decode(regs: Registers, layer: u8, enabled: bool) ?Framebuffer {
     if (!addressIsRam(regs.flm2)) return null;
     const stride = regs.flm3 >> field.stride_shift & field.stride_mask;
     const lines = (regs.flm5 >> field.lnnum_shift & field.lnnum_mask) + 1;
-    const format: pixel.Format = @enumFromInt(regs.flm6 >> field.format_shift & field.format_mask);
+    const format: pixel.Format = @fromBackingInt(@intCast(regs.flm6 >> field.format_shift & field.format_mask));
     if (stride == 0) return null;
     // Bits, not bytes: a CLUT4 line of `stride` bytes carries twice as many
     // pixels as it has bytes, and a CLUT1 line eight times as many. dev

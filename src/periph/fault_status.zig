@@ -60,12 +60,12 @@ pub const Cause = enum(u5) {
     divbyzero = 25,
 
     pub fn bit(self: Cause) u32 {
-        return @as(u32, 1) << @intFromEnum(self);
+        return @as(u32, 1) << @backingInt(self);
     }
 
     /// The fault this cause belongs to.
     pub fn fault(self: Cause) Fault {
-        const at = @intFromEnum(self);
+        const at = @backingInt(self);
         if (at < 8) return .mem_manage;
         if (at < 16) return .bus_fault;
         return .usage_fault;
@@ -84,7 +84,7 @@ pub const Hard = enum(u5) {
     debugevt = 31,
 
     pub fn bit(self: Hard) u32 {
-        return @as(u32, 1) << @intFromEnum(self);
+        return @as(u32, 1) << @backingInt(self);
     }
 };
 
@@ -108,7 +108,7 @@ pub const HardCauses = std.BoundedArray(Hard, @typeInfo(Hard).@"enum".fields.len
 pub fn decode(word: u32) Causes {
     var found = Causes{};
     inline for (@typeInfo(Cause).@"enum".fields) |entry| {
-        const cause: Cause = @enumFromInt(entry.value);
+        const cause: Cause = @fromBackingInt(@intCast(entry.value));
         if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
     }
     return found;
@@ -118,7 +118,7 @@ pub fn decode(word: u32) Causes {
 pub fn decodeHard(word: u32) HardCauses {
     var found = HardCauses{};
     inline for (@typeInfo(Hard).@"enum".fields) |entry| {
-        const cause: Hard = @enumFromInt(entry.value);
+        const cause: Hard = @fromBackingInt(@intCast(entry.value));
         if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
     }
     return found;

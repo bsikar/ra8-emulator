@@ -65,12 +65,12 @@ pub const Context = struct {
     mapping: ?Mapping = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
-        return self.topics[@intFromEnum(of)] & bit(topic) != 0;
+        return self.topics[@backingInt(of)] & bit(topic) != 0;
     }
 };
 
 fn bit(topic: proto.Topic) u8 {
-    const index = @intFromEnum(topic) - @intFromEnum(proto.Topic.stop);
+    const index = @backingInt(topic) - @backingInt(proto.Topic.stop);
     std.debug.assert(index < topic_count);
     return @as(u8, 1) << @intCast(index);
 }
@@ -79,7 +79,7 @@ const Ack = rpc.Outcome(proto.Ack);
 const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
 fn code(value: u16) rpc.Code {
-    return @enumFromInt(value);
+    return @fromBackingInt(@intCast(value));
 }
 
 fn refuse(comptime Reply: type, err: anyerror) rpc.Outcome(Reply) {
@@ -88,7 +88,7 @@ fn refuse(comptime Reply: type, err: anyerror) rpc.Outcome(Reply) {
 }
 
 fn core(of: proto.Core) api.Core {
-    return @enumFromInt(@intFromEnum(of));
+    return @fromBackingInt(@intCast(@backingInt(of)));
 }
 
 fn register(of: proto.Register) ?api.Register {
@@ -184,7 +184,7 @@ pub fn clearWatchpoint(context: *Context, args: proto.PointId) Ack {
 /// Replies 0 when the id was a breakpoint and 1 when it was a watchpoint.
 pub fn removePoint(context: *Context, args: proto.PointId) rpc.Outcome(proto.U32) {
     const removed = context.session.removePoint(core(args.core), args.id) catch |err| return refuse(proto.U32, err);
-    return .{ .ok = .{ .value = @intFromEnum(removed) } };
+    return .{ .ok = .{ .value = @backingInt(removed) } };
 }
 
 pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
@@ -196,12 +196,12 @@ pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
         if (context.gpa == null or context.session.display == null) return .{ .err = code(app_codes.refused) };
         context.lcd_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
     }
-    context.topics[@intFromEnum(args.core)] |= bit(args.topic);
+    context.topics[@backingInt(args.core)] |= bit(args.topic);
     return ack;
 }
 
 pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
-    context.topics[@intFromEnum(args.core)] &= ~bit(args.topic);
+    context.topics[@backingInt(args.core)] &= ~bit(args.topic);
     if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) release(context, &context.uart_feed);
     if (!context.wants(.cpu0, .lcd_dirty) and !context.wants(.cpu1, .lcd_dirty)) release(context, &context.lcd_feed);
     return ack;
@@ -237,7 +237,7 @@ pub fn stopped(session: *api.Session, of: proto.Core, ended: api.Ended) proto.St
     const pc = session.register(core(of), .pc) catch 0;
     return switch (ended) {
         .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },
-        .core => |stop| .{ .core = of, .reason = .core_fault, .address = pc, .detail = @intFromEnum(std.meta.activeTag(stop)) },
+        .core => |stop| .{ .core = of, .reason = .core_fault, .address = pc, .detail = @backingInt(std.meta.activeTag(stop)) },
         .stop => |stop| .{ .core = of, .reason = reason(stop), .address = pc, .detail = detail(stop) },
     };
 }
