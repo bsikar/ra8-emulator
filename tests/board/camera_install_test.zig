@@ -33,7 +33,7 @@ test "a spec that opens replaces the source and closes the old one" {
     defer board.deinit();
     var stub: Stub = .{};
     board.capture.source = stub.source();
-    try install(&board, std.testing.allocator, try registry.parse("gradient"));
+    try install(&board, std.testing.allocator, std.testing.io, try registry.parse("gradient"));
     try std.testing.expectEqual(@as(u32, 1), stub.closed);
     try std.testing.expectEqualStrings("synthetic gradient", board.capture.source.label);
 }
@@ -44,8 +44,8 @@ test "a spec that cannot be opened keeps the old source open" {
     var stub: Stub = .{};
     board.capture.source = stub.source();
     const missing = try registry.parse("image:/nonexistent/ra8emu-795.png");
-    try std.testing.expect(std.meta.isError(install(&board, std.testing.allocator, missing)));
+    try std.testing.expect(std.meta.isError(install(&board, std.testing.allocator, std.testing.io, missing)));
     try std.testing.expectEqual(@as(u32, 0), stub.closed);
     try std.testing.expectEqualStrings("stub", board.capture.source.label);
-    board.capture.source = (registry.Spec{}).open(std.testing.allocator, &board.wire.sensor.format) catch unreachable;
+    board.capture.source = (registry.Spec{}).open(std.testing.allocator, std.testing.io, &board.wire.sensor.format) catch unreachable;
 }

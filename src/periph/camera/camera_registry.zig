@@ -33,10 +33,10 @@ pub const Spec = struct {
     /// The source this spec names, ready to hand to the CEU. A source that
     /// converts reads the sensor's FORMAT CONTROL byte at each capture. A
     /// picture that cannot be read or decoded says why and refuses the run.
-    pub fn open(self: Spec, allocator: std.mem.Allocator, format_control: *const u8) !frame_source.FrameSource {
+    pub fn open(self: Spec, allocator: std.mem.Allocator, io: std.Io, format_control: *const u8) !frame_source.FrameSource {
         return switch (self.kind) {
             .gradient => gradient.source(),
-            .image => image.labelled((image.ImageSource.load(allocator, self.arg, format_control) catch |err| {
+            .image => image.labelled((image.ImageSource.load(allocator, io, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
