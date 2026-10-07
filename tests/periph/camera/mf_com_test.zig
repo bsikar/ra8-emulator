@@ -38,7 +38,7 @@ fn getUint64(self: *anyopaque, key: *const mf.Guid, value: *u64) callconv(mf.cc)
 fn lock(self: *anyopaque, bytes: *?[*]u8, max: ?*u32, length: *u32) callconv(mf.cc) mf.HRESULT {
     _ = note(self, mf.slot.buffer_lock);
     if (max != null) return -1;
-    bytes.* = @constCast(@ptrCast("YUYV"));
+    bytes.* = @ptrCast(@constCast("YUYV"));
     length.* = 4;
     return 0;
 }

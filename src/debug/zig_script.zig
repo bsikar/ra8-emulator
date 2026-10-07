@@ -93,13 +93,13 @@ pub const ZigScript = struct {
     /// As session.zig's switchTo: say which core has the session and where
     /// it stands.
     fn switchTo(self: *ZigScript, index: u8, out: anytype) !void {
-        if (index != @intFromEnum(self.session.currentCore())) {
-            try self.session.switchTo(@enumFromInt(index));
+        if (index != @backingInt(self.session.currentCore())) {
+            try self.session.switchTo(@fromBackingInt(@intCast(index)));
             std.mem.swap(?elf.Image, &self.image, &self.other_image);
             std.mem.swap(Temporary, &self.temporary, &self.other_temporary);
         }
         const view = try self.session.view(self.session.currentCore());
-        try out.print("Core {d}, ", .{@intFromEnum(self.session.currentCore())});
+        try out.print("Core {d}, ", .{@backingInt(self.session.currentCore())});
         try session_report.line(view, self.image, try view.register(.pc), out);
     }
 

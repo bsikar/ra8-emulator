@@ -49,7 +49,7 @@ const LoadLog = struct {
     fn load(context: *anyopaque, core: api.Core, image: []const u8) anyerror!void {
         const self: *LoadLog = @ptrCast(@alignCast(context));
         if (image.len == 0) return error.EmptyImage;
-        self.calls[@intFromEnum(core)] += 1;
+        self.calls[@backingInt(core)] += 1;
     }
 };
 

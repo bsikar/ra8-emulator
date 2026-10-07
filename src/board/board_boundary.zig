@@ -39,7 +39,7 @@ pub const BoardBoundary = struct {
     fn asleep(context: *anyopaque, normal: u32) u32 {
         const self: *BoardBoundary = @ptrCast(@alignCast(context));
         if (self.second != null) return normal;
-        if (self.selected) |selected| if (selected.* != @intFromEnum(registry.Issuer.cpu0)) return normal;
+        if (self.selected) |selected| if (selected.* != @backingInt(registry.Issuer.cpu0)) return normal;
         if (!quiet_due.quietUntilDue(self.board)) return normal;
         const edges = [_]u64{
             self.timebase.untilWrap(self.core),
@@ -55,7 +55,7 @@ pub const BoardBoundary = struct {
         const self: *BoardBoundary = @ptrCast(@alignCast(context));
         try self.timebase.advance(self.core, instructions);
         try self.ns_timebase.advanceSysTick(self.core, instructions);
-        const issuer: registry.Issuer = if (self.selected) |selected| @enumFromInt(selected.*) else .cpu0;
+        const issuer: registry.Issuer = if (self.selected) |selected| @fromBackingInt(@intCast(selected.*)) else .cpu0;
         try self.board.tickFrom(self.core, instructions, issuer);
         if (issuer == .cpu1) if (self.second) |unit| unit.takeResetRequest(self.second_memory.?);
         const pending = self.reboot orelse return;

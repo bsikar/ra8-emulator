@@ -27,7 +27,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
                 .uart => |sent| sent,
                 else => continue,
             };
-            const of: proto.Core = @enumFromInt(@intFromEnum(event.core));
+            const of: proto.Core = @fromBackingInt(@intCast(@backingInt(event.core)));
             if (!context.wants(of, .uart)) continue;
             if (run.len != 0 and (run.core != of or run.channel != uart.channel)) {
                 try send(server, run, &bytes, tx);
@@ -46,5 +46,5 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
 
 fn send(server: anytype, run: Run, bytes: *const [batch]u8, tx: []u8) !void {
     const event: proto.Uart = .{ .core = run.core, .channel = run.channel, .virtual_ns = run.virtual_ns, .bytes = bytes[0..run.len] };
-    try server.emit(proto.Uart, @intFromEnum(proto.Topic.uart), event, tx);
+    try server.emit(proto.Uart, @backingInt(proto.Topic.uart), event, tx);
 }

@@ -30,7 +30,7 @@ const Fixture = struct {
 
     /// What ra8_rtc.c's internal_start_count_source writes, in its own order.
     fn startSubClock(self: *Fixture) void {
-        self.storeMode(@intFromEnum(subclock.Drive.standard));
+        self.storeMode(@backingInt(subclock.Drive.standard));
         self.storeControl(0);
     }
 };
@@ -62,7 +62,7 @@ test "a drive change while the crystal swings is refused and counted" {
     fix.init();
     fix.unlock();
     fix.startSubClock();
-    fix.storeMode(@intFromEnum(subclock.Drive.lp3));
+    fix.storeMode(@backingInt(subclock.Drive.lp3));
     try std.testing.expectEqual(subclock.Drive.standard, fix.unit.drive());
     try std.testing.expectEqual(@as(u32, 1), fix.unit.refused_running);
 }
@@ -72,10 +72,10 @@ test "stopping the crystal again reopens the drive register" {
     fix.init();
     fix.unlock();
     fix.startSubClock();
-    fix.storeMode(@intFromEnum(subclock.Drive.lp2));
+    fix.storeMode(@backingInt(subclock.Drive.lp2));
     fix.storeControl(subclock.field.sostp);
     try std.testing.expect(!fix.unit.running());
-    fix.storeMode(@intFromEnum(subclock.Drive.lp2));
+    fix.storeMode(@backingInt(subclock.Drive.lp2));
     try std.testing.expectEqual(subclock.Drive.lp2, fix.unit.drive());
     try std.testing.expectEqual(@as(u32, 1), fix.unit.refused_running);
 }
@@ -85,7 +85,7 @@ test "every drive code round-trips while the crystal is stopped" {
     fix.init();
     fix.unlock();
     for ([_]subclock.Drive{ .standard, .lp1, .lp2, .lp3 }) |want| {
-        fix.storeMode(@intFromEnum(want));
+        fix.storeMode(@backingInt(want));
         try std.testing.expectEqual(want, fix.unit.drive());
     }
     try std.testing.expectEqual(@as(u32, 0), fix.unit.refused_running);
@@ -117,7 +117,7 @@ test "PRC0 is judged before the ordering rule" {
     fix.unlock();
     fix.startSubClock();
     fix.relock();
-    fix.storeMode(@intFromEnum(subclock.Drive.lp1));
+    fix.storeMode(@backingInt(subclock.Drive.lp1));
     try std.testing.expectEqual(@as(u32, 1), fix.unit.dropped_locked);
     try std.testing.expectEqual(@as(u32, 0), fix.unit.refused_running);
 }
@@ -138,7 +138,7 @@ test "the two registers read back on their own lanes" {
     var fix: Fixture = undefined;
     fix.init();
     fix.unlock();
-    fix.storeMode(@intFromEnum(subclock.Drive.lp3));
+    fix.storeMode(@backingInt(subclock.Drive.lp3));
     try std.testing.expectEqual(
         @as(u32, subclock.field.sostp),
         fix.unit.read(subclock.win_base, 1),
@@ -183,7 +183,7 @@ test "a refused drive store still breaks quiet" {
     fix.unlock();
     fix.storeControl(0);
     const before = fix.unit.stores;
-    fix.storeMode(@intFromEnum(subclock.Drive.lp3));
+    fix.storeMode(@backingInt(subclock.Drive.lp3));
     try std.testing.expect(!fix.unit.quiet());
     try std.testing.expectEqual(before, fix.unit.stores);
 }

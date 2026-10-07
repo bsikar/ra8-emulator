@@ -32,7 +32,7 @@ fn contextWith(hook: ?*Hook) handlers.Context {
 fn refusedCode(outcome: anytype) ?u16 {
     return switch (outcome) {
         .ok => null,
-        .err => |code| @intFromEnum(code),
+        .err => |code| @backingInt(code),
     };
 }
 

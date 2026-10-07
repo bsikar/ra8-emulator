@@ -93,7 +93,7 @@ pub const Link = struct {
     /// Send a request and return its id; the response comes back by pump.
     pub fn send(self: *Link, comptime Args: type, method: proto.Method, args: Args) !u32 {
         if (self.state != .connected) return error.NotConnected;
-        return self.client.call(Args, @intFromEnum(method), args, 0, self.tx) catch |err| {
+        return self.client.call(Args, @backingInt(method), args, 0, self.tx) catch |err| {
             self.fail(err);
             return err;
         };

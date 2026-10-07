@@ -57,7 +57,7 @@ test "only the window relations read DODSR1" {
 }
 
 test "the reserved encodings answer as the reset relation and say so" {
-    const reserved: compare.Relation = @enumFromInt(6);
+    const reserved: compare.Relation = @fromBackingInt(@intCast(6));
     try std.testing.expect(compare.hit(reserved, 7, 9, 0));
     try std.testing.expect(!compare.hit(reserved, 9, 9, 0));
     try std.testing.expect(!reserved.windowed());

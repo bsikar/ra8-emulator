@@ -49,7 +49,7 @@ pub fn narrow(d: u128, m: u128, size: Size, half: Half, spec: Narrow) int.Sat {
             saturated = saturated or c != r;
             r = c;
         }
-        out = qreg.setElem(out, size, 2 * e + @intFromEnum(half), @truncate(@as(u128, @bitCast(r))));
+        out = qreg.setElem(out, size, 2 * e + @backingInt(half), @truncate(@as(u128, @bitCast(r))));
     }
     return .{ .value = out, .saturated = saturated };
 }
@@ -61,7 +61,7 @@ pub fn widen(m: u128, size: Size, half: Half, unsigned: bool, left: u6) u128 {
     var out: u128 = 0;
     for (0..qreg.lanes(wide)) |k| {
         const e: u8 = @intCast(k);
-        const x = int.extend(qreg.elem(m, size, 2 * e + @intFromEnum(half)), size, unsigned);
+        const x = int.extend(qreg.elem(m, size, 2 * e + @backingInt(half)), size, unsigned);
         const r = x << left;
         out = qreg.setElem(out, wide, e, @truncate(@as(u64, @bitCast(r))));
     }

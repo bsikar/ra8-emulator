@@ -70,5 +70,5 @@ pub const SoftStart = enum(u2) {
 };
 
 pub fn softStartOf(code: u2) SoftStart {
-    return @enumFromInt(code);
+    return @fromBackingInt(@intCast(code));
 }

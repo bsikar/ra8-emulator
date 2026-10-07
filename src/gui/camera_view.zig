@@ -88,7 +88,7 @@ pub const Layout = struct {
     }
 
     pub fn source(self: Layout, kind: Kind) Rect {
-        const at: i32 = @intCast(@intFromEnum(kind));
+        const at: i32 = @intCast(@backingInt(kind));
         return .{ .x = self.x + gap + at * (button + gap), .y = self.y + gap, .w = button, .h = button };
     }
 
@@ -99,7 +99,7 @@ pub const Layout = struct {
     }
 
     pub fn dialog(self: Layout, reply: Answer) Rect {
-        const at: i32 = @intCast(@intFromEnum(reply));
+        const at: i32 = @intCast(@backingInt(reply));
         const y = self.y + 2 * gap + button;
         return .{ .x = self.x + gap + at * (button + gap), .y = y, .w = button, .h = button };
     }

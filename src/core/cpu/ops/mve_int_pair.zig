@@ -32,7 +32,7 @@ const Kind = enum { vqadd, vqsub, vhadd, vrhadd, vhsub, vmax, vmin, vabd };
 
 fn kindOf(tail: u16) ?Kind {
     inline for (@typeInfo(Kind).@"enum".fields) |f| {
-        if (tail == @field(encodings, f.name)) return @enumFromInt(f.value);
+        if (tail == @field(encodings, f.name)) return @fromBackingInt(@intCast(f.value));
     }
     return null;
 }

@@ -115,7 +115,7 @@ pub const Cache = struct {
     }
 
     pub fn count(self: *const Cache, which: Op) u32 {
-        return self.seen[@intFromEnum(which)];
+        return self.seen[@backingInt(which)];
     }
 
     /// Boundaries at which a whole-cache set/way walk was asked for, either
@@ -150,7 +150,7 @@ pub const Cache = struct {
         try core.writeWord(memmap.cache.ctr, self.ctr);
         try core.writeWord(memmap.cache.ccsidr, self.ccsidr);
         inline for (@typeInfo(Op).@"enum".fields) |field| {
-            try core.writeWord((@as(Op, @enumFromInt(field.value))).address(), idle);
+            try core.writeWord((@as(Op, @fromBackingInt(@intCast(field.value)))).address(), idle);
         }
     }
 
@@ -166,7 +166,7 @@ pub const Cache = struct {
             self.changes +%= 1;
         }
         inline for (@typeInfo(Op).@"enum".fields) |field| {
-            const which: Op = @enumFromInt(field.value);
+            const which: Op = @fromBackingInt(@intCast(field.value));
             if (try core.readWord(which.address()) != idle) {
                 self.seen[field.value] +%= 1;
                 try core.writeWord(which.address(), idle);

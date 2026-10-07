@@ -14,7 +14,7 @@ fn fwRequest(buf: []u8, kind: event.Kind, uid: u32) ![]const u8 {
     var proto_buf: [32]u8 = undefined;
     var proto: event.Writer = .{ .buf = &proto_buf };
     try proto.key(1, 0);
-    try proto.varint(@intFromEnum(kind));
+    try proto.varint(@backingInt(kind));
     try proto.key(2, 0);
     try proto.varint(rpc.Id.req_fw_version);
     try proto.key(3, 0);

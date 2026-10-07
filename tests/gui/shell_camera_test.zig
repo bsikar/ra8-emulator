@@ -43,7 +43,7 @@ const Wire = struct {
 };
 
 fn reply(camera: *Camera, id: u32, ok: bool) void {
-    const result: Env.Result = if (ok) .{ .ok = "" } else .{ .err = @enumFromInt(0x0100) };
+    const result: Env.Result = if (ok) .{ .ok = "" } else .{ .err = @fromBackingInt(@intCast(0x0100)) };
     camera.observe(.{ .response = .{ .id = id, .result = result } });
 }
 

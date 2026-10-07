@@ -35,7 +35,7 @@ pub fn fields(instr: Instr) ?Fields {
         .qd = @intCast(instr.hw2 >> 13),
         .qm = @intCast(instr.hw2 >> 1 & 7),
         .size = shape.size,
-        .half = @enumFromInt(instr.hw2 >> 12 & 1),
+        .half = @fromBackingInt(@intCast(instr.hw2 >> 12 & 1)),
         .unsigned = instr.hw1 >> 12 & 1 == 1,
         .left = shape.left,
     };

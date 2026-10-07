@@ -105,7 +105,7 @@ pub const Unit = struct {
     }
 
     pub fn drive(self: *const Unit) Drive {
-        return @enumFromInt(@as(u2, @truncate(self.somcr & field.sodrv)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate(self.somcr & field.sodrv))));
     }
 
     pub fn read(self: *const Unit, address: u32, width: u3) u32 {

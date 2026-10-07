@@ -36,7 +36,7 @@ fn mdio(index: u32, op: regs.Op, data: u16) u32 {
     return regs.rmac.psme |
         (eth_phy.address << regs.rmac.pda_shift) |
         (index << regs.rmac.pra_shift) |
-        (@as(u32, @intFromEnum(op)) << regs.rmac.pop_shift) |
+        (@as(u32, @backingInt(op)) << regs.rmac.pop_shift) |
         (@as(u32, data) << regs.rmac.prd_shift);
 }
 

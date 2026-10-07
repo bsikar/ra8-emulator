@@ -95,7 +95,7 @@ pub const Mode = enum(u32) {
 
 /// The mode GTCR selects.
 pub fn modeOf(cr: u32) Mode {
-    return @enumFromInt((cr & field.md) >> field.shift);
+    return @fromBackingInt(@intCast((cr & field.md) >> field.shift));
 }
 
 /// What GTCR.MD has been set to over a channel's life. GTCR is written a

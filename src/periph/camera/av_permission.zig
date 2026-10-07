@@ -53,7 +53,7 @@ pub fn status(runtime: Runtime) Status {
     const device = runtime.class("AVCaptureDevice") orelse return .not_determined;
     const select = runtime.selector("authorizationStatusForMediaType:") orelse return .not_determined;
     const video = runtime.video orelse return .not_determined;
-    return @enumFromInt(runtime.send(device, select, video));
+    return @fromBackingInt(@intCast(runtime.send(device, select, video)));
 }
 
 pub const objc_path = "/usr/lib/libobjc.A.dylib";

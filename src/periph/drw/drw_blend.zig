@@ -120,8 +120,8 @@ pub const Style = struct {
         const low = word >> control2.format_low_shift & control2.format_low_mask;
         const high: u32 = if (word & control2.format_high != 0) 0x4 else 0;
         return .{
-            .format = @enumFromInt(@as(u3, @intCast(low | high))),
-            .write_alpha = @enumFromInt(@as(u2, @intCast(word >> control2.write_alpha_shift & control2.write_alpha_mask))),
+            .format = @fromBackingInt(@intCast(@as(u3, @intCast(low | high)))),
+            .write_alpha = @fromBackingInt(@intCast(@as(u2, @intCast(word >> control2.write_alpha_shift & control2.write_alpha_mask)))),
             .blend_alpha = word & control2.use_acb != 0,
             .src = .{ .is_alpha = word & control2.src_factor != 0, .invert = word & control2.src_invert != 0 },
             .dst = .{ .is_alpha = word & control2.dst_factor != 0, .invert = word & control2.dst_invert != 0 },

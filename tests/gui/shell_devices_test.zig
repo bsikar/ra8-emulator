@@ -51,7 +51,7 @@ fn answer(devices: *Devices, id: u32, text: []const u8) !void {
 test "only the response to its own ask is kept" {
     var devices: Devices = .{ .asked = 7 };
     try std.testing.expectEqual(@as(?[]const u8, null), devices.note());
-    devices.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.uart), .payload = "x" } });
+    devices.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } });
     try answer(&devices, 6, "led@gpio:P106\n");
     try std.testing.expect(!devices.answered);
     try answer(&devices, 7, "lsm6dso@i2c:touch@0x6b\nmax17048@i2c:touch@0x36\n");
@@ -66,7 +66,7 @@ test "only the response to its own ask is kept" {
 
 test "a refused, garbled or empty reply leaves a note" {
     var refused: Devices = .{ .asked = 1 };
-    refused.observe(.{ .response = .{ .id = 1, .result = .{ .err = @enumFromInt(0x0003) } } });
+    refused.observe(.{ .response = .{ .id = 1, .result = .{ .err = @fromBackingInt(@intCast(0x0003)) } } });
     try std.testing.expectEqualStrings("the session would not list its parts", refused.note().?);
     var garbled: Devices = .{ .asked = 1 };
     garbled.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "" } } });
@@ -172,7 +172,7 @@ test "a refused unplug keeps the rows and leaves a note under them" {
     var devices: Devices = .{ .asked = 1 };
     try answer(&devices, 1, "lsm6dso@i2c:touch@0x6b\n");
     devices.unplugging = 5;
-    devices.observe(.{ .response = .{ .id = 5, .result = .{ .err = @enumFromInt(0x0100) } } });
+    devices.observe(.{ .response = .{ .id = 5, .result = .{ .err = @fromBackingInt(@intCast(0x0100)) } } });
     try std.testing.expect(devices.unplug_refused);
     try std.testing.expect(devices.want);
     try std.testing.expectEqualStrings("lsm6dso@i2c:touch@0x6b", devices.line(0).?);

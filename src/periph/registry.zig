@@ -146,7 +146,7 @@ pub const Bus = struct {
     /// The port `issuer` reaches the bus through. Its address is stable for
     /// as long as the bus is, which is what an MMIO hook needs.
     pub fn port(self: *Bus, issuer: Issuer) *Port {
-        const slot = &self.ports[@intFromEnum(issuer)];
+        const slot = &self.ports[@backingInt(issuer)];
         slot.* = .{ .bus = self, .issuer = issuer };
         return slot;
     }

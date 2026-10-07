@@ -26,8 +26,7 @@ fn clearFlags() void {
     asm volatile ("vmsr fpscr, %[v]"
         :
         : [v] "r" (@as(u32, 0)),
-        : "memory"
-    );
+        : .{ .memory = true });
 }
 
 fn store(word: u32) void {
@@ -39,8 +38,7 @@ fn storeFpscr() void {
     store(asm volatile ("vmrs %[v], fpscr"
         : [v] "=r" (-> u32),
         :
-        : "memory"
-    ));
+        : .{ .memory = true }));
 }
 
 fn single(a: f32, b: f32) void {

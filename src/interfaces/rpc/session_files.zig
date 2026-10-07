@@ -12,7 +12,7 @@ const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
 fn refused(err: anyerror) Ack {
     std.debug.print("serve: {s}\n", .{@errorName(err)});
-    return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
 }
 
 /// Write the whole run to `path`.

@@ -89,7 +89,7 @@ pub const Status = struct {
     }
 
     fn stopped(self: *Status, event: Env.Event) void {
-        if (event.topic != @intFromEnum(proto.Topic.stop)) return;
+        if (event.topic != @backingInt(proto.Topic.stop)) return;
         const stop = proto.decode(proto.Stopped, event.payload) catch return;
         if (stop.core != self.core) return;
         self.run = .{ .halted = .{ .address = stop.address, .reason = stop.reason } };

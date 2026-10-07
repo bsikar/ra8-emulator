@@ -36,7 +36,7 @@ test "every CFSR cause sits on its DDI0553 D1.2.11 bit" {
 
 test "each cause belongs to the sub-register its bit falls in" {
     inline for (@typeInfo(status.Cause).@"enum".fields) |entry| {
-        const cause: status.Cause = @enumFromInt(entry.value);
+        const cause: status.Cause = @fromBackingInt(@intCast(entry.value));
         const mask: u32 = switch (cause.fault()) {
             .mem_manage => status.cfsr.mmfsr,
             .bus_fault => status.cfsr.bfsr,
@@ -69,8 +69,8 @@ test "a word with every cause set decodes to all of them in bit order" {
     try std.testing.expectEqual(@typeInfo(status.Cause).@"enum".fields.len, found.len);
     var last: u5 = 0;
     for (found.constSlice(), 0..) |cause, i| {
-        if (i > 0) try std.testing.expect(@intFromEnum(cause) > last);
-        last = @intFromEnum(cause);
+        if (i > 0) try std.testing.expect(@backingInt(cause) > last);
+        last = @backingInt(cause);
     }
 }
 

@@ -271,7 +271,7 @@ pub const Fabric = struct {
     pub fn note(self: *Fabric, initiator: Initiator, hit: Hit, direction: Direction, len: usize) void {
         const initiator_index = initiator.timedIndex() orelse return;
         if (len == 0) return;
-        const region_index: usize = @intFromEnum(hit.kind);
+        const region_index: usize = @backingInt(hit.kind);
         const config = self.layout.config.region(hit.kind);
         const region = &self.regions[region_index];
         region.ready[initiator_index] = @max(region.ready[initiator_index], self.wall);
@@ -307,7 +307,7 @@ pub const Fabric = struct {
     }
 
     pub fn counters(self: *const Fabric, kind: Kind, elapsed: u64) Counters {
-        const region = &self.regions[@intFromEnum(kind)];
+        const region = &self.regions[@backingInt(kind)];
         const observed = @max(elapsed, region.latest);
         const observed_window = observed / self.layout.config.window_cycles;
         const partial_width = if (observed_window > region.window.index)

@@ -84,10 +84,10 @@ pub const Info = struct {
         const mra: u8 = @truncate(mr >> field.mra_shift);
         const mrb: u8 = @truncate(mr >> field.mrb_shift);
         return .{
-            .mode = @enumFromInt(@as(u2, @truncate(mra >> 6))),
-            .width = @enumFromInt(@as(u2, @truncate(mra >> 4))),
-            .source = @enumFromInt(@as(u2, @truncate(mra >> 2))),
-            .destination = @enumFromInt(@as(u2, @truncate(mrb >> 2))),
+            .mode = @fromBackingInt(@intCast(@as(u2, @truncate(mra >> 6)))),
+            .width = @fromBackingInt(@intCast(@as(u2, @truncate(mra >> 4)))),
+            .source = @fromBackingInt(@intCast(@as(u2, @truncate(mra >> 2)))),
+            .destination = @fromBackingInt(@intCast(@as(u2, @truncate(mrb >> 2)))),
             .interrupt_each = mrb & field.disel != 0,
             .chained = mrb & field.chne != 0,
             .sar = sar,

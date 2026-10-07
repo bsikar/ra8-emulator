@@ -141,7 +141,7 @@ pub const Tree = struct {
     divcr: u32 = 0,
     divcr2: u16 = 0,
     /// CKSEL. Resets to HOCO; see the header.
-    cksel: u8 = @intFromEnum(Source.hoco),
+    cksel: u8 = @backingInt(Source.hoco),
     /// Divider words the firmware programmed.
     programmed: u32 = 0,
     /// Source selects that landed.
@@ -174,7 +174,7 @@ pub const Tree = struct {
 
     /// The source the tree is running on right now.
     pub fn source(self: *const Tree) Source {
-        return @enumFromInt(self.cksel & cksel_mask);
+        return @fromBackingInt(@intCast(self.cksel & cksel_mask));
     }
 
     /// What one domain of SCKDIVCR divides by, or null for a code the firmware

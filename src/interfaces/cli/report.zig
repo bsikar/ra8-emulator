@@ -85,7 +85,7 @@ pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     if (!board.checksum.quiet()) {
         try out.print(
             "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
-            .{ @intFromEnum(board.checksum.gps()), board.checksum.dor, board.checksum.bytes },
+            .{ @backingInt(board.checksum.gps()), board.checksum.dor, board.checksum.bytes },
         );
         if (board.checksum.cleared != 0) {
             try out.print(
@@ -97,7 +97,7 @@ pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     if (!board.dataops.quiet()) {
         try out.print(
             "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
-            .{ @intFromEnum(board.dataops.mode()), board.dataops.dodsr0, @intFromBool(board.dataops.flag), board.dataops.ops },
+            .{ @backingInt(board.dataops.mode()), board.dataops.dodsr0, @intFromBool(board.dataops.flag), board.dataops.ops },
         );
         if (board.dataops.windows != 0) {
             try out.print(

@@ -21,7 +21,7 @@ pub fn write(writer: anytype, value: anytype) @TypeOf(writer).Error!void {
     switch (@typeInfo(T)) {
         .int => try writer.writeInt(Whole(T), value, .little),
         .bool => try writer.writeByte(@intFromBool(value)),
-        .@"enum" => try write(writer, @intFromEnum(value)),
+        .@"enum" => try write(writer, @backingInt(value)),
         .array => for (value) |item| try write(writer, item),
         .optional => if (value) |inner| {
             try writer.writeByte(1);

@@ -73,7 +73,7 @@ fn caches(board: *Board, out: Writer) !void {
         },
     );
     for (0..cache.op_count) |index| {
-        const which: cache.Op = @enumFromInt(index);
+        const which: cache.Op = @fromBackingInt(@intCast(index));
         const count = unit.count(which);
         if (count == 0) continue;
         try out.print("CACHE: {s} at {d} boundary(s)\n", .{ which.name(), count });

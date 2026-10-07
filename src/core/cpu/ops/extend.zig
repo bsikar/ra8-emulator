@@ -30,7 +30,7 @@ pub fn apply(kind: Kind, value: u32) u32 {
 }
 
 fn run(cpu: *Cpu, instr: Instr) op.Error!void {
-    const kind: Kind = @enumFromInt((instr.hw1 >> 6) & 3);
+    const kind: Kind = @fromBackingInt(@intCast((instr.hw1 >> 6) & 3));
     const rm: u4 = @intCast((instr.hw1 >> 3) & 7);
     const rd: u4 = @intCast(instr.hw1 & 7);
     cpu.regs.set(rd, apply(kind, cpu.regs.get(rm)));

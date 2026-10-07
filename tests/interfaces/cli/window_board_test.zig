@@ -76,11 +76,11 @@ const tcon = ra8.periph.glcdc_tcon;
 fn programPanel(unit: *tcon.Tcon) void {
     _ = unit.latch(tcon.off.tim, 0);
     _ = unit.latch(tcon.off.stva1, 1);
-    _ = unit.latch(tcon.off.stva2, @intFromEnum(tcon.Signal.stva) | tcon.field.invert);
+    _ = unit.latch(tcon.off.stva2, @backingInt(tcon.Signal.stva) | tcon.field.invert);
     _ = unit.latch(tcon.off.stha1, 1);
-    _ = unit.latch(tcon.off.stha2, @intFromEnum(tcon.Signal.de));
+    _ = unit.latch(tcon.off.stha2, @backingInt(tcon.Signal.de));
     _ = unit.latch(tcon.off.stvb1, 2 << tcon.field.start_shift | 32);
-    _ = unit.latch(tcon.off.stvb2, @intFromEnum(tcon.Signal.stha) | tcon.field.invert);
+    _ = unit.latch(tcon.off.stvb2, @backingInt(tcon.Signal.stha) | tcon.field.invert);
     _ = unit.latch(tcon.off.sthb1, 2 << tcon.field.start_shift | 64);
     _ = unit.latch(tcon.off.sthb2, 0);
     _ = unit.latch(tcon.off.de, 0);

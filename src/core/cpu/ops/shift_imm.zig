@@ -23,7 +23,7 @@ fn decode(instr: Instr) ?op.Exec {
 }
 
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
-    const kind: shift.Kind = @enumFromInt((instr.hw1 >> 11) & 0x3);
+    const kind: shift.Kind = @fromBackingInt(@intCast((instr.hw1 >> 11) & 0x3));
     const imm5: u5 = @intCast((instr.hw1 >> 6) & 0x1F);
     const rm: u4 = @intCast((instr.hw1 >> 3) & 0x7);
     const rd: u4 = @intCast(instr.hw1 & 0x7);

@@ -92,7 +92,7 @@ pub const Session = struct {
         self.input_script = script;
     }
     pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
-        self.board_ticks[@intFromEnum(core)] = .{ .tick = tick, .guest = guest };
+        self.board_ticks[@backingInt(core)] = .{ .tick = tick, .guest = guest };
     }
     pub fn attachDisplay(self: *Session, display: session_display.Display) void {
         self.display = display;
@@ -150,14 +150,14 @@ pub const Session = struct {
             symbols.addressOf(parsed, widget_tree.symbol)
         else |_|
             null;
-        self.widget_tree_addresses[@intFromEnum(core)] = tree_address;
+        self.widget_tree_addresses[@backingInt(core)] = tree_address;
         self.publish(.{ .core = core, .kind = .loaded });
     }
 
     /// Read the latest visible widget snapshot published by ra8_widget.
     pub fn widgets(self: *Session, allocator: std.mem.Allocator, core: Core) anyerror![]Widget {
         try self.select(core);
-        const address = self.widget_tree_addresses[@intFromEnum(core)] orelse return error.NoWidgetTree;
+        const address = self.widget_tree_addresses[@backingInt(core)] orelse return error.NoWidgetTree;
         return widget_tree.read(self.live.view(), address, allocator);
     }
 
@@ -195,7 +195,7 @@ pub const Session = struct {
     }
 
     fn advanceBoard(self: *Session, core: Core, instructions: u64) anyerror!void {
-        const board = self.board_ticks[@intFromEnum(core)] orelse return;
+        const board = self.board_ticks[@backingInt(core)] orelse return;
         var left = instructions;
         while (left > 0) {
             const count: u32 = @intCast(@min(left, std.math.maxInt(u32)));
@@ -229,7 +229,7 @@ pub const Session = struct {
                 .kind = .fault,
                 .address = address,
                 .payload = .{ .fault = .{
-                    .cause = @intFromEnum(std.meta.activeTag(ended.core)),
+                    .cause = @backingInt(std.meta.activeTag(ended.core)),
                     .address = address,
                 } },
             });
@@ -337,11 +337,11 @@ pub const Session = struct {
     }
 
     pub fn hasCore(self: *const Session, core: Core) bool {
-        return @intFromEnum(core) == self.live.index or self.live.other != null;
+        return @backingInt(core) == self.live.index or self.live.other != null;
     }
 
     pub fn currentCore(self: *const Session) Core {
-        return @enumFromInt(self.live.index);
+        return @fromBackingInt(@intCast(self.live.index));
     }
 
     pub fn switchTo(self: *Session, core: Core) anyerror!void {
@@ -384,7 +384,7 @@ pub const Session = struct {
     }
 
     fn select(self: *Session, core: Core) anyerror!void {
-        return self.live.switchTo(@intFromEnum(core));
+        return self.live.switchTo(@backingInt(core));
     }
 
     /// Publish a board observation into bounded subscriber queues.

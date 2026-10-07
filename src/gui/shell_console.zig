@@ -37,7 +37,7 @@ pub const Console = struct {
             .event => |event| event,
             .response => return,
         };
-        if (event.topic != @intFromEnum(proto.Topic.uart)) return;
+        if (event.topic != @backingInt(proto.Topic.uart)) return;
         const sent = proto.decode(proto.Uart, event.payload) catch return;
         try self.log.feedAll(sent.bytes, sent.virtual_ns);
     }

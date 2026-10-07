@@ -85,12 +85,12 @@ pub const Client = struct {
     /// Call `method` and decode its `Reply`, skipping events on the way.
     /// A slice in the reply lives until the next call.
     pub fn call(self: *Client, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
-        _ = try self.client.call(Args, @intFromEnum(method), args, 0, self.tx);
+        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
         while (true) switch (try self.next()) {
             .response => |response| switch (response.result) {
                 .ok => |bytes| return try proto.decode(Reply, bytes),
                 .err => |code| {
-                    self.refused = @intFromEnum(code);
+                    self.refused = @backingInt(code);
                     return error.Refused;
                 },
             },
@@ -114,7 +114,7 @@ pub const Client = struct {
     /// The next stop event the server sends.
     pub fn stop(self: *Client) !proto.Stopped {
         while (true) switch (try self.next()) {
-            .event => |frame| if (frame.topic == @intFromEnum(proto.Topic.stop)) {
+            .event => |frame| if (frame.topic == @backingInt(proto.Topic.stop)) {
                 return try proto.decode(proto.Stopped, frame.payload);
             },
             else => {},

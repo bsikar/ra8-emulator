@@ -34,7 +34,7 @@ fn programLayer(unit: *glcdc.Glcdc, layer: u32, base: u32) void {
     unit.write(layer + glcdc.off.flm2, 4, base);
     unit.write(layer + glcdc.off.flm3, 4, 960 << 16);
     unit.write(layer + glcdc.off.flm5, 4, 271 << 16);
-    unit.write(layer + glcdc.off.flm6, 4, @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 28);
+    unit.write(layer + glcdc.off.flm6, 4, @as(u32, @backingInt(glcdc.Format.rgb565)) << 28);
     unit.write(layer + glcdc.off.flmrd, 4, 1);
 }
 
@@ -169,7 +169,7 @@ test "a stride past the dimension cap is refused" {
     var unit = glcdc.Glcdc.init(&domain);
     programLayer(&unit, layer1, fb_base);
     unit.write(layer1 + glcdc.off.flm3, 4, 0xFFFF << 16);
-    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @intFromEnum(glcdc.Format.clut8)) << 28);
+    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @backingInt(glcdc.Format.clut8)) << 28);
     try std.testing.expectEqual(@as(?glcdc.Framebuffer, null), unit.framebuffer());
 }
 
@@ -178,7 +178,7 @@ test "the width recovery follows the format's fetch width" {
     const domain = poweredDomain(&guard);
     var unit = glcdc.Glcdc.init(&domain);
     programLayer(&unit, layer1, fb_base);
-    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @intFromEnum(glcdc.Format.argb8888)) << 28);
+    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @backingInt(glcdc.Format.argb8888)) << 28);
     const found = unit.framebuffer().?;
     try std.testing.expectEqual(@as(u32, 240), found.width);
     try std.testing.expectEqual(glcdc.Format.argb8888, found.format);
@@ -266,7 +266,7 @@ test "a byte store into the format lane leaves the rest of FLM6 standing" {
     var unit = glcdc.Glcdc.init(&domain);
     unit.write(layer1 + glcdc.off.flm6, 4, 0x0000_00AB);
     // FORMAT sits at [30:28], so a driver setting it alone stores the top byte.
-    const format = @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 4;
+    const format = @as(u32, @backingInt(glcdc.Format.rgb565)) << 4;
     unit.write(layer1 + glcdc.off.flm6 + 3, 1, format);
     try std.testing.expectEqual(
         @as(u32, (format << 24) | 0xAB),
@@ -284,7 +284,7 @@ test "a layer programmed with narrow stores still decodes" {
     unit.write(layer1 + glcdc.off.flm2 + 2, 2, fb_base >> 16);
     unit.write(layer1 + glcdc.off.flm3 + 2, 2, 960);
     unit.write(layer1 + glcdc.off.flm5 + 2, 2, 271);
-    unit.write(layer1 + glcdc.off.flm6 + 3, 1, @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 4);
+    unit.write(layer1 + glcdc.off.flm6 + 3, 1, @as(u32, @backingInt(glcdc.Format.rgb565)) << 4);
     unit.write(layer1 + glcdc.off.flmrd, 1, 1);
     unit.write(bg_en, 1, 1);
     const frame = unit.framebuffer() orelse return error.NoFramebuffer;
@@ -376,7 +376,7 @@ test "a layer descriptor still decodes after its VEN went by" {
     unit.write(layer1 + glcdc.off.flm2, 4, fb_base);
     unit.write(layer1 + glcdc.off.flm3, 4, 960 << 16);
     unit.write(layer1 + glcdc.off.flm5, 4, 271 << 16);
-    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @intFromEnum(glcdc.Format.rgb565)) << 28);
+    unit.write(layer1 + glcdc.off.flm6, 4, @as(u32, @backingInt(glcdc.Format.rgb565)) << 28);
     unit.write(layer1 + glcdc.off.flmrd, 4, 1);
     unit.write(glcdc.win_base + 0x1100, 4, 1);
     unit.write(bg_en, 4, 0x101);

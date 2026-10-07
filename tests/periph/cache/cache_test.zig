@@ -55,7 +55,7 @@ test "priming leaves every maintenance port on the idle sentinel" {
     var unit = try primed(&ppb);
     _ = &unit;
     for (0..cache.op_count) |index| {
-        const which: cache.Op = @enumFromInt(index);
+        const which: cache.Op = @fromBackingInt(@intCast(index));
         try std.testing.expectEqual(cache.idle, try ppb.readWord(which.address()));
     }
 }
@@ -181,7 +181,7 @@ test "every operation names itself and its own register" {
     var seen = std.AutoHashMap(u32, void).init(std.testing.allocator);
     defer seen.deinit();
     for (0..cache.op_count) |index| {
-        const which: cache.Op = @enumFromInt(index);
+        const which: cache.Op = @fromBackingInt(@intCast(index));
         try std.testing.expect(which.name().len != 0);
         try std.testing.expect(!seen.contains(which.address()));
         try seen.put(which.address(), {});

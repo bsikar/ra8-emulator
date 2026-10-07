@@ -61,7 +61,7 @@ pub fn compute(kind: Kind, m: u32, n: u32) Result {
 }
 
 fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
-    const kind: Kind = @enumFromInt((instr.hw2 >> 4) & 0x3);
+    const kind: Kind = @fromBackingInt(@intCast((instr.hw2 >> 4) & 0x3));
     const rn: u4 = @intCast(instr.hw1 & 0xF);
     const rd: u4 = @intCast((instr.hw2 >> 8) & 0xF);
     const rm: u4 = @intCast(instr.hw2 & 0xF);

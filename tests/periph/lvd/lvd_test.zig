@@ -14,7 +14,7 @@ const healthy: u8 = lvd.compare.enable | 0x09;
 const above_rail: u8 = lvd.compare.enable | 0x03;
 
 fn armed(unit: *lvd.Lvd, edge: lvd.Edge, level: u8) void {
-    unit.write(lvd.at(pvd1, .cr1), 1, @intFromEnum(edge));
+    unit.write(lvd.at(pvd1, .cr1), 1, @backingInt(edge));
     unit.write(lvd.at(pvd1, .cmpcr), 1, level);
 }
 

@@ -18,6 +18,6 @@ pub fn printPredicated(instr: Instr, out: *text.Text, suffix: []const u8) void {
     else
         (if (f.form.kind == .max) "vmaxv" else "vminv");
     const sign = if (f.form.unsigned) "u" else "s";
-    const width = sizes[@intFromEnum(f.size)];
+    const width = sizes[@backingInt(f.size)];
     out.put("{s}{s}.{s}{s} {s}, q{d}", .{ root, suffix, sign, width, text.names[rda], qm });
 }

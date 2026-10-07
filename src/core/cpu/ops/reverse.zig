@@ -22,7 +22,7 @@ fn decode(instr: Instr) ?op.Exec {
 }
 
 fn kindOf(hw1: u16) Kind {
-    return @enumFromInt((hw1 >> 6) & 3);
+    return @fromBackingInt(@intCast((hw1 >> 6) & 3));
 }
 
 /// `value` reversed the way `kind` says. `unallocated` returns it unchanged.

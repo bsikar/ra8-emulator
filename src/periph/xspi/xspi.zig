@@ -260,7 +260,7 @@ pub const Xspi = struct {
         const address = self.buffer(slot.address).*;
         const size = descriptor.dataSize(cdt);
         if (self.resetting.step(descriptor.opcode(cdt))) self.write_enabled = false;
-        switch (@as(Opcode, @enumFromInt(descriptor.opcode(cdt)))) {
+        switch (@as(Opcode, @fromBackingInt(@intCast(descriptor.opcode(cdt))))) {
             .read_id => self.buffer(slot.data0).* = self.flash.jedecWord(),
             .read_status => self.buffer(slot.data0).* = if (self.write_enabled) status.wel else 0,
             .write_enable => self.write_enabled = true,

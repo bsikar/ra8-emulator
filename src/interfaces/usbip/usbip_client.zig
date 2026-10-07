@@ -65,7 +65,7 @@ pub fn submit(out: *[wire.basic_len]u8, urb: Urb) void {
     put(out, 0, wire.cmd.submit);
     put(out, 4, urb.seqnum);
     put(out, 8, urb.devid);
-    put(out, 12, @intFromEnum(urb.direction));
+    put(out, 12, @backingInt(urb.direction));
     put(out, 16, urb.ep);
     put(out, 24, urb.length);
     out[40..48].* = urb.setup;

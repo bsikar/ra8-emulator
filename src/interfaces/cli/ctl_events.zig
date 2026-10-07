@@ -82,14 +82,14 @@ pub fn watch(client: *Client, w: anytype, json: bool, options: Options) !u8 {
         while (true) {
             const left = deadline - std.time.milliTimestamp();
             const sent = try client.event(@max(left, 1)) orelse return timedOut(w, json, options);
-            if (sent.topic == @intFromEnum(proto.Topic.uart)) {
+            if (sent.topic == @backingInt(proto.Topic.uart)) {
                 const uart = try proto.decode(proto.Uart, sent.payload);
                 try out.uart(w, json, uart);
                 const until = options.until orelse continue;
                 if (window.feed(until, uart.bytes)) return 0;
                 continue;
             }
-            if (sent.topic != @intFromEnum(proto.Topic.stop)) continue;
+            if (sent.topic != @backingInt(proto.Topic.stop)) continue;
             const stop = try proto.decode(proto.Stopped, sent.payload);
             if (stop.reason == .count) {
                 if (options.stop) try out.stopped(w, json, stop);

@@ -34,7 +34,7 @@ fn caches(j: anytype, unit: *const cache.Cache) !void {
     try j.field("refused_stores", unit.refused);
     try j.open("maintenance", '[');
     for (0..cache.op_count) |index| {
-        const which: cache.Op = @enumFromInt(index);
+        const which: cache.Op = @fromBackingInt(@intCast(index));
         const count = unit.count(which);
         if (count == 0) continue;
         try j.open(null, '{');

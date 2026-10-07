@@ -122,7 +122,7 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
             continue;
         }
         // walk() already refused any opcode outside Op.
-        try operate(&machine, memory, regions, @enumFromInt(code), word);
+        try operate(&machine, memory, regions, @fromBackingInt(@intCast(code)), word);
     }
     return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps, .quant = machine.quant, .elements = machine.elements };
 }

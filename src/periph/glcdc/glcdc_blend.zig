@@ -169,7 +169,7 @@ pub const Layer = struct {
     }
 
     pub fn display(self: Layer) Display {
-        return @enumFromInt(self.ab1 & field.dispsel);
+        return @fromBackingInt(@intCast(self.ab1 & field.dispsel));
     }
 
     /// AB1.GRCDISPON: whether the rectangle's frame line is drawn. The
@@ -266,7 +266,7 @@ pub const Layer = struct {
 /// and one that does not still expects its framebuffer on the panel.
 pub fn implied(width: u32, height: u32) Layer {
     return .{
-        .ab1 = field.grcdispon | @intFromEnum(Display.shown),
+        .ab1 = field.grcdispon | @backingInt(Display.shown),
         .ab2 = height & field.size_mask,
         .ab3 = width & field.size_mask,
         .implicit = true,

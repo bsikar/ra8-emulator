@@ -38,7 +38,7 @@ pub const Fd = struct {
         if (comptime !supported) return no_system_call;
         const self: *Fd = @ptrCast(@alignCast(ctx));
         const rc = std.os.linux.ioctl(self.fd, request, @intFromPtr(arg));
-        return @intFromEnum(std.os.linux.E.init(rc));
+        return @backingInt(std.os.linux.E.init(rc));
     }
 
     /// Reads one whole frame of `out.len` bytes with read() I/O.

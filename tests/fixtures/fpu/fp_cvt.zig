@@ -22,16 +22,14 @@ fn flags() void {
     store(asm volatile ("vmrs %[v], fpscr"
         : [v] "=r" (-> u32),
         :
-        : "memory"
-    ) & flag_mask);
+        : .{ .memory = true }) & flag_mask);
 }
 
 fn clear() void {
     asm volatile ("vmsr fpscr, %[v]"
         :
         : [v] "r" (@as(u32, 0)),
-        : "memory"
-    );
+        : .{ .memory = true });
 }
 
 /// Runs one single-register op on s0 and stores its result and flags.
@@ -40,8 +38,7 @@ fn single(comptime insn: []const u8, x: u32, keep: u32) void {
     store(asm volatile ("vmov s0, %[x]\n" ++ insn ++ "\nvmov %[r], s0"
         : [r] "=r" (-> u32),
         : [x] "r" (x),
-        : "s0", "memory"
-    ) & keep);
+        : .{ .s0 = true, .memory = true }) & keep);
     flags();
 }
 
@@ -53,8 +50,7 @@ fn widen(x: u32) void {
         : [lo] "=r" (lo),
           [hi] "=r" (hi),
         : [x] "r" (x),
-        : "s0", "d1", "memory"
-    );
+        : .{ .s0 = true, .d1 = true, .memory = true });
     store(lo);
     store(hi);
     flags();
@@ -67,8 +63,7 @@ fn fromDouble(comptime insn: []const u8, x: u64) void {
         : [r] "=r" (-> u32),
         : [lo] "r" (@as(u32, @truncate(x))),
           [hi] "r" (@as(u32, @truncate(x >> 32))),
-        : "s0", "d1", "memory"
-    ));
+        : .{ .s0 = true, .d1 = true, .memory = true }));
     flags();
 }
 
@@ -80,8 +75,7 @@ fn toDouble(x: u32) void {
         : [lo] "=r" (lo),
           [hi] "=r" (hi),
         : [x] "r" (x),
-        : "s0", "d1", "memory"
-    );
+        : .{ .s0 = true, .d1 = true, .memory = true });
     store(lo);
     store(hi);
     flags();

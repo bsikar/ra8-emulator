@@ -73,7 +73,7 @@ test "a divider word written with PRC0 shut goes nowhere and is counted" {
 test "a source select with PRC0 shut leaves the tree where it was" {
     var fix: Fixture = undefined;
     fix.init();
-    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @backingInt(sysclk.Source.pll1));
     try std.testing.expectEqual(sysclk.Source.hoco, fix.tree.source());
     try std.testing.expectEqual(@as(u32, 1), fix.tree.dropped_locked);
     try std.testing.expectEqual(@as(u32, 0), fix.tree.selects);
@@ -96,7 +96,7 @@ test "selecting a stabilised source is not remarked on" {
     // PLL1 comes up stopped; start it and let OSCSF raise PLL1SF.
     fix.start(oscsf.regs.pllcr);
     try std.testing.expect(fix.oscillators.running(oscsf.flag.pll1sf));
-    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @backingInt(sysclk.Source.pll1));
     try std.testing.expectEqual(sysclk.Source.pll1, fix.tree.source());
     try std.testing.expectEqual(@as(u32, 1), fix.tree.selects);
     try std.testing.expectEqual(@as(u32, 0), fix.tree.unstable_selects);
@@ -107,7 +107,7 @@ test "selecting a source that never stabilised lands, and is counted" {
     fix.init();
     fix.unlock();
     // PLL1 is still stopped, so PLL1SF is down and the driver skipped its wait.
-    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.pll1));
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @backingInt(sysclk.Source.pll1));
     try std.testing.expectEqual(sysclk.Source.pll1, fix.tree.source());
     try std.testing.expectEqual(@as(u32, 1), fix.tree.unstable_selects);
 }
@@ -116,7 +116,7 @@ test "a source with no OSCSF flag is selected without comment" {
     var fix: Fixture = undefined;
     fix.init();
     fix.unlock();
-    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @intFromEnum(sysclk.Source.moco));
+    fix.tree.write(Fixture.at(sysclk.regs.sckscr), 1, @backingInt(sysclk.Source.moco));
     try std.testing.expectEqual(sysclk.Source.moco, fix.tree.source());
     try std.testing.expectEqual(@as(u32, 0), fix.tree.unstable_selects);
     try std.testing.expectEqual(@as(u32, 0), fix.tree.reserved_selects);

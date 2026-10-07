@@ -50,7 +50,7 @@ const LoaderState = struct {
     fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
         const self: *LoaderState = @ptrCast(@alignCast(context));
         const image = try elf.Image.init(bytes);
-        const index = @intFromEnum(core);
+        const index = @backingInt(core);
         const cpu = self.cpu[index] orelse return error.CoreNotAttached;
         const memory = self.memory[index] orelse return error.CoreNotAttached;
         // The same map, option-window claim and write a `--cpu zig` run
@@ -127,7 +127,7 @@ pub const Harness = struct {
     /// The image a core last loaded (the opened one, until a session load
     /// replaces it), or null when nothing loaded on that core.
     pub fn loadedImage(self: *const Harness, core: session_api.Core) ?elf.Image {
-        const bytes = self.state.loading.loaded[@intFromEnum(core)] orelse return null;
+        const bytes = self.state.loading.loaded[@backingInt(core)] orelse return null;
         return elf.Image.init(bytes) catch null;
     }
 
@@ -144,7 +144,7 @@ pub const Harness = struct {
     }
 
     pub fn attachCore(self: *Harness, core: session_api.Core, cpu: *cpu_mod.Cpu, core_guest: Guest) void {
-        const index = @intFromEnum(core);
+        const index = @backingInt(core);
         self.state.loading.cpu[index] = cpu;
         self.state.loading.memory[index] = core_guest;
         self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);

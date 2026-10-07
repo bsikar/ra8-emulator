@@ -86,7 +86,7 @@ test "attribution is never looser than the IDAU" {
         const got = map.attribute(&unit, address);
         if (got.exempt) continue;
         const floor = map.answer(address).state;
-        try std.testing.expect(@intFromEnum(got.state) >= @intFromEnum(floor));
+        try std.testing.expect(@backingInt(got.state) >= @backingInt(floor));
     };
 }
 

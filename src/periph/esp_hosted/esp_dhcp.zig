@@ -37,7 +37,7 @@ pub fn messageType(data: []const u8) ?MessageType {
         }
         if (i + 2 >= data.len) return null;
         const len = data[i + 1];
-        if (code == 53 and len == 1) return @enumFromInt(data[i + 2]);
+        if (code == 53 and len == 1) return @fromBackingInt(@intCast(data[i + 2]));
         i += 2 + @as(usize, len);
     }
     return null;
@@ -66,7 +66,7 @@ pub fn reply(out: []u8, request: []const u8, kind: MessageType) void {
     @memcpy(out[236..240], &cookie);
     var lease: [4]u8 = undefined;
     std.mem.writeInt(u32, &lease, lease_seconds, .big);
-    var at = option(out, options_at, 53, &.{@intFromEnum(kind)});
+    var at = option(out, options_at, 53, &.{@backingInt(kind)});
     at = option(out, at, 54, &server_ip);
     at = option(out, at, 51, &lease);
     at = option(out, at, 1, &netmask);

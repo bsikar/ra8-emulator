@@ -26,7 +26,7 @@ pub const State = union(enum) {
 pub fn fromIt(it: u8) State {
     if (it & 0xF != 0) return .it;
     return switch (it >> 4) {
-        0, 1, 2, 4, 5 => .{ .eci = @enumFromInt(it >> 4) },
+        0, 1, 2, 4, 5 => .{ .eci = @fromBackingInt(@intCast(it >> 4)) },
         else => .reserved,
     };
 }
@@ -58,7 +58,7 @@ pub fn skipsFirstBeat(state: State) bool {
 /// left to the IT advance.
 pub fn next(it: u8) u8 {
     return switch (fromIt(it)) {
-        .eci => |e| if (e == .a0a1a2b0) @as(u8, @intFromEnum(Eci.a0)) << 4 else 0,
+        .eci => |e| if (e == .a0a1a2b0) @as(u8, @backingInt(Eci.a0)) << 4 else 0,
         else => it,
     };
 }

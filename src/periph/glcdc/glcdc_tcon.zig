@@ -81,7 +81,7 @@ pub const Pin = struct {
     programmed: bool = false,
 
     fn latch(self: *Pin, value: u32) void {
-        self.signal = @enumFromInt(value & field.sel_mask);
+        self.signal = @fromBackingInt(@intCast(value & field.sel_mask));
         self.inverted = value & field.invert != 0;
         self.programmed = true;
     }

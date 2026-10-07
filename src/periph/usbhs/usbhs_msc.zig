@@ -140,7 +140,7 @@ pub const Target = struct {
         std.mem.writeInt(u32, out[0..4], csw_signature, .little);
         std.mem.writeInt(u32, out[4..8], self.tag, .little);
         std.mem.writeInt(u32, out[8..12], self.expected -| self.sent, .little);
-        out[12] = @intFromEnum(self.status);
+        out[12] = @backingInt(self.status);
     }
 
     fn execute(self: *Target, cdb: []const u8) void {

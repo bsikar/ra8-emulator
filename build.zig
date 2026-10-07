@@ -24,7 +24,7 @@
 //! -Ddeps-prefix is accepted and ignored: the C library it pointed at is
 //! gone (RA8EMU-706), and existing invocations keep building.
 //!
-//! Zig 0.14.1, the version pinned in ra8-firmware .devcontainer/Dockerfile.
+//! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
@@ -48,20 +48,22 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "ra8_emulator",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
     });
     exe.root_module.addImport("ra8", emu);
     const build_options = b.addOptions();
     build_options.addOption(bool, "gui", gui);
     exe.root_module.addOptions("build_options", build_options);
-    exe.linkLibC();
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Run the emulator").dependOn(&run.step);
 
     // The gate is a program of its own: build.zig owns the formatter check,
@@ -75,7 +77,7 @@ pub fn build(b: *std.Build) void {
     // its parser through the same module the executable is built from.
     const table_mod = toolModule(b, target, optimize, "tools/example_table.zig");
     const table = b.addRunArtifact(b.addExecutable(.{ .name = "example_table", .root_module = table_mod }));
-    if (b.args) |args| table.addArgs(args);
+    table.addPassthruArgs();
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
     usbipAttach(b, target, optimize);
@@ -113,14 +115,13 @@ const TestImports = struct {
 
 /// One unit test binary over `root`, with every module the tests import.
 fn testBinary(b: *std.Build, name: []const u8, root: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, imports: TestImports, exe: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    const tests = b.addTest(.{ .name = name, .root_source_file = b.path(root), .target = target, .optimize = optimize });
+    const tests = b.addTest(.{ .name = name, .root_module = b.createModule(.{ .root_source_file = b.path(root), .target = target, .optimize = optimize, .link_libc = true }) });
     tests.root_module.addImport("ra8", imports.emu);
     tests.root_module.addImport("ra8_widget", imports.widget);
     tests.root_module.addImport("gate", imports.gate);
     tests.root_module.addImport("terms", imports.terms);
     tests.root_module.addImport("example_table", imports.table);
     tests.root_module.addImport("handoff_bench", imports.bench);
-    tests.linkLibC();
     testPaths(b, tests, exe);
     return tests;
 }
@@ -149,13 +150,13 @@ fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     consumer_step.dependOn(&consumer.step);
     test_step.dependOn(&consumer.step);
     test_step.dependOn(exe_step);
-    const harness_tests = b.addTest(.{
+    const harness_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("tests/harness_test.zig"),
         .target = target,
         .optimize = optimize,
-    });
+        .link_libc = true,
+    }) });
     harness_tests.root_module.addImport("ra8", emu);
-    harness_tests.linkLibC();
     const harness_step = b.step("harness-test", "Run public harness behavior tests");
     harness_step.dependOn(&b.addRunArtifact(harness_tests).step);
 }
@@ -164,15 +165,19 @@ fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
 /// everything we write, then a file and function length check over the same
 /// paths. Anything heavier belongs in ra8-firmware, not in a tool.
 fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths: []const []const u8 = &.{ "build.zig", "src", "tests", "tools" };
+    const paths = [_][]const u8{ "build.zig", "src", "tests", "tools" };
 
-    const fmt = b.addFmt(.{ .paths = paths, .check = true });
+    var fmt_paths: [paths.len]std.Build.LazyPath = undefined;
+    for (paths, &fmt_paths) |path, *lazy| lazy.* = b.path(path);
+    const fmt = b.addFmt(.{ .paths = &fmt_paths, .check = true });
 
     const checker = b.addExecutable(.{
         .name = "gate",
-        .root_source_file = b.path("tools/gate.zig"),
-        .target = target,
-        .optimize = .Debug,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/gate.zig"),
+            .target = target,
+            .optimize = .debug,
+        }),
     });
     const run = b.addRunArtifact(checker);
     run.has_side_effects = true;
@@ -187,9 +192,11 @@ fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "docs", "panels", "README.md", "AGENTS.md" };
     const checker = b.addExecutable(.{
         .name = "terms",
-        .root_source_file = b.path("tools/terms.zig"),
-        .target = target,
-        .optimize = .Debug,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/terms.zig"),
+            .target = target,
+            .optimize = .debug,
+        }),
     });
     const run = b.addRunArtifact(checker);
     run.has_side_effects = true;
@@ -207,7 +214,7 @@ fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
     });
     usbip_mod.addImport("usbip_client", b.createModule(.{ .root_source_file = b.path("src/interfaces/usbip/usbip_client.zig") }));
     const usbip = b.addRunArtifact(b.addExecutable(.{ .name = "usbip_attach", .root_module = usbip_mod }));
-    if (b.args) |args| usbip.addArgs(args);
+    usbip.addPassthruArgs();
     b.step("usbip-attach", "Attach --usbip PORT and check it end to end: -- PORT").dependOn(&usbip.step);
 }
 
@@ -251,7 +258,7 @@ fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     if (!target.query.isNative()) return sdl_mod;
     const run = b.addRunArtifact(hello);
     run.step.dependOn(&install.step);
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     step.dependOn(&run.step);
     return sdl_mod;
 }

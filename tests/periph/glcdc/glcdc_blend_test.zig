@@ -8,7 +8,7 @@ const blend = ra8.periph.glcdc_blend;
 fn layer() blend.Layer {
     var stage = blend.Layer{};
     // Driven, displayed, a 4x4 rectangle at the panel origin.
-    stage.ab1 = blend.field.grcdispon | @intFromEnum(blend.Display.shown);
+    stage.ab1 = blend.field.grcdispon | @backingInt(blend.Display.shown);
     stage.ab2 = 4;
     stage.ab3 = 4;
     return stage;
@@ -64,7 +64,7 @@ test "ARCDEF sits in AB7 [23:16], where ra8_glcdc_layer.c writes it" {
 
 test "a transparent layer stands aside and the miss is counted" {
     var stage = layer();
-    stage.ab1 = blend.field.grcdispon | @intFromEnum(blend.Display.transparent);
+    stage.ab1 = blend.field.grcdispon | @backingInt(blend.Display.transparent);
     try std.testing.expectEqual(@as(?u32, null), stage.contribution(0xFF00_FF00, 1, 1));
     try std.testing.expectEqual(@as(u32, 1), stage.hidden);
     try std.testing.expectEqual(@as(u32, 0), stage.shown);
@@ -85,14 +85,14 @@ test "a displayed layer hands back its pixel fully opaque" {
 
 test "a blended layer keeps the alpha its own pixel carries" {
     var stage = layer();
-    stage.ab1 = blend.field.grcdispon | @intFromEnum(blend.Display.blended);
+    stage.ab1 = blend.field.grcdispon | @backingInt(blend.Display.blended);
     const shown = stage.contribution(0x8012_3456, 0, 0).?;
     try std.testing.expectEqual(@as(u32, 0x8012_3456), shown);
 }
 
 test "a blended pixel with no alpha of its own takes ARCDEF" {
     var stage = layer();
-    stage.ab1 = blend.field.grcdispon | @intFromEnum(blend.Display.blended);
+    stage.ab1 = blend.field.grcdispon | @backingInt(blend.Display.blended);
     stage.ab7 = 0x40 << blend.field.arcdef_shift;
     const shown = stage.contribution(0x0012_3456, 0, 0).?;
     try std.testing.expectEqual(@as(u32, 0x4012_3456), shown);
@@ -100,14 +100,14 @@ test "a blended pixel with no alpha of its own takes ARCDEF" {
 
 test "a fully transparent blended pixel drops out and is counted hidden" {
     var stage = layer();
-    stage.ab1 = blend.field.grcdispon | @intFromEnum(blend.Display.blended);
+    stage.ab1 = blend.field.grcdispon | @backingInt(blend.Display.blended);
     try std.testing.expectEqual(@as(?u32, null), stage.contribution(0x0012_3456, 0, 0));
     try std.testing.expectEqual(@as(u32, 1), stage.hidden);
 }
 
 test "the alpha rectangle applies ARCDEF where it covers, and only there" {
     var stage = layer();
-    stage.ab1 = blend.field.grcdispon | blend.field.arcon | @intFromEnum(blend.Display.blended);
+    stage.ab1 = blend.field.grcdispon | blend.field.arcon | @backingInt(blend.Display.blended);
     stage.ab7 = 0x20 << blend.field.arcdef_shift;
     // A 1x1 alpha rectangle at the origin.
     stage.ab4 = 1;

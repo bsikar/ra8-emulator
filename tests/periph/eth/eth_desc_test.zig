@@ -23,7 +23,7 @@ test "byte one's high nibble is not part of the size" {
 
 test "a code with no type is still readable" {
     const raw = [_]u8{ 0, 0, 0x50, 0, 0, 0, 0, 0 };
-    try std.testing.expectEqual(@as(u4, 5), @intFromEnum(desc.Desc.decode(raw).dt));
+    try std.testing.expectEqual(@as(u4, 5), @backingInt(desc.Desc.decode(raw).dt));
 }
 
 test "the pointer is little-endian" {

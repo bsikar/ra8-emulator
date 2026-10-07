@@ -22,16 +22,14 @@ fn fpscr() void {
     store(asm volatile ("vmrs %[v], fpscr"
         : [v] "=r" (-> u32),
         :
-        : "memory"
-    ) & fpscr_mask);
+        : .{ .memory = true }) & fpscr_mask);
 }
 
 fn clear() void {
     asm volatile ("vmsr fpscr, %[v]"
         :
         : [v] "r" (@as(u32, 0)),
-        : "memory"
-    );
+        : .{ .memory = true });
 }
 
 /// Runs a two-operand single-precision op on s0, s1 and stores s0 when the
@@ -42,8 +40,7 @@ fn single(comptime insn: []const u8, comptime writes: bool, a: u32, b: u32) void
         : [r] "=r" (-> u32),
         : [a] "r" (a),
           [b] "r" (b),
-        : "s0", "s1", "memory"
-    );
+        : .{ .s0 = true, .s1 = true, .memory = true });
     if (writes) store(r);
     fpscr();
 }
@@ -60,8 +57,7 @@ fn double(comptime insn: []const u8, comptime writes: bool, a: u64, b: u64) void
           [ah] "r" (@as(u32, @truncate(a >> 32))),
           [bl] "r" (@as(u32, @truncate(b))),
           [bh] "r" (@as(u32, @truncate(b >> 32))),
-        : "d0", "d1", "memory"
-    );
+        : .{ .d0 = true, .d1 = true, .memory = true });
     if (writes) {
         store(lo);
         store(hi);

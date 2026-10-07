@@ -19,7 +19,7 @@ fn clientMessage(buf: *[dhcp.reply_len]u8, kind: dhcp.MessageType) void {
     buf[10] = 0x80;
     @memcpy(buf[28..34], &client_mac);
     @memcpy(buf[236..240], &dhcp.cookie);
-    @memcpy(buf[240..244], &[_]u8{ 53, 1, @intFromEnum(kind), 255 });
+    @memcpy(buf[240..244], &[_]u8{ 53, 1, @backingInt(kind), 255 });
 }
 
 /// The Ethernet frame the station broadcasts for client message `kind`.

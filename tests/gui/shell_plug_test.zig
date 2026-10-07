@@ -83,7 +83,7 @@ test "an ack clears the field and asks the list again" {
     try std.testing.expect(plug.attach(&wire.link));
     const id = plug.asking.?;
     try std.testing.expect(!plug.observe(.{ .response = .{ .id = id + 1, .result = .{ .ok = "" } } }));
-    try std.testing.expect(!plug.observe(.{ .event = .{ .topic = @intFromEnum(proto.Topic.uart), .payload = "x" } }));
+    try std.testing.expect(!plug.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } }));
     try std.testing.expect(plug.observe(.{ .response = .{ .id = id, .result = .{ .ok = "" } } }));
     try std.testing.expect(!plug.refused);
     try std.testing.expectEqual(@as(usize, 0), plug.field.value().len);
@@ -101,7 +101,7 @@ test "a refusal keeps the text and leaves a note" {
     try typed(&plug, &list, &devices, "bad@gpio");
     enter(&plug);
     try std.testing.expect(plug.attach(&wire.link));
-    try std.testing.expect(plug.observe(.{ .response = .{ .id = plug.asking.?, .result = .{ .err = @enumFromInt(0x0100) } } }));
+    try std.testing.expect(plug.observe(.{ .response = .{ .id = plug.asking.?, .result = .{ .err = @fromBackingInt(@intCast(0x0100)) } } }));
     try std.testing.expect(plug.refused);
     try std.testing.expectEqualStrings("bad@gpio", plug.field.value());
 }

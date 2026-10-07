@@ -39,7 +39,7 @@ fn busy() Stand {
     var board = Stand.wiredTo(&guard_a);
     board.capture.frames = 3;
     board.capture.last_width = 320;
-    board.capture.last_decline = @enumFromInt(0);
+    board.capture.last_decline = @fromBackingInt(@intCast(0));
     board.mailbox.wakes = 2;
     board.mailbox.attrib.sar = 0x55;
     board.modem.answered = 4;

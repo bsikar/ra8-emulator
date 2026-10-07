@@ -98,7 +98,7 @@ const Wire = struct {
     }
 
     fn call(self: *Wire, comptime Args: type, method: proto.Method, args: Args) !Env.Result {
-        _ = try self.client.call(Args, @intFromEnum(method), args, 0, self.tx);
+        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
         return self.finish();
     }
 
@@ -119,7 +119,7 @@ const Wire = struct {
     }
 
     fn record(self: *Wire, topic: u16, payload: []const u8) !void {
-        const known: proto.Topic = @enumFromInt(topic);
+        const known: proto.Topic = @fromBackingInt(@intCast(topic));
         try self.topics.append(known);
         switch (known) {
             .stop => self.stop = try proto.decode(proto.Stopped, payload),
@@ -139,7 +139,7 @@ fn reply(comptime T: type, result: Env.Result) !T {
     return switch (result) {
         .ok => |bytes| try proto.decode(T, bytes),
         .err => |code| {
-            std.debug.print("refused with {d}\n", .{@intFromEnum(code)});
+            std.debug.print("refused with {d}\n", .{@backingInt(code)});
             return error.Refused;
         },
     };
@@ -148,7 +148,7 @@ fn reply(comptime T: type, result: Env.Result) !T {
 fn refusal(result: Env.Result) !u16 {
     return switch (result) {
         .ok => error.Accepted,
-        .err => |refused| @intFromEnum(refused),
+        .err => |refused| @backingInt(refused),
     };
 }
 
@@ -211,7 +211,7 @@ test "the server refuses unknown methods, missing cores, oversized reads and sta
     try wire.open(&context);
 
     _ = try wire.client.callBytes(0x0200, &.{}, 0, wire.tx);
-    try std.testing.expectEqual(@intFromEnum(rpc.Code.unknown_method), try refusal(try wire.finish()));
+    try std.testing.expectEqual(@backingInt(rpc.Code.unknown_method), try refusal(try wire.finish()));
     const missing = try wire.call(proto.ReadRegister, .read_register, .{ .core = .cpu1, .register = .pc });
     try std.testing.expectEqual(served.app_codes.no_core, try refusal(missing));
     const long = try wire.call(proto.ReadMemory, .read_memory, .{ .core = .cpu0, .address = 0, .length = 9 });
@@ -299,7 +299,7 @@ test "part methods parse their spec, refuse a bad one and refuse a board with no
     defer wire.deinit();
     try wire.open(&context);
 
-    const bad = @intFromEnum(rpc.Code.bad_args);
+    const bad = @backingInt(rpc.Code.bad_args);
     const typo = try wire.call(proto.PartSpec, .plug, .{ .core = .cpu0, .text = "nosuch@i2c:riic@0x36" });
     try std.testing.expectEqual(bad, try refusal(typo));
     const no_mode = try wire.call(proto.PartSpec, .set_fault, .{ .core = .cpu0, .text = "@i2c:riic@0x36" });

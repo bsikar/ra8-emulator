@@ -69,7 +69,7 @@ pub const Width = enum(u6) {
     thirty_two = 32,
 
     pub fn bits(self: Width) u6 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     /// The part of a word a frame this wide carries.

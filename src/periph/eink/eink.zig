@@ -179,7 +179,7 @@ pub const Panel = struct {
         switch (self.state) {
             .command => {
                 self.state = .preamble;
-                self.takeCommand(@enumFromInt(word));
+                self.takeCommand(@fromBackingInt(@intCast(word)));
             },
             .data => {
                 self.state = .preamble;

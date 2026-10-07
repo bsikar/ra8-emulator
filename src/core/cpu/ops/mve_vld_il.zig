@@ -51,7 +51,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const rn: u4 = @intCast(instr.hw1 & 0xF);
     const base = cpu.regs.get(rn);
     const qd: u3 = @intCast(instr.hw2 >> 13);
-    const size: Size = @enumFromInt(instr.hw2 >> 7 & 3);
+    const size: Size = @fromBackingInt(@intCast(instr.hw2 >> 7 & 3));
     const load = instr.hw1 >> 4 & 1 == 1;
     var q: [4]u128 = undefined;
     for (0..regs) |r| q[r] = mve.qreg.read(&cpu.fp.bank, @intCast(qd + r));

@@ -17,9 +17,9 @@ const off_doscr = mod.off_doscr;
 const off_dosr = mod.off_dosr;
 const regAddress = mod.regAddress;
 
-const docr_add_32: u32 = @intFromEnum(Mode.add) | dobw_32;
+const docr_add_32: u32 = @backingInt(Mode.add) | dobw_32;
 
-const docr_sub_32: u32 = @intFromEnum(Mode.subtract) | dobw_32;
+const docr_sub_32: u32 = @backingInt(Mode.subtract) | dobw_32;
 test "an eight-entry add chain leaves the hardware sum in DODSR0" {
     var unit = Doc.init();
     unit.write(regAddress(off_docr), 1, docr_add_32);
@@ -46,7 +46,7 @@ test "a seeded reference is the first operand, not a cleared accumulator" {
 
 test "a 16-bit add wraps at the width and latches DOPCF" {
     var unit = Doc.init();
-    unit.write(regAddress(off_docr), 1, @intFromEnum(Mode.add)); // DOBW clear
+    unit.write(regAddress(off_docr), 1, @backingInt(Mode.add)); // DOBW clear
     unit.write(regAddress(off_dodsr0), 4, 0xFFF0);
     unit.write(regAddress(off_dodir), 4, 0x0020);
     try std.testing.expectEqual(@as(u32, 0x0010), unit.read(regAddress(off_dodsr0), 4));
@@ -64,7 +64,7 @@ test "a 32-bit add carries out of bit 31, which the C tree could not see" {
 
 test "DOPCF is sticky until DOSCR clears it" {
     var unit = Doc.init();
-    unit.write(regAddress(off_docr), 1, @intFromEnum(Mode.add));
+    unit.write(regAddress(off_docr), 1, @backingInt(Mode.add));
     unit.write(regAddress(off_dodsr0), 4, 0xFFFF);
     unit.write(regAddress(off_dodir), 4, 1); // carries
     try std.testing.expect(unit.flag);
@@ -95,14 +95,14 @@ test "subtract borrows below zero and masks to the width" {
 
 test "compare leaves the accumulator alone and only moves the flag" {
     var match = Doc.init();
-    match.write(regAddress(off_docr), 1, @intFromEnum(Mode.compare) | (1 << dcsel_shift) | dobw_32);
+    match.write(regAddress(off_docr), 1, @backingInt(Mode.compare) | (1 << dcsel_shift) | dobw_32);
     match.write(regAddress(off_dodsr0), 4, 0xABCD_1234);
     match.write(regAddress(off_dodir), 4, 0xABCD_1234);
     try std.testing.expect(match.flag);
     try std.testing.expectEqual(@as(u32, 0xABCD_1234), match.read(regAddress(off_dodsr0), 4));
 
     var differ = Doc.init();
-    differ.write(regAddress(off_docr), 1, @intFromEnum(Mode.compare) | dobw_32);
+    differ.write(regAddress(off_docr), 1, @backingInt(Mode.compare) | dobw_32);
     differ.write(regAddress(off_dodsr0), 4, 7);
     differ.write(regAddress(off_dodir), 4, 7);
     try std.testing.expect(!differ.flag); // mismatch relation, operands match
@@ -182,7 +182,7 @@ test "a 32-bit operand put in as two halfwords runs nothing at all" {
 
 test "a halfword store still carries the 16-bit operand ra8_doc.c writes" {
     var unit = Doc.init();
-    unit.write(regAddress(off_docr), 1, @intFromEnum(Mode.add)); // DOBW clear
+    unit.write(regAddress(off_docr), 1, @backingInt(Mode.add)); // DOBW clear
     unit.write(regAddress(off_dodsr0), 4, 0x0100);
     unit.write(regAddress(off_dodir), 2, 0x0024);
     try std.testing.expectEqual(@as(u32, 0x0124), unit.read(regAddress(off_dodsr0), 4));

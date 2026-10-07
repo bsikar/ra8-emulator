@@ -44,7 +44,7 @@ pub const Format = enum(u4) {
     pub fn decode(control2: u32) Format {
         const high = control2 >> field.high_shift & field.high_mask;
         const low = control2 >> field.low_shift & field.low_mask;
-        return @enumFromInt(@as(u4, @intCast(high << field.high_position | low)));
+        return @fromBackingInt(@intCast(@as(u4, @intCast(high << field.high_position | low))));
     }
 
     /// Bits per texel, or null for a code with no documented width.

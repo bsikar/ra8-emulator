@@ -79,7 +79,7 @@ pub const Sources = struct {
     fn currentCore(self: *const Sources, fallback: ?Core) Core {
         if (fallback) |core| return core;
         const found = self.issuer orelse return .cpu0;
-        return @enumFromInt(@intFromEnum(found.*));
+        return @fromBackingInt(@intCast(@backingInt(found.*)));
     }
 
     fn publish(self: *Sources, event: Event) void {
@@ -112,7 +112,7 @@ pub const Sources = struct {
     fn observed(context: *anyopaque, issuer: registry.Issuer, at_ns: u64, latest: board_events.Observation) void {
         _ = at_ns;
         const self: *Sources = @ptrCast(@alignCast(context));
-        self.active_core = @enumFromInt(@intFromEnum(issuer));
+        self.active_core = @fromBackingInt(@intCast(@backingInt(issuer)));
         self.observation = latest;
     }
 
@@ -171,6 +171,6 @@ pub const Sources = struct {
             .watchdog => .watchdog,
             .iwdt => .iwdt,
         };
-        self.publishAt(.{ .core = @enumFromInt(@intFromEnum(issuer)), .kind = .reset, .payload = .{ .reset = reset_kind } }, at_ns);
+        self.publishAt(.{ .core = @fromBackingInt(@intCast(@backingInt(issuer))), .kind = .reset, .payload = .{ .reset = reset_kind } }, at_ns);
     }
 };

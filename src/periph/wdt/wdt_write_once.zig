@@ -30,7 +30,7 @@ pub const Once = struct {
     written: u3 = 0,
 
     fn bitOf(which: Register) u3 {
-        return @as(u3, 1) << @intFromEnum(which);
+        return @as(u3, 1) << @backingInt(which);
     }
 
     /// True once this register has had its one write.

@@ -122,7 +122,7 @@ fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
 
 /// The selected core's thread id: CPU0 is 1, CPU1 is 2.
 fn thread(target: *const Target) u32 {
-    return @as(u32, @intFromEnum(target.session.currentCore())) + 1;
+    return @as(u32, @backingInt(target.session.currentCore())) + 1;
 }
 
 /// Thread `0` and `-1` mean any thread, so the selected one stands.
@@ -142,7 +142,7 @@ fn select(target: *Target, text: []const u8) bool {
     if (!alive(target, text)) return false;
     if (anyThread(text)) return true;
     const id = std.fmt.parseInt(u8, text, 16) catch return false;
-    target.session.switchTo(@enumFromInt(id - 1)) catch return false;
+    target.session.switchTo(@fromBackingInt(@intCast(id - 1))) catch return false;
     return true;
 }
 

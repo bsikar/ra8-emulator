@@ -12,7 +12,7 @@ const handlers = @import("session_handlers.zig");
 const registry = @import("../../periph/camera/camera_registry.zig");
 
 const Ack = rpc.Outcome(proto.Ack);
-const refused: Ack = .{ .err = @enumFromInt(handlers.app_codes.refused) };
+const refused: Ack = .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
 
 pub fn setCameraSource(context: *handlers.Context, args: proto.CameraSource) Ack {
     const camera = context.camera orelse return refused;

@@ -19,13 +19,13 @@ const Ack = rpc.Outcome(proto.Ack);
 const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
 fn core(of: proto.Core) @import("../../debug/session_api.zig").Core {
-    return @enumFromInt(@intFromEnum(of));
+    return @fromBackingInt(@intCast(@backingInt(of)));
 }
 
 fn refused(err: anyerror) Ack {
     std.debug.print("serve: {s}\n", .{@errorName(err)});
-    if (err == error.CoreNotAttached) return .{ .err = @enumFromInt(handlers.app_codes.no_core) };
-    return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    if (err == error.CoreNotAttached) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
 }
 
 /// `MODEL@ENDPOINT`: a fresh part of that model on that endpoint.
@@ -59,12 +59,12 @@ pub fn clearFault(context: *Context, args: proto.PartSpec) Ack {
 
 /// The fitted parts, one `MODEL@ENDPOINT` line each.
 pub fn listParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.PartList) {
-    const listing = context.listing orelse return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+    const listing = context.listing orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     const room = @min(context.scratch.len, proto.PartList.max_len.text);
     const text = listing.listFn(listing.context, context.scratch[0..room]) catch |err| {
-        if (err == error.NoSpaceLeft) return .{ .err = @enumFromInt(handlers.app_codes.too_long) };
+        if (err == error.NoSpaceLeft) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.too_long)) };
         std.debug.print("serve: {s}\n", .{@errorName(err)});
-        return .{ .err = @enumFromInt(handlers.app_codes.refused) };
+        return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     };
     return .{ .ok = .{ .text = text } };
 }

@@ -29,7 +29,7 @@ const sections = .{
 
 pub fn save(board: anytype, writer: anytype) !void {
     try file.writeSectionHeader(writer, .part, 1);
-    try fields.write(writer, @as(u8, @intFromEnum(board.part)));
+    try fields.write(writer, @as(u8, @backingInt(board.part)));
     try time.save(&board.time, writer);
     inline for (sections) |section| try section.save(board, writer);
 }
@@ -55,5 +55,5 @@ pub fn partOf(expected: Part, bytes: []const u8) Error!void {
     var cursor: fields.Cursor = .{ .bytes = section.payload };
     const tag = try fields.read(u8, &cursor);
     if (!cursor.done()) return Error.BadValue;
-    if (tag != @intFromEnum(expected)) return Error.WrongPart;
+    if (tag != @backingInt(expected)) return Error.WrongPart;
 }

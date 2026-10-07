@@ -51,7 +51,7 @@ pub const Relation = enum(u3) {
 
     /// The relation DOCR currently selects.
     pub fn of(docr: u8) Relation {
-        return @enumFromInt(@as(u3, @truncate((docr & field.mask) >> field.shift)));
+        return @fromBackingInt(@intCast(@as(u3, @truncate((docr & field.mask) >> field.shift))));
     }
 
     /// Whether this relation reads DODSR1 as an upper bound.

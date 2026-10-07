@@ -196,7 +196,7 @@ pub const Card = struct {
         const status: u8 = if (self.ready) r1.ready else r1.idle;
         self.app_cmd = false;
         self.commands +%= 1;
-        const command: Command = @enumFromInt(index);
+        const command: Command = @fromBackingInt(@intCast(index));
         if (self.trace) {
             var buf: sd_trace.Buffer = undefined;
             std.debug.print("{s}\n", .{sd_trace.line(&buf, index, arg, was_app)});

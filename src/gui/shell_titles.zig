@@ -12,8 +12,8 @@ const Kind = pane_layout.Kind;
 /// The kind after `kind`, wrapping from the last back to the first.
 pub fn nextKind(kind: Kind) Kind {
     const kinds = std.enums.values(Kind);
-    const at = @intFromEnum(kind) + 1;
-    return if (at == kinds.len) kinds[0] else @enumFromInt(at);
+    const at = @backingInt(kind) + 1;
+    return if (at == kinds.len) kinds[0] else @fromBackingInt(@intCast(at));
 }
 
 /// The leaf whose title bar holds (`x`, `y`), or null.

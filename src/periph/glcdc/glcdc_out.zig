@@ -99,11 +99,11 @@ pub const Shadow = struct {
     pdtha: u32 = 0,
 
     pub fn format(self: Shadow) Format {
-        return @enumFromInt(self.set >> field.format_shift & field.format_mask);
+        return @fromBackingInt(@intCast(self.set >> field.format_shift & field.format_mask));
     }
 
     pub fn dither(self: Shadow) Dither {
-        return @enumFromInt(self.pdtha >> field.dither_shift & field.dither_mask);
+        return @fromBackingInt(@intCast(self.pdtha >> field.dither_shift & field.dither_mask));
     }
 
     /// The 2x2 cell added before the bits are dropped, in output steps.

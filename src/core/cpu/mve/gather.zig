@@ -15,8 +15,8 @@ pub const Form = struct { msize: Size, esize: Size, signed: bool, store: bool, o
 /// memory no wider than the element, os never with bytes, and a signed
 /// load only when it widens. Stores are unsigned.
 pub fn valid(f: Form) bool {
-    const m = @intFromEnum(f.msize);
-    const e = @intFromEnum(f.esize);
+    const m = @backingInt(f.msize);
+    const e = @backingInt(f.esize);
     if (m > e) return false;
     if (f.os and f.msize == .byte) return false;
     if (f.signed) return !f.store and m < e;
@@ -27,7 +27,7 @@ pub const Address = struct { base: u32, offset: u32, msize: Size, os: bool };
 
 /// The address element e touches: Rn plus its offset, scaled when os.
 pub fn address(a: Address) u32 {
-    const shift: u5 = if (a.os) @intFromEnum(a.msize) else 0;
+    const shift: u5 = if (a.os) @backingInt(a.msize) else 0;
     return a.base +% (a.offset << shift);
 }
 

@@ -95,7 +95,7 @@ pub const Doc = struct {
     }
 
     pub fn mode(self: *const Doc) Mode {
-        return @enumFromInt(self.docr & oms_mask);
+        return @fromBackingInt(@intCast(self.docr & oms_mask));
     }
 
     /// DOCR.DOBW picks the arithmetic width: clear is 16-bit, set is 32-bit.

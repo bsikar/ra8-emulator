@@ -41,7 +41,7 @@ pub fn fields(instr: Instr) ?Fields {
     if (kind_bits == 0x3) return null;
     const imm3: u6 = @intCast((instr.hw2 >> 12) & 0x7);
     const imm2: u6 = @intCast((instr.hw2 >> 6) & 0x3);
-    const kind: Kind = @enumFromInt(kind_bits);
+    const kind: Kind = @fromBackingInt(@intCast(kind_bits));
     const amount = shiftAmount(kind, (imm3 << 2) | imm2) orelse return null;
     return .{ .lo = @intCast(instr.hw1 & 0xE), .hi = hi, .amount = amount, .kind = kind };
 }

@@ -176,7 +176,7 @@ pub const Syscnt = struct {
 
     /// Where the pixel clock is taken from.
     pub fn source(self: *const Syscnt) Source {
-        return @enumFromInt(self.panel_clk >> clock.source_shift & clock.source_mask);
+        return @fromBackingInt(@intCast(self.panel_clk >> clock.source_shift & clock.source_mask));
     }
 
     /// The divider the clock is taken through. Zero means the field was

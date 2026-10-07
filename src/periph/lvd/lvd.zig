@@ -84,7 +84,7 @@ pub const Channel = struct {
     touched: bool = false,
 
     pub fn edge(self: *const Channel) Edge {
-        return @enumFromInt(@as(u2, @truncate(self.cr1 & irq.idtsel)));
+        return @fromBackingInt(@intCast(@as(u2, @truncate(self.cr1 & irq.idtsel))));
     }
 
     /// Whether a DET latch would reach the CPU: RIE armed on an m channel.
