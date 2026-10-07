@@ -48,7 +48,7 @@ pub const Spec = struct {
                 std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
-            .webcam => webcam.open(allocator, self.arg, self.allow_webcam, format_control) catch |err| {
+            .webcam => webcam.open(allocator, io, self.arg, self.allow_webcam, format_control) catch |err| {
                 std.debug.print("--camera-source webcam:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             },

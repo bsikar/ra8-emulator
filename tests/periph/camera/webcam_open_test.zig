@@ -9,27 +9,27 @@ const opener = webcam.opener;
 const allocator = std.testing.allocator;
 var format_control: u8 = 0;
 
-fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.ArrayList(u8)) !ra8.periph.ceu.camera.frame_source.FrameSource {
-    var in = std.io.fixedBufferStream(answer);
-    return opener.openWith(allocator, arg, grant, in.reader(), said.writer(), &format_control);
+fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.Io.Writer.Allocating) !ra8.periph.ceu.camera.frame_source.FrameSource {
+    var in = std.Io.Reader.fixed(answer);
+    return opener.openWith(allocator, arg, grant, &in, &said.writer, &format_control);
 }
 
 test "a refused question opens nothing" {
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     const arg = if (builtin.os.tag == .macos) "0" else "/nonexistent/video9";
     try std.testing.expectError(error.WebcamRefused, openAnswering(arg, .ask, "n\n", &said));
     const question = if (builtin.os.tag == .macos) "webcam 0" else "open the host camera /nonexistent/video9?";
-    try std.testing.expect(std.mem.indexOf(u8, said.items, question) != null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), question) != null);
 }
 
 test "a yes reaches the device, and a node that is not V4L2 is refused" {
     if (!webcam.device.supported) return error.SkipZigTest;
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     try std.testing.expectError(error.QueryFailed, openAnswering("/dev/null", .ask, "y\n", &said));
     try std.testing.expectError(error.OpenFailed, openAnswering("/nonexistent/video9", .allowed, "", &said));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "capture started") == null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "capture started") == null);
 }
 
 test "device names follow the consent gate's rules" {

@@ -60,9 +60,9 @@ fn host(answer: webcam.av_permission.Status) av_webcam.Host {
     };
 }
 
-fn openAnswering(answer: webcam.av_permission.Status, arg: []const u8, grant: webcam.consent.Grant, typed: []const u8, said: *std.ArrayList(u8)) !ra8.periph.ceu.camera.frame_source.FrameSource {
-    var in = std.io.fixedBufferStream(typed);
-    return av_webcam.openWith(allocator, host(answer), arg, grant, in.reader(), said.writer(), &format_control);
+fn openAnswering(answer: webcam.av_permission.Status, arg: []const u8, grant: webcam.consent.Grant, typed: []const u8, said: *std.Io.Writer.Allocating) !ra8.periph.ceu.camera.frame_source.FrameSource {
+    var in = std.Io.Reader.fixed(typed);
+    return av_webcam.openWith(allocator, host(answer), arg, grant, &in, &said.writer, &format_control);
 }
 
 test "webcam args name a device index; paths are not macOS devices" {
@@ -76,26 +76,26 @@ test "webcam args name a device index; paths are not macOS devices" {
 
 test "a refusal asks about webcam N and never touches AVFoundation" {
     reset();
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     try std.testing.expectError(error.WebcamRefused, openAnswering(.authorized, "1", .ask, "n\n", &said));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "webcam 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "webcam 1") != null);
     try std.testing.expectEqual(@as(usize, 0), sends);
 }
 
 test "a denied permission says where to fix it and opens nothing" {
     reset();
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     try std.testing.expectError(error.PrivacyBlocked, openAnswering(.denied, "", .allowed, "", &said));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "Privacy & Security") != null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "Privacy & Security") != null);
     try std.testing.expectEqual(@as(usize, 0), sends);
 }
 
 test "no camera returns cleanly and frees the partial capture" {
     reset();
     device_count = 0;
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     try std.testing.expectError(error.NoDevice, openAnswering(.authorized, "", .allowed, "", &said));
     try std.testing.expectEqual(@as(usize, 0), stops);
@@ -104,7 +104,7 @@ test "no camera returns cleanly and frees the partial capture" {
 
 test "an allowed open runs the session and close stops and releases it" {
     reset();
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     const camera = try openAnswering(.authorized, "0", .allowed, "", &said);
     try std.testing.expect(sends > 0);
