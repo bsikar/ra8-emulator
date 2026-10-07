@@ -32,7 +32,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     if (options.rtc_start) |start| board.clock.seed(try rtc_start.resolve(start, io));
     if (options.speed) |factor| pacing.attachHost(&board.time, io, factor);
     board.time.soak.armed = options.run_for;
-    const profile_fits = try loadProfile(allocator, options.board_profile);
+    const profile_fits = try loadProfile(allocator, io, options.board_profile);
     board.external_memory = profile_fits.memory;
     try board.flash.flash.resize(profile_fits.memory.ospi.size);
     var asks: [profile.max_fits + request.max]request.Request = undefined;
@@ -48,7 +48,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     if (options.usb_loop) board.usb.loopBack();
     board.c6.useIo(io);
     if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(io, spec.dir, spec.mode));
-    board.capture.source = try options.camera.open(allocator, &board.wire.sensor.format);
+    board.capture.source = try options.camera.open(allocator, io, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     try cli.card_setup.prepareSdhi(board, options.sdhi);
     queueTouches(board, options);
@@ -81,10 +81,8 @@ fn setBattery(board: *Board, options: cli.Options) !void {
 }
 
 /// Load a selected profile, or the shipped EK-RA8D2 default from the repo.
-fn loadProfile(allocator: std.mem.Allocator, path: ?[]const u8) !profile.Profile {
+fn loadProfile(allocator: std.mem.Allocator, io: std.Io, path: ?[]const u8) !profile.Profile {
     const profile_path = path orelse return profile.parse(@embedFile("../../board/ek_ra8d2.board"));
-    const file = try std.fs.cwd().openFile(profile_path, .{});
-    defer file.close();
-    const contents = try file.readToEndAlloc(allocator, 64 * 1024);
+    const contents = try std.Io.Dir.cwd().readFileAlloc(io, profile_path, allocator, .limited(64 * 1024));
     return profile.parse(contents);
 }

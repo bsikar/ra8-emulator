@@ -42,7 +42,7 @@ fn writeFile(dir: std.fs.Dir, name: []const u8, bytes: []const u8) !void {
 fn loadFrom(dir: std.testing.TmpDir, name: []const u8, format_control: *const u8) !*still.ImageSource {
     const path = try dir.dir.realpathAlloc(allocator, name);
     defer allocator.free(path);
-    return still.ImageSource.load(allocator, path, format_control);
+    return still.ImageSource.load(allocator, std.testing.io, path, format_control);
 }
 
 test "FORMAT CONTROL picks RGB565 for 0x6x and YUV422 otherwise" {
@@ -95,7 +95,7 @@ test "a file no decoder claims and a missing file are refused" {
     try writeFile(tmp.dir, "x.txt", "hello");
     var format_control: u8 = 0x30;
     try std.testing.expectError(error.Unsupported, loadFrom(tmp, "x.txt", &format_control));
-    try std.testing.expectError(error.FileNotFound, still.ImageSource.load(allocator, "/nonexistent/ra8.png", &format_control));
+    try std.testing.expectError(error.FileNotFound, still.ImageSource.load(allocator, std.testing.io, "/nonexistent/ra8.png", &format_control));
 }
 
 test "an armed CEU capture writes the picture's pixels into the buffer" {
