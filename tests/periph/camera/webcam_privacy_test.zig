@@ -28,14 +28,14 @@ test "either the machine or the user denying blocks the camera" {
 }
 
 test "a denied setting refuses with the fix, the rest pass quietly" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer out.deinit();
-    try std.testing.expectError(error.PrivacyBlocked, privacy.gate(.denied, out.writer()));
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "Let desktop apps access your camera") != null);
+    try std.testing.expectError(error.PrivacyBlocked, privacy.gate(.denied, &out.writer));
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Let desktop apps access your camera") != null);
     out.clearRetainingCapacity();
-    try privacy.gate(.allowed, out.writer());
-    try privacy.gate(.unset, out.writer());
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try privacy.gate(.allowed, &out.writer);
+    try privacy.gate(.unset, &out.writer);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
 test "hosts without the Windows setting are never blocked" {
