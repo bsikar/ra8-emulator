@@ -1,5 +1,6 @@
 //! Covers src/periph/sd_image.zig.
 const std = @import("std");
+const io = std.testing.io;
 const image = @import("ra8").periph.sd_image;
 
 fn unit() image.Image {
@@ -147,14 +148,14 @@ test "saveTo: a written block round-trips through the image file" {
     defer tmp.cleanup();
     const bytes = try patterned(std.testing.allocator);
     defer std.testing.allocator.free(bytes);
-    try tmp.dir.writeFile(.{ .sub_path = "card.img", .data = bytes });
+    try tmp.dir.writeFile(io, .{ .sub_path = "card.img", .data = bytes });
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
     const written: image.Block = @splat(0xA5);
     try std.testing.expect(img.write(9, &written));
-    try img.saveTo(tmp.dir, "card.img");
-    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", bytes.len + 1);
+    try img.saveTo(io, tmp.dir, "card.img");
+    const back = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqual(bytes.len, back.len);
     try std.testing.expectEqualSlices(u8, &written, back[9 * 512 .. 10 * 512]);
@@ -166,12 +167,12 @@ test "saveTo: an unchanged card leaves the image byte-identical" {
     defer tmp.cleanup();
     const bytes = try patterned(std.testing.allocator);
     defer std.testing.allocator.free(bytes);
-    try tmp.dir.writeFile(.{ .sub_path = "card.img", .data = bytes });
+    try tmp.dir.writeFile(io, .{ .sub_path = "card.img", .data = bytes });
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
-    try img.saveTo(tmp.dir, "card.img");
-    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", bytes.len + 1);
+    try img.saveTo(io, tmp.dir, "card.img");
+    const back = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
 }
@@ -182,19 +183,19 @@ test "saveTo: a write that fails leaves the original image intact" {
     defer tmp.cleanup();
     const bytes = try patterned(std.testing.allocator);
     defer std.testing.allocator.free(bytes);
-    try tmp.dir.makeDir("ro");
-    try tmp.dir.writeFile(.{ .sub_path = "ro/card.img", .data = bytes });
+    try tmp.dir.createDir(io, "ro", .default_dir);
+    try tmp.dir.writeFile(io, .{ .sub_path = "ro/card.img", .data = bytes });
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
     const written: image.Block = @splat(0x5A);
     try std.testing.expect(img.write(3, &written));
-    var ro = try tmp.dir.openDir("ro", .{ .iterate = true });
-    defer ro.close();
-    try ro.chmod(0o555);
-    defer ro.chmod(0o755) catch {};
-    try std.testing.expectError(error.AccessDenied, img.saveTo(tmp.dir, "ro/card.img"));
-    const back = try tmp.dir.readFileAlloc(std.testing.allocator, "ro/card.img", bytes.len + 1);
+    var ro = try tmp.dir.openDir(io, "ro", .{ .iterate = true });
+    defer ro.close(io);
+    try ro.setPermissions(io, .fromMode(0o555));
+    defer ro.setPermissions(io, .fromMode(0o755)) catch {};
+    try std.testing.expectError(error.AccessDenied, img.saveTo(io, tmp.dir, "ro/card.img"));
+    const back = try tmp.dir.readFileAlloc(io, "ro/card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
 }

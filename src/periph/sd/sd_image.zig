@@ -157,20 +157,21 @@ pub const Image = struct {
     /// to a sibling temp file, which is fsynced and then renamed over the
     /// image, so a write that fails anywhere leaves the old file as it was.
     /// The image keeps its permissions.
-    pub fn saveTo(self: *const Image, dir: std.fs.Dir, path: []const u8) !void {
-        const mode = if (dir.statFile(path)) |stat| stat.mode else |_| std.fs.File.default_mode;
-        var atomic = try dir.atomicFile(path, .{ .mode = mode });
-        defer atomic.deinit();
-        var buffered = std.io.bufferedWriter(atomic.file.writer());
+    pub fn saveTo(self: *const Image, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
+        const kept = if (dir.statFile(io, path, .{})) |stat| stat.permissions else |_| std.Io.File.Permissions.default_file;
+        var atomic = try dir.createFileAtomic(io, path, .{ .permissions = kept, .replace = true });
+        defer atomic.deinit(io);
+        var buffer: [4096]u8 = undefined;
+        var out = atomic.file.writer(io, &buffer);
         var block: Block = undefined;
         var index: u32 = 0;
         while (index < self.capacity_blocks) : (index += 1) {
             _ = self.read(index, &block);
-            try buffered.writer().writeAll(&block);
+            try out.interface.writeAll(&block);
         }
-        try buffered.flush();
-        try atomic.file.sync();
-        try atomic.finish();
+        try out.interface.flush();
+        try atomic.file.sync(io);
+        try atomic.replace(io);
     }
 };
 
