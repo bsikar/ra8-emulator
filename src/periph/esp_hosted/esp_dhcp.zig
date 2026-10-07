@@ -93,9 +93,9 @@ pub fn answerFrame(out: *[frame.frame_size]u8, ethernet: []const u8) bool {
     reply(buf[eth.headers..], dgram.data, kind);
     const len = eth.wrap(&buf, .{
         .src_mac = station.bssid,
-        .dst_mac = .{0xFF} ** 6,
+        .dst_mac = @splat(0xFF),
         .src_ip = server_ip,
-        .dst_ip = .{0xFF} ** 4,
+        .dst_ip = @splat(0xFF),
         .src_port = server_port,
         .dst_port = client_port,
     }, reply_len);

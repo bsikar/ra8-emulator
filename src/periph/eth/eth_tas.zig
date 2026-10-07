@@ -51,8 +51,8 @@ const word_count = reg.span / 4;
 /// Registers and gate RAM for one ETHA port.
 pub const Tas = struct {
     base: u32,
-    words: [word_count]u32 = [_]u32{0} ** word_count,
-    ram: [reg.ram_entries]u32 = [_]u32{0} ** reg.ram_entries,
+    words: [word_count]u32 = @splat(0),
+    ram: [reg.ram_entries]u32 = @splat(0),
     writes: u32 = 0,
     resets: u32 = 0,
     learns: u32 = 0,
@@ -125,7 +125,7 @@ pub const Tas = struct {
             self.setWord(reg.ram_init, value & ~reg.ram_ready);
             return;
         }
-        self.ram = [_]u32{0} ** reg.ram_entries;
+        self.ram = @as([reg.ram_entries]u32, @splat(0));
         self.setWord(reg.ram_init, reg.ram_ready);
         self.resets +%= 1;
     }

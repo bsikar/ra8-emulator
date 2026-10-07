@@ -38,7 +38,7 @@ const Flow = struct {
 };
 
 pub const Bridge = struct {
-    flows: [capacity]Flow = [_]Flow{.{}} ** capacity,
+    flows: [capacity]Flow = @splat(.{}),
     generation: u64 = 0,
     cursor: usize = 0,
 

@@ -5,7 +5,7 @@ const eth = ra8.periph.esp_hosted.eth;
 
 const route: eth.Route = .{
     .src_mac = .{ 1, 2, 3, 4, 5, 6 },
-    .dst_mac = .{0xFF} ** 6,
+    .dst_mac = @splat(0xFF),
     .src_ip = .{ 10, 0, 0, 1 },
     .dst_ip = .{ 10, 0, 0, 2 },
     .src_port = 68,
@@ -89,7 +89,7 @@ test "bad checksums fragments and oversize payloads are refused" {
     var bad_tcp = buf;
     bad_tcp[len - 1] ^= 1;
     try std.testing.expect(eth.tcp(eth.ipv4(bad_tcp[0..len]).?) == null);
-    const too_big = [_]u8{0} ** (eth.tcp_payload_max + 1);
+    const too_big = @as([eth.tcp_payload_max + 1]u8, @splat(0));
     try std.testing.expect(eth.tcpFrame(&buf, route, 0, 0, 0, 0, &too_big) == null);
 }
 

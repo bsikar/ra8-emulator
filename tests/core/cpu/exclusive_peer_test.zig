@@ -11,7 +11,7 @@ const fixture = @import("exception/ram.zig");
 /// Shared SRAM both cores store into.
 const Shared = struct {
     const base: u32 = 0x2200_0000;
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Shared) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

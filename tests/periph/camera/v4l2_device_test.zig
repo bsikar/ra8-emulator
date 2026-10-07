@@ -21,9 +21,9 @@ test "read capture fills a whole frame, and a short read is reported" {
     if (!v4l2.supported) return error.SkipZigTest;
     var zero = try v4l2.Fd.open("/dev/zero");
     defer zero.close();
-    var frame = [_]u8{0xAA} ** 64;
+    var frame = @as([64]u8, @splat(0xAA));
     try zero.readFrame(&frame);
-    try std.testing.expectEqualSlices(u8, &([_]u8{0} ** 64), &frame);
+    try std.testing.expectEqualSlices(u8, &(@as([64]u8, @splat(0))), &frame);
     var empty = try v4l2.Fd.open("/dev/null");
     defer empty.close();
     try std.testing.expectError(error.ShortFrame, empty.readFrame(&frame));

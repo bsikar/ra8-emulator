@@ -37,7 +37,7 @@ test "the panel pixels land unchanged inside the bezel" {
 test "a driven LED shows its colour and an idle one stays dark" {
     const size = comptime view.size(64, 1);
     var canvas: [size.width * size.height]u32 = undefined;
-    const panel = [_]u32{0xFF000000} ** 64;
+    const panel = @as([64]u32, @splat(0xFF000000));
     view.compose(&canvas, &panel, 64, 1, &.{ .{ .rgb565 = 0x001F, .on = true }, .{ .rgb565 = 0xF800, .on = false } });
     const top = 1 + 2 * view.margin + (view.strip - view.led_side) / 2 - view.margin / 2;
     const first = view.margin + 1;

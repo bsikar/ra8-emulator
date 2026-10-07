@@ -113,7 +113,7 @@ pub const Region = struct {
 /// The SAU window: the hardwired count the firmware reads out of it, and the
 /// region map it programmes into it.
 pub const Sau = struct {
-    table: [geometry.regions]Region = [_]Region{.{}} ** geometry.regions,
+    table: [geometry.regions]Region = @splat(.{}),
     /// RNR as the firmware last left it.
     selected: u8 = 0,
     /// CTRL as the firmware last left it, so the report can say whether the

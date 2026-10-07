@@ -39,8 +39,8 @@ pub const off = struct {
 
 pub const Agent = struct {
     base: u32,
-    depth: [off.class_count]u32 = .{0} ** off.class_count,
-    enabled: [off.group_count]u32 = .{0} ** off.group_count,
+    depth: [off.class_count]u32 = @splat(0),
+    enabled: [off.group_count]u32 = @splat(0),
     /// Stores that landed on either window.
     writes: u32 = 0,
 

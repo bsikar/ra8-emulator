@@ -18,7 +18,7 @@ test "a fresh card holds nothing and reads back zeros" {
 test "a written block comes back and is held" {
     var img = unit();
     defer img.deinit();
-    var out: image.Block = .{0xA5} ** image.geometry.block_bytes;
+    var out: image.Block = @splat(0xA5);
     try std.testing.expect(img.write(3, &out));
     try std.testing.expectEqual(@as(usize, 1), img.held());
     var back: image.Block = undefined;
@@ -30,7 +30,7 @@ test "a block past the end of the card is not a block" {
     var img = unit();
     defer img.deinit();
     const past = image.geometry.default_capacity_blocks;
-    var block: image.Block = .{1} ** image.geometry.block_bytes;
+    var block: image.Block = @splat(1);
     try std.testing.expect(!img.write(past, &block));
     try std.testing.expect(!img.read(past, &block));
     try std.testing.expect(img.inRange(past - 1));
@@ -39,7 +39,7 @@ test "a block past the end of the card is not a block" {
 test "an erase gives the blocks back instead of filling them with zeros" {
     var img = unit();
     defer img.deinit();
-    const filled: image.Block = .{0xFF} ** image.geometry.block_bytes;
+    const filled: image.Block = @splat(0xFF);
     try std.testing.expect(img.write(10, &filled));
     try std.testing.expect(img.write(11, &filled));
     try std.testing.expect(img.write(20, &filled));
@@ -67,7 +67,7 @@ test "a blank card takes another size, and a card holding data does not" {
     try std.testing.expect(!img.resize(0));
     try std.testing.expect(!img.resize(1500));
 
-    const block: image.Block = .{7} ** image.geometry.block_bytes;
+    const block: image.Block = @splat(7);
     try std.testing.expect(img.write(1, &block));
     try std.testing.expect(!img.resize(64 * 1024));
     try std.testing.expectEqual(@as(u32, 128 * 1024), img.capacity_blocks);
@@ -87,8 +87,8 @@ test "a fresh card is 64 MiB and its CSD reports that capacity" {
 test "a rewrite replaces the block instead of holding a second one" {
     var img = unit();
     defer img.deinit();
-    const first: image.Block = .{1} ** image.geometry.block_bytes;
-    const second: image.Block = .{2} ** image.geometry.block_bytes;
+    const first: image.Block = @splat(1);
+    const second: image.Block = @splat(2);
     try std.testing.expect(img.write(5, &first));
     try std.testing.expect(img.write(5, &second));
     try std.testing.expectEqual(@as(usize, 1), img.held());
@@ -100,7 +100,7 @@ test "a rewrite replaces the block instead of holding a second one" {
 test "release hands every block back" {
     var img = unit();
     defer img.deinit();
-    const filled: image.Block = .{9} ** image.geometry.block_bytes;
+    const filled: image.Block = @splat(9);
     try std.testing.expect(img.write(1, &filled));
     img.release();
     try std.testing.expectEqual(@as(usize, 0), img.held());
@@ -151,7 +151,7 @@ test "saveTo: a written block round-trips through the image file" {
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
-    const written: image.Block = .{0xA5} ** image.geometry.block_bytes;
+    const written: image.Block = @splat(0xA5);
     try std.testing.expect(img.write(9, &written));
     try img.saveTo(tmp.dir, "card.img");
     const back = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", bytes.len + 1);
@@ -187,7 +187,7 @@ test "saveTo: a write that fails leaves the original image intact" {
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
-    const written: image.Block = .{0x5A} ** image.geometry.block_bytes;
+    const written: image.Block = @splat(0x5A);
     try std.testing.expect(img.write(3, &written));
     var ro = try tmp.dir.openDir("ro", .{ .iterate = true });
     defer ro.close();

@@ -35,7 +35,7 @@ test "rectangles land at their place and a later one only touches its region" {
     defer board.deinit();
     try std.testing.expect(!board.hasFrame());
 
-    try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 3, .virtual_ns = 1, .pixels = &([_]u8{10} ** 12) });
+    try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 3, .virtual_ns = 1, .pixels = &(@as([12]u8, @splat(10))) });
     try std.testing.expect(board.hasFrame());
     try std.testing.expectEqual(@as(u32, 4), board.width);
     try std.testing.expectEqual(@as(u32, 3), board.height);
@@ -93,7 +93,7 @@ test "the board leaf draws the panel image in place of its note" {
     const gpa = std.testing.allocator;
     var board = Board.init(gpa);
     defer board.deinit();
-    try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 6, .virtual_ns = 1, .pixels = &([_]u8{200} ** 24) });
+    try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 6, .virtual_ns = 1, .pixels = &(@as([24]u8, @splat(200))) });
     var layout = try pane_layout.twoCore(gpa);
     defer layout.deinit();
     var solved = try frame.solve(&layout, gpa, 480, 320);

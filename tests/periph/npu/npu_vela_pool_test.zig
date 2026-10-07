@@ -12,7 +12,7 @@ fn hexBytes(comptime hex: []const u8) [hex.len / 2]u8 {
 }
 
 const Memory = struct {
-    bytes: [0x200]u8 = .{0} ** 0x200,
+    bytes: [0x200]u8 = @splat(0),
     pub fn read(self: *@This(), at: u32, out: []u8) error{Refused}!void {
         if (at + out.len > self.bytes.len) return error.Refused;
         @memcpy(out, self.bytes[at..][0..out.len]);
@@ -60,7 +60,7 @@ fn inputs() pool.Inputs {
 test "MAX pool slides the window and clamps to the activation range" {
     var memory = Memory{};
     for ([_]i8{ -7, 4, -2 }, 0..) |v, i| memory.bytes[i] = @bitCast(v);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     try std.testing.expectEqual(@as(u64, 2), try pool.run(&memory, &regions, pool.mode_max, inputs()));
     try std.testing.expectEqual(@as(i8, 4), @as(i8, @bitCast(memory.bytes[0x100])));
     try std.testing.expectEqual(@as(i8, 4), @as(i8, @bitCast(memory.bytes[0x101])));
@@ -73,7 +73,7 @@ test "MAX pool slides the window and clamps to the activation range" {
 test "padded positions take no part in the max" {
     var memory = Memory{};
     for ([_]i8{ -7, -4, -2 }, 0..) |v, i| memory.bytes[i] = @bitCast(v);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var padded = inputs();
     padded.maps.ifm_pad.left = 1; // windows (pad, -7), (-7, -4), (-4, -2)
     padded.maps.ofm.width0_m1 = 2;
@@ -86,7 +86,7 @@ test "padded positions take no part in the max" {
 
 test "what the model cannot vouch for is refused, not guessed" {
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     try std.testing.expectError(error.OperatorNotModelled, pool.run(&memory, &regions, 1, inputs()));
     var padded = inputs();
     padded.maps.ifm_pad.left = pool.max_pad_before + 1;
@@ -155,7 +155,7 @@ const ofm_4x4 = hexBytes("6c4f4f7e6d4b5f756239707e6d7973577140627e6c077675624062
 fn runVela(words: []const u32, ifm: []const u8, ofm_at: usize, ofm: []const u8) !void {
     var memory = Memory{};
     @memcpy(memory.bytes[0..ifm.len], ifm);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     const result = try vela.runner.run(&memory, &regions, words);
     try std.testing.expectEqual(@as(u64, ofm.len), result.elements);
     try std.testing.expectEqualSlices(u8, ofm, memory.bytes[ofm_at..][0..ofm.len]);

@@ -16,7 +16,7 @@ test "OP_REQ_IMPORT carries the busid the server reads back" {
     try client.importRequest(&out, "1-1");
     try std.testing.expectEqual(wire.op.req_import, (try wire.OpHeader.decode(&out)).code);
     try std.testing.expectEqualStrings("1-1", try wire.importBusid(out[wire.op_header_len..]));
-    try std.testing.expectError(error.TooLong, client.importRequest(&out, "x" ** 32));
+    try std.testing.expectError(error.TooLong, client.importRequest(&out, &@as([32:0]u8, @splat('x'))));
 }
 
 test "a listed device decodes from the record the server encodes" {

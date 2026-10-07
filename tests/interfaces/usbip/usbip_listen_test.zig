@@ -34,7 +34,7 @@ fn send(stream: std.net.Stream, code: u16, busid: ?[]const u8) !void {
     (wire.OpHeader{ .code = code }).encode(&header);
     try stream.writeAll(&header);
     const name = busid orelse return;
-    var body = [_]u8{0} ** wire.busid_len;
+    var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..name.len], name);
     try stream.writeAll(&body);
 }

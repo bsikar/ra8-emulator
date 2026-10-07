@@ -82,8 +82,7 @@ pub const Scanner = struct {
     /// Pixels decoded across every scan.
     pixels: u32 = 0,
     /// Per-reason refusal counts, indexed by Refusal.
-    refused: [@typeInfo(Refusal).@"enum".fields.len]u32 =
-        [_]u32{0} ** @typeInfo(Refusal).@"enum".fields.len,
+    refused: [@typeInfo(Refusal).@"enum".fields.len]u32 = @splat(0),
     /// The last picture, which is what the report prints.
     last: ?Picture = null,
     /// Why the last scan refused, when it did.
@@ -222,7 +221,7 @@ pub const Fold = struct {
     hash: u32 = fnv.offset,
     pixels: u32 = 0,
     blank: u32 = 0,
-    seen: [colour_sample]u32 = [_]u32{0} ** colour_sample,
+    seen: [colour_sample]u32 = @splat(0),
     colours: u32 = 0,
 
     pub fn row(self: *Fold, line: []const u8, shape: Shape, palette: *const clut.Palette) void {

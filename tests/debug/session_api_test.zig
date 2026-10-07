@@ -17,7 +17,7 @@ const timebase = ra8.periph.clocks.timebase;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.
 const Ram = struct {
-    bytes: [8192]u8 = [_]u8{0} ** 8192,
+    bytes: [8192]u8 = @splat(0),
 
     fn init() Ram {
         var memory: Ram = .{};

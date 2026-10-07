@@ -21,7 +21,7 @@ const Env = proto.Client.Env;
 
 /// Vector table (SP 0x40, reset 0x09) then nops at 0x08.
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

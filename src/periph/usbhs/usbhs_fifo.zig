@@ -10,7 +10,7 @@ const regs = @import("usbhs_regs.zig");
 
 /// One side of one pipe's staging.
 pub const Staging = struct {
-    data: [regs.staging.packet_cap]u8 = [_]u8{0} ** regs.staging.packet_cap,
+    data: [regs.staging.packet_cap]u8 = @splat(0),
     len: u16 = 0,
     cursor: u16 = 0,
     ready: bool = false,
@@ -50,8 +50,8 @@ pub const Staging = struct {
 
 /// The CFIFO port and the staging behind every pipe.
 pub const Port = struct {
-    in: [regs.pipe.count]Staging = [_]Staging{.{}} ** regs.pipe.count,
-    out: [regs.pipe.count]Staging = [_]Staging{.{}} ** regs.pipe.count,
+    in: [regs.pipe.count]Staging = @splat(.{}),
+    out: [regs.pipe.count]Staging = @splat(.{}),
     /// CFIFOSEL as written.
     sel: u16 = 0,
     /// True once a pipe in range has been selected.

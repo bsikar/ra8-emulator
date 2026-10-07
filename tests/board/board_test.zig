@@ -24,7 +24,7 @@ fn board() Board {
 /// the real mapping gives them.
 const Ppb = struct {
     word: u32 = scb.key.status,
-    slots: [16]Slot = .{Slot{}} ** 16,
+    slots: [16]Slot = @splat(Slot{}),
 
     const Slot = struct { at: u32 = 0, value: u32 = 0, used: bool = false };
 

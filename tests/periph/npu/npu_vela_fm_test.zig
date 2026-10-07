@@ -51,7 +51,7 @@ test "the runner keeps the feature-map registers the program set" {
         pub fn write(_: *@This(), _: u32, _: []const u8) error{Refused}!void {}
     };
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     const words = [_]u32{ 0x0007_010A, 0x001F_0113, 0x0001_011F, 0x0000_0000 };
     const result = try vela.runner.run(&memory, &regions, &words);
     try std.testing.expectEqual(@as(u16, 7), result.maps.ifm.width0_m1);

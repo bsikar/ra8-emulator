@@ -21,7 +21,7 @@ pub const Word = struct {
 
 pub const Transfer = struct {
     phase: Phase = .none,
-    stage: [card.geometry.block_bytes]u8 = [_]u8{0} ** card.geometry.block_bytes,
+    stage: [card.geometry.block_bytes]u8 = @splat(0),
     word_idx: u32 = 0,
     lba: u32 = 0,
     blocks_left: u32 = 0,

@@ -136,7 +136,7 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn loadValue(cpu: *Cpu, address: u32, f: Form) op.Error!u32 {
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     try cpu.bus.read(address, bytes[0..f.size]);
     const raw = std.mem.readInt(u32, &bytes, .little);
     if (!f.signed) return raw;

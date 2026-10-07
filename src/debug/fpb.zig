@@ -38,7 +38,7 @@ pub const comp_enable: u32 = 1 << 0;
 
 pub const Fpb = struct {
     enabled: bool = false,
-    comps: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
+    comps: [limits.comparators]u32 = @splat(0),
 
     /// The register at `offset` from `base`, or null when the offset is
     /// not one of the unit's registers.

@@ -25,7 +25,7 @@ fn put(bytes: []u8, at_: usize, value: u32) void {
 }
 
 fn submit(seqnum: u32, in: bool, ep: u32, length: u32) [wire.basic_len]u8 {
-    var bytes = [_]u8{0} ** wire.basic_len;
+    var bytes = @as([wire.basic_len]u8, @splat(0));
     put(&bytes, 0, wire.cmd.submit);
     put(&bytes, 4, seqnum);
     put(&bytes, 12, @intFromBool(in));
@@ -35,7 +35,7 @@ fn submit(seqnum: u32, in: bool, ep: u32, length: u32) [wire.basic_len]u8 {
 }
 
 fn unlink(seqnum: u32, victim: u32) [wire.basic_len]u8 {
-    var bytes = [_]u8{0} ** wire.basic_len;
+    var bytes = @as([wire.basic_len]u8, @splat(0));
     put(&bytes, 0, wire.cmd.unlink);
     put(&bytes, 4, seqnum);
     put(&bytes, 20, victim);

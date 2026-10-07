@@ -59,7 +59,7 @@ pub const Battery = struct {
 };
 
 pub const Gauge = struct {
-    registers: [reg.count]u8 = .{0} ** reg.count,
+    registers: [reg.count]u8 = @splat(0),
     battery: Battery = .{},
     /// Where the pointer stands, whether this transfer named it, and the
     /// high byte of a word that has not landed yet.
@@ -110,7 +110,7 @@ pub const Gauge = struct {
     }
 
     fn seed(self: *Gauge) void {
-        self.registers = .{0} ** reg.count;
+        self.registers = @splat(0);
         self.put(reg.vcell, cell.vcell);
         self.put(reg.soc, @as(u16, self.battery.soc_pct) << cell.percent_shift);
         self.put(reg.version, cell.version);

@@ -57,7 +57,7 @@ pub const Line = struct {
 pub const Snapshot = struct {
     pc: u32 = 0,
     count: usize = 0,
-    lines: [max_rows]Line = [_]Line{.{}} ** max_rows,
+    lines: [max_rows]Line = @splat(.{}),
 };
 
 /// Decodes `row_count` instructions (at most `max_rows`) of `core` forward

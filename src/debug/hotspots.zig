@@ -48,7 +48,7 @@ pub const Site = struct {
 /// site's count into the thousands within a few boundaries and nothing
 /// can evict it after that.
 pub const Table = struct {
-    sites: [limits.kept]Site = [_]Site{.{ .address = 0, .samples = 0 }} ** limits.kept,
+    sites: [limits.kept]Site = @splat(.{ .address = 0, .samples = 0 }),
     used: usize = 0,
     /// Every sample taken, including those whose site was later evicted,
     /// so a share is a share of the run and not of the table.

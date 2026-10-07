@@ -9,7 +9,7 @@ const trcena: u32 = 1 << 24;
 
 /// A memory that keeps the last word written to each ITM register and DEMCR.
 const Words = struct {
-    words: [itm.limits.span / 4]u32 = [_]u32{0} ** (itm.limits.span / 4),
+    words: [itm.limits.span / 4]u32 = @splat(0),
     demcr: u32 = 0x0100_0000 >> 24,
 
     pub fn readWord(self: *Words, address: u32) !u32 {

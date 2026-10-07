@@ -60,7 +60,7 @@ pub const Snapshot = struct {
     /// The line pc belongs to.
     current: u32 = 0,
     count: usize = 0,
-    rows: [max_rows]Row = [_]Row{.{}} ** max_rows,
+    rows: [max_rows]Row = @splat(.{}),
 
     pub fn path(self: *const Snapshot) []const u8 {
         return self.path_buf[0..self.path_len];

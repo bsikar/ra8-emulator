@@ -8,7 +8,7 @@ const View = ra8.core.step_hook.core_view.View;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

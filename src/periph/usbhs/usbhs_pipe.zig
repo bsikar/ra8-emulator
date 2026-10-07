@@ -24,7 +24,7 @@ pub const Pipe = struct {
 
 /// The table and the PIPESEL cursor over it.
 pub const Table = struct {
-    pipes: [regs.pipe.count]Pipe = [_]Pipe{.{}} ** regs.pipe.count,
+    pipes: [regs.pipe.count]Pipe = @splat(.{}),
     /// PIPESEL as written; zero means no pipe window is open.
     selected: u16 = 0,
 

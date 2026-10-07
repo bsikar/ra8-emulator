@@ -15,7 +15,7 @@ fn unit() sd_card.Card {
 /// Clock a six-byte command frame and hand back the first reply byte, which
 /// is R1 for everything that answers with one.
 fn command(card: *sd_card.Card, index: u8, arg: u32) u8 {
-    var frame: [6]u8 = .{0} ** 6;
+    var frame: [6]u8 = @splat(0);
     frame[0] = sd_card.frame.start_bits | index;
     std.mem.writeInt(u32, frame[1..5], arg, .big);
     frame[5] = 0x01;
@@ -134,7 +134,7 @@ test "a block written by CMD24 reads back through CMD17" {
     defer card.deinit();
     try bringUp(&card);
     try std.testing.expectEqual(sd_card.r1.ready, command(&card, 24, 9));
-    const filled: [block_bytes]u8 = .{0x5A} ** block_bytes;
+    const filled: [block_bytes]u8 = @splat(0x5A);
     try std.testing.expectEqual(sd_card.token.accepted, sendBlock(&card, 0x5A, sd_crc.crc16(&filled)));
     drain(&card, 2);
     try std.testing.expectEqual(@as(u32, 1), card.writes);
@@ -182,7 +182,7 @@ test "a right checksum is not counted as unchecked" {
     defer card.deinit();
     try bringUp(&card);
     _ = command(&card, 24, 4);
-    const filled: [block_bytes]u8 = .{0x11} ** block_bytes;
+    const filled: [block_bytes]u8 = @splat(0x11);
     try std.testing.expectEqual(sd_card.token.accepted, sendBlock(&card, 0x11, sd_crc.crc16(&filled)));
     try std.testing.expectEqual(@as(u32, 1), card.writes);
     try std.testing.expectEqual(@as(u32, 0), card.crc_unchecked);
@@ -226,7 +226,7 @@ test "a write past the end of the card is not stored" {
     try bringUp(&card);
     const past = image.geometry.default_capacity_blocks;
     _ = command(&card, 24, past);
-    const filled: [block_bytes]u8 = .{7} ** block_bytes;
+    const filled: [block_bytes]u8 = @splat(7);
     try std.testing.expectEqual(sd_card.token.write_error, sendBlock(&card, 7, sd_crc.crc16(&filled)));
     try std.testing.expectEqual(@as(u32, 1), card.past_end);
     try std.testing.expectEqual(@as(usize, 0), card.img.held());
@@ -251,7 +251,7 @@ test "an erase with no range latched is refused, which dev runs on block zero" {
     var card = unit();
     defer card.deinit();
     try bringUp(&card);
-    const filled: [block_bytes]u8 = .{0xEE} ** block_bytes;
+    const filled: [block_bytes]u8 = @splat(0xEE);
     _ = command(&card, 24, 0);
     _ = sendBlock(&card, 0xEE, sd_crc.crc16(&filled));
     drain(&card, 2);
@@ -264,7 +264,7 @@ test "CMD32 and CMD33 latch a range CMD38 then erases" {
     var card = unit();
     defer card.deinit();
     try bringUp(&card);
-    const filled: [block_bytes]u8 = .{0xEE} ** block_bytes;
+    const filled: [block_bytes]u8 = @splat(0xEE);
     _ = command(&card, 24, 6);
     _ = sendBlock(&card, 0xEE, sd_crc.crc16(&filled));
     drain(&card, 2);
@@ -303,7 +303,7 @@ test "a multi-block write takes the blocks in order and stop-tran ends it" {
     defer card.deinit();
     try bringUp(&card);
     _ = command(&card, 25, 30);
-    const first: [block_bytes]u8 = .{1} ** block_bytes;
+    const first: [block_bytes]u8 = @splat(1);
     _ = card.exchange(sd_write.host_token.multi);
     var index: usize = 0;
     while (index < block_bytes) : (index += 1) _ = card.exchange(1);

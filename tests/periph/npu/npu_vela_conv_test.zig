@@ -52,7 +52,7 @@ test "a Vela-compiled 1x1 convolution gives TFLite Micro's output" {
 /// One channel, scale 1.0 (2^30 with shift 30), no bias: the OFM is the
 /// raw accumulator plus the zero point, so padding and stride show plainly.
 fn unitRecord() [10]u8 {
-    var r = [_]u8{0} ** 10;
+    var r = @as([10]u8, @splat(0));
     std.mem.writeInt(u32, r[5..9], 1 << 30, .little);
     r[9] = 30;
     return r;
@@ -101,7 +101,7 @@ test "stride skips IFM pixels and the activation range clamps" {
 
 test "mismatched buffers and missing records are refused" {
     var ofm: [96]i8 = undefined;
-    const ohwi = [_]i16{0} ** 48;
+    const ohwi = @as([48]i16, @splat(0));
     try std.testing.expectError(error.BadShape, conv.run(params, @ptrCast(ifm_bytes[0..127]), &ohwi, &scales, &ofm));
     try std.testing.expectError(error.MissingRecord, conv.run(params, @ptrCast(&ifm_bytes), &ohwi, scales[0..50], &ofm));
 }

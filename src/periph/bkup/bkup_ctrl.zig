@@ -202,7 +202,7 @@ pub const Control = struct {
 };
 
 fn defaults() [slot_count]u8 {
-    var out = [_]u8{0} ** slot_count;
+    var out = @as([slot_count]u8, @splat(0));
     for (&specs, 0..) |spec, index| out[index] = spec.reset;
     return out;
 }

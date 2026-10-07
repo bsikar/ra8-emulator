@@ -40,7 +40,7 @@ test "list_parts is refused without a listing and too_long past one reply" {
     var scratch: [proto.max_payload]u8 = undefined;
     var context: server.Context = .{ .session = &session, .scratch = &scratch };
     try std.testing.expectEqual(server.app_codes.refused, code(parts.listParts(&context, .{ .core = .cpu0 })));
-    var stub: Stub = .{ .text = &([_]u8{'x'} ** (proto.PartList.max_len.text + 1)) };
+    var stub: Stub = .{ .text = &(@as([proto.PartList.max_len.text + 1]u8, @splat('x'))) };
     context.listing = .{ .context = &stub, .listFn = Stub.list };
     try std.testing.expectEqual(server.app_codes.too_long, code(parts.listParts(&context, .{ .core = .cpu0 })));
 }

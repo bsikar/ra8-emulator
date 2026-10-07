@@ -77,7 +77,7 @@ fn getCurrent(_: *anyopaque, _: u32, out: *?*anyopaque) callconv(mf.cc) mf.HRESU
 }
 
 fn vtable() [42]?*const anyopaque {
-    var entries = [_]?*const anyopaque{null} ** 42;
+    var entries: [42]?*const anyopaque = @splat(null);
     entries[mf.slot.release] = @ptrCast(&release);
     entries[mf.slot.set_guid] = @ptrCast(&setGuid);
     entries[mf.slot.set_uint32] = @ptrCast(&setUint32);

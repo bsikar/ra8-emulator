@@ -12,8 +12,8 @@ const frame_len = 8;
 /// array; each dequeue fills the oldest queued buffer with its sequence.
 const Driver = struct {
     granted: u32 = 4,
-    backing: [vs.buffer_count * frame_len]u8 = .{0} ** (vs.buffer_count * frame_len),
-    queued: [vs.buffer_count]bool = .{false} ** vs.buffer_count,
+    backing: [vs.buffer_count * frame_len]u8 = @splat(0),
+    queued: [vs.buffer_count]bool = @splat(false),
     streaming: bool = false,
     sequence: u8 = 0,
     short: bool = false,
@@ -110,7 +110,7 @@ test "a short frame is not handed on, and the stream keeps going" {
     var driver: Driver = .{ .short = true };
     var stream = try vs.Stream.start(driver.device(), driver.mapper());
     defer stream.stop();
-    var out = [_]u8{0xEE} ** frame_len;
+    var out = @as([frame_len]u8, @splat(0xEE));
     try std.testing.expect(!stream.readFrame(&out));
     try std.testing.expectEqual(@as(u8, 0xEE), out[0]);
     driver.short = false;

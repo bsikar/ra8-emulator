@@ -87,7 +87,7 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     const f = Fields.of(instr).?;
     const address = f.address(cpu);
     try alignment.memU(cpu.bus, address, f.size);
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     try cpu.bus.read(address, bytes[0..f.size]);
     var value = std.mem.readInt(u32, &bytes, .little);
     if (f.signed) {

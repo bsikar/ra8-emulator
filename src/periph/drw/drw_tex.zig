@@ -258,7 +258,7 @@ pub const Source = struct {
             self.off_ram +%= 1;
             return null;
         }
-        var window = [_]u8{0} ** 4;
+        var window = @as([4]u8, @splat(0));
         memory.read(address, window[0..]) catch {
             self.faults +%= 1;
             return null;

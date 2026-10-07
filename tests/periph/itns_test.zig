@@ -6,7 +6,7 @@ const itns = ra8.periph.nvic.itns;
 
 /// The ITNS words as plain memory.
 const Words = struct {
-    word: [16]u32 = [_]u32{0} ** 16,
+    word: [16]u32 = @splat(0),
 
     pub fn readWord(self: *Words, address: u32) !u32 {
         return self.word[(address - itns.base) / 4];

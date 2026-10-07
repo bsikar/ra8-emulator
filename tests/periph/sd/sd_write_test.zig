@@ -37,7 +37,7 @@ test "a whole block with a matching checksum commits" {
     var unit = sd_write.Write{};
     unit.begin(4, false);
     _ = unit.feed(sd_write.host_token.data);
-    const payload: [block_bytes]u8 = .{0x5A} ** block_bytes;
+    const payload: [block_bytes]u8 = @splat(0x5A);
     const done = sendBlock(&unit, 0x5A, sd_crc.crc16(&payload));
     try std.testing.expect(done.commit.crc_ok);
     try std.testing.expectEqual(@as(u32, 4), done.commit.block);
@@ -57,7 +57,7 @@ test "a multi-block write re-arms on the next block" {
     var unit = sd_write.Write{};
     unit.begin(8, true);
     _ = unit.feed(sd_write.host_token.multi);
-    const payload: [block_bytes]u8 = .{0} ** block_bytes;
+    const payload: [block_bytes]u8 = @splat(0);
     const first = sendBlock(&unit, 0, sd_crc.crc16(&payload));
     try std.testing.expectEqual(@as(u32, 8), first.commit.block);
     try std.testing.expectEqual(sd_write.Phase.token, unit.phase);

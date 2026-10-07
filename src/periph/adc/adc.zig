@@ -122,7 +122,7 @@ const words: usize = win_span / 4;
 
 /// The modelled converter.
 pub const Adc = struct {
-    reg: [words]u32 = .{0} ** words,
+    reg: [words]u32 = @splat(0),
     /// Scans that actually ran.
     scans: u32 = 0,
     /// Channels converted across every scan.

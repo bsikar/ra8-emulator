@@ -120,7 +120,7 @@ pub const Channel = struct {
 };
 
 pub const Acmphs = struct {
-    channels: [channel_count]Channel = .{Channel{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(Channel{}),
 
     pub fn init() Acmphs {
         return .{};

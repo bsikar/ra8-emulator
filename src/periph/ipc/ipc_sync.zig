@@ -186,8 +186,8 @@ pub fn decode(offset: u32) ?Target {
 
 /// The semaphore file and both doorbells, as one thing the IPC block owns.
 pub const Sync = struct {
-    semaphores: [sem.count]Semaphore = .{Semaphore{}} ** sem.count,
-    doorbells: [nmi.units]Doorbell = .{Doorbell{}} ** nmi.units,
+    semaphores: [sem.count]Semaphore = @splat(Semaphore{}),
+    doorbells: [nmi.units]Doorbell = @splat(Doorbell{}),
 
     pub fn quiet(self: *const Sync) bool {
         for (&self.semaphores) |*one| {

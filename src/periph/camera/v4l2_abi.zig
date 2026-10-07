@@ -22,13 +22,13 @@ pub const cap_device_caps: u32 = 0x8000_0000;
 
 /// struct v4l2_capability.
 pub const Capability = extern struct {
-    driver: [16]u8 = .{0} ** 16,
-    card: [32]u8 = .{0} ** 32,
-    bus_info: [32]u8 = .{0} ** 32,
+    driver: [16]u8 = @splat(0),
+    card: [32]u8 = @splat(0),
+    bus_info: [32]u8 = @splat(0),
     version: u32 = 0,
     capabilities: u32 = 0,
     device_caps: u32 = 0,
-    reserved: [3]u32 = .{0} ** 3,
+    reserved: [3]u32 = @splat(0),
 
     /// The capabilities of this node: device_caps when the driver fills it.
     pub fn node(self: Capability) u32 {
@@ -59,7 +59,7 @@ pub const Format = extern struct {
     fmt: extern union {
         pix: PixFormat,
         raw: [200]u8 align(@alignOf(usize)),
-    } = .{ .raw = .{0} ** 200 },
+    } = .{ .raw = @splat(0) },
 };
 
 const ioc_write: u32 = 1;
@@ -82,7 +82,7 @@ pub const RequestBuffers = extern struct {
     memory: u32 = memory_mmap,
     capabilities: u32 = 0,
     flags: u8 = 0,
-    reserved: [3]u8 = .{0} ** 3,
+    reserved: [3]u8 = @splat(0),
 };
 
 /// struct timeval as the kernel lays it out in a v4l2_buffer.
@@ -96,7 +96,7 @@ pub const Buffer = extern struct {
     flags: u32 = 0,
     field: u32 = 0,
     timestamp: TimeVal = .{},
-    timecode: [4]u32 = .{0} ** 4,
+    timecode: [4]u32 = @splat(0),
     sequence: u32 = 0,
     memory: u32 = memory_mmap,
     m: extern union { offset: u32, userptr: usize } = .{ .userptr = 0 },

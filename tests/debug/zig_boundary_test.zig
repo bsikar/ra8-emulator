@@ -32,7 +32,7 @@ const Ram = struct {
 
 // sp 0x40, reset 0x09 ; 0x08 nop ; 0x0A nop ; 0x0C nop ; 0x0E b 0x08
 fn ram() Ram {
-    var r: Ram = .{ .bytes = [_]u8{0} ** 64 };
+    var r: Ram = .{ .bytes = @as([64]u8, @splat(0)) };
     const image = [_]u8{
         0x40, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00,
         0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF, 0xFB, 0xE7,
@@ -43,7 +43,7 @@ fn ram() Ram {
 
 /// Records every boundary it is passed.
 const Ticks = struct {
-    seen: [8]u32 = .{0} ** 8,
+    seen: [8]u32 = @splat(0),
     len: usize = 0,
     fail: bool = false,
 

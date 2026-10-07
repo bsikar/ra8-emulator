@@ -45,7 +45,7 @@ pub const Forward = struct {
     sts: u32 = 0,
     ie: u32 = 0,
     /// FWPBFC0 and FWPBFCSDC0 for ports 0, 1 and the host port.
-    ports: [off.port_count][2]u32 = .{.{ 0, 0 }} ** off.port_count,
+    ports: [off.port_count][2]u32 = @splat(.{ 0, 0 }),
     /// FWPC10/11/12.DDE selects the extended descriptor format per agent.
     fwpc: [3]u32 = .{ 0, 0, 0 },
     /// Stores that landed anywhere here.

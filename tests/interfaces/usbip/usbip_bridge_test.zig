@@ -57,13 +57,13 @@ fn host(port: u16, seen: *Seen) void {
     defer stream.close();
     var header: [wire.op_header_len]u8 = undefined;
     (wire.OpHeader{ .code = wire.op.req_import }).encode(&header);
-    var busid = [_]u8{0} ** wire.busid_len;
+    var busid = @as([wire.busid_len]u8, @splat(0));
     @memcpy(busid[0..3], "1-1");
     stream.writeAll(&header) catch return;
     stream.writeAll(&busid) catch return;
     var reply: [wire.op_header_len + wire.device_len]u8 = undefined;
     stream.reader().readNoEof(&reply) catch return;
-    var submit = [_]u8{0} ** wire.basic_len;
+    var submit = @as([wire.basic_len]u8, @splat(0));
     std.mem.writeInt(u32, submit[0..4], wire.cmd.submit, .big);
     std.mem.writeInt(u32, submit[4..8], 1, .big);
     std.mem.writeInt(u32, submit[12..16], 1, .big);

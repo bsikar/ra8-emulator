@@ -13,8 +13,8 @@ const Hook = @typeInfo(@FieldType(Usb, "bridge")).optional.child;
 const Device = @FieldType(Usb, "device");
 const Script = @FieldType(Usb, "script");
 
-var disk_a: [2048]u8 = [_]u8{0x5A} ** 2048;
-var disk_b: [2048]u8 = [_]u8{0x5A} ** 2048;
+var disk_a: [2048]u8 = @splat(0x5A);
+var disk_b: [2048]u8 = @splat(0x5A);
 var context: u8 = 0;
 
 fn poll(ctx: *anyopaque, device: *Device, host: *const Script) void {

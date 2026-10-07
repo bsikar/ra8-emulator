@@ -23,7 +23,7 @@ const Slot = struct {
 };
 
 pub const Session = struct {
-    slots: [slot_count]?Slot = [_]?Slot{null} ** slot_count,
+    slots: [slot_count]?Slot = @splat(null),
 
     /// Read one command. False on a clean hangup before its header.
     pub fn receive(self: *Session, reader: anytype, writer: anytype) !bool {

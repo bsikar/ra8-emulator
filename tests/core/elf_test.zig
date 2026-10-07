@@ -13,7 +13,7 @@ const em_arm = mod.em_arm;
 const pf_x = mod.pf_x;
 const pt_load = mod.pt_load;
 test "rejects a file that is not a little-endian 32-bit ARM ELF" {
-    var buffer = [_]u8{0} ** @sizeOf(Header);
+    var buffer = @as([@sizeOf(Header)]u8, @splat(0));
     try std.testing.expectError(Error.Truncated, Image.init(buffer[0..8]));
     try std.testing.expectError(Error.NotElf32, Image.init(&buffer));
     @memcpy(buffer[0..4], "\x7fELF");
@@ -28,7 +28,7 @@ test "rejects a file that is not a little-endian 32-bit ARM ELF" {
 
 test "finds secure vectors before SRAM helpers and the reset code" {
     const page = 0x1000;
-    var file = [_]u8{0} ** (page * 4);
+    var file = @as([page * 4]u8, @splat(0));
     const head: *Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
         .magic = .{ 0x7f, 'E', 'L', 'F' },
@@ -37,7 +37,7 @@ test "finds secure vectors before SRAM helpers and the reset code" {
         .version = 1,
         .osabi = 0,
         .abiversion = 0,
-        .pad = .{0} ** 7,
+        .pad = @splat(0),
         .e_type = 2,
         .e_machine = em_arm,
         .e_version = 1,
@@ -96,7 +96,7 @@ test "finds secure vectors before SRAM helpers and the reset code" {
 }
 
 test "a segment whose file bytes run past the end is refused, not trusted" {
-    var file = [_]u8{0} ** (@sizeOf(Header) + @sizeOf(ProgramHeader));
+    var file = @as([@sizeOf(Header) + @sizeOf(ProgramHeader)]u8, @splat(0));
     const head: *Header = @ptrCast(@alignCast(&file[0]));
     head.magic = .{ 0x7f, 'E', 'L', 'F' };
     head.class = 1;

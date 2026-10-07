@@ -73,7 +73,7 @@ test "list numbers the window's lines and stops where the source does" {
 }
 
 test "list keeps the start of an overlong line and carries on after it" {
-    const long = "x" ** (session_source.limits.line_bytes + 10);
+    const long = &@as([session_source.limits.line_bytes + 10:0]u8, @splat('x'));
     var source = std.io.fixedBufferStream(long ++ "\nnext\n");
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();

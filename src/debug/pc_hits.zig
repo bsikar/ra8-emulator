@@ -32,7 +32,7 @@ pub const Place = struct {
 
 /// The counted addresses of one run.
 pub const Hits = struct {
-    places: [limits.places]Place = [_]Place{.{}} ** limits.places,
+    places: [limits.places]Place = @splat(.{}),
     /// Addresses asked for past the table's capacity.
     refused: usize = 0,
 

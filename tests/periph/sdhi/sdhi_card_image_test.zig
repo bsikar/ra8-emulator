@@ -18,7 +18,7 @@ fn fatImage(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]u8 {
     const volume = try sd_format.apply(&img, .fat16, "SDIMG");
     const layout = volume.layout;
     const root = layout.reserved_sectors + sd_format.rule.fats * layout.fat_sectors;
-    var entry: Block = [_]u8{0} ** 512;
+    var entry: Block = @as([512]u8, @splat(0));
     @memcpy(entry[0..11], "BOOK    EPB");
     entry[11] = 0x20;
     _ = img.write(root, &entry);
@@ -56,7 +56,7 @@ test "writes stay in the overlay until the card is saved back" {
     var unit = card.Card.init(std.testing.allocator);
     defer unit.deinit();
     try unit.loadBytes(bytes);
-    const scribble: Block = [_]u8{0x5A} ** 512;
+    const scribble: Block = @as([512]u8, @splat(0x5A));
     try std.testing.expect(unit.write(3, &scribble));
     const before = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", std.math.maxInt(usize));
     defer std.testing.allocator.free(before);
@@ -72,10 +72,10 @@ test "writes stay in the overlay until the card is saved back" {
 test "an image that is not whole C_SIZE units, or a card already holding data, is refused" {
     var unit = card.Card.init(std.testing.allocator);
     defer unit.deinit();
-    const odd = [_]u8{0} ** 1024;
+    const odd = @as([1024]u8, @splat(0));
     try std.testing.expectError(error.BadImageSize, unit.loadBytes(&odd));
     try std.testing.expectError(error.BadImageSize, unit.loadBytes(&.{}));
-    const one: Block = [_]u8{1} ** 512;
+    const one: Block = @as([512]u8, @splat(1));
     try std.testing.expect(unit.write(0, &one));
     const whole = try std.testing.allocator.alloc(u8, 512 * 1024);
     defer std.testing.allocator.free(whole);

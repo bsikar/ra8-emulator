@@ -34,7 +34,7 @@ const Fixture = struct {
     /// Write a control block whose up-buffer zero points at `buf`.
     fn plant(self: *Fixture, at: u32, buf: u32, size: u32, count: u32) !void {
         try self.core.write(at, &block.id);
-        try self.core.write(at + @as(u32, block.id.len), &[_]u8{0} ** 6);
+        try self.core.write(at + @as(u32, block.id.len), &@as([6]u8, @splat(0)));
         try self.core.writeWord(at + block.layout.max_up, count);
         try self.core.writeWord(at + block.layout.max_down, 0);
         const up0 = at + block.layout.up0;
@@ -93,7 +93,7 @@ test "text written around the wrap comes out in order" {
     var fixture = try Fixture.open();
     defer fixture.close();
     try fixture.plant(cb_at, ring_at, ring_size, 1);
-    try fixture.say("x" ** 60 ++ "\n");
+    try fixture.say(&@as([60]u8, @splat('x')) ++ "\n");
     fixture.settle();
     try fixture.say("wrapped\n");
     fixture.model.tick();
@@ -147,7 +147,7 @@ test "a clobbered block is forgotten and the scan is re-armed, not run every tic
     try fixture.plant(cb_at, ring_at, ring_size, 1);
     fixture.settle();
     const scans = fixture.model.scans;
-    try fixture.core.write(cb_at, &[_]u8{0} ** block.id.len);
+    try fixture.core.write(cb_at, &@as([block.id.len]u8, @splat(0)));
     fixture.model.tick();
     try std.testing.expectEqual(@as(?u32, null), fixture.model.found);
     try std.testing.expectEqual(@as(u32, 1), fixture.model.forgotten);

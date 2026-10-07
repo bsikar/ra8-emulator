@@ -22,7 +22,7 @@ fn open(device: *usbfs.Device, n: u16, endpoint: u16, in: bool) void {
 }
 
 fn submit(direction: wire.Direction, ep: u32, length: u32) urb.Transfer {
-    return .{ .submit = .{ .seqnum = 7, .devid = 0x10002, .direction = direction, .ep = ep, .transfer_flags = 0, .length = length, .start_frame = 0, .packets = 0, .interval = 0, .setup = [_]u8{0} ** 8 } };
+    return .{ .submit = .{ .seqnum = 7, .devid = 0x10002, .direction = direction, .ep = ep, .transfer_flags = 0, .length = length, .start_frame = 0, .packets = 0, .interval = 0, .setup = @as([8]u8, @splat(0)) } };
 }
 
 test "a short bulk OUT URB lands in the driver's pipe in one packet" {
@@ -38,7 +38,7 @@ test "a long OUT URB waits while the pipe still holds its first packet" {
     var device = usbfs.Device{};
     open(&device, 1, 2, false);
     var transfer = submit(.out, 2, 100);
-    const data = [_]u8{0x5A} ** 100;
+    const data = @as([100]u8, @splat(0x5A));
     try std.testing.expectEqual(@as(?urb.Reply, null), transfer.advance(&device, &data, &.{}));
     try std.testing.expectEqual(@as(u32, 64), transfer.moved);
     try std.testing.expectEqual(@as(?urb.Reply, null), transfer.advance(&device, &data, &.{}));

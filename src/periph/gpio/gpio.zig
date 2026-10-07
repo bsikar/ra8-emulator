@@ -106,10 +106,10 @@ pub const Gpio = struct {
         changedFn: *const fn (*anyopaque, *Gpio, u8) void,
     };
 
-    ports: [port_count]Port = [1]Port{.{}} ** port_count,
+    ports: [port_count]Port = @splat(.{}),
     /// Last level seen on each board LED, and how many times it changed.
-    led_level: [led_count]u1 = .{0} ** led_count,
-    led_edges: [led_count]u32 = .{0} ** led_count,
+    led_level: [led_count]u1 = @splat(0),
+    led_edges: [led_count]u32 = @splat(0),
     /// Stores into PCNTR2, which the pads drive and firmware does not.
     refused: u32 = 0,
     observer: ?Observer = null,
@@ -127,9 +127,9 @@ pub const Gpio = struct {
     /// pull-ups, so a released button has to read high or a firmware poll sees
     /// a press that never happened.
     pub fn reset(self: *Gpio) void {
-        self.ports = [1]Port{.{}} ** port_count;
-        self.led_level = .{0} ** led_count;
-        self.led_edges = .{0} ** led_count;
+        self.ports = @splat(.{});
+        self.led_level = @splat(0);
+        self.led_edges = @splat(0);
         self.refused = 0;
         const switches = (@as(u16, 1) << sw1_pin) | (@as(u16, 1) << sw2_pin);
         self.ports[sw_port].in_ovr = switches;

@@ -52,7 +52,7 @@ test "a loop that comes back to its opening state closes" {
 
 test "a machine that keeps moving does not close" {
     var seam = idle.Seam{};
-    var walking = [_]u32{0} ** (idle.limits.probe + 8);
+    var walking = @as([idle.limits.probe + 8]u32, @splat(0));
     for (&walking, 0..) |*slot, index| slot.* = @intCast(index + 1);
     var core = Fake{ .script = &walking, .seam = &seam };
     const looked = try seam.look(&core, 0, idle.limits.probe);
@@ -75,7 +75,7 @@ test "a store the model cannot show harmless refuses the closure" {
 
 test "a disturbed probe stops stepping instead of running its budget out" {
     var seam = idle.Seam{};
-    var walking = [_]u32{0} ** (idle.limits.probe + 8);
+    var walking = @as([idle.limits.probe + 8]u32, @splat(0));
     for (&walking, 0..) |*slot, index| slot.* = @intCast(index + 1);
     var core = Fake{ .script = &walking, .seam = &seam, .disturbs = &.{2} };
     const looked = try seam.look(&core, 0, idle.limits.probe);
@@ -89,7 +89,7 @@ test "a disturbed probe stops stepping instead of running its budget out" {
 
 test "an undisturbed probe still walks the whole budget" {
     var seam = idle.Seam{};
-    var walking = [_]u32{0} ** (idle.limits.probe + 8);
+    var walking = @as([idle.limits.probe + 8]u32, @splat(0));
     for (&walking, 0..) |*slot, index| slot.* = @intCast(index + 1);
     var core = Fake{ .script = &walking, .seam = &seam };
     const looked = try seam.look(&core, 0, idle.limits.probe);
@@ -98,7 +98,7 @@ test "an undisturbed probe still walks the whole budget" {
 
 test "a loop wider than the probe budget is not seen" {
     var seam = idle.Seam{};
-    var wide = [_]u32{0} ** (idle.limits.probe + 4);
+    var wide = @as([idle.limits.probe + 4]u32, @splat(0));
     for (&wide, 0..) |*slot, index| slot.* = @intCast(index + 1);
     var core = Fake{ .script = &wide, .seam = &seam };
     const looked = try seam.look(&core, 0, idle.limits.probe);

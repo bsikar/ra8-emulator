@@ -13,7 +13,7 @@ fn put(bytes: []u8, index: usize, value: u32) void {
 
 /// A valid hello-world container: 16 bytes of code, 8 of data.
 fn sample() [image_len]u8 {
-    var bytes = [_]u8{0} ** image_len;
+    var bytes = @as([image_len]u8, @splat(0));
     const words = [_]u32{ appimg.magic, appimg.version, 4, code_len, data_len, 0x800, 1, appimg.Capability.display };
     for (words, 0..) |value, index| put(&bytes, index, value);
     @memcpy(bytes[32..][0..9], "com.hello");

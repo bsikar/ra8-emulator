@@ -84,7 +84,7 @@ pub const Group = struct {
     /// and the noise filter, whichever bits they are on this part. Kept so a
     /// read-modify-write of the register survives, never read by anything.
     others: u32 = 0,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     asserts: u32 = 0,
     clears: u32 = 0,
     faked: u32 = 0,
@@ -116,7 +116,7 @@ pub const Group = struct {
 };
 
 pub const Poeg = struct {
-    groups: [group_count]Group = .{Group{}} ** group_count,
+    groups: [group_count]Group = @splat(Group{}),
 
     pub fn init() Poeg {
         return .{};

@@ -149,7 +149,7 @@ const Writer = struct {
             at += fat.sector_bytes;
             sector += 1;
         }) {
-            var block: fat.Sector = .{0} ** fat.sector_bytes;
+            var block: fat.Sector = @splat(0);
             const n = @min(fat.sector_bytes, bytes.len - at);
             @memcpy(block[0..n], bytes[at..][0..n]);
             if (std.mem.allEqual(u8, &block, 0)) continue;
@@ -167,7 +167,7 @@ const Writer = struct {
         const first = self.take(clustersOf(slots * dirent.bytes, self.clusterBytes()));
         const entries = try self.allocator.alloc(dirent.Entry, clustersOf(slots * dirent.bytes, self.clusterBytes()) * self.clusterBytes() / dirent.bytes);
         defer self.allocator.free(entries);
-        @memset(entries, [_]u8{0} ** dirent.bytes);
+        @memset(entries, @as([dirent.bytes]u8, @splat(0)));
         var at: usize = 0;
         if (parent == 0 and first == fat.value.root_cluster) {
             entries[0] = dirent.short(labelName(label), dirent.attr.volume, 0, 0);
@@ -227,7 +227,7 @@ const Writer = struct {
             at += fat.sector_bytes;
             s += 1;
         }) {
-            var block: fat.Sector = .{0} ** fat.sector_bytes;
+            var block: fat.Sector = @splat(0);
             const n = @min(fat.sector_bytes, bytes.len - at);
             @memcpy(block[0..n], bytes[at..][0..n]);
             if (!self.img.write(s, &block)) return error.WriteRefused;
@@ -237,7 +237,7 @@ const Writer = struct {
 
 /// The volume label as an 11-byte space-padded name.
 fn labelName(label: []const u8) [11]u8 {
-    var out = [_]u8{' '} ** 11;
+    var out = @as([11]u8, @splat(' '));
     for (label[0..@min(label.len, 11)], 0..) |c, i| out[i] = std.ascii.toUpper(c);
     return out;
 }

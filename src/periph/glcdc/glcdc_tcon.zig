@@ -127,7 +127,7 @@ pub const Tcon = struct {
     tim: u32 = 0,
     de: u32 = 0,
     /// LCD_TCON0..3, in that order.
-    pin: [pins]Pin = [_]Pin{.{}} ** pins,
+    pin: [pins]Pin = @splat(.{}),
     /// Writes this block took.
     writes: u32 = 0,
     /// Whether both active-area registers have been written, which is what

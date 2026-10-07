@@ -97,7 +97,7 @@ pub const reset: u32 = 0;
 
 /// The six words, and what the gate turned away.
 pub const Unit = struct {
-    words: [register_count]u32 = .{reset} ** register_count,
+    words: [register_count]u32 = @splat(reset),
     /// Stores that landed on a register with PRC4 open.
     writes: u32 = 0,
     /// Stores silicon would have discarded, because PRC4 was shut.

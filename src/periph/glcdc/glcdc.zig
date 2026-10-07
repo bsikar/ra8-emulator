@@ -104,13 +104,13 @@ pub const Glcdc = struct {
     /// built without an engine, which is every unit test that only cares
     /// about the register window.
     memory: ?Guest = null,
-    registers: [words]u32 = [_]u32{0} ** words,
+    registers: [words]u32 = @splat(0),
     /// One palette pair per graphics layer, layer 1 first.
-    palettes: [2]clut.Palette = [_]clut.Palette{.{}} ** 2,
+    palettes: [2]clut.Palette = @splat(.{}),
     /// The scan-out: what the panel actually shows.
     scanner: scan.Scanner = .{},
     /// One blend stage per graphics layer, layer 1 first.
-    blends: [2]blend.Layer = [_]blend.Layer{.{}} ** 2,
+    blends: [2]blend.Layer = @splat(.{}),
     /// The compositor that stacks those layers on the background.
     mixer: mix.Mixer = .{},
     /// The output stage every composited pixel leaves through.

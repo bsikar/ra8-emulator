@@ -40,7 +40,7 @@ const image = struct {
 
 /// 8 KiB of SRAM holding the program, its counter and its stack.
 const Sram = struct {
-    bytes: [0x2000]u8 = [_]u8{0} ** 0x2000,
+    bytes: [0x2000]u8 = @splat(0),
 
     fn view(self: *Sram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

@@ -102,7 +102,7 @@ pub const Limiter = struct {
 
 /// The six limiters and the tree CONTROL folds them down.
 pub const Set = struct {
-    edges: [count]Limiter = .{Limiter{}} ** count,
+    edges: [count]Limiter = @splat(Limiter{}),
 
     /// Take a register write. Returns false when the offset is not one of
     /// this set's, so the caller can keep its own switch small.

@@ -15,7 +15,7 @@ const Env = proto.Client.Env;
 
 /// Vector table (SP 0x40, reset 0x09) then nops, so a step has somewhere to go.
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         const code = [_]u8{ 0x40, 0, 0, 0, 0x09, 0, 0, 0, 0x00, 0xBF, 0x00, 0xBF };

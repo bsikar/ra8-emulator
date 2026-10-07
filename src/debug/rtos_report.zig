@@ -71,7 +71,7 @@ pub const Table = struct {
     other: u64,
     slots: [rtos_load.limits.slots]rtos_load.Slot = undefined,
     len: usize = 0,
-    shares: [limits.rows]u64 = [_]u64{0} ** limits.rows,
+    shares: [limits.rows]u64 = @splat(0),
 
     pub fn rows(self: *const Table) []const rtos_load.Slot {
         return self.slots[0..self.len];

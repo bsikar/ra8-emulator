@@ -170,7 +170,7 @@ pub fn centred(list: *draw_list.DrawList, area: draw_list.Rect, text: []const u8
 
 fn expand() [atlas_w * atlas_h]u8 {
     @setEvalBranchQuota(200_000);
-    var out = [_]u8{0} ** (atlas_w * atlas_h);
+    var out = @as([atlas_w * atlas_h]u8, @splat(0));
     for (columns, 0..) |glyph, index| {
         const origin = cell(@intCast(first + index));
         for (glyph, 0..) |bits, column| {

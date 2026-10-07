@@ -54,7 +54,7 @@ pub const Pdg = struct {
     gtdlycr: u16 = 0,
     gtdlycr2: u16 = 0,
     /// Delay codes by edge, then channel, then pin.
-    codes: [2][channels][2]u16 = [_][channels][2]u16{[_][2]u16{.{ 0, 0 }} ** channels} ** 2,
+    codes: [2][channels][2]u16 = @splat(@splat(.{ 0, 0 })),
     writes: u32 = 0,
     /// Times the DLL left reset with DLLEN set: one per completed bring-up.
     releases: u32 = 0,

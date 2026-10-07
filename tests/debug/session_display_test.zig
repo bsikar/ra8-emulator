@@ -14,7 +14,7 @@ const eink = ra8.periph.eink;
 const eink_wire = ra8.periph.eink_wire;
 
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn init() Ram {
         var ram: Ram = .{};

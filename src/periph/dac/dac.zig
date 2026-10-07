@@ -96,7 +96,7 @@ pub const Channel = struct {
     dacr0: u32 = 0,
     /// DACR1. DPSEL is read; the rest rides along untouched.
     dacr1: u32 = 0,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// Codes accepted while the channel was enabled.
     outputs: u32 = 0,
     /// The largest code written while enabled.
@@ -156,7 +156,7 @@ pub const Channel = struct {
 };
 
 pub const Dac = struct {
-    channels: [channel_count]Channel = .{Channel{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(Channel{}),
 
     pub fn init() Dac {
         return .{};

@@ -12,7 +12,7 @@ const page: usize = 0x1000;
 /// An image of `count` PT_LOAD segments, the first at MRAM (a vector pair)
 /// and the second at SRAM (a marker word), each from its own file page.
 fn twoSegments(count: u16) [page * 3]u8 {
-    var file = [_]u8{0} ** (page * 3);
+    var file = @as([page * 3]u8, @splat(0));
     const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
         .magic = .{ 0x7f, 'E', 'L', 'F' },
@@ -21,7 +21,7 @@ fn twoSegments(count: u16) [page * 3]u8 {
         .version = 1,
         .osabi = 0,
         .abiversion = 0,
-        .pad = .{0} ** 7,
+        .pad = @splat(0),
         .e_type = 2,
         .e_machine = elf.em_arm,
         .e_version = 1,

@@ -9,7 +9,7 @@ const setup = ra8.periph.usbhs_setup;
 const usbhs_pipe = ra8.periph.usbhs_pipe;
 const xfer = ra8.periph.usbhs_xfer;
 
-var disk = [_]u8{0x5A} ** (2 * msc.block_len);
+var disk = @as([2 * msc.block_len]u8, @splat(0x5A));
 
 fn set(code: u8, value: u16) setup.Packet {
     return .{ .request_type = 0x00, .code = code, .value = value };
@@ -24,7 +24,7 @@ fn configured() device.Device {
 }
 
 fn cbw(tag: u32, length: u32, cdb: []const u8) [msc.cbw_len]u8 {
-    var packet = [_]u8{0} ** msc.cbw_len;
+    var packet = @as([msc.cbw_len]u8, @splat(0));
     std.mem.writeInt(u32, packet[0..4], msc.cbw_signature, .little);
     std.mem.writeInt(u32, packet[4..8], tag, .little);
     std.mem.writeInt(u32, packet[8..12], length, .little);

@@ -51,7 +51,7 @@ pub const reset: u32 = 0;
 
 /// The attribution words, and what the firmware did to them.
 pub const Unit = struct {
-    words: [word_count]u32 = .{reset} ** word_count,
+    words: [word_count]u32 = @splat(reset),
     /// Stores that landed on a real attribution word.
     stores: u32 = 0,
     /// Stores that named the reserved word at +0, which is not a register.

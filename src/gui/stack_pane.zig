@@ -60,7 +60,7 @@ pub const Frame = struct {
 
 pub const Snapshot = struct {
     count: usize = 0,
-    frames: [max_frames]Frame = [_]Frame{.{}} ** max_frames,
+    frames: [max_frames]Frame = @splat(.{}),
 };
 
 /// Walks `core`'s call chain. Without CFI for the stop the chain is pc and,

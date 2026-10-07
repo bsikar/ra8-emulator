@@ -206,7 +206,7 @@ test "every pixel through the stage is counted" {
 
 test "an armed capture keeps exactly what leaves the stage and drops what falls outside it" {
     var stage = out.Stage{};
-    var pixels = [_]u32{0} ** 4;
+    var pixels = @as([4]u32, @splat(0));
     stage.capture = .{ .pixels = &pixels, .width = 2, .height = 2 };
     const shown = stage.apply(grey, 1, 1);
     try std.testing.expectEqual(shown, pixels[3]);

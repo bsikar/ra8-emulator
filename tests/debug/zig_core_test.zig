@@ -28,7 +28,7 @@ const Ram = struct {
 
 // sp 0x00000040, reset 0x09 ; bf00 nop ; bf00 nop ; bf00 nop ; ba80 (unallocated)
 fn ram() Ram {
-    var r: Ram = .{ .bytes = [_]u8{0} ** 64 };
+    var r: Ram = .{ .bytes = @as([64]u8, @splat(0)) };
     const image = [_]u8{
         0x40, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00,
         0x00, 0xBF, 0x00, 0xBF, 0x00, 0xBF, 0x80, 0xBA,

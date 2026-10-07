@@ -73,7 +73,7 @@ test "a stream of the wrong length is refused" {
     const layout = order.Layout{ .ofm_depth = 1, .kernel_height = 1, .kernel_width = 1, .ifm_depth = 1, .ofm_block_depth = 8 };
     var out: [1]i16 = undefined;
     const padded = try order.paddedLength(layout);
-    const zeros = [_]i16{0} ** 300;
+    const zeros = @as([300]i16, @splat(0));
     try std.testing.expectError(error.ShortStream, order.unpack(layout, zeros[0 .. padded - 1], &out));
     try std.testing.expectError(error.LongStream, order.unpack(layout, zeros[0 .. padded + 1], &out));
     try order.unpack(layout, zeros[0..padded], &out);

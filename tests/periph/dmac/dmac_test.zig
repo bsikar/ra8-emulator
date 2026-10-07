@@ -41,7 +41,7 @@ fn scene(core: store_memory.Guest) !void {
     var pattern: [16]u8 = undefined;
     for (&pattern, 0..) |*cell, index| cell.* = @intCast(0xA0 + index);
     try core.write(source_at, &pattern);
-    try core.write(dest_at, &[_]u8{0} ** 16);
+    try core.write(dest_at, &@as([16]u8, @splat(0)));
 }
 
 fn byteAt(core: store_memory.Guest, address: u32) !u8 {
@@ -332,7 +332,7 @@ test "a block memory cut short keeps the units that landed, addresses over them"
     const core = try store_memory.open();
     defer store_memory.close(core);
     try scene(core);
-    try core.write(source_at, &[_]u8{0x11} ** 8);
+    try core.write(source_at, &@as([8]u8, @splat(0x11)));
     const bank = startedBank();
     var unit = dmac.Dmac.init(&bank);
     unit.memory = core;

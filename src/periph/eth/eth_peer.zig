@@ -24,7 +24,7 @@ pub const Frame = struct {
 
 /// A bounded queue of frames in one direction.
 pub const Queue = struct {
-    frames: [depth]Frame = [_]Frame{.{}} ** depth,
+    frames: [depth]Frame = @splat(.{}),
     head: usize = 0,
     count: usize = 0,
     /// Frames the queue had no room for. The sender still holds them.

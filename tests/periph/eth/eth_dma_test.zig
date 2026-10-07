@@ -34,7 +34,7 @@ const Fixture = struct {
     /// Write an eight-byte descriptor at `at`.
     fn plant(self: *Fixture, at: u32, dt: desc.Dt, ds: u32, ptr: u32) !void {
         const size = desc.dsBytes(0, ds);
-        var raw = [_]u8{0} ** desc.size;
+        var raw = @as([desc.size]u8, @splat(0));
         raw[desc.layout.ds_low] = size[0];
         raw[desc.layout.ds_high] = size[1];
         raw[desc.layout.dt] = desc.dtByte(0, dt);
@@ -60,7 +60,7 @@ const Fixture = struct {
     }
 };
 
-const frame = [_]u8{0xA5} ** 64;
+const frame = @as([64]u8, @splat(0xA5));
 
 test "a kicked queue moves its frame and frees the slot" {
     var fix = try Fixture.open();
@@ -178,7 +178,7 @@ test "a waiting frame lands in the first free slot" {
     try std.testing.expectEqual(@as(u32, 1), fix.rings.rx_frames);
     try std.testing.expectEqual(desc.Dt.fsingle, try fix.typeAt(slot));
     try std.testing.expectEqual(@as(u32, frame.len), try fix.sizeAt(slot));
-    var back = [_]u8{0} ** frame.len;
+    var back = @as([frame.len]u8, @splat(0));
     try fix.core.read(buffer_at + 256, &back);
     try std.testing.expectEqualSlices(u8, &frame, &back);
 }

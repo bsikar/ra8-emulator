@@ -36,9 +36,9 @@ const Tracked = struct { address: u32, at_head: u32, delta: i64 };
 
 pub const Recorder = struct {
     heads: u8 = 0,
-    head: [16]u32 = .{0} ** 16,
+    head: [16]u32 = @splat(0),
     xpsr: u32 = 0,
-    deltas: [16]i64 = .{0} ** 16,
+    deltas: [16]i64 = @splat(0),
     steps: [max_steps]td.Step = undefined,
     before: [max_steps][16]u32 = undefined,
     len: usize = 0,

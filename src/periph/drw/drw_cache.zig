@@ -140,7 +140,7 @@ pub const Framebuffer = struct {
             self.faults +%= 1;
             return;
         };
-        var slot = [_]u8{0} ** 4;
+        var slot = @as([4]u8, @splat(0));
         const span = slot[0..cell.bytes];
         pack(span, cell.value);
         target.write(cell.at, span) catch {

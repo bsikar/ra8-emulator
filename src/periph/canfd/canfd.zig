@@ -126,7 +126,7 @@ pub const Unit = struct {
     /// CFDCnERFL: the error flags, which only the controller can raise.
     faults: errors.Errors = .{},
     queue: fifo.Fifo = .{},
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// Frames clocked out of the transmit buffer.
     sent: u32 = 0,
     /// Frames the filter accepted and a stage took.
@@ -310,7 +310,7 @@ pub const Unit = struct {
 };
 
 pub const Canfd = struct {
-    units: [unit_count]Unit = .{Unit{}} ** unit_count,
+    units: [unit_count]Unit = @splat(Unit{}),
     /// A delivery on CANFD0 waiting for the chunk boundary.
     raised: bool = false,
     /// Events handed to the board's event path.

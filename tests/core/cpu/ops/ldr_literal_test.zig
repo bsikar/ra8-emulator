@@ -9,7 +9,7 @@ const ldr_literal = ra8.core.cpu.ops.ldr_literal;
 /// 64 bytes of flash at 0x0800_0000, read-only.
 const Flash = struct {
     const base: u32 = 0x0800_0000;
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Flash) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

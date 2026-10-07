@@ -27,8 +27,8 @@ test "nothing until a publish, then a copy the board can't change" {
 test "a resized panel arrives whole and the newest publish wins" {
     var handoff = snapshot.Handoff.init(std.testing.allocator);
     defer handoff.deinit();
-    const small = [_]u32{7} ** 4;
-    const big = [_]u32{9} ** 12;
+    const small = @as([4]u32, @splat(7));
+    const big = @as([12]u32, @splat(9));
     _ = try handoff.publish(.{ .panel = &small, .width = 2, .height = 2, .leds = &.{} });
     _ = try handoff.publish(.{ .panel = &big, .width = 4, .height = 3, .leds = &.{} });
     const seen = handoff.latest().?;
@@ -43,7 +43,7 @@ test "a resized panel arrives whole and the newest publish wins" {
 test "more LEDs than a slot holds are refused" {
     var handoff = snapshot.Handoff.init(std.testing.allocator);
     defer handoff.deinit();
-    const leds = [_]Led{.{ .rgb565 = 0, .on = false }} ** (snapshot.max_leds + 1);
+    const leds = @as([snapshot.max_leds + 1]Led, @splat(.{ .rgb565 = 0, .on = false }));
     try std.testing.expectError(error.TooManyLeds, handoff.publish(.{ .panel = &.{}, .width = 0, .height = 0, .leds = &leds }));
     try std.testing.expect(handoff.latest() == null);
 }

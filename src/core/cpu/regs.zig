@@ -72,7 +72,7 @@ pub const Name = enum(u5) {
 };
 
 pub const Regs = struct {
-    low: [13]u32 = [_]u32{0} ** 13,
+    low: [13]u32 = @splat(0),
     msp: u32 = 0,
     psp: u32 = 0,
     lr: u32 = 0,

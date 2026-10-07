@@ -73,7 +73,7 @@ pub const Pipe = struct {
 
 pub const Pipes = struct {
     sel: u16 = 0,
-    pipes: [count]Pipe = .{Pipe{}} ** count,
+    pipes: [count]Pipe = @splat(Pipe{}),
     /// Window writes that landed with no pipe selected.
     unselected: u32 = 0,
 

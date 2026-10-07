@@ -50,7 +50,7 @@ pub const Site = struct {
 
 /// The pairs counted so far.
 pub const Tally = struct {
-    sites: [limits.kept]Site = [_]Site{.{ .pc = 0, .value = 0, .writes = 0 }} ** limits.kept,
+    sites: [limits.kept]Site = @splat(.{ .pc = 0, .value = 0, .writes = 0 }),
     used: usize = 0,
     /// Pairs that arrived to a full table and displaced a slot, so a
     /// tally that is not the whole story says so.

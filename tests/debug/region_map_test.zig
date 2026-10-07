@@ -84,6 +84,6 @@ test "a span straddling a region's end fits nowhere" {
 
 test "too many regions is refused" {
     const image = try elf.Image.init(image_bytes);
-    const many = [_]region_map.Region{.{ .name = "X", .base = 0, .size = 1 }} ** (region_map.max_regions + 1);
+    const many = @as([region_map.max_regions + 1]region_map.Region, @splat(.{ .name = "X", .base = 0, .size = 1 }));
     try std.testing.expectError(region_map.Error.TooManyRegions, region_map.build(image, &many));
 }

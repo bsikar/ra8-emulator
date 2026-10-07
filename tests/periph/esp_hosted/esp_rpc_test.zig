@@ -71,7 +71,7 @@ test "the firmware version answer echoes the uid and reports 2.12.11 on an ESP32
     const got = try frame.parse(&out);
     try std.testing.expectEqual(frame.Interface.serial, got.header.interface);
     const proto = rpc.tlvData(got.payload).?;
-    var envelope = [_]u64{0} ** 4;
+    var envelope = @as([4]u64, @splat(0));
     try varints(proto, &envelope);
     try std.testing.expectEqual(@as(u64, 2), envelope[1]);
     try std.testing.expectEqual(@as(u64, 606), envelope[2]);
@@ -84,7 +84,7 @@ test "the firmware version body carries version, chip id and target" {
     var buf: [32]u8 = undefined;
     var w: event.Writer = .{ .buf = &buf };
     try rpc.fwVersion(&w);
-    var fields = [_]u64{0} ** 9;
+    var fields = @as([9]u64, @splat(0));
     try varints(w.written(), &fields);
     try std.testing.expectEqual(@as(u64, 0), fields[1]);
     try std.testing.expectEqual(@as(u64, 2), fields[2]);
@@ -121,7 +121,7 @@ test "the link answers the request only after the host announces itself" {
     try std.testing.expectEqual(@as(u32, 1), link.replies_sent);
     try std.testing.expect(!link.dataReady());
     const proto = rpc.tlvData((try frame.parse(&got)).payload).?;
-    var envelope = [_]u64{0} ** 4;
+    var envelope = @as([4]u64, @splat(0));
     try varints(proto, &envelope);
     try std.testing.expectEqual(@as(u64, 606), envelope[2]);
     try std.testing.expectEqual(@as(u64, 1), envelope[3]);
@@ -132,7 +132,7 @@ test "station requests get a bare acknowledgement echoing the uid" {
         var out: [frame.frame_size]u8 = undefined;
         try std.testing.expect(try rpc.answerFrame(&out, .{ .id = id, .uid = 5 }));
         const proto = rpc.tlvData((try frame.parse(&out)).payload).?;
-        var envelope = [_]u64{0} ** 4;
+        var envelope = @as([4]u64, @splat(0));
         try varints(proto, &envelope);
         try std.testing.expectEqual(@as(u64, 2), envelope[1]);
         try std.testing.expectEqual(@as(u64, id + 256), envelope[2]);

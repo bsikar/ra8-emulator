@@ -69,7 +69,7 @@ fn store(cpu: *Cpu, instr: Instr) op.Error!void {
 fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     const a = access(cpu, instr.hw1);
     try alignment.memU(cpu.bus, a.address, a.size);
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     try cpu.bus.read(a.address, bytes[0..a.size]);
     var value = std.mem.readInt(u32, &bytes, .little);
     if (a.signed) {

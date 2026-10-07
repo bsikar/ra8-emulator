@@ -75,7 +75,7 @@ const Queue = struct {
     }
 };
 pub const Stream = struct {
-    queues: [subscribers]?Queue = [_]?Queue{null} ** subscribers,
+    queues: [subscribers]?Queue = @splat(null),
     pub fn subscribe(self: *Stream) ?usize {
         for (&self.queues, 0..) |*slot, id| {
             if (slot.* != null) continue;

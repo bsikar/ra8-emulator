@@ -79,7 +79,7 @@ test "an empty device list is the header and a zero count" {
 
 test "an import of an exported busid answers status 0 and the record" {
     const items = [_]exp.Export{try exp.fromDescriptors(place, &device, &config)};
-    var body = [_]u8{0} ** wire.busid_len;
+    var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..3], "1-1");
     const found = try exp.find(&items, &body);
     try std.testing.expect(found != null);
@@ -94,7 +94,7 @@ test "an import of an exported busid answers status 0 and the record" {
 
 test "an import of an unknown busid answers status 1 with no record" {
     const items = [_]exp.Export{try exp.fromDescriptors(place, &device, &config)};
-    var body = [_]u8{0} ** wire.busid_len;
+    var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..3], "2-1");
     const found = try exp.find(&items, &body);
     try std.testing.expect(found == null);

@@ -72,7 +72,7 @@ fn shutdown(_: *anyopaque) callconv(mf.cc) mf.HRESULT {
 }
 
 fn vtable() [42]?*const anyopaque {
-    var entries = [_]?*const anyopaque{null} ** 42;
+    var entries: [42]?*const anyopaque = @splat(null);
     entries[mf.slot.release] = @ptrCast(&release);
     entries[mf.slot.reader_read_sample] = @ptrCast(&readSample);
     entries[mf.slot.sample_to_contiguous] = @ptrCast(&toContiguous);

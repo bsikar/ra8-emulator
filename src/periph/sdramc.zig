@@ -46,7 +46,7 @@ pub const off = struct {
 const word_count: usize = span / 4;
 
 pub const Sdramc = struct {
-    words: [word_count]u32 = .{0} ** word_count,
+    words: [word_count]u32 = @splat(0),
     sdckocr: u8 = 0,
     /// Stores that landed on either window.
     writes: u32 = 0,

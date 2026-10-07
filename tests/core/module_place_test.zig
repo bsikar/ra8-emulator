@@ -13,7 +13,7 @@ fn put(bytes: []u8, index: usize, value: u32) void {
 }
 
 fn sample() [image_len]u8 {
-    var bytes = [_]u8{0} ** image_len;
+    var bytes = @as([image_len]u8, @splat(0));
     const words = [_]u32{ appimg.magic, appimg.version, 8, code_len, data_len, 0x400, 1, 0 };
     for (words, 0..) |value, index| put(&bytes, index, value);
     @memcpy(bytes[32..][0..9], "com.hello");
@@ -23,7 +23,7 @@ fn sample() [image_len]u8 {
 
 const Memory = struct {
     base: u32,
-    cells: [256]u8 = [_]u8{0} ** 256,
+    cells: [256]u8 = @splat(0),
     writes: usize = 0,
 
     pub fn write(self: *Memory, address: u32, bytes: []const u8) !void {

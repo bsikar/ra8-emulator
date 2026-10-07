@@ -107,7 +107,7 @@ pub const BoardBus = struct {
         const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
         if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
-        var padded = [_]u8{0} ** 4;
+        var padded = @as([4]u8, @splat(0));
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
@@ -241,7 +241,7 @@ pub const Scs = struct {
         if (self.cut) |edge| try edge.see(memory, address, bytes);
         try memory.write(address, bytes);
         if (owed) |unit| {
-            var padded = [_]u8{0} ** 4;
+            var padded = @as([4]u8, @splat(0));
             @memcpy(padded[0..@min(bytes.len, 4)], bytes[0..@min(bytes.len, 4)]);
             unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
             unit.apply(memory) catch return bus.Error.Unmapped;
@@ -304,7 +304,7 @@ fn fileItm(memory: bus.Bus, port: *itm_port.Itm, address: u32, bytes: []const u8
     if (address < itm_port.base or address - itm_port.base >= itm_port.limits.span) return;
     const offset = address - itm_port.base;
     const width = @min(bytes.len, 4);
-    var padded = [_]u8{0} ** 4;
+    var padded = @as([4]u8, @splat(0));
     @memcpy(padded[0..width], bytes[0..width]);
     if (!port.write(offset, std.mem.readInt(u32, &padded, .little), @intCast(width))) return;
     if (port.peek(offset)) |word| try putWord(memory, address, word);

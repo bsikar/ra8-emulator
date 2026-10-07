@@ -156,7 +156,7 @@ pub const Channel = struct {
 /// The eight channels, the module gate over them, and the counters behind the
 /// end-of-run line.
 pub const Dmac = struct {
-    channels: [channel_count]Channel = [_]Channel{.{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(.{}),
     /// The machine whose memory a transfer moves. wiring.attachBlocks points
     /// this at the run's guest memory; a board built without one declines
     /// every request.

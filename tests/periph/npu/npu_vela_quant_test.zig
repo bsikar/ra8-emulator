@@ -49,7 +49,7 @@ test "the runner keeps the scale and stride registers the program set" {
         pub fn write(_: *@This(), _: u32, _: []const u8) error{Refused}!void {}
     };
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     // OFM_SCALE shift 12 + payload, IFM_STRIDE_X + payload, ACTIVATION_MAX, STOP.
     const words = [_]u32{ 0x000C_4024, 0x0000_7FFF, 0x0000_4004, 0x0000_0020, 0x007F_0127, 0x0000_0000 };
     const result = try vela.runner.run(&memory, &regions, &words);

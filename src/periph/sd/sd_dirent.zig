@@ -53,7 +53,7 @@ pub fn isShort(name: []const u8) bool {
 /// The 11-byte short name: the name itself when it is 8.3, else BASE~N.EXT
 /// with N the long name's place among its directory's long names.
 pub fn shortName(name: []const u8, index: u32) [11]u8 {
-    var out = [_]u8{' '} ** 11;
+    var out = @as([11]u8, @splat(' '));
     const dot = std.mem.lastIndexOfScalar(u8, name, '.');
     const split = if (dot) |d| (if (d == 0) name.len else d) else name.len;
     const ext = if (split < name.len) name[split + 1 ..] else "";
@@ -76,7 +76,7 @@ pub fn shortName(name: []const u8, index: u32) [11]u8 {
 
 /// The short entry: name, attribute, first cluster, size and the stamp.
 pub fn short(name11: [11]u8, attribute: u8, cluster: u32, size: u32) Entry {
-    var e = [_]u8{0} ** bytes;
+    var e = @as([bytes]u8, @splat(0));
     @memcpy(e[0..11], &name11);
     e[11] = attribute;
     put16(&e, 14, stamp.time);
@@ -117,7 +117,7 @@ pub fn checksum(name11: *const [11]u8) u8 {
 }
 
 fn longEntry(units: []const u16, chunk: usize, last: bool, sum: u8) Entry {
-    var e = [_]u8{0} ** bytes;
+    var e = @as([bytes]u8, @splat(0));
     e[0] = @as(u8, @intCast(chunk + 1)) | (if (last) @as(u8, 0x40) else 0);
     e[11] = attr.long_name;
     e[13] = sum;

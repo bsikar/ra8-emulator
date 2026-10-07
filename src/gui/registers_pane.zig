@@ -37,7 +37,7 @@ pub const shown = [_]Register{
 };
 
 pub const Snapshot = struct {
-    values: [shown.len]u32 = [_]u32{0} ** shown.len,
+    values: [shown.len]u32 = @splat(0),
 
     /// Did register `index` change since `before`? Nothing has changed
     /// when there is no earlier snapshot.

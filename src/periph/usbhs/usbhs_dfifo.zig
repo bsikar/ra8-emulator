@@ -51,7 +51,7 @@ pub const DataPort = struct {
 /// The pair, and the arbitration between them. Two ports aimed at one pipe is
 /// the case that needs an owner, so the pair owns it.
 pub const Ports = struct {
-    ports: [regs.dfifo.count]DataPort = [_]DataPort{.{}} ** regs.dfifo.count,
+    ports: [regs.dfifo.count]DataPort = @splat(.{}),
 
     /// DnFIFOSEL. CURPIPE 0 parks the port: it is the reset value, and the
     /// way a driver lets go of a data port when it resets the controller.

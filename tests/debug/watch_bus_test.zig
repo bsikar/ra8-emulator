@@ -46,8 +46,8 @@ const script =
 
 /// 8 KiB of SRAM at sram_base and the DWT's page, both plain memory.
 const Memory = struct {
-    sram: [0x2000]u8 = [_]u8{0} ** 0x2000,
-    ppb: [0x1000]u8 = [_]u8{0} ** 0x1000,
+    sram: [0x2000]u8 = @splat(0),
+    ppb: [0x1000]u8 = @splat(0),
 
     fn view(self: *Memory) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

@@ -123,7 +123,7 @@ pub const cmd = struct {
 const words = win_span / 4;
 
 pub const Sdhi = struct {
-    regs: [words]u32 = [_]u32{0} ** words,
+    regs: [words]u32 = @splat(0),
     card: card.Card,
     /// The block in flight, if a data phase is armed.
     data: xfer.Transfer = .{},
@@ -257,7 +257,7 @@ pub const Sdhi = struct {
             cmd.app_cmd => rsp[0] = card.response.r1_ready | card.response.r1_app_cmd,
             cmd.send_cid => {
                 if (!self.card.publishCid()) return illegal(rsp);
-                rsp.* = .{card.response.cid_word} ** 4;
+                rsp.* = @splat(card.response.cid_word);
             },
             cmd.send_rca => {
                 if (!self.card.takeAddress()) return illegal(rsp);

@@ -49,7 +49,7 @@ pub const Fitted = struct { at: endpoint.Endpoint, name: []const u8 };
 pub const Plugs = struct {
     board: *Board,
     arena: std.mem.Allocator,
-    panels: [spi.channel_count]?*eink.Panel = [_]?*eink.Panel{null} ** spi.channel_count,
+    panels: [spi.channel_count]?*eink.Panel = @splat(null),
 
     instances: [max_instances]catalog.Instance = undefined,
     instance_count: usize = 0,

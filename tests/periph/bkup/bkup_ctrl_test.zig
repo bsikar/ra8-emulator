@@ -6,7 +6,7 @@ const ra8 = @import("ra8");
 const ctrl = ra8.periph.bkup_ctrl;
 
 test "every named register resolves to its own slot" {
-    var seen = [_]bool{false} ** ctrl.slot_count;
+    var seen = @as([ctrl.slot_count]bool, @splat(false));
     const offsets = [_]u32{
         ctrl.off.vbtber,   ctrl.off.vbtbpcr2,  ctrl.off.vbtbpsr,
         ctrl.off.vbtadsr,  ctrl.off.vbtadcr1,  ctrl.off.vbtadcr2,

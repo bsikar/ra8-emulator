@@ -119,9 +119,9 @@ const shadow_words: usize = channel_stride / 4;
 pub const Channel = struct {
     running: bool = false,
     read_enable: bool = false,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// Produced and not yet read, oldest first.
-    fifo: [fifo_depth]u32 = .{0} ** fifo_depth,
+    fifo: [fifo_depth]u32 = @splat(0),
     filled: usize = 0,
     /// Tone state, advanced when a sample is produced.
     phase: u32 = 0,
@@ -205,7 +205,7 @@ pub const Channel = struct {
 };
 
 pub const Pdm = struct {
-    channels: [channel_count]Channel = .{Channel{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(Channel{}),
 
     pub fn init() Pdm {
         return .{};

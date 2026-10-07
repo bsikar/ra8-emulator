@@ -94,8 +94,8 @@ pub const Spot = struct {
 /// The modelled GPTP: the shadow firmware reads its own config back out of,
 /// the two counters behind it, and what went wrong.
 pub const Gptp = struct {
-    reg: [win_span]u8 = .{0} ** win_span,
-    units: [unit_count]gptp_timer.Unit = .{gptp_timer.Unit{}} ** unit_count,
+    reg: [win_span]u8 = @splat(0),
+    units: [unit_count]gptp_timer.Unit = @splat(gptp_timer.Unit{}),
     ns_remainder: u64 = 0,
     /// Units started, and units stopped, over the run.
     starts: u32 = 0,

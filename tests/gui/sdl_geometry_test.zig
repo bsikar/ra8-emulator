@@ -121,9 +121,9 @@ fn diff(a: u8, b: u8) u8 {
 fn compare(s: Scene) !u8 {
     var list = draw_list.DrawList.init(std.testing.allocator, width, height);
     defer list.deinit();
-    const texels = [_]Color{s.texel} ** 6;
+    const texels = @as([6]Color, @splat(s.texel));
     try scene(&list, s, &texels);
-    const coverage = [_]u8{s.coverage} ** 16;
+    const coverage = @as([16]u8, @splat(s.coverage));
     const atlas = raster.Atlas{ .width = 4, .height = 4, .coverage = &coverage };
     var want = try golden(&list, atlas);
     defer want.deinit(std.testing.allocator);
@@ -158,7 +158,7 @@ test "image textures not drawn in a frame are dropped at the next frame" {
     defer textures.deinit();
     var list = draw_list.DrawList.init(std.testing.allocator, 8, 8);
     defer list.deinit();
-    const texels = [_]Color{Color.rgb(1, 2, 3)} ** 6;
+    const texels = @as([6]Color, @splat(Color.rgb(1, 2, 3)));
     try list.image(rect(0, 0, 3, 2), .{ .width = 3, .height = 2, .pixels = &texels });
     var batch = gui.geometry.Batch.init(std.testing.allocator);
     defer batch.deinit();
@@ -175,9 +175,9 @@ test "image textures not drawn in a frame are dropped at the next frame" {
 test "the presenter clears to opaque black and draws the list like raster.draw" {
     var list = draw_list.DrawList.init(std.testing.allocator, width, height);
     defer list.deinit();
-    const texels = [_]Color{Color.rgb(9, 99, 199)} ** 6;
+    const texels = @as([6]Color, @splat(Color.rgb(9, 99, 199)));
     try scene(&list, .{ .tint = 255, .textured = true }, &texels);
-    const coverage = [_]u8{255} ** 16;
+    const coverage = @as([16]u8, @splat(255));
     const atlas = raster.Atlas{ .width = 4, .height = 4, .coverage = &coverage };
     var want = try golden(&list, atlas);
     defer want.deinit(std.testing.allocator);
