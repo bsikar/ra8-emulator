@@ -27,51 +27,58 @@ fn channels(colour: u8) usize {
 }
 
 pub fn build(allocator: std.mem.Allocator, spec: Spec) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
-    try out.appendSlice(&.{ 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' });
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.appendSlice(allocator, &.{ 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' });
     var ihdr: [13]u8 = undefined;
     std.mem.writeInt(u32, ihdr[0..4], spec.width, .big);
     std.mem.writeInt(u32, ihdr[4..8], spec.height, .big);
     ihdr[8..13].* = .{ spec.depth, spec.colour, 0, 0, spec.interlace };
-    try chunk(&out, "IHDR", &ihdr);
-    if (spec.palette) |palette| try chunk(&out, "PLTE", palette);
+    try chunk(allocator, &out, "IHDR", &ihdr);
+    if (spec.palette) |palette| try chunk(allocator, &out, "PLTE", palette);
     const data = try compressed(allocator, spec);
     defer allocator.free(data);
     if (spec.split_idat and data.len > 2) {
-        try chunk(&out, "IDAT", data[0 .. data.len / 2]);
-        try chunk(&out, "IDAT", data[data.len / 2 ..]);
+        try chunk(allocator, &out, "IDAT", data[0 .. data.len / 2]);
+        try chunk(allocator, &out, "IDAT", data[data.len / 2 ..]);
     } else {
-        try chunk(&out, "IDAT", data);
+        try chunk(allocator, &out, "IDAT", data);
     }
-    try chunk(&out, "IEND", "");
-    return out.toOwnedSlice();
+    try chunk(allocator, &out, "IEND", "");
+    return out.toOwnedSlice(allocator);
 }
 
-fn chunk(out: *std.ArrayList(u8), kind: *const [4]u8, data: []const u8) !void {
-    try out.writer().writeInt(u32, @intCast(data.len), .big);
+fn chunk(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kind: *const [4]u8, data: []const u8) !void {
+    var word: [4]u8 = undefined;
+    std.mem.writeInt(u32, &word, @intCast(data.len), .big);
+    try out.appendSlice(allocator, &word);
     const start = out.items.len;
-    try out.appendSlice(kind);
-    try out.appendSlice(data);
-    try out.writer().writeInt(u32, std.hash.Crc32.hash(out.items[start..]), .big);
+    try out.appendSlice(allocator, kind);
+    try out.appendSlice(allocator, data);
+    std.mem.writeInt(u32, &word, std.hash.Crc32.hash(out.items[start..]), .big);
+    try out.appendSlice(allocator, &word);
 }
 
 fn compressed(allocator: std.mem.Allocator, spec: Spec) ![]u8 {
-    var raw = std.ArrayList(u8).init(allocator);
-    defer raw.deinit();
-    if (!spec.no_data) try filtered(&raw, spec);
-    var out = std.ArrayList(u8).init(allocator);
+    var raw: std.ArrayList(u8) = .empty;
+    defer raw.deinit(allocator);
+    if (!spec.no_data) try filtered(allocator, &raw, spec);
+    // Compress.init needs a few bytes of output buffer up front.
+    var out: std.Io.Writer.Allocating = try .initCapacity(allocator, 64);
     errdefer out.deinit();
-    var stream = std.io.fixedBufferStream(raw.items);
-    try std.compress.zlib.compress(stream.reader(), out.writer(), .{});
+    const window = try allocator.alloc(u8, std.compress.flate.max_window_len);
+    defer allocator.free(window);
+    var deflater = try std.compress.flate.Compress.init(&out.writer, window, .zlib, .default);
+    try deflater.writer.writeAll(raw.items);
+    try deflater.finish();
     return out.toOwnedSlice();
 }
 
-fn filtered(raw: *std.ArrayList(u8), spec: Spec) !void {
+fn filtered(allocator: std.mem.Allocator, raw: *std.ArrayList(u8), spec: Spec) !void {
     const bpp = channels(spec.colour);
     const len = @as(usize, spec.width) * bpp;
     for (spec.filters, 0..) |kind, row| {
-        try raw.append(kind);
+        try raw.append(allocator, kind);
         const line = spec.pixels[row * len ..][0..len];
         for (line, 0..) |byte, index| {
             const a: u8 = if (index >= bpp) line[index - bpp] else 0;
@@ -84,7 +91,7 @@ fn filtered(raw: *std.ArrayList(u8), spec: Spec) !void {
                 4 => paeth(a, b, c),
                 else => 0,
             };
-            try raw.append(byte -% predicted);
+            try raw.append(allocator, byte -% predicted);
         }
     }
 }

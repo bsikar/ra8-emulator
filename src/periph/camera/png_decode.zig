@@ -57,7 +57,7 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) Error!Image {
     const stride = header.rowBytes() + 1;
     const raw = try allocator.alloc(u8, stride * header.height);
     defer allocator.free(raw);
-    try inflate(parts.data.items, raw);
+    try inflate(allocator, parts.data.items, raw);
     try unfilter(raw, header);
     try pixels(image, raw, &parts);
     return image;
@@ -113,11 +113,18 @@ fn nextChunk(bytes: []const u8, at: *usize) Error!Chunk {
     return .{ .kind = body[0..4], .data = body[4..] };
 }
 
-fn inflate(data: []const u8, raw: []u8) Error!void {
-    var stream = std.io.fixedBufferStream(data);
-    var inflater = std.compress.zlib.decompressor(stream.reader());
-    const got = inflater.reader().readAll(raw) catch return error.Corrupt;
-    if (got != raw.len) return error.Truncated;
+/// The window lives on the heap: 64 KiB is too much for a camera worker's
+/// stack, and it only lives for one decode.
+fn inflate(allocator: std.mem.Allocator, data: []const u8, raw: []u8) Error!void {
+    const flate = std.compress.flate;
+    const window = try allocator.alloc(u8, flate.max_window_len);
+    defer allocator.free(window);
+    var input: std.Io.Reader = .fixed(data);
+    var inflater: flate.Decompress = .init(&input, .zlib, window);
+    inflater.reader.readSliceAll(raw) catch |err| return switch (err) {
+        error.EndOfStream => error.Truncated,
+        error.ReadFailed => error.Corrupt,
+    };
 }
 
 /// Undo each row's filter in place. A row's "previous" bytes are the row
