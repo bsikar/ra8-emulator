@@ -72,7 +72,7 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
             1 => true,
             else => Error.BadValue,
         },
-        .@"enum" => |e| return std.meta.intToEnum(T, try read(e.tag_type, cursor)) catch Error.BadValue,
+        .@"enum" => |e| return std.enums.fromInt(T, try read(e.tag_type, cursor)) orelse Error.BadValue,
         .array => |a| {
             var out: T = undefined;
             for (&out) |*item| item.* = try read(a.child, cursor);
