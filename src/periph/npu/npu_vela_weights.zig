@@ -20,10 +20,10 @@ const index_limit = 512;
 
 /// Decode a whole weight stream. The caller owns the returned slice.
 pub fn decode(gpa: std.mem.Allocator, stream: []const u8) Error![]i16 {
-    var d = Decoder{ .bits = .{ .buf = stream }, .out = std.ArrayList(i16).init(gpa) };
-    errdefer d.out.deinit();
+    var d = Decoder{ .gpa = gpa, .bits = .{ .buf = stream }, .out = .empty };
+    errdefer d.out.deinit(gpa);
     while (try d.nextSlice()) {}
-    return d.out.toOwnedSlice();
+    return d.out.toOwnedSlice(gpa);
 }
 
 /// The stream read least-significant bit first.
@@ -169,6 +169,7 @@ const Side = struct {
 };
 
 const Decoder = struct {
+    gpa: std.mem.Allocator,
     bits: Bits,
     out: std.ArrayList(i16),
     palette: Palette = .{},
@@ -223,7 +224,7 @@ const Decoder = struct {
     }
 
     fn decodeSlice(self: *Decoder, h: Header) Error!void {
-        const gpa = self.out.allocator;
+        const gpa = self.gpa;
         const w_values = try gpa.alloc(u32, h.nvalues);
         defer gpa.free(w_values);
         const z_values = try gpa.alloc(u32, h.nvalues + @intFromBool(h.new_palette));
@@ -259,10 +260,10 @@ const Decoder = struct {
     fn interleave(self: *Decoder, h: Header, w_values: []const u32, z_values: []const u32) Error!void {
         const zero_run = h.zeroRun();
         const lead = @intFromBool(h.new_palette);
-        if (h.new_palette and zero_run) try self.out.appendNTimes(0, z_values[0]);
+        if (h.new_palette and zero_run) try self.out.appendNTimes(self.gpa, 0, z_values[0]);
         for (w_values, 0..) |index, i| {
-            try self.out.append(try self.palette.weight(index));
-            if (zero_run) try self.out.appendNTimes(0, z_values[i + lead]);
+            try self.out.append(self.gpa, try self.palette.weight(index));
+            if (zero_run) try self.out.appendNTimes(self.gpa, 0, z_values[i + lead]);
         }
     }
 };

@@ -65,11 +65,12 @@ fn exitedClean(term: std.process.Child.Term) bool {
 
 /// `text` single-quoted for the remote shell.
 pub fn quote(allocator: std.mem.Allocator, text: []const u8) ![]const u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    try out.append('\'');
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.append(allocator, '\'');
     for (text) |c| {
-        if (c == '\'') try out.appendSlice("'\\''") else try out.append(c);
+        if (c == '\'') try out.appendSlice(allocator, "'\\''") else try out.append(allocator, c);
     }
-    try out.append('\'');
-    return out.toOwnedSlice();
+    try out.append(allocator, '\'');
+    return out.toOwnedSlice(allocator);
 }

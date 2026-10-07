@@ -43,11 +43,11 @@ pub const Media = struct {
 
 /// The pictures and clips directly in `dir`, which must be iterable.
 pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Media {
-    var images = std.ArrayList([]u8).init(allocator);
-    defer images.deinit();
+    var images: std.ArrayList([]u8) = .empty;
+    defer images.deinit(allocator);
     errdefer for (images.items) |name| allocator.free(name);
-    var videos = std.ArrayList([]u8).init(allocator);
-    defer videos.deinit();
+    var videos: std.ArrayList([]u8) = .empty;
+    defer videos.deinit(allocator);
     errdefer for (videos.items) |name| allocator.free(name);
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -55,11 +55,11 @@ pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Media {
         const kind = sniff(dir, entry.name) orelse continue;
         const name = try allocator.dupe(u8, entry.name);
         errdefer allocator.free(name);
-        try (if (kind == .image) &images else &videos).append(name);
+        try (if (kind == .image) &images else &videos).append(allocator, name);
     }
-    const found_images = try images.toOwnedSlice();
+    const found_images = try images.toOwnedSlice(allocator);
     errdefer freeNames(allocator, found_images);
-    const found_videos = try videos.toOwnedSlice();
+    const found_videos = try videos.toOwnedSlice(allocator);
     sortNames(found_images);
     sortNames(found_videos);
     return .{ .allocator = allocator, .images = found_images, .videos = found_videos };
