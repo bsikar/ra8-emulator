@@ -43,24 +43,25 @@ fn region(out: anytype, name: []const u8, one: external.RegionConfig) !void {
 }
 
 /// One child run of `exe` on `config`, with its profile at `scratch`.
-pub fn runOne(gpa: std.mem.Allocator, exe: []const u8, job: Job, config: external.Config, scratch: []const u8) !sweep.Result {
+pub fn runOne(gpa: std.mem.Allocator, io: std.Io, exe: []const u8, job: Job, config: external.Config, scratch: []const u8) !sweep.Result {
     {
-        const file = try std.fs.cwd().createFile(scratch, .{});
-        defer file.close();
-        var buffered = std.io.bufferedWriter(file.writer());
-        try profileText(buffered.writer(), config);
-        try buffered.flush();
+        const file = try std.Io.Dir.cwd().createFile(io, scratch, .{});
+        defer file.close(io);
+        var buffer: [1024]u8 = undefined;
+        var writer = file.writerStreaming(io, &buffer);
+        try profileText(&writer.interface, config);
+        try writer.interface.flush();
     }
-    var argv = std.ArrayList([]const u8).init(gpa);
-    defer argv.deinit();
-    try argv.appendSlice(&.{ exe, job.path, "--cpu", "zig", "--part", job.part, "--board-profile", scratch, "--report", "json" });
-    if (job.stop_sym) |name| try argv.appendSlice(&.{ "--stop-sym", name, job.stop_count });
-    if (job.ms) |ms| try argv.appendSlice(&.{ "--ms", ms });
-    const ran = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items, .max_output_bytes = max_report_bytes });
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(gpa);
+    try argv.appendSlice(gpa, &.{ exe, job.path, "--cpu", "zig", "--part", job.part, "--board-profile", scratch, "--report", "json" });
+    if (job.stop_sym) |name| try argv.appendSlice(gpa, &.{ "--stop-sym", name, job.stop_count });
+    if (job.ms) |ms| try argv.appendSlice(gpa, &.{ "--ms", ms });
+    const ran = try std.process.run(gpa, io, .{ .argv = argv.items, .stdout_limit = .limited(max_report_bytes), .stderr_limit = .limited(max_report_bytes) });
     defer gpa.free(ran.stdout);
     defer gpa.free(ran.stderr);
     switch (ran.term) {
-        .Exited => |code| if (code != 0) return error.ChildFailed,
+        .exited => |code| if (code != 0) return error.ChildFailed,
         else => return error.ChildFailed,
     }
     return fromReport(gpa, ran.stdout);
@@ -98,20 +99,18 @@ fn number(value: ?std.json.Value, field: []const u8) !u64 {
 }
 
 /// Every configuration in the matrix, each judged against `target_ns`.
-pub fn all(gpa: std.mem.Allocator, job: Job, target_ns: ?u64, rows: *[matrix.count]sweep.Row) !void {
-    const exe = try std.fs.selfExePathAlloc(gpa);
+pub fn all(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, job: Job, target_ns: ?u64, rows: *[matrix.count]sweep.Row) !void {
+    const exe = try std.process.executablePathAlloc(io, gpa);
     defer gpa.free(exe);
-    const scratch = try std.fmt.allocPrint(gpa, "{s}/ra8-sweep-{x}.board", .{ tempDir(), std.crypto.random.int(u64) });
+    var tag: [8]u8 = undefined;
+    io.random(&tag);
+    const scratch = try std.fmt.allocPrint(gpa, "{s}/ra8-sweep-{x}.board", .{ env.get("TMPDIR") orelse "/tmp", std.mem.readInt(u64, &tag, .little) });
     defer gpa.free(scratch);
-    defer std.fs.cwd().deleteFile(scratch) catch {};
+    defer std.Io.Dir.cwd().deleteFile(io, scratch) catch {};
     for (rows, 0..) |*row, index| {
         const config = matrix.at(index);
-        const result = try runOne(gpa, exe, job, config, scratch);
+        const result = try runOne(gpa, io, exe, job, config, scratch);
         const meets = if (target_ns) |target| result.total_ns <= target else true;
         row.* = .{ .config = config, .result = result, .meets = meets };
     }
-}
-
-fn tempDir() []const u8 {
-    return std.posix.getenv("TMPDIR") orelse "/tmp";
 }

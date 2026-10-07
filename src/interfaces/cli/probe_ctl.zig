@@ -18,39 +18,46 @@ pub fn parse(argv: []const []const u8) !Request {
     return request;
 }
 
-pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+    _ = allocator;
     const request = parse(argv) catch |err| {
         std.debug.print("ctl probe: {s}\nusage: ra8_emulator ctl probe HOST PORT capabilities|registers|read ADDRESS LENGTH|halt|step|resume\n", .{@errorName(err)});
         return 2;
     };
     if (request.action == .capabilities) {
-        try std.io.getStdOut().writer().writeAll("{\"registers\":true,\"memory_read\":true,\"halt\":true,\"resume\":true,\"step\":true,\"speed_control\":false,\"idle_fast_forward\":false,\"fault_injection\":false}\n");
+        try emit(io, "{s}", .{"{\"registers\":true,\"memory_read\":true,\"halt\":true,\"resume\":true,\"step\":true,\"speed_control\":false,\"idle_fast_forward\":false,\"fault_injection\":false}\n"});
         return 0;
     }
-    var stream = try std.net.tcpConnectToHost(allocator, request.host, request.port);
-    defer stream.close();
+    const host = try std.Io.net.HostName.init(request.host);
+    var stream = try host.connect(io, request.port, .{ .mode = .stream });
+    defer stream.close(io);
+    var send_buffer: [4096]u8 = undefined;
+    var stream_writer = stream.writer(io, &send_buffer);
+    const writer = &stream_writer.interface;
     if (request.action == .cont or request.action == .step) {
-        try sendPacket(stream.writer(), if (request.action == .step) "s" else "c");
+        try sendPacket(writer, if (request.action == .step) "s" else "c");
         return 0;
     }
+    var receive_buffer: [4096]u8 = undefined;
+    var stream_reader = stream.reader(io, &receive_buffer);
+    const reader = &stream_reader.interface;
     var response: [4096]u8 = undefined;
-    const writer = stream.writer();
-    const reader = stream.reader();
     switch (request.action) {
         .registers => {
             const body = try exchange(reader, writer, "g", &response);
-            try std.io.getStdOut().writer().print("{{\"registers_rsp\":\"{s}\"}}\n", .{body});
+            try emit(io, "{{\"registers_rsp\":\"{s}\"}}\n", .{body});
         },
         .read => {
             var command: [32]u8 = undefined;
             const text = try std.fmt.bufPrint(&command, "m{X},{X}", .{ request.address, request.length });
             const body = try exchange(reader, writer, text, &response);
-            try std.io.getStdOut().writer().print("{{\"address\":{d},\"length\":{d},\"memory_rsp\":\"{s}\"}}\n", .{ request.address, request.length, body });
+            try emit(io, "{{\"address\":{d},\"length\":{d},\"memory_rsp\":\"{s}\"}}\n", .{ request.address, request.length, body });
         },
         .halt => {
             try writer.writeByte(3);
+            try writer.flush();
             const body = try receivePacket(reader, writer, &response);
-            try std.io.getStdOut().writer().print("{{\"halted\":true,\"stop_rsp\":\"{s}\"}}\n", .{body});
+            try emit(io, "{{\"halted\":true,\"stop_rsp\":\"{s}\"}}\n", .{body});
         },
         else => unreachable,
     }
@@ -64,19 +71,20 @@ fn exchange(reader: anytype, writer: anytype, command: []const u8, storage: []u8
 
 fn receivePacket(reader: anytype, writer: anytype, storage: []u8) ![]const u8 {
     while (true) {
-        const byte = try reader.readByte();
+        const byte = try reader.takeByte();
         if (byte != '$') continue;
         var length: usize = 0;
         while (true) {
-            const next = try reader.readByte();
+            const next = try reader.takeByte();
             if (next == '#') break;
             if (length == storage.len) return error.ResponseTooLong;
             storage[length] = next;
             length += 1;
         }
-        _ = try reader.readByte();
-        _ = try reader.readByte();
+        _ = try reader.takeByte();
+        _ = try reader.takeByte();
         try writer.writeAll("+");
+        try writer.flush();
         return storage[0..length];
     }
 }
@@ -93,4 +101,13 @@ fn sendPacket(writer: anytype, payload: []const u8) !void {
     framed[payload.len + 2] = chars[checksum >> 4];
     framed[payload.len + 3] = chars[checksum & 0xf];
     try writer.writeAll(framed[0 .. payload.len + 4]);
+    try writer.flush();
+}
+
+/// One line of JSON on stdout, flushed before the next request goes out.
+fn emit(io: std.Io, comptime format: []const u8, args: anytype) !void {
+    var buffer: [256]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(io, &buffer);
+    try stdout.interface.print(format, args);
+    try stdout.interface.flush();
 }

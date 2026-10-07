@@ -4,6 +4,7 @@
 //! it). Each piece refuses on its own terms and says so; this only puts them
 //! in order.
 const std = @import("std");
+const rtc_start = @import("rtc_start.zig");
 const cli = @import("cli.zig");
 const Board = @import("../../board/board.zig").Board;
 const usb_plug = @import("../../board/usb_plug.zig");
@@ -20,7 +21,7 @@ pub fn tapeVerdict(board: *const Board, code: u8) u8 {
     return if (code == 0) 1 else code;
 }
 
-pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !void {
+pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli.Options) !void {
     board.part = options.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
@@ -28,7 +29,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, options: cli.Options) !v
     // sleeping core reaches the next second edge, so the geared clock the
     // corpus was first recorded on is only kept for the RTC's own tests.
     board.clock.pace.mode = .virtual;
-    if (options.rtc_start) |at| board.clock.seed(at);
+    if (options.rtc_start) |start| board.clock.seed(try rtc_start.resolve(start, io));
     if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
     board.time.soak.armed = options.run_for;
     const profile_fits = try loadProfile(allocator, options.board_profile);

@@ -82,16 +82,17 @@ pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
     for (argv) |arg| {
         if (isDebugFlag(arg)) break;
     } else return null;
-    var rest = std.BoundedArray([]const u8, max_args){};
+    var rest_buffer: [max_args][]const u8 = undefined;
+    var rest: std.ArrayList([]const u8) = .initBuffer(&rest_buffer);
     var cpu: ?cpu_choice.Choice = .zig;
     var index: usize = 0;
     while (index < argv.len) : (index += 1) {
         if (std.mem.eql(u8, argv[index], flags.cpu) and index + 1 < argv.len) {
             cpu = cpu_choice.Choice.parse(argv[index + 1]);
             index += 1;
-        } else rest.append(argv[index]) catch return error.BadUsage;
+        } else rest.appendBounded(argv[index]) catch return error.BadUsage;
     }
-    var request = (plain(rest.constSlice()) orelse return null) catch |err| return err;
+    var request = (plain(rest.items) orelse return null) catch |err| return err;
     request.cpu = cpu orelse return error.BadUsage;
     return request;
 }
@@ -130,7 +131,7 @@ fn isDebugFlag(arg: []const u8) bool {
 /// flags, so a debugger invocation lands here: run it, print the
 /// debugger's usage when it is malformed, or the run usage when it was
 /// never a debugger invocation at all.
-pub fn refused(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+pub fn refused(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     const asked = wanted(argv) orelse {
         std.debug.print("{s}", .{cli.usage});
         return 2;
@@ -139,24 +140,27 @@ pub fn refused(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
         std.debug.print("{s}", .{usage});
         return 2;
     };
-    return run(allocator, argv, request);
+    return run(allocator, io, argv, request);
 }
 
 /// Hand the image path to the public harness-backed Zig debugger.
-pub fn run(allocator: std.mem.Allocator, argv: []const []const u8, request: Request) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8, request: Request) !u8 {
     _ = argv;
-    return zig_debug_front.run(allocator, request, std.io.getStdOut().writer());
+    // Unbuffered, so the prompt shows before the read that follows it.
+    var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
+    return zig_debug_front.run(allocator, io, request, &stdout.interface);
 }
 
 /// Prompt, read a line, apply it, until `quit` or the end of input.
-pub fn converse(target: anytype, out: anytype) !void {
-    const input = std.io.getStdIn().reader();
+pub fn converse(io: std.Io, target: anytype, out: anytype) !void {
     var buffer: [limits.max_line]u8 = undefined;
+    var stdin = std.Io.File.stdin().readerStreaming(io, &buffer);
+    const input = &stdin.interface;
     while (true) {
         try out.print("{s}", .{script.prompt});
-        const line = input.readUntilDelimiterOrEof(&buffer, '\n') catch |err| switch (err) {
+        const line = input.takeDelimiter('\n') catch |err| switch (err) {
             error.StreamTooLong => {
-                try input.skipUntilDelimiterOrEof('\n');
+                _ = try input.discardDelimiterInclusive('\n');
                 try out.print("error: LineTooLong\n", .{});
                 continue;
             },

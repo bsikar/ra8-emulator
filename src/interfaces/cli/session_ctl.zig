@@ -102,11 +102,11 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
 }
 
 /// The link `where` names: a socket, or a `serve --stdio` started for it.
-fn target(allocator: std.mem.Allocator, where: Where) !ctl_client.Target {
+fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, where: Where) !ctl_client.Target {
     switch (where) {
         .connect => |spec| return .{ .socket = spec },
         .host => |host| {
-            const profile = try profiles.load(allocator, host.hosts, host.name);
+            const profile = try profiles.load(allocator, io, env, host.hosts, host.name);
             return .{ .spawn = try host_spawn.serveArgv(allocator, profile, host.image) };
         },
     }
@@ -189,12 +189,12 @@ fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const p
 }
 
 /// Run `argv` (`ra8_emulator ctl --connect|--host ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
     const request = parse(allocator, argv) catch |err| {
         std.debug.print("ctl: {s}\n{s}", .{ @errorName(err), usage });
         return 2;
     };
-    const reach = target(allocator, request.where) catch |err| return out.failed(request.json, err, 0);
+    const reach = target(allocator, io, env, request.where) catch |err| return out.failed(request.json, err, 0);
     const client = Client.open(allocator, reach) catch |err| return out.failed(request.json, err, 0);
     defer client.close();
     return perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);

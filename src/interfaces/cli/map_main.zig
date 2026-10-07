@@ -16,12 +16,12 @@ const region_map = @import("../../debug/region_map.zig");
 const usage = "usage: ra8_emulator --map <firmware.elf>\n";
 
 /// The whole command: argv[1] is "--map", argv[2] the image.
-pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     if (argv.len != 3) {
-        std.io.getStdErr().writeAll(usage) catch {};
+        std.Io.File.stderr().writeStreamingAll(io, usage) catch {};
         return 2;
     }
-    const bytes = std.fs.cwd().readFileAlloc(allocator, argv[2], 1 << 30) catch |err| {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, argv[2], allocator, .limited(1 << 30)) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ argv[2], @errorName(err) });
         return 1;
     };
@@ -29,9 +29,10 @@ pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
         std.debug.print("{s} is not a loadable image: {s}\n", .{ argv[2], @errorName(err) });
         return 1;
     };
-    var buffered = std.io.bufferedWriter(std.io.getStdOut().writer());
-    try render(buffered.writer(), image, &region_map.ek_ra8d2);
-    try buffered.flush();
+    var buffer: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(io, &buffer);
+    try render(&stdout.interface, image, &region_map.ek_ra8d2);
+    try stdout.interface.flush();
     return 0;
 }
 
