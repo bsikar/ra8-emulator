@@ -18,14 +18,14 @@ fn query(out: []u8, qtype: u16) []const u8 {
     return out[0..26];
 }
 
-fn lookup(_: ?*anyopaque, name: []const u8, out: *[dns.max_answers][4]u8) !u8 {
+fn lookup(_: ?*anyopaque, _: ?std.Io, name: []const u8, out: *[dns.max_answers][4]u8) !u8 {
     try std.testing.expectEqualSlices(u8, "host.ra8", name);
     out[0] = .{ 192, 0, 2, 7 };
     out[1] = .{ 198, 51, 100, 9 };
     return 2;
 }
 
-fn fail(_: ?*anyopaque, _: []const u8, _: *[dns.max_answers][4]u8) !u8 {
+fn fail(_: ?*anyopaque, _: ?std.Io, _: []const u8, _: *[dns.max_answers][4]u8) !u8 {
     return error.NoResolver;
 }
 
