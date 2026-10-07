@@ -51,8 +51,8 @@ pub const Input = struct {
 
     /// Open PATH for reading without blocking, so a FIFO with no writer yet
     /// does not hold up the run.
-    pub fn open(self: *Input, path: []const u8) !void {
-        self.fd = host_read.open(path) catch |err| {
+    pub fn open(self: *Input, io: std.Io, path: []const u8) !void {
+        self.fd = host_read.open(io, path) catch |err| {
             std.debug.print("--touch @{s}: {s}\n", .{ path, @errorName(err) });
             return err;
         };

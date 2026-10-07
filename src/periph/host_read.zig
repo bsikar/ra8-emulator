@@ -18,14 +18,31 @@ const is_windows = builtin.os.tag == .windows;
 /// Standard input's handle, asked for at run time: on Windows it is a
 /// HANDLE the process inherits, not descriptor 0.
 pub fn stdin() Handle {
-    return std.io.getStdIn().handle;
+    return std.Io.File.stdin().handle;
 }
 
 /// Open PATH, a file or a FIFO, for reading. On POSIX the open does not
-/// block, so a FIFO with no writer yet does not hold up the run.
-pub fn open(path: []const u8) !Handle {
-    if (is_windows) return (try std.fs.cwd().openFile(path, .{})).handle;
-    return std.posix.open(path, .{ .NONBLOCK = true }, 0);
+/// block, so a FIFO with no writer yet does not hold up the run; std.Io
+/// has no non-blocking open, so POSIX goes to open(2) directly.
+pub fn open(io: std.Io, path: []const u8) !Handle {
+    if (is_windows) {
+        return (try std.Io.Dir.cwd().openFile(io, path, .{})).handle;
+    } else return openNonBlocking(path);
+}
+
+fn openNonBlocking(path: []const u8) !Handle {
+    const z = try std.posix.toPosixPath(path);
+    while (true) {
+        const rc = std.posix.system.open(&z, .{ .NONBLOCK = true, .CLOEXEC = true }, @as(c_uint, 0));
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return @intCast(rc),
+            .INTR => continue,
+            .NOENT => return error.FileNotFound,
+            .ACCES, .PERM => return error.AccessDenied,
+            .ISDIR => return error.IsDir,
+            else => return error.OpenFailed,
+        }
+    }
 }
 
 /// Read what is waiting on `handle` into `into`. Null means nothing is
@@ -35,7 +52,10 @@ pub fn read(handle: Handle, into: []u8) ?usize {
     if (is_windows) {
         if (host_console.isConsole(handle)) return host_console.read(handle, into);
         return pipe_windows.readNow(handle, true, into) catch null;
-    }
+    } else return readPosix(handle, into);
+}
+
+fn readPosix(handle: Handle, into: []u8) ?usize {
     var fds = [_]std.posix.pollfd{
         .{ .fd = handle, .events = std.posix.POLL.IN, .revents = 0 },
     };
