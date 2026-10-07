@@ -45,7 +45,8 @@ pub fn labelled(source: frame_source.FrameSource, arg: []const u8) frame_source.
 
 pub const VideoSource = struct {
     allocator: std.mem.Allocator,
-    file: std.fs.File,
+    io: std.Io,
+    file: std.Io.File,
     header: y4m.Header,
     loop: bool,
     /// Where each whole frame's planes start in the file.
@@ -56,14 +57,14 @@ pub const VideoSource = struct {
     converted: converted.Converted,
     format_control: *const u8,
 
-    pub fn load(allocator: std.mem.Allocator, arg: []const u8, format_control: *const u8) !*VideoSource {
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, arg: []const u8, format_control: *const u8) !*VideoSource {
         const parsed = parseArg(arg);
-        const file = try std.fs.cwd().openFile(parsed.path, .{});
-        errdefer file.close();
+        const file = try std.Io.Dir.cwd().openFile(io, parsed.path, .{});
+        errdefer file.close(io);
         var line: [max_line]u8 = undefined;
-        const first = try readLine(file, 0, &line);
+        const first = try readLine(io, file, 0, &line);
         const header = try y4m.parse(first.text);
-        const offsets = try index(allocator, file, header, first.next);
+        const offsets = try index(allocator, io, file, header, first.next);
         errdefer allocator.free(offsets);
         const image = try decoded.Image.alloc(allocator, header.width, header.height);
         errdefer image.deinit(allocator);
@@ -72,6 +73,7 @@ pub const VideoSource = struct {
         const self = try allocator.create(VideoSource);
         self.* = .{
             .allocator = allocator,
+            .io = io,
             .file = file,
             .header = header,
             .loop = parsed.loop,
@@ -100,7 +102,7 @@ pub const VideoSource = struct {
     /// comes back short keeps the previous picture rather than half a frame.
     fn show(self: *VideoSource, at: usize) void {
         if (self.shown == at) return;
-        const got = self.file.preadAll(self.planes, self.offsets[at]) catch return;
+        const got = self.file.readPositionalAll(self.io, self.planes, self.offsets[at]) catch return;
         if (got != self.planes.len) return;
         yuv.toRgb(self.header, self.planes, self.image.pixels);
         self.shown = at;
@@ -123,7 +125,7 @@ pub const VideoSource = struct {
     fn close(context: *anyopaque) void {
         const self: *VideoSource = @ptrCast(@alignCast(context));
         const allocator = self.allocator;
-        self.file.close();
+        self.file.close(self.io);
         allocator.free(self.offsets);
         allocator.free(self.planes);
         self.image.deinit(allocator);
@@ -134,22 +136,22 @@ pub const VideoSource = struct {
 const Line = struct { text: []const u8, next: u64 };
 
 /// One newline-ended line at `at`, and the offset just past it.
-fn readLine(file: std.fs.File, at: u64, buffer: *[max_line]u8) !Line {
-    const got = try file.preadAll(buffer, at);
+fn readLine(io: std.Io, file: std.Io.File, at: u64, buffer: *[max_line]u8) !Line {
+    const got = try file.readPositionalAll(io, buffer, at);
     const end = std.mem.indexOfScalar(u8, buffer[0..got], '\n') orelse return error.BadHeader;
     return .{ .text = buffer[0..end], .next = at + end + 1 };
 }
 
 /// The plane offset of every whole frame from `start` to the end of file.
-fn index(allocator: std.mem.Allocator, file: std.fs.File, header: y4m.Header, start: u64) ![]u64 {
-    const size = (try file.stat()).size;
+fn index(allocator: std.mem.Allocator, io: std.Io, file: std.Io.File, header: y4m.Header, start: u64) ![]u64 {
+    const size = try file.length(io);
     const bytes = header.frameBytes();
     var offsets: std.ArrayList(u64) = .empty;
     errdefer offsets.deinit(allocator);
     var at = start;
     var line: [max_line]u8 = undefined;
     while (at < size) {
-        const next = try readLine(file, at, &line);
+        const next = try readLine(io, file, at, &line);
         if (!std.mem.startsWith(u8, next.text, "FRAME")) return error.BadHeader;
         if (next.next + bytes > size) break;
         try offsets.append(allocator, next.next);
