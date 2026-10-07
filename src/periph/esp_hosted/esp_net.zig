@@ -349,9 +349,9 @@ pub const Bridge = struct {
     }
 };
 
-fn hostAddress(destination: [4]u8, port: u16) std.net.Address {
+fn hostAddress(destination: [4]u8, port: u16) std.Io.net.Ip4Address {
     const host = if (std.mem.eql(u8, &destination, &dhcp.server_ip)) [4]u8{ 127, 0, 0, 1 } else destination;
-    return std.net.Address.initIp4(host, port);
+    return .{ .bytes = host, .port = port };
 }
 
 fn makeKey(ip: eth.Ipv4, src_port: u16, dst_port: u16) Key {
