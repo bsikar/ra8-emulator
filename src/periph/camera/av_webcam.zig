@@ -57,19 +57,19 @@ const AvCapture = struct {
         const self: *AvCapture = @ptrCast(@alignCast(ctx));
         self.running.close();
         self.box.deinit();
-        if (self.name_len > 0) consent.logStop(std.io.getStdErr().writer(), self.name[0..self.name_len]) catch {};
+        if (self.name_len > 0) consent.logStopStderr(self.name[0..self.name_len]);
         self.allocator.destroy(self);
     }
 };
 
 /// Asks (unless allowed), checks the permission and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
     const n = try preflight(arg, grant, reader, writer);
     return openPrepared(allocator, host, n, writer, format_control);
 }
 
 /// Validates the device and gets consent before opening host camera libraries.
-pub fn preflight(arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype) !u32 {
+pub fn preflight(arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !u32 {
     const n = index(arg) orelse return error.BadDevice;
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
@@ -78,7 +78,7 @@ pub fn preflight(arg: []const u8, grant: consent.Grant, reader: anytype, writer:
 }
 
 /// Opens a device after `preflight` has validated its index and consent.
-pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
     try permission.gate(host.permission, writer);

@@ -5,9 +5,9 @@ const ra8 = @import("ra8");
 const consent = ra8.periph.ceu.camera.webcam.consent;
 
 fn ask(answer: []const u8, out: []u8) consent.Decision {
-    var in = std.io.fixedBufferStream(answer);
-    var prompt = std.io.fixedBufferStream(out);
-    return consent.decide(.ask, "/dev/video0", in.reader(), prompt.writer());
+    var in = std.Io.Reader.fixed(answer);
+    var prompt = std.Io.Writer.fixed(out);
+    return consent.decide(.ask, "/dev/video0", &in, &prompt);
 }
 
 test "y and yes grant, in any case" {
@@ -26,22 +26,22 @@ test "anything else refuses, including no answer at all" {
 
 test "the question names the device" {
     var out: [128]u8 = undefined;
-    var in = std.io.fixedBufferStream("n\n");
-    var prompt = std.io.fixedBufferStream(&out);
-    _ = consent.decide(.ask, "/dev/video2", in.reader(), prompt.writer());
+    var in = std.Io.Reader.fixed("n\n");
+    var prompt = std.Io.Writer.fixed(&out);
+    _ = consent.decide(.ask, "/dev/video2", &in, &prompt);
     try std.testing.expectEqualStrings(
         "--camera-source webcam: open the host camera /dev/video2? [y/N] ",
-        prompt.getWritten(),
+        prompt.buffered(),
     );
 }
 
 test "--allow-webcam grants without asking" {
     var out: [128]u8 = undefined;
-    var in = std.io.fixedBufferStream("");
-    var prompt = std.io.fixedBufferStream(&out);
-    const got = consent.decide(.allowed, "/dev/video0", in.reader(), prompt.writer());
+    var in = std.Io.Reader.fixed("");
+    var prompt = std.Io.Writer.fixed(&out);
+    const got = consent.decide(.allowed, "/dev/video0", &in, &prompt);
     try std.testing.expectEqual(consent.Decision.granted, got);
-    try std.testing.expectEqual(@as(usize, 0), prompt.getWritten().len);
+    try std.testing.expectEqual(@as(usize, 0), prompt.buffered().len);
 }
 
 test "the device defaults, takes an index or a path, and refuses junk" {
@@ -55,11 +55,11 @@ test "the device defaults, takes an index or a path, and refuses junk" {
 
 test "capture start and stop are logged" {
     var out: [128]u8 = undefined;
-    var log = std.io.fixedBufferStream(&out);
-    try consent.logStart(log.writer(), "/dev/video0");
-    try consent.logStop(log.writer(), "/dev/video0");
+    var log = std.Io.Writer.fixed(&out);
+    try consent.logStart(&log, "/dev/video0");
+    try consent.logStop(&log, "/dev/video0");
     try std.testing.expectEqualStrings(
         "camera: webcam capture started on /dev/video0\ncamera: webcam capture stopped, /dev/video0 released\n",
-        log.getWritten(),
+        log.buffered(),
     );
 }

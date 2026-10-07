@@ -40,9 +40,9 @@ fn free(_: ?*anyopaque) void {}
 
 const calls = mf_open.Calls{ .startup = startup, .shutdown = stop, .create_attributes = none, .create_media_type = none, .enum_devices = noDevices, .create_reader = noReader, .free = free };
 
-fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.ArrayList(u8)) !ra8.periph.ceu.camera.frame_source.FrameSource {
-    var in = std.io.fixedBufferStream(answer);
-    return mf_webcam.openWith(allocator, calls, arg, grant, in.reader(), said.writer(), &format_control);
+fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.Io.Writer.Allocating) !ra8.periph.ceu.camera.frame_source.FrameSource {
+    var in = std.Io.Reader.fixed(answer);
+    return mf_webcam.openWith(allocator, calls, arg, grant, &in, &said.writer, &format_control);
 }
 
 test "webcam args name a device index; paths are not Windows devices" {
@@ -54,17 +54,17 @@ test "webcam args name a device index; paths are not Windows devices" {
 
 test "a refusal asks about webcam N and never starts Media Foundation" {
     starts = 0;
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     try std.testing.expectError(error.WebcamRefused, openAnswering("2", .ask, "n\n", &said));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "open the host camera webcam 2?") != null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "open the host camera webcam 2?") != null);
     try std.testing.expectEqual(@as(u32, 0), starts);
     try std.testing.expectError(error.BadDevice, openAnswering("/dev/video0", .allowed, "", &said));
     try std.testing.expectEqual(@as(u32, 0), starts);
 }
 
 test "a failed start or a missing device leaves Media Foundation stopped" {
-    var said = std.ArrayList(u8).init(allocator);
+    var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
     starts = 0;
     running = 0;
@@ -74,5 +74,5 @@ test "a failed start or a missing device leaves Media Foundation stopped" {
     start_result = 0;
     try std.testing.expectError(error.NoDevice, openAnswering("0", .ask, "y\n", &said));
     try std.testing.expectEqual(@as(i32, 0), running);
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "capture started") == null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "capture started") == null);
 }
