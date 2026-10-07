@@ -25,9 +25,17 @@ pub const Socket = struct {
         const ready = std.posix.poll(&fds, 0) catch return false;
         if (ready == 0) return false;
         var byte: [1]u8 = undefined;
-        const peeked = std.posix.recv(self.handle, &byte, socket_flags.peek) catch return false;
+        const peeked = take(self.handle, &byte, socket_flags.peek) orelse return false;
         if (peeked == 0 or byte[0] != packet.interrupt) return false;
-        _ = std.posix.recv(self.handle, &byte, 0) catch return false;
+        _ = take(self.handle, &byte, 0) orelse return false;
         return true;
     }
 };
+
+/// One byte off the socket through libc's recv (Zig 0.17 has no
+/// std.posix.recv); null when it fails.
+fn take(handle: std.posix.socket_t, byte: *[1]u8, flags: u32) ?usize {
+    const got = std.c.recv(handle, byte, byte.len, @intCast(flags));
+    if (got < 0) return null;
+    return @intCast(got);
+}
