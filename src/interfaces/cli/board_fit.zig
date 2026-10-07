@@ -59,7 +59,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
         try board.input_script.parse(content);
     }
     try setBattery(board, options);
-    try usb_plug.apply(&board.usb, allocator, options.usb_disk);
+    try usb_plug.apply(&board.usb, allocator, io, options.usb_disk);
     try cli.usbip_export.run.install(&board.usb, allocator, options.usbip);
 }
 
