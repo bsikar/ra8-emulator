@@ -161,7 +161,7 @@ fn pumpWhile(link: *Link, from: std.meta.Tag(State)) ?Arrival {
 test "a spawned serve --stdio child connects, answers, and shows as failed once it exits" {
     const gpa = std.testing.allocator;
     var local: session_link.Local = undefined;
-    try local.spawn(gpa, test_paths.emulator, "tests/fixtures/fpu/fp_basic.elf");
+    try local.spawn(std.testing.io, test_paths.emulator, "tests/fixtures/fpu/fp_basic.elf");
     errdefer _ = local.child.kill() catch {};
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
     defer gpa.free(rx);
