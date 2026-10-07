@@ -2,6 +2,7 @@
 //! served Session joined over the library's in-memory loopback.
 const std = @import("std");
 const ra8 = @import("ra8");
+const Bounded = ra8.core.bounded.Bounded;
 const rpc = served.rpc_lib;
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
@@ -68,10 +69,10 @@ const Wire = struct {
     /// The stop event the last call produced, if any.
     stop: ?proto.Stopped = null,
     /// UART bytes the last call's events carried, and the topics in arrival order.
-    uart: std.BoundedArray(u8, 64) = .{},
-    channels: std.BoundedArray(u8, 8) = .{},
-    stamps: std.BoundedArray(u64, 8) = .{},
-    topics: std.BoundedArray(proto.Topic, 8) = .{},
+    uart: Bounded(u8, 64) = .{},
+    channels: Bounded(u8, 8) = .{},
+    stamps: Bounded(u64, 8) = .{},
+    topics: Bounded(proto.Topic, 8) = .{},
 
     fn init(gpa: std.mem.Allocator) !*Wire {
         const self = try gpa.create(Wire);

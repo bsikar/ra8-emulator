@@ -45,6 +45,7 @@
 //! so. The comparison lives in ulpt_compare.zig now, and the flags it raises
 //! are AGTCR's TCMAF and TCMBF, which ULPTCR mirrors.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const bytelanes = @import("../bytelanes.zig");
 const periph = @import("../registry.zig");
@@ -99,7 +100,7 @@ pub const event = struct {
 pub const ticks_per_chunk: u32 = 0x4_0000;
 
 /// At most one event is due per boundary, from channel 0.
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 /// One channel: a reloading down-counter plus its mode and status bytes.
 pub const Channel = struct {

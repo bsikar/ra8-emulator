@@ -60,6 +60,7 @@
 //! inside the store, which is how every other block on this board offers
 //! one.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const prcr = @import("../prcr.zig");
@@ -115,7 +116,7 @@ pub const event = struct {
 
 /// One event per boundary: the line is already pending in the controller, so
 /// a second raise before the core takes it would be the same line twice.
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 const shadow_words: usize = win_span / 4;
 

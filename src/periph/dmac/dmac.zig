@@ -20,6 +20,7 @@
 //! events, so firmware sees the bytes immediately and the interrupt one
 //! boundary later.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const dma_bank = @import("../dma_bank.zig");
@@ -71,7 +72,7 @@ pub fn refusalName(reason: Refusal) []const u8 {
     };
 }
 
-pub const Due = std.BoundedArray(u16, channel_count);
+pub const Due = Bounded(u16, channel_count);
 
 /// A channel's two running counts, taken together so they can be put back as
 /// they stood.
