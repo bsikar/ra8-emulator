@@ -101,7 +101,7 @@ pub const Input = struct {
         if (text.len == 0 or std.mem.eql(u8, text, "up")) return;
         if (self.feedSwitch(pins, text)) return;
         for ([_][]const u8{ "down ", "move " }) |verb| {
-            if (std.mem.startsWith(u8, text, verb)) text = std.mem.trimLeft(u8, text[verb.len..], " ");
+            if (std.mem.startsWith(u8, text, verb)) text = std.mem.trimStart(u8, text[verb.len..], " ");
         }
         const contact = parse(text) orelse {
             self.refused += 1;

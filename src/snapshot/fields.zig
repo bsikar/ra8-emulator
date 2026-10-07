@@ -13,7 +13,7 @@ pub const Error = error{ Truncated, BadValue };
 /// `T` widened to a whole number of bytes, keeping its signedness.
 fn Whole(comptime T: type) type {
     const info = @typeInfo(T).int;
-    return std.meta.Int(info.signedness, (info.bits + 7) / 8 * 8);
+    return @Int(info.signedness, (info.bits + 7) / 8 * 8);
 }
 
 pub fn write(writer: anytype, value: anytype) @TypeOf(writer).Error!void {
