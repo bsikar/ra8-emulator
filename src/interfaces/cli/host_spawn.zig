@@ -10,16 +10,16 @@ const max_image = 64 * 1024 * 1024;
 
 /// The argv that starts `serve --stdio` for the image at `image_path` on
 /// `profile`. Memory comes from `allocator`, which ctl runs as an arena.
-pub fn serveArgv(allocator: std.mem.Allocator, profile: profiles.Profile, image_path: []const u8) ![]const []const u8 {
+pub fn serveArgv(allocator: std.mem.Allocator, io: std.Io, profile: profiles.Profile, image_path: []const u8) ![]const []const u8 {
     switch (profile) {
         .local => {
-            const exe = try std.fs.selfExePathAlloc(allocator);
+            const exe = try std.process.executablePathAlloc(io, allocator);
             return allocator.dupe([]const u8, &.{ exe, "serve", "--stdio", image_path });
         },
         .ssh => |ssh| {
-            const bytes = std.fs.cwd().readFileAlloc(allocator, image_path, max_image) catch return error.ImageUnreadable;
+            const bytes = std.Io.Dir.cwd().readFileAlloc(io, image_path, allocator, .limited(max_image)) catch return error.ImageUnreadable;
             const remote = try cachePath(allocator, ssh.cache, bytes);
-            try ensureCopied(allocator, ssh, remote, bytes);
+            try ensureCopied(allocator, io, ssh, remote, bytes);
             const line = try std.fmt.allocPrint(allocator, "{s} serve --stdio {s}", .{ try quote(allocator, ssh.emulator), try quote(allocator, remote) });
             return allocator.dupe([]const u8, &.{ ssh.program, "-T", ssh.destination, line });
         },
@@ -35,12 +35,12 @@ pub fn cachePath(allocator: std.mem.Allocator, cache: []const u8, bytes: []const
 
 /// Copy `bytes` to `remote` unless a `test -f` there says it is present.
 /// ssh exits 255 for its own failures, which is reported as unreachable.
-fn ensureCopied(allocator: std.mem.Allocator, ssh: profiles.Ssh, remote: []const u8, bytes: []const u8) !void {
+fn ensureCopied(allocator: std.mem.Allocator, io: std.Io, ssh: profiles.Ssh, remote: []const u8, bytes: []const u8) !void {
     const file = try quote(allocator, remote);
     const probe = try std.fmt.allocPrint(allocator, "test -f {s}", .{file});
-    const held = try std.process.Child.run(.{ .allocator = allocator, .argv = &.{ ssh.program, "-T", ssh.destination, probe } });
+    const held = try std.process.run(allocator, io, .{ .argv = &.{ ssh.program, "-T", ssh.destination, probe } });
     switch (held.term) {
-        .Exited => |code| switch (code) {
+        .exited => |code| switch (code) {
             0 => return,
             1 => {},
             else => return error.HostUnreachable,
@@ -49,18 +49,16 @@ fn ensureCopied(allocator: std.mem.Allocator, ssh: profiles.Ssh, remote: []const
     }
     const dir = try quote(allocator, ssh.cache);
     const store = try std.fmt.allocPrint(allocator, "mkdir -p {s} && cat > {s}.part && mv {s}.part {s}", .{ dir, file, file, file });
-    var child = std.process.Child.init(&.{ ssh.program, "-T", ssh.destination, store }, allocator);
-    child.stdin_behavior = .Pipe;
-    try child.spawn();
-    child.stdin.?.writeAll(bytes) catch {};
-    child.stdin.?.close();
+    var child = try std.process.spawn(io, .{ .argv = &.{ ssh.program, "-T", ssh.destination, store }, .stdin = .pipe });
+    child.stdin.?.writeStreamingAll(io, bytes) catch {};
+    child.stdin.?.close(io);
     child.stdin = null;
-    if (!exitedClean(try child.wait())) return error.CopyFailed;
+    if (!exitedClean(try child.wait(io))) return error.CopyFailed;
 }
 
 fn exitedClean(term: std.process.Child.Term) bool {
     return switch (term) {
-        .Exited => |code| code == 0,
+        .exited => |code| code == 0,
         else => false,
     };
 }

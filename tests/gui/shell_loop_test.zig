@@ -94,7 +94,7 @@ test "a local session connects and loads a corpus image through the shell" {
     var s = try shell();
     defer s.deinit();
     var local: session_link.Local = undefined;
-    try local.spawn(gpa, test_paths.emulator, elf_path);
+    try local.spawn(std.testing.io, test_paths.emulator, elf_path);
     errdefer _ = local.child.kill() catch {};
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
     defer gpa.free(rx);

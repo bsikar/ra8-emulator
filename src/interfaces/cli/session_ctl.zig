@@ -107,7 +107,7 @@ fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
         .connect => |spec| return .{ .socket = spec },
         .host => |host| {
             const profile = try profiles.load(allocator, io, env, host.hosts, host.name);
-            return .{ .spawn = try host_spawn.serveArgv(allocator, profile, host.image) };
+            return .{ .spawn = try host_spawn.serveArgv(allocator, io, profile, host.image) };
         },
     }
 }
@@ -195,7 +195,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         return 2;
     };
     const reach = target(allocator, io, env, request.where) catch |err| return out.failed(request.json, err, 0);
-    const client = Client.open(allocator, reach) catch |err| return out.failed(request.json, err, 0);
+    const client = Client.open(allocator, io, reach) catch |err| return out.failed(request.json, err, 0);
     defer client.close();
     return perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
 }

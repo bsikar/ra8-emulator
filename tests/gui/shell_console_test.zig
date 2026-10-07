@@ -77,7 +77,7 @@ fn greeted(_: *const session_link.Link, _: *const status_bar.Status, console: *c
 test "a local session's banner reaches the console stamped with board time" {
     const gpa = std.testing.allocator;
     var local: session_link.Local = undefined;
-    try local.spawn(gpa, test_paths.emulator, uart_image);
+    try local.spawn(std.testing.io, test_paths.emulator, uart_image);
     errdefer _ = local.child.kill() catch {};
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
     defer gpa.free(rx);

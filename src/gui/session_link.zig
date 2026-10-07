@@ -132,15 +132,13 @@ pub const Link = struct {
 /// A local `ra8_emulator serve --stdio` child, spoken to over its pipes.
 pub const Local = struct {
     child: std.process.Child,
+    io: std.Io,
     pipes: Stdio = .{},
 
     /// Start `exe serve --stdio elf`. Its stderr stays the GUI's.
-    pub fn spawn(self: *Local, allocator: std.mem.Allocator, exe: []const u8, elf: []const u8) !void {
-        self.* = .{ .child = std.process.Child.init(&.{ exe, "serve", "--stdio", elf }, allocator) };
-        self.child.stdin_behavior = .Pipe;
-        self.child.stdout_behavior = .Pipe;
-        self.child.stderr_behavior = .Inherit;
-        try self.child.spawn();
+    pub fn spawn(self: *Local, io: std.Io, exe: []const u8, elf: []const u8) !void {
+        const argv: []const []const u8 = &.{ exe, "serve", "--stdio", elf };
+        self.* = .{ .io = io, .child = try std.process.spawn(io, .{ .argv = argv, .stdin = .pipe, .stdout = .pipe, .stderr = .inherit }) };
         self.pipes = .{ .input = self.child.stdout.?.handle, .output = self.child.stdin.?.handle };
     }
 
@@ -150,12 +148,12 @@ pub const Local = struct {
 
     /// Close the child's stdin, which tells `serve` to exit.
     pub fn end(self: *Local) void {
-        if (self.child.stdin) |*file| file.close();
+        if (self.child.stdin) |file| file.close(self.io);
         self.child.stdin = null;
     }
 
     /// Wait for the child once it has been told to end.
     pub fn reap(self: *Local) !std.process.Child.Term {
-        return self.child.wait();
+        return self.child.wait(self.io);
     }
 };
