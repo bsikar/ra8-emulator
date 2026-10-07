@@ -58,11 +58,28 @@ const PipeBench = struct {
     }
 };
 
+/// 0.17 has no std.posix pipe, write or close; libc is linked.
+fn pipeFds() ![2]std.posix.fd_t {
+    var fds: [2]std.posix.fd_t = undefined;
+    if (std.c.pipe(&fds) != 0) return error.PipeFailed;
+    return fds;
+}
+
+fn writeFd(fd: std.posix.fd_t, bytes: []const u8) !usize {
+    const n = std.c.write(fd, bytes.ptr, bytes.len);
+    if (n < 0) return error.WriteFailed;
+    return @intCast(n);
+}
+
+fn closeFd(fd: std.posix.fd_t) void {
+    _ = std.c.close(fd);
+}
+
 const Ends = struct { source: *pipe.PipeSource, writer: std.posix.fd_t };
 
 fn open() !Ends {
     if (builtin.os.tag == .windows) return error.SkipZigTest;
-    const fds = try std.posix.pipe();
+    const fds = try pipeFds();
     const source = try pipe.PipeSource.fromFd(allocator, fds[0], true, arg, &rgb565);
     return .{ .source = source, .writer = fds[1] };
 }
@@ -81,7 +98,7 @@ const white_565 = [4]u8{ 0xFF, 0xFF, 0xFF, 0xFF };
 
 test "an empty pipe returns at once and the capture is black" {
     const ends = try open();
-    defer std.posix.close(ends.writer);
+    defer closeFd(ends.writer);
     const source = ends.source.source();
     defer source.close();
     try expectLine(source, black_565);
@@ -90,15 +107,15 @@ test "an empty pipe returns at once and the capture is black" {
 
 test "the newest whole frame wins and half a frame waits for the rest" {
     const ends = try open();
-    defer std.posix.close(ends.writer);
+    defer closeFd(ends.writer);
     const source = ends.source.source();
     defer source.close();
-    _ = try std.posix.write(ends.writer, &red);
-    _ = try std.posix.write(ends.writer, &blue);
-    _ = try std.posix.write(ends.writer, white[0..4]);
+    _ = try writeFd(ends.writer, &red);
+    _ = try writeFd(ends.writer, &blue);
+    _ = try writeFd(ends.writer, white[0..4]);
     try expectLine(source, blue_565);
     try std.testing.expectEqual(@as(u64, 2), ends.source.frames);
-    _ = try std.posix.write(ends.writer, white[4..]);
+    _ = try writeFd(ends.writer, white[4..]);
     try expectLine(source, white_565);
     try expectLine(source, white_565);
 }
@@ -107,8 +124,8 @@ test "a closed writer holds the last frame and never stalls the run" {
     const ends = try open();
     const source = ends.source.source();
     defer source.close();
-    _ = try std.posix.write(ends.writer, &red);
-    std.posix.close(ends.writer);
+    _ = try writeFd(ends.writer, &red);
+    closeFd(ends.writer);
     try expectLine(source, red_565);
     try std.testing.expect(ends.source.closed);
     try expectLine(source, red_565);
@@ -116,12 +133,12 @@ test "a closed writer holds the last frame and never stalls the run" {
 
 test "a writer faster than the run cannot hold one capture forever" {
     const ends = try open();
-    defer std.posix.close(ends.writer);
+    defer closeFd(ends.writer);
     const source = ends.source.source();
     defer source.close();
     var burst: [6 * (pipe.max_frames_per_capture + 1)]u8 = undefined;
     for (0..pipe.max_frames_per_capture + 1) |at| @memcpy(burst[at * 6 ..][0..6], &red);
-    _ = try std.posix.write(ends.writer, &burst);
+    _ = try writeFd(ends.writer, &burst);
     try expectLine(source, red_565);
     try std.testing.expectEqual(@as(u64, pipe.max_frames_per_capture), ends.source.frames);
     try expectLine(source, red_565);
@@ -137,11 +154,11 @@ test "pipe frames reach the CEU destination" {
     bench.program();
     try bench.core.write(frame_base, &@as([4]u8, @splat(0xAA)));
 
-    const fds = try std.posix.pipe();
+    const fds = try pipeFds();
     var reader: ?std.posix.fd_t = fds[0];
-    defer if (reader) |fd| std.posix.close(fd);
+    defer if (reader) |fd| closeFd(fd);
     var writer: ?std.posix.fd_t = fds[1];
-    defer if (writer) |fd| std.posix.close(fd);
+    defer if (writer) |fd| closeFd(fd);
 
     const pipe_source = try pipe.PipeSource.fromFd(allocator, reader.?, true, arg, &rgb565);
     reader = null;
@@ -153,16 +170,16 @@ test "pipe frames reach the CEU destination" {
     try std.testing.expectEqual(@as(u32, 1), bench.unit.frames);
     try std.testing.expectEqualSlices(u8, &black_565, &(try bench.frame()));
 
-    try std.testing.expectEqual(red.len, try std.posix.write(writer.?, &red));
+    try std.testing.expectEqual(red.len, try writeFd(writer.?, &red));
     bench.arm();
     try std.testing.expectEqualSlices(u8, &red_565, &(try bench.frame()));
 
-    try std.testing.expectEqual(@as(usize, 3), try std.posix.write(writer.?, blue[0..3]));
+    try std.testing.expectEqual(@as(usize, 3), try writeFd(writer.?, blue[0..3]));
     bench.arm();
     try std.testing.expectEqualSlices(u8, &red_565, &(try bench.frame()));
 
-    try std.testing.expectEqual(@as(usize, 3), try std.posix.write(writer.?, blue[3..]));
-    std.posix.close(writer.?);
+    try std.testing.expectEqual(@as(usize, 3), try writeFd(writer.?, blue[3..]));
+    closeFd(writer.?);
     writer = null;
     bench.arm();
     try std.testing.expectEqualSlices(u8, &blue_565, &(try bench.frame()));

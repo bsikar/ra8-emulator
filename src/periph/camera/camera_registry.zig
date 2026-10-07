@@ -44,7 +44,7 @@ pub const Spec = struct {
                 std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
-            .pipe => pipe.labelled((pipe.PipeSource.load(allocator, self.arg, format_control) catch |err| {
+            .pipe => pipe.labelled((pipe.PipeSource.load(allocator, io, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
