@@ -132,12 +132,14 @@ fn ratioMilli(virtual_ns: u64, wall_ns: u64) u64 {
     return @intCast(@min(r, std.math.maxInt(u64)));
 }
 
-/// The host's monotonic clock.
+/// The host's monotonic clock: the awake clock, read and slept on through
+/// the run's io.
 pub const HostClock = struct {
-    timer: std.time.Timer,
+    io: std.Io,
+    start: std.Io.Timestamp,
 
-    pub fn init() !HostClock {
-        return .{ .timer = try std.time.Timer.start() };
+    pub fn init(io: std.Io) HostClock {
+        return .{ .io = io, .start = .now(io, .awake) };
     }
 
     pub fn clock(self: *HostClock) Clock {
@@ -146,10 +148,14 @@ pub const HostClock = struct {
 
     fn nowHost(ctx: *anyopaque) u64 {
         const self: *HostClock = @ptrCast(@alignCast(ctx));
-        return self.timer.read();
+        const ran = self.start.untilNow(self.io, .awake).nanoseconds;
+        return @intCast(std.math.clamp(ran, 0, std.math.maxInt(u64)));
     }
 
-    fn sleepHost(_: *anyopaque, ns: u64) void {
-        std.time.sleep(ns);
+    /// A cancelled sleep wakes early; the pacer reads the clock again and
+    /// counts any shortfall as drift, so there is nothing to report.
+    fn sleepHost(ctx: *anyopaque, ns: u64) void {
+        const self: *HostClock = @ptrCast(@alignCast(ctx));
+        self.io.sleep(.fromNanoseconds(ns), .awake) catch {};
     }
 };

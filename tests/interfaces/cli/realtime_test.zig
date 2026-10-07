@@ -39,7 +39,7 @@ test "the pace line gives requested and achieved speed, drift and slips" {
 test "attaching paces the board's time from where it stands" {
     var time = clocks.Time{};
     time.base.advance(3_000);
-    try realtime.attachHost(&time, 1000);
+    realtime.attachHost(&time, std.testing.io, 1000);
     const paced = time.pacing.?;
     try std.testing.expectEqual(@as(u64, 3_000), paced.last_ns);
     try std.testing.expectEqual(@as(u64, 1000), paced.pacer.speed_milli);

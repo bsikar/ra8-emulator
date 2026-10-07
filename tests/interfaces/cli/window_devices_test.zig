@@ -13,7 +13,7 @@ test "click and an attach each give the pane a row" {
     defer board.deinit();
     const attaches = [_]request.Request{try request.parse("max17048@i2c:riic@0x36")};
     var devices: window_devices.Devices = undefined;
-    devices.init(std.testing.allocator, &board, &attaches, true);
+    devices.init(std.testing.allocator, std.testing.io, &board, &attaches, true);
     defer devices.deinit();
     try std.testing.expectEqual(@as(usize, 3), devices.panel.rows.len);
     try std.testing.expectEqual(window_devices.click_imu, devices.panel.rows[0].at);
@@ -26,7 +26,7 @@ test "an unplug from the pane lands at the park" {
     defer board.deinit();
     const attaches = [_]request.Request{try request.parse("max17048@i2c:riic@0x36")};
     var devices: window_devices.Devices = undefined;
-    devices.init(std.testing.allocator, &board, &attaches, false);
+    devices.init(std.testing.allocator, std.testing.io, &board, &attaches, false);
     defer devices.deinit();
     devices.panel.rows[0].part = null;
     try devices.panel.plug(0, "max17048");
@@ -42,7 +42,7 @@ test "a speed change waits for the park and keeps virtual time" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var devices: window_devices.Devices = undefined;
-    devices.init(std.testing.allocator, &board, &.{}, false);
+    devices.init(std.testing.allocator, std.testing.io, &board, &.{}, false);
     defer devices.deinit();
     board.time.base.advance(5000);
     const before = board.time.base.now();

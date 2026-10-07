@@ -33,14 +33,15 @@ pub const Devices = struct {
     post: plug_post.PlugPost = .{},
     speed: speed_post.SpeedPost = .{},
     board: *Board,
+    io: std.Io,
     session: session_api.Session = .{ .live = undefined },
     event_ns: std.atomic.Value(u64) = .init(0),
     rows: [request.max + 2]devices_panel.Row = undefined,
     panel: devices_panel.Panel = undefined,
 
     /// Builds in place: the session and the panel point into `self`.
-    pub fn init(self: *Devices, allocator: std.mem.Allocator, board: *Board, attaches: []const request.Request, click: bool) void {
-        self.* = .{ .arena = .init(allocator), .plugs = undefined, .board = board };
+    pub fn init(self: *Devices, allocator: std.mem.Allocator, io: std.Io, board: *Board, attaches: []const request.Request, click: bool) void {
+        self.* = .{ .arena = .init(allocator), .plugs = undefined, .board = board, .io = io };
         self.plugs = session_plug.Plugs.init(board, self.arena.allocator());
         self.event_ns.store(board.time.base.now(), .monotonic);
         self.session.attachEventClock(.{ .context = self, .nowFn = eventNow });
@@ -76,8 +77,7 @@ pub const Devices = struct {
     pub fn park(self: *Devices) void {
         self.event_ns.store(self.board.time.base.now(), .release);
         _ = self.post.apply(self.plugs.hook());
-        const clock = pacing.hostClock() catch return;
-        _ = self.speed.apply(&self.board.time, clock);
+        _ = self.speed.apply(&self.board.time, pacing.hostClock(self.io));
     }
 
     fn eventNow(context: *anyopaque) u64 {
