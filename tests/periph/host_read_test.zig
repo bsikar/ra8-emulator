@@ -28,7 +28,7 @@ test "a file opened by path reads its contents and then the end" {
     try dir.dir.writeFile(.{ .sub_path = "touch.txt", .data = "1,2\n" });
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try dir.dir.realpath("touch.txt", &path_buf);
-    const handle = try host_read.open(path);
+    const handle = try host_read.open(std.testing.io, path);
     defer std.posix.close(handle);
     var bytes: [8]u8 = undefined;
     try std.testing.expectEqual(@as(?usize, 4), host_read.read(handle, &bytes));

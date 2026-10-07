@@ -52,11 +52,9 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
     try cli.card_setup.prepareSdhi(board, options.sdhi);
     queueTouches(board, options);
-    if (options.touch_in) |path| try board.touch_input.open(path);
+    if (options.touch_in) |path| try board.touch_input.open(io, path);
     if (options.input_script) |path| {
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+        const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024));
         defer allocator.free(content);
         try board.input_script.parse(content);
     }
