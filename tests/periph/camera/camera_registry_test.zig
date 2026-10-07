@@ -14,7 +14,7 @@ test "gradient parses with no argument and opens the gradient source" {
     const spec = try registry.parse("gradient");
     try std.testing.expectEqual(registry.Kind.gradient, spec.kind);
     try std.testing.expectEqualStrings("", spec.arg);
-    try std.testing.expectEqual(camera.gradient.source().vtable, (try spec.open(allocator, &format_control)).vtable);
+    try std.testing.expectEqual(camera.gradient.source().vtable, (try spec.open(allocator, std.testing.io, &format_control)).vtable);
     const empty = try registry.parse("gradient:");
     try std.testing.expectEqual(registry.Kind.gradient, empty.kind);
 }
@@ -22,7 +22,7 @@ test "gradient parses with no argument and opens the gradient source" {
 test "the default spec is the gradient the CEU always captured" {
     const spec = registry.Spec{};
     try std.testing.expectEqual(registry.Kind.gradient, spec.kind);
-    try std.testing.expectEqual(camera.gradient.source().vtable, (try spec.open(allocator, &format_control)).vtable);
+    try std.testing.expectEqual(camera.gradient.source().vtable, (try spec.open(allocator, std.testing.io, &format_control)).vtable);
 }
 
 test "an unknown kind and a stray gradient argument are refused" {
@@ -41,11 +41,11 @@ test "image takes a path and refuses to go without one" {
 
 test "an image that is not there refuses the run when it opens" {
     const spec = try registry.parse("image:/nonexistent/ra8-camera.png");
-    try std.testing.expectError(error.FileNotFound, spec.open(allocator, &format_control));
+    try std.testing.expectError(error.FileNotFound, spec.open(allocator, std.testing.io, &format_control));
 }
 
 test "the report names each source: the gradient by default, a picture by its path" {
-    const gradient = try (registry.Spec{}).open(allocator, &format_control);
+    const gradient = try (registry.Spec{}).open(allocator, std.testing.io, &format_control);
     try std.testing.expectEqualStrings("synthetic gradient", gradient.label);
     try std.testing.expectEqualStrings("", gradient.detail);
     const named = camera.still.labelled(camera.gradient.source(), "shots/frame.png");
@@ -59,7 +59,7 @@ test "video takes a path, optionally with loop, and is named by it" {
     try std.testing.expectEqual(registry.Kind.video, spec.kind);
     try std.testing.expectEqualStrings("clips/walk.y4m,loop", spec.arg);
     try std.testing.expectError(error.BadValue, registry.parse("video"));
-    try std.testing.expectError(error.FileNotFound, (try registry.parse("video:/nonexistent/ra8.y4m")).open(allocator, &format_control));
+    try std.testing.expectError(error.FileNotFound, (try registry.parse("video:/nonexistent/ra8.y4m")).open(allocator, std.testing.io, &format_control));
     const named = camera.video.labelled(camera.gradient.source(), "clips/walk.y4m,loop");
     try std.testing.expectEqualStrings("video", named.label);
     try std.testing.expectEqualStrings("clips/walk.y4m,loop", named.detail);

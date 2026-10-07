@@ -8,8 +8,8 @@ const registry = @import("../periph/camera/camera_registry.zig");
 
 /// Open `spec` and install it as `board`'s camera source. Call it only on
 /// the thread that steps the board.
-pub fn install(board: *Board, allocator: std.mem.Allocator, spec: registry.Spec) !void {
-    const next = try spec.open(allocator, &board.wire.sensor.format);
+pub fn install(board: *Board, allocator: std.mem.Allocator, io: std.Io, spec: registry.Spec) !void {
+    const next = try spec.open(allocator, io, &board.wire.sensor.format);
     board.capture.source.close();
     board.capture.source = next;
 }

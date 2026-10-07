@@ -54,7 +54,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     };
     var context: served.Context = .{ .session = owner.session(), .scratch = try allocator.alloc(u8, proto.max_payload), .state = owner.stateFiles(), .gpa = allocator };
     context.listing = .{ .context = owner.plugs(), .listFn = listParts };
-    var camera: Camera = .{ .board = owner.board(), .allocator = allocator };
+    var camera: Camera = .{ .board = owner.board(), .allocator = allocator, .io = io };
     context.camera = .{ .context = &camera, .setFn = Camera.set };
     context.mapping = .{ .context = &owner, .mapFn = mapImage };
     const done = switch (asked.where) {
@@ -87,13 +87,14 @@ fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]
     return stream.getWritten();
 }
 
-/// The board and allocator set_camera_source opens sources with.
+/// The board, allocator and io set_camera_source opens sources with.
 const Camera = struct {
     board: *Board,
     allocator: std.mem.Allocator,
+    io: std.Io,
 
     fn set(context: *anyopaque, spec: camera_registry.Spec) anyerror!void {
         const self: *Camera = @ptrCast(@alignCast(context));
-        try camera_install.install(self.board, self.allocator, spec);
+        try camera_install.install(self.board, self.allocator, self.io, spec);
     }
 };

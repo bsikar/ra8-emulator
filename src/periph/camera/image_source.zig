@@ -50,8 +50,8 @@ pub const ImageSource = struct {
     /// The sensor's FORMAT CONTROL byte, read again at every capture.
     format_control: *const u8,
 
-    pub fn load(allocator: std.mem.Allocator, path: []const u8, format_control: *const u8) !*ImageSource {
-        const bytes = try std.fs.cwd().readFileAlloc(allocator, path, max_file_bytes);
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, path: []const u8, format_control: *const u8) !*ImageSource {
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(max_file_bytes));
         defer allocator.free(bytes);
         const image = try decodeAny(allocator, bytes);
         errdefer image.deinit(allocator);
