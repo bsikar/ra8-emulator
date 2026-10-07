@@ -81,6 +81,7 @@
 //! GTINTAD, so channel 0's overflow always raises and a compare match never
 //! does.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const buf = @import("gpt_buffer.zig");
 const ch = @import("gpt_channel.zig");
@@ -148,7 +149,7 @@ pub const step_per_tick: u32 = ch.step_per_tick;
 pub const default_period: u32 = ch.default_period;
 
 /// At most one event per boundary, from channel 0.
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 pub const Gpt = struct {
     channels: [channels]Channel = @splat(.{}),

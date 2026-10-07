@@ -64,6 +64,7 @@
 //! the sampling-time and gain registers. They are shadowed so a read-modify-
 //! write survives, and never read.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 const periph = @import("../registry.zig");
 const scan = @import("adc_scan.zig");
 const intr = @import("adc_intr.zig");
@@ -116,7 +117,7 @@ pub const event = struct {
     pub const scan_end: u16 = 0x09C;
 };
 
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 const words: usize = win_span / 4;
 

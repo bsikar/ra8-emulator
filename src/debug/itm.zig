@@ -14,6 +14,7 @@
 //! Each core has its own ITM. The PPB is plain memory, so after a store the
 //! debug core writes these registers back the way a read should see them.
 const std = @import("std");
+const Bounded = @import("../core/bounded.zig").Bounded;
 
 pub const base: u32 = 0xE000_0000;
 
@@ -45,7 +46,7 @@ pub const Itm = struct {
     ter: u32 = 0,
     tpr: u32 = 0,
     tcr: u32 = 0,
-    text: std.BoundedArray(u8, limits.capacity) = .{},
+    text: Bounded(u8, limits.capacity) = .{},
     /// Port 0 characters that arrived with the text already full.
     dropped: usize = 0,
     /// Stores that reached an enabled port other than 0.

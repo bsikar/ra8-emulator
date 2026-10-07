@@ -13,6 +13,7 @@
 //! one timer event is doing the ordinary thing, and answering only the first
 //! would silently drop the second.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 /// ELSR0..ELSR52 (FSP R_ELC_Type, ra8_elc.h k_ra8_elc_elsr_count).
 pub const slots: usize = 53;
@@ -22,7 +23,7 @@ pub const els_mask: u16 = 0x03FF;
 
 /// The slots that take one event. Bounded by the table, because nothing stops
 /// a firmware from pointing every slot at the same source.
-pub const Takers = std.BoundedArray(u8, slots);
+pub const Takers = Bounded(u8, slots);
 
 /// What happened to one event offered to the table.
 pub const Arrival = enum {

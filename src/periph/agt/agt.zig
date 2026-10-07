@@ -72,6 +72,7 @@
 //! this tree does not carry. Only the AGT0 combined event is raised, on underflow, which is
 //! what dev raises too.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const periph = @import("../registry.zig");
 const clk = @import("agt_clock.zig");
@@ -121,7 +122,7 @@ pub const event = struct {
 pub const step_per_tick: u16 = 0x0800;
 
 /// At most one event per boundary, from channel 0.
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 /// One channel: the live count, the two compare values, the control byte,
 /// and a shadow for every register this model does not interpret.

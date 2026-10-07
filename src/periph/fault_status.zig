@@ -15,6 +15,7 @@
 //! handler's dump and the run report read the word the same way.
 
 const std = @import("std");
+const Bounded = @import("../core/bounded.zig").Bounded;
 
 /// How a store to CFSR or HFSR clears the bits it wrote ones to. Reached
 /// through here so the status words and their write rule are one name.
@@ -100,8 +101,8 @@ pub const hfsr = struct {
     pub const defined: u32 = maskOf(Hard);
 };
 
-pub const Causes = std.BoundedArray(Cause, @typeInfo(Cause).@"enum".fields.len);
-pub const HardCauses = std.BoundedArray(Hard, @typeInfo(Hard).@"enum".fields.len);
+pub const Causes = Bounded(Cause, @typeInfo(Cause).@"enum".fields.len);
+pub const HardCauses = Bounded(Hard, @typeInfo(Hard).@"enum".fields.len);
 
 /// The causes a CFSR word reports, lowest bit first. Reserved bits are
 /// dropped rather than named.

@@ -6,6 +6,7 @@
 //! name here, so a caller that only knows the block still reaches them
 //! through it.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 
 /// CANFD geometry. The Non-secure alias is folded onto these by the bus.
 pub const unit0_base: u32 = 0x4038_0000;
@@ -68,7 +69,7 @@ pub const event = struct {
 
 /// One event per boundary: the line is pending in the controller until the
 /// firmware clears it, so re-raising every stage would say nothing new.
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 /// The three states both machines walk. A reserved encoding lands on
 /// operation, which is what dev's else branch does.

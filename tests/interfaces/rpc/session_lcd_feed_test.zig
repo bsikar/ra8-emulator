@@ -2,6 +2,7 @@
 //! served Session with a fake panel, joined over the in-memory loopback.
 const std = @import("std");
 const ra8 = @import("ra8");
+const Bounded = ra8.core.bounded.Bounded;
 const rpc = served.rpc_lib;
 const bus = ra8.core.cpu.bus;
 const Cpu = ra8.core.cpu.cpu.Cpu;
@@ -79,7 +80,7 @@ const Wire = struct {
     client: proto.Client = undefined,
     host: served.Host = undefined,
     panel: *const Panel = undefined,
-    got: std.BoundedArray(Got, 8) = .{},
+    got: Bounded(Got, 8) = .{},
 
     fn init(gpa: std.mem.Allocator) !*Wire {
         const self = try gpa.create(Wire);

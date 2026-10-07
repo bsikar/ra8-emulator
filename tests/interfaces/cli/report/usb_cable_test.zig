@@ -7,9 +7,21 @@ const usbfs = ra8.periph.usbfs;
 const Host = ra8.periph.usbhs.Host;
 const Loop = ra8.periph.usbhs.loop.Loop;
 
-fn render(host: *const Host) !std.BoundedArray(u8, 512) {
-    var text = std.BoundedArray(u8, 512){};
-    try usb_cable.section(host, text.writer());
+/// The rendered section: up to 512 bytes, kept by value.
+const Text = struct {
+    buffer: [512]u8 = undefined,
+    len: usize = 0,
+
+    fn constSlice(self: *const Text) []const u8 {
+        return self.buffer[0..self.len];
+    }
+};
+
+fn render(host: *const Host) !Text {
+    var text: Text = .{};
+    var out: std.Io.Writer = .fixed(&text.buffer);
+    try usb_cable.section(host, &out);
+    text.len = out.end;
     return text;
 }
 
