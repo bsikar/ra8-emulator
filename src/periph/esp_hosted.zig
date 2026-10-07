@@ -1,4 +1,5 @@
 //! The EK-RA8D2's SPI peer: the idle frame and sideband lines of esp-hosted.
+const std = @import("std");
 const sci = @import("sci/sci.zig");
 const gpio = @import("gpio/gpio.zig");
 
@@ -49,6 +50,10 @@ pub const C6 = struct {
 
     pub fn deinit(self: *C6) void {
         self.wire.deinit();
+    }
+    /// Hands the C6's DNS bridge the host Io it resolves names with.
+    pub fn useIo(self: *C6, io: std.Io) void {
+        self.wire.bridge.resolver.io = io;
     }
     /// Records or replays the C6's host traffic (RA8EMU-560).
     pub fn useTape(self: *C6, run: tape.Tape) void {
