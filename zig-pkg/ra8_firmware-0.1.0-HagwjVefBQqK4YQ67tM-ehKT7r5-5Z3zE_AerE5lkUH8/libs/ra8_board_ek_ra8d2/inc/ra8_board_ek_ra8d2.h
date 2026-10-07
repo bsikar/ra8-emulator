@@ -1,0 +1,69 @@
+/**
+ * @file ra8_board_ek_ra8d2.h
+ * @brief Board-support layer for the Renesas EK-RA8D2 v1 evaluation kit
+ * @ingroup grp_board
+ *
+ * @par Tag
+ * [Ring 5 / BSP] {World: S}
+ *
+ * @details
+ * Names every on-board feature of the EK-RA8D2 v1 (LEDs, switches,
+ * connectors, peripherals) so application code can speak in board
+ * coordinates ("LED1", "Arduino D13", "Pmod1 SCK") rather than chip
+ * coordinates ("P600", "P102", "P803"). Every pin enum carries a
+ * citation back to a numbered table in the EK-RA8D2 v1 User's Manual
+ * so a reader can audit the wiring without opening the schematic.
+ *
+ * This header is a THIN UMBRELLA: the declarations themselves live in
+ * two self-contained sub-headers in this directory, and this file just
+ * pulls them in so existing consumers that ``#include
+ * "ra8_board_ek_ra8d2.h"`` keep compiling unchanged:
+ *
+ *   - ``ra8_board_ek_ra8d2_bringup.h`` -- the substrate prologue
+ *     (clocks, module stop, timebase, console, LEDs, interrupts)
+ *     behind one ``ra8_board_bringup()`` call.
+ *   - ``ra8_board_ek_ra8d2_connectors.h`` -- board identity, user LEDs,
+ *     user switches, parallel-RGB J1, audio CODEC, Arduino header,
+ *     Pmod1/Pmod2, MikroBUS, and the project SW4-layout enum.
+ *   - ``ra8_board_ek_ra8d2_peripherals.h`` -- the U15 I/O-expander SW4
+ *     override functions, USB-HS/FS, parallel camera J35, Octo-SPI flash
+ *     + SDRAM, MIPI-DSI J32, the J-Link OB VCOM console, and Ethernet.
+ *   - ``ra8_board_ek_ra8d2_pmod.h`` -- Pmod2 (J25) Simple-SPI bus
+ *     bring-up: the pin routing and the active-low chip-select every
+ *     microSD-over-Pmod2 consumer used to open-code.
+ *   - ``ra8_board_ek_ra8d2_backdrop.h`` -- lighting the J1 panel with a
+ *     flat colour and no framebuffer at all, for bring-up, test and
+ *     panic paths that need the glass to show something before any
+ *     graphics stack exists.
+ *   - ``ra8_board_ek_ra8d2_dualcore.h`` -- where the Cortex-M85 and the
+ *     Cortex-M33 meet: the shared SRAM window, CPU1's private bank, and
+ *     the MRAM window its image is pinned in.
+ *   - ``ra8_board_ek_ra8d2_clock_profile.h`` -- the board's answer to the
+ *     neutral clock port in ``libs/if``: which chip instance each board
+ *     module index means, and ``ra8_board_clock()``, the one bound handle
+ *     a consumer asks a rate of instead of reaching for ``ra8_cgc``.
+ *
+ * Authoritative source: ``docs/reference/ek-ra8d2-v1-users-manual.pdf``
+ * (Rev 1.01, R20UT5523EG0101, October 2025).
+ *
+ * Underlying chip register access is delegated to ``libs/ra8_hal``:
+ * the BSP itself does NO register pokes -- it just translates board
+ * names into the right ``ra8_port_pin_t`` / ``ra8_psel_t`` /
+ * ``ra8_icu_irq_cfg_t`` values and forwards to the HAL.
+ *
+ * @copyright Copyright (c) 2026 Brighton Sikarskie
+ * SPDX-License-Identifier: MIT
+ * @since 0.1.0
+ */
+
+#pragma once
+
+#include "ra8_board_ek_ra8d2_backdrop.h"
+#include "ra8_board_ek_ra8d2_bringup.h"
+#include "ra8_board_ek_ra8d2_camera_mode.h"
+#include "ra8_board_ek_ra8d2_clock_profile.h"
+#include "ra8_board_ek_ra8d2_connectors.h"
+#include "ra8_board_ek_ra8d2_dualcore.h"
+#include "ra8_board_ek_ra8d2_pdm.h"
+#include "ra8_board_ek_ra8d2_pmod.h"
+#include "ra8_board_ek_ra8d2_peripherals.h"

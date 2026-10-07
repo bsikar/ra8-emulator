@@ -45,6 +45,14 @@ fn openNonBlocking(path: []const u8) !Handle {
     }
 }
 
+/// Close a handle from open() or a pipe. 0.17 has no std.posix.close;
+/// libc is always linked, so POSIX calls close(2) directly.
+pub fn close(handle: Handle) void {
+    if (is_windows) {
+        std.os.windows.CloseHandle(handle);
+    } else _ = std.c.close(handle);
+}
+
 /// Read what is waiting on `handle` into `into`. Null means nothing is
 /// waiting (or the read failed) and the caller asks again next boundary;
 /// 0 means end of input; anything else is the count read.

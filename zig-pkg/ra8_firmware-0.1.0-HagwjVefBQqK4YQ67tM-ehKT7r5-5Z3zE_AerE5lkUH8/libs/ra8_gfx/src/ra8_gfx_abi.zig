@@ -1,0 +1,851 @@
+//! SPDX-License-Identifier: MIT
+//! Copyright (c) 2026 Brighton Sikarskie
+//!
+//! C ABI membrane for the `ra8_gfx` software rasteriser: the lifecycle, the
+//! drawing entry points, the glyph/text stack and the per-panel tone curve
+//! alike. Defines the one module-wide framebuffer binding `g_gfx_text_state`,
+//! exports the four promoted helpers `priv_gfx_text_pack_565`,
+//! `priv_gfx_text_plot`, `priv_gfx_bpp` and `priv_gfx_format_ok` that
+//! `src/ra8_gfx_internal.h` declares, exports the fifteen entry points
+//! declared in `inc/ra8_gfx.h`, the two bind forms and the teardown among
+//! them, the three `inc/ra8_gfx_tone.h` calls with their committed nominal
+//! curve, and the six `inc/ra8_gfx_dither.h` calls over the committed
+//! blue-noise mask.
+//!
+//! Nothing of `ra8_gfx` is C any more. The bundled 8x16 font table came over
+//! last: its exported descriptor `ra8_gfx_font_8x16` lives in
+//! `ra8_gfx_font_abi.zig`, referenced below so the export lands in this
+//! archive.
+//!
+//! Every decision lives in `internal/root.zig` and, for the lifecycle, in
+//! `internal/bind.zig`; this file only moves bytes.
+
+const std = @import("std");
+const impl = @import("internal/root.zig");
+const tone_impl = @import("internal/tone.zig");
+const dither_impl = @import("internal/dither.zig");
+const bind_impl = @import("internal/bind.zig");
+const font_abi = @import("ra8_gfx_font_abi.zig");
+const text_impl = @import("internal/text.zig");
+
+comptime {
+    // An export in a non-root file only reaches the archive when the root
+    // analyses it, and `ra8_gfx_font_8x16` is the whole point of that file.
+    _ = font_abi;
+}
+
+/// Re-exported so the ABI test binary shares the exact struct types.
+pub const internal = impl;
+
+/// The tone curve's own pure half, re-exported for the same reason.
+pub const tone = tone_impl;
+
+/// The dither's own pure half, re-exported for the same reason.
+pub const dither = dither_impl;
+
+/// Face-aware text metrics and rasterisation for the standalone text tests.
+pub const text_renderer = text_impl;
+
+/// The lifecycle's own pure half, re-exported for the same reason.
+pub const bind = bind_impl;
+
+/// `g_gfx_text_state` -- the single shared framebuffer binding. The C
+/// definition initialised only `.format`, so RGB565 is the pre-init format.
+pub export var g_gfx_text_state: impl.State = .{ .format = impl.format.rgb565 };
+
+/// The active clip box as a value.
+fn clip() impl.Box {
+    return .{
+        .x0 = g_gfx_text_state.clip_x0,
+        .y0 = g_gfx_text_state.clip_y0,
+        .x1 = g_gfx_text_state.clip_x1,
+        .y1 = g_gfx_text_state.clip_y1,
+    };
+}
+
+/// Row stride of the bound framebuffer, in bytes. Since RA8FW-304 the binding
+/// carries its own pitch, so a padded surface addresses rows correctly and a
+/// packed one is bit-for-bit what `width * bpp` gave before.
+fn stride() usize {
+    return @as(usize, g_gfx_text_state.pitch);
+}
+
+/// `priv_gfx_text_pack_565`
+pub export fn priv_gfx_text_pack_565(color: u32) callconv(.c) u16 {
+    return impl.pack565(color);
+}
+
+/// `priv_gfx_bpp`
+pub export fn priv_gfx_bpp(fmt: u8) callconv(.c) u8 {
+    return impl.bppOf(fmt);
+}
+
+/// `priv_gfx_format_ok`. Declared `bool` in the header, so the byte the C
+/// reads is 0 or 1; `bool` itself is not a boundary type this repo allows.
+pub export fn priv_gfx_format_ok(fmt: u8) callconv(.c) u8 {
+    return @intFromBool(impl.formatOk(fmt));
+}
+
+/// `priv_gfx_text_plot`
+pub export fn priv_gfx_text_plot(x: i32, y: i32, color: u32) callconv(.c) void {
+    if (!impl.plotInClip(x, y, clip())) return;
+    const fb = g_gfx_text_state.fb orelse return;
+    impl.putPixel(
+        fb,
+        stride(),
+        g_gfx_text_state.format,
+        @intCast(x),
+        @intCast(y),
+        color,
+    );
+}
+
+/// One row of an RGB565 span: a `memset` when the two halves match, an
+/// interleaving store otherwise. Mirrors `internal_fill_565`.
+fn fill565(p: [*]u8, count: usize, lo: u8, hi: u8) void {
+    if (impl.fillIsFlat(lo, hi)) {
+        @memset(p[0 .. count * impl.rgb565_bpp], lo);
+        return;
+    }
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        p[(i * impl.rgb565_bpp)] = lo;
+        p[(i * impl.rgb565_bpp) + 1] = hi;
+    }
+}
+
+/// `internal_fill_rect_565`
+fn fillRect565(x: i32, y: i32, w: i32, h: i32, color: u32) void {
+    const box = impl.fillSpan(x, y, w, h, clip()) orelse return;
+    const fb = g_gfx_text_state.fb orelse return;
+
+    const v = impl.pack565(color);
+    const lo: u8 = @intCast(v & 0xFF);
+    const hi: u8 = @intCast((v >> 8) & 0xFF);
+    const bpp: usize = g_gfx_text_state.bpp;
+    const row_bytes = stride();
+    const count: usize = @intCast(box.x1 - box.x0);
+
+    var row = box.y0;
+    while (row < box.y1) : (row += 1) {
+        const offset = (@as(usize, @intCast(row)) * row_bytes) + (@as(usize, @intCast(box.x0)) * bpp);
+        fill565(fb + offset, count, lo, hi);
+    }
+}
+
+/// `internal_fill_rect`
+fn fillRect(x: i32, y: i32, w: i32, h: i32, color: u32) void {
+    if (g_gfx_text_state.format == impl.format.rgb565) {
+        fillRect565(x, y, w, h, color);
+        return;
+    }
+    var row: i32 = 0;
+    while (row < h) : (row += 1) {
+        var col: i32 = 0;
+        while (col < w) : (col += 1) {
+            priv_gfx_text_plot(x +% col, y +% row, color);
+        }
+    }
+}
+
+/// `internal_rect_outline`
+fn rectOutline(x: i32, y: i32, w: i32, h: i32, color: u32) void {
+    var col: i32 = 0;
+    while (col < w) : (col += 1) {
+        priv_gfx_text_plot(x +% col, y, color);
+        priv_gfx_text_plot(x +% col, y +% h -% 1, color);
+    }
+    var row: i32 = 0;
+    while (row < h) : (row += 1) {
+        priv_gfx_text_plot(x, y +% row, color);
+        priv_gfx_text_plot(x +% w -% 1, y +% row, color);
+    }
+}
+
+/// `ra8_gfx_init` -- the positional bind form. No stride parameter, so the
+/// buffer is densely packed by definition and the pitch is one packed row.
+pub export fn ra8_gfx_init(
+    fb: ?*anyopaque,
+    width: u16,
+    height: u16,
+    fmt: u8,
+) callconv(.c) u16 {
+    const base = fb orelse return impl.err.null_ptr;
+    const status = bind_impl.checkDims(width, height, fmt);
+    if (status != impl.err.ok) return status;
+    g_gfx_text_state = bind_impl.bound(
+        @ptrCast(base),
+        width,
+        height,
+        fmt,
+        bind_impl.packedRow(width, fmt),
+    );
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_init_surface` -- the pitch-carrying bind form (RA8FW-304). The
+/// descriptor is copied, so the caller may reuse the object.
+pub export fn ra8_gfx_init_surface(s: ?*const bind_impl.Surface) callconv(.c) u16 {
+    const surface = s orelse return impl.err.null_ptr;
+    const pixels = surface.pixels orelse return impl.err.null_ptr;
+    const status = bind_impl.checkSurface(surface.*);
+    if (status != impl.err.ok) return status;
+    g_gfx_text_state = bind_impl.bound(
+        @ptrCast(pixels),
+        surface.w,
+        surface.h,
+        surface.fmt,
+        surface.stride_bytes,
+    );
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_deinit`
+pub export fn ra8_gfx_deinit() callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    g_gfx_text_state = bind_impl.released(g_gfx_text_state);
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_clear`
+pub export fn ra8_gfx_clear(color: u32) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+
+    if (g_gfx_text_state.format == impl.format.rgb565) {
+        fillRect565(0, 0, @intCast(g_gfx_text_state.width), @intCast(g_gfx_text_state.height), color);
+        return impl.err.ok;
+    }
+
+    const fb = g_gfx_text_state.fb orelse return impl.err.ok;
+    const row_bytes = stride();
+    var y = g_gfx_text_state.clip_y0;
+    while (y < g_gfx_text_state.clip_y1) : (y += 1) {
+        var x = g_gfx_text_state.clip_x0;
+        while (x < g_gfx_text_state.clip_x1) : (x += 1) {
+            impl.putPixel(
+                fb,
+                row_bytes,
+                g_gfx_text_state.format,
+                @intCast(x),
+                @intCast(y),
+                color,
+            );
+        }
+    }
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_set_clip`
+pub export fn ra8_gfx_set_clip(x: i32, y: i32, w: i32, h: i32) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+
+    const box = impl.clampClip(
+        x,
+        y,
+        w,
+        h,
+        @intCast(g_gfx_text_state.width),
+        @intCast(g_gfx_text_state.height),
+    );
+    g_gfx_text_state.clip_x0 = box.x0;
+    g_gfx_text_state.clip_y0 = box.y0;
+    g_gfx_text_state.clip_x1 = box.x1;
+    g_gfx_text_state.clip_y1 = box.y1;
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_reset_clip`
+pub export fn ra8_gfx_reset_clip() callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    g_gfx_text_state.clip_x0 = 0;
+    g_gfx_text_state.clip_y0 = 0;
+    g_gfx_text_state.clip_x1 = @intCast(g_gfx_text_state.width);
+    g_gfx_text_state.clip_y1 = @intCast(g_gfx_text_state.height);
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_pixel`
+pub export fn ra8_gfx_pixel(x: i32, y: i32, color: u32) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    if (!impl.pixelInBounds(x, y, g_gfx_text_state.width, g_gfx_text_state.height)) {
+        return impl.err.range_check_failed;
+    }
+    priv_gfx_text_plot(x, y, color);
+    return impl.err.ok;
+}
+
+/// `internal_blit_gray8_565`
+fn blitGray8Fast(src: [*]const u8, w: i32, dst_x: i32, dst_y: i32, box: impl.Box) void {
+    const fb = g_gfx_text_state.fb orelse return;
+    const row_bytes = stride();
+    const src_w: usize = @intCast(w);
+
+    var y = box.y0;
+    while (y < box.y1) : (y += 1) {
+        var p = fb + (@as(usize, @intCast(y)) * row_bytes) + (@as(usize, @intCast(box.x0)) * impl.rgb565_bpp);
+        var s = src + (@as(usize, @intCast(y - dst_y)) * src_w) + @as(usize, @intCast(box.x0 - dst_x));
+        var x = box.x0;
+        while (x < box.x1) : (x += 1) {
+            const v = impl.pack565(impl.grayToColor(s[0]));
+            p[0] = @intCast(v & 0xFF);
+            p[1] = @intCast((v >> 8) & 0xFF);
+            p += impl.rgb565_bpp;
+            s += 1;
+        }
+    }
+}
+
+/// `internal_blit_gray8_slow`
+fn blitGray8Slow(src: [*]const u8, w: i32, h: i32, dx: i32, dy: i32) void {
+    const src_w: usize = @intCast(w);
+    var y: i32 = 0;
+    while (y < h) : (y += 1) {
+        var x: i32 = 0;
+        while (x < w) : (x += 1) {
+            const sample = src[(@as(usize, @intCast(y)) * src_w) + @as(usize, @intCast(x))];
+            priv_gfx_text_plot(dx +% x, dy +% y, impl.grayToColor(sample));
+        }
+    }
+}
+
+/// `ra8_gfx_blit_gray8`
+pub export fn ra8_gfx_blit_gray8(
+    src: ?[*]const u8,
+    w: i32,
+    h: i32,
+    dst_x: i32,
+    dst_y: i32,
+) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    if (!impl.blitGray8ArgsOk(src != null, w, h)) return impl.err.invalid_arg;
+    const pixels = src.?;
+
+    if (g_gfx_text_state.format != impl.format.rgb565) {
+        blitGray8Slow(pixels, w, h, dst_x, dst_y);
+        return impl.err.ok;
+    }
+
+    if (impl.blitWindow(dst_x, dst_y, w, h, clip())) |box| {
+        blitGray8Fast(pixels, w, dst_x, dst_y, box);
+    }
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_line`
+pub export fn ra8_gfx_line(x0: i32, y0: i32, x1: i32, y1: i32, color: u32) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+
+    var walk = impl.lineStart(x0, y0, x1, y1);
+    var i: i32 = 0;
+    while (i < impl.Line.max_iterations) : (i += 1) {
+        priv_gfx_text_plot(walk.x, walk.y, color);
+        if ((walk.x == x1) and (walk.y == y1)) break;
+        walk = impl.lineStep(walk);
+    }
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_rect`; C23 `bool` arrives as its one-byte `_Bool` ABI value.
+pub export fn ra8_gfx_rect(
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    color: u32,
+    filled: u8,
+) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    if ((w <= 0) or (h <= 0)) return impl.err.ok;
+    if (filled != 0) {
+        fillRect(x, y, w, h, color);
+    } else {
+        rectOutline(x, y, w, h, color);
+    }
+    return impl.err.ok;
+}
+
+/// `internal_circle_outline_step`: the eight-way octant reflection.
+fn circleOutlineStep(cx: i32, cy: i32, x: i32, y: i32, color: u32) void {
+    priv_gfx_text_plot(cx +% x, cy +% y, color);
+    priv_gfx_text_plot(cx -% x, cy +% y, color);
+    priv_gfx_text_plot(cx +% x, cy -% y, color);
+    priv_gfx_text_plot(cx -% x, cy -% y, color);
+    priv_gfx_text_plot(cx +% y, cy +% x, color);
+    priv_gfx_text_plot(cx -% y, cy +% x, color);
+    priv_gfx_text_plot(cx +% y, cy -% x, color);
+    priv_gfx_text_plot(cx -% y, cy -% x, color);
+}
+
+/// `internal_circle_filled_step`: the two mirrored spans. The counters are
+/// widened to 64-bit so a degenerate radius cannot wrap the loop itself,
+/// while the plotted coordinates keep the C's 32-bit arithmetic.
+fn circleFilledStep(cx: i32, cy: i32, x: i32, y: i32, color: u32) void {
+    var col: i64 = -@as(i64, x);
+    while (col <= @as(i64, x)) : (col += 1) {
+        const c: i32 = @truncate(col);
+        priv_gfx_text_plot(cx +% c, cy +% y, color);
+        priv_gfx_text_plot(cx +% c, cy -% y, color);
+    }
+    col = -@as(i64, y);
+    while (col <= @as(i64, y)) : (col += 1) {
+        const c: i32 = @truncate(col);
+        priv_gfx_text_plot(cx +% c, cy +% x, color);
+        priv_gfx_text_plot(cx +% c, cy -% x, color);
+    }
+}
+
+/// `ra8_gfx_circle`; C23 `bool` arrives as its one-byte `_Bool` ABI value.
+pub export fn ra8_gfx_circle(
+    cx: i32,
+    cy: i32,
+    r: i32,
+    color: u32,
+    filled: u8,
+) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    if (r < 0) return impl.err.invalid_arg;
+
+    var walk = impl.circleStart(r);
+    var i: i32 = 0;
+    while (i < impl.Circle.max_iterations) : (i += 1) {
+        if (filled != 0) {
+            circleFilledStep(cx, cy, walk.x, walk.y, color);
+        } else {
+            circleOutlineStep(cx, cy, walk.x, walk.y, color);
+        }
+        if (walk.done()) break;
+        walk = impl.circleStep(walk);
+    }
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_blit`
+pub export fn ra8_gfx_blit(
+    src_buf: ?*const anyopaque,
+    src_w: u16,
+    src_h: u16,
+    src_format: u8,
+    dst_x: i32,
+    dst_y: i32,
+) callconv(.c) u16 {
+    if (src_buf == null) return impl.err.null_ptr;
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    if (!impl.blitArgsOk(src_w, src_h, src_format)) return impl.err.invalid_arg;
+
+    const src: [*]const u8 = @ptrCast(src_buf.?);
+    const src_stride = @as(usize, src_w) * @as(usize, impl.bppOf(src_format));
+
+    var row: u32 = 0;
+    while (row < src_h) : (row += 1) {
+        var col: u32 = 0;
+        while (col < src_w) : (col += 1) {
+            const color = impl.getPixel(src, src_stride, src_format, col, row);
+            priv_gfx_text_plot(
+                dst_x +% @as(i32, @intCast(col)),
+                dst_y +% @as(i32, @intCast(row)),
+                color,
+            );
+        }
+    }
+    return impl.err.ok;
+}
+
+/// `internal_gray4_color`: sample one packed nibble and expand it to gray.
+fn gray4Color(src: [*]const u8, src_w: i32, x: i32, y: i32) u32 {
+    const flat = impl.gray4FlatIndex(src_w, x, y);
+    const nibble = impl.gray4Nibble(src[flat >> 1], flat);
+    return impl.grayToColor(@as(u32, impl.gray4ToGray8(nibble)));
+}
+
+/// `internal_gray4_block`: one magnified source pixel as a solid square.
+///
+/// Every destination pixel goes through the clipped plotter, so a block
+/// straddling a clip edge writes only its visible pixels.
+fn gray4Block(bx: i32, by: i32, zoom: i32, color: u32) void {
+    var dy: i32 = 0;
+    while (dy < zoom) : (dy += 1) {
+        var dx: i32 = 0;
+        while (dx < zoom) : (dx += 1) {
+            priv_gfx_text_plot(bx +% dx, by +% dy, color);
+        }
+    }
+}
+
+/// `ra8_gfx_blit_gray4_zoom`
+pub export fn ra8_gfx_blit_gray4_zoom(
+    src: ?[*]const u8,
+    src_w: i32,
+    src_h: i32,
+    sx: i32,
+    sy: i32,
+    sw: i32,
+    sh: i32,
+    zoom: i32,
+    dst_x: i32,
+    dst_y: i32,
+) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) {
+        return impl.err.not_initialized;
+    }
+    if (!impl.gray4ZoomArgsOk(src != null, zoom, src_w, src_h)) {
+        return impl.err.invalid_arg;
+    }
+    const pixels = src.?;
+
+    const window = impl.gray4Window(sx, sy, sw, sh, src_w, src_h);
+    var py = window.y0;
+    while (py < window.y1) : (py += 1) {
+        const by = dst_y +% ((py -% sy) *% zoom);
+        var px = window.x0;
+        while (px < window.x1) : (px += 1) {
+            gray4Block(
+                dst_x +% ((px -% sx) *% zoom),
+                by,
+                zoom,
+                gray4Color(pixels, src_w, px, py),
+            );
+        }
+    }
+    return impl.err.ok;
+}
+
+/// `internal_blit_glyph_565`: one glyph cell straight into an RGB565 surface.
+/// Both colours are packed once and every visible pixel stores the two
+/// pre-packed bytes, which is byte-identical to the per-pixel plot path over
+/// the same in-bounds set. The whole cell is painted: foreground for set bits,
+/// background for clear ones.
+fn blitGlyph565(
+    x: i32,
+    y: i32,
+    font: *const impl.Font,
+    gd: [*]const u8,
+    fg: u32,
+    bg: u32,
+) void {
+    const box = impl.glyphWindow(x, y, font.glyph_width, font.glyph_height, clip()) orelse return;
+    const fb = g_gfx_text_state.fb orelse return;
+
+    const row_bytes = impl.glyphRowBytes(font.glyph_width);
+    const vfg = impl.pack565(fg);
+    const vbg = impl.pack565(bg);
+    const flo: u8 = @intCast(vfg & 0xFF);
+    const fhi: u8 = @intCast((vfg >> 8) & 0xFF);
+    const blo: u8 = @intCast(vbg & 0xFF);
+    const bhi: u8 = @intCast((vbg >> 8) & 0xFF);
+    const bpp: usize = g_gfx_text_state.bpp;
+    const row_stride = stride();
+
+    var sy = box.y0;
+    while (sy < box.y1) : (sy += 1) {
+        const grow: u32 = @intCast(sy - y);
+        var p = fb + (@as(usize, @intCast(sy)) * row_stride) + (@as(usize, @intCast(box.x0)) * bpp);
+        var sx = box.x0;
+        while (sx < box.x1) : (sx += 1) {
+            const gcol: u32 = @intCast(sx - x);
+            const on = impl.glyphBitSet(gd, row_bytes, grow, gcol);
+            p[0] = if (on) flo else blo;
+            p[1] = if (on) fhi else bhi;
+            p += bpp;
+        }
+    }
+}
+
+/// `internal_render_glyph`: place one codepoint's cell at (`x`, `y`), through
+/// the RGB565 fast path when that format is bound and through the shared
+/// plotter otherwise.
+///
+/// A font with no glyph table draws nothing. The C dereferenced
+/// `font->glyph_data` unconditionally, so that case was undefined behaviour
+/// rather than a contract; refusing to read it is the one deliberate
+/// hardening.
+fn renderGlyph(x: i32, y: i32, font: *const impl.Font, cp: u8, fg: u32, bg: u32) void {
+    const table = font.glyph_data orelse return;
+    const idx = impl.glyphIndex(cp, font.first_codepoint, font.last_codepoint);
+    const gd = table + impl.glyphDataOffset(idx, font.bytes_per_glyph);
+
+    if (g_gfx_text_state.format == impl.format.rgb565) {
+        blitGlyph565(x, y, font, gd, fg, bg);
+        return;
+    }
+
+    const row_bytes = impl.glyphRowBytes(font.glyph_width);
+    var row: u32 = 0;
+    while (row < font.glyph_height) : (row += 1) {
+        var col: u32 = 0;
+        while (col < font.glyph_width) : (col += 1) {
+            const on = impl.glyphBitSet(gd, row_bytes, row, col);
+            priv_gfx_text_plot(
+                x +% @as(i32, @intCast(col)),
+                y +% @as(i32, @intCast(row)),
+                if (on) fg else bg,
+            );
+        }
+    }
+}
+
+/// `ra8_gfx_text_out`
+pub export fn ra8_gfx_text_out(
+    x: i32,
+    y: i32,
+    str: ?[*:0]const u8,
+    font: ?*const impl.Font,
+    fg_color: u32,
+    bg_color: u32,
+) callconv(.c) u16 {
+    const status = impl.textOutStatus(str != null, font != null, g_gfx_text_state.initialized);
+    if (status != impl.err.ok) {
+        return status;
+    }
+
+    const text = str.?;
+    const face = font.?;
+    const step_x: i32 = face.glyph_width;
+    var cur_x = x;
+    var i: u32 = 0;
+    while (i < impl.max_chars) : (i += 1) {
+        if (text[i] == 0) {
+            break;
+        }
+        renderGlyph(cur_x, y, face, text[i], fg_color, bg_color);
+        cur_x +%= step_x;
+    }
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_text_size`
+/// Plotter adapted to the pure Literata atlas renderer.
+fn textPixel(_: ?*anyopaque, x: i32, y: i32, color: u32) callconv(.c) void {
+    priv_gfx_text_plot(x, y, color);
+}
+
+/// ra8_gfx_text_out_face
+pub export fn ra8_gfx_text_out_face(
+    x: i32,
+    y: i32,
+    str: ?[*:0]const u8,
+    face: u8,
+    fg_color: u32,
+    bg_color: u32,
+) callconv(.c) u16 {
+    const text_value = str orelse return impl.err.null_ptr;
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    const family = std.enums.fromInt(text_impl.Face, face) orelse return impl.err.invalid_arg;
+
+    if (family == .sans) {
+        return ra8_gfx_text_out(x, y, text_value, &font_abi.ra8_gfx_font_8x16, fg_color, bg_color);
+    }
+    text_impl.drawSerif(text_value, x, y, fg_color, bg_color, null, textPixel);
+    return impl.err.ok;
+}
+
+/// ra8_gfx_text_out_style
+pub export fn ra8_gfx_text_out_style(
+    x: i32,
+    y: i32,
+    str: ?[*:0]const u8,
+    face: u8,
+    weight: u8,
+    fg_color: u32,
+    bg_color: u32,
+) callconv(.c) u16 {
+    const text_value = str orelse return impl.err.null_ptr;
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    const family = std.enums.fromInt(text_impl.Face, face) orelse return impl.err.invalid_arg;
+    const stroke = std.enums.fromInt(text_impl.Weight, weight) orelse return impl.err.invalid_arg;
+
+    if (family == .serif) {
+        text_impl.drawSerifWeight(text_value, x, y, fg_color, bg_color, stroke, null, textPixel);
+        return impl.err.ok;
+    }
+
+    text_impl.drawSansWeight(text_value, x, y, fg_color, bg_color, stroke, null, textPixel);
+    return impl.err.ok;
+}
+
+/// ra8_gfx_text_size_style
+pub export fn ra8_gfx_text_size_style(
+    str: ?[*:0]const u8,
+    face: u8,
+    weight: u8,
+    out_w: ?*u32,
+    out_h: ?*u32,
+) callconv(.c) u16 {
+    const text_value = str orelse return impl.err.null_ptr;
+    const width = out_w orelse return impl.err.null_ptr;
+    const height = out_h orelse return impl.err.null_ptr;
+    const family = std.enums.fromInt(text_impl.Face, face) orelse return impl.err.invalid_arg;
+    const stroke = std.enums.fromInt(text_impl.Weight, weight) orelse return impl.err.invalid_arg;
+    const extent = text_impl.measureWeight(text_value, family, stroke);
+    width.* = extent.width;
+    height.* = extent.height;
+    return impl.err.ok;
+}
+
+/// ra8_gfx_text_size_face
+pub export fn ra8_gfx_text_size_face(
+    str: ?[*:0]const u8,
+    face: u8,
+    out_w: ?*u32,
+    out_h: ?*u32,
+) callconv(.c) u16 {
+    const text_value = str orelse return impl.err.null_ptr;
+    const width = out_w orelse return impl.err.null_ptr;
+    const height = out_h orelse return impl.err.null_ptr;
+    const family = std.enums.fromInt(text_impl.Face, face) orelse return impl.err.invalid_arg;
+    const extent = text_impl.measure(text_value, family);
+    width.* = extent.width;
+    height.* = extent.height;
+    return impl.err.ok;
+}
+
+pub export fn ra8_gfx_text_size(
+    str: ?[*:0]const u8,
+    font: ?*const impl.Font,
+    out_w: ?*u32,
+    out_h: ?*u32,
+) callconv(.c) u16 {
+    const status = impl.textSizeStatus(str != null, font != null, out_w != null, out_h != null);
+    if (status != impl.err.ok) {
+        return status;
+    }
+
+    const face = font.?;
+    const extent = impl.textExtent(impl.textLength(str.?), face.glyph_width, face.glyph_height);
+    out_w.?.* = extent.w;
+    out_h.?.* = extent.h;
+    return impl.err.ok;
+}
+
+/// `k_ra8_gfx_tone_lut_nominal` -- the committed uncalibrated curve, so the
+/// renderer works with no calibration data at all.
+pub export const k_ra8_gfx_tone_lut_nominal: tone_impl.Lut = tone_impl.nominal;
+
+/// `ra8_gfx_tone_lut_validate`
+pub export fn ra8_gfx_tone_lut_validate(lut: ?*const tone_impl.Lut) callconv(.c) u16 {
+    const curve = lut orelse return impl.err.null_ptr;
+    return tone_impl.validateLut(curve);
+}
+
+/// `ra8_gfx_tone_prepare`
+pub export fn ra8_gfx_tone_prepare(
+    lut: ?*const tone_impl.Lut,
+    out: ?*tone_impl.Map,
+) callconv(.c) u16 {
+    const map = out orelse return impl.err.null_ptr;
+    const curve = lut orelse return impl.err.null_ptr;
+    const status = tone_impl.validateLut(curve);
+    if (status != impl.err.ok) {
+        return status;
+    }
+    tone_impl.prepareMap(curve, map);
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_tone_quantise`
+pub export fn ra8_gfx_tone_quantise(
+    map: *const tone_impl.Map,
+    gray8: u8,
+    thr: u8,
+) callconv(.c) u8 {
+    return tone_impl.quantise(map, gray8, thr);
+}
+
+/// `ra8_gfx_dither_gray4_level`
+pub export fn ra8_gfx_dither_gray4_level(gray8: u8, x: i32, y: i32) callconv(.c) u8 {
+    return dither_impl.quantise(gray8, dither_impl.thresholdAt(x, y));
+}
+
+/// `ra8_gfx_dither_gray4_level_tone`
+pub export fn ra8_gfx_dither_gray4_level_tone(
+    map: ?*const tone_impl.Map,
+    gray8: u8,
+    x: i32,
+    y: i32,
+) callconv(.c) u8 {
+    return dither_impl.quantiseAny(map, gray8, dither_impl.thresholdAt(x, y));
+}
+
+/// `ra8_gfx_dither_gray8_to_gray4`
+pub export fn ra8_gfx_dither_gray8_to_gray4(
+    src: ?[*]const u8,
+    w: i32,
+    h: i32,
+    origin_x: i32,
+    origin_y: i32,
+    out: ?[*]u8,
+    out_cap: u32,
+    out_size: ?*u32,
+) callconv(.c) u16 {
+    return ra8_gfx_dither_gray8_to_gray4_tone(null, src, w, h, origin_x, origin_y, out, out_cap, out_size);
+}
+
+/// `ra8_gfx_dither_gray8_to_gray4_tone`
+pub export fn ra8_gfx_dither_gray8_to_gray4_tone(
+    map: ?*const tone_impl.Map,
+    src: ?[*]const u8,
+    w: i32,
+    h: i32,
+    origin_x: i32,
+    origin_y: i32,
+    out: ?[*]u8,
+    out_cap: u32,
+    out_size: ?*u32,
+) callconv(.c) u16 {
+    const source = src orelse return impl.err.null_ptr;
+    const sink = out orelse return impl.err.null_ptr;
+    const size = out_size orelse return impl.err.null_ptr;
+    if (w <= 0 or h <= 0) {
+        return impl.err.invalid_arg;
+    }
+
+    const width: u32 = @intCast(w);
+    const height: u32 = @intCast(h);
+    const needed = dither_impl.packedBytes(width, height);
+    if (out_cap < needed) {
+        return impl.err.no_mem;
+    }
+
+    dither_impl.packTile(map, source[0 .. width * height], w, h, origin_x, origin_y, sink[0..needed]);
+    size.* = needed;
+    return impl.err.ok;
+}
+
+/// `ra8_gfx_blit_gray8_dither`
+pub export fn ra8_gfx_blit_gray8_dither(
+    src: ?[*]const u8,
+    w: i32,
+    h: i32,
+    dst_x: i32,
+    dst_y: i32,
+) callconv(.c) u16 {
+    return ra8_gfx_blit_gray8_dither_tone(null, src, w, h, dst_x, dst_y);
+}
+
+/// `ra8_gfx_blit_gray8_dither_tone`
+pub export fn ra8_gfx_blit_gray8_dither_tone(
+    map: ?*const tone_impl.Map,
+    src: ?[*]const u8,
+    w: i32,
+    h: i32,
+    dst_x: i32,
+    dst_y: i32,
+) callconv(.c) u16 {
+    if (!g_gfx_text_state.initialized) return impl.err.not_initialized;
+    const source = src orelse return impl.err.invalid_arg;
+    if (w <= 0 or h <= 0) {
+        return impl.err.invalid_arg;
+    }
+
+    var row: i32 = 0;
+    while (row < h) : (row += 1) {
+        var col: i32 = 0;
+        while (col < w) : (col += 1) {
+            const i = (@as(u32, @bitCast(row)) * @as(u32, @bitCast(w))) + @as(u32, @bitCast(col));
+            const x = dst_x +% col;
+            const y = dst_y +% row;
+            const level = dither_impl.quantiseAny(map, source[i], dither_impl.thresholdAt(x, y));
+            priv_gfx_text_plot(x, y, dither_impl.levelToColor(level));
+        }
+    }
+    return impl.err.ok;
+}

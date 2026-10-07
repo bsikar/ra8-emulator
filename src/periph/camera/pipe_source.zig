@@ -16,6 +16,7 @@ const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
 const decoded = @import("decoded_image.zig");
 const still = @import("image_source.zig");
+const host_read = @import("../host_read.zig");
 pub const raw = @import("pipe_frame.zig");
 pub const pipe_windows = @import("pipe_windows.zig");
 const win = pipe_windows;
@@ -54,27 +55,28 @@ pub const PipeSource = struct {
     format_control: *const u8,
 
     /// Open the named pipe, or standard input for "-", without blocking.
-    pub fn load(allocator: std.mem.Allocator, text: []const u8, format_control: *const u8) !*PipeSource {
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, text: []const u8, format_control: *const u8) !*PipeSource {
         const arg = try raw.parseArg(text);
         const stdin = std.mem.eql(u8, arg.path, "-");
         if (is_windows) {
-            const handle = if (stdin) std.io.getStdIn().handle else try win.serve(arg.path, arg.frameBytes());
-            errdefer if (!stdin) posix.close(handle);
+            const handle = if (stdin) host_read.stdin() else try win.serve(arg.path, arg.frameBytes());
+            errdefer if (!stdin) host_read.close(handle);
             const self = try make(allocator, handle, !stdin, arg, format_control);
             self.stdin = stdin;
             return self;
         }
-        const fd = if (stdin) posix.STDIN_FILENO else try posix.open(arg.path, .{ .ACCMODE = .RDONLY, .NONBLOCK = true }, 0);
-        errdefer if (!stdin) posix.close(fd);
+        const fd = if (stdin) host_read.stdin() else try host_read.open(io, arg.path);
+        errdefer if (!stdin) host_read.close(fd);
         return fromFd(allocator, fd, !stdin, arg, format_control);
     }
 
     /// Read frames from `fd`, which is made non-blocking; closed at the end
     /// only when `owns_fd`.
     pub fn fromFd(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg, format_control: *const u8) !*PipeSource {
-        const flags = try posix.fcntl(fd, posix.F.GETFL, 0);
-        const nonblock: usize = @as(u32, @bitCast(posix.O{ .NONBLOCK = true }));
-        _ = try posix.fcntl(fd, posix.F.SETFL, flags | nonblock);
+        const flags = std.c.fcntl(fd, std.c.F.GETFL);
+        if (flags < 0) return error.FcntlFailed;
+        const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
+        if (std.c.fcntl(fd, std.c.F.SETFL, flags | nonblock) < 0) return error.FcntlFailed;
         return make(allocator, fd, owns_fd, arg, format_control);
     }
 
@@ -157,7 +159,7 @@ pub const PipeSource = struct {
     fn close(context: *anyopaque) void {
         const self: *PipeSource = @ptrCast(@alignCast(context));
         const allocator = self.allocator;
-        if (self.owns_fd) posix.close(self.fd);
+        if (self.owns_fd) host_read.close(self.fd);
         allocator.free(self.pending);
         allocator.free(self.latest);
         self.image.deinit(allocator);
