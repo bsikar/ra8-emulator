@@ -42,17 +42,19 @@ pub fn encode(allocator: std.mem.Allocator, writer: anytype, width: u32, height:
     if (width == 0 or height == 0) return Error.EmptyImage;
     const row = @as(usize, width) * bytes_per_pixel;
     if (rgba.len != row * height) return Error.BadShape;
-    var idat = std.ArrayList(u8).init(allocator);
+    var idat: std.Io.Writer.Allocating = try .initCapacity(allocator, 64);
     defer idat.deinit();
-    var deflater = try std.compress.zlib.compressor(idat.writer(), .{});
+    const window = try allocator.alloc(u8, std.compress.flate.max_window_len);
+    defer allocator.free(window);
+    var deflater = try std.compress.flate.Compress.init(&idat.writer, window, .zlib, .default);
     for (0..height) |y| {
-        try deflater.writer().writeByte(0);
-        try deflater.writer().writeAll(rgba[y * row ..][0..row]);
+        try deflater.writer.writeByte(0);
+        try deflater.writer.writeAll(rgba[y * row ..][0..row]);
     }
     try deflater.finish();
     try writer.writeAll(&signature);
     try chunk(writer, "IHDR", &header(width, height));
-    try chunk(writer, "IDAT", idat.items);
+    try chunk(writer, "IDAT", idat.written());
     try chunk(writer, "IEND", "");
 }
 

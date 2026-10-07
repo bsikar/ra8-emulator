@@ -75,8 +75,8 @@ const units = [_]Unit{
 };
 
 pub fn parse(gpa: std.mem.Allocator, text: []const u8, diag: *Diagnostic) Error!Schedule {
-    var events = std.ArrayList(Event).init(gpa);
-    errdefer events.deinit();
+    var events: std.ArrayList(Event) = .empty;
+    errdefer events.deinit(gpa);
     var lines = std.mem.splitScalar(u8, text, '\n');
     var number: u32 = 0;
     var last_ns: u64 = 0;
@@ -86,7 +86,7 @@ pub fn parse(gpa: std.mem.Allocator, text: []const u8, diag: *Diagnostic) Error!
         const event = try parseLine(line) orelse continue;
         if (event.at_ns < last_ns) return Error.TimeBackwards;
         last_ns = event.at_ns;
-        try events.append(.{
+        try events.append(gpa, .{
             .at_ns = event.at_ns,
             .target = event.target,
             .action = event.action,
@@ -94,7 +94,7 @@ pub fn parse(gpa: std.mem.Allocator, text: []const u8, diag: *Diagnostic) Error!
         });
     }
     diag.line = 0;
-    return .{ .events = try events.toOwnedSlice() };
+    return .{ .events = try events.toOwnedSlice(gpa) };
 }
 
 const Parsed = struct {

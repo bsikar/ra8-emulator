@@ -75,8 +75,8 @@ pub const Writer = struct {
         const indices = try self.allocator.alloc(u8, pixels.len);
         defer self.allocator.free(indices);
         for (pixels, indices) |pixel, *index| index.* = quantize(pixel);
-        var compressed = std.ArrayList(u8).init(self.allocator);
-        defer compressed.deinit();
+        var compressed: std.ArrayList(u8) = .empty;
+        defer compressed.deinit(self.allocator);
         try lzw.encode(self.allocator, indices, &compressed);
         var offset: usize = 0;
         while (offset < compressed.items.len) {

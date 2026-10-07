@@ -11,6 +11,7 @@ const max_width: u4 = 12;
 
 /// Packs codes least significant bit first, as GIF requires.
 const BitSink = struct {
+    gpa: std.mem.Allocator,
     out: *std.ArrayList(u8),
     bits: u32 = 0,
     count: u5 = 0,
@@ -19,14 +20,14 @@ const BitSink = struct {
         self.bits |= @as(u32, code) << self.count;
         self.count += width;
         while (self.count >= 8) {
-            try self.out.append(@truncate(self.bits));
+            try self.out.append(self.gpa, @truncate(self.bits));
             self.bits >>= 8;
             self.count -= 8;
         }
     }
 
     fn flush(self: *BitSink) !void {
-        if (self.count != 0) try self.out.append(@truncate(self.bits));
+        if (self.count != 0) try self.out.append(self.gpa, @truncate(self.bits));
         self.bits = 0;
         self.count = 0;
     }
@@ -43,7 +44,7 @@ pub fn encode(allocator: std.mem.Allocator, indices: []const u8, out: *std.Array
     var table = std.AutoHashMap(u32, u16).init(allocator);
     defer table.deinit();
     try table.ensureTotalCapacity(max_codes);
-    var sink: BitSink = .{ .out = out };
+    var sink: BitSink = .{ .gpa = allocator, .out = out };
     var width: u4 = 9;
     var next: u16 = first_free;
     try sink.put(clear, width);

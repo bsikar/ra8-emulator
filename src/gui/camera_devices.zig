@@ -26,13 +26,13 @@ pub const Devices = struct {
 /// `video` followed by digits, and numbers `webcam:N` cannot name, are
 /// left out.
 pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Devices {
-    var found = std.ArrayList(u32).init(allocator);
-    errdefer found.deinit();
+    var found: std.ArrayList(u32) = .empty;
+    errdefer found.deinit(allocator);
     var it = dir.iterate();
     while (try it.next()) |entry| {
-        if (number(entry.name)) |n| try found.append(n);
+        if (number(entry.name)) |n| try found.append(allocator, n);
     }
-    const numbers = try found.toOwnedSlice();
+    const numbers = try found.toOwnedSlice(allocator);
     std.mem.sort(u32, numbers, {}, std.sort.asc(u32));
     return .{ .allocator = allocator, .numbers = numbers };
 }
