@@ -23,9 +23,9 @@ fn wire(buffer: []u8, payloads: []const []const u8, extra: []const u8) ![]const 
     return buffer[0 .. at + extra.len];
 }
 
-fn play(rig: *Rig, input: []const u8, sent: *std.ArrayList(u8)) !server.End {
-    var stream = std.io.fixedBufferStream(input);
-    return server.serve(.{ .view = rig.view() }, stream.reader(), sent.writer());
+fn play(rig: *Rig, input: []const u8, sent: *std.Io.Writer.Allocating) !server.End {
+    var reader: std.Io.Reader = .fixed(input);
+    return server.serve(.{ .view = rig.view() }, &reader, &sent.writer);
 }
 
 // Each packet is acknowledged and answered, and D ends the connection.
@@ -34,10 +34,10 @@ test "packets are acknowledged and answered until detach" {
     try open(&rig);
     var buffer: [128]u8 = undefined;
     const input = try wire(&buffer, &.{ "m22000000,2", "D" }, "");
-    var sent = std.ArrayList(u8).init(std.testing.allocator);
+    var sent: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer sent.deinit();
     try std.testing.expectEqual(server.End.detached, try play(&rig, input, &sent));
-    try std.testing.expectEqualStrings("+$cafe#8f+$OK#9a", sent.items);
+    try std.testing.expectEqualStrings("+$cafe#8f+$OK#9a", sent.written());
 }
 
 // A `-` gets the last reply again; a bad checksum gets `-`; k ends silently.
@@ -46,18 +46,18 @@ test "resend, a corrupt packet, and kill" {
     try open(&rig);
     var buffer: [128]u8 = undefined;
     const input = try wire(&buffer, &.{"qAttached"}, "-$m0,1#00$k#6b");
-    var sent = std.ArrayList(u8).init(std.testing.allocator);
+    var sent: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer sent.deinit();
     try std.testing.expectEqual(server.End.killed, try play(&rig, input, &sent));
-    try std.testing.expectEqualStrings("+$1#31$1#31-+", sent.items);
+    try std.testing.expectEqualStrings("+$1#31$1#31-+", sent.written());
 }
 
 // The stream running dry ends the connection as closed.
 test "the other end closing" {
     var rig: Rig = .{};
     try open(&rig);
-    var sent = std.ArrayList(u8).init(std.testing.allocator);
+    var sent: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer sent.deinit();
     try std.testing.expectEqual(server.End.closed, try play(&rig, "+", &sent));
-    try std.testing.expectEqual(@as(usize, 0), sent.items.len);
+    try std.testing.expectEqual(@as(usize, 0), sent.written().len);
 }

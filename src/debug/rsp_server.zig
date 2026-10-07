@@ -14,7 +14,7 @@ const rsp_dispatch = @import("rsp_dispatch.zig");
 const console = @import("rsp_console.zig");
 
 pub const limits = struct {
-    /// Bytes taken from the connection per read.
+    /// Bytes the connection's reader buffers per read.
     pub const chunk: usize = 512;
     /// A framed reply: every payload byte escaped, plus `$`, `#` and the sum.
     pub const framed: usize = rsp_dispatch.packet_size * 2 + 4;
@@ -24,17 +24,21 @@ pub const limits = struct {
 pub const End = enum { detached, killed, closed };
 
 /// Serve one connection until it ends.
-pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: anytype, writer: anytype) !End {
+pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: *std.Io.Reader, writer: *std.Io.Writer) !End {
     var incoming: [rsp_dispatch.packet_size]u8 = undefined;
     var wire = packet.Reader.init(&incoming);
     var payload: [rsp_dispatch.packet_size]u8 = undefined;
     var framed: [limits.framed]u8 = undefined;
     var last: []const u8 = &.{};
-    var chunk: [limits.chunk]u8 = undefined;
+    defer writer.flush() catch {};
     while (true) {
-        const count = try reader.read(&chunk);
-        if (count == 0) return .closed;
-        for (chunk[0..count]) |byte| {
+        try writer.flush();
+        const got = reader.peekGreedy(1) catch |err| switch (err) {
+            error.EndOfStream => return .closed,
+            else => |e| return e,
+        };
+        reader.toss(got.len);
+        for (got) |byte| {
             const event = wire.push(byte) orelse continue;
             switch (event) {
                 .ack, .interrupt => {},
