@@ -88,7 +88,7 @@ fn readHeader(bytes: []const u8, at: *usize) Error!Header {
     if (!std.mem.eql(u8, chunk.kind, "IHDR") or chunk.data.len != 13) return error.BadHeader;
     const data = chunk.data;
     const depth = data[8];
-    const colour = std.meta.intToEnum(Colour, data[9]) catch return error.Unsupported;
+    const colour = std.enums.fromInt(Colour, data[9]) orelse return error.Unsupported;
     if (data[10] != 0 or data[11] != 0) return error.BadHeader;
     if (data[12] == 1) return error.Interlaced;
     if (data[12] != 0) return error.BadHeader;

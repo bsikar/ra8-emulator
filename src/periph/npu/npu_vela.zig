@@ -140,7 +140,7 @@ pub fn walk(words: []const u32) Error!Summary {
             summary.register_sets += 1;
             continue;
         }
-        const op = std.meta.intToEnum(Op, code) catch return error.UnknownOpcode;
+        const op = std.enums.fromInt(Op, code) orelse return error.UnknownOpcode;
         count(&summary, op, word);
         if (op == .stop) {
             summary.words = index;

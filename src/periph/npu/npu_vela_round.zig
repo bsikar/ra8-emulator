@@ -26,7 +26,7 @@ pub const Rounding = enum(u2) {
 
     /// Decode NPU_SET_OFM_PRECISION b[15:14]; 3 is reserved.
     pub fn fromBits(bits: u2) ?Rounding {
-        return std.meta.intToEnum(Rounding, bits) catch null;
+        return std.enums.fromInt(Rounding, bits);
     }
 };
 
