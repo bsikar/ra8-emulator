@@ -69,8 +69,8 @@ pub const DrawList = struct {
     allocator: std.mem.Allocator,
     /// The whole surface; the clip when none is pushed.
     bounds: Rect,
-    commands: std.ArrayListUnmanaged(Command) = .{},
-    clips: std.ArrayListUnmanaged(Rect) = .{},
+    commands: std.ArrayListUnmanaged(Command) = .empty,
+    clips: std.ArrayListUnmanaged(Rect) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, width: u32, height: u32) DrawList {
         return .{ .allocator = allocator, .bounds = .{ .x = 0, .y = 0, .w = @intCast(width), .h = @intCast(height) } };

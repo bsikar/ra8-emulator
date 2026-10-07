@@ -58,7 +58,7 @@ pub const Textures = struct {
     /// Drop the image textures the last frame did not draw, then count
     /// a new frame, so each image is refilled on its next draw.
     pub fn beginFrame(self: *Textures) Error!void {
-        var stale: std.ArrayListUnmanaged(Key) = .{};
+        var stale: std.ArrayListUnmanaged(Key) = .empty;
         defer stale.deinit(self.allocator);
         var it = self.images.iterator();
         while (it.next()) |kv| {

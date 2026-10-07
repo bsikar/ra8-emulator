@@ -61,8 +61,8 @@ pub const Readout = struct {
 
     /// "T+h:mm:ss.mmm", then "| 0.42x of 1x" when short of the request.
     pub fn text(self: *const Readout, requested_milli: u64, buf: []u8) ![]const u8 {
-        var stream = std.io.fixedBufferStream(buf);
-        const w = stream.writer();
+        var stream: std.Io.Writer = .fixed(buf);
+        const w = &stream;
         if (self.virtual_ns) |ns| {
             const ms = ns / std.time.ns_per_ms;
             try w.print("T+{d}:{d:0>2}:{d:0>2}.{d:0>3}", .{ ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000 });
@@ -72,6 +72,6 @@ pub const Readout = struct {
             var want_buf: [24]u8 = undefined;
             try w.print(" | {s} of {s}", .{ try speed_field.format(got, &got_buf), try speed_field.format(requested_milli, &want_buf) });
         };
-        return stream.getWritten();
+        return stream.buffered();
     }
 };

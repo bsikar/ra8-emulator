@@ -10,7 +10,7 @@ pub const Headless = struct {
     allocator: std.mem.Allocator,
     drawable: Size,
     dpi: f32 = 1.0,
-    queue: std.ArrayListUnmanaged(Event) = .{},
+    queue: std.ArrayListUnmanaged(Event) = .empty,
     next: usize = 0,
     /// A copy of the last presented frame.
     last: ?raster.Framebuffer = null,

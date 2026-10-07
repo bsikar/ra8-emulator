@@ -125,8 +125,8 @@ pub const Status = struct {
 
     /// The status line: connection | image | run state [| refusal].
     pub fn text(self: *const Status, state: session_link.State, buf: []u8) ![]const u8 {
-        var stream = std.io.fixedBufferStream(buf);
-        const out = stream.writer();
+        var stream: std.Io.Writer = .fixed(buf);
+        const out = &stream;
         switch (state) {
             .connecting => try out.writeAll("connecting"),
             .connected => |up| try out.print("connected (protocol v{d})", .{up.version}),
@@ -134,7 +134,7 @@ pub const Status = struct {
             .closed => try out.writeAll("closed"),
         }
         if (self.image) |*image| {
-            try out.print(" | {s} {s}", .{ image.name(), std.fmt.fmtSliceHexLower(&image.hash) });
+            try out.print(" | {s} {x}", .{ image.name(), image.hash[0..] });
         } else try out.writeAll(" | no image");
         switch (self.run) {
             .unknown => {},
@@ -145,6 +145,6 @@ pub const Status = struct {
             },
         }
         if (self.refused) |what| try out.print(" | {s}", .{what.message()});
-        return stream.getWritten();
+        return stream.buffered();
     }
 };

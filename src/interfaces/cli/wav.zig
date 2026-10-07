@@ -45,7 +45,7 @@ pub const Error = error{ BadFormat, TooLong } || std.mem.Allocator.Error;
 
 pub const Recorder = struct {
     format: Format,
-    samples: std.ArrayListUnmanaged(u32) = .{},
+    samples: std.ArrayListUnmanaged(u32) = .empty,
     /// Virtual time of the first sample. Slot 0 belongs to it.
     start_ns: ?u64 = null,
     /// Silent samples written where the stream underran.
