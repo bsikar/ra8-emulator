@@ -26,7 +26,7 @@ pub const Sdhi = struct {
 };
 
 /// Load the `--sd-image` file into the SDHI card.
-pub fn prepareSdhi(board: *Board, sdhi: Sdhi) !void {
+pub fn prepareSdhi(board: *Board, io: std.Io, sdhi: Sdhi) !void {
     if (sdhi.dir) |dir| {
         if (sdhi.image != null) {
             std.debug.print("--sd-dir and --sd-image both name the SDHI card; pick one\n", .{});
@@ -35,7 +35,7 @@ pub fn prepareSdhi(board: *Board, sdhi: Sdhi) !void {
         return fromDir(board, dir);
     }
     const path = sdhi.image orelse return;
-    const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, std.math.maxInt(usize)) catch |err| {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, std.heap.page_allocator, .unlimited) catch |err| {
         std.debug.print("cannot read SD image {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
@@ -71,20 +71,20 @@ fn fromDir(board: *Board, path: []const u8) !void {
 }
 
 /// Write the SDHI card back over its image when `--sd-writable` asked.
-pub fn saveSdhi(board: *Board, sdhi: Sdhi) void {
+pub fn saveSdhi(board: *Board, io: std.Io, sdhi: Sdhi) void {
     if (!sdhi.writable) return;
     const path = sdhi.image orelse return;
-    board.card.card.saveTo(std.fs.cwd(), path) catch |err| {
+    board.card.card.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
         std.debug.print("--sd-image {s}: not saved: {s}\n", .{ path, @errorName(err) });
     };
 }
 
 /// Write the card back over its `--sd-save` image when the run ends. A
 /// failed write is reported and leaves the image file as it was.
-pub fn saveBack(board: *const Board, sd_path: ?[]const u8, save: bool) void {
+pub fn saveBack(board: *const Board, io: std.Io, sd_path: ?[]const u8, save: bool) void {
     if (!save) return;
     const path = sd_path orelse return;
-    board.sd.img.saveTo(std.fs.cwd(), path) catch |err| {
+    board.sd.img.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
         std.debug.print("SD image {s}: not saved: {s}\n", .{ path, @errorName(err) });
     };
 }
@@ -92,6 +92,7 @@ pub fn saveBack(board: *const Board, sd_path: ?[]const u8, save: bool) void {
 /// Size and format the card, or import a raw host image when requested.
 pub fn prepare(
     board: *Board,
+    io: std.Io,
     trace_sd: bool,
     sd_path: ?[]const u8,
     sd_size_mb: ?u32,
@@ -101,7 +102,7 @@ pub fn prepare(
     board.sd.trace = trace_sd;
     if (sd_path) |path| {
         if (sd_new != null or sd_size_mb != null) return error.ConflictingCardOptions;
-        const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, std.math.maxInt(usize)) catch |err| {
+        const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, std.heap.page_allocator, .unlimited) catch |err| {
             std.debug.print("cannot read SD image {s}: {s}\n", .{ path, @errorName(err) });
             return err;
         };

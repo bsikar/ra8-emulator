@@ -49,8 +49,8 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     board.c6.useIo(io);
     if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(io, spec.dir, spec.mode));
     board.capture.source = try options.camera.open(allocator, io, &board.wire.sensor.format);
-    try cli.card_setup.prepare(board, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
-    try cli.card_setup.prepareSdhi(board, options.sdhi);
+    try cli.card_setup.prepare(board, io, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
+    try cli.card_setup.prepareSdhi(board, io, options.sdhi);
     queueTouches(board, options);
     if (options.touch_in) |path| try board.touch_input.open(io, path);
     if (options.input_script) |path| {
