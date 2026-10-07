@@ -243,13 +243,13 @@ fn abortThunk(context: *anyopaque) void {
 
 /// Run, then print what the board has to say.
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
-pub fn run(out: std.fs.File.Writer, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
+pub fn run(out: std.fs.File.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
-        if (!openSecond(&pair, board, named, memory, options.blocks)) return 1;
+        if (!openSecond(&pair, io, board, named, memory, options.blocks)) return 1;
         clock.cpu1 = &pair;
         rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
     }
@@ -343,8 +343,8 @@ fn finishEinkLog(out: std.fs.File.Writer, options: cli.Options, recorder: *eink_
 
 /// Bring CPU1 up from `named`, with its block cache when asked; false once
 /// the reason it could not is printed.
-fn openSecond(pair: *second_core.zig_run.Driver, board: *Board, named: []const u8, memory: Guest, blocks: bool) bool {
-    pair.open(std.heap.page_allocator, board, named, memory) catch |err| {
+fn openSecond(pair: *second_core.zig_run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool) bool {
+    pair.open(std.heap.page_allocator, io, board, named, memory) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return false;
     };

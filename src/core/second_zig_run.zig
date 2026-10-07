@@ -38,11 +38,9 @@ pub const Driver = struct {
     /// CPU1 from the image at `path`, on `board`, ready to take
     /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
     /// in storage the caller holds: both halves keep pointers into it.
-    pub fn open(self: *Driver, allocator: std.mem.Allocator, board: *Board, path: []const u8, memory: Guest) !void {
+    pub fn open(self: *Driver, allocator: std.mem.Allocator, io: std.Io, board: *Board, path: []const u8, memory: Guest) !void {
         const lender = memory.store;
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const bytes = try file.readToEndAlloc(allocator, second_core.limits.image_bytes);
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
         defer allocator.free(bytes);
         const image = try elf.Image.init(bytes);
         self.ns_timebase = .{ .words = systick_bank.non_secure_words };

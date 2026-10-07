@@ -51,7 +51,7 @@ fn runImage(dir: std.fs.Dir, file: []const u8, instructions: usize, state: zig_r
     _ = try main_path.prepare(&cpu0, &board, loaded, &parts, options);
     var log = try dir.createFile("run.log", .{});
     defer log.close();
-    _ = try zig_run.run(log.writer(), cpu0.own(), &board, &parts.timebase, loaded, options, vectors, null, parts.tap.waiting(), .{});
+    _ = try zig_run.run(log.writer(), std.testing.io, cpu0.own(), &board, &parts.timebase, loaded, options, vectors, null, parts.tap.waiting(), .{});
     return board.time.base.now();
 }
 
