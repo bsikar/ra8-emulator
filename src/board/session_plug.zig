@@ -41,7 +41,7 @@ pub const floating = struct {
 };
 
 const max_instances = 256;
-const max_fitted = max_instances + @typeInfo(std.meta.FieldType(plug.Asks, .asked)).array.len;
+const max_fitted = max_instances + @typeInfo(@FieldType(plug.Asks, "asked")).array.len;
 
 /// One endpoint and the catalog part on it, by name.
 pub const Fitted = struct { at: endpoint.Endpoint, name: []const u8 };
