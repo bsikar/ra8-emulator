@@ -54,7 +54,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
 
 /// gdb on the port, or the script or terminal.
 fn serve(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
-    if (mode == .gdb) return listen(target.session, mode.gdb);
+    if (mode == .gdb) return listen(io, target.session, mode.gdb);
     return drive(allocator, io, target, mode, out);
 }
 
@@ -109,21 +109,25 @@ fn drive(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript
 }
 
 /// Wait for gdb on the loopback port and serve it from the Zig core.
-fn listen(live: *session_api.Session, port: u16) !u8 {
-    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
-    var server = address.listen(.{ .reuse_address = true }) catch |err| {
+fn listen(io: std.Io, live: *session_api.Session, port: u16) !u8 {
+    const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
+    var server = address.listen(io, .{ .reuse_address = true }) catch |err| {
         std.debug.print("cannot listen on 127.0.0.1:{d}: {s}\n", .{ port, @errorName(err) });
         return 1;
     };
-    defer server.deinit();
+    defer server.deinit(io);
     std.debug.print("gdb: listening on 127.0.0.1:{d}\n", .{port});
-    const connection = try server.accept();
-    defer connection.stream.close();
-    var socket = rsp_poll.Socket{ .handle = connection.stream.handle };
+    const stream = try server.accept(io);
+    defer stream.close(io);
+    var socket = rsp_poll.Socket{ .handle = stream.socket.handle };
     try live.setRunBudget(live.currentCore(), rsp_poll.chunk);
     var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll() };
     const stub = rsp_dispatch.Dispatch{ .zig = &target };
-    const end = try rsp_dispatch.server.serve(stub, connection.stream.reader(), connection.stream.writer());
+    var in: [rsp_dispatch.server.limits.chunk]u8 = undefined;
+    var out: [rsp_dispatch.server.limits.framed]u8 = undefined;
+    var reader = stream.reader(io, &in);
+    var writer = stream.writer(io, &out);
+    const end = try rsp_dispatch.server.serve(stub, &reader.interface, &writer.interface);
     std.debug.print("gdb: {s}\n", .{@tagName(end)});
     return 0;
 }
