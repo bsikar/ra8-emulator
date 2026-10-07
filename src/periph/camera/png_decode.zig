@@ -43,7 +43,7 @@ const Parts = struct {
     header: Header,
     palette: [256]convert.Rgb = undefined,
     palette_len: usize = 0,
-    data: std.ArrayListUnmanaged(u8) = .{},
+    data: std.ArrayListUnmanaged(u8) = .empty,
 };
 
 pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) Error!Image {

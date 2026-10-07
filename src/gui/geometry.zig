@@ -53,9 +53,9 @@ const Span = struct { y: i32, lo: i32, hi: i32 };
 
 pub const Batch = struct {
     allocator: std.mem.Allocator,
-    vertices: std.ArrayListUnmanaged(Vertex) = .{},
-    indices: std.ArrayListUnmanaged(u32) = .{},
-    runs: std.ArrayListUnmanaged(Run) = .{},
+    vertices: std.ArrayListUnmanaged(Vertex) = .empty,
+    indices: std.ArrayListUnmanaged(u32) = .empty,
+    runs: std.ArrayListUnmanaged(Run) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) Batch {
         return .{ .allocator = allocator };
