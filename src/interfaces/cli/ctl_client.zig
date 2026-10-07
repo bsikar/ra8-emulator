@@ -45,8 +45,8 @@ pub const Client = struct {
         };
         switch (target) {
             .socket => |spec| self.link = .{ .socket = switch (spec) {
-                .unix => |path| try Connection.unix(path),
-                .tcp => |address| try Connection.tcp(address),
+                .unix => |path| try Connection.unix(io, path),
+                .tcp => |address| try Connection.tcp(io, address),
             } },
             .spawn => |argv| {
                 self.link = .{ .child = undefined };

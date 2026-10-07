@@ -59,7 +59,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     context.mapping = .{ .context = &owner, .mapFn = mapImage };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
-        .listen => |spec| listen.serve(spec, &context, buffers),
+        .listen => |spec| listen.serve(io, spec, &context, buffers),
     };
     done catch |err| {
         std.debug.print("serve: {s}\n", .{@errorName(err)});
