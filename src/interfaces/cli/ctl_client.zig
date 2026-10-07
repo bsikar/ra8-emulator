@@ -32,7 +32,7 @@ pub const Client = struct {
 
     /// Reach `target` and finish the handshake. Buffers come from
     /// `allocator`, which ctl runs as an arena.
-    pub fn open(allocator: std.mem.Allocator, target: Target) !*Client {
+    pub fn open(allocator: std.mem.Allocator, io: std.Io, target: Target) !*Client {
         const self = try allocator.create(Client);
         self.* = .{
             .link = undefined,
@@ -47,7 +47,7 @@ pub const Client = struct {
             } },
             .spawn => |argv| {
                 self.link = .{ .child = undefined };
-                try self.link.child.spawn(allocator, argv);
+                try self.link.child.spawn(io, argv);
             },
         }
         self.client = proto.Client.init(self.transport(), self.rx, proto.capabilities);

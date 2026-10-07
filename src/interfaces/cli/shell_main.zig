@@ -95,7 +95,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
 fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
     const exe = try std.process.executablePathAlloc(io, allocator);
     var child: session_link.Local = undefined;
-    try child.spawn(allocator, exe, path);
+    try child.spawn(io, exe, path);
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
     const tx = try allocator.alloc(u8, Env.max_frame);
     var link: session_link.Link = undefined;
