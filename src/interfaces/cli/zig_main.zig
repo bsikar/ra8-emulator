@@ -28,8 +28,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var board = Board.init(allocator);
     defer board.deinit();
     fit(&board, allocator, io, options) catch return 2;
-    defer cli.card_setup.saveBack(&board, options.sd_path, options.sd_save);
-    defer cli.card_setup.saveSdhi(&board, options.sdhi);
+    defer cli.card_setup.saveBack(&board, io, options.sd_path, options.sd_save);
+    defer cli.card_setup.saveSdhi(&board, io, options.sdhi);
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};
