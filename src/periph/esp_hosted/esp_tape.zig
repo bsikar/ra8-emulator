@@ -19,24 +19,28 @@ const file_max: usize = 64 * 1024 * 1024;
 
 pub const Record = struct { dir: Dir, bytes: []const u8 };
 
+/// The open tape directory and the Io that reaches it.
+const Store = struct { io: std.Io, dir: std.Io.Dir };
+
 /// Where a run's tapes live and which way they go. `misses` counts every
 /// replay request with no recording; a run with misses must fail.
 pub const Tape = struct {
     mode: Mode = .live,
-    dir: ?std.fs.Dir = null,
+    store: ?Store = null,
     keys: [key_capacity]Key = undefined,
     counts: [key_capacity]u32 = undefined,
     key_len: usize = 0,
     misses: std.atomic.Value(u32) = .init(0),
 
-    pub fn open(path: []const u8, mode: Mode) !Tape {
-        if (mode == .record) try std.fs.cwd().makePath(path);
-        return .{ .mode = mode, .dir = try std.fs.cwd().openDir(path, .{}) };
+    pub fn open(io: std.Io, path: []const u8, mode: Mode) !Tape {
+        const cwd = std.Io.Dir.cwd();
+        if (mode == .record) try cwd.createDirPath(io, path);
+        return .{ .mode = mode, .store = .{ .io = io, .dir = try cwd.openDir(io, path, .{}) } };
     }
 
     pub fn deinit(self: *Tape) void {
-        if (self.dir) |*dir| dir.close();
-        self.dir = null;
+        if (self.store) |store| store.dir.close(store.io);
+        self.store = null;
     }
 
     pub fn missed(self: *const Tape) u32 {
@@ -47,14 +51,16 @@ pub const Tape = struct {
     pub fn create(self: *Tape, key: Key) !Writer {
         var buf: [64]u8 = undefined;
         const name = try self.nextName(&buf, key);
-        return .{ .file = try self.dir.?.createFile(name, .{}) };
+        const store = self.store.?;
+        return .{ .io = store.io, .file = try store.dir.createFile(store.io, name, .{}) };
     }
 
     /// Loads the next recording for `key`; a missing one is a miss.
     pub fn load(self: *Tape, key: Key) !Reader {
         var buf: [64]u8 = undefined;
         const name = try self.nextName(&buf, key);
-        const data = self.dir.?.readFileAlloc(std.heap.page_allocator, name, file_max) catch |err| {
+        const store = self.store.?;
+        const data = store.dir.readFileAlloc(store.io, name, std.heap.page_allocator, .limited(file_max)) catch |err| {
             self.miss("no recording for {s}", .{name});
             return err;
         };
@@ -65,9 +71,10 @@ pub const Tape = struct {
     pub fn storeDns(self: *Tape, request: []const u8, answer: []const u8) void {
         if (request.len < 2) return;
         var buf: [64]u8 = undefined;
-        const file = self.dir.?.createFile(dnsName(&buf, request), .{}) catch |err| return warnWrite(err);
-        defer file.close();
-        file.writeAll(answer) catch |err| warnWrite(err);
+        const store = self.store.?;
+        const file = store.dir.createFile(store.io, dnsName(&buf, request), .{}) catch |err| return warnWrite(err);
+        defer file.close(store.io);
+        file.writeStreamingAll(store.io, answer) catch |err| warnWrite(err);
     }
 
     /// The recorded answer to `request`, its id patched to match; null is a miss.
@@ -75,7 +82,8 @@ pub const Tape = struct {
         if (request.len < 2) return null;
         var buf: [64]u8 = undefined;
         const name = dnsName(&buf, request);
-        const answer = self.dir.?.readFile(name, out) catch {
+        const store = self.store.?;
+        const answer = store.dir.readFile(store.io, name, out) catch {
             self.miss("no recording for {s}", .{name});
             return null;
         };
@@ -121,19 +129,20 @@ fn warnWrite(err: anyerror) void {
 
 /// Appends records to one connection's tape.
 pub const Writer = struct {
-    file: std.fs.File,
+    io: std.Io,
+    file: std.Io.File,
 
     pub fn put(self: *Writer, dir: Dir, bytes: []const u8) void {
         if (bytes.len == 0 and dir != .closed) return;
         var head: [header_len]u8 = undefined;
         head[0] = @backingInt(dir);
         std.mem.writeInt(u32, head[1..5], @intCast(bytes.len), .little);
-        self.file.writeAll(&head) catch |err| return warnWrite(err);
-        self.file.writeAll(bytes) catch |err| warnWrite(err);
+        self.file.writeStreamingAll(self.io, &head) catch |err| return warnWrite(err);
+        self.file.writeStreamingAll(self.io, bytes) catch |err| warnWrite(err);
     }
 
     pub fn close(self: *Writer) void {
-        self.file.close();
+        self.file.close(self.io);
     }
 };
 
@@ -153,7 +162,7 @@ pub const Reader = struct {
         const start = self.at + header_len;
         const end = start + std.mem.readInt(u32, self.data[self.at + 1 ..][0..4], .little);
         if (end > self.data.len) return null;
-        const dir = std.meta.intToEnum(Dir, self.data[self.at]) catch return null;
+        const dir = std.enums.fromInt(Dir, self.data[self.at]) orelse return null;
         return .{ .dir = dir, .bytes = self.data[start + self.used .. end] };
     }
 
