@@ -82,23 +82,24 @@ fn syntheticFlag(job: *workload.Synthetic, flag: []const u8, value: []const u8) 
 }
 
 /// The whole command: argv[0] is the program, argv[1] is "sweep".
-pub fn run(argv: anytype) !u8 {
+pub fn run(io: std.Io, env: *const std.process.Environ.Map, argv: anytype) !u8 {
     const options = parse(argv[2..]) catch {
-        try std.io.getStdErr().writeAll(usage);
+        try std.Io.File.stderr().writeStreamingAll(io, usage);
         return 2;
     };
     var rows: [matrix.count]sweep.Row = undefined;
     if (options.elf) |guest| {
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer arena.deinit();
-        sweep_elf.all(arena.allocator(), guest, options.target_ns, &rows) catch |err| {
-            try std.io.getStdErr().writer().print("sweep: running {s} failed: {s}\n", .{ guest.path, @errorName(err) });
+        sweep_elf.all(arena.allocator(), io, env, guest, options.target_ns, &rows) catch |err| {
+            std.debug.print("sweep: running {s} failed: {s}\n", .{ guest.path, @errorName(err) });
             return 1;
         };
     } else try sweep.all(options.job, options.target_ns, &rows);
-    var buffered = std.io.bufferedWriter(std.io.getStdOut().writer());
-    try emit(buffered.writer(), options, &rows);
-    try buffered.flush();
+    var buffer: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(io, &buffer);
+    try emit(&stdout.interface, options, &rows);
+    try stdout.interface.flush();
     return 0;
 }
 

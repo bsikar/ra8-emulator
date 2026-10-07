@@ -11,14 +11,34 @@ const std = @import("std");
 const clock = @import("../../periph/rtc/rtc_clock.zig");
 
 pub const Error = error{ BadDateTime, OutOfRange };
+pub const Calendar = clock.Calendar;
 
 /// The years the RTC's two BCD year digits can hold.
 pub const first_year: u16 = 2000;
 pub const last_year: u16 = 2099;
 
+/// What `--rtc-start` asked for. `now` stays unread until the board is
+/// fitted, so parsing the command line never touches the host clock.
+pub const Start = union(enum) {
+    now,
+    at: clock.Calendar,
+};
+
 /// One `--rtc-start` value.
-pub fn parse(text: []const u8) Error!clock.Calendar {
-    if (std.mem.eql(u8, text, "now")) return fromEpoch(@intCast(@max(std.time.timestamp(), 0)));
+pub fn parse(text: []const u8) Error!Start {
+    if (std.mem.eql(u8, text, "now")) return .now;
+    return .{ .at = try calendar(text) };
+}
+
+/// The calendar `start` seeds the RTC with, reading the host clock for `now`.
+pub fn resolve(start: Start, io: std.Io) Error!clock.Calendar {
+    return switch (start) {
+        .at => |at| at,
+        .now => fromEpoch(@intCast(@max(std.Io.Clock.real.now(io).toSeconds(), 0))),
+    };
+}
+
+fn calendar(text: []const u8) Error!clock.Calendar {
     if (text.len != "YYYY-MM-DDTHH:MM:SS".len) return Error.BadDateTime;
     for ([_]usize{ 4, 7 }) |i| if (text[i] != '-') return Error.BadDateTime;
     for ([_]usize{ 13, 16 }) |i| if (text[i] != ':') return Error.BadDateTime;

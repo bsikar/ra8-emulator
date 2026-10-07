@@ -168,7 +168,7 @@ fn runFor(text: []const u8) !u64 {
 }
 
 /// One `--rtc-start` value. A bad one says why before the run starts.
-fn rtcStart(text: []const u8) !@import("../../periph/rtc/rtc_clock.zig").Calendar {
+fn rtcStart(text: []const u8) !rtc_start.Start {
     return rtc_start.parse(text) catch |err| {
         std.debug.print("--rtc-start {s}: {s}\n", .{ text, @errorName(err) });
         return err;

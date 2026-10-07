@@ -61,17 +61,17 @@ fn profile(kind: []const u8, words: *Words) !Profile {
 }
 
 /// The hosts file to read: `given`, else $RA8_HOSTS, else the one under $HOME.
-pub fn path(allocator: std.mem.Allocator, given: ?[]const u8) ![]const u8 {
+pub fn path(allocator: std.mem.Allocator, env: *const std.process.Environ.Map, given: ?[]const u8) ![]const u8 {
     if (given) |file| return file;
-    if (std.process.getEnvVarOwned(allocator, "RA8_HOSTS")) |file| return file else |_| {}
-    const home = std.process.getEnvVarOwned(allocator, "HOME") catch return error.NoHostsFile;
+    if (env.get("RA8_HOSTS")) |file| return file;
+    const home = env.get("HOME") orelse return error.NoHostsFile;
     return std.fs.path.join(allocator, &.{ home, ".config", "ra8_emulator", "hosts" });
 }
 
 /// Read the hosts file and return the profile called `name`. Slices point
 /// into memory from `allocator`, which ctl runs as an arena.
-pub fn load(allocator: std.mem.Allocator, given: ?[]const u8, name: []const u8) !Profile {
-    const file = try path(allocator, given);
-    const text = std.fs.cwd().readFileAlloc(allocator, file, max_file) catch return error.NoHostsFile;
+pub fn load(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, given: ?[]const u8, name: []const u8) !Profile {
+    const file = try path(allocator, env, given);
+    const text = std.Io.Dir.cwd().readFileAlloc(io, file, allocator, .limited(max_file)) catch return error.NoHostsFile;
     return find(text, name);
 }
