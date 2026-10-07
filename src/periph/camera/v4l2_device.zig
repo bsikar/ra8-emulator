@@ -24,9 +24,16 @@ pub const Fd = struct {
     /// Opens `path` for capture. Callers pass the consent gate first.
     pub fn open(path: []const u8) OpenError!Fd {
         if (comptime !supported) return error.Unsupported;
+        const z = std.posix.toPosixPath(path) catch return error.OpenFailed;
         const flags: std.posix.O = .{ .ACCMODE = .RDWR, .CLOEXEC = true };
-        const fd = std.posix.open(path, flags, 0) catch return error.OpenFailed;
-        return .{ .fd = fd };
+        while (true) {
+            const rc = std.posix.system.open(&z, flags, @as(std.posix.mode_t, 0));
+            switch (std.posix.errno(rc)) {
+                .SUCCESS => return .{ .fd = @intCast(rc) },
+                .INTR => continue,
+                else => return error.OpenFailed,
+            }
+        }
     }
 
     /// The ioctl seam the negotiation drives.
@@ -38,7 +45,7 @@ pub const Fd = struct {
         if (comptime !supported) return no_system_call;
         const self: *Fd = @ptrCast(@alignCast(ctx));
         const rc = std.os.linux.ioctl(self.fd, request, @intFromPtr(arg));
-        return @backingInt(std.os.linux.E.init(rc));
+        return @backingInt(std.os.linux.errno(rc));
     }
 
     /// Reads one whole frame of `out.len` bytes with read() I/O.
@@ -55,7 +62,7 @@ pub const Fd = struct {
     fn map(ctx: *anyopaque, offset: u32, length: u32) ?[]u8 {
         if (comptime !supported) return null;
         const self: *Fd = @ptrCast(@alignCast(ctx));
-        const prot = std.posix.PROT.READ | std.posix.PROT.WRITE;
+        const prot: std.posix.PROT = .{ .READ = true, .WRITE = true };
         return std.posix.mmap(null, length, prot, .{ .TYPE = .SHARED }, self.fd, offset) catch null;
     }
 
@@ -67,7 +74,7 @@ pub const Fd = struct {
 
     /// Releases the device.
     pub fn close(self: *Fd) void {
-        std.posix.close(self.fd);
+        _ = std.posix.system.close(self.fd);
         self.fd = -1;
     }
 };
