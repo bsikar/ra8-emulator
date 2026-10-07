@@ -13,11 +13,11 @@ const prefixes = [2][3][]const u8{
 
 /// Every mnemonic, built once: [unsigned][mode][shape].
 const mnemonics = blk: {
-    const shapes = std.meta.fields(parallel.Shape);
+    const shapes = std.meta.fieldNames(parallel.Shape);
     var out: [2][3][shapes.len][]const u8 = undefined;
     for (0..2) |u| {
         for (0..3) |m| {
-            for (shapes, 0..) |shape, s| out[u][m][s] = prefixes[u][m] ++ shape.name;
+            for (shapes, 0..) |shape, s| out[u][m][s] = prefixes[u][m] ++ shape;
         }
     }
     break :blk out;

@@ -94,7 +94,7 @@ fn idle(rn: u4, base: u32) Out {
 /// A claimed vector: the idle state for its Rn and base, with `changes`.
 fn based(name: []const u8, hw1: u16, hw2: u16, base: u32, changes: anytype) V {
     var out = idle(@intCast(hw1 & 0xF), base);
-    inline for (std.meta.fields(@TypeOf(changes))) |f| @field(out, f.name) = @field(changes, f.name);
+    inline for (std.meta.fieldNames(@TypeOf(changes))) |field| @field(out, field) = @field(changes, field);
     return .{ .encoding = group, .name = name, .input = .{ .hw1 = hw1, .hw2 = hw2, .base = base }, .expect = out };
 }
 
