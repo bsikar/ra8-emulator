@@ -58,9 +58,9 @@ pub fn draw(list: *draw_list.DrawList, area: Rect, log: *const console_log.Log, 
 
 fn drawEntry(list: *draw_list.DrawList, x: i32, y: i32, width: u32, entry: console_log.Entry) !void {
     var buffer: [stamp_len + 8]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    console_log.stamp(stream.writer(), entry.at_ns) catch {};
-    const stamp = stream.getWritten();
+    var stream: std.Io.Writer = .fixed(&buffer);
+    console_log.stamp(&stream, entry.at_ns) catch {};
+    const stamp = stream.buffered();
     try font.draw(list, x, y, font.fit(stamp, width), muted);
     const left = font.textWidth(stamp.len);
     try font.draw(list, x + @as(i32, @intCast(left)), y, font.fit(entry.text, width -| left), ink);
