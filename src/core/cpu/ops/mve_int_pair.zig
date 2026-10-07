@@ -31,8 +31,9 @@ pub const encodings = struct {
 const Kind = enum { vqadd, vqsub, vhadd, vrhadd, vhsub, vmax, vmin, vabd };
 
 fn kindOf(tail: u16) ?Kind {
-    inline for (@typeInfo(Kind).@"enum".fields) |f| {
-        if (tail == @field(encodings, f.name)) return @fromBackingInt(@intCast(f.value));
+    const info = @typeInfo(Kind).@"enum";
+    inline for (info.field_names, info.field_values) |name, value| {
+        if (tail == @field(encodings, name)) return @fromBackingInt(@intCast(value));
     }
     return null;
 }

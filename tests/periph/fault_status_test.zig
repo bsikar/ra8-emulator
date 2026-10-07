@@ -30,13 +30,13 @@ test "every CFSR cause sits on its DDI0553 D1.2.11 bit" {
         .{ .cause = .unaligned, .word = 0x0100_0000 },
         .{ .cause = .divbyzero, .word = 0x0200_0000 },
     };
-    try std.testing.expectEqual(@typeInfo(status.Cause).@"enum".fields.len, pins.len);
+    try std.testing.expectEqual(@typeInfo(status.Cause).@"enum".field_names.len, pins.len);
     for (pins) |pin| try std.testing.expectEqual(pin.word, pin.cause.bit());
 }
 
 test "each cause belongs to the sub-register its bit falls in" {
-    inline for (@typeInfo(status.Cause).@"enum".fields) |entry| {
-        const cause: status.Cause = @fromBackingInt(@intCast(entry.value));
+    inline for (@typeInfo(status.Cause).@"enum".field_values) |value| {
+        const cause: status.Cause = @fromBackingInt(@intCast(value));
         const mask: u32 = switch (cause.fault()) {
             .mem_manage => status.cfsr.mmfsr,
             .bus_fault => status.cfsr.bfsr,
@@ -66,7 +66,7 @@ test "reserved CFSR bits are dropped rather than named" {
 
 test "a word with every cause set decodes to all of them in bit order" {
     const found = status.decode(0xFFFF_FFFF);
-    try std.testing.expectEqual(@typeInfo(status.Cause).@"enum".fields.len, found.len);
+    try std.testing.expectEqual(@typeInfo(status.Cause).@"enum".field_names.len, found.len);
     var last: u5 = 0;
     for (found.constSlice(), 0..) |cause, i| {
         if (i > 0) try std.testing.expect(@backingInt(cause) > last);

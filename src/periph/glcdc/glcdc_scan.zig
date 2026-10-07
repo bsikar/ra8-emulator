@@ -82,7 +82,7 @@ pub const Scanner = struct {
     /// Pixels decoded across every scan.
     pixels: u32 = 0,
     /// Per-reason refusal counts, indexed by Refusal.
-    refused: [@typeInfo(Refusal).@"enum".fields.len]u32 = @splat(0),
+    refused: [@typeInfo(Refusal).@"enum".field_names.len]u32 = @splat(0),
     /// The last picture, which is what the report prints.
     last: ?Picture = null,
     /// Why the last scan refused, when it did.
