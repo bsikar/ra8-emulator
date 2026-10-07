@@ -23,18 +23,18 @@ pub const Built = struct {
 const Item = struct { name: []const u8, is_dir: bool };
 
 /// Format `img` and fill it from `dir`. `img` is resized to the card chosen.
-pub fn build(allocator: std.mem.Allocator, img: *image.Image, dir: std.fs.Dir, label: []const u8) !Built {
+pub fn build(allocator: std.mem.Allocator, io: std.Io, img: *image.Image, dir: std.Io.Dir, label: []const u8) !Built {
     var mib = format.smallestCardMib(.fat32) orelse return error.NoCardFits;
     while (true) : (mib *= 2) {
         if (mib > format.search.max_mib) return error.NoCardFits;
         const layout = try format.solve(.fat32, mib * format.search.sectors_per_mib);
         const bytes = layout.sectors_per_cluster * fat.sector_bytes;
-        const need = 1 + try clustersIn(allocator, dir, bytes, true);
+        const need = 1 + try clustersIn(allocator, io, dir, bytes, true);
         if (need <= layout.clusters) break;
     }
     if (!img.resize(mib * format.search.sectors_per_mib)) return error.WriteRefused;
     const volume = try format.apply(img, .fat32, label);
-    var w = try Writer.init(allocator, img, volume.layout);
+    var w = try Writer.init(allocator, io, img, volume.layout);
     defer allocator.free(w.table);
     _ = try w.writeDir(dir, 0, label);
     try w.finish();
@@ -42,14 +42,14 @@ pub fn build(allocator: std.mem.Allocator, img: *image.Image, dir: std.fs.Dir, l
 }
 
 /// The directory's entries, dotfiles left out, sorted by name bytes.
-fn listed(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]Item {
+fn listed(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) ![]Item {
     var items: std.ArrayList(Item) = .empty;
     errdefer {
         for (items.items) |item| allocator.free(item.name);
         items.deinit(allocator);
     }
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.name.len == 0 or entry.name[0] == '.') continue;
         const is_dir = switch (entry.kind) {
             .directory => true,
@@ -85,18 +85,18 @@ fn clustersOf(size: u64, cluster_bytes: u64) u32 {
 
 /// Clusters the folder takes at `cluster_bytes`, root's own clusters beyond
 /// the first excluded when `root` (the caller counts cluster 2).
-fn clustersIn(allocator: std.mem.Allocator, dir: std.fs.Dir, cluster_bytes: u64, root: bool) anyerror!u32 {
-    const items = try listed(allocator, dir);
+fn clustersIn(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cluster_bytes: u64, root: bool) anyerror!u32 {
+    const items = try listed(allocator, io, dir);
     defer freeItems(allocator, items);
     const own = clustersOf((try slotsFor(items)) * dirent.bytes, cluster_bytes);
     var total: u32 = if (root) own - 1 else own;
     for (items) |item| {
         if (item.is_dir) {
-            var sub = try dir.openDir(item.name, .{ .iterate = true });
-            defer sub.close();
-            total += try clustersIn(allocator, sub, cluster_bytes, false);
+            var sub = try dir.openDir(io, item.name, .{ .iterate = true });
+            defer sub.close(io);
+            total += try clustersIn(allocator, io, sub, cluster_bytes, false);
         } else {
-            const stat = try dir.statFile(item.name);
+            const stat = try dir.statFile(io, item.name, .{});
             total += clustersOf(stat.size, cluster_bytes);
         }
     }
@@ -105,6 +105,7 @@ fn clustersIn(allocator: std.mem.Allocator, dir: std.fs.Dir, cluster_bytes: u64,
 
 const Writer = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     img: *image.Image,
     layout: fat.Layout,
     table: []u32,
@@ -112,12 +113,12 @@ const Writer = struct {
     files: u32 = 0,
     dirs: u32 = 0,
 
-    fn init(allocator: std.mem.Allocator, img: *image.Image, layout: fat.Layout) !Writer {
+    fn init(allocator: std.mem.Allocator, io: std.Io, img: *image.Image, layout: fat.Layout) !Writer {
         const table = try allocator.alloc(u32, layout.clusters + 2);
         @memset(table, 0);
         table[0] = fat.value.fat32_entry0;
         table[1] = fat.value.fat32_end_of_chain;
-        return .{ .allocator = allocator, .img = img, .layout = layout, .table = table };
+        return .{ .allocator = allocator, .io = io, .img = img, .layout = layout, .table = table };
     }
 
     fn clusterBytes(self: *const Writer) usize {
@@ -160,8 +161,8 @@ const Writer = struct {
     /// Write one directory and everything under it; return its first cluster.
     /// `parent` is 0 for the root, which carries the volume label instead of
     /// the dot pair.
-    fn writeDir(self: *Writer, dir: std.fs.Dir, parent: u32, label: []const u8) anyerror!u32 {
-        const items = try listed(self.allocator, dir);
+    fn writeDir(self: *Writer, dir: std.Io.Dir, parent: u32, label: []const u8) anyerror!u32 {
+        const items = try listed(self.allocator, self.io, dir);
         defer freeItems(self.allocator, items);
         const slots = try slotsFor(items);
         const first = self.take(clustersOf(slots * dirent.bytes, self.clusterBytes()));
@@ -190,13 +191,13 @@ const Writer = struct {
         return first;
     }
 
-    fn child(self: *Writer, dir: std.fs.Dir, item: Item, here: u32) anyerror!struct { u32, u32, u8 } {
+    fn child(self: *Writer, dir: std.Io.Dir, item: Item, here: u32) anyerror!struct { u32, u32, u8 } {
         if (item.is_dir) {
-            var sub = try dir.openDir(item.name, .{ .iterate = true });
-            defer sub.close();
+            var sub = try dir.openDir(self.io, item.name, .{ .iterate = true });
+            defer sub.close(self.io);
             return .{ try self.writeDir(sub, here, ""), 0, dirent.attr.directory };
         }
-        const data = try dir.readFileAlloc(self.allocator, item.name, std.math.maxInt(u32));
+        const data = try dir.readFileAlloc(self.io, item.name, self.allocator, .limited(std.math.maxInt(u32)));
         defer self.allocator.free(data);
         const first = self.take(clustersOf(data.len, self.clusterBytes()));
         try self.writeAt(first, data);
