@@ -1,0 +1,272 @@
+//! SPDX-License-Identifier: MIT
+//! Copyright (c) 2026 Brighton Sikarskie
+//!
+//! Build graph for the Zig half of `ra8_board_ek_ra8d2`. CMake consumes the
+//! installed static archive behind the unchanged `inc/` headers, so no
+//! consumer include path moves.
+//!
+//! This board is only partly ported: `src/*.c` still holds the pin/LED/switch
+//! core, the camera and audio-USB layers, and `src/boot/`.
+//! Those stay C and are recorded in the parallel-tree allowlist. The archive
+//! and the remaining objects link side by side, which is why
+//! `cmake/ra8_app/sources.cmake` grew a partial-port case.
+//!
+//! The layer calls the HAL, the chip clock binding, the io-stream sink and the
+//! board's own remaining C as plain externs, resolved at link time by whatever
+//! the app or the host suite already links. Nothing here needs a vendored
+//! header, so there is no `@cImport`.
+
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    // The boot MPU marks the CPU0 <-> CPU1 window Normal non-cacheable only
+    // under RA8_BOOT_ENABLE_CACHE_MPU, and the shared-RAM descriptor reports
+    // the flag the running build carries rather than a constant.
+    const boot_cache_mpu = b.option(
+        bool,
+        "boot-cache-mpu",
+        "Build with RA8_BOOT_ENABLE_CACHE_MPU, so the shared window is Normal non-cacheable",
+    ) orelse false;
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "boot_cache_mpu", boot_cache_mpu);
+
+    const library_module = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .pic = true,
+    });
+    library_module.addOptions("build_config", build_options);
+
+    const library = b.addLibrary(.{
+        .name = "ra8_board_ek_ra8d2",
+        .linkage = .static,
+        .root_module = library_module,
+    });
+    library.bundle_compiler_rt = true;
+    // Split functions and data so --gc-sections can discard unused Zig code
+    // from the single-object archive in firmware images.
+    library.link_function_sections = true;
+    library.link_data_sections = true;
+    library.root_module.pic = true;
+    b.installArtifact(library);
+
+    const test_step = b.step("test", "Run Zig ra8_board_ek_ra8d2 tests");
+
+    // One unit module per suite, rooted at the file under test, so no internal
+    // file lands in two modules of the same test binary. Each suite defines
+    // the extern seam its unit calls.
+    const suites = [_]struct {
+        name: []const u8,
+        source: []const u8,
+        root: []const u8,
+        needs_config: bool,
+    }{
+        .{
+            .name = "dualcore",
+            .source = "src/internal/dualcore.zig",
+            .root = "tests/dualcore_test.zig",
+            .needs_config = true,
+        },
+        .{
+            .name = "usb_port",
+            .source = "src/internal/usb_port.zig",
+            .root = "tests/usb_port_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "bringup",
+            .source = "src/internal/bringup.zig",
+            .root = "tests/bringup_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "clock_profile",
+            .source = "src/internal/clock_profile.zig",
+            .root = "tests/clock_profile_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "clocks",
+            .source = "src/internal/clocks.zig",
+            .root = "tests/clocks_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "uart_console",
+            .source = "src/internal/uart_console.zig",
+            .root = "tests/uart_console_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "camera",
+            .source = "src/internal/camera.zig",
+            .root = "tests/camera_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "camera_xclk",
+            .source = "src/internal/camera_xclk.zig",
+            .root = "tests/camera_xclk_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "audio",
+            .source = "src/internal/audio.zig",
+            .root = "tests/audio_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "audio_word",
+            .source = "src/internal/audio_word.zig",
+            .root = "tests/audio_word_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "io_expander",
+            .source = "src/internal/io_expander.zig",
+            .root = "tests/io_expander_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "io_exp_bus",
+            .source = "src/internal/io_exp_bus.zig",
+            .root = "tests/io_exp_bus_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "usbhs",
+            .source = "src/internal/usbhs.zig",
+            .root = "tests/usbhs_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "pdm_mic",
+            .source = "src/internal/pdm_mic.zig",
+            .root = "tests/pdm_mic_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "pdm_pins",
+            .source = "src/internal/pdm_pins.zig",
+            .root = "tests/pdm_pins_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "touch",
+            .source = "src/internal/touch.zig",
+            .root = "tests/touch_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "camera_mode",
+            .source = "src/internal/camera_mode.zig",
+            .root = "tests/camera_mode_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "eth_phy",
+            .source = "src/internal/eth_phy.zig",
+            .root = "tests/eth_phy_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "ethernet",
+            .source = "src/internal/ethernet.zig",
+            .root = "tests/ethernet_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "leds",
+            .source = "src/internal/leds.zig",
+            .root = "tests/leds_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "switches",
+            .source = "src/internal/switches.zig",
+            .root = "tests/switches_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "glcdc_pins",
+            .source = "src/internal/glcdc_pins.zig",
+            .root = "tests/glcdc_pins_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "backdrop",
+            .source = "src/internal/backdrop.zig",
+            .root = "tests/backdrop_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "panel",
+            .source = "src/internal/panel.zig",
+            .root = "tests/panel_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "mipi_panel",
+            .source = "src/internal/mipi_panel.zig",
+            .root = "tests/mipi_panel_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "xspi_pins",
+            .source = "src/internal/xspi_pins.zig",
+            .root = "tests/xspi_pins_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "sdhi_pins",
+            .source = "src/internal/sdhi_pins.zig",
+            .root = "tests/sdhi_pins_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "arduino",
+            .source = "src/internal/arduino.zig",
+            .root = "tests/arduino_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "board_info",
+            .source = "src/internal/board_info.zig",
+            .root = "tests/board_info_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "gpt_profile",
+            .source = "src/internal/gpt_profile.zig",
+            .root = "tests/gpt_profile_test.zig",
+            .needs_config = false,
+        },
+        .{
+            .name = "console_stream",
+            .source = "src/internal/console_stream.zig",
+            .root = "tests/console_stream_test.zig",
+            .needs_config = false,
+        },
+    };
+    for (suites) |suite| {
+        const under_test = b.createModule(.{
+            .root_source_file = b.path(suite.source),
+            .target = target,
+            .optimize = optimize,
+        });
+        if (suite.needs_config) under_test.addOptions("build_config", build_options);
+        const test_module = b.createModule(.{
+            .root_source_file = b.path(suite.root),
+            .target = target,
+            .optimize = optimize,
+        });
+        test_module.addImport(suite.name, under_test);
+        const tests = b.addTest(.{ .root_module = test_module });
+        test_step.dependOn(&b.addRunArtifact(tests).step);
+    }
+}

@@ -1,0 +1,223 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Brighton Sikarskie
+#
+# Per-app CMake for `secure_boot_ns_hil` -- the TrustZone BLXNS root-of-trust
+# proof. A TWO-PROJECT TrustZone build:
+#
+#   * Secure ELF (ra8_add_app): SAU + SRAM-NS boundary + NS-image copy
+#     (trustzone_init.c), then main() runs the RA8_ENABLE_ROOT_OF_TRUST verify
+#     (ra8_rot + ra8_psa_crypto + tf-psa-crypto) and BLXNS-es via
+#     ra8_tz_secure_boot_jump_ns -- default-deny on a failed signature.
+#   * Non-Secure ELF (secure_boot_ns_hil_ns.elf): a minimal liveness beacon
+#     (ns_main.c) placed at the NS addresses by the generated NS script, whose .ns_rot_header
+#     tells the Secure verifier the signed-body length.
+#
+# The NS image is SIGNED (scripts/secrets/rot_sign.py) and merged with the Secure hex into
+# two flashable artifacts -- a genuine one (NS runs) and a one-byte-tampered one
+# (NS denied). Signing degrades gracefully when the RoT key is absent (see
+# examples/ek_ra8d2/hw_pending/secure_boot_ns_hil/scripts/sign_and_merge.py).
+# Copyright (c) 2026 Brighton Sikarskie.
+#
+cmake_minimum_required(VERSION 3.20)
+
+get_directory_property(_ra8_has_parent PARENT_DIRECTORY)
+if(NOT _ra8_has_parent)
+  project(secure_boot_ns_hil LANGUAGES C ASM)
+endif()
+
+set(_d "${CMAKE_CURRENT_SOURCE_DIR}")
+while(NOT EXISTS "${_d}/cmake/ra8_add_app.cmake" AND NOT "${_d}" STREQUAL "/")
+  get_filename_component(_d "${_d}" DIRECTORY)
+endwhile()
+include("${_d}/cmake/ra8_add_app.cmake")
+
+get_directory_property(_ra8_p PARENT_DIRECTORY)
+if(NOT _ra8_p)
+  option(RA8_TRUSTZONE_ENABLE "Enable Cortex-M85 TrustZone (-mcmse + SAU)" ON)
+endif()
+
+# ---- Secure ELF ----------------------------------------------------------
+# ra8_tz_secure_boot (LIBS, globbed in so RA8_ENABLE_ROOT_OF_TRUST reaches the
+# BLXNS gate internal_ns_verify_or_deny). ra8_rot + ra8_psa_crypto + the
+# fail-closed RNG shim from this app's src/ directory; ra8_rsip (software SHA)
+# auto-globbed.
+ra8_add_app(
+  NAME secure_boot_ns_hil
+  STACK_BYTES 32768
+  DESCRIPTION "TrustZone BLXNS root-of-trust proof (Secure verify + NS liveness)" AUX_SRCS
+                                                                                  src/ns_main.c
+  LIBS ra8_tz_secure_boot ra8_psa_crypto ra8_rot
+             MRAM_LENGTH 512K
+)
+
+# tf-psa-crypto software crypto for ARM (same recipe as rot_verify_hil /
+# secure_boot_hil): SYSTEM includes keep the vendored psa headers out of
+# -Werror; the port config is software-only with EXTERNAL_RNG; a static-buffer
+# allocator backs mbedtls_calloc (no libc heap on target).
+include(${_d}/cmake/zig_package.cmake)
+ra8_zig_package_dir(tf_psa_crypto _TF)
+ra8_zig_package_dir(mbedtls _MBEDTLS)
+set(_PORT "${_d}/port/mbedtls/inc")
+file(
+  GLOB
+  _TF_SRC
+  CONFIGURE_DEPENDS
+  ${_TF}/core/*.c
+  ${_TF}/drivers/builtin/src/*.c
+  ${_TF}/platform/*.c
+  ${_TF}/utilities/*.c
+  ${_TF}/extras/*.c
+)
+add_library(tfpsa_sbns STATIC ${_TF_SRC})
+target_include_directories(
+  tfpsa_sbns SYSTEM
+  PUBLIC ${_TF}/include
+         ${_TF}/drivers/builtin/include
+         ${_TF}/core
+         ${_TF}/dispatch
+         ${_TF}/drivers/builtin/src
+         ${_TF}/platform
+         ${_TF}/utilities
+         ${_TF}/extras
+         ${_MBEDTLS}/include
+         ${_PORT}
+)
+target_compile_definitions(
+  tfpsa_sbns
+  PUBLIC MBEDTLS_CONFIG_FILE="mbedtls_config.h" TF_PSA_CRYPTO_CONFIG_FILE="tf_psa_crypto_config.h"
+         MBEDTLS_PLATFORM_MEMORY MBEDTLS_MEMORY_BUFFER_ALLOC_C
+)
+# No warning suppression: this OBJECT library has no warning profile to suppress.
+# ra8_add_app() applies the project profile to the app target, not to this
+# separately-declared tf-psa-crypto object library, so its compile line is the
+# toolchain flags plus this one. Compiling all 77 tf-psa-crypto TUs with
+# -Wno-attributes and -Wno-redundant-decls removed, under arm-none-eabi-gcc
+# 13.3.1 at -O0, emits nothing at all: neither -Wattributes nor
+# -Wredundant-decls is ever enabled here. Both are deleted; -fno-strict-aliasing
+# stays because it changes code generation, not diagnostics.
+target_compile_options(tfpsa_sbns PRIVATE -fno-strict-aliasing)
+
+target_link_libraries(secure_boot_ns_hil.elf PRIVATE tfpsa_sbns)
+include(${RA8_REPO_ROOT}/libs/ra8_board_ek_ra8d2/ld/ns_memory_map.cmake)
+# The Secure boot copies/jumps to the NS image, so it needs the NS addresses as
+# constants. They come from the same map the NS linker script is generated from
+# rather than being re-typed in trustzone_init.c.
+ra8_ns_memory_map_defines(secure_boot_ns_hil.elf)
+
+target_compile_definitions(
+  secure_boot_ns_hil.elf PRIVATE RA8_ENABLE_ROOT_OF_TRUST RA8_TRUSTZONE_ENABLE
+)
+target_include_directories(
+  secure_boot_ns_hil.elf PRIVATE ${_d}/libs/ra8_psa_crypto/inc ${_d}/libs/ra8_dfu/inc
+                                 ${_d}/libs/ra8_tz_secure_boot/inc
+)
+
+# The tf-psa include directories are SYSTEM, so its header diagnostics do not
+# weaken the full project warning profile on the first-party app and RNG shim.
+
+# ---- Non-Secure ELF ------------------------------------------------------
+# Written by hand on purpose: ra8_add_ns_image() does not fit this app.
+#
+# That helper exists to collapse the dual-image boilerplate the other three
+# dual-image apps share, and its core is the CMSE import-library handshake:
+# it asks the Secure target for --out-implib and links that implib into the
+# NS image. This app has no veneers to hand over. Its Secure ELF carries a
+# .gnu.sgstubs section of size 0 and the build produces no import library at
+# all, because the Secure/NS boundary here is not a veneer call at all: the
+# Secure boot verifies a signed NS image and BLXNSes into it, so the
+# only thing crossing is the image itself. Calling ra8_add_ns_image() here
+# would ask the Secure link for an import library with no cmse entry
+# functions behind it, which fails the link outright.
+#
+# The staple below is also not the helper's MERGED_HEX step. That step
+# objcopies both ELFs and merges once. This app signs first: scripts/
+# sign_and_merge.py pads the NS body to the body_len the linker recorded in
+# .ns_rot_header, appends an ECDSA-P256 RoT trailer, and emits TWO hexes, a
+# genuine one and a tampered one that differs only in a flipped body byte, so
+# the bench can prove the gate denies as well as admits.
+#
+# If a second signed-NS app ever appears, that is the point to give the helper
+# an optional staple hook. One app is not enough shape to design against.
+#
+# A standalone minimal image: no libc/RTOS/veneers. Same toolchain ABI as the
+# Secure side (cpu flags from the toolchain, C23 global), but no startup files
+# (the Secure boot copies it and ns_reset_handler is the entry) and its own
+# NS-image linker script.
+# ra8_ns_rot_header_object() emits the .ns_rot_header record this app's whole point
+# depends on (the Secure side reads it to learn body_len before it will BLXNS).
+# ra8_add_ns_image() adds it for the three apps that use the helper; this
+# hand-rolled link names it itself.
+# The NS link is hand-rolled (no CMSE veneers to hand over, so ra8_add_ns_image()
+# does not fit), but the linker script is still the shared board template rather
+# than a third fork: ra8_ns_linker_script() configures it from ns_image.ld.in
+# with this board's one NS memory map.
+include(${RA8_REPO_ROOT}/cmake/ra8_add_ns_image.cmake)
+ra8_ns_linker_script(_sbnh_ns_linker NAME secure_boot_ns_hil_ns)
+ra8_ns_rot_header_object(_sbnh_ns_rot_obj)
+
+add_executable(
+  secure_boot_ns_hil_ns.elf
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ns_main.c
+  ${_sbnh_ns_rot_obj}
+)
+# The freestanding runtime primitives (memcpy / memset / str* / abs) are Zig
+# now, so the NS image takes them from ra8_core's archive built for
+# this core instead of compiling the three deleted .c files. This image is a
+# raw add_executable(), outside the ra8_add_app() expansion that registers a
+# migrated library's archive automatically, so it asks for the archive here.
+ra8_link_zig_library_for_cpu(
+  TARGET secure_boot_ns_hil_ns.elf
+  LIB ra8_core
+  CPU cortex_m85
+  FLOAT hard
+)
+target_include_directories(
+  secure_boot_ns_hil_ns.elf PRIVATE ${_d}/libs/ra8_core/inc ${_d}/libs/ra8_tz_secure_boot/inc
+)
+target_compile_options(secure_boot_ns_hil_ns.elf PRIVATE -fshort-enums -ffreestanding)
+# Raw add_executable targets skip the ra8_add_app warning profile, so without
+# this the NS image compiles WITHOUT -Wall/-Wextra/-Werror (the T2-05
+# warnings-scope hole).
+ra8_target_enable_project_warnings(secure_boot_ns_hil_ns.elf STACK_USAGE_BYTES 32768)
+target_link_options(
+  secure_boot_ns_hil_ns.elf
+  PRIVATE
+  -nostartfiles
+  -T${_sbnh_ns_linker}
+  -Wl,--Map=secure_boot_ns_hil_ns.map
+)
+set_target_properties(secure_boot_ns_hil_ns.elf PROPERTIES LINK_DEPENDS "${_sbnh_ns_linker}")
+# The Secure hex is an input to the merge below, so build the Secure ELF first.
+add_dependencies(secure_boot_ns_hil_ns.elf secure_boot_ns_hil.elf)
+
+# ---- Sign the NS image + merge Secure+NS -> genuine + tampered hex --------
+# Objcopy the Secure ELF to ihex (stripping the option-setting records the
+# J-Link/MRAM flasher cannot write), then
+# examples/ek_ra8d2/hw_pending/secure_boot_ns_hil/scripts/sign_and_merge.py signs the NS body
+# (rot_sign.py) and merges. Genuine overwrites secure_boot_ns_hil.hex so the
+# existing flash flow picks it up; the tampered variant is a second artifact.
+# RA8_ROT_KEY (or ~/ra8d2-rot-signing-key.pem) selects the signing key; when
+# absent the step degrades gracefully and prints the manual sign command.
+if(DEFINED ENV{RA8_ROT_KEY})
+  set(_sbns_key "$ENV{RA8_ROT_KEY}")
+else()
+  set(_sbns_key "$ENV{HOME}/ra8d2-rot-signing-key.pem")
+endif()
+
+set(RA8_REPO_ROOT "${_d}")
+include("${_d}/cmake/ra8_zig_tool.cmake")
+ra8_use_merge_ihex(secure_boot_ns_hil_ns.elf)
+add_custom_command(
+  TARGET secure_boot_ns_hil_ns.elf
+  POST_BUILD
+  COMMAND ${CMAKE_OBJCOPY} --remove-section=.option_setting* -O ihex
+          $<TARGET_FILE:secure_boot_ns_hil.elf> secure_boot_ns_hil_secure.hex
+  COMMAND
+    python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/sign_and_merge.py --secure-hex
+    secure_boot_ns_hil_secure.hex --ns-elf $<TARGET_FILE:secure_boot_ns_hil_ns.elf> --objcopy
+    ${CMAKE_OBJCOPY} --rot-sign ${_d}/scripts/secrets/rot_sign.py --merge
+    $<TARGET_FILE:ra8_zig::merge_ihex> --out-genuine secure_boot_ns_hil.hex --out-tampered
+    secure_boot_ns_hil_tampered.hex --key ${_sbns_key} --ns-load-addr ${RA8_NS_MRAM_ORIGIN}
+  VERBATIM
+  COMMENT "Signing NS image + merging Secure+NS -> secure_boot_ns_hil.hex (+_tampered)"
+)

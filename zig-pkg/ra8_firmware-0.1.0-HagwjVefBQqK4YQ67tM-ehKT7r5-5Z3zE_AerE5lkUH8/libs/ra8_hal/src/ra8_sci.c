@@ -1,0 +1,593 @@
+/**
+ * @file ra8_sci.c
+ * @brief Full-featured SCI_B driver implementation
+ *
+ * @par Tag
+ * [Ring 3 / HAL] {World: NS}
+ *
+ * @details
+ * SCI_B variant of the RA8D2 SCI peripheral (HUM Ch 38). See
+ * `ra8_sci.h` for the public API contract and `ra8_sci_regs.h` for
+ * the register layout. This file replaces the prior legacy-SCI driver
+ * stub (the legacy 8-bit-register variant is not present on RA8D2).
+ *
+ * Asynchronous (UART) bring-up sequence implemented in `ra8_sci_init`:
+ *   1. Open the per-channel MSTP gate.
+ *   2. Clear CCR0 so TE/RE/TIE/RIE/TEIE are off before reconfiguring.
+ *   3. Programme CCR1 (parity / inverter / break-data defaults).
+ *   4. Programme CCR3 (mode = async, CHR = data length, STP = stop
+ *      bits, MOD = 0 for async/multi-proc, MP/FM/DEN/CKE all clear so
+ *      the channel uses the on-chip baud generator with no FIFO).
+ *   5. Programme CCR2 with BRR computed from PCLKB and the requested
+ *      baud (CKS = 0, BGDM = 0, ABCS = 0 -- the standard 16x base
+ *      clock path), MDDR left at reset (0xFF -> no modulation).
+ *   6. Disable FIFO mode and Manchester / LIN / IIC satellite bits.
+ *   7. Clear every CSR / FFCLR latch left over from a prior boot
+ *      (mirrors FSP `R_SCI_B_UART_Open` lines 375 & 378).
+ *   8. Set CCR0 = TE | RE.
+ *
+ * @par Intentional FSP Gaps
+ * The driver follows the FSP `r_sci_b_uart` reference closely but
+ * deliberately omits four steps that do not apply to our usage:
+ *
+ *   - **`r_sci_b_uart.c` (CCR0 IDSEL pre-seed).** FSP pre-loads
+ *     CCR0 with the IDSEL bit when the multi-processor bit is being
+ *     turned on. IDSEL is only meaningful when CCR3.MP=1; this driver
+ *     never enables multi-processor mode (see `ccr3` in internal/sci_cfg.zig -- MOD
+ *     stays 000 / async and MP stays 0), so the bit is dead and we
+ *     skip the extra write.
+ *   - **`r_sci_b_uart.c` (`r_sci_b_uart_synchronization_delay_cfg`).**
+ *     The FSP delay loop accounts for the synchronizer hop between
+ *     SCICLK and PCLK when those clocks are sourced independently.
+ *     In our async-UART configuration the on-chip baud generator is
+ *     fed from PCLKB (CCR3.CKE = 00, CCR3.BPEN = 1 -- see
+ *     `ccr3` in internal/sci_cfg.zig), so SCICLK and PCLK are the same edge and FSP's
+ *     own delay-count formula evaluates to zero. The wait is a no-op
+ *     for us and is intentionally not ported.
+ *   - **`r_sci_b_uart.c` (`SCI_B_UART_FCR_DEFAULT_VALUE = 0x1F1F0000`).**
+ *     FSP seeds FCR with RTRG=31 / TTRG=31 even when FIFO mode is
+ *     off. RTRG/TTRG are dead bits when CCR3.FM=0 (HUM Ch 38.2.11
+ *     p 2215, "valid only when FM = 1"); we keep `FCR = 0` here since
+ *     we never enable FIFO mode.
+ *   - **`r_sci_b_uart.c` (Close clears CCR3.FM before TE drop).**
+ *     FSP's Close path explicitly toggles FM off because there is a
+ *     documented hang where TE -> 0 with FM=1 leaves CSR.TEND stuck
+ *     at 0 and the peripheral wedged. Since this driver never sets
+ *     FM=1, the workaround is unnecessary and `ra8_sci_deinit` writes
+ *     CCR0=0 directly.
+ *
+ * @copyright Copyright (c) 2026 Brighton Sikarskie
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "ra8_sci.h"
+
+#include <stdint.h>
+
+#include "ra8_attributes.h"
+#include "ra8_check.h"
+#include "ra8_err.h"
+#include "ra8_hw_err.h"
+#include "ra8_log.h"
+#include "ra8_mstp.h"
+#include "ra8_mstp_regs.h"
+#include "ra8_register_guard.h"
+#include "ra8_sci_internal.h"
+#include "ra8_sci_regs.h"
+
+static const char* const s_tag = "SCI";
+
+/* Config encoders and ra8_sci_baud_calculate live in Zig (RA8FW-905,
+ * src/internal/sci_cfg.zig + src/sci_cfg_abi.zig). */
+uint8_t  priv_ra8_sci_brr(uint32_t pclk_hz, uint32_t baud);
+uint32_t priv_ra8_sci_ccr1(const ra8_sci_cfg_t* cfg);
+uint32_t priv_ra8_sci_ccr2(const ra8_sci_cfg_t* cfg);
+uint32_t priv_ra8_sci_ccr3(const ra8_sci_cfg_t* cfg);
+
+/* Handler attach, error status, stop and the MSTP id table live in Zig
+ * (RA8FW-906, src/internal/sci_ctl.zig + src/sci_ctl_abi.zig). */
+ra8_mstp_t priv_ra8_sci_mstp_id(uint8_t channel);
+
+/* =============================================================================
+ * Per-channel state
+ * =============================================================================
+ */
+
+/**
+ * @var s_sci_state
+ * @brief Per-channel allocation + dispatch table.
+ *
+ * @details
+ * Canonical definition of the cross-TU dispatch table declared
+ * ``extern`` in ``ra8_sci_internal.h``; ``ra8_sci_dma_isr.c`` reads and
+ * mutates the same storage from the ISR dispatch path.
+ */
+ra8_sci_state_t s_sci_state[k_ra8_sci_channel_count_val];
+
+/* =============================================================================
+ * Internal helpers
+ * =============================================================================
+ */
+
+/**
+ * @brief Validate ``channel`` and return the register pointer.
+ */
+RA8_HW_REGISTER_ACCESS
+RA8_INTERNAL static inline volatile r_sci_regs_t* internal_reg(uint8_t channel)
+{
+  if (channel > k_ra8_sci_channel_max_index) {
+    return nullptr;
+  }
+  return ra8_sci(channel);
+}
+
+/**
+ * @brief Clear every stale CSR / FFCLR latch on a freshly-opened channel.
+ *
+ * @details
+ * Mirrors FSP `r_sci_b_uart.c` (`p_ctrl->p_reg->CFCLR =
+ * SCI_B_UART_CFCLR_DEFAULT`) and `r_sci_b_uart.c`
+ * (`p_ctrl->p_reg->FFCLR = SCI_B_UART_FFCLR_DEFAULT`). Both clear
+ * registers are write-1-to-clear: writing the "all bits" mask drops
+ * every defined latch in a single store while leaving the reserved
+ * bits at 0. Without this step, residual flags from a prior boot
+ * (e.g. ORER set by a stray RX framing error) would surface as a
+ * spurious error the moment we re-enable RIE/TIE.
+ * @param[in] reg See declaration: ``volatile r_sci_regs_t* reg``.
+ * @pre Module/state preconditions hold (see function body).
+ * @pre Module/state preconditions hold (see function body).
+ * @post Documented side effects are visible on success.
+ * @post Documented side effects are visible on success.
+ * @note Not thread-safe; the caller must serialise concurrent access.
+ * @since 0.1.0
+ */
+RA8_INTERNAL static void internal_clear_csr_flags(volatile r_sci_regs_t* reg)
+{
+  /* HUM Ch 38.2.24 "CFCLR : Common Flag Clear Register", p 2238 --
+   * one write clears ERS / DCMF / DPER / DFER / ORER / MFF / PER /
+   * FER / TDRE / RDRF in CSR. */
+  reg->CFCLR = k_ra8_sci_cfclr_default;
+
+  /* HUM Ch 38.2.26 "FFCLR : FIFO Flag Clear Register", p 2239 --
+   * clears FRSR.DR (the only defined W1C bit). */
+  reg->FFCLR = k_ra8_sci_ffclr_default;
+}
+
+/**
+ * @brief Spin until CSR.TEND = 1 or the bounded budget runs out.
+ *
+ * @details
+ * Mirrors FSP `r_sci_b_uart.c` and `:809`
+ * (`FSP_HARDWARE_REGISTER_WAIT(p_ctrl->p_reg->CSR_b.TEND, 1U)`). TDRE
+ * (transmit data register empty) is asserted as soon as TDR is
+ * latched into the shift register, but the bits are not yet on the
+ * wire. TEND additionally waits for the shift register to drain. We
+ * use a bounded medium-budget spin so the call returns in finite
+ * time even if the line is wedged.
+ *
+ * On the host (`RA8_OFF_TARGET`) the fake does not model the
+ * shift-register drain -- `*reg` would never see TEND assert -- so we
+ * short-circuit and return success.
+ *
+ * @param[in,out] reg See function signature.
+ * @return Result code or value; see implementation.
+ * @retval 0 Success or default value.
+ * @pre Module has been initialized.
+ * @pre Caller has validated arguments.
+ * @post Side effects bounded to documented state.
+ * @post State reflects operation result.
+ * @note Not thread-safe unless documented otherwise.
+ * @since 0.1.0
+ */
+RA8_INTERNAL static ra8_err_t internal_wait_tx_end(volatile r_sci_regs_t* reg)
+{
+  /* HUM Ch 38.2.17 "CSR : Common Status Register", p 2225 -- TEND (bit 30) goes
+   * high when both the data register and the shift register are empty. The
+   * ra8_fake_mmio host fault seam drives this real poll on the unit-test build, so
+   * the success and timeout legs run on host (T1-01) rather than short-circuit. */
+  const uint32_t mask = (1U << k_ra8_sci_csr_bit_tend);
+  return ra8_hw_wait_flag_set32(&reg->CSR, mask, k_ra8_hw_budget_medium);
+}
+
+/* =============================================================================
+ * Public API
+ * =============================================================================
+ */
+
+/**
+ * @brief Program CCR0..CCR4 + FCR for the requested UART config.
+ *
+ * @details
+ * Performs the deterministic MMIO write sequence required between
+ * MSTP-enable and the final TE/RE strobe: CCR0=0 (disable), FCR=0
+ * (non-FIFO), CCR1/CCR3/CCR2 from the cached helpers, CCR4=0, then
+ * the CFCLR / FFCLR latch clear. The write order is identical to
+ * FSP r_sci_b_uart.c.
+ *
+ * @param[in,out] reg Channel register bank, non-NULL.
+ * @param[in]     cfg Validated UART configuration.
+ *
+ * @pre Caller has enabled the module-stop clock for this channel.
+ * @pre ``reg`` is the canonical bank pointer for the active channel.
+ * @post CCR0=0 (TX/RX still disabled until ra8_sci_init re-strobes it).
+ * @post FCR=0, CCR1/CCR2/CCR3 programmed, CCR4 cleared, flags cleared.
+ *
+ * @note Not thread-safe; called once during init under IRQ-masked context.
+ * @since 0.1.0
+ */
+RA8_INTERNAL static void internal_program_ccr_bank(volatile r_sci_regs_t* reg,
+                                                   const ra8_sci_cfg_t*   cfg)
+{
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- disable
+   * TX/RX/IE bits before reconfiguring CCR1..CCR4 and FCR. */
+  reg->CCR0 = 0U;
+
+  /* HUM Ch 38.2.11 "FCR : FIFO Control Register", p 2215 -- non-FIFO
+   * polling mode for the bring-up demo: TFRST/RFRST cleared, all
+   * trigger numbers reset to 0. */
+  reg->FCR = 0U;
+
+  /* HUM Ch 38.2.6 "CCR1 : Common Control Register 1", p 2185 */
+  reg->CCR1 = priv_ra8_sci_ccr1(cfg);
+
+  /* HUM Ch 38.2.8 "CCR3 : Common Control Register 3", p 2203 -- mode
+   * + framing must be programmed before TE/RE go high. */
+  reg->CCR3 = priv_ra8_sci_ccr3(cfg);
+
+  /* HUM Ch 38.2.7 "CCR2 : Common Control Register 2", p 2189 -- BRR
+   * derived from cfg->pclk_hz and cfg->baud. */
+  reg->CCR2 = priv_ra8_sci_ccr2(cfg);
+
+  /* HUM Ch 38.2.9 "CCR4 : Common Control Register 4", p 2210 -- no
+   * sample / transmit timing adjustment for async UART. */
+  reg->CCR4 = 0U;
+
+  /* HUM Ch 38.2.24 "CFCLR : Common Flag Clear Register", p 2238 +
+   * HUM Ch 38.2.26 "FFCLR : FIFO Flag Clear Register", p 2239 -- drop
+   * any latches inherited from a previous boot before TX/RX go live.
+   * Mirrors FSP r_sci_b_uart.c. */
+  internal_clear_csr_flags(reg);
+}
+
+ra8_err_t ra8_sci_init(uint8_t channel, const ra8_sci_cfg_t* cfg)
+{
+  RA8_CHECK_NULL_PTR(cfg, s_tag, "sci_init: cfg");
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+
+  /* HUM Ch 11.2.7 "MSTPCRB : Module Stop Control Register B", p 445 */
+  const ra8_err_t mst_err = ra8_mstp_enable(priv_ra8_sci_mstp_id(channel));
+  if (mst_err != k_ra8_ok) {
+    ra8_log_error_val(s_tag, "sci_init: mstp enable failed", (uint32_t)mst_err);
+    return k_ra8_err_hw_init_failed;
+  }
+
+  internal_program_ccr_bank(reg, cfg);
+
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- enable
+   * transmitter and receiver. Interrupt-enable bits are toggled
+   * separately by ra8_sci_attach_{rx,tx}_handler. */
+  reg->CCR0 = (1U << k_ra8_sci_ccr0_bit_te) | (1U << k_ra8_sci_ccr0_bit_re);
+
+  s_sci_state[channel].initialized = true;
+  s_sci_state[channel].tx_buf      = nullptr;
+  s_sci_state[channel].tx_len      = 0U;
+  s_sci_state[channel].tx_idx      = 0U;
+  s_sci_state[channel].rx_buf      = nullptr;
+  s_sci_state[channel].rx_len      = 0U;
+  s_sci_state[channel].rx_idx      = 0U;
+  ra8_log_info_val(s_tag, "sci_init channel", (uint32_t)channel);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_deinit(uint8_t channel)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+
+  /* Drop CCR0 and tear the async descriptor down atomically w.r.t. the
+   * TXI/RXI ISR. Without the mask, a pending interrupt can still observe a
+   * non-zero tx_len/rx_len after CCR0 is cleared and then dereference the
+   * buffer pointer this path is nulling -- a NULL deref in interrupt
+   * context. Mirrors the ra8_sci_abort teardown. */
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 */
+  reg->CCR0                        = 0U;
+  s_sci_state[channel].rx_fn       = nullptr;
+  s_sci_state[channel].rx_ctx      = nullptr;
+  s_sci_state[channel].tx_fn       = nullptr;
+  s_sci_state[channel].tx_ctx      = nullptr;
+  s_sci_state[channel].initialized = false;
+  s_sci_state[channel].tx_buf      = nullptr;
+  s_sci_state[channel].tx_len      = 0U;
+  s_sci_state[channel].tx_idx      = 0U;
+  s_sci_state[channel].rx_buf      = nullptr;
+  s_sci_state[channel].rx_len      = 0U;
+  s_sci_state[channel].rx_idx      = 0U;
+  ra8_register_guard_exit(&guard);
+  return ra8_mstp_disable(priv_ra8_sci_mstp_id(channel));
+}
+
+/* ---- Polling TX / RX -------------------------------------------------- */
+
+ra8_err_t ra8_sci_putc_polling(uint8_t channel, uint8_t byte)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* HUM Ch 38.2.17 "CSR : Common Status Register", p 2225 -- spin
+   * until TDRE = 1 (transmit data register empty). */
+  const uint32_t  mask = (1U << k_ra8_sci_csr_bit_tdre);
+  const ra8_err_t werr = ra8_hw_wait_flag_set32(&reg->CSR, mask, k_ra8_hw_budget_medium);
+  if (werr != k_ra8_ok) {
+    return werr;
+  }
+  /* HUM Ch 38.2.3 "TDR : Transmit Data Register", p 2181 -- write to
+   * TDAT[7:0] (low 8 bits of TDR) launches one frame in non-FIFO
+   * 8-bit async mode. */
+  reg->TDR = (uint32_t)byte;
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_getc_polling(uint8_t channel, uint8_t* out_byte)
+{
+  RA8_CHECK_NULL_PTR(out_byte, s_tag, "getc: out_byte");
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* HUM Ch 38.2.17 "CSR : Common Status Register", p 2225 -- spin
+   * until RDRF = 1 (receive data full). */
+  const uint32_t  mask = (1U << k_ra8_sci_csr_bit_rdrf);
+  const ra8_err_t werr = ra8_hw_wait_flag_set32(&reg->CSR, mask, k_ra8_hw_budget_medium);
+  if (werr != k_ra8_ok) {
+    return werr;
+  }
+  /* HUM Ch 38.2.2 "RDR : Receive Data Register", p 2180 -- RDAT[7:0]
+   * holds the byte just received in 8-bit async mode. */
+  *out_byte = (uint8_t)(reg->RDR & k_ra8_sci_rdr_mask_data8);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_write_polling(uint8_t channel, const uint8_t* data, uint32_t len)
+{
+  if ((data == nullptr) && (len != 0U)) {
+    return k_ra8_err_null_ptr;
+  }
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  for (uint32_t i = 0U; i < len; ++i) {
+    const ra8_err_t err = ra8_sci_putc_polling(channel, data[i]);
+    if (err != k_ra8_ok) {
+      return err;
+    }
+  }
+  /* HUM Ch 38.2.17 "CSR : Common Status Register", p 2225 -- TDRE
+   * goes high as soon as TDR latches into the shifter, but the byte
+   * may still be on the wire. Wait for TEND so the call only returns
+   * after the last frame is fully transmitted. Mirrors FSP
+   * r_sci_b_uart.c (`R_SCI_B_UART_Close` blocks on TEND for the
+   * same reason before dropping TE). */
+  if (len != 0U) {
+    return internal_wait_tx_end(reg);
+  }
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_flush(uint8_t channel)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* HUM Ch 38.2.17 "CSR : Common Status Register", p 2225 -- block on
+   * TEND so the shift register has fully drained before the caller
+   * proceeds (typically into a panic_halt / WFI that would gate the
+   * SCI clock and discard in-flight bytes). */
+  return internal_wait_tx_end(reg);
+}
+
+/* ---- Runtime reconfigure --------------------------------------------- */
+
+ra8_err_t ra8_sci_set_baud(uint8_t channel, uint32_t baud, uint32_t pclk_hz)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  if (baud == 0U) {
+    return k_ra8_err_invalid_arg;
+  }
+  const uint8_t brr = priv_ra8_sci_brr(pclk_hz, baud);
+  /* Guard the CCR2 read-modify-write against any SCI ISR that stores to
+   * this channel's control registers: an interrupt landing between the
+   * CCR2 read and the write-back would otherwise drop the freshly merged
+   * BRR field (lost update). The mask is a no-op when uncontended, so the
+   * final CCR2 value is byte-identical to the unguarded path. */
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  /* HUM Ch 38.2.7 "CCR2 : Common Control Register 2", p 2189 -- BRR
+   * lives in CCR2[15:8]; preserve the rest of CCR2. */
+  uint32_t v = reg->CCR2;
+  v &= ~k_ra8_sci_ccr2_mask_brr_field;
+  v |= ((uint32_t)brr << k_ra8_sci_ccr2_shift_brr);
+  reg->CCR2 = v;
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+/* ---- Async byte-stream TX / RX (FSP Read/Write parity) --------------- */
+
+ra8_err_t ra8_sci_write(uint8_t channel, const uint8_t* data, uint32_t len)
+{
+  if ((data == nullptr) && (len != 0U)) {
+    return k_ra8_err_null_ptr;
+  }
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  if (!s_sci_state[channel].initialized) {
+    return k_ra8_err_invalid_arg;
+  }
+  if (s_sci_state[channel].tx_len != 0U) {
+    return k_ra8_err_busy;
+  }
+  if (len == 0U) {
+    return k_ra8_ok;
+  }
+  /* Publish the async TX descriptor and arm TIE atomically w.r.t. the
+   * TXI ISR: it tests tx_len then dereferences tx_buf, so a torn publish
+   * (or a CCR0 RMW racing the ISR's TIE clear) must not be observable. */
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  s_sci_state[channel].tx_buf = data;
+  s_sci_state[channel].tx_len = len;
+  s_sci_state[channel].tx_idx = 0U;
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- arm
+   * TIE so the next TDRE event fires the dispatcher. Mirrors FSP
+   * r_sci_b_uart.c which sets TE | TIE in a single store. */
+  reg->CCR0 = reg->CCR0 | (1U << k_ra8_sci_ccr0_bit_tie);
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_read(uint8_t channel, uint8_t* buf, uint32_t len)
+{
+  if ((buf == nullptr) && (len != 0U)) {
+    return k_ra8_err_null_ptr;
+  }
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  if (!s_sci_state[channel].initialized) {
+    return k_ra8_err_invalid_arg;
+  }
+  if (s_sci_state[channel].rx_len != 0U) {
+    return k_ra8_err_busy;
+  }
+  if (len == 0U) {
+    return k_ra8_ok;
+  }
+  /* Publish the async RX descriptor and arm RIE atomically w.r.t. the
+   * RXI ISR (it tests rx_len then writes through rx_buf). */
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  s_sci_state[channel].rx_buf = buf;
+  s_sci_state[channel].rx_len = len;
+  s_sci_state[channel].rx_idx = 0U;
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- arm
+   * RIE so the next RDRF event fires the dispatcher. Mirrors FSP
+   * r_sci_b_uart.c which stashes p_rx_dest / rx_dest_bytes for
+   * use by `rxi_isr`. */
+  reg->CCR0 = reg->CCR0 | (1U << k_ra8_sci_ccr0_bit_rie);
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_abort(uint8_t channel, ra8_sci_dir_t direction)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  if ((direction != k_ra8_sci_dir_tx) && (direction != k_ra8_sci_dir_rx) &&
+      (direction != k_ra8_sci_dir_both)) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* Disarm and tear down the async descriptor atomically w.r.t. the
+   * TXI/RXI ISR. Without the mask, the ISR can latch tx_len > 0, take an
+   * interrupt while this path nulls tx_buf, then dereference the stale
+   * NULL -- a use-after-free / NULL deref in interrupt context.
+   * HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 */
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  if ((direction & k_ra8_sci_dir_tx) != 0U) {
+    const uint32_t tie_teie     = (1U << k_ra8_sci_ccr0_bit_tie) | (1U << k_ra8_sci_ccr0_bit_teie);
+    reg->CCR0                   = reg->CCR0 & ~tie_teie;
+    s_sci_state[channel].tx_buf = nullptr;
+    s_sci_state[channel].tx_len = 0U;
+    s_sci_state[channel].tx_idx = 0U;
+  }
+  if ((direction & k_ra8_sci_dir_rx) != 0U) {
+    const uint32_t rie          = (1U << k_ra8_sci_ccr0_bit_rie);
+    reg->CCR0                   = reg->CCR0 & ~rie;
+    s_sci_state[channel].rx_buf = nullptr;
+    s_sci_state[channel].rx_len = 0U;
+    s_sci_state[channel].rx_idx = 0U;
+  }
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_read_stop(uint8_t channel, uint32_t* remaining)
+{
+  RA8_CHECK_NULL_PTR(remaining, s_tag, "read_stop: remaining");
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* Mirror FSP `R_SCI_B_UART_ReadStop` r_sci_b_uart.c: stash the
+   * pre-stop count, zero state, then disarm RIE. */
+  /* Snapshot the residual count, null the descriptor, and disarm RIE
+   * atomically w.r.t. the RXI ISR so the reported remaining matches the
+   * state we tear down (and the ISR cannot deref a half-nulled rx_buf). */
+  const uint32_t       rie = (1U << k_ra8_sci_ccr0_bit_rie);
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  const uint32_t pending      = (s_sci_state[channel].rx_len > s_sci_state[channel].rx_idx)
+                                  ? (s_sci_state[channel].rx_len - s_sci_state[channel].rx_idx)
+                                  : 0U;
+  *remaining                  = pending;
+  s_sci_state[channel].rx_buf = nullptr;
+  s_sci_state[channel].rx_len = 0U;
+  s_sci_state[channel].rx_idx = 0U;
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 */
+  reg->CCR0 = reg->CCR0 & ~rie;
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_receive_suspend(uint8_t channel)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- drop
+   * RE to silence the RX shift register. FSP returns UNSUPPORTED here;
+   * we approximate the feature by toggling CCR0.RE so RXI stops firing
+   * and the FIFO/RDR stops accepting fresh frames. Guard the RMW against
+   * the RXI ISR's own CCR0 update. */
+  const uint32_t       re = (1U << k_ra8_sci_ccr0_bit_re);
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  reg->CCR0 = reg->CCR0 & ~re;
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}
+
+ra8_err_t ra8_sci_receive_resume(uint8_t channel)
+{
+  volatile r_sci_regs_t* reg = internal_reg(channel);
+  if (reg == nullptr) {
+    return k_ra8_err_invalid_arg;
+  }
+  /* HUM Ch 38.2.5 "CCR0 : Common Control Register 0", p 2182 -- guard the
+   * RE RMW against the RXI ISR's concurrent CCR0 update. */
+  const uint32_t       re = (1U << k_ra8_sci_ccr0_bit_re);
+  ra8_register_guard_t guard;
+  ra8_register_guard_enter(&guard);
+  reg->CCR0 = reg->CCR0 | re;
+  ra8_register_guard_exit(&guard);
+  return k_ra8_ok;
+}

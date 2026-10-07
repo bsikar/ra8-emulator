@@ -1,0 +1,22 @@
+.{
+    .name = .ra8_abi_chain_fixture,
+    .version = "0.1.0",
+    .fingerprint = 0x37c85a45a9025f3b,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        // Shared host-target selection (see tools/zig_build/macos_host.zig, RA8FW-330).
+        .ra8_zig_build = .{ .path = "../../tools/zig_build" },
+        // Turns ra8_abi_chain.h into the module tests/chain_adapter.zig uses.
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c#875969d3493e245e01bf5d7860f792d8f3eb9ef5",
+            .hash = "translate_c-0.0.0-Q_BUWoFOBwAhz77Zd15HCVuhTKzdUKc94kezmCeJ7IC_",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "inc",
+        "src",
+        "tests",
+    },
+}

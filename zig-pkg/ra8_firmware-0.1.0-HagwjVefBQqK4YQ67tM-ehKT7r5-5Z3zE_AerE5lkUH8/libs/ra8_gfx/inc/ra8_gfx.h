@@ -1,0 +1,589 @@
+/**
+ * @file ra8_gfx.h
+ * @brief Software 2D graphics primitives layered on top of a caller-owned
+ * @ingroup grp_ereader
+ *        framebuffer (DRW / D/AVE 2D / GLCDC ready).
+ *
+ * @details
+ * This module is a small, dependency-free 2D graphics library aimed at the
+ * RA8D2's GLCDC + DRW (D/AVE 2D) accelerator. The current implementation is
+ * a portable C software pixel pusher; if `RA8_GFX_USE_DRW` is defined a
+ * future revision can route ra8_gfx_rect / ra8_gfx_blit through ra8_drw's
+ * hardware blitter without changing call sites.
+ *
+ * The framebuffer memory itself is owned by the caller -- ra8_gfx_init only
+ * remembers a pointer and metadata, so the same library can be used over
+ * the GLCDC display plane, an off-screen scratch buffer, or a host-side
+ * test buffer.
+ *
+ * @copyright Copyright (c) 2026 Brighton Sikarskie
+ * SPDX-License-Identifier: MIT
+ * @since 0.1.0
+ */
+
+#pragma once
+
+#include <stdint.h>
+
+#include "ra8_err.h"
+#include "ra8_gfx_font.h"
+
+/**
+ * @enum ra8_gfx_format_t
+ * @brief Pixel format of the framebuffer bound by ra8_gfx_init().
+ *
+ * @details
+ * Values double as the bytes-per-pixel - the low byte is the byte stride
+ * for one pixel; the high byte is just a unique tag.
+ */
+typedef enum : uint8_t {
+  k_ra8_gfx_format_rgb565   = 2, /**< 16-bit RGB565, little-endian in memory. */
+  k_ra8_gfx_format_rgb888   = 3, /**< 24-bit packed R,G,B bytes.              */
+  k_ra8_gfx_format_argb8888 = 4, /**< 32-bit ARGB, A in MSB.                  */
+} ra8_gfx_format_t;
+
+/**
+ * @enum ra8_gfx_dim_limits_t
+ * @brief Bounds on framebuffer dimensions accepted by ra8_gfx_init().
+ */
+typedef enum : uint16_t {
+  k_ra8_gfx_min_dim = 1,    /**< Minimum width or height in pixels. */
+  k_ra8_gfx_max_dim = 4096, /**< Maximum supported edge length.     */
+} ra8_gfx_dim_limits_t;
+
+/**
+ * @brief Bind ra8_gfx to a caller-owned framebuffer.
+ *
+ * @param[in] fb     Pointer to framebuffer memory.
+ * @param[in] width  Framebuffer width in pixels.
+ * @param[in] height Framebuffer height in pixels.
+ * @param[in] format Pixel format (see ra8_gfx_format_t).
+ *
+ * @return Error code.
+ * @retval k_ra8_ok               Bound successfully.
+ * @retval k_ra8_err_null_ptr     `fb` was NULL.
+ * @retval k_ra8_err_invalid_arg  Dimensions out of range or unsupported format.
+ *
+ * @pre  fb points to at least `width * height * bytes_per_pixel(format)` bytes.
+ * @pre  width, height in [1, 4096].
+ * @post Subsequent draw calls operate on the bound buffer.
+ * @post On error, no global state is changed.
+ *
+ * @note Not thread-safe; bind once during init.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_init(void* fb, uint16_t width, uint16_t height, ra8_gfx_format_t format);
+
+/**
+ * @struct ra8_gfx_surface_t
+ * @brief Framebuffer descriptor carried end to end, stride included.
+ *
+ * @details
+ * The positional ra8_gfx_init() cannot express a row pitch, so a caller whose
+ * backend padded its rows has to drop `stride_bytes` on the floor and hope the
+ * rasteriser's `width * bpp` assumption still holds. This descriptor is the
+ * same four values plus the pitch, so the binding survives the handoff intact:
+ * it is what a producer of a framebuffer (the display PAL's `display_fb_t`, an
+ * off-screen scratch allocator, a host test buffer) already knows.
+ *
+ * `stride_bytes` is the distance in bytes from one row's first pixel to the
+ * next row's first pixel. Set it to `w * bytes_per_pixel(fmt)` for a densely
+ * packed buffer; a larger value leaves the trailing bytes of each row as
+ * padding that no draw call touches.
+ *
+ * @since 0.1.0
+ */
+typedef struct {
+  void*            pixels;       /**< Base of pixel data.                  */
+  uint16_t         w;            /**< Width in pixels, in [1, 4096].       */
+  uint16_t         h;            /**< Height in pixels, in [1, 4096].      */
+  uint32_t         stride_bytes; /**< Row pitch in bytes; >= w * bpp(fmt). */
+  ra8_gfx_format_t fmt;          /**< Pixel format of `pixels`.            */
+} ra8_gfx_surface_t;
+
+/**
+ * @brief Bind ra8_gfx to a caller-owned surface, honouring its row stride.
+ *
+ * @details
+ * The surface form of ra8_gfx_init(). Identical in effect when
+ * `s->stride_bytes == s->w * bytes_per_pixel(s->fmt)`; when the stride is
+ * larger, every draw call addresses row `y` at `s->pixels + y * stride_bytes`
+ * and the padding bytes past `w` pixels are left untouched.
+ *
+ * @param[in] s Surface descriptor. Copied; the caller may reuse the object.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok               Bound successfully.
+ * @retval k_ra8_err_null_ptr     `s` or `s->pixels` was NULL.
+ * @retval k_ra8_err_invalid_arg  Dimensions out of range, unsupported format,
+ *                                or `stride_bytes` narrower than one packed row.
+ *
+ * @pre  s->pixels points to at least `(h - 1) * stride_bytes + w * bpp` bytes.
+ * @pre  w, h in [1, 4096].
+ * @post The clip rectangle is reset to the whole surface.
+ * @post On error, no module state is changed.
+ *
+ * @note Not thread-safe; bind once during init.
+ * @see ra8_gfx_init
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_init_surface(const ra8_gfx_surface_t* s);
+
+/**
+ * @brief Release the current binding, leaving the module uninitialised.
+ *
+ * @details
+ * The teardown half of the lifecycle. The framebuffer memory is the caller's,
+ * so nothing is freed; the binding is dropped, which lets a caller retire the
+ * buffer it lent (unmap it, hand it back to the PAL, let a stack fixture go out
+ * of scope) and be certain no later draw call can still reach it. Without this,
+ * ra8_gfx was init-without-teardown while `display_deinit` on the other side of
+ * the seam already existed.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Binding released.
+ * @retval k_ra8_err_not_initialized No binding was in place.
+ *
+ * @post Every draw entry point returns k_ra8_err_not_initialized until a
+ *       subsequent ra8_gfx_init() / ra8_gfx_init_surface() succeeds.
+ * @post The retained framebuffer pointer is cleared.
+ *
+ * @note Not thread-safe; the binding is module-global state.
+ * @see ra8_gfx_init_surface
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_deinit(void);
+
+/**
+ * @brief Fill the bound framebuffer's clip region with a single colour.
+ *
+ * @param[in] color 32-bit colour in 0x00RRGGBB or 0xAARRGGBB form.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Cleared.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @post Every pixel of the active clip region equals `color` (down-converted as
+ *       needed to the active pixel format). With the default (full-framebuffer)
+ *       clip this is the whole framebuffer.
+ *
+ * @note Honours the clip rectangle set by ra8_gfx_set_clip(); the default clip is
+ *       the whole framebuffer, so unclipped callers see no change.
+ * @see ra8_gfx_set_clip
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_clear(uint32_t color);
+
+/**
+ * @brief Restrict all subsequent drawing to a rectangle (dirty-region updates).
+ *
+ * @details
+ * Every draw call (clear, rect, line, pixel, text, blit) writes only pixels
+ * inside the intersection of this rectangle and the framebuffer; pixels outside
+ * are left untouched. This is the primitive for incremental / dirty-region
+ * repaints -- set the clip to the damaged area, redraw, then ra8_gfx_reset_clip()
+ * -- so a small change (e.g. an overlay banner) does not repaint the whole panel.
+ * The clip persists until changed or reset; ra8_gfx_init() and ra8_gfx_reset_clip()
+ * set it to the full framebuffer.
+ *
+ * @param[in] x Clip left in pixels (clamped to the framebuffer).
+ * @param[in] y Clip top in pixels (clamped to the framebuffer).
+ * @param[in] w Clip width in pixels (a non-positive width yields an empty clip).
+ * @param[in] h Clip height in pixels (a non-positive height yields an empty clip).
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Clip set (possibly empty).
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @post Subsequent draws are confined to the clamped rectangle.
+ * @post An off-screen or zero-area request leaves an empty clip (draws are no-ops).
+ *
+ * @note Not thread-safe; the clip is module-global state.
+ * @see ra8_gfx_reset_clip
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_set_clip(int32_t x, int32_t y, int32_t w, int32_t h);
+
+/**
+ * @brief Reset the clip rectangle to the whole framebuffer.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Clip reset to the full framebuffer.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @post Subsequent draws may touch any framebuffer pixel.
+ *
+ * @note Not thread-safe; the clip is module-global state.
+ * @see ra8_gfx_set_clip
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_reset_clip(void);
+
+/**
+ * @brief Set a single pixel.
+ *
+ * @param[in] x     Column, 0 = left.
+ * @param[in] y     Row, 0 = top.
+ * @param[in] color 32-bit colour.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Pixel written.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ * @retval k_ra8_err_range_check_failed (x,y) outside framebuffer.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @post On success the addressed pixel equals the down-converted colour.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_pixel(int32_t x, int32_t y, uint32_t color);
+
+/**
+ * @brief Blit an 8-bit grayscale image to a framebuffer rectangle.
+ *
+ * @details
+ * Writes the @p w x @p h block of 8-bit gray samples at @p src into the bound
+ * framebuffer with its top-left at (@p dst_x, @p dst_y), expanding each sample
+ * @c g to the colour `(g<<16)|(g<<8)|g` and down-converting to the panel format.
+ * The clip rectangle and framebuffer bounds are resolved ONCE for the whole
+ * block (not per pixel), so a full image is a tight row loop -- the same pixels
+ * a per-pixel ra8_gfx_pixel() loop would write, far fewer instructions. Rows are
+ * sampled left-to-right, top-to-bottom; @p src is row-major with stride @p w.
+ *
+ * @param[in] src   Row-major 8-bit gray buffer of at least @p w * @p h bytes.
+ * @param[in] w     Source width in pixels (> 0).
+ * @param[in] h     Source height in pixels (> 0).
+ * @param[in] dst_x Destination column of the block's left edge.
+ * @param[in] dst_y Destination row of the block's top edge.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Visible pixels written (or fully clipped out).
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ * @retval k_ra8_err_invalid_arg     @p src is NULL, or @p w / @p h <= 0.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @pre  @p src holds at least @p w * @p h bytes.
+ * @post Each in-clip destination pixel equals its down-converted gray sample.
+ * @post Pixels outside the clip rectangle are left unchanged.
+ *
+ * @note Not thread-safe; shares the single ra8_gfx bind state.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_blit_gray8(const uint8_t* src, int32_t w, int32_t h, int32_t dst_x, int32_t dst_y);
+
+/**
+ * @brief Nearest-neighbour integer-zoom blit of a sub-rectangle of a packed
+ *        4-bit grayscale image into the framebuffer (no scale-to-fit).
+ *
+ * @details
+ * Samples the source sub-rectangle [@p sx, @p sx + @p sw) x [@p sy, @p sy + @p sh)
+ * of a packed gray4 image and writes every sampled source pixel as a @p zoom x
+ * @p zoom nearest-neighbour block, so the destination spans @p sw * @p zoom by
+ * @p sh * @p zoom pixels (before clipping). Unlike ra8_gfx_blit() or the reflow
+ * engine's scale-to-fit path, no source pixels are decimated -- this is the 1:1
+ * (@p zoom == 1) or magnified (@p zoom >= 2) view a reader loupe uses to inspect
+ * a full-resolution page window without resolution loss.
+ *
+ * The source is packed two pixels per byte at flat nibble index `y * src_w + x`:
+ * an even flat index occupies the high nibble, an odd flat index the low nibble.
+ * Each 4-bit sample @c n is expanded to the 8-bit gray `(n << 4) | n`, then to
+ * `(g << 16) | (g << 8) | g` before down-conversion to the bound pixel format --
+ * byte-identical to ra8_gfx_blit_gray8()'s expansion of the same gray level.
+ *
+ * The sampled window is clamped to the source image bounds [0, @p src_w) x
+ * [0, @p src_h): a sub-rectangle that runs off an image edge draws only the
+ * in-image portion at its natural destination offset (the off-image remainder is
+ * left untouched). Destination pixels are additionally confined to the active
+ * clip rectangle, so a lens window near a panel edge is clipped, never wrapped.
+ *
+ * @param[in] src   Packed gray4 source image, `>= (src_w * src_h + 1) / 2` bytes.
+ * @param[in] src_w Source image width in pixels (> 0); also the nibble stride.
+ * @param[in] src_h Source image height in pixels (> 0).
+ * @param[in] sx    Sub-rectangle left in source pixels (may be negative).
+ * @param[in] sy    Sub-rectangle top in source pixels (may be negative).
+ * @param[in] sw    Sub-rectangle width in source pixels (<= 0 draws nothing).
+ * @param[in] sh    Sub-rectangle height in source pixels (<= 0 draws nothing).
+ * @param[in] zoom  Integer magnification factor (>= 1; <= 0 rejected).
+ * @param[in] dst_x Destination column of the sub-rectangle's top-left.
+ * @param[in] dst_y Destination row of the sub-rectangle's top-left.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Visible pixels written (or fully clipped out).
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ * @retval k_ra8_err_invalid_arg     @p src is NULL, @p src_w / @p src_h <= 0, or @p zoom <= 0.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @pre  @p src holds at least `(src_w * src_h + 1) / 2` readable bytes.
+ * @post Each in-clip, in-image destination pixel equals its zoomed gray sample.
+ * @post Pixels outside the clip rectangle or off the source image are unchanged.
+ *
+ * @note Not thread-safe; shares the single ra8_gfx bind state.
+ * @see ra8_gfx_blit_gray8  1:1 gray8 blit with no zoom or sub-rect.
+ * @see ra8_gfx_set_clip    Confine the lens blit to its window.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_blit_gray4_zoom(const uint8_t* src,
+                                                int32_t        src_w,
+                                                int32_t        src_h,
+                                                int32_t        sx,
+                                                int32_t        sy,
+                                                int32_t        sw,
+                                                int32_t        sh,
+                                                int32_t        zoom,
+                                                int32_t        dst_x,
+                                                int32_t        dst_y);
+
+/**
+ * @brief Draw a line from (x0,y0) to (x1,y1) with Bresenham's algorithm.
+ *
+ * @param[in] x0,y0,x1,y1 Endpoints (clipped to framebuffer).
+ * @param[in] color       32-bit colour.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Line drawn (after clipping).
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre ra8_gfx_init() returned k_ra8_ok.
+ * @post Pixels on the rasterised line within bounds equal `color`.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_line(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t color);
+
+/**
+ * @brief Draw an axis-aligned rectangle.
+ *
+ * @param[in] x,y    Top-left corner.
+ * @param[in] w,h    Width and height in pixels.
+ * @param[in] color  32-bit colour.
+ * @param[in] filled true for solid fill, false for 1-pixel outline.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Drawn.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre ra8_gfx_init() returned k_ra8_ok.
+ * @post Rectangle area within bounds is updated.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color, bool filled);
+
+/**
+ * @brief Draw a circle using midpoint algorithm.
+ *
+ * @param[in] cx,cy  Centre.
+ * @param[in] r      Radius in pixels (>= 0).
+ * @param[in] color  32-bit colour.
+ * @param[in] filled true for solid disc, false for 1-pixel outline.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Drawn.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ * @retval k_ra8_err_invalid_arg     r < 0.
+ *
+ * @pre ra8_gfx_init() returned k_ra8_ok.
+ * @post Pixels on / inside the circle within bounds are updated.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_circle(int32_t cx, int32_t cy, int32_t r, uint32_t color, bool filled);
+
+/**
+ * @brief Render a NUL-terminated ASCII string.
+ *
+ * @param[in] x,y      Top-left of the first glyph.
+ * @param[in] str      NUL-terminated ASCII string (NULL not allowed).
+ * @param[in] font     Font descriptor (NULL not allowed).
+ * @param[in] fg_color Foreground colour.
+ * @param[in] bg_color Background colour.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Rendered.
+ * @retval k_ra8_err_null_ptr        str or font was NULL.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @pre  font->glyph_data covers at least last-first+1 glyphs.
+ * @post Glyph cells within bounds are filled with fg/bg colour pairs.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_text_out(int32_t               x,
+                                         int32_t               y,
+                                         const char*           str,
+                                         const ra8_gfx_font_t* font,
+                                         uint32_t              fg_color,
+                                         uint32_t              bg_color);
+
+/**
+ * @brief Compute rendered pixel dimensions of a string.
+ *
+ * @param[in]  str   ASCII string.
+ * @param[in]  font  Font descriptor.
+ * @param[out] out_w Receives total pixel width.
+ * @param[out] out_h Receives total pixel height (font glyph height).
+ *
+ * @return Error code.
+ * @retval k_ra8_ok               Measured.
+ * @retval k_ra8_err_null_ptr     Any argument was NULL.
+ *
+ * @pre  All pointer arguments are non-NULL.
+ * @post *out_w and *out_h are written.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t
+ra8_gfx_text_size(const char* str, const ra8_gfx_font_t* font, uint32_t* out_w, uint32_t* out_h);
+
+/**
+ * @brief Draw text using the selected bundled sans or Literata serif face.
+ *
+ * @details The serif path decodes bounded UTF-8 and renders the checked-in
+ *          Latin-1/common-punctuation Literata atlas. Invalid sequences and
+ *          valid but unsupported code points draw as a question-mark. The
+ *          sans face retains the legacy ASCII IBM 8x16 renderer.
+ *
+ * @param[in] x        Left edge of the first glyph cell.
+ * @param[in] y        Top edge of the face line box.
+ * @param[in] str      NUL-terminated text; at most 4096 input bytes are read.
+ * @param[in] face     Selected ra8_gfx_text_face_t.
+ * @param[in] fg_color Foreground colour in 0x00RRGGBB format.
+ * @param[in] bg_color Background colour in 0x00RRGGBB format.
+ *
+ * @return ra8_err_t
+ * @retval k_ra8_ok                  Text was drawn.
+ * @retval k_ra8_err_null_ptr        str was NULL.
+ * @retval k_ra8_err_invalid_arg     face is not supported.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init was not called.
+ *
+ * @pre ra8_gfx_init() has bound a valid framebuffer.
+ * @pre face is the sans or serif enumerator.
+ * @post Glyphs are clipped to the active framebuffer clip rectangle.
+ * @post The panel pixels represent the requested face and colors.
+ *
+ * @note Not thread-safe; uses the module-wide framebuffer binding.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_text_out_face(int32_t             x,
+                                              int32_t             y,
+                                              const char*         str,
+                                              ra8_gfx_text_face_t face,
+                                              uint32_t            fg_color,
+                                              uint32_t            bg_color);
+
+/**
+ * @brief Measure text with the same selected face used by ra8_gfx_text_out_face.
+ *
+ * @details Serif measurement sums the exact advances used by the Literata
+ *          raster path. Invalid and unsupported UTF-8 uses the replacement
+ *          glyph, so measuring and drawing the same run agree.
+ *
+ * @param[in]  str    NUL-terminated input text, at most 4096 bytes.
+ * @param[in]  face   Selected text face.
+ * @param[out] out_w  Receives the total advance width in pixels.
+ * @param[out] out_h  Receives the line-box height in pixels.
+ *
+ * @return ra8_err_t
+ * @retval k_ra8_ok              Dimensions were written.
+ * @retval k_ra8_err_null_ptr    Any pointer argument was NULL.
+ * @retval k_ra8_err_invalid_arg face is not supported.
+ *
+ * @pre All pointer arguments are non-NULL.
+ * @pre face is a supported text face.
+ * @post out_w is the sum of the draw path glyph advances.
+ * @post out_h is the draw path line-box height.
+ *
+ * @note Thread-safe; reads only immutable font tables.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_text_size_face(const char*         str,
+                                               ra8_gfx_text_face_t face,
+                                               uint32_t*           out_w,
+                                               uint32_t*           out_h);
+
+/**
+ * @brief Draw UTF-8 text with an explicit family and stroke weight.
+ *
+ * @param[in] x        Left edge of the first glyph cell.
+ * @param[in] y        Top edge of the face line box.
+ * @param[in] str      NUL-terminated UTF-8 text, at most 4096 bytes.
+ * @param[in] face     Selected sans or serif family.
+ * @param[in] weight   Regular or one-pixel-expanded bold strokes.
+ * @param[in] fg_color Foreground colour in 0x00RRGGBB format.
+ * @param[in] bg_color Background colour in 0x00RRGGBB format.
+ *
+ * @return ra8_err_t
+ * @retval k_ra8_ok                  Text was drawn.
+ * @retval k_ra8_err_null_ptr        str was NULL.
+ * @retval k_ra8_err_invalid_arg     face or weight is unsupported.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init was not called.
+ *
+ * @note Not thread-safe; uses the module-wide framebuffer binding.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_text_out_style(int32_t               x,
+                                               int32_t               y,
+                                               const char*           str,
+                                               ra8_gfx_text_face_t   face,
+                                               ra8_gfx_text_weight_t weight,
+                                               uint32_t              fg_color,
+                                               uint32_t              bg_color);
+
+/**
+ * @brief Measure the visible bounds produced by ra8_gfx_text_out_style.
+ *
+ * @param[in]  str    NUL-terminated UTF-8 text, at most 4096 bytes.
+ * @param[in]  face   Selected sans or serif family.
+ * @param[in]  weight Regular or one-pixel-expanded bold strokes.
+ * @param[out] out_w  Receives the visible width.
+ * @param[out] out_h  Receives the line-box height.
+ *
+ * @return ra8_err_t
+ * @retval k_ra8_ok              Dimensions were written.
+ * @retval k_ra8_err_null_ptr    Any pointer argument was NULL.
+ * @retval k_ra8_err_invalid_arg face or weight is unsupported.
+ *
+ * @note Thread-safe; reads only immutable font tables.
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_text_size_style(const char*           str,
+                                                ra8_gfx_text_face_t   face,
+                                                ra8_gfx_text_weight_t weight,
+                                                uint32_t*             out_w,
+                                                uint32_t*             out_h);
+
+/**
+ * @brief Copy a sub-image from `src_buf` into the framebuffer at (dst_x,dst_y).
+ *
+ * @param[in] src_buf    Source image bytes.
+ * @param[in] src_w,src_h Source size.
+ * @param[in] src_format Pixel format of the source image.
+ * @param[in] dst_x,dst_y Destination top-left in the framebuffer.
+ *
+ * @return Error code.
+ * @retval k_ra8_ok                  Blitted (clipped if needed).
+ * @retval k_ra8_err_null_ptr        src_buf was NULL.
+ * @retval k_ra8_err_not_initialized ra8_gfx_init() was not called.
+ * @retval k_ra8_err_invalid_arg     src_w or src_h was zero or src_format invalid.
+ *
+ * @pre  ra8_gfx_init() returned k_ra8_ok.
+ * @post Destination rectangle (clipped to FB) holds the converted pixels.
+ *
+ * @since 0.1.0
+ */
+[[nodiscard]] ra8_err_t ra8_gfx_blit(const void*      src_buf,
+                                     uint16_t         src_w,
+                                     uint16_t         src_h,
+                                     ra8_gfx_format_t src_format,
+                                     int32_t          dst_x,
+                                     int32_t          dst_y);

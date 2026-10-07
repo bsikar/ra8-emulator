@@ -1,0 +1,372 @@
+//! SPDX-License-Identifier: MIT
+//! Copyright (c) 2026 Brighton Sikarskie
+//!
+//! Build graph for `ra8_widget`, which is now Zig end to end. The library's
+//! public C ABI (`inc/ra8_widget.h`) is unchanged; this archive carries the
+//! module-private paint helpers that `src/ra8_widget_internal.h` declares,
+//! nine leaf widgets, the container panel that nests them into a tree, and
+//! the flat container ops every one of them dispatches through. No C
+//! translation unit is left in `libs/ra8_widget/src`.
+//! The `test` step verifies the pure geometry and each membrane.
+
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    const debug_record_cap = b.option(usize, "widget-debug-record-cap", "Maximum number of widget-tree records published in a debug build") orelse 256;
+    if (debug_record_cap == 0 or debug_record_cap > 256) {
+        @panic("widget-debug-record-cap must be between 1 and 256");
+    }
+    const debug_build_options = b.addOptions();
+    debug_build_options.addOption(usize, "widget_debug_record_cap", debug_record_cap);
+
+    const debug_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_debug_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    debug_module.addOptions("build_options", debug_build_options);
+
+    const library = b.addLibrary(.{
+        .name = "ra8_widget",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/ra8_widget_abi.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    // The host C test executables are linked by the system toolchain, not by
+    // `zig cc`, so nothing else on that link line provides Zig's runtime
+    // helpers. Without this the archive leaves `__zig_probe_stack` undefined.
+    library.bundle_compiler_rt = true;
+    if (optimize == .debug) library.root_module.addImport("debug", debug_module);
+    b.installArtifact(library);
+
+    const implementation_module = b.createModule(.{
+        .root_source_file = b.path("src/internal/paint.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const abi_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_paint_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const internal_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/internal_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    internal_test_module.addImport("implementation", implementation_module);
+    const internal_tests = b.addTest(.{ .root_module = internal_test_module });
+
+    const abi_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/abi_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    abi_test_module.addImport("abi", abi_module);
+    const abi_tests = b.addTest(.{ .root_module = abi_test_module });
+
+    const label_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_label_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const label_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/label_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    label_test_module.addImport("abi", label_module);
+    const label_tests = b.addTest(.{ .root_module = label_test_module });
+
+    const button_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_button_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const button_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/button_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    button_test_module.addImport("abi", button_module);
+    const button_tests = b.addTest(.{ .root_module = button_test_module });
+
+    const host_paint_module = b.createModule(.{
+        .root_source_file = b.path("src/host_paint.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const host_font_module = b.createModule(.{
+        .root_source_file = b.path("../ra8_gfx/src/internal/text.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const host_render_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/host_render_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    host_paint_module.addImport("text", host_font_module);
+    host_render_test_module.addImport("host", host_paint_module);
+    const host_render_abi_module = b.createModule(.{
+        .root_source_file = b.path("src/ra8_widget_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    host_render_abi_module.addImport("debug", debug_module);
+    host_render_test_module.addImport("abi", host_render_abi_module);
+    host_render_test_module.addImport("debug", debug_module);
+    const host_render_tests = b.addTest(.{ .root_module = host_render_test_module });
+    const toggle_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_toggle_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const toggle_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/toggle_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    toggle_test_module.addImport("abi", toggle_module);
+    const toggle_tests = b.addTest(.{ .root_module = toggle_test_module });
+
+    const segmented_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_segmented_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const segmented_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/segmented_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    segmented_test_module.addImport("abi", segmented_module);
+    const segmented_tests = b.addTest(.{ .root_module = segmented_test_module });
+
+    const progress_bar_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_progress_bar_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const progress_bar_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/progress_bar_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    progress_bar_test_module.addImport("abi", progress_bar_module);
+    const progress_bar_tests = b.addTest(.{ .root_module = progress_bar_test_module });
+
+    const level_bar_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_level_bar_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const level_bar_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/level_bar_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    level_bar_test_module.addImport("abi", level_bar_module);
+    const level_bar_tests = b.addTest(.{ .root_module = level_bar_test_module });
+
+    const status_bar_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_status_bar_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const status_bar_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/status_bar_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    status_bar_test_module.addImport("abi", status_bar_module);
+    const status_bar_tests = b.addTest(.{ .root_module = status_bar_test_module });
+
+    const toolbar_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_toolbar_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const toolbar_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/toolbar_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    toolbar_test_module.addImport("abi", toolbar_module);
+    const toolbar_tests = b.addTest(.{ .root_module = toolbar_test_module });
+
+    const keyboard_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_keyboard_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const keyboard_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/keyboard_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    keyboard_test_module.addImport("abi", keyboard_module);
+    const keyboard_tests = b.addTest(.{ .root_module = keyboard_test_module });
+
+    const nav_bar_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_nav_bar_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const nav_bar_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/nav_bar_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    nav_bar_test_module.addImport("abi", nav_bar_module);
+    const nav_bar_tests = b.addTest(.{ .root_module = nav_bar_test_module });
+
+    const panel_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_panel_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    if (optimize == .debug) panel_module.addImport("debug", debug_module);
+    const panel_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/panel_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    panel_test_module.addImport("abi", panel_module);
+    panel_test_module.addImport("debug", debug_module);
+    const panel_tests = b.addTest(.{ .root_module = panel_test_module });
+
+    const reflow_view_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_reflow_view_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const reflow_view_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/reflow_view_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    reflow_view_test_module.addImport("abi", reflow_view_module);
+    const reflow_view_tests = b.addTest(.{ .root_module = reflow_view_test_module });
+
+    const pager_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_pager_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const pager_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/pager_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pager_module.addImport("debug", debug_module);
+    pager_test_module.addImport("abi", pager_module);
+
+    const core_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_core_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const core_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/core_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    core_test_module.addImport("abi", core_module);
+    const core_tests = b.addTest(.{ .root_module = core_test_module });
+    const pager_tests = b.addTest(.{ .root_module = pager_test_module });
+
+    const image_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_image.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const image_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/image_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    image_test_module.addImport("image", image_module);
+    const image_tests = b.addTest(.{ .root_module = image_test_module });
+
+    const image_widget_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_image_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const image_widget_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/image_widget_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    image_widget_test_module.addImport("abi", image_widget_module);
+    const image_widget_tests = b.addTest(.{ .root_module = image_widget_test_module });
+
+    const book_module = b.createModule(.{
+        .root_source_file = b.path("src/widget_book_abi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const book_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/book_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    book_test_module.addImport("abi", book_module);
+    const book_tests = b.addTest(.{ .root_module = book_test_module });
+
+    const run_host_render_tests = b.addRunArtifact(host_render_tests);
+    const list_module = b.createModule(.{ .root_source_file = b.path("src/widget_list_abi.zig"), .target = target, .optimize = optimize });
+    const list_test_module = b.createModule(.{ .root_source_file = b.path("tests/list_test.zig"), .target = target, .optimize = optimize });
+    list_test_module.addImport("abi", list_module);
+    const list_tests = b.addTest(.{ .root_module = list_test_module });
+
+    const run_image_widget_tests = b.addRunArtifact(image_widget_tests);
+    const run_internal_tests = b.addRunArtifact(internal_tests);
+    const run_abi_tests = b.addRunArtifact(abi_tests);
+    const run_label_tests = b.addRunArtifact(label_tests);
+    const run_button_tests = b.addRunArtifact(button_tests);
+    const run_toggle_tests = b.addRunArtifact(toggle_tests);
+    const run_segmented_tests = b.addRunArtifact(segmented_tests);
+    const run_progress_bar_tests = b.addRunArtifact(progress_bar_tests);
+    const run_level_bar_tests = b.addRunArtifact(level_bar_tests);
+    const run_status_bar_tests = b.addRunArtifact(status_bar_tests);
+    const run_toolbar_tests = b.addRunArtifact(toolbar_tests);
+    const run_keyboard_tests = b.addRunArtifact(keyboard_tests);
+    const run_nav_bar_tests = b.addRunArtifact(nav_bar_tests);
+    const run_panel_tests = b.addRunArtifact(panel_tests);
+    const run_reflow_view_tests = b.addRunArtifact(reflow_view_tests);
+    const run_book_tests = b.addRunArtifact(book_tests);
+    const run_image_tests = b.addRunArtifact(image_tests);
+    const run_list_tests = b.addRunArtifact(list_tests);
+    const run_core_tests = b.addRunArtifact(core_tests);
+    const run_pager_tests = b.addRunArtifact(pager_tests);
+    const test_step = b.step("test", "Run Zig ra8_widget tests");
+    test_step.dependOn(&run_host_render_tests.step);
+    test_step.dependOn(&run_internal_tests.step);
+    test_step.dependOn(&run_image_widget_tests.step);
+    test_step.dependOn(&run_abi_tests.step);
+    test_step.dependOn(&run_label_tests.step);
+    test_step.dependOn(&run_button_tests.step);
+    test_step.dependOn(&run_toggle_tests.step);
+    test_step.dependOn(&run_segmented_tests.step);
+    test_step.dependOn(&run_progress_bar_tests.step);
+    test_step.dependOn(&run_status_bar_tests.step);
+    test_step.dependOn(&run_level_bar_tests.step);
+    test_step.dependOn(&run_toolbar_tests.step);
+    test_step.dependOn(&run_keyboard_tests.step);
+    test_step.dependOn(&run_nav_bar_tests.step);
+    test_step.dependOn(&run_panel_tests.step);
+    test_step.dependOn(&run_reflow_view_tests.step);
+    test_step.dependOn(&run_book_tests.step);
+    test_step.dependOn(&run_image_tests.step);
+    test_step.dependOn(&run_list_tests.step);
+    test_step.dependOn(&run_core_tests.step);
+    test_step.dependOn(&run_pager_tests.step);
+}

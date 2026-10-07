@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Brighton Sikarskie
+.{
+    .name = .ra8_firmware,
+    .version = "0.1.0",
+    .fingerprint = 0x44ffd43a8d30a81d,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .ra8_box = .{ .path = "libs/ra8_box" },
+        .ra8_power_profile = .{ .path = "libs/ra8_power_profile" },
+        .ra8_epd_cal = .{ .path = "libs/ra8_epd_cal" },
+        .ra8_imgdec = .{ .path = "libs/ra8_imgdec" },
+        .ra8_core = .{ .path = "libs/ra8_core" },
+        .ra8_board_ek_ra8d2 = .{ .path = "libs/ra8_board_ek_ra8d2" },
+        .ra8_board_ra8p1 = .{ .path = "libs/ra8_board_ra8p1" },
+        .ra8_mem = .{ .path = "libs/ra8_mem" },
+        .ra8_dfu = .{ .path = "libs/ra8_dfu" },
+        .ra8_rot = .{ .path = "libs/ra8_rot" },
+        .ra8_rot_launch = .{ .path = "libs/ra8_rot_launch" },
+        .ra8_dfu_device = .{ .path = "libs/ra8_dfu_device" },
+        .ra8_psa_crypto = .{ .path = "libs/ra8_psa_crypto" },
+        .ra8_sdmmc_spi = .{ .path = "libs/ra8_sdmmc_spi" },
+        .ra8_tz_secure_boot = .{ .path = "libs/ra8_tz_secure_boot" },
+        .ra8_usb_pal = .{ .path = "libs/ra8_usb_pal" },
+        .ra8_hal = .{ .path = "libs/ra8_hal" },
+        .ra8_io = .{ .path = "libs/ra8_io" },
+        .ra8_fs = .{ .path = "libs/ra8_fs" },
+        .if_ra8_cgc = .{ .path = "libs/if_ra8_cgc" },
+        .@"if" = .{ .path = "libs/if" },
+        .ra8_abi_fixture = .{ .path = "tests/zig_abi_fixture" },
+        // Translates C headers for the Zig roots in middleware archives.
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c#875969d3493e245e01bf5d7860f792d8f3eb9ef5",
+            .hash = "translate_c-0.0.0-Q_BUWoFOBwAhz77Zd15HCVuhTKzdUKc94kezmCeJ7IC_",
+        },
+        // Third-party, fetched by cmake/zig_package.cmake; nothing in build.zig imports it.
+        .flatbuffers = .{
+            .url = "https://github.com/google/flatbuffers/archive/187240970746d00bbd26b0f5873ed54d2477f9f3.tar.gz",
+            .hash = "N-V-__8AABzBxwBMl4El_S7LHuoUmX_djbnoBjd-bFivTVUO",
+            .lazy = true,
+        },
+        .gemmlowp = .{
+            .url = "https://github.com/google/gemmlowp/archive/719139ce755a0f31cbf1c37f7f98adcc7fc9f425.tar.gz",
+            .hash = "N-V-__8AAF8UUQDfw2gf77-gAA8_kdu0idv5S00VssPCWByg",
+            .lazy = true,
+        },
+        .ruy = .{
+            .url = "https://github.com/google/ruy/archive/d37128311b445e758136b8602d1bbd2a755e115d.tar.gz",
+            .hash = "N-V-__8AAHM2GQD1bQLoOLlEhGDOEM8O1g0jjvII9F_PUyat",
+            .lazy = true,
+        },
+        .tflite_micro = .{
+            .url = "https://github.com/tensorflow/tflite-micro/archive/fddd3707a3c5733af4cb866f18650441e6712504.tar.gz",
+            .hash = "N-V-__8AABnHqwH0WNMqhd6EOZNeMNA60iRlcWUh_osHYQKZ",
+            .lazy = true,
+        },
+        .esp_hosted = .{
+            .url = "https://github.com/espressif/esp-hosted-mcu/archive/949bb30612747a3bd9e402eda8d01fbfa1f8503e.tar.gz",
+            .hash = "N-V-__8AAPk7yQDK2oreQ5VXoxAgGf5nMpSFAB6_6Dialtw4",
+            .lazy = true,
+        },
+        // bsikar fork of protobuf-c at upstream abc67a11 plus the RA8
+        // assertion/allocator patch (branch ra8-abc67a11).
+        .protobuf_c = .{
+            .url = "https://github.com/bsikar/protobuf-c/archive/c61bb2e30f50a984f9c76f600b34150bc76f9553.tar.gz",
+            .hash = "N-V-__8AAMeECgBRiKccCTAGJTRwB5LP6QVHDxHj_SQxBofe",
+            .lazy = true,
+        },
+        .nimble = .{
+            .url = "https://github.com/apache/mynewt-nimble/archive/a7a156f28954819e158b62dd613008f22f9cf73b.tar.gz",
+            .hash = "N-V-__8AAGXukwCsPZWLszqjHEq2BSv7gwvQcmCQ8FZ3C7BA",
+            .lazy = true,
+        },
+        .netxduo = .{
+            .url = "https://github.com/eclipse-threadx/netxduo/archive/8b6e03ac30ab688bec02c69d42f2304b7f72a202.tar.gz",
+            .hash = "N-V-__8AAPZtwAhYa3pneorsST1dPMt0UEWk2_bDy9Cdc3To",
+            .lazy = true,
+        },
+        // Eclipse ThreadX kernel (threadx / threadx_ns middleware).
+        .threadx = .{
+            .url = "https://github.com/eclipse-threadx/threadx/archive/3726d7906b4808bfec7855fc088e073199df9120.tar.gz",
+            .hash = "N-V-__8AACeHVAWQnalf6pLkI_X_OgjmjhX_AXiqy625pqeO",
+            .lazy = true,
+        },
+        // Mbed TLS and TF-PSA-Crypto, from bsikar forks that only add the
+        // generated headers upstream builds at configure time. The Zig build
+        // graph reads them through pkg:mbedtls/ and pkg:tf_psa_crypto/ paths,
+        // cmake/mbedtls.cmake through cmake/zig_package.cmake, and
+        // libs/ra8_psa_crypto and libs/ra8_tls pin the same two entries.
+        .mbedtls = .{
+            .url = "https://github.com/bsikar/mbedtls/archive/f06d8d7cb0ce4f9c0ebc6db3e1dbf3ca02973e00.tar.gz",
+            .hash = "N-V-__8AAONGfwDjjMjSEyow7xCaH-cj9BOe1iHzR_n4TxFQ",
+            .lazy = true,
+        },
+        .tf_psa_crypto = .{
+            .url = "https://github.com/bsikar/TF-PSA-Crypto/archive/fe051ec96e072ae8499eba8741950ff209b32e49.tar.gz",
+            .hash = "N-V-__8AAGXETQH82E7iW1WCWsDfDOuaNu545OeJ4Z_ffPs6",
+            .lazy = true,
+        },
+        // Eclipse USBX device stack (usbx middleware, tz_nsc_cgc_usb NS image).
+        .usbx = .{
+            .url = "https://github.com/eclipse-threadx/usbx/archive/6dc0cf233d5b7ee6e1a7434581964975f8d8d37b.tar.gz",
+            .hash = "N-V-__8AAOXoRQGfmvONnuF6PJBJcnL5BhJXM69TKQ9f_w3A",
+            .lazy = true,
+        },
+        .levelx = .{
+            .url = "https://github.com/eclipse-threadx/levelx/archive/a46b74fb8aa133796ccbc13e7902cb8bb818e12f.tar.gz",
+            .hash = "N-V-__8AAGSoDQDB0db5wTeihbe1fdhAZxfHTxNomUA-QNfC",
+            .lazy = true,
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "libs",
+        "tests",
+        // What build.zig reads when this package is somebody's dependency:
+        // libs/ra8_hal and tests/zig_abi_fixture reach tools/zig_build by
+        // path, and the cross-build graph lists examples/ and port/.
+        "tools/zig_build",
+        // tests/zig_build_graph imports or builds these host tools.
+        "tools/check_txm_module_relocs",
+        "tools/merge_ihex",
+        "tools/vela",
+        "examples",
+        "port",
+    },
+}
