@@ -76,7 +76,7 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
     if (argv.len < 5 or !std.mem.eql(u8, argv[1], "ctl")) return error.BadArguments;
     const by_host = std.mem.eql(u8, argv[2], "--host");
     if (!by_host and !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
-    var words = std.ArrayList([]const u8).init(allocator);
+    var words: std.ArrayList([]const u8) = .empty;
     var json = false;
     var hosts: ?[]const u8 = null;
     var image: ?[]const u8 = null;
@@ -89,7 +89,7 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
             index += 1;
             if (index == argv.len) return error.BadArguments;
             if (word[2] == 'h') hosts = argv[index] else image = argv[index];
-        } else try words.append(word);
+        } else try words.append(allocator, word);
     }
     if (words.items.len == 0) return error.BadArguments;
     const command = try parseCommand(allocator, words.items[0], words.items[1..]);

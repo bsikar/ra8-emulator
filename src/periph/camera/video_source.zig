@@ -144,17 +144,17 @@ fn readLine(file: std.fs.File, at: u64, buffer: *[max_line]u8) !Line {
 fn index(allocator: std.mem.Allocator, file: std.fs.File, header: y4m.Header, start: u64) ![]u64 {
     const size = (try file.stat()).size;
     const bytes = header.frameBytes();
-    var offsets = std.ArrayList(u64).init(allocator);
-    errdefer offsets.deinit();
+    var offsets: std.ArrayList(u64) = .empty;
+    errdefer offsets.deinit(allocator);
     var at = start;
     var line: [max_line]u8 = undefined;
     while (at < size) {
         const next = try readLine(file, at, &line);
         if (!std.mem.startsWith(u8, next.text, "FRAME")) return error.BadHeader;
         if (next.next + bytes > size) break;
-        try offsets.append(next.next);
+        try offsets.append(allocator, next.next);
         at = next.next + bytes;
     }
     if (offsets.items.len == 0) return error.Truncated;
-    return offsets.toOwnedSlice();
+    return offsets.toOwnedSlice(allocator);
 }

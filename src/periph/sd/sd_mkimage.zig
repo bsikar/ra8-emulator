@@ -43,10 +43,10 @@ pub fn build(allocator: std.mem.Allocator, img: *image.Image, dir: std.fs.Dir, l
 
 /// The directory's entries, dotfiles left out, sorted by name bytes.
 fn listed(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]Item {
-    var items = std.ArrayList(Item).init(allocator);
+    var items: std.ArrayList(Item) = .empty;
     errdefer {
         for (items.items) |item| allocator.free(item.name);
-        items.deinit();
+        items.deinit(allocator);
     }
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -56,14 +56,14 @@ fn listed(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]Item {
             .file => false,
             else => return error.UnsupportedEntry,
         };
-        try items.append(.{ .name = try allocator.dupe(u8, entry.name), .is_dir = is_dir });
+        try items.append(allocator, .{ .name = try allocator.dupe(u8, entry.name), .is_dir = is_dir });
     }
     std.mem.sort(Item, items.items, {}, struct {
         fn less(_: void, a: Item, b: Item) bool {
             return std.mem.order(u8, a.name, b.name) == .lt;
         }
     }.less);
-    return items.toOwnedSlice();
+    return items.toOwnedSlice(allocator);
 }
 
 fn freeItems(allocator: std.mem.Allocator, items: []Item) void {

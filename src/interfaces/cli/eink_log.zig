@@ -23,7 +23,7 @@ pub const Run = struct {
     allocation_failed: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board) Run {
-        return .{ .allocator = allocator, .board = board, .panel = board.asks.attached_eink orelse &board.panel, .entries = std.ArrayList(Entry).init(allocator) };
+        return .{ .allocator = allocator, .board = board, .panel = board.asks.attached_eink orelse &board.panel, .entries = .empty };
     }
 
     pub fn arm(self: *Run) void {
@@ -34,7 +34,7 @@ pub const Run = struct {
         if (self.panel.refresh_log_hook) |hook| {
             if (hook.context == @as(*anyopaque, @ptrCast(self))) self.panel.refresh_log_hook = null;
         }
-        self.entries.deinit();
+        self.entries.deinit(self.allocator);
     }
 
     pub fn write(self: *Run, path: []const u8) !void {
@@ -101,7 +101,7 @@ pub const Run = struct {
 fn onRefresh(context: *anyopaque, event: refresh.Event) void {
     const self: *Run = @ptrCast(@alignCast(context));
     const geometry = self.panel.planes.geometry;
-    self.entries.append(.{
+    self.entries.append(self.allocator, .{
         .virtual_time_ns = self.board.time.base.now(),
         .x = event.x,
         .y = event.y,
