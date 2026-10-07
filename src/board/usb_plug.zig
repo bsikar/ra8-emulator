@@ -20,14 +20,14 @@ pub const blank_serial: u32 = 0x5241_3845;
 pub const Error = error{ EmptyImage, NotWholeSectors } || usb_disk.Error;
 
 /// The disk bytes a spec names, owned by `allocator`.
-pub fn load(allocator: std.mem.Allocator, spec: []const u8) ![]u8 {
+pub fn load(allocator: std.mem.Allocator, io: std.Io, spec: []const u8) ![]u8 {
     if (std.mem.eql(u8, spec, blank_spec)) {
         const disk = try allocator.alloc(u8, blank_len);
         errdefer allocator.free(disk);
         _ = try usb_disk.format(disk, blank_serial);
         return disk;
     }
-    const disk = try std.fs.cwd().readFileAlloc(allocator, spec, max_image);
+    const disk = try std.Io.Dir.cwd().readFileAlloc(io, spec, allocator, .limited(max_image));
     errdefer allocator.free(disk);
     if (disk.len == 0) return error.EmptyImage;
     if (disk.len % usb_disk.sector_len != 0) return error.NotWholeSectors;
@@ -41,9 +41,9 @@ pub fn plug(board_usb: *usb.Usb, disk: []u8) void {
 
 /// What the --usb-disk option asked for, if anything: load it and plug it
 /// in, or say on stderr why not.
-pub fn apply(board_usb: *usb.Usb, allocator: std.mem.Allocator, spec: ?[]const u8) !void {
+pub fn apply(board_usb: *usb.Usb, allocator: std.mem.Allocator, io: std.Io, spec: ?[]const u8) !void {
     const named = spec orelse return;
-    const disk = load(allocator, named) catch |err| {
+    const disk = load(allocator, io, named) catch |err| {
         std.debug.print("--usb-disk {s}: {s}\n", .{ named, @errorName(err) });
         return err;
     };
