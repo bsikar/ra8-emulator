@@ -132,7 +132,7 @@ pub const Due = std.BoundedArray(u16, 2);
 /// The modelled RTC: the register shadow firmware reads, the binary time
 /// behind it, and what the run should be told happened.
 pub const Rtc = struct {
-    reg: [win_span]u8 = .{0} ** win_span,
+    reg: [win_span]u8 = @splat(0),
     now: clock.Calendar = .{},
     /// The sub-second counter: one step a boundary when geared, 64 Hz of
     /// virtual time otherwise.

@@ -14,7 +14,7 @@ const stack_b: u32 = base + 0x500;
 
 /// 2 KiB of word memory at 0x2000_0000 holding a two-thread created list.
 const Fake = struct {
-    words: [512]u32 = [_]u32{0} ** 512,
+    words: [512]u32 = @splat(0),
 
     fn at(self: *Fake, address: u32) *u32 {
         return &self.words[(address - base) / 4];

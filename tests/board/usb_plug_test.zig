@@ -19,7 +19,7 @@ test "blank is a formatted FAT12 volume the device then serves" {
 test "an image file is read whole" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "disk.img", .data = &([_]u8{0x7E} ** 1024) });
+    try tmp.dir.writeFile(.{ .sub_path = "disk.img", .data = &(@as([1024]u8, @splat(0x7E))) });
     const path = try tmp.dir.realpathAlloc(std.testing.allocator, "disk.img");
     defer std.testing.allocator.free(path);
     const disk = try usb_plug.load(std.testing.allocator, path);
@@ -31,7 +31,7 @@ test "an image file is read whole" {
 test "an image that is not whole sectors is refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "odd.img", .data = &([_]u8{0} ** 700) });
+    try tmp.dir.writeFile(.{ .sub_path = "odd.img", .data = &(@as([700]u8, @splat(0))) });
     const path = try tmp.dir.realpathAlloc(std.testing.allocator, "odd.img");
     defer std.testing.allocator.free(path);
     try std.testing.expectError(error.NotWholeSectors, usb_plug.load(std.testing.allocator, path));

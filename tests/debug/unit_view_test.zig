@@ -29,9 +29,9 @@ const layout = struct {
 
 /// 8 KiB of SRAM, the ITM/DWT/FPB pages and the SCS page, all plain memory.
 const Memory = struct {
-    sram: [0x2000]u8 = [_]u8{0} ** 0x2000,
-    trace: [0x3000]u8 = [_]u8{0} ** 0x3000,
-    scs: [0x1000]u8 = [_]u8{0} ** 0x1000,
+    sram: [0x2000]u8 = @splat(0),
+    trace: [0x3000]u8 = @splat(0),
+    scs: [0x1000]u8 = @splat(0),
 
     fn view(self: *Memory) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

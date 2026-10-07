@@ -90,7 +90,7 @@ pub const Options = struct {
     dump_sd: ?u32 = null, // print this card block back as hex once the run is over
     faults: ?[]const u8 = null, // `--faults FILE`: hardware changes at virtual times (RA8EMU-207)
     /// Contacts queued on the touch panel, one drained per frame read.
-    touches: [gt911.queue_depth]gt911.Contact = .{gt911.Contact{}} ** gt911.queue_depth,
+    touches: [gt911.queue_depth]gt911.Contact = @splat(gt911.Contact{}),
     touch_count: usize = 0,
     touch_in: ?[]const u8 = null, // `--touch @PATH`: a file or FIFO of host touches, one per line
     input_script: ?[]const u8 = null, // `--input-script PATH`: timed taps, swipes, presses, buttons
@@ -112,7 +112,7 @@ pub const Options = struct {
     /// The Zig core runs from formed blocks (RA8EMU-408); `--no-blocks` steps.
     blocks: bool = true,
     /// Globals to read out of RAM once the run is over, in the order asked.
-    dump: [dump_limit][]const u8 = .{""} ** dump_limit,
+    dump: [dump_limit][]const u8 = @splat(""),
     dump_count: usize = 0,
     /// A global to watch, and the value that ends the run once it reaches
     /// it. Null watches nothing and the run goes to its instruction budget.
@@ -162,7 +162,7 @@ pub const Options = struct {
     /// `--count-pc`: instruction addresses to count executions of, in the
     /// order they were given. src/debug/pc_hits.zig says why a counter
     /// that measures nothing but the execution is worth having.
-    count_pc: [pc_hits.limits.places]u32 = [_]u32{0} ** pc_hits.limits.places,
+    count_pc: [pc_hits.limits.places]u32 = @splat(0),
     /// How many of `count_pc` were actually given.
     count_pc_len: usize = 0,
     /// `--chunk`: how many instructions between two boundaries, overriding

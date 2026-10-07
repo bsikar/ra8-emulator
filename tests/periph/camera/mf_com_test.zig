@@ -44,7 +44,7 @@ fn lock(self: *anyopaque, bytes: *?[*]u8, max: ?*u32, length: *u32) callconv(mf.
 }
 
 fn table() [42]?*const anyopaque {
-    var entries = [_]?*const anyopaque{null} ** 42;
+    var entries: [42]?*const anyopaque = @splat(null);
     entries[mf.slot.release] = @ptrCast(&release);
     entries[mf.slot.set_uint64] = @ptrCast(&setUint64);
     entries[mf.slot.get_uint64] = @ptrCast(&getUint64);

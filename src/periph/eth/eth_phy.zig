@@ -53,7 +53,7 @@ pub fn readOnly(index: u32) bool {
 }
 
 pub const Phy = struct {
-    file: [reg.count]u16 = .{0} ** reg.count,
+    file: [reg.count]u16 = @splat(0),
     /// Management frames carried out, each way.
     reads: u32 = 0,
     writes: u32 = 0,
@@ -75,7 +75,7 @@ pub const Phy = struct {
     }
 
     fn seedFile(self: *Phy) void {
-        self.file = .{0} ** reg.count;
+        self.file = @splat(0);
         self.file[reg.bmcr] = seed.bmcr;
         self.file[reg.bmsr] = seed.bmsr;
         self.file[reg.anar] = seed.anar;

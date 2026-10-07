@@ -47,7 +47,7 @@ pub const Cfa = struct {
 /// One row of the table: the CFA and every register's rule at a pc.
 pub const Row = struct {
     cfa: Cfa = .{},
-    rules: [limits.registers]Rule = [_]Rule{.same} ** limits.registers,
+    rules: [limits.registers]Rule = @splat(.same),
 };
 
 /// What a CIE says about every FDE that points at it.

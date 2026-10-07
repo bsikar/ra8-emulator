@@ -61,7 +61,7 @@ pub const reset = struct {
 /// The samples a channel is holding, oldest first, plus what the run should
 /// be told about the ones it could not hold.
 pub const Stage = struct {
-    samples: [depth.stages]u32 = .{0} ** depth.stages,
+    samples: [depth.stages]u32 = @splat(0),
     held: usize = 0,
     /// Stores that arrived with every stage full.
     overruns: u32 = 0,

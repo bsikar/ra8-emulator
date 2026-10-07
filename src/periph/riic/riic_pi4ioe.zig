@@ -22,7 +22,7 @@ pub const file = struct {
 
 pub const Expander = struct {
     registers: [file.count]u8 = blk: {
-        var reset = [_]u8{0} ** file.count;
+        var reset = @as([file.count]u8, @splat(0));
         reset[file.device_id] = file.device_id_value;
         break :blk reset;
     },

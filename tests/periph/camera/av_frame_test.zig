@@ -32,7 +32,7 @@ test "BGRA rows become RGB24" {
 
 test "short buffers, odd 2vuy widths and thin strides are refused" {
     var out: [16]u8 = undefined;
-    const src = [_]u8{0} ** 8;
+    const src = @as([8]u8, @splat(0));
     try std.testing.expect(!frame.copy(.bgra, &src, 8, 2, 2, &out));
     try std.testing.expect(!frame.copy(.uyvy, &src, 6, 3, 1, &out));
     try std.testing.expect(!frame.copy(.bgra, &src, 4, 2, 1, &out));

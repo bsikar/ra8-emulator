@@ -152,7 +152,7 @@ pub const Select = struct {
 pub const Ckcr = struct {
     /// The board's live protection model, not a copy of it.
     protection: *const prcr.Prcr,
-    selects: [slots.len]Select = .{Select{}} ** slots.len,
+    selects: [slots.len]Select = @splat(Select{}),
     /// Stores dropped because PRCR.PRC0 was locked.
     dropped_locked: u32 = 0,
 

@@ -150,7 +150,7 @@ pub const info = struct {
 /// A read burst: the dummy word the controller clocks out first, then the
 /// value. The driver's read_data16 takes exactly these four bytes.
 pub const Burst = struct {
-    buf: [wire.burst_bytes]u8 = .{0} ** wire.burst_bytes,
+    buf: [wire.burst_bytes]u8 = @splat(0),
     len: usize = 0,
     pos: usize = 0,
 

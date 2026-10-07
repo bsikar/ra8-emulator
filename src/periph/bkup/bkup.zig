@@ -51,7 +51,7 @@ pub const Bkup = struct {
     /// The retained bytes. `resetControl` deliberately leaves these alone:
     /// they clear only when the emulator process starts, which models the
     /// first-ever boot with a dead battery.
-    data: [reg_count]u8 = [_]u8{0} ** reg_count,
+    data: [reg_count]u8 = @splat(0),
     /// Every BAT*/VBT* register in the window that is not a data byte.
     control: ctrl.Control = ctrl.Control.init(),
     writes: u32 = 0,

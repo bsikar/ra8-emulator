@@ -25,10 +25,10 @@ pub const Cbs = struct {
     base: u32,
     admin_enabled: u32 = 0,
     enabled: u32 = 0,
-    admin_increment: [off.class_count]u32 = .{0} ** off.class_count,
-    admin_upper_limit: [off.class_count]u32 = .{off.upper_limit_mask} ** off.class_count,
-    increment: [off.class_count]u32 = .{0} ** off.class_count,
-    upper_limit: [off.class_count]u32 = .{off.upper_limit_mask} ** off.class_count,
+    admin_increment: [off.class_count]u32 = @splat(0),
+    admin_upper_limit: [off.class_count]u32 = @splat(off.upper_limit_mask),
+    increment: [off.class_count]u32 = @splat(0),
+    upper_limit: [off.class_count]u32 = @splat(off.upper_limit_mask),
     writes: u32 = 0,
 
     pub fn init(base: u32) Cbs {

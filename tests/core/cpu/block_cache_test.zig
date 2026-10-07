@@ -6,7 +6,7 @@ const decode = ra8.core.cpu.decode;
 const BlockCache = decode.block_cache.BlockCache;
 
 const Ram = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
@@ -108,7 +108,7 @@ test "an exception mid-block leaves it and resumes at the interrupted instructio
 }
 
 const SramRam = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
     const base = ra8.core.memmap.sram_base;
 
     fn view(self: *SramRam) bus.Bus {

@@ -66,7 +66,7 @@ pub const Target = struct {
     served: usize = 0,
     /// Echo bytes the firmware transmitted this read.
     echoed: usize = 0,
-    captured: [script.capture]u8 = .{0} ** script.capture,
+    captured: [script.capture]u8 = @splat(0),
     cycles: u32 = 0,
     mismatched: bool = false,
     /// Read frames the controller ended by not acknowledging the last byte

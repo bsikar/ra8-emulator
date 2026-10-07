@@ -125,7 +125,7 @@ pub const LabelError = error{BadLabel};
 /// format does with one.
 pub fn labelField(dst: *[label_len]u8, label: []const u8) LabelError!void {
     if (label.len > label_len) return error.BadLabel;
-    dst.* = .{' '} ** label_len;
+    dst.* = @splat(' ');
     for (label, 0..) |byte, index| {
         if (!labelByteAllowed(byte)) return error.BadLabel;
         dst[index] = std.ascii.toUpper(byte);
@@ -168,7 +168,7 @@ fn commonBpb(buf: *Sector, layout: Layout) void {
 
 /// A FAT16 boot sector for `layout`.
 pub fn bootSector16(layout: Layout, fats: u32, label: []const u8) LabelError!Sector {
-    var buf: Sector = .{0} ** sector_bytes;
+    var buf: Sector = @splat(0);
     commonBpb(&buf, layout);
     buf[offset.fats] = @intCast(fats);
     put16(&buf, offset.root_entries, @intCast(layout.root_sectors * sector_bytes / 32));
@@ -188,7 +188,7 @@ pub fn bootSector16(layout: Layout, fats: u32, label: []const u8) LabelError!Sec
 
 /// A FAT32 boot sector for `layout`.
 pub fn bootSector32(layout: Layout, fats: u32, label: []const u8) LabelError!Sector {
-    var buf: Sector = .{0} ** sector_bytes;
+    var buf: Sector = @splat(0);
     commonBpb(&buf, layout);
     buf[offset.fats] = @intCast(fats);
     put32(&buf, offset.total_sectors32, layout.total_sectors);
@@ -211,7 +211,7 @@ pub const backup_sector: u32 = 6;
 /// The FSInfo sector. The free count is the whole volume less the cluster the
 /// root directory already holds.
 pub fn fsInfoSector(clusters: u32) Sector {
-    var buf: Sector = .{0} ** sector_bytes;
+    var buf: Sector = @splat(0);
     put32(&buf, fsinfo_offset.lead, value.fsinfo_lead);
     put32(&buf, fsinfo_offset.structure, value.fsinfo_structure);
     put32(&buf, fsinfo_offset.free_clusters, if (clusters > 0) clusters - 1 else 0);
@@ -223,7 +223,7 @@ pub fn fsInfoSector(clusters: u32) Sector {
 /// The first sector of a FAT16 table: the two reserved entries and nothing
 /// allocated behind them.
 pub fn fatHead16() Sector {
-    var buf: Sector = .{0} ** sector_bytes;
+    var buf: Sector = @splat(0);
     put16(&buf, 0, value.fat16_entry0);
     put16(&buf, 2, value.fat16_entry1);
     return buf;
@@ -232,7 +232,7 @@ pub fn fatHead16() Sector {
 /// The first sector of a FAT32 table. Entry 2 ends the chain because the root
 /// directory is one cluster long and empty.
 pub fn fatHead32() Sector {
-    var buf: Sector = .{0} ** sector_bytes;
+    var buf: Sector = @splat(0);
     put32(&buf, 0, value.fat32_entry0);
     put32(&buf, 4, value.fat32_end_of_chain);
     put32(&buf, 8, value.fat32_end_of_chain);

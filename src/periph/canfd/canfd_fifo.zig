@@ -40,7 +40,7 @@ pub const ptr = struct {
 /// One frame, held as the words the window reads back so nothing is lost
 /// between the transmit buffer and the receive stage.
 pub const Frame = struct {
-    words: [frame_words]u32 = .{0} ** frame_words,
+    words: [frame_words]u32 = @splat(0),
 
     pub fn id(self: *const Frame) u32 {
         return self.words[0] & id_mask.extended;
@@ -53,7 +53,7 @@ pub const Frame = struct {
 
 /// The queue itself: a ring of stages, oldest first.
 pub const Fifo = struct {
-    stages: [depth]Frame = .{Frame{}} ** depth,
+    stages: [depth]Frame = @splat(Frame{}),
     head: usize = 0,
     count: usize = 0,
 

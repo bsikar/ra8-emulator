@@ -101,7 +101,7 @@ pub const Panel = struct {
     refusing: bool = false,
     /// Awake until the firmware issues SLEEP.
     awake: bool = true,
-    registers: [register_slots]Register = .{Register{}} ** register_slots,
+    registers: [register_slots]Register = @splat(Register{}),
     register_count: usize = 0,
     reg_address: u16 = 0,
     vcom_direction: u16 = 0,
@@ -121,7 +121,7 @@ pub const Panel = struct {
     refresh_log_hook: ?refresh.LogHook = null,
     event_hook: ?EventHook = null,
     loaded_pixels: u32 = 0,
-    display_args: [5]u16 = .{0} ** 5,
+    display_args: [5]u16 = @splat(0),
     /// The film: busy while a refresh is still being driven.
     film: busy.Lut = .{},
     /// Commands the panel took.

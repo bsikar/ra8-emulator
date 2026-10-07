@@ -150,7 +150,7 @@ pub const Xspi = struct {
     /// The OCTACLK watch, or null on a board without one, in which case the
     /// engine works the way it always did here.
     octa: ?*const octaclk.Octa = null,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// INTS.CMDCMP, held rather than shadowed.
     complete: bool = false,
     /// The write-enable latch WREN sets and a program or erase spends.

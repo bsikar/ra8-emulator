@@ -15,7 +15,7 @@ const stack: u32 = memmap.sram_base + 0x800;
 /// One executable PT_LOAD segment in code MRAM, where a real image loads:
 /// SP, reset, then B . at +8.
 fn image() [page * 2]u8 {
-    var file = [_]u8{0} ** (page * 2);
+    var file = @as([page * 2]u8, @splat(0));
     const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
         .magic = .{ 0x7f, 'E', 'L', 'F' },
@@ -24,7 +24,7 @@ fn image() [page * 2]u8 {
         .version = 1,
         .osabi = 0,
         .abiversion = 0,
-        .pad = .{0} ** 7,
+        .pad = @splat(0),
         .e_type = 2,
         .e_machine = elf.em_arm,
         .e_version = 1,

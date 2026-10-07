@@ -42,7 +42,7 @@ fn sections() dwarf_line.Sections {
 /// A RAM image holding a vector table (initial sp 0x40, reset at 0x08);
 /// everything past its 256 bytes is unmapped.
 const Ram = struct {
-    bytes: [256]u8 = [_]u8{0} ** 256,
+    bytes: [256]u8 = @splat(0),
 
     fn init() Ram {
         var memory: Ram = .{};

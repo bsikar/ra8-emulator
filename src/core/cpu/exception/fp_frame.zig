@@ -43,7 +43,7 @@ pub const Fp = struct {
 pub fn push(to: bus.Bus, sp: u32, basic: frame.Frame, fp: Fp) bus.Error!u32 {
     const pad = sp & 4;
     const at = (sp -% sizeFor(fp.high != null)) & ~pad;
-    var all: [words_ts]u32 = [_]u32{0} ** words_ts;
+    var all: [words_ts]u32 = @splat(0);
     @memcpy(all[0..frame.words], &basic);
     all[frame.slot.xpsr] &= ~frame.realigned;
     if (pad != 0) all[frame.slot.xpsr] |= frame.realigned;

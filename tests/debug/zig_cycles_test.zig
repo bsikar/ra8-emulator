@@ -11,7 +11,7 @@ const dfsr: u32 = 0xE000_ED30;
 
 /// 64 bytes of RAM at address 0, plus the DWT_CYCCNT and DFSR words.
 const Rig = struct {
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
     cycles: u32 = 0,
     dfsr: u32 = 0,
 

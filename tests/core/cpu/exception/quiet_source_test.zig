@@ -30,7 +30,7 @@ const LatchProbe = struct {
         _ = address;
         const self: *LatchProbe = @ptrCast(@alignCast(ctx));
         self.writes += 1;
-        var word: [4]u8 = .{0} ** 4;
+        var word: [4]u8 = @splat(0);
         @memcpy(word[0..bytes.len], bytes);
         self.value = std.mem.readInt(u32, &word, .little);
     }

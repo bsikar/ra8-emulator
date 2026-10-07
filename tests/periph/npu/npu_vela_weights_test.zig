@@ -18,7 +18,7 @@ test "uncompressed indices with no zero runs" {
 }
 
 test "zero runs around a pair of weights" {
-    const zeros = [_]i16{0} ** 20 ++ [_]i16{ 4, -4 } ++ [_]i16{0} ** 5;
+    const zeros = @as([20]i16, @splat(0)) ++ [_]i16{ 4, -4 } ++ @as([5]i16, @splat(0));
     try expectDecode("03005c149438900800e00c80ffffffff", &zeros);
 }
 

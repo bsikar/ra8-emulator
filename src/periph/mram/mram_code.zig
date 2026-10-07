@@ -45,7 +45,7 @@ const words: usize = page.span / 4;
 
 pub const Page = struct {
     /// The gate words, which firmware writes and reads back.
-    shadow: [words]u32 = [_]u32{0} ** words,
+    shadow: [words]u32 = @splat(0),
     /// Stores to MRCPS: the controller owns that word, firmware does not.
     refused: u32 = 0,
 

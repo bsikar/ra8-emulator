@@ -36,7 +36,7 @@ pub const reg = flag.reg;
 /// One RIIC channel: the register shadow, the transfer in flight, and what
 /// the run should be told about the traffic it was given.
 pub const Channel = struct {
-    shadow: [flag.reg.count]u8 = .{0} ** flag.reg.count,
+    shadow: [flag.reg.count]u8 = @splat(0),
     /// ICSR2 in controller mode.
     status: u8 = 0,
     busy: bool = false,
@@ -322,7 +322,7 @@ pub const Channel = struct {
 /// EK-RA8D2 routes the expander and the camera to channel 1; nothing in this
 /// tree gives the other two channels a device, so they answer NACK.
 pub const Riic = struct {
-    channels: [flag.channel_count]Channel = .{Channel{}} ** flag.channel_count,
+    channels: [flag.channel_count]Channel = @splat(Channel{}),
     devices: bus.Registry = .{},
 
     pub fn init() Riic {

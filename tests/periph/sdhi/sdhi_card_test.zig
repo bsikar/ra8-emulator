@@ -65,7 +65,7 @@ test "CMD0 puts a selected card back in idle" {
 test "a block nobody wrote reads as zeros" {
     var unit_card = unit();
     defer unit_card.deinit();
-    var block: [card.geometry.block_bytes]u8 = [_]u8{0xAA} ** card.geometry.block_bytes;
+    var block: [card.geometry.block_bytes]u8 = @splat(0xAA);
     try std.testing.expect(unit_card.read(7, &block));
     for (block) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
 }
@@ -73,7 +73,7 @@ test "a block nobody wrote reads as zeros" {
 test "a written block comes back and is held" {
     var unit_card = unit();
     defer unit_card.deinit();
-    var written: [card.geometry.block_bytes]u8 = [_]u8{0} ** card.geometry.block_bytes;
+    var written: [card.geometry.block_bytes]u8 = @splat(0);
     written[0] = 0x5A;
     written[card.geometry.block_bytes - 1] = 0xC3;
     try std.testing.expect(unit_card.write(12, &written));
@@ -87,7 +87,7 @@ test "an address past the end of the card is refused and counted" {
     var unit_card = unit();
     defer unit_card.deinit();
     const past = card.geometry.capacity_blocks;
-    var block: [card.geometry.block_bytes]u8 = [_]u8{0} ** card.geometry.block_bytes;
+    var block: [card.geometry.block_bytes]u8 = @splat(0);
     try std.testing.expect(!unit_card.write(past, &block));
     try std.testing.expect(!unit_card.read(past, &block));
     try std.testing.expectEqual(@as(u32, 2), unit_card.past_end);
@@ -98,7 +98,7 @@ test "release frees the blocks and powers the card down" {
     var unit_card = unit();
     defer unit_card.deinit();
     identify(&unit_card);
-    const block: [card.geometry.block_bytes]u8 = [_]u8{1} ** card.geometry.block_bytes;
+    const block: [card.geometry.block_bytes]u8 = @splat(1);
     try std.testing.expect(unit_card.write(3, &block));
     unit_card.release();
     try std.testing.expectEqual(@as(u32, 0), unit_card.held());

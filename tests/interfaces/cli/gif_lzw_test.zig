@@ -20,7 +20,7 @@ test "LZW round-trips empty, short and repeating inputs" {
     _ = try roundTrip(&.{7});
     _ = try roundTrip("TOBEORNOTTOBEORTOBEORNOT");
     // A run of one value takes the code-equals-next path on every new entry.
-    _ = try roundTrip(&([_]u8{0x41} ** 5000));
+    _ = try roundTrip(&(@as([5000]u8, @splat(0x41))));
 }
 
 test "LZW widens past 9 bits and clears the table at 4096 codes" {

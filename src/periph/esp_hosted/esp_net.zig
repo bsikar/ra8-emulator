@@ -57,7 +57,7 @@ const TcpFlow = struct {
 };
 
 pub const Bridge = struct {
-    tcp_flows: [tcp_capacity]TcpFlow = [_]TcpFlow{.{}} ** tcp_capacity,
+    tcp_flows: [tcp_capacity]TcpFlow = @splat(.{}),
     udp_bridge: udp_net.Bridge = .{},
     resolver: dns.Resolver = .{},
     tcp_cursor: usize = 0,

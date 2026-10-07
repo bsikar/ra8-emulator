@@ -13,7 +13,7 @@ const Stub = struct {
 };
 
 fn bank() [14]Stub {
-    return [_]Stub{.{}} ** 14;
+    return @as([14]Stub, @splat(.{}));
 }
 
 fn running(channel: Stub) bool {

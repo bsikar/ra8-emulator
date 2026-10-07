@@ -135,7 +135,7 @@ test "pipe frames reach the CEU destination" {
     try bench.open();
     defer bench.close();
     bench.program();
-    try bench.core.write(frame_base, &[_]u8{0xAA} ** 4);
+    try bench.core.write(frame_base, &@as([4]u8, @splat(0xAA)));
 
     const fds = try std.posix.pipe();
     var reader: ?std.posix.fd_t = fds[0];

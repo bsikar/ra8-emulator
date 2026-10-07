@@ -28,7 +28,7 @@ pub const max_wrapped: usize = 2 * riic_bus.max_devices;
 pub const Faults = struct {
     board: *Board,
     arena: std.mem.Allocator,
-    wrapped: [max_wrapped]?*fault.I2c = .{null} ** max_wrapped,
+    wrapped: [max_wrapped]?*fault.I2c = @splat(null),
     spi_parts: lines.Wrappers(fault_lines.Spi, spi.Device, spi.channel_count) = .{},
     uart_parts: lines.Wrappers(fault_lines.Uart, sci_device.Device, sci.channels) = .{},
 

@@ -12,7 +12,7 @@ const Trip = struct {
     steps: [max]td.Step = undefined,
     regs: [max][16]u32 = undefined,
     len: usize = 0,
-    head: [16]i64 = .{0} ** 16,
+    head: [16]i64 = @splat(0),
 
     fn add(self: *Trip, hw: u16, before: [16]u32) void {
         self.steps[self.len] = td.decode(hw, 0);
@@ -31,7 +31,7 @@ const Trip = struct {
 };
 
 fn regs(pairs: []const [2]u32) [16]u32 {
-    var out: [16]u32 = .{0} ** 16;
+    var out: [16]u32 = @splat(0);
     out[13] = 0x2200_0F00;
     for (pairs) |pair| out[pair[0]] = pair[1];
     return out;

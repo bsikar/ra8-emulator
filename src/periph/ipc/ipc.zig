@@ -125,7 +125,7 @@ pub const Channel = struct {
     /// The IRQ lines ISET has latched and CLR has not yet dropped.
     pending: u32 = 0,
     /// Ring storage: `rd` is the oldest entry, `count` the fill level.
-    word: [fifo_depth]u32 = .{0} ** fifo_depth,
+    word: [fifo_depth]u32 = @splat(0),
     rd: usize = 0,
     count: usize = 0,
     /// The sticky error latches, which only CLR drops.
@@ -224,13 +224,13 @@ pub const attribution = attr;
 const Slot = struct { index: usize, reg: u32 };
 
 pub const Ipc = struct {
-    channels: [ch_count]Channel = .{Channel{}} ** ch_count,
+    channels: [ch_count]Channel = @splat(Channel{}),
     /// IPCSEM0..15 and the two NMI doorbells, below the channel windows.
     locks: sync.Sync = .{},
     /// What neither the channels nor the locks own: the gap at 0x040 and
     /// the padding inside each window. Held so a read-modify-write
     /// survives, never interpreted.
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// An IPC0 poke waiting for the chunk boundary to be offered as an event.
     raised: bool = false,
     /// Events handed to the board's event path.

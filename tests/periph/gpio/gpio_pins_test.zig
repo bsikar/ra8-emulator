@@ -59,7 +59,7 @@ test "a store to another port leaves the LED alone" {
 
 test "one model per pin, and at most four" {
     var gpio = Gpio.init();
-    var leds = [_]Led{.{}} ** 5;
+    var leds = @as([5]Led, @splat(.{}));
     try gpio.wired.attach(&gpio, 2, 0, leds[0].device());
     try std.testing.expectError(error.PinTaken, gpio.wired.attach(&gpio, 2, 0, leds[1].device()));
     for (leds[1..4], 1..) |*led, pin| try gpio.wired.attach(&gpio, 2, @intCast(pin), led.device());

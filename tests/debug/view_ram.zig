@@ -9,8 +9,8 @@ const View = ra8.core.step_hook.core_view.View;
 const ppb_base: u32 = 0xE000_0000;
 
 pub const Rig = struct {
-    sram: [0x2000]u8 = [_]u8{0} ** 0x2000,
-    ppb: [0x10000]u8 = [_]u8{0} ** 0x10000,
+    sram: [0x2000]u8 = @splat(0),
+    ppb: [0x10000]u8 = @splat(0),
     cpu: Cpu = undefined,
 
     /// Point the core at this rig's memory, once the rig has its home.

@@ -24,8 +24,8 @@ test "Y4M writes exact grayscale frames held at ten virtual frames per second" {
     defer std.testing.allocator.free(path);
     var writer = try video_out.Writer.init(std.testing.allocator, path);
     defer writer.deinit();
-    const black = [_]u32{0xFF000000} ** 4;
-    const white = [_]u32{0xFFFFFFFF} ** 4;
+    const black = @as([4]u32, @splat(0xFF000000));
+    const white = @as([4]u32, @splat(0xFFFFFFFF));
     try writer.record(2, 2, &black, 100);
     try writer.record(2, 2, &white, 200_000_100);
     try writer.finish();
@@ -53,8 +53,8 @@ test "MP4 decodes virtual-time frames with the expected duration and quality" {
         return err;
     };
     defer writer.deinit();
-    const black = [_]u32{0xFF000000} ** 256;
-    const white = [_]u32{0xFFFFFFFF} ** 256;
+    const black = @as([256]u32, @splat(0xFF000000));
+    const white = @as([256]u32, @splat(0xFFFFFFFF));
     try writer.record(16, 16, &black, 0);
     try writer.record(16, 16, &white, 200_000_000);
     try writer.finish();

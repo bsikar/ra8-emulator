@@ -22,7 +22,7 @@ const Stand = struct {
 };
 
 fn filled(byte: u8) [512]u8 {
-    return .{byte} ** 512;
+    return @splat(byte);
 }
 
 fn busy() !Stand {
@@ -82,7 +82,7 @@ test "a block past capacity or out of order is BadValue and nothing changes" {
     defer std.testing.allocator.free(bad);
     // The SPI card's blocks are written 2 then 7; renumber the first to 9
     // (out of order), then past the card's end.
-    const first = std.mem.indexOf(u8, bad, &[_]u8{ 2, 0, 0, 0 } ++ [_]u8{0x3C} ** 4).?;
+    const first = std.mem.indexOf(u8, bad, &[_]u8{ 2, 0, 0, 0 } ++ @as([4]u8, @splat(0x3C))).?;
     std.mem.writeInt(u32, bad[first..][0..4], 9, .little);
     try std.testing.expectError(error.BadValue, sd.load(&fresh, bad));
     std.mem.writeInt(u32, bad[first..][0..4], 0xFFFF_FFF0, .little);

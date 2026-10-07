@@ -108,7 +108,7 @@ test "a pane too narrow draws nothing, and rows stop at what was captured" {
 /// A RAM image holding a vector table (initial sp 0x40, reset at 0x08);
 /// everything past its 256 bytes is unmapped.
 const Ram = struct {
-    bytes: [256]u8 = [_]u8{0} ** 256,
+    bytes: [256]u8 = @splat(0),
 
     fn init() Ram {
         var memory: Ram = .{};

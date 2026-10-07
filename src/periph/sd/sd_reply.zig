@@ -39,7 +39,7 @@ pub const r1 = struct {
 pub const capacity: usize = 2 + image.geometry.block_bytes + 2;
 
 pub const Reply = struct {
-    buf: [capacity]u8 = .{0} ** capacity,
+    buf: [capacity]u8 = @splat(0),
     len: usize = 0,
     pos: usize = 0,
 

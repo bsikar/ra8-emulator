@@ -74,10 +74,10 @@ pub const Host = struct {
     waited: u32 = 0,
     patience: u32 = 20_000,
     /// What the device returned, for the run report.
-    device: [18]u8 = .{0} ** 18,
+    device: [18]u8 = @splat(0),
     /// The configuration descriptor set, as much of it as fits; config_len
     /// is how much of it the full read asked for, 0 until then.
-    config: [255]u8 = .{0} ** 255,
+    config: [255]u8 = @splat(0),
     config_len: u16 = 0,
     /// GET_CONFIGURATION's one byte and GET_STATUS's two, once configured.
     config_value: [1]u8 = .{0},
@@ -86,8 +86,8 @@ pub const Host = struct {
     config_answer: Answer = .none,
     status_answer: Answer = .none,
     /// String descriptor 0 (the language IDs) and the iProduct string, as sent.
-    languages: [255]u8 = .{0} ** 255,
-    product: [255]u8 = .{0} ** 255,
+    languages: [255]u8 = @splat(0),
+    product: [255]u8 = @splat(0),
     /// How the device answered SET_INTERFACE.
     interface: Answer = .none,
     /// How the device answered halting, then un-halting, its first endpoint.

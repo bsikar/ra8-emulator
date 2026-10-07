@@ -10,7 +10,7 @@ const xfer = ra8.periph.dtc_xfer;
 
 const Cells = struct {
     base: u32 = 0x2000_0000,
-    bytes: [512]u8 = [_]u8{0} ** 512,
+    bytes: [512]u8 = @splat(0),
 };
 
 /// One flat window with the calls the controller makes of a core.

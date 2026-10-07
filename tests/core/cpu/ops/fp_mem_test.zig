@@ -10,7 +10,7 @@ const Fpscr = ra8.core.fpu.fpscr.Fpscr;
 /// 64 bytes of RAM at 0x2000_0000.
 const Ram = struct {
     const base: u32 = 0x2000_0000;
-    bytes: [64]u8 = [_]u8{0} ** 64,
+    bytes: [64]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

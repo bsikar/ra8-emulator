@@ -29,7 +29,7 @@ pub const Host = struct {
     pipes: usbhs_pipe.Table = .{},
     xfer: usbhs_xfer.Transfer = .{},
     /// The 16-bit register shadow, for everything the model does not own.
-    shadow: [regs.window.words]u16 = .{0} ** regs.window.words,
+    shadow: [regs.window.words]u16 = @splat(0),
 
     /// Accesses refused, each for its own reason.
     misaligned: u32 = 0,

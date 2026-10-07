@@ -45,7 +45,7 @@ test "halfwords and words read little-endian" {
 }
 
 test "a write lands and an access outside the map fails" {
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
     const b = flat.view();
     try b.write(0x2000_0002, &.{ 0x34, 0x12 });
@@ -99,7 +99,7 @@ test "an armed MPU check turns the direct path aside" {
 }
 
 test "a refused read or write records where it went" {
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
     var at: u32 = 0;
     var b = flat.view();
@@ -111,7 +111,7 @@ test "a refused read or write records where it went" {
 }
 
 test "an access that lands leaves the recorded miss alone" {
-    var bytes = [_]u8{0} ** 4;
+    var bytes = @as([4]u8, @splat(0));
     var flat: Flat = .{ .base = 0x2000_0000, .bytes = &bytes };
     var at: u32 = 0xDEAD_BEEF;
     var b = flat.view();

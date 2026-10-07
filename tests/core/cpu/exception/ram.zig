@@ -17,10 +17,10 @@ pub const scs: u32 = 0xE000_E000;
 pub const scs_ns: u32 = 0xE002_E000;
 
 pub const Ram = struct {
-    bytes: [0x400]u8 = [_]u8{0} ** 0x400,
-    scs_page: [0x1000]u8 = [_]u8{0} ** 0x1000,
+    bytes: [0x400]u8 = @splat(0),
+    scs_page: [0x1000]u8 = @splat(0),
     /// The Non-secure alias of the SCS page (RA8EMU-438).
-    scs_ns_page: [0x1000]u8 = [_]u8{0} ** 0x1000,
+    scs_ns_page: [0x1000]u8 = @splat(0),
 
     pub fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

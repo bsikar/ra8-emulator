@@ -37,9 +37,9 @@ pub const Arrival = enum {
 };
 
 pub const Table = struct {
-    els: [slots]u16 = [_]u16{0} ** slots,
+    els: [slots]u16 = @splat(0),
     /// Events that reached each slot.
-    arrivals: [slots]u32 = [_]u32{0} ** slots,
+    arrivals: [slots]u32 = @splat(0),
     /// Events offered to the table at all.
     offered: u32 = 0,
     /// Offered events no slot links.

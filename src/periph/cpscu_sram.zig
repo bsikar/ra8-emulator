@@ -39,7 +39,7 @@ pub const esar_mask: u32 = 0x0000_0001;
 
 pub const Unit = struct {
     sar: u32 = 0,
-    sabar: [bank_count]u32 = .{0} ** bank_count,
+    sabar: [bank_count]u32 = @splat(0),
     esar: u32 = 0,
     /// Stores that landed on any of the words.
     writes: u32 = 0,

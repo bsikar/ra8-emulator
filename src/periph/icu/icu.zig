@@ -60,7 +60,7 @@ pub const field = struct {
 
 /// The event-link table and the counters behind the end-of-run line.
 pub const Icu = struct {
-    links: [slots]u32 = [_]u32{0} ** slots,
+    links: [slots]u32 = @splat(0),
     /// Events raised by a block that some slot was listening for.
     raised: u64 = 0,
     /// Events raised that no slot listens for. Silicon drops these too; they
@@ -83,7 +83,7 @@ pub const Icu = struct {
     /// core reaches only its own (HUM Rev 1.30 14.2, p 526), so a bus access
     /// from CPU1 lands here and one from CPU0 lands in `links`. Nothing
     /// raises into this table yet.
-    cpu1: [slots]u32 = [_]u32{0} ** slots,
+    cpu1: [slots]u32 = @splat(0),
     /// Whose access the bus is serving, pointed at the board's bus. Null
     /// leaves every access on ICU0, which is what a single-core run and the
     /// unit tests want.

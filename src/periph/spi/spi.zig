@@ -144,7 +144,7 @@ pub const Channel = struct {
     spcr: u32 = 0,
     /// SPCR2. Only the two loopback bits are read.
     spcr2: u32 = 0,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// The receive holding register, and whether anything is in it.
     rx: u32 = 0,
     rx_full: bool = false,
@@ -301,7 +301,7 @@ pub const Channel = struct {
 };
 
 pub const Spi = struct {
-    channels: [channel_count]Channel = .{Channel{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(Channel{}),
 
     pub fn init() Spi {
         return .{};

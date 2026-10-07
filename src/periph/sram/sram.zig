@@ -111,11 +111,11 @@ const shadow_words: usize = win_span / 4;
 pub const Sram = struct {
     /// SRAMESR, the live status word. Two bits per bank.
     esr: u16 = 0,
-    walk: [bank_count]Walk = .{.idle} ** bank_count,
+    walk: [bank_count]Walk = @splat(.idle),
     /// The rest of the window: SRAMPRCR, SRAMWTSC, the CR bytes themselves
     /// and the ECC region registers. Kept so a read-modify-write survives,
     /// never interpreted. SRAMEAR lives here too, written by a latch.
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     latches: u32 = 0,
     /// Stores to SRAMESR that tried to raise a flag firmware cannot raise.
     faked: u32 = 0,

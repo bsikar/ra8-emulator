@@ -16,7 +16,7 @@ test "a single zero byte still runs the polynomial" {
 }
 
 test "one changed byte changes the checksum" {
-    var block: [512]u8 = .{0} ** 512;
+    var block: [512]u8 = @splat(0);
     const clean = sd_crc.crc16(&block);
     block[100] = 0xA5;
     try std.testing.expect(clean != sd_crc.crc16(&block));

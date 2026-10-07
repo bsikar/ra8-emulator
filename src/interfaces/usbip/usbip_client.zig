@@ -57,7 +57,7 @@ pub const Urb = struct {
     direction: wire.Direction,
     ep: u32,
     length: u32,
-    setup: [8]u8 = .{0} ** 8,
+    setup: [8]u8 = @splat(0),
 };
 
 pub fn submit(out: *[wire.basic_len]u8, urb: Urb) void {

@@ -142,7 +142,7 @@ test "the data port serves its byte on the low lane and nowhere else" {
 /// A part that answers with a fixed reply and remembers what it was told.
 const Echo = struct {
     reply: []const u8 = &[_]u8{},
-    heard: [8]u8 = .{0} ** 8,
+    heard: [8]u8 = @splat(0),
     heard_len: usize = 0,
 
     fn write(context: *anyopaque, byte: u8) void {

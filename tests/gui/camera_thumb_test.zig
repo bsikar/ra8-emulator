@@ -49,7 +49,7 @@ test "no preview draws nothing; a preview is centred in its area" {
     const area = ra8.gui.draw_list.Rect{ .x = 10, .y = 20, .w = 24, .h = 24 };
     try thumb.draw(&list, area, null);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
-    var pixels = [_]Color{Color.rgb(1, 2, 3)} ** 8;
+    var pixels = @as([8]Color, @splat(Color.rgb(1, 2, 3)));
     try thumb.draw(&list, area, .{ .width = 4, .height = 2, .pixels = &pixels });
     try std.testing.expectEqual(@as(usize, 1), list.commands.items.len);
     const quad = list.commands.items[0].shape.image;

@@ -95,7 +95,7 @@ pub const Error = error{
 /// The address -> device map. Nothing here interprets bytes; it only says who
 /// answers.
 pub const Registry = struct {
-    devices: [max_devices]?Device = .{null} ** max_devices,
+    devices: [max_devices]?Device = @splat(null),
     /// Something is holding SDA/SCL low (RA8EMU-519). The bus is a shared
     /// line, so this is the bus's fact, not one part's: every channel sees
     /// it busy until it is let go.

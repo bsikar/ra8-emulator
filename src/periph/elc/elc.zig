@@ -83,10 +83,10 @@ pub const Elc = struct {
     elcr: u8 = 0,
     /// The live WE bit of each generator. WI reads back set, so it is not
     /// stored: it is a write-side gate, not a state bit.
-    armed: [generators]bool = [_]bool{false} ** generators,
+    armed: [generators]bool = @splat(false),
     /// The ELSR slots and what has reached them (src/periph/elc_route.zig).
     table: route.Table = .{},
-    attribution: [attributions]u32 = [_]u32{0} ** attributions,
+    attribution: [attributions]u32 = @splat(0),
     pending: Due = .{},
     /// Software events actually generated.
     generated: u32 = 0,

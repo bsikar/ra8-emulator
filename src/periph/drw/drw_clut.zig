@@ -32,7 +32,7 @@ pub const rgb565 = struct {
 
 /// The palette and its load cursor.
 pub const Clut = struct {
-    entries: [size.entries]u32 = [_]u32{0} ** size.entries,
+    entries: [size.entries]u32 = @splat(0),
     cursor: u32 = 0,
     offset: u32 = 0,
     /// Entries loaded, so a run can say whether a palette was ever written.

@@ -124,7 +124,7 @@ const shadow_words: usize = channel_stride / 4;
 pub const Channel = struct {
     /// SSICR. Only REN and TEN are read; the rest rides along untouched.
     ssicr: u32 = 0,
-    shadow: [shadow_words]u32 = .{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// Samples written while the transmitter was off, oldest first.
     tx: fifo.Stage = .{},
     /// Samples shifted out with TEN set.
@@ -246,7 +246,7 @@ pub const Channel = struct {
 };
 
 pub const Ssie = struct {
-    channels: [channel_count]Channel = .{Channel{}} ** channel_count,
+    channels: [channel_count]Channel = @splat(Channel{}),
 
     pub fn init() Ssie {
         return .{};

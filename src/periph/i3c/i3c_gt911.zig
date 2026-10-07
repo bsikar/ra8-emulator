@@ -69,7 +69,7 @@ pub const Panel = struct {
     taken: usize = 0,
     /// The contact waiting to be read, if there is one.
     armed: ?Contact = null,
-    queued: [queue_depth]Contact = .{Contact{}} ** queue_depth,
+    queued: [queue_depth]Contact = @splat(Contact{}),
     queued_len: usize = 0,
     queued_pos: usize = 0,
     /// Contacts the firmware actually drained.

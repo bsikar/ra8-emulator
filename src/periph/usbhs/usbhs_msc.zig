@@ -62,7 +62,7 @@ pub const Target = struct {
     data: []const u8 = &.{},
     /// What is left of the blocks a WRITE(10) is filling.
     sink: []u8 = &.{},
-    scratch: [18]u8 = [_]u8{0} ** 18,
+    scratch: [18]u8 = @splat(0),
     commands: u32 = 0,
     invalid: u32 = 0,
     failed: u32 = 0,

@@ -11,7 +11,7 @@ const xfer = ra8.periph.dtc_xfer;
 /// pointer: a copy of it still reaches the same storage.
 const Cells = struct {
     base: u32 = 0x2000_0000,
-    bytes: [512]u8 = [_]u8{0} ** 512,
+    bytes: [512]u8 = @splat(0),
 };
 
 /// A stand-in for the machine's memory: one flat window, with the four calls

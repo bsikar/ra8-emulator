@@ -168,7 +168,7 @@ pub const Region = struct {
 /// The MPU window: the hardwired count the firmware reads out of it, and the
 /// region table it programmes into it.
 pub const Mpu = struct {
-    table: [geometry.regions]Region = [_]Region{.{}} ** geometry.regions,
+    table: [geometry.regions]Region = @splat(.{}),
     /// RNR as the firmware last left it.
     selected: u8 = 0,
     /// CTRL as the firmware last left it, so the report can say which of the

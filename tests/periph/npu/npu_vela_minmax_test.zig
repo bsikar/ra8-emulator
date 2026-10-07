@@ -5,7 +5,7 @@ const vela = ra8.periph.npu_vela;
 const minmax = vela.minmax;
 
 const Memory = struct {
-    bytes: [0x400]u8 = .{0} ** 0x400,
+    bytes: [0x400]u8 = @splat(0),
     pub fn read(self: *@This(), at: u32, out: []u8) error{Refused}!void {
         if (at + out.len > self.bytes.len) return error.Refused;
         @memcpy(out, self.bytes[at..][0..out.len]);
@@ -51,7 +51,7 @@ fn fill(memory: *Memory) void {
 test "MIN writes the smaller signed element of each pair" {
     var memory = Memory{};
     fill(&memory);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     try std.testing.expectEqual(@as(u64, 8), try minmax.run(&memory, &regions, minmax.mode_min, inputs()));
     for (0..8) |i| try std.testing.expectEqual(@min(a[i], b[i]), @as(i8, @bitCast(memory.bytes[0x200 + i])));
 }
@@ -60,7 +60,7 @@ test "MAX writes the larger element and honours the region base" {
     var memory = Memory{};
     for (a, 0..) |v, i| memory.bytes[0x40 + i] = @bitCast(v);
     for (b, 0..) |v, i| memory.bytes[0x140 + i] = @bitCast(v);
-    var regions: vela.dma.Regions = .{0} ** 8;
+    var regions: vela.dma.Regions = @splat(0);
     regions[2] = 0x40;
     var setup = inputs();
     setup.maps.ifm.region = 2;
@@ -77,7 +77,7 @@ test "the activation clamp bounds the result" {
 
 test "cases the TRM leaves open are refused, not guessed" {
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var mixed = inputs();
     mixed.maps.ifm2.zero_point = 5;
     try std.testing.expectError(error.OperatorNotModelled, minmax.run(&memory, &regions, minmax.mode_min, mixed));
@@ -90,7 +90,7 @@ test "cases the TRM leaves open are refused, not guessed" {
 test "the runner executes an elementwise MAX and counts its elements" {
     var memory = Memory{};
     fill(&memory);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     // Shapes, precision, strides, bases, clamp, then ELEMENTWISE mode 4 and STOP.
     const words = [_]u32{
         0x0001_010A, 0x0003_0104, 0x0001_0105, 0x0001_018A, 0x0001_0185,
@@ -108,7 +108,7 @@ test "the runner executes an elementwise MAX and counts its elements" {
 test "a scalar IFM2 is compared against every IFM element" {
     var memory = Memory{};
     fill(&memory);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var setup = inputs();
     setup.maps.ifm2_broadcast = minmax.broadcast_scalar;
     setup.maps.ifm2_scalar = @bitCast(@as(i16, -2));
@@ -119,7 +119,7 @@ test "a scalar IFM2 is compared against every IFM element" {
 test "broadcasting W and C reuses IFM2 element (0, 0, 0)" {
     var memory = Memory{};
     fill(&memory);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var setup = inputs();
     setup.maps.ifm2_broadcast = minmax.broadcast_w | minmax.broadcast_c;
     _ = try minmax.run(&memory, &regions, minmax.mode_min, setup);
@@ -129,7 +129,7 @@ test "broadcasting W and C reuses IFM2 element (0, 0, 0)" {
 test "broadcasting C alone keeps IFM2's x and repeats its channel 0" {
     var memory = Memory{};
     fill(&memory);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var setup = inputs();
     setup.maps.ifm2_broadcast = minmax.broadcast_c;
     _ = try minmax.run(&memory, &regions, minmax.mode_max, setup);

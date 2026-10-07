@@ -5,7 +5,7 @@
 //! registers to or from a D register (Rt is the low word) or to or from
 //! two consecutive S registers.
 pub const Bank = struct {
-    s: [32]u32 = [_]u32{0} ** 32,
+    s: [32]u32 = @splat(0),
 
     pub fn readS(self: *const Bank, n: u5) u32 {
         return self.s[n];

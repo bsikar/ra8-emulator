@@ -26,7 +26,7 @@ pub fn lineMode(mode: ?fault_spec.Mode) Error!fault_lines.LineMode {
 pub fn Wrappers(comptime Wrapper: type, comptime Device: type, comptime count: usize) type {
     return struct {
         const Self = @This();
-        held: [count]?*Wrapper = .{null} ** count,
+        held: [count]?*Wrapper = @splat(null),
 
         /// Put the part fitted in `slot` (channel `index`) into `mode`.
         pub fn set(

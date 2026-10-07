@@ -184,7 +184,7 @@ pub const Tap = @import("sci_tap.zig").Tap;
 
 /// The block: ten channels and the console line capture.
 pub const Sci = struct {
-    channels: [channels]Channel = [_]Channel{.{}} ** channels,
+    channels: [channels]Channel = @splat(.{}),
     line: Line = .{},
     tap: ?Tap = null,
 

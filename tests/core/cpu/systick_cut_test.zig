@@ -11,8 +11,8 @@ const Words = ra8.periph.clocks.Words;
 const Ram = struct {
     const normal: u32 = 0xE000_E000;
     const alias: u32 = 0xE002_E000;
-    lo: [0x40]u8 = [_]u8{0} ** 0x40,
-    hi: [0x40]u8 = [_]u8{0} ** 0x40,
+    lo: [0x40]u8 = @splat(0),
+    hi: [0x40]u8 = @splat(0),
 
     fn view(self: *Ram) bus.Bus {
         return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };

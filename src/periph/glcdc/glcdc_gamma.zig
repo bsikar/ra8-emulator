@@ -69,7 +69,7 @@ pub fn slotOf(offset: u32) ?Slot {
 /// One channel's correction curve.
 pub const Channel = struct {
     /// Slope per segment, in 1/1024 units.
-    gain: [geometry.entries]u16 = [_]u16{@intCast(field.unity)} ** geometry.entries,
+    gain: [geometry.entries]u16 = @splat(@intCast(field.unity)),
     /// The input value each segment ends at, in 10-bit space.
     threshold: [geometry.entries]u16 = defaultThresholds(),
     /// Whether the driver has written this block. An untouched channel

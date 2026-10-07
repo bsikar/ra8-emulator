@@ -18,11 +18,11 @@ const count = pipe.count;
 
 pub const Bulk = struct {
     /// What the driver is staging on each IN pipe.
-    in: [count]fifo.Staging = [_]fifo.Staging{.{}} ** count,
+    in: [count]fifo.Staging = @splat(.{}),
     /// The packet committed with BVAL on each IN pipe, until the host takes it.
-    sent: [count]fifo.Staging = [_]fifo.Staging{.{}} ** count,
+    sent: [count]fifo.Staging = @splat(.{}),
     /// What the host sent on each OUT pipe, waiting for the driver.
-    out: [count]fifo.Staging = [_]fifo.Staging{.{}} ** count,
+    out: [count]fifo.Staging = @splat(.{}),
     /// BRDYSTS and BEMPSTS, one bit per pipe with bit n for PIPEn.
     brdy: u16 = 0,
     bemp: u16 = 0,

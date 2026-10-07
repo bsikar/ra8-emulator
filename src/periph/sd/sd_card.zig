@@ -106,7 +106,7 @@ pub const Card = struct {
     img: image.Image,
     /// Mid command frame.
     collecting: bool = false,
-    cmd: [frame.length]u8 = .{0} ** frame.length,
+    cmd: [frame.length]u8 = @splat(0),
     cmd_len: usize = 0,
     /// The last command was CMD55, so the next one is an ACMD.
     app_cmd: bool = false,
@@ -370,7 +370,7 @@ pub const Card = struct {
     /// CMD9: a CSD v2.0 register whose capacity field is the image's own, so
     /// a driver sizing the card sees the card it actually gets.
     fn sendCsd(self: *Card) void {
-        var block: [csd.length]u8 = .{0} ** csd.length;
+        var block: [csd.length]u8 = @splat(0);
         block[0] = csd.version;
         const size = self.img.csize();
         block[csd.csize_high] = @intCast((size >> 16) & csd.high_mask);

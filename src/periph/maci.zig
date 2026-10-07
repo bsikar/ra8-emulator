@@ -71,7 +71,7 @@ pub const Sequencer = struct {
     kind: Kind = .program,
     /// Halfwords the count byte asked for.
     declared: usize = 0,
-    payload: [max_payload]u8 = [_]u8{0} ** max_payload,
+    payload: [max_payload]u8 = @splat(0),
     len: usize = 0,
     /// A halfword arrived with no room left for it.
     overflowed: bool = false,

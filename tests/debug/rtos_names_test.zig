@@ -19,7 +19,7 @@ const Window = struct {
 };
 
 fn block(name_at: u32) [64]u8 {
-    var bytes = [_]u8{0} ** 64;
+    var bytes = @as([64]u8, @splat(0));
     std.mem.writeInt(u32, bytes[names.name_offset..][0..4], name_at, .little);
     return bytes;
 }
@@ -47,7 +47,7 @@ test "bytes that are not text give no name, a long name is cut short" {
     var junk = block(0x1000 + 48);
     junk[48] = 0xFF;
     try std.testing.expect(names.name(Window{ .base = 0x1000, .bytes = &junk }, 0x1000, &buffer) == null);
-    var long = [_]u8{'x'} ** 96;
+    var long = @as([96]u8, @splat('x'));
     @memset(long[0..48], 0);
     std.mem.writeInt(u32, long[names.name_offset..][0..4], 0x1000 + 48, .little);
     const got = names.name(Window{ .base = 0x1000, .bytes = &long }, 0x1000, &buffer);

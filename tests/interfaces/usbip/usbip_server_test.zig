@@ -35,7 +35,7 @@ fn request(out: *std.ArrayList(u8), code: u16) !void {
 /// An OP_REQ_IMPORT for `busid`, NUL padded to 32 bytes.
 fn importFor(out: *std.ArrayList(u8), busid: []const u8) !void {
     try request(out, wire.op.req_import);
-    var body = [_]u8{0} ** wire.busid_len;
+    var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..busid.len], busid);
     try out.appendSlice(&body);
 }

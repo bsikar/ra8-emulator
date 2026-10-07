@@ -166,7 +166,7 @@ pub const Ceu = struct {
     /// The board's virtual time, read at each arm and handed to the source
     /// (RA8EMU-540). A bare test CEU has none and its source sees 0.
     clock: ?*const TimeBase = null,
-    shadow: [win_span / 4]u32 = [_]u32{0} ** (win_span / 4),
+    shadow: [win_span / 4]u32 = @splat(0),
 
     arms: u32 = 0,
     frames: u32 = 0,

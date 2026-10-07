@@ -91,7 +91,7 @@ pub const Cache = struct {
     /// CSSELR: which cache a walk last selected.
     selected: u32 = 0,
     /// Boundaries at which each operation was seen, one counter per Op.
-    seen: [op_count]u32 = .{0} ** op_count,
+    seen: [op_count]u32 = @splat(0),
     /// Stores to CTR or CCSIDR, which are read-only on silicon.
     refused: u32 = 0,
     /// CCR.IC and CCR.DC as last read, and how often that changed.

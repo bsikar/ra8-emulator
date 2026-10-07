@@ -55,7 +55,7 @@ test "an empty frame is not a frame" {
 
 test "a frame longer than the marshal buffer is refused" {
     var queue = peer.Queue{};
-    const big = [_]u8{0} ** (desc.limits.frame_max + 1);
+    const big = @as([desc.limits.frame_max + 1]u8, @splat(0));
     try std.testing.expect(!queue.push(&big));
 }
 

@@ -14,7 +14,7 @@ const served = ra8.interfaces.rpc.server;
 
 /// Vector table (SP 0x40, reset 0x09) then nop, nop.w, nop at 0x08.
 const Ram = struct {
-    bytes: [256]u8 = [_]u8{0} ** 256,
+    bytes: [256]u8 = @splat(0),
 
     fn init() Ram {
         var memory: Ram = .{};

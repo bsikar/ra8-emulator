@@ -119,7 +119,7 @@ pub const Moved = struct {
 };
 
 pub const Npu = struct {
-    reg: [words]u32 = .{0} ** words,
+    reg: [words]u32 = @splat(0),
     /// STATUS as this model computes it, held rather than shadowed.
     state: u32 = 0,
     /// The arenas a job moves bytes between. A board built by a test without

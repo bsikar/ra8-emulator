@@ -304,7 +304,7 @@ pub const Drw = struct {
         const under = self.destination(memory, at, bytes) orelse return;
         const stored = painting.pack(painting.shade(source, self.color2, under));
         if (self.pixel_cache.store(self.memory, at, bytes, stored)) return;
-        var cell = [_]u8{0} ** 4;
+        var cell = @as([4]u8, @splat(0));
         const slot = cell[0..bytes];
         cache.pack(slot, stored);
         memory.write(at, slot) catch {
@@ -318,7 +318,7 @@ pub const Drw = struct {
     /// the same pixel composites against the wrong colour.
     fn destination(self: *Drw, memory: Guest, at: u32, bytes: u32) ?u32 {
         if (self.pixel_cache.load(at)) |cached| return cached;
-        var cell = [_]u8{0} ** 4;
+        var cell = @as([4]u8, @splat(0));
         const slot = cell[0..bytes];
         memory.read(at, slot) catch {
             self.faults +%= 1;

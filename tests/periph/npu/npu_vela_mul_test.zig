@@ -8,7 +8,7 @@ const mul = vela.mul;
 
 /// A flat 4 KiB memory at bus address 0x1000 that refuses everything else.
 const Memory = struct {
-    bytes: [4096]u8 = [_]u8{0} ** 4096,
+    bytes: [4096]u8 = @splat(0),
 
     const base: u32 = 0x1000;
 

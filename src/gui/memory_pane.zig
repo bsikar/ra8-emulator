@@ -37,8 +37,8 @@ pub const Snapshot = struct {
     base: u32 = 0,
     /// Rows captured, from `base` up.
     count: usize = 0,
-    bytes: [cells]u8 = [_]u8{0} ** cells,
-    readable: [cells]bool = [_]bool{false} ** cells,
+    bytes: [cells]u8 = @splat(0),
+    readable: [cells]bool = @splat(false),
 
     pub fn rowAddress(self: *const Snapshot, row: usize) u32 {
         return self.base +% @as(u32, @intCast(row * per_row));

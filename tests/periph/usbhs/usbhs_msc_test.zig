@@ -4,7 +4,7 @@ const ra8 = @import("ra8");
 const msc = ra8.periph.usbhs_msc;
 
 fn cbw(tag: u32, length: u32, cdb: []const u8) [msc.cbw_len]u8 {
-    var packet = [_]u8{0} ** msc.cbw_len;
+    var packet = @as([msc.cbw_len]u8, @splat(0));
     std.mem.writeInt(u32, packet[0..4], msc.cbw_signature, .little);
     std.mem.writeInt(u32, packet[4..8], tag, .little);
     std.mem.writeInt(u32, packet[8..12], length, .little);
@@ -15,14 +15,14 @@ fn cbw(tag: u32, length: u32, cdb: []const u8) [msc.cbw_len]u8 {
 }
 
 fn csw(target: *msc.Target) [msc.csw_len]u8 {
-    var out = [_]u8{0} ** msc.csw_len;
+    var out = @as([msc.csw_len]u8, @splat(0));
     std.testing.expectEqual(msc.csw_len, target.reply(&out)) catch unreachable;
     return out;
 }
 
 var disk_bytes = blk: {
     @setEvalBranchQuota(8 * msc.block_len);
-    var bytes = [_]u8{0} ** (4 * msc.block_len);
+    var bytes = @as([4 * msc.block_len]u8, @splat(0));
     for (&bytes, 0..) |*b, i| b.* = @truncate(i / msc.block_len + 0xA0);
     break :blk bytes;
 };
@@ -129,10 +129,10 @@ test "WRITE(10) takes its data on bulk OUT, then reads back what it wrote" {
     try std.testing.expectEqual(msc.Phase.data_out, target.phase);
     var buf: [512]u8 = undefined;
     try std.testing.expectEqual(@as(usize, 0), target.reply(&buf));
-    const half = [_]u8{0x11} ** 256;
+    const half = @as([256]u8, @splat(0x11));
     try std.testing.expect(target.command(&half));
     try std.testing.expectEqual(msc.Phase.data_out, target.phase);
-    try std.testing.expect(target.command(&([_]u8{0x22} ** 256)));
+    try std.testing.expect(target.command(&(@as([256]u8, @splat(0x22)))));
     const status = csw(&target);
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, status[8..12], .little));
     try std.testing.expectEqual(@as(u8, 0), status[12]);
@@ -161,5 +161,5 @@ test "a bus reset in the middle of a write drops the rest of it" {
     _ = target.command(&cbw(3, 512, &.{ msc.op.write10, 0, 0, 0, 0, 3, 0, 0, 1, 0 }));
     target.reset();
     try std.testing.expectEqual(msc.Phase.command, target.phase);
-    try std.testing.expect(!target.command(&([_]u8{0} ** 8)));
+    try std.testing.expect(!target.command(&(@as([8]u8, @splat(0)))));
 }

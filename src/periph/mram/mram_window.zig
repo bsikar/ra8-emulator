@@ -53,7 +53,7 @@ pub fn claim(machine: Guest.Guest, base: u32, size: u32) bool {
 /// erased value. A page something already mapped (an image segment that
 /// loaded first) keeps its bytes. Returns how many pages were mapped here.
 pub fn map(machine: Guest.Guest) Guest.Error!u32 {
-    const erased = [_]u8{cells.window.erased} ** page;
+    const erased = @as([page]u8, @splat(cells.window.erased));
     var mapped: u32 = 0;
     var at: u32 = span.base;
     while (at < span.end) : (at += page) {

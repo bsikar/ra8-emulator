@@ -135,9 +135,9 @@ pub const id = struct {
 };
 
 pub const Dwt = struct {
-    comps: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
-    functions: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
-    vmasks: [limits.comparators]u32 = [_]u32{0} ** limits.comparators,
+    comps: [limits.comparators]u32 = @splat(0),
+    functions: [limits.comparators]u32 = @splat(0),
+    vmasks: [limits.comparators]u32 = @splat(0),
     /// DWT_CTRL.NUMCOMP: the comparators this core has. Those past it are
     /// absent, so they read as zero, ignore writes and never match.
     numcomp: u4 = limits.comparators,

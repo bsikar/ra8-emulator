@@ -151,7 +151,7 @@ const store_stack: u32 = store_vectors + 0x800;
 /// One executable PT_LOAD segment at `store_vectors`: a vector pair, then
 /// MOVS r0, #5; ADDS r0, #1; B . at +0x200.
 fn cpu1Image() [store_page * 2]u8 {
-    var file = [_]u8{0} ** (store_page * 2);
+    var file = @as([store_page * 2]u8, @splat(0));
     const elf = ra8.core.elf;
     const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
@@ -161,7 +161,7 @@ fn cpu1Image() [store_page * 2]u8 {
         .version = 1,
         .osabi = 0,
         .abiversion = 0,
-        .pad = .{0} ** 7,
+        .pad = @splat(0),
         .e_type = 2,
         .e_machine = elf.em_arm,
         .e_version = 1,

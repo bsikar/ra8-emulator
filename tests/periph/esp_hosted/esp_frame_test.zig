@@ -38,7 +38,7 @@ test "header round trips through encode and decode" {
 }
 
 test "checksum is a wrapping byte sum that skips the checksum field" {
-    var bytes = [_]u8{0xFF} ** 300;
+    var bytes = @as([300]u8, @splat(0xFF));
     bytes[6] = 0x12;
     bytes[7] = 0x34;
     try std.testing.expectEqual(@as(u16, @truncate(298 * 0xFF)), frame.checksum(&bytes));
@@ -64,7 +64,7 @@ test "a corrupted payload byte fails the checksum" {
 }
 
 test "parse rejects short frames, low offsets and overruns" {
-    try std.testing.expectError(frame.Error.ShortFrame, frame.parse(&[_]u8{0} ** 4));
+    try std.testing.expectError(frame.Error.ShortFrame, frame.parse(&@as([4]u8, @splat(0))));
     var buf: [frame.frame_size]u8 = undefined;
     try frame.build(&buf, .{ .interface = .serial }, "abc");
     buf[4] = 2;
@@ -76,6 +76,6 @@ test "parse rejects short frames, low offsets and overruns" {
 
 test "build refuses a payload larger than one frame holds" {
     var buf: [frame.frame_size]u8 = undefined;
-    const big = [_]u8{0} ** (frame.max_payload + 1);
+    const big = @as([frame.max_payload + 1]u8, @splat(0));
     try std.testing.expectError(frame.Error.BadLength, frame.build(&buf, .{}, &big));
 }

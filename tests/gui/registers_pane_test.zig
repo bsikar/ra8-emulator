@@ -109,7 +109,7 @@ test "no earlier snapshot marks nothing, and a pane too small draws nothing" {
 
 /// A RAM image holding a vector table: initial sp 0x40, reset at 0x08.
 const Ram = struct {
-    bytes: [256]u8 = [_]u8{0} ** 256,
+    bytes: [256]u8 = @splat(0),
 
     fn init() Ram {
         var memory: Ram = .{};

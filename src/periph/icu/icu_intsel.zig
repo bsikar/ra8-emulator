@@ -48,7 +48,7 @@ const assigned_writable = [_]u32{
 };
 
 pub const Intsel = struct {
-    bank: [words]u32 = [_]u32{0} ** words,
+    bank: [words]u32 = @splat(0),
 
     /// Which core `event` interrupts. A number past the bank is CPU0's,
     /// the same answer the reset value gives.

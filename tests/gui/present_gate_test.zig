@@ -61,7 +61,7 @@ test "a change held back by the interval presents once the interval passes" {
 }
 
 test "an image refilled in place changes the digest" {
-    var pixels = [_]Color{Color.rgb(1, 2, 3)} ** 4;
+    var pixels = @as([4]Color, @splat(Color.rgb(1, 2, 3)));
     var list = draw_list.DrawList.init(std.testing.allocator, 8, 8);
     defer list.deinit();
     try list.image(.{ .x = 0, .y = 0, .w = 2, .h = 2 }, .{ .width = 2, .height = 2, .pixels = &pixels });

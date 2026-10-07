@@ -19,7 +19,7 @@ pub const stage_bytes = 64;
 
 pub const Rx = struct {
     /// What the addressed device staged for this read.
-    staged: [stage_bytes]u8 = .{0} ** stage_bytes,
+    staged: [stage_bytes]u8 = @splat(0),
     staged_len: usize = 0,
     served: usize = 0,
     /// The dummy read that starts the clock has not happened yet.

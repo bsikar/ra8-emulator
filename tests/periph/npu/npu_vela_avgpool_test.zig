@@ -7,7 +7,7 @@ const vela = ra8.periph.npu_vela;
 const avgpool = vela.avgpool;
 
 const Memory = struct {
-    bytes: [0x200]u8 = .{0} ** 0x200,
+    bytes: [0x200]u8 = @splat(0),
     pub fn read(self: *@This(), at: u32, out: []u8) error{Refused}!void {
         if (at + out.len > self.bytes.len) return error.Refused;
         @memcpy(out, self.bytes[at..][0..out.len]);
@@ -138,7 +138,7 @@ const ofm_same_4x4 = hexBytes("130a11c621d2e3f9fa0d0fe30bf2e203e70828fd1e11f122d
 fn runVela(words: []const u32, ifm: []const u8, ofm_at: usize, ofm: []const u8) !void {
     var memory = Memory{};
     @memcpy(memory.bytes[0..ifm.len], ifm);
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     const result = try vela.runner.run(&memory, &regions, words);
     try std.testing.expectEqual(@as(u64, ofm.len), result.elements);
     try std.testing.expectEqualSlices(u8, ofm, memory.bytes[ofm_at..][0..ofm.len]);
@@ -169,7 +169,7 @@ test "a Vela-compiled SAME average pool writes TFLite's output" {
 
 test "a padded average pool outside Vela's form or the TRM limits is not modelled" {
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     var words = vela_avg_same_4x4;
     const prec = std.mem.indexOfScalar(u32, &words, 0x00010114).?; // OFM_PRECISION, global scale off
     words[prec] = 0x01010114;
@@ -186,7 +186,7 @@ test "a padded average pool outside Vela's form or the TRM limits is not modelle
 
 test "padded-with-scale, per-channel or activated average pools are not modelled" {
     var memory = Memory{};
-    const regions: vela.dma.Regions = .{0} ** 8;
+    const regions: vela.dma.Regions = @splat(0);
     const index = std.mem.indexOfScalar(u32, &vela_avg_2x2, 0x00000100).?; // IFM_PAD_TOP 0
     var words = withWord(index, 0x00010100);
     try std.testing.expectError(error.OperatorNotModelled, vela.runner.run(&memory, &regions, &words));

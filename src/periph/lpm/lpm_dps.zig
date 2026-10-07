@@ -51,7 +51,7 @@ pub fn addressOf(kind: Kind, index: usize) u32 {
 
 pub const Dps = struct {
     /// DPSIER0..3, DPSIFR0..3, DPSIEGR0..2 in address order.
-    bytes: [count]u8 = [_]u8{0} ** count,
+    bytes: [count]u8 = @splat(0),
     writes: u32 = 0,
 
     pub fn quiet(self: *const Dps) bool {

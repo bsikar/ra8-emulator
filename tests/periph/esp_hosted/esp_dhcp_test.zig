@@ -27,9 +27,9 @@ fn clientFrame(buf: []u8, kind: dhcp.MessageType, port: u16) usize {
     clientMessage(buf[eth.headers..][0..dhcp.reply_len], kind);
     return eth.wrap(buf, .{
         .src_mac = client_mac,
-        .dst_mac = .{0xFF} ** 6,
+        .dst_mac = @splat(0xFF),
         .src_ip = .{ 0, 0, 0, 0 },
-        .dst_ip = .{0xFF} ** 4,
+        .dst_ip = @splat(0xFF),
         .src_port = dhcp.client_port,
         .dst_port = port,
     }, dhcp.reply_len);
@@ -42,7 +42,7 @@ fn answer(out: *[frame.frame_size]u8, kind: dhcp.MessageType) ![]const u8 {
     try std.testing.expect(dhcp.answerFrame(out, buf[0..len]));
     const got = try frame.parse(out);
     try std.testing.expectEqual(frame.Interface.sta, got.header.interface);
-    try std.testing.expectEqualSlices(u8, &([_]u8{0xFF} ** 6), got.payload[0..6]);
+    try std.testing.expectEqualSlices(u8, &(@as([6]u8, @splat(0xFF))), got.payload[0..6]);
     const dgram = eth.udp(got.payload).?;
     try std.testing.expectEqual(dhcp.server_port, dgram.src_port);
     try std.testing.expectEqual(dhcp.client_port, dgram.dst_port);

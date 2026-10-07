@@ -5,7 +5,7 @@ const vpt = ra8.core.mve.vpt;
 const Vpr = ra8.core.mve.predicate.Vpr;
 
 fn runs(start: Vpr, count: usize) [4]u16 {
-    var out = [_]u16{0} ** 4;
+    var out = @as([4]u16, @splat(0));
     var v = start;
     for (0..count) |i| {
         out[i] = vpt.elementMask(v);

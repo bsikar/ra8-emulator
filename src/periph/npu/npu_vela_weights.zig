@@ -56,7 +56,7 @@ const Bits = struct {
 /// Indices below `size` look a value up; the rest are offset directly.
 /// Values are sign-magnitude with the sign in bit 0.
 const Palette = struct {
-    entries: [32]u16 = [_]u16{0} ** 32,
+    entries: [32]u16 = @splat(0),
     size: u32 = 0,
     bits: u5 = 2,
     direct_offset: u32 = 0,
@@ -98,11 +98,11 @@ const Header = struct {
 const Side = struct {
     pos: u32 = 0,
     prev_pos: u32 = 0,
-    q: [max_symbols]u32 = [_]u32{0} ** max_symbols,
+    q: [max_symbols]u32 = @splat(0),
     nsymbols: u32 = 0,
     carry: u32 = 0,
     enable: bool = false,
-    prev_q: [max_symbols]u32 = [_]u32{0} ** max_symbols,
+    prev_q: [max_symbols]u32 = @splat(0),
     prev_nsymbols: u32 = 0,
     prev_enable: bool = false,
 

@@ -79,7 +79,7 @@ pub const Error = error{TooManyRegions};
 /// Section bytes per region, the sections that fit none, and the stack.
 pub const Map = struct {
     regions: []const Region,
-    used: [max_regions]u64 = [_]u64{0} ** max_regions,
+    used: [max_regions]u64 = @splat(0),
     outside: usize = 0,
     outside_bytes: u64 = 0,
     stack: ?Stack = null,

@@ -16,7 +16,7 @@ const ppm_bytes = "P6\n2 2\n255\n" ++ [_]u8{ 255, 0, 0, 0, 255, 0, 0, 0, 255, 25
 
 /// The same picture as a bottom-up 24-bit BMP (rows padded to 8 bytes).
 fn bmpBytes() [70]u8 {
-    var b = [_]u8{0} ** 70;
+    var b = @as([70]u8, @splat(0));
     b[0] = 'B';
     b[1] = 'M';
     std.mem.writeInt(u32, b[2..6], 70, .little);

@@ -21,7 +21,7 @@ const Slot = struct {
 };
 
 pub const DecodeCache = struct {
-    table: [slots]Slot = [_]Slot{.{}} ** slots,
+    table: [slots]Slot = @splat(.{}),
     /// Lookups the table answered, and lookups that had to walk the groups.
     hits: u64 = 0,
     misses: u64 = 0,

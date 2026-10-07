@@ -70,7 +70,7 @@ pub const Device = struct {
     vbus: bool = false,
     syscfg: u16 = 0,
     status: u16 = 0,
-    shadow: [window.words]u16 = .{0} ** window.words,
+    shadow: [window.words]u16 = @splat(0),
     /// The control FIFO port, aimed at the DCP.
     control: dcp.Dcp = .{},
     /// PIPE1 through PIPE9.

@@ -139,7 +139,7 @@ test "a park hands the console what the channels sent, stamped with board time" 
     defer feed.deinit();
     screen.feed = &feed;
     board.serial.tap = feed.tap();
-    var logs = [_]ra8.gui.console_log.Log{ra8.gui.console_log.Log.init(std.testing.allocator, 4)} ** sci.channels;
+    var logs = @as([sci.channels]ra8.gui.console_log.Log, @splat(ra8.gui.console_log.Log.init(std.testing.allocator, 4)));
     defer for (&logs) |*log| log.deinit();
     board.serial.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.te);
     board.time.base.advance(board.time.base.hz);

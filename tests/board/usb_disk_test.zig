@@ -3,7 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const usb_disk = ra8.board.usb_disk;
 
-var image = [_]u8{0xCC} ** (512 * usb_disk.sector_len);
+var image = @as([512 * usb_disk.sector_len]u8, @splat(0xCC));
 
 fn rd16(at: usize) u16 {
     return std.mem.readInt(u16, image[at..][0..2], .little);

@@ -56,7 +56,7 @@ pub const Write = struct {
     count: usize = 0,
     /// The checksum the host sent, assembled big-endian.
     sent: u16 = 0,
-    buf: image.Block = .{0} ** image.geometry.block_bytes,
+    buf: image.Block = @splat(0),
 
     pub fn active(self: *const Write) bool {
         return self.phase != .idle;

@@ -45,7 +45,7 @@ test "a device record puts path, busid and the descriptor fields where usbip rea
 
 test "a busid or path that fills its whole field is refused, leaving no NUL" {
     var out: [wire.device_len]u8 = undefined;
-    const long = "x" ** wire.busid_len;
+    const long = &@as([wire.busid_len:0]u8, @splat('x'));
     const device = wire.Device{ .path = "", .busid = long, .busnum = 1, .devnum = 1, .speed = .full, .vendor = 0, .product = 0, .bcd_device = 0 };
     try std.testing.expectError(error.TooLong, device.encode(&out));
 }
@@ -57,14 +57,14 @@ test "an interface entry is class, subclass, protocol and a pad byte" {
 }
 
 test "an import request names its busid up to the first NUL" {
-    var body = [_]u8{0} ** wire.busid_len;
+    var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..3], "1-1");
     try std.testing.expectEqualStrings("1-1", try wire.importBusid(&body));
     try std.testing.expectError(error.Short, wire.importBusid(body[0..8]));
 }
 
 fn submitBytes(direction: u32) [wire.basic_len]u8 {
-    var bytes = [_]u8{0} ** wire.basic_len;
+    var bytes = @as([wire.basic_len]u8, @splat(0));
     const words = [_]u32{ wire.cmd.submit, 7, 0x0001_0002, direction, 0, 0x200, 18, 0, 0, 0 };
     for (words, 0..) |value, i| std.mem.writeInt(u32, bytes[i * 4 ..][0..4], value, .big);
     bytes[40..48].* = .{ 0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x12, 0x00 };
@@ -112,9 +112,9 @@ test "a submit reply zeroes devid, direction and ep and reports status and lengt
     wire.retSubmit(&out, 7, 0, 18);
     try std.testing.expectEqual(wire.cmd.ret_submit, try wire.command(&out));
     try std.testing.expectEqual(@as(u32, 7), std.mem.readInt(u32, out[4..8], .big));
-    try std.testing.expectEqualSlices(u8, &([_]u8{0} ** 12), out[8..20]);
+    try std.testing.expectEqualSlices(u8, &(@as([12]u8, @splat(0))), out[8..20]);
     try std.testing.expectEqual(@as(u32, 18), std.mem.readInt(u32, out[24..28], .big));
-    try std.testing.expectEqualSlices(u8, &([_]u8{0} ** 20), out[28..48]);
+    try std.testing.expectEqualSlices(u8, &(@as([20]u8, @splat(0))), out[28..48]);
 }
 
 test "an unlink reply carries a negative errno as status" {

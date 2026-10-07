@@ -127,7 +127,7 @@ pub const Oscillators = struct {
     pub fn init(protection: *const prcr.Prcr) Oscillators {
         var self = Oscillators{
             .protection = protection,
-            .shadow = [_]u8{0} ** win_span,
+            .shadow = @as([win_span]u8, @splat(0)),
         };
         // HOCO running, the other three stopped. See the header.
         self.shadow[regs.mosccr] = stop;

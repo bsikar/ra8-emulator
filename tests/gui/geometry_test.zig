@@ -8,11 +8,11 @@ const Rect = draw_list.Rect;
 
 const red = Color.rgb(255, 0, 0);
 const blue = Color.rgb(0, 0, 255);
-const coverage = [_]u8{0xff} ** (8 * 4);
+const coverage = @as([8 * 4]u8, @splat(0xff));
 const atlas = raster.Atlas{ .width = 8, .height = 4, .coverage = &coverage };
-const pixels = [_]Color{red} ** 4;
+const pixels = @as([4]Color, @splat(red));
 const picture = draw_list.Image{ .width = 2, .height = 2, .pixels = &pixels };
-const other_pixels = [_]Color{blue} ** 4;
+const other_pixels = @as([4]Color, @splat(blue));
 const other_picture = draw_list.Image{ .width = 2, .height = 2, .pixels = &other_pixels };
 
 fn build(list: *const draw_list.DrawList, cells: ?raster.Atlas) !geometry.Batch {
@@ -41,7 +41,7 @@ test "a fill is two triangles over its clipped area in one untextured run" {
 
 /// Every pixel the batch's quads cover, as a grid.
 fn covered(batch: *const geometry.Batch, comptime size: usize) [size][size]bool {
-    var grid = [_][size]bool{[_]bool{false} ** size} ** size;
+    var grid: [size][size]bool = @splat(@splat(false));
     var index: usize = 0;
     while (index < batch.vertices.items.len) : (index += 4) {
         const top_left = batch.vertices.items[index];

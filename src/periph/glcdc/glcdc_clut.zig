@@ -63,10 +63,9 @@ pub fn slotOf(offset: u32) ?Slot {
 /// exactly the mistake worth catching, so the filled count is kept and the
 /// scan asks about it before it trusts a lookup.
 pub const Palette = struct {
-    planes: [geometry.planes][geometry.entries]u32 =
-        [_][geometry.entries]u32{[_]u32{0} ** geometry.entries} ** geometry.planes,
+    planes: [geometry.planes][geometry.entries]u32 = @splat(@splat(0)),
     /// Entries written per plane, so an unprogrammed palette is knowable.
-    filled: [geometry.planes]u32 = [_]u32{0} ** geometry.planes,
+    filled: [geometry.planes]u32 = @splat(0),
     /// Which plane the fetch unit reads, from CLUTINT.SEL.
     selected: u8 = 0,
 

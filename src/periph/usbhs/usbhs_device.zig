@@ -36,12 +36,12 @@ pub const Device = struct {
     configuration: u8 = 0,
 
     /// What the device owes the host on the control pipe.
-    reply: [regs.staging.reply_cap]u8 = [_]u8{0} ** regs.staging.reply_cap,
+    reply: [regs.staging.reply_cap]u8 = @splat(0),
     reply_len: u16 = 0,
     reply_ready: bool = false,
 
     /// The bulk endpoint's loopback: what came in on OUT goes back out on IN.
-    echo: [regs.staging.packet_cap]u8 = [_]u8{0} ** regs.staging.packet_cap,
+    echo: [regs.staging.packet_cap]u8 = @splat(0),
     echo_len: u16 = 0,
     echo_ready: bool = false,
 

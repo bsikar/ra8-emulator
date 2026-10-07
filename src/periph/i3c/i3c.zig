@@ -37,7 +37,7 @@ pub const reg = flag.reg;
 pub const stage_bytes: usize = 64;
 
 pub const I3c = struct {
-    shadow: [flag.reg.words]u32 = .{0} ** flag.reg.words,
+    shadow: [flag.reg.words]u32 = @splat(0),
     /// The transmit side is empty out of reset, so a driver may put the
     /// first address byte down without waiting for anything.
     ntst: u32 = flag.ntst.tdbef0,
@@ -48,7 +48,7 @@ pub const I3c = struct {
     reading: bool = false,
     target_7b: u7 = 0,
     /// What the addressed device staged for this read.
-    staged: [stage_bytes]u8 = .{0} ** stage_bytes,
+    staged: [stage_bytes]u8 = @splat(0),
     staged_len: usize = 0,
     served: usize = 0,
     /// The receive flow does one dummy buffer read to start the clock before

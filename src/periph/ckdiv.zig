@@ -126,7 +126,7 @@ pub const Ckdiv = struct {
     protection: *const prcr.Prcr,
     /// The selects, so a store can ask whether its branch is gated.
     branches: *const ckcr.Ckcr,
-    dividers: [slots.len]Divider = .{Divider{}} ** slots.len,
+    dividers: [slots.len]Divider = @splat(Divider{}),
     /// Stores dropped because PRCR.PRC0 was locked.
     dropped_locked: u32 = 0,
 

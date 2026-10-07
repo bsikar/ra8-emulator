@@ -36,7 +36,7 @@ pub const Site = struct {
 
 /// The table itself.
 pub const Sites = struct {
-    seen: [limits.sites]Site = [_]Site{.{}} ** limits.sites,
+    seen: [limits.sites]Site = @splat(.{}),
     used: usize = 0,
     /// Records that arrived for a new address once the table was full, so
     /// a run with more sites than slots says so instead of lying by

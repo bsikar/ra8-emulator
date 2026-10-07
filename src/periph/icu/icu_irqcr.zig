@@ -69,7 +69,7 @@ pub fn channelAt(offset: u32) ?usize {
 
 /// The thirty-two control bytes and the rewrites the manual forbids.
 pub const Irqcr = struct {
-    pins: [channels]u8 = [_]u8{0} ** channels,
+    pins: [channels]u8 = @splat(0),
     /// Stores that changed a pin's byte while its event was routed.
     rewrites_while_routed: u32 = 0,
 

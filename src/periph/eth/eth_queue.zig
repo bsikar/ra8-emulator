@@ -33,7 +33,7 @@ pub const Queues = struct {
     mode: ?*const eth_mode.Machine = null,
     rings: eth_dma.Dma = .{},
     /// GWDCC[i] as written, for the read back.
-    config: [regs.gwca.queue_count]u32 = [_]u32{0} ** regs.gwca.queue_count,
+    config: [regs.gwca.queue_count]u32 = @splat(0),
     chain_base: [2]u32 = .{ 0, 0 },
     /// Ring-base writes the gateway was not in CONFIG for.
     base_late: u32 = 0,

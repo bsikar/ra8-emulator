@@ -25,7 +25,7 @@ pub const field = struct {
 
 pub const Bank = struct {
     dmast: u8 = 0,
-    shadow: [win_span]u8 = [_]u8{0} ** win_span,
+    shadow: [win_span]u8 = @splat(0),
     /// Accesses to a register in this bank that is shadowed and not modelled.
     unmodelled: u32 = 0,
 

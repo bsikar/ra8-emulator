@@ -110,7 +110,7 @@ pub const Image = struct {
         if (self.blocks.get(index)) |stored| {
             out.* = stored.*;
         } else {
-            out.* = .{0} ** geometry.block_bytes;
+            out.* = @splat(0);
         }
         return true;
     }

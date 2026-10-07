@@ -55,8 +55,8 @@ pub const region = struct {
 
 /// The pin array, the gate, and what the run should say about both.
 pub const Pfs = struct {
-    entries: [limits.entry_count]u32 = [_]u32{0} ** limits.entry_count,
-    misc: [region.pmisc_words]u32 = [_]u32{0} ** region.pmisc_words,
+    entries: [limits.entry_count]u32 = @splat(0),
+    misc: [region.pmisc_words]u32 = @splat(0),
     guard: protect.Protect = .{},
     ordering: route.Route = .{},
     /// Pin writes that landed, so a refusal count has something to sit beside.

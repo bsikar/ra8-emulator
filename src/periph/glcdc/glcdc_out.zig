@@ -151,7 +151,7 @@ pub const Capture = struct {
 pub const Stage = struct {
     shadow: Shadow = .{},
     live: Shadow = .{},
-    gamma: [gam.geometry.channels]gam.Channel = [_]gam.Channel{.{}} ** gam.geometry.channels,
+    gamma: [gam.geometry.channels]gam.Channel = @splat(.{}),
     /// GAMSW.GAMON, which is not shadowed.
     gamma_on: bool = false,
     /// Writes into the window.

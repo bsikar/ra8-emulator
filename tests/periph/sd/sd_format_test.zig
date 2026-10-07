@@ -109,7 +109,7 @@ test "a formatted FAT32 card carries the backup boot sector and its FSInfo" {
 test "a format clears what the card was still holding in the metadata region" {
     var img = card(32);
     defer img.deinit();
-    const junk: image.Block = .{0xA5} ** image.geometry.block_bytes;
+    const junk: image.Block = @splat(0xA5);
     try std.testing.expect(img.write(3, &junk));
     try std.testing.expect(img.write(40, &junk));
     const beyond: u32 = 40_000;

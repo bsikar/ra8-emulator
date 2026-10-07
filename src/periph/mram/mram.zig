@@ -115,7 +115,7 @@ const shadow_words: usize = regs.span / 4;
 pub const Mram = struct {
     otp: cells.Cells,
     stream: maci.Sequencer = .{},
-    shadow: [shadow_words]u32 = [_]u32{0} ** shadow_words,
+    shadow: [shadow_words]u32 = @splat(0),
     /// The code-MRAM program-control page: a different program path on the
     /// same controller, so it shares this block and owns its own rules.
     code: code.Page = .{},

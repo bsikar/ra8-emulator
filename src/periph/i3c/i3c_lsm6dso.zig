@@ -59,7 +59,7 @@ pub const seed = struct {
 
 pub const Imu = struct {
     registers: [reg.count]u8 = blk: {
-        var reset = [_]u8{0} ** reg.count;
+        var reset = @as([reg.count]u8, @splat(0));
         reset[reg.who_am_i] = identity;
         reset[reg.outz_l_a] = @truncate(seed.accel_z);
         reset[reg.outz_l_a + 1] = @truncate(seed.accel_z >> 8);
