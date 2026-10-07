@@ -55,7 +55,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
         .undefined_sites = if (swept) |*found| found else null,
         .schedule = if (options.faults != null) &schedule.applier else null,
     };
-    if (options.frames.live) return fit_verdict(&board, try window_main.show(allocator, .{ .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
+    if (options.frames.live) return fit_verdict(&board, try window_main.show(allocator, .{ .io = io, .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
     return fit_verdict(&board, try zig_run.run(out, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends));
 }
 

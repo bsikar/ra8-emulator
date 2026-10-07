@@ -54,19 +54,20 @@ pub const Pacing = struct {
 var host: pacer.HostClock = undefined;
 var host_started = false;
 
-/// The process's host clock, started on first use. A later caller gets the
-/// same one, so a pacer anchored on it never sees the clock restart.
-pub fn hostClock() !pacer.Clock {
+/// The process's host clock, started on first use with the first caller's
+/// io. A later caller gets the same one, so a pacer anchored on it never
+/// sees the clock restart.
+pub fn hostClock(io: std.Io) pacer.Clock {
     if (!host_started) {
-        host = try pacer.HostClock.init();
+        host = pacer.HostClock.init(io);
         host_started = true;
     }
     return host.clock();
 }
 
 /// Pace `time` against the host's monotonic clock from where it stands.
-pub fn attachHost(time: anytype, speed_milli: u64) !void {
-    time.pacing = Pacing.start(try hostClock(), time.base.now(), speed_milli);
+pub fn attachHost(time: anytype, io: std.Io, speed_milli: u64) void {
+    time.pacing = Pacing.start(hostClock(io), time.base.now(), speed_milli);
 }
 
 /// The end-of-run line, only when the run was paced, so an unpaced run's

@@ -116,7 +116,7 @@ test "a zero speed means real time and no wall time reports zero" {
 }
 
 test "the host clock moves forward" {
-    var host = try pacer.HostClock.init();
+    var host = pacer.HostClock.init(std.testing.io);
     const c = host.clock();
     const a = c.now();
     c.sleep(1000);
