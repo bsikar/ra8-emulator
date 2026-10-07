@@ -21,6 +21,7 @@ pub const core = struct {
     pub const csel = @import("core/csel.zig");
     pub const disasm = @import("debug/disasm.zig");
     pub const elf = @import("core/elf.zig");
+    pub const bounded = @import("core/bounded.zig");
     pub const long_shift = @import("core/long_shift.zig");
     pub const lob = @import("core/lob.zig");
     pub const memmap = @import("core/memmap.zig");

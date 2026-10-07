@@ -26,6 +26,7 @@
 //! The map itself, and which lanes of a word each register occupies, is
 //! src/periph/elc_regs.zig; this file is the behaviour behind it.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const regs = @import("elc_regs.zig");
@@ -76,7 +77,7 @@ pub const Refusal = enum {
 };
 
 /// Software events generated this boundary, drained by the board.
-pub const Due = std.BoundedArray(u16, generators);
+pub const Due = Bounded(u16, generators);
 
 /// The link table, the generators, and the counters behind the report line.
 pub const Elc = struct {

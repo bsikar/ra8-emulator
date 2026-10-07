@@ -56,6 +56,7 @@
 //! and a guest address is 32 bits here, so a BASEPn with anything in its
 //! high word is refused rather than truncated into a plausible pointer.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const periph = @import("../registry.zig");
 const cmd = @import("npu_cmd.zig");
@@ -106,7 +107,7 @@ pub const event = struct {
     pub const irq: u16 = 0x067;
 };
 
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 const words: usize = win_span / 4;
 

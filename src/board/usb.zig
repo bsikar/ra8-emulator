@@ -6,11 +6,12 @@
 //! on the other end is a board fact, so it is set here. The device jack has
 //! a scripted host on it, the way a PC would be, stepped once per boundary.
 const std = @import("std");
+const Bounded = @import("../core/bounded.zig").Bounded;
 const periph = @import("../periph/registry.zig");
 const usbfs = @import("../periph/usbfs/usbfs.zig");
 const usbhs = @import("../periph/usbhs/usbhs.zig");
 
-pub const Due = std.BoundedArray(u16, 1);
+pub const Due = Bounded(u16, 1);
 
 pub const event = struct {
     /// ELC_EVENT_USBFS_INT (ra8_elc_regs.h k_ra8_elc_event_usbfs_int).

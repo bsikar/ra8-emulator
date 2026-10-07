@@ -4,6 +4,7 @@
 //! transcript on either CPU. `core 0|1` hands the session to the other
 //! core (RA8EMU-337), its image and temporary breaks with it.
 const std = @import("std");
+const Bounded = @import("../core/bounded.zig").Bounded;
 const break_table = @import("break_table.zig");
 const commands = @import("commands.zig");
 const elf = @import("../core/elf.zig");
@@ -17,7 +18,7 @@ const endpoint = @import("../periph/model/endpoint.zig");
 
 pub const Error = error{ Unsupported, MissingPart };
 
-const Temporary = std.BoundedArray(break_table.Id, break_table.limits.capacity);
+const Temporary = Bounded(break_table.Id, break_table.limits.capacity);
 
 pub const ZigScript = struct {
     session: *session_api.Session,

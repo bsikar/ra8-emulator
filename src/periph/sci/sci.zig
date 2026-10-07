@@ -42,6 +42,7 @@
 //! and a refused read leaves the ring holding what it had, so the driver can
 //! come back with a load that names the data.
 const std = @import("std");
+const Bounded = @import("../../core/bounded.zig").Bounded;
 const periph = @import("../registry.zig");
 const sci_status = @import("sci_status.zig");
 const sci_lin = @import("sci_lin.zig");
@@ -106,7 +107,7 @@ pub const event = struct {
 
 /// The console events armed and satisfied at one moment. Bounded because
 /// there are exactly three of them.
-pub const Due = std.BoundedArray(u16, 3);
+pub const Due = Bounded(u16, 3);
 
 pub const data_mask: u32 = 0xFF;
 
