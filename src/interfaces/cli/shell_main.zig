@@ -121,7 +121,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     shell.camera_file = &camera_file;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug, .camera_file = &camera_file };
     shell.painter = panes.painter();
-    try drive(&shell, window, path, bytes);
+    try drive(io, &shell, window, path, bytes);
     link.close();
     child.end();
     _ = try child.reap();
@@ -129,7 +129,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
 
 /// Step `shell` until its window closes, loading the image once its session
 /// has greeted.
-pub fn drive(shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
+pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
     var sent = false;
     while (try shell.step(window)) {
         if (!sent and shell.state() == .connected) {
@@ -137,6 +137,6 @@ pub fn drive(shell: *shell_loop.Shell, window: platform.Platform, path: []const 
             try shell.status.load(link, path, bytes);
             sent = true;
         }
-        std.time.sleep(frame_gap_ns);
+        try io.sleep(.fromNanoseconds(frame_gap_ns), .awake);
     }
 }
