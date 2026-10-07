@@ -47,15 +47,15 @@ pub fn Reader(comptime Source: type) type {
 
         /// The whole chain from `first`, cut to `limit` bytes when given.
         pub fn chain(self: *const Self, allocator: std.mem.Allocator, first: u32, limit: ?u32) ![]u8 {
-            var out = std.ArrayList(u8).init(allocator);
-            errdefer out.deinit();
+            var out: std.ArrayList(u8) = .empty;
+            errdefer out.deinit(allocator);
             var cluster = first;
             while (cluster >= 2 and cluster < 0x0FFF_FFF8) : (cluster = try self.next(cluster)) {
                 var s: u32 = 0;
                 while (s < self.spc) : (s += 1) {
                     var block: [512]u8 = undefined;
                     if (!self.source.read(self.sectorOf(cluster) + s, &block)) return error.ReadFailed;
-                    try out.appendSlice(&block);
+                    try out.appendSlice(allocator, &block);
                 }
                 if (limit) |l| if (out.items.len >= l) break;
             }
@@ -63,7 +63,7 @@ pub fn Reader(comptime Source: type) type {
                 if (out.items.len < l) return error.ShortChain;
                 out.shrinkRetainingCapacity(l);
             }
-            return out.toOwnedSlice();
+            return out.toOwnedSlice(allocator);
         }
     };
 }
@@ -72,7 +72,7 @@ pub fn Reader(comptime Source: type) type {
 pub fn list(self: anytype, allocator: std.mem.Allocator, cluster: u32) ![]Item {
     const raw = try self.chain(allocator, cluster, null);
     defer allocator.free(raw);
-    var items = std.ArrayList(Item).init(allocator);
+    var items: std.ArrayList(Item) = .empty;
     var units: [260]u16 = undefined;
     var long_len: usize = 0;
     var at: usize = 0;
@@ -92,14 +92,14 @@ pub fn list(self: anytype, allocator: std.mem.Allocator, cluster: u32) ![]Item {
         if (e[11] & 0x08 != 0 or e[0] == '.') continue;
         const name = if (long_len > 0) try longName(allocator, units[0..long_len]) else try shortName(allocator, e[0..11]);
         const hi: u32 = std.mem.readInt(u16, e[20..22], .little);
-        try items.append(.{
+        try items.append(allocator, .{
             .name = name,
             .is_dir = e[11] & 0x10 != 0,
             .cluster = (hi << 16) | std.mem.readInt(u16, e[26..28], .little),
             .size = std.mem.readInt(u32, e[28..32], .little),
         });
     }
-    return items.toOwnedSlice();
+    return items.toOwnedSlice(allocator);
 }
 
 pub fn freeItems(allocator: std.mem.Allocator, items: []Item) void {
