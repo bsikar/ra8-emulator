@@ -184,7 +184,7 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     _ = try ra8.core.cpu.memory.load.image(memory, image);
 
     var driver: Driver = undefined;
-    try driver.open(std.testing.allocator, &board, cpu1_path, memory);
+    try driver.open(std.testing.allocator, std.testing.io, &board, cpu1_path, memory);
     defer driver.close();
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
     var clock: ra8.board.zig_run.Clock = .{ .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };

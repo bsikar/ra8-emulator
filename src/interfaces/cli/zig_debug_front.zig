@@ -44,7 +44,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};
     const named = request.cpu1 orelse return serve(allocator, io, &target, request.mode, out);
-    other.open(allocator, &pair, &opened, named, &target) catch |err| {
+    other.open(allocator, io, &pair, &opened, named, &target) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };
@@ -66,10 +66,10 @@ const Other = struct {
     bytes: []u8 = &.{},
     paired: ?*cpu_mod.Cpu = null,
 
-    fn open(self: *Other, allocator: std.mem.Allocator, pair: *second_core.zig_run.Driver, opened: *harness.Harness, path: []const u8, target: *zig_script.ZigScript) !void {
-        self.bytes = try std.fs.cwd().readFileAlloc(allocator, path, second_core.limits.image_bytes);
+    fn open(self: *Other, allocator: std.mem.Allocator, io: std.Io, pair: *second_core.zig_run.Driver, opened: *harness.Harness, path: []const u8, target: *zig_script.ZigScript) !void {
+        self.bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
         errdefer allocator.free(self.bytes);
-        try pair.open(allocator, opened.board(), path, opened.guest());
+        try pair.open(allocator, io, opened.board(), path, opened.guest());
         target.other_image = try elf.Image.init(self.bytes);
         self.driver = .{ .machine = &self.machine };
         self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };
@@ -94,7 +94,7 @@ const Other = struct {
 fn drive(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
     switch (mode) {
         .script => |path| {
-            const text = std.fs.cwd().readFileAlloc(allocator, path, debug_front.limits.max_file) catch |err| {
+            const text = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(debug_front.limits.max_file)) catch |err| {
                 std.debug.print("cannot read {s}: {s}\n", .{ path, @errorName(err) });
                 return 1;
             };
