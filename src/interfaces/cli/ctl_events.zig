@@ -46,7 +46,7 @@ pub fn parse(args: []const []const u8) !Options {
 /// `500ms`, `30s`, or a bare number of seconds.
 pub fn parseDuration(word: []const u8) !i64 {
     const ms = std.mem.endsWith(u8, word, "ms");
-    const digits = if (ms) word[0 .. word.len - 2] else std.mem.trimRight(u8, word, "s");
+    const digits = if (ms) word[0 .. word.len - 2] else std.mem.trimEnd(u8, word, "s");
     const value = try std.fmt.parseInt(i64, digits, 10);
     if (value <= 0 or value > 86_400_000) return error.BadDuration;
     return if (ms) value else std.math.mul(i64, value, 1000) catch error.BadDuration;

@@ -33,7 +33,7 @@ pub fn format(milli: u64, buf: []u8) ![]const u8 {
     if (frac == 0) return std.fmt.bufPrint(buf, "{d}x", .{whole});
     var digits: [3]u8 = undefined;
     _ = try std.fmt.bufPrint(&digits, "{d:0>3}", .{frac});
-    return std.fmt.bufPrint(buf, "{d}.{s}x", .{ whole, std.mem.trimRight(u8, &digits, "0") });
+    return std.fmt.bufPrint(buf, "{d}.{s}x", .{ whole, std.mem.trimEnd(u8, &digits, "0") });
 }
 
 pub const Refusal = enum {

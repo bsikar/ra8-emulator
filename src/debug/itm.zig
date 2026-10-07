@@ -93,7 +93,7 @@ pub const Itm = struct {
         const text = self.text.constSlice();
         var done: usize = 0;
         while (std.mem.indexOfScalarPos(u8, text, done, '\n')) |end| {
-            try out.print("itm: {s}\n", .{std.mem.trimRight(u8, text[done..end], "\r")});
+            try out.print("itm: {s}\n", .{std.mem.trimEnd(u8, text[done..end], "\r")});
             done = end + 1;
         }
         if ((all or text.len == limits.capacity) and done < text.len) {
