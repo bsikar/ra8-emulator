@@ -5,12 +5,16 @@ pub const port: u16 = 53;
 pub const max_answers: usize = 4;
 pub const ttl_seconds: u32 = 60;
 
+pub const LookupFn = *const fn (?*anyopaque, ?std.Io, []const u8, *[max_answers][4]u8) anyerror!u8;
+
 pub const Resolver = struct {
     context: ?*anyopaque = null,
-    lookupFn: *const fn (?*anyopaque, []const u8, *[max_answers][4]u8) anyerror!u8 = hostLookup,
+    /// The host Io; without one, host lookups fail and the guest gets SERVFAIL.
+    io: ?std.Io = null,
+    lookupFn: LookupFn = hostLookup,
 
     pub fn lookup4(self: Resolver, name: []const u8, out: *[max_answers][4]u8) !u8 {
-        return self.lookupFn(self.context, name, out);
+        return self.lookupFn(self.context, self.io, name, out);
     }
 };
 
@@ -104,19 +108,31 @@ fn decodeName(encoded: []const u8, out: *[253]u8) ?usize {
     return null;
 }
 
-fn hostLookup(_: ?*anyopaque, name: []const u8, out: *[max_answers][4]u8) !u8 {
-    var list = try std.net.getAddressList(std.heap.page_allocator, name, 0);
-    defer list.deinit();
+fn hostLookup(_: ?*anyopaque, maybe_io: ?std.Io, name: []const u8, out: *[max_answers][4]u8) !u8 {
+    const io = maybe_io orelse return error.NoHostIo;
+    const Result = std.Io.net.HostName.LookupResult;
+    var buffer: [16]Result = undefined;
+    var results: std.Io.Queue(Result) = .init(&buffer);
+    const host: std.Io.net.HostName = try .init(name);
+    try host.lookup(io, &results, .{ .port = 0, .family = .ip4 });
     var count: u8 = 0;
-    for (list.addrs) |address| {
-        if (address.any.family != std.posix.AF.INET) continue;
-        const octets: [4]u8 = @bitCast(address.in.sa.addr);
+    while (results.getOne(io)) |result| {
+        const octets = switch (result) {
+            .address => |address| switch (address) {
+                .ip4 => |ip4| ip4.bytes,
+                .ip6 => continue,
+            },
+            .canonical_name => continue,
+        };
+        if (count == max_answers) continue;
         var duplicate = false;
         for (out[0..count]) |seen| duplicate = duplicate or std.mem.eql(u8, &seen, &octets);
         if (duplicate) continue;
         out[count] = octets;
         count += 1;
-        if (count == max_answers) break;
+    } else |err| switch (err) {
+        error.Closed => {},
+        else => |other| return other,
     }
     return count;
 }

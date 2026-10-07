@@ -92,7 +92,7 @@ test "a missing or short section leaves the C6 alone" {
     try std.testing.expectEqual(@as(u32, 0), target.c6.wire.boots_sent);
 }
 
-fn fakeLookup(_: ?*anyopaque, _: []const u8, _: *[esp_hosted.dns.max_answers][4]u8) !u8 {
+fn fakeLookup(_: ?*anyopaque, _: ?std.Io, _: []const u8, _: *[esp_hosted.dns.max_answers][4]u8) !u8 {
     return 0;
 }
 
