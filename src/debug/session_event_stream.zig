@@ -34,7 +34,7 @@ pub const subscribers = 8;
 pub const Read = struct { count: usize, dropped: u64 };
 const Queue = struct {
     items: [capacity]Event = undefined,
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.atomic.Mutex = .unlocked,
     dropped: std.atomic.Value(u64) = .init(0),
     head: usize = 0,
     len: usize = 0,
@@ -65,7 +65,7 @@ const Queue = struct {
         self.len += 1;
     }
     fn read(self: *Queue, out: []Event) Read {
-        self.mutex.lock();
+        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
         defer self.mutex.unlock();
         const count = @min(self.len, out.len);
         for (0..count) |i| out[i] = self.items[(self.head + i) % capacity];
