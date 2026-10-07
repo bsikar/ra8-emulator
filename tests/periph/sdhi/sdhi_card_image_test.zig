@@ -2,6 +2,7 @@
 //! card's sparse store is the copy-on-write overlay: reads come from the
 //! image, writes stay in memory, and only saveTo rewrites the file.
 const std = @import("std");
+const io = std.testing.io;
 const ra8 = @import("ra8");
 const card = ra8.periph.sdhi_card;
 const sd_image = ra8.periph.sd_image;
@@ -10,7 +11,7 @@ const sd_format = ra8.periph.sd_format;
 const Block = [card.geometry.block_bytes]u8;
 
 /// A formatted FAT16 card as raw bytes, with one root entry "BOOK    EPB".
-fn fatImage(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]u8 {
+fn fatImage(allocator: std.mem.Allocator, dir: std.Io.Dir) ![]u8 {
     var img = sd_image.Image.init(allocator);
     defer img.deinit();
     const mib = sd_format.smallestCardMib(.fat16).?;
@@ -22,8 +23,8 @@ fn fatImage(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]u8 {
     @memcpy(entry[0..11], "BOOK    EPB");
     entry[11] = 0x20;
     _ = img.write(root, &entry);
-    try img.saveTo(dir, "card.img");
-    return dir.readFileAlloc(allocator, "card.img", std.math.maxInt(usize));
+    try img.saveTo(io, dir, "card.img");
+    return dir.readFileAlloc(io, "card.img", allocator, .unlimited);
 }
 
 test "a loaded image is the card: boot sector, root entry and its size" {
@@ -58,11 +59,11 @@ test "writes stay in the overlay until the card is saved back" {
     try unit.loadBytes(bytes);
     const scribble: Block = @as([512]u8, @splat(0x5A));
     try std.testing.expect(unit.write(3, &scribble));
-    const before = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", std.math.maxInt(usize));
+    const before = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(before);
     try std.testing.expectEqualSlices(u8, bytes, before);
-    try unit.saveTo(tmp.dir, "card.img");
-    const after = try tmp.dir.readFileAlloc(std.testing.allocator, "card.img", std.math.maxInt(usize));
+    try unit.saveTo(io, tmp.dir, "card.img");
+    const after = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(after);
     try std.testing.expectEqual(bytes.len, after.len);
     try std.testing.expectEqualSlices(u8, &scribble, after[3 * 512 ..][0..512]);
