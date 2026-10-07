@@ -108,12 +108,12 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
 /// (RA8EMU-681): "channels.listener" leaves out `listener` in every element
 /// of `channels`.
 pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
-    inline for (@typeInfo(@TypeOf(value)).@"struct".fields) |field| {
-        if (comptime named(field.name, skip)) continue;
-        const inner = comptime below(field.name, skip);
+    inline for (@typeInfo(@TypeOf(value)).@"struct".field_names) |name| {
+        if (comptime named(name, skip)) continue;
+        const inner = comptime below(name, skip);
         if (inner.len == 0) {
-            try write(writer, @field(value, field.name));
-        } else try writeInner(writer, @field(value, field.name), inner);
+            try write(writer, @field(value, name));
+        } else try writeInner(writer, @field(value, name), inner);
     }
 }
 
@@ -128,12 +128,13 @@ fn writeInner(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(w
 /// Reads what `writeExcept` wrote over `out`; the skipped fields keep
 /// whatever `out` already held.
 pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
-    inline for (@typeInfo(@TypeOf(out.*)).@"struct".fields) |field| {
-        if (comptime named(field.name, skip)) continue;
-        const inner = comptime below(field.name, skip);
+    const info = @typeInfo(@TypeOf(out.*)).@"struct";
+    inline for (info.field_names, info.field_types) |name, T| {
+        if (comptime named(name, skip)) continue;
+        const inner = comptime below(name, skip);
         if (inner.len == 0) {
-            @field(out.*, field.name) = try read(field.type, cursor);
-        } else try readInner(cursor, &@field(out.*, field.name), inner);
+            @field(out.*, name) = try read(T, cursor);
+        } else try readInner(cursor, &@field(out.*, name), inner);
     }
 }
 

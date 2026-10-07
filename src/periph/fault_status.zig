@@ -101,15 +101,15 @@ pub const hfsr = struct {
     pub const defined: u32 = maskOf(Hard);
 };
 
-pub const Causes = Bounded(Cause, @typeInfo(Cause).@"enum".fields.len);
-pub const HardCauses = Bounded(Hard, @typeInfo(Hard).@"enum".fields.len);
+pub const Causes = Bounded(Cause, @typeInfo(Cause).@"enum".field_names.len);
+pub const HardCauses = Bounded(Hard, @typeInfo(Hard).@"enum".field_names.len);
 
 /// The causes a CFSR word reports, lowest bit first. Reserved bits are
 /// dropped rather than named.
 pub fn decode(word: u32) Causes {
     var found = Causes{};
-    inline for (@typeInfo(Cause).@"enum".fields) |entry| {
-        const cause: Cause = @fromBackingInt(@intCast(entry.value));
+    inline for (@typeInfo(Cause).@"enum".field_values) |value| {
+        const cause: Cause = @fromBackingInt(@intCast(value));
         if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
     }
     return found;
@@ -118,8 +118,8 @@ pub fn decode(word: u32) Causes {
 /// The causes an HFSR word reports, lowest bit first.
 pub fn decodeHard(word: u32) HardCauses {
     var found = HardCauses{};
-    inline for (@typeInfo(Hard).@"enum".fields) |entry| {
-        const cause: Hard = @fromBackingInt(@intCast(entry.value));
+    inline for (@typeInfo(Hard).@"enum".field_values) |value| {
+        const cause: Hard = @fromBackingInt(@intCast(value));
         if (word & cause.bit() != 0) found.appendAssumeCapacity(cause);
     }
     return found;
@@ -141,6 +141,6 @@ pub fn line(out: anytype, words: Words) !void {
 
 fn maskOf(comptime E: type) u32 {
     var mask: u32 = 0;
-    for (@typeInfo(E).@"enum".fields) |entry| mask |= @as(u32, 1) << entry.value;
+    inline for (@typeInfo(E).@"enum".field_values) |value| mask |= @as(u32, 1) << value;
     return mask;
 }
