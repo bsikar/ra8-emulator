@@ -36,7 +36,7 @@ pub const Listing = struct {
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
 };
 
-const topic_count = @typeInfo(proto.Topic).@"enum".fields.len;
+const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,

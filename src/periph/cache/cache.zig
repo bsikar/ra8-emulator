@@ -81,7 +81,7 @@ pub const Op = enum(u3) {
     }
 };
 
-pub const op_count = @typeInfo(Op).@"enum".fields.len;
+pub const op_count = @typeInfo(Op).@"enum".field_names.len;
 
 /// What the cache window holds and what the firmware has asked it for.
 pub const Cache = struct {
@@ -149,8 +149,8 @@ pub const Cache = struct {
     pub fn prime(self: *Cache, core: anytype) !void {
         try core.writeWord(memmap.cache.ctr, self.ctr);
         try core.writeWord(memmap.cache.ccsidr, self.ccsidr);
-        inline for (@typeInfo(Op).@"enum".fields) |field| {
-            try core.writeWord((@as(Op, @fromBackingInt(@intCast(field.value)))).address(), idle);
+        inline for (@typeInfo(Op).@"enum".field_values) |value| {
+            try core.writeWord((@as(Op, @fromBackingInt(@intCast(value)))).address(), idle);
         }
     }
 
@@ -165,10 +165,10 @@ pub const Cache = struct {
             self.enables = ccr;
             self.changes +%= 1;
         }
-        inline for (@typeInfo(Op).@"enum".fields) |field| {
-            const which: Op = @fromBackingInt(@intCast(field.value));
+        inline for (@typeInfo(Op).@"enum".field_values) |value| {
+            const which: Op = @fromBackingInt(@intCast(value));
             if (try core.readWord(which.address()) != idle) {
-                self.seen[field.value] +%= 1;
+                self.seen[value] +%= 1;
                 try core.writeWord(which.address(), idle);
             }
         }
