@@ -20,7 +20,7 @@ pub fn index(arg: []const u8) ?u32 {
 }
 
 /// Asks (unless allowed), checks the privacy setting and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
     const n = index(arg) orelse return error.BadDevice;
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;

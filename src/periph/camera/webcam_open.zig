@@ -56,20 +56,23 @@ const Node = struct {
         const self: *Node = @ptrCast(@alignCast(ctx));
         if (self.stream) |*stream| stream.stop();
         self.fd.close();
-        consent.logStop(std.io.getStdErr().writer(), self.path) catch {};
+        consent.logStopStderr(self.path);
         self.allocator.free(self.path);
         self.allocator.destroy(self);
     }
 };
 
 /// Opens the webcam, asking on the terminal unless `allow` is set.
-pub fn open(allocator: std.mem.Allocator, arg: []const u8, allow: bool, format_control: *const u8) !frame_source.FrameSource {
+pub fn open(allocator: std.mem.Allocator, io: std.Io, arg: []const u8, allow: bool, format_control: *const u8) !frame_source.FrameSource {
     const grant: consent.Grant = if (allow) .allowed else .ask;
-    return openWith(allocator, arg, grant, std.io.getStdIn().reader(), std.io.getStdErr().writer(), format_control);
+    var answer: [64]u8 = undefined;
+    var in = std.Io.File.stdin().readerStreaming(io, &answer);
+    var out = std.Io.File.stderr().writerStreaming(io, &.{});
+    return openWith(allocator, arg, grant, &in.interface, &out.interface, format_control);
 }
 
 /// `open` with the consent question's reader and writer passed in.
-pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
     if (builtin.os.tag == .windows) {
         const calls = mf_open.system() orelse return error.NoCaptureIo;
         return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer, format_control);
@@ -82,7 +85,7 @@ pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Gr
     return openV4l2(allocator, arg, grant, reader, writer, format_control);
 }
 
-fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: anytype, writer: anytype, format_control: *const u8) !frame_source.FrameSource {
+fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
     var name: Name = undefined;
     const named = try consent.device(&name, arg);
     if (consent.decide(grant, named, reader, writer) == .refused) return error.WebcamRefused;

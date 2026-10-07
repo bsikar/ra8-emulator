@@ -38,20 +38,28 @@ pub fn isYes(line: []const u8) bool {
 /// Decides whether `dev` may be opened. With `.ask`, writes the question
 /// to `writer` and reads one answer line from `reader`; the end of input or
 /// a read error refuses.
-pub fn decide(grant: Grant, dev: []const u8, reader: anytype, writer: anytype) Decision {
+pub fn decide(grant: Grant, dev: []const u8, reader: *std.Io.Reader, writer: *std.Io.Writer) Decision {
     if (grant == .allowed) return .granted;
     writer.print("--camera-source webcam: open the host camera {s}? [y/N] ", .{dev}) catch return .refused;
-    var buf: [16]u8 = undefined;
-    const line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return .refused;
+    writer.flush() catch return .refused;
+    const line = reader.takeDelimiter('\n') catch return .refused;
     return if (isYes(line orelse return .refused)) .granted else .refused;
 }
 
 /// The log line for a capture that starts on `dev`.
-pub fn logStart(writer: anytype, dev: []const u8) !void {
+pub fn logStart(writer: *std.Io.Writer, dev: []const u8) !void {
     try writer.print("camera: webcam capture started on {s}\n", .{dev});
 }
 
 /// The log line for a capture that stops, releasing `dev`.
-pub fn logStop(writer: anytype, dev: []const u8) !void {
+pub fn logStop(writer: *std.Io.Writer, dev: []const u8) !void {
     try writer.print("camera: webcam capture stopped, {s} released\n", .{dev});
+}
+
+/// logStop to stderr, for a capture's close, which has no io: the same
+/// stderr path std.debug.print takes.
+pub fn logStopStderr(dev: []const u8) void {
+    const locked = std.debug.lockStderr(&.{});
+    defer std.debug.unlockStderr();
+    logStop(&locked.file_writer.interface, dev) catch {};
 }
