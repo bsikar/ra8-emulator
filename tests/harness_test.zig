@@ -10,7 +10,7 @@ const input_path = "tests/fixtures/display/tap.input";
 
 test "public harness opens real display firmware, taps, settles, and frames" {
     if (builtin.mode != .ReleaseFast) return error.SkipZigTest;
-    var opened = try ra8.harness.open(std.testing.allocator, .{
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = image_path,
         .input_script = input_path,
     });
@@ -39,7 +39,7 @@ test "RA8EMU-768: restore returns the session to a saved screen, frame for frame
     defer std.testing.allocator.free(dir);
     const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "screen.ra8snap" });
     defer std.testing.allocator.free(path);
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image_path, .input_script = input_path });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path });
     defer opened.deinit();
 
     try opened.session().waitSettled(2_000_000_000);
@@ -60,7 +60,7 @@ test "RA8EMU-768: restore returns the session to a saved screen, frame for frame
 }
 
 test "public harness rejects a zero settle window before opening the image" {
-    const result = ra8.harness.open(std.testing.allocator, .{
+    const result = ra8.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = image_path,
         .settle_window_ns = 0,
     });
@@ -77,7 +77,7 @@ test "public harness cleans up an invalid ELF" {
     try tmp.dir.writeFile(.{ .sub_path = "bad.elf", .data = "not an elf" });
     var path_buffer: [128]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/bad.elf", .{tmp.sub_path});
-    const result = ra8.harness.open(std.testing.allocator, .{ .elf_path = path });
+    const result = ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = path });
     if (result) |opened_value| {
         var opened = opened_value;
         opened.deinit();
@@ -86,7 +86,7 @@ test "public harness cleans up an invalid ELF" {
 }
 
 test "public harness streams ThreadX switches and exceptions in time order" {
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();
@@ -115,7 +115,7 @@ test "public harness streams ThreadX switches and exceptions in time order" {
 }
 
 test "public harness reports no RTOS trace for an image without ThreadX" {
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image_path });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
     defer opened.deinit();
     try std.testing.expect(!opened.traceRtos());
 }
@@ -130,7 +130,7 @@ fn isRtos(event: StreamEvent) bool {
 }
 
 test "public harness streams the same RTOS events --trace-rtos records" {
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();
@@ -170,7 +170,7 @@ test "public harness streams the same RTOS events --trace-rtos records" {
 }
 
 fn retiredAfter(stall: bool) !struct { retired: u64, recorded: usize, dropped: u64, total: usize } {
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();

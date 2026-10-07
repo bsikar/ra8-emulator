@@ -2,7 +2,7 @@
     .name = .ra8_harness_consumer,
     .version = "0.0.0",
     .fingerprint = 0x62c873781ad7d14b,
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .ra8_emulator = .{ .path = "../.." },
     },
