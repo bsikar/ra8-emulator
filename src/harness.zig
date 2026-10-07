@@ -200,19 +200,19 @@ pub const Harness = struct {
 };
 
 /// Open and load one ELF with the board ticker and display attached.
-pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
+pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness {
     if (options.settle_window_ns == 0) return error.InvalidSettleWindow;
     const state = try allocator.create(State);
     errdefer allocator.destroy(state);
     state.allocator = allocator;
-    state.bytes = try std.fs.cwd().readFileAlloc(allocator, options.elf_path, limits.max_elf_bytes);
+    state.bytes = try std.Io.Dir.cwd().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
     errdefer allocator.free(state.bytes);
     state.image = try elf.Image.init(state.bytes);
     state.board = Board.init(allocator);
     errdefer state.board.deinit();
     state.board.part = options.device;
     state.board.clock.pace.mode = .virtual;
-    try loadInput(allocator, &state.board, options.input_script);
+    try loadInput(allocator, io, &state.board, options.input_script);
     state.cpu0 = .{};
     state.tracer = null;
     errdefer state.cpu0.close();
@@ -256,9 +256,9 @@ pub fn open(allocator: std.mem.Allocator, options: Options) !Harness {
     return .{ .state = state };
 }
 
-fn loadInput(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8) !void {
+fn loadInput(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8) !void {
     const named = path orelse return;
-    const text = try std.fs.cwd().readFileAlloc(allocator, named, limits.max_input_bytes);
+    const text = try std.Io.Dir.cwd().readFileAlloc(io, named, allocator, .limited(limits.max_input_bytes));
     defer allocator.free(text);
     try board.input_script.parse(text);
 }

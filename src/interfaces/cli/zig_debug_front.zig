@@ -33,7 +33,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
         std.debug.print("{s}\n", .{why});
         return 2;
     }
-    var opened = harness.open(allocator, .{ .elf_path = request.image, .device = .ra8d2 }) catch |err| {
+    var opened = harness.open(allocator, io, .{ .elf_path = request.image, .device = .ra8d2 }) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ request.image, @errorName(err) });
         return 1;
     };

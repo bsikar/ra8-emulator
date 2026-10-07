@@ -32,7 +32,7 @@ test "restore puts pc, guest memory and virtual time back where snapshot left th
     const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "run.ra8snap" });
     defer std.testing.allocator.free(path);
 
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };
@@ -58,7 +58,7 @@ test "restore puts pc, guest memory and virtual time back where snapshot left th
 }
 
 test "snapshot and restore are refused with no state hook or no such file" {
-    var opened = try ra8.harness.open(std.testing.allocator, .{ .elf_path = image });
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var bare: server.Context = .{ .session = opened.session(), .scratch = &scratch };
