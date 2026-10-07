@@ -28,7 +28,7 @@ pub fn refusal(request: debug_front.Request) ?[]const u8 {
 }
 
 /// Open `request.image` through the public harness and serve its debugger.
-pub fn run(allocator: std.mem.Allocator, request: debug_front.Request, out: anytype) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Request, out: anytype) !u8 {
     if (refusal(request)) |why| {
         std.debug.print("{s}\n", .{why});
         return 2;
@@ -43,19 +43,19 @@ pub fn run(allocator: std.mem.Allocator, request: debug_front.Request, out: anyt
     target.session.speed = speed.hook();
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};
-    const named = request.cpu1 orelse return serve(allocator, &target, request.mode, out);
+    const named = request.cpu1 orelse return serve(allocator, io, &target, request.mode, out);
     other.open(allocator, &pair, &opened, named, &target) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };
     defer other.close(allocator, &pair);
-    return serve(allocator, &target, request.mode, out);
+    return serve(allocator, io, &target, request.mode, out);
 }
 
 /// gdb on the port, or the script or terminal.
-fn serve(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
+fn serve(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
     if (mode == .gdb) return listen(target.session, mode.gdb);
-    return drive(allocator, target, mode, out);
+    return drive(allocator, io, target, mode, out);
 }
 
 /// CPU1 under the debugger, parked in the session until `core 1`.
@@ -91,7 +91,7 @@ const Other = struct {
 };
 
 /// Play the script or talk to the terminal.
-fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
+fn drive(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
     switch (mode) {
         .script => |path| {
             const text = std.fs.cwd().readFileAlloc(allocator, path, debug_front.limits.max_file) catch |err| {
@@ -101,7 +101,7 @@ fn drive(allocator: std.mem.Allocator, target: *zig_script.ZigScript, mode: debu
             defer allocator.free(text);
             _ = try script.play(target, text, out, true);
         },
-        .interactive => try debug_front.converse(target, out),
+        .interactive => try debug_front.converse(io, target, out),
         .gdb => unreachable,
     }
     try target.session.flushItm(target.session.currentCore(), out, true);

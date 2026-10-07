@@ -76,8 +76,8 @@ test "the fixture moves the same bytes on every row and takes longer on slow mem
     const scratch = try std.fs.path.join(std.testing.allocator, &.{ base, "row.board" });
     defer std.testing.allocator.free(scratch);
     const job: sweep_elf.Job = .{ .path = fixture, .stop_sym = "ext_stream_done" };
-    const slow = try sweep_elf.runOne(std.testing.allocator, test_paths.emulator, job, matrix.at(0), scratch);
-    const fast = try sweep_elf.runOne(std.testing.allocator, test_paths.emulator, job, matrix.at(matrix.count - 1), scratch);
+    const slow = try sweep_elf.runOne(std.testing.allocator, std.testing.io, test_paths.emulator, job, matrix.at(0), scratch);
+    const fast = try sweep_elf.runOne(std.testing.allocator, std.testing.io, test_paths.emulator, job, matrix.at(matrix.count - 1), scratch);
     for ([_]@TypeOf(slow){ slow, fast }) |row| {
         try std.testing.expectEqual(@as(u64, 64 * 1024), row.flash_bytes_read);
         try std.testing.expectEqual(@as(u64, 128 * 1024), row.sdram_bytes_moved);

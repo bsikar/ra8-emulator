@@ -24,10 +24,10 @@ const fit_verdict = @import("board_fit.zig").tapeVerdict;
 
 /// The whole run, in the order main's engine path takes it: fit the board,
 /// load, announce, then run on the Zig core.
-pub fn run(allocator: std.mem.Allocator, image: elf.Image, options: cli.Options) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: cli.Options) !u8 {
     var board = Board.init(allocator);
     defer board.deinit();
-    fit(&board, allocator, options) catch return 2;
+    fit(&board, allocator, io, options) catch return 2;
     defer cli.card_setup.saveBack(&board, options.sd_path, options.sd_save);
     defer cli.card_setup.saveSdhi(&board, options.sdhi);
     var cpu0: Cpu0 = .{};

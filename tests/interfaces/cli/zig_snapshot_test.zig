@@ -43,7 +43,7 @@ fn runImage(dir: std.fs.Dir, file: []const u8, instructions: usize, state: zig_r
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     const options: Options = .{ .path = "cpu0.elf", .cpu = .zig, .instructions = instructions, .state = state };
-    try main_path.fit(&board, std.testing.allocator, options);
+    try main_path.fit(&board, std.testing.allocator, std.testing.io, options);
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};

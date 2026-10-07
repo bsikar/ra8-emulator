@@ -5,9 +5,10 @@ const ra8 = @import("ra8");
 const parse = ra8.core.cli.parse;
 const rtc = ra8.periph.rtc;
 
-fn start(value: []const u8) !std.meta.FieldType(ra8.core.cli.Options, .rtc_start) {
+fn start(value: []const u8) !?ra8.core.cli.rtc_start.Calendar {
     const options = try parse(&[_][]const u8{ "emu", "a.elf", "--rtc-start", value });
-    return options.rtc_start;
+    const given = options.rtc_start orelse return null;
+    return given.at;
 }
 
 test "a run with no --rtc-start leaves the RTC at its reset date" {
@@ -43,8 +44,10 @@ test "--rtc-start refuses what the RTC cannot count" {
     try std.testing.expectError(error.BadDateTime, start("2026-1x-04T00:00:00"));
 }
 
-test "--rtc-start now reads the host clock" {
-    const at = (try start("now")).?;
+test "--rtc-start now reads the host clock when the board is fitted" {
+    const options = try parse(&[_][]const u8{ "emu", "a.elf", "--rtc-start", "now" });
+    try std.testing.expect(options.rtc_start.? == .now);
+    const at = try ra8.core.cli.rtc_start.resolve(options.rtc_start.?, std.testing.io);
     try std.testing.expect(at.year >= 26);
     try std.testing.expect(at.month >= 1 and at.month <= 12);
 }

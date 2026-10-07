@@ -66,6 +66,6 @@ test "fit puts the command line's part on the board" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     const options: ra8.core.cli.Options = .{ .path = "cpu0.elf", .cpu = .zig };
-    try main_path.fit(&board, std.testing.allocator, options);
+    try main_path.fit(&board, std.testing.allocator, std.testing.io, options);
     try std.testing.expectEqual(options.part, board.part);
 }

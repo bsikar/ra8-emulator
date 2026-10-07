@@ -17,45 +17,42 @@ comptime {
 const elf = ra8.core.elf;
 
 /// Read the image off disk and parse it, saying which of the two failed.
-fn openImage(allocator: std.mem.Allocator, path: []const u8) !elf.Image {
-    const bytes = try readImage(allocator, path);
+fn openImage(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !elf.Image {
+    const bytes = try readImage(io, allocator, path);
     return elf.Image.init(bytes) catch |err| {
         std.debug.print("{s} is not a loadable image: {s}\n", .{ path, @errorName(err) });
         return err;
     };
 }
 
-pub fn main() !u8 {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    const argv = try std.process.argsAlloc(allocator);
-    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return ra8.core.probe_ctl.run(allocator, argv);
-    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return ra8.core.session_ctl.run(allocator, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return ra8.core.map_main.run(allocator, argv);
+pub fn main(init: std.process.Init) !u8 {
+    const allocator = init.arena.allocator();
+    const io = init.io;
+    const argv = try init.minimal.args.toSlice(allocator);
+    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return ra8.core.probe_ctl.run(allocator, io, argv);
+    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return ra8.core.session_ctl.run(allocator, io, init.environ_map, argv);
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return ra8.core.map_main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return shell(allocator, argv);
-    const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, argv);
-    const image = openImage(allocator, options.path) catch return 1;
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(io, init.environ_map, argv);
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return shell(allocator, io, init.environ_map, argv);
+    const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, io, argv);
+    const image = openImage(io, allocator, options.path) catch return 1;
     // Only a -Dgui build compiles src/gui_window.zig and links SDL.
     if (build_options.gui) ra8.board.window_main.opener = @import("gui_window.zig").opener;
-    return ra8.board.zig_run.main_path.run(allocator, image, options);
+    return ra8.board.zig_run.main_path.run(allocator, io, image, options);
 }
 
 /// The docked debugger shell, in this build's window when it has one.
-fn shell(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+fn shell(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
     if (build_options.gui) ra8.board.window_main.opener = @import("gui_window.zig").opener;
-    return ra8.core.shell_main.run(allocator, argv);
+    return ra8.core.shell_main.run(allocator, io, env, argv);
 }
 
 /// The file behind `path`, or a printed complaint and the error that caused
 /// it. The bytes outlive the file and are owned by the caller's arena.
-fn readImage(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
-        std.debug.print("cannot open {s}: {s}\n", .{ path, @errorName(err) });
+fn readImage(io: std.Io, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
+        std.debug.print("cannot read {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
-    defer file.close();
-    return file.readToEndAlloc(allocator, 64 * 1024 * 1024);
 }
