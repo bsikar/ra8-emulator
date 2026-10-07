@@ -32,7 +32,7 @@ pub fn prepareSdhi(board: *Board, io: std.Io, sdhi: Sdhi) !void {
             std.debug.print("--sd-dir and --sd-image both name the SDHI card; pick one\n", .{});
             return error.ConflictingCardOptions;
         }
-        return fromDir(board, dir);
+        return fromDir(board, io, dir);
     }
     const path = sdhi.image orelse return;
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, std.heap.page_allocator, .unlimited) catch |err| {
@@ -47,16 +47,16 @@ pub fn prepareSdhi(board: *Board, io: std.Io, sdhi: Sdhi) !void {
 }
 
 /// Build the `--sd-dir` image and hand its bytes to the SDHI card.
-fn fromDir(board: *Board, path: []const u8) !void {
+fn fromDir(board: *Board, io: std.Io, path: []const u8) !void {
     const allocator = std.heap.page_allocator;
-    var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| {
         std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
-    defer dir.close();
+    defer dir.close(io);
     var img = sd_image.Image.init(allocator);
     defer img.deinit();
-    const built = sd_mkimage.build(allocator, &img, dir, default_label) catch |err| {
+    const built = sd_mkimage.build(allocator, io, &img, dir, default_label) catch |err| {
         std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
