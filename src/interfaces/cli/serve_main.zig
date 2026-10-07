@@ -37,12 +37,12 @@ fn parse(argv: []const []const u8) ?Asked {
 }
 
 /// Serve `argv` (`ra8_emulator serve ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, argv: []const []const u8) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     const asked = parse(argv) orelse {
         std.debug.print("{s}", .{usage});
         return 2;
     };
-    var owner = harness.open(allocator, .{ .elf_path = asked.elf }) catch |err| {
+    var owner = harness.open(allocator, io, .{ .elf_path = asked.elf }) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
         return 1;
     };

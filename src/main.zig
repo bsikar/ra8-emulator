@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return ra8.core.probe_ctl.run(allocator, io, argv);
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return ra8.core.session_ctl.run(allocator, io, init.environ_map, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return ra8.core.map_main.run(allocator, io, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, argv);
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(io, init.environ_map, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return shell(allocator, io, init.environ_map, argv);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, io, argv);
