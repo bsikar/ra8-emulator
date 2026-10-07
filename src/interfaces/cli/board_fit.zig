@@ -30,7 +30,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     // corpus was first recorded on is only kept for the RTC's own tests.
     board.clock.pace.mode = .virtual;
     if (options.rtc_start) |start| board.clock.seed(try rtc_start.resolve(start, io));
-    if (options.speed) |factor| try pacing.attachHost(&board.time, factor);
+    if (options.speed) |factor| pacing.attachHost(&board.time, io, factor);
     board.time.soak.armed = options.run_for;
     const profile_fits = try loadProfile(allocator, options.board_profile);
     board.external_memory = profile_fits.memory;

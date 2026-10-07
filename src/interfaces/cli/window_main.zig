@@ -22,6 +22,7 @@ pub const frame_ns: u64 = 16_666_667;
 
 /// What zig_run.run takes, gathered by zig_main.
 pub const Args = struct {
+    io: std.Io,
     out: std.fs.File.Writer,
     memory: Guest,
     board: *Board,
@@ -67,7 +68,7 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     const shown = if (stills_dir != null) recorder.platform() else window;
     var live = Live{ .args = args, .pacer = &pacer };
     var devices: window_devices.Devices = undefined;
-    devices.init(allocator, args.board, args.options.attaches[0..args.options.attach_count], args.options.click);
+    devices.init(allocator, args.io, args.board, args.options.attaches[0..args.options.attach_count], args.options.click);
     defer devices.deinit();
     const result = try window_run.show(allocator, shown, args.board, &pacer, live.engine(), args.options.camera, &devices);
     std.debug.print("window: {d} frames, board snapshot up to {d} bytes per frame\n", .{ result.frames, result.snapshot_bytes });
