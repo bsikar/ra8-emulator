@@ -113,8 +113,8 @@ fn longName(allocator: std.mem.Allocator, units: []const u16) ![]u8 {
 }
 
 fn shortName(allocator: std.mem.Allocator, raw: *const [11]u8) ![]u8 {
-    const base = std.mem.trimRight(u8, raw[0..8], " ");
-    const ext = std.mem.trimRight(u8, raw[8..11], " ");
+    const base = std.mem.trimEnd(u8, raw[0..8], " ");
+    const ext = std.mem.trimEnd(u8, raw[8..11], " ");
     if (ext.len == 0) return allocator.dupe(u8, base);
     return std.fmt.allocPrint(allocator, "{s}.{s}", .{ base, ext });
 }

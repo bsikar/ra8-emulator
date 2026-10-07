@@ -10,7 +10,7 @@ pub const Format = struct {
     frac_bits: u7,
 
     pub fn Bits(comptime self: Format) type {
-        return std.meta.Int(.unsigned, 1 + @as(u16, self.exp_bits) + self.frac_bits);
+        return @Int(.unsigned, 1 + @as(u16, self.exp_bits) + self.frac_bits);
     }
 
     pub fn width(comptime self: Format) u16 {
