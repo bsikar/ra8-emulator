@@ -40,7 +40,7 @@ pub const Spec = struct {
                 std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),
-            .video => video.labelled((video.VideoSource.load(allocator, self.arg, format_control) catch |err| {
+            .video => video.labelled((video.VideoSource.load(allocator, io, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
             }).source(), self.arg),

@@ -23,12 +23,12 @@ const red = [_]u8{ 0x00, 0xF8, 0x00, 0xF8 };
 var rgb565: u8 = 0x6F;
 
 fn open(dir: std.testing.TmpDir, bytes: []const u8, suffix: []const u8) !*video.VideoSource {
-    try dir.dir.writeFile(.{ .sub_path = "clip.y4m", .data = bytes });
-    const path = try dir.dir.realpathAlloc(allocator, "clip.y4m");
+    try dir.dir.writeFile(std.testing.io, .{ .sub_path = "clip.y4m", .data = bytes });
+    const path = try dir.dir.realPathFileAlloc(std.testing.io, "clip.y4m", allocator);
     defer allocator.free(path);
     const arg = try std.mem.concat(allocator, u8, &.{ path, suffix });
     defer allocator.free(arg);
-    return video.VideoSource.load(allocator, arg, &rgb565);
+    return video.VideoSource.load(allocator, std.testing.io, arg, &rgb565);
 }
 
 fn expectLine(source: ra8.periph.ceu.camera.frame_source.FrameSource, when: u64, expected: []const u8) !void {
@@ -98,7 +98,7 @@ test "a frame cut short at the end of the file is dropped" {
 test "a missing, frameless or unsupported clip refuses the run" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try std.testing.expectError(error.FileNotFound, video.VideoSource.load(allocator, "/nonexistent/ra8.y4m", &rgb565));
+    try std.testing.expectError(error.FileNotFound, video.VideoSource.load(allocator, std.testing.io, "/nonexistent/ra8.y4m", &rgb565));
     try std.testing.expectError(error.Truncated, open(tmp, "YUV4MPEG2 W2 H2\n", ""));
     try std.testing.expectError(error.Unsupported, open(tmp, "YUV4MPEG2 W2 H2 It\nFRAME\n", ""));
 }
