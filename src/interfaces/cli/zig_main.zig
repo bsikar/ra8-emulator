@@ -33,6 +33,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};
+    defer parts.deinit();
     const written = try prepare(&cpu0, &board, io, image, &parts, options);
     if (options.ns_path) |path| loadNonSecure(allocator, io, &cpu0, path) catch return 1;
     const vector_base = vectorBase(image) catch return 1;
@@ -70,7 +71,7 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
     parts.tap = .{ .echo = if (options.console) io else null, .wait = if (options.until) |text| .{ .needle = text } else null };
     if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;
     cli.console_output.configure(&board.serial.line, &parts.tap);
-    if (options.profile) parts.prepareProfile(image);
+    if (options.profile) try parts.prepareProfile(image, options.profile_folded != null);
     option_memory.apply(board, cpu0.own());
     if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armForCli(std.heap.page_allocator, io, board, options.frames);
     return written;

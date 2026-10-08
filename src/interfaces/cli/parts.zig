@@ -13,6 +13,8 @@ const hotspots = @import("../../debug/hotspots.zig");
 const functions = @import("../../debug/functions.zig");
 const profile = functions.profile;
 const elf = @import("../../core/elf.zig");
+const std = @import("std");
+const stack_samples = @import("../../debug/stack_samples.zig");
 const tally = @import("../../debug/tally.zig");
 const pend_break = @import("../../core/pend_break.zig");
 const pend_pace = @import("../../core/pend_pace.zig");
@@ -42,9 +44,21 @@ pub const Parts = struct {
     mask_pacing: mask_pace.Pace = .{},
     hits: pc_hits.Hits = .{},
 
-    /// The profile table, fed from the Zig core's retire path (RA8EMU-592).
-    pub fn prepareProfile(self: *Parts, image: elf.Image) void {
+    /// The profile table, fed from the Zig core's retire path (RA8EMU-592),
+    /// with a store for sampled call stacks when they are `sampled`
+    /// (`--profile-folded`, RA8EMU-971).
+    pub fn prepareProfile(self: *Parts, image: elf.Image, sampled: bool) !void {
         self.profile = .{ .image = image };
         self.profile.?.prepare();
+        if (!sampled) return;
+        const store = try std.heap.page_allocator.create(stack_samples.Store);
+        store.* = .{};
+        self.profile.?.samples = store;
+    }
+
+    pub fn deinit(self: *Parts) void {
+        const table = if (self.profile) |*one| one else return;
+        if (table.samples) |store| std.heap.page_allocator.destroy(store);
+        table.samples = null;
     }
 };

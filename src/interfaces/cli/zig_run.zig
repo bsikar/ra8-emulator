@@ -1,8 +1,7 @@
-//! A `--cpu zig` run started from main, with the
-//! board's time wired in. This charges SysTick, DWT_CYCCNT
-//! and the blocks at every chunk boundary, the same
-//! boundary, so a ThreadX image gets its tick and the peripherals that count
-//! time (the USB host script among them) move.
+//! A `--cpu zig` run started from main, with the board's time wired in. This
+//! charges SysTick, DWT_CYCCNT and the blocks at every chunk boundary, the
+//! same boundary, so a ThreadX image gets its tick and the peripherals that
+//! count time (the USB host script among them) move.
 const std = @import("std");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
@@ -31,6 +30,7 @@ const audio_out = @import("audio_out.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
 const second_core = @import("../../core/second_core.zig");
 const profile = @import("../../debug/profile.zig");
+pub const stack_profile = @import("stack_profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const watchpoint = @import("../../debug/watchpoint.zig");
 /// `--watch` on a Zig run: src/interfaces/cli/zig_watch.zig.
@@ -267,6 +267,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     const wrap = watcher.arm(image, options.watch_place, if (tracer != null) listener.wrap() else null, &timebase.ticks);
     const budget = options.budgetFor(ends.stop != null);
     var retire: break_sym.Retire = .{ .table = profile_table, .point = ends.point };
+    var stacks = stack_profile.Run.of(profile_table, image, budget, &clock.wall_cycles, if (tracer) |*found| &found.trace else null);
     var eink_recorder = eink_log.Run.init(std.heap.page_allocator, board);
     if (options.frames.eink_log != null) eink_recorder.arm();
     defer eink_recorder.deinit();
@@ -287,7 +288,8 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         .fast_memory = options.watch_place == null and wrap == null,
         .blocks = options.blocks,
         .wrap = wrap,
-        .retire_listener = watcher.listener(retire.listener()),
+        .retire_listener = stacks.listener(watcher.listener(retire.listener())),
+        .core = stacks.lend(),
         .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,

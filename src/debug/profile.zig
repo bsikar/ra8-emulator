@@ -2,6 +2,7 @@
 const std = @import("std");
 const elf = @import("../core/elf.zig");
 const symbols = @import("symbols.zig");
+const stack_samples = @import("stack_samples.zig");
 
 pub const limits = struct {
     pub const functions: usize = 256;
@@ -18,6 +19,9 @@ pub const Table = struct {
     missed: u64 = 0,
     extents: [limits.ranges]symbols.Extent = undefined,
     extent_count: usize = 0,
+    /// Call stacks sampled on the retire path, when --profile-folded asked
+    /// for them (RA8EMU-971); the folded file writes these when it has any.
+    samples: ?*stack_samples.Store = null,
 
     /// Build the function lookup once before execution.
     pub fn prepare(self: *Table) void {

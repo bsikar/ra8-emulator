@@ -100,6 +100,27 @@ test "a stale lr inside the pc's own function is dropped" {
     try std.testing.expectEqualSlices(u32, &.{ 0x2040, 0x2200, 0x2300 }, stack);
 }
 
+fn startsOf(_: *const anyopaque, address: u32) ?u32 {
+    if (address >= 0x2000 and address < 0x2600) return address & ~@as(u32, 0xFF);
+    return null;
+}
+
+/// The chain, plus a `bl 0x2400` at 0x2104 (so returning to 0x2108).
+const called: Memory = .{ .regions = &.{
+    .{ .base = 0x200, .words = &.{ 0x210, 0x2201 } },
+    .{ .base = 0x210, .words = &.{ 0, 0x2301 } },
+    .{ .base = 0x2104, .words = &.{0xF97C_F000} },
+} };
+
+test "an lr left over from a call that already returned is dropped" {
+    const starts: stack_walk.Starts = .{ .context = undefined, .startFn = startsOf };
+    var into: [8]u32 = undefined;
+    const back = try walked(stopped(0x2040, 0x2109, 0x200, 0x1f0), called, starts, &into);
+    try std.testing.expectEqualSlices(u32, &.{ 0x2040, 0x2200, 0x2300 }, back);
+    const inside = try walked(stopped(0x2404, 0x2109, 0x200, 0x1f0), called, starts, &into);
+    try std.testing.expectEqualSlices(u32, &.{ 0x2404, 0x2108, 0x2200, 0x2300 }, inside);
+}
+
 test "an EXC_RETURN lr is no caller, and a bad frame pointer ends the walk" {
     var into: [8]u32 = undefined;
     try std.testing.expectEqualSlices(

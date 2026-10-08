@@ -134,6 +134,9 @@ pub const Wiring = struct {
     /// CPU1's core: each core's stores clear the other's exclusive monitor
     /// (RA8EMU-134). Null on a single-core run.
     peer: ?*cpu_mod.Cpu = null,
+    /// Filled with the core the run builds, before reset, and cleared when
+    /// the run returns, for a retire listener that reads it (RA8EMU-971).
+    core: ?*?*cpu_mod.Cpu = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
     itm: ?*@import("../../debug/itm.zig").Itm = null,
     /// `--bus-errors`: a refused data and fetch accesses raise BusFaults,
@@ -169,12 +172,12 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot, .peer = wiring.peer }, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot, .peer = wiring.peer, .core = wiring.core }, &board, source, wiring.blocks, wiring.until, wiring.final);
 }
 
 /// What the core reports to, per instruction: after it retires and before
 /// it is fetched.
-const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null, peer: ?*cpu_mod.Cpu = null };
+const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null, peer: ?*cpu_mod.Cpu = null, core: ?*?*cpu_mod.Cpu = null };
 
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
@@ -198,6 +201,10 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     defer if (formed) |cache| code_lines.unwatch(&cache.lines);
     cpu.blocks = formed;
     cpu.retire_listener = watch.retire;
+    if (watch.core) |slot| slot.* = &cpu;
+    defer if (watch.core) |slot| {
+        slot.* = null;
+    };
     cpu.fetch_guard = watch.fetch;
     var miss: u32 = 0;
     if (watch.bus_errors) |tally| cpu.bus.tally = tally;
