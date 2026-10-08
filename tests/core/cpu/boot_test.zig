@@ -29,12 +29,12 @@ test "a zig run stops on the first unknown encoding and says where" {
     defer store.deinit();
     try loadTiny(&store);
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    const status = try boot.run(stream.writer(), .{ .store = &store }, memmap.sram_base, 100, null);
+    var stream: std.Io.Writer = .fixed(&buf);
+    const status = try boot.run(&stream, .{ .store = &store }, memmap.sram_base, 100, null);
     try std.testing.expectEqual(@as(u8, 1), status);
     var want: [128]u8 = undefined;
     const line = try std.fmt.bufPrint(&want, "zig core: unknown encoding at 0x{x:0>8}: 0xba80 after 2 instructions\n", .{memmap.sram_base + 0xE});
-    try std.testing.expectEqualStrings(line, stream.getWritten());
+    try std.testing.expectEqualStrings(line, stream.buffered());
 }
 
 test "a zig run that spends its budget is clean" {
@@ -42,9 +42,9 @@ test "a zig run that spends its budget is clean" {
     defer store.deinit();
     try loadTiny(&store);
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 0), try boot.run(stream.writer(), .{ .store = &store }, memmap.sram_base, 1, null));
-    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 1 instructions clean"));
+    var stream: std.Io.Writer = .fixed(&buf);
+    try std.testing.expectEqual(@as(u8, 0), try boot.run(&stream, .{ .store = &store }, memmap.sram_base, 1, null));
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "zig core: ran 1 instructions clean"));
 }
 
 test "no vector table is said plainly" {
@@ -52,9 +52,9 @@ test "no vector table is said plainly" {
     defer store.deinit();
     // Nothing backs 0x7000_0000, so reset cannot read a vector table there.
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try std.testing.expectEqual(@as(u8, 1), try boot.run(stream.writer(), .{ .store = &store }, 0x7000_0000, 1, null));
-    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: no vector table"));
+    var stream: std.Io.Writer = .fixed(&buf);
+    try std.testing.expectEqual(@as(u8, 1), try boot.run(&stream, .{ .store = &store }, 0x7000_0000, 1, null));
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "zig core: no vector table"));
 }
 
 /// Counts the boundaries a run closes and how many instructions they carry.
@@ -96,10 +96,10 @@ test "a zig run on the board closes a boundary after every stretch, the short la
     var edges: Edges = .{ .width = 3 };
     var ran: u64 = 0;
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 10), ran);
     try std.testing.expectEqual(@as(u32, 4), edges.closes);
@@ -112,10 +112,10 @@ test "a zig run hands back its registers as it left them (RA8EMU-579)" {
     try loadSpin(&store);
     var final: boot.Regs = .{};
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, null, .{ .final = &final });
+    _ = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 10, null, .{ .final = &final });
     try std.testing.expectEqual(memmap.sram_base + 8, final.pc);
     try std.testing.expectEqual(memmap.sram_base + 0x1000, final.get(13));
 }
@@ -126,10 +126,10 @@ test "a stretch the core stops inside is never closed" {
     try loadTiny(&store);
     var edges: Edges = .{ .width = 5 };
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 1), status);
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
 }
@@ -141,11 +141,11 @@ test "a console success reached before an unknown encoding ends the Zig run" {
     var edges: Edges = .{ .width = 5 };
     var until = Until{ .needle = "PASS", .seen = true };
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
     const status = try boot.runOnBoard(
-        stream.writer(),
+        &stream,
         .{ .store = &store },
         &periph,
         memmap.sram_base,
@@ -158,7 +158,7 @@ test "a console success reached before an unknown encoding ends the Zig run" {
     try std.testing.expectEqual(@as(u32, 0), edges.closes);
     try std.testing.expectEqualStrings(
         "zig core: ran 1 instructions clean, pc 0x2200000A\nstopped clean on the console line \"PASS\", pc 0x2200000A\n",
-        stream.getWritten(),
+        stream.buffered(),
     );
 }
 
@@ -180,10 +180,10 @@ test "a core asleep in wfi closes every stretch at once without retiring" {
     var edges: Edges = .{ .width = 4 };
     var ran: u64 = 0;
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 20, &ran, .{ .boundary = edges.boundary() });
+    const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 20, &ran, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 1), ran);
     try std.testing.expectEqual(@as(u32, 5), edges.closes);
@@ -207,16 +207,16 @@ test "a PACBTI-built firmware image runs through the Zig core" {
     }
 
     var output: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     var retired: u64 = 0;
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.start(stream.writer(), .zig, .{ .store = &store }, &periph, vector_base, 100, &retired, .{});
+    const status = try boot.start(&stream, .zig, .{ .store = &store }, &periph, vector_base, 100, &retired, .{});
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u64, 100), retired);
     try std.testing.expectEqual(@as(u32, 0x247), std.mem.readInt(u32, store.span(memmap.sram_base, 4).?[0..4], .little));
-    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "zig core: ran 100 instructions clean"));
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "zig core: ran 100 instructions clean"));
 }
 
 /// Reset branches to an even address with UsageFault disabled; HardFault
@@ -237,13 +237,13 @@ test "a board run that took INVSTATE reports CFSR and HFSR.FORCED (RA8EMU-394)" 
     defer store.deinit();
     try loadEvenBranch(&store);
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 50, null, .{});
+    _ = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 50, null, .{});
     const line = "faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n";
-    std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), line) != null) catch |err| {
-        std.debug.print("report was: {s}\n", .{stream.getWritten()});
+    std.testing.expect(std.mem.indexOf(u8, stream.buffered(), line) != null) catch |err| {
+        std.debug.print("report was: {s}\n", .{stream.buffered()});
         return err;
     };
 }
@@ -283,17 +283,17 @@ test "a reset asked for at a boundary brings the zig core back up on its reset v
     var kick: Kick = .{ .reboot = &reboot };
     var ran: u64 = 0;
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, base, 3, &ran, .{ .boundary = kick.boundary() });
+    const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, base, 3, &ran, .{ .boundary = kick.boundary() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expectEqual(@as(u32, 1), reboot.performed);
     try std.testing.expect(!reboot.requested);
     // The stretch ended on `b .` at +10; the reset put it back at +8, and
     // the instructions it ran before the reset are still counted.
     try std.testing.expectEqual(@as(u64, 3), ran);
-    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc 0x22000008") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stream.buffered(), "pc 0x22000008") != null);
 }
 
 /// Records what the snapshot hook saw (RA8EMU-695, RA8EMU-700).
@@ -331,10 +331,10 @@ fn runOwed(probe: *Probe, edges: *Edges, budget: u64) !void {
     try loadSpin(&store);
     var ran: u64 = 0;
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, budget, &ran, .{ .boundary = edges.boundary(), .snapshot = probe.hook() });
+    _ = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, budget, &ran, .{ .boundary = edges.boundary(), .snapshot = probe.hook() });
 }
 
 test "a run that saves holds the stretch its budget cut short, saves what it owes, then closes it" {
@@ -362,10 +362,10 @@ test "the snapshot hook loads after reset and saves once the budget is spent" {
     var probe: Probe = .{ .start_retired = 1000 };
     var ran: u64 = 0;
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{ .snapshot = probe.hook() });
+    const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{ .snapshot = probe.hook() });
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expect(probe.loaded);
     try std.testing.expectEqual(@as(u64, 1010), probe.saved_retired.?);
@@ -379,9 +379,9 @@ test "a run with no snapshot hook is unchanged" {
     try loadSpin(&store);
     var ran: u64 = 0;
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
+    var stream: std.Io.Writer = .fixed(&buf);
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    _ = try boot.runOnBoard(stream.writer(), .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{});
+    _ = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 10, &ran, .{});
     try std.testing.expectEqual(@as(u64, 10), ran);
 }

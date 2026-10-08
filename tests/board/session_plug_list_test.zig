@@ -104,8 +104,8 @@ test "an endpoint's text reads back as the same endpoint" {
     };
     for (all) |at| {
         var out: [32]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&out);
-        try at.write(stream.writer());
-        try std.testing.expectEqual(at, try model.endpoint.parse(stream.getWritten()));
+        var stream: std.Io.Writer = .fixed(&out);
+        try at.write(&stream);
+        try std.testing.expectEqual(at, try model.endpoint.parse(stream.buffered()));
     }
 }

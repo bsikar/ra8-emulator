@@ -75,9 +75,9 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;
     var output: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
-    _ = try boot.start(stream.writer(), .zig, core, &board.bus, vector_base, 500_000, &ran, .{
+    _ = try boot.start(&stream, .zig, core, &board.bus, vector_base, 500_000, &ran, .{
         .boundary = try fault_file.boundary(&run.applier, clock.boundary()),
         .partitions = &board.partitions,
         .idau = &board.idau,

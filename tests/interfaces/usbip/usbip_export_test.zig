@@ -59,9 +59,9 @@ test "a short or mistyped descriptor is refused" {
 test "the device list carries the count, the record and its interfaces" {
     const items = [_]exp.Export{try exp.fromDescriptors(place, &device, &config)};
     var buf: [512]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try exp.writeDevlist(stream.writer(), &items);
-    const out = stream.getWritten();
+    var stream: std.Io.Writer = .fixed(&buf);
+    try exp.writeDevlist(&stream, &items);
+    const out = stream.buffered();
     try std.testing.expectEqual(wire.op_header_len + 4 + wire.device_len + 2 * wire.interface_len, out.len);
     const header = try wire.OpHeader.decode(out);
     try std.testing.expectEqual(wire.op.rep_devlist, header.code);
@@ -72,9 +72,9 @@ test "the device list carries the count, the record and its interfaces" {
 
 test "an empty device list is the header and a zero count" {
     var buf: [16]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try exp.writeDevlist(stream.writer(), &.{});
-    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x11, 0x00, 0x05, 0, 0, 0, 0, 0, 0, 0, 0 }, stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try exp.writeDevlist(&stream, &.{});
+    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x11, 0x00, 0x05, 0, 0, 0, 0, 0, 0, 0, 0 }, stream.buffered());
 }
 
 test "an import of an exported busid answers status 0 and the record" {
@@ -84,12 +84,12 @@ test "an import of an exported busid answers status 0 and the record" {
     const found = try exp.find(&items, &body);
     try std.testing.expect(found != null);
     var buf: [wire.op_header_len + wire.device_len]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try exp.writeImport(stream.writer(), found);
+    var stream: std.Io.Writer = .fixed(&buf);
+    try exp.writeImport(&stream, found);
     const header = try wire.OpHeader.decode(&buf);
     try std.testing.expectEqual(wire.op.rep_import, header.code);
     try std.testing.expectEqual(@as(u32, 0), header.status);
-    try std.testing.expectEqual(buf.len, stream.getWritten().len);
+    try std.testing.expectEqual(buf.len, stream.buffered().len);
 }
 
 test "an import of an unknown busid answers status 1 with no record" {
@@ -99,9 +99,9 @@ test "an import of an unknown busid answers status 1 with no record" {
     const found = try exp.find(&items, &body);
     try std.testing.expect(found == null);
     var buf: [64]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try exp.writeImport(stream.writer(), found);
-    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x11, 0x00, 0x03, 0, 0, 0, 1 }, stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try exp.writeImport(&stream, found);
+    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x11, 0x00, 0x03, 0, 0, 0, 1 }, stream.buffered());
 }
 
 test {

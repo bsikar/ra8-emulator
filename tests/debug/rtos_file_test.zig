@@ -23,9 +23,9 @@ fn sample() rtos_trace.Trace {
 }
 
 fn render(trace: *const rtos_trace.Trace, into: []u8) ![]const u8 {
-    var stream = std.io.fixedBufferStream(into);
-    try rtos_file.write(stream.writer(), trace);
-    return stream.getWritten();
+    var stream: std.Io.Writer = .fixed(into);
+    try rtos_file.write(&stream, trace);
+    return stream.buffered();
 }
 
 test "a written trace reads back event for event, dropped count included" {

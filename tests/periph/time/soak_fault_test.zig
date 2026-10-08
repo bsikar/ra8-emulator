@@ -56,7 +56,7 @@ test "an armed soak stops on a fault and names it" {
     var state = clocks.soak.Soak{ .armed = true };
     state.note(soak_fault.kind(.{ .cfsr = status.Cause.stkof.bit() }).?, 7_200_000_000_000);
     var buffer: [96]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try state.line(stream.writer());
-    try std.testing.expectEqualStrings("soak: stopped on stack overflow (UsageFault STKOF) at 7200.000000000 s virtual, core 0\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try state.line(&stream);
+    try std.testing.expectEqualStrings("soak: stopped on stack overflow (UsageFault STKOF) at 7200.000000000 s virtual, core 0\n", stream.buffered());
 }

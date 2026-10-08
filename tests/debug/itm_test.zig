@@ -59,14 +59,14 @@ test "flush writes complete lines and keeps the unfinished one" {
     var unit = enabled();
     sent(&unit, "boot ok\r\nticks=3\nhalf");
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try unit.flush(stream.writer(), false);
-    try std.testing.expectEqualStrings("itm: boot ok\nitm: ticks=3\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try unit.flush(&stream, false);
+    try std.testing.expectEqualStrings("itm: boot ok\nitm: ticks=3\n", stream.buffered());
     try std.testing.expectEqualStrings("half", unit.output());
     sent(&unit, " done");
-    stream.reset();
-    try unit.flush(stream.writer(), true);
-    try std.testing.expectEqualStrings("itm: half done\n", stream.getWritten());
+    stream.end = 0;
+    try unit.flush(&stream, true);
+    try std.testing.expectEqualStrings("itm: half done\n", stream.buffered());
     try std.testing.expectEqualStrings("", unit.output());
 }
 
