@@ -21,8 +21,8 @@ fn sections(list: *std.ArrayList(u8)) !ra8.core.dwarf_line.Sections {
 }
 
 test "a line's lowest address wins, in the file asked for" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     const s = try sections(&list);
     try std.testing.expectEqual(@as(?u32, 0x1000), try find.addressOf(s, "main.c", 3));
     try std.testing.expectEqual(@as(?u32, 0x1002), try find.addressOf(s, "main.c", 5));
@@ -30,8 +30,8 @@ test "a line's lowest address wins, in the file asked for" {
 }
 
 test "a line without code falls to the next one, and past the last is none" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     const s = try sections(&list);
     try std.testing.expectEqual(@as(?u32, 0x1002), try find.addressOf(s, "main.c", 4));
     try std.testing.expectEqual(@as(?u32, 0x1000), try find.addressOf(s, "main.c", 1));
@@ -69,8 +69,8 @@ const entry_tables = "\x00a.c\x00\x00\x00\x00\x00";
 const entry_program = [_]u8{ 0x00, 0x05, 0x02, 0x00, 0x10, 0x00, 0x00, 0x03, 0x02, 0x01, 0x02, 0x01, 0x03, 0x01, 0x0a, 0x01, 0x02, 0x01, 0x00, 0x01, 0x01 };
 
 test "a break on a function's entry moves past the prologue, or is refused before its declaration" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, entry_tables, &entry_program);
     const s = ra8.core.dwarf_line.Sections{ .line = list.items };
     try std.testing.expectEqual(@as(?u32, 0x1002), try find.prologueEnd(s, 0x1000, 0x1004));
