@@ -23,12 +23,12 @@ fn decodeFrame(bytes: []const u8, allocator: std.mem.Allocator, requested: usize
         try std.testing.expectEqual(@as(u8, 8), bytes[cursor]);
         cursor += 1;
 
-        var compressed = std.ArrayList(u8).init(allocator);
-        defer compressed.deinit();
+        var compressed: std.ArrayList(u8) = .empty;
+        defer compressed.deinit(allocator);
         while (bytes[cursor] != 0) {
             const count = bytes[cursor];
             cursor += 1;
-            try compressed.appendSlice(bytes[cursor .. cursor + count]);
+            try compressed.appendSlice(allocator, bytes[cursor .. cursor + count]);
             cursor += count;
         }
         cursor += 1;

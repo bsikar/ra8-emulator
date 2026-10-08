@@ -13,9 +13,9 @@ fn readCode(bytes: []const u8, bit: usize, width: u4) u16 {
     return code;
 }
 
-fn emit(out: *std.ArrayList(u8), table: *const [4096]Entry, code: u16) !void {
+fn emit(allocator: std.mem.Allocator, out: *std.ArrayList(u8), table: *const [4096]Entry, code: u16) !void {
     const start = out.items.len;
-    try out.resize(start + table[code].len);
+    try out.resize(allocator, start + table[code].len);
     var at = code;
     var index: usize = table[code].len;
     while (index > 0) {
@@ -27,8 +27,8 @@ fn emit(out: *std.ArrayList(u8), table: *const [4096]Entry, code: u16) !void {
 
 /// Decodes one LZW stream (as written after the minimum code size byte).
 pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
     var table: [4096]Entry = undefined;
     for (0..256) |i| table[i] = .{ .prefix = 0, .suffix = @intCast(i), .first = @intCast(i), .len = 1 };
     var width: u4 = 9;
@@ -44,7 +44,7 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
             prev = null;
             continue;
         }
-        if (code == 257) return out.toOwnedSlice();
+        if (code == 257) return out.toOwnedSlice(allocator);
         if (prev) |p| {
             if (code > next) return error.BadCode;
             const first = if (code < next) table[code].first else table[p].first;
@@ -54,7 +54,7 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
             }
             if (width < 12 and next == (@as(u16, 1) << width)) width += 1;
         } else if (code >= 256) return error.BadCode;
-        try emit(&out, &table, code);
+        try emit(allocator, &out, &table, code);
         prev = code;
     }
     return error.NoEnd;

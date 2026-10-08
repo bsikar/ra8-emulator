@@ -6,10 +6,10 @@ const wav = ra8.board.report.wav;
 
 const allocator = std.testing.allocator;
 
-fn encode(recorder: *const wav.Recorder) !std.ArrayList(u8) {
-    var out = std.ArrayList(u8).init(allocator);
+fn encode(recorder: *const wav.Recorder) !std.Io.Writer.Allocating {
+    var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
-    try recorder.write(out.writer());
+    try recorder.write(&out.writer);
     return out;
 }
 
@@ -37,7 +37,7 @@ test "the header names the format and the data length" {
     for (0..5) |i| try r.push(allocator, 0, @intCast(0x00ABCDE0 + i));
     var out = try encode(&r);
     defer out.deinit();
-    const b = out.items;
+    const b = out.written();
     try std.testing.expectEqualStrings("RIFF", b[0..4]);
     try std.testing.expectEqualStrings("WAVEfmt ", b[8..16]);
     try std.testing.expectEqual(@as(u16, 1), le16(b, 20));
@@ -67,7 +67,7 @@ test "a 1 kHz tone reads back as 1 kHz for a quarter second" {
     }
     var out = try encode(&r);
     defer out.deinit();
-    const data = out.items[44..];
+    const data = out.written()[44..];
     const samples = data.len / 2;
     try std.testing.expectEqual(@as(usize, count), samples);
     try std.testing.expectEqual(@as(u64, 0), r.silent);

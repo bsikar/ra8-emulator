@@ -20,7 +20,7 @@ fn send(board: *ra8.board.Board, words: []const u32) void {
 const Output = struct {
     dir: std.testing.TmpDir,
     path: []u8,
-    said: std.ArrayList(u8),
+    said: std.Io.Writer.Allocating,
 
     fn init() !Output {
         var dir = std.testing.tmpDir(.{});
@@ -28,7 +28,7 @@ const Output = struct {
         const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", allocator);
         defer allocator.free(root);
         const path = try std.fs.path.join(allocator, &.{ root, "out.wav" });
-        return .{ .dir = dir, .path = path, .said = std.ArrayList(u8).init(allocator) };
+        return .{ .dir = dir, .path = path, .said = .init(allocator) };
     }
 
     fn deinit(self: *Output) void {
@@ -74,14 +74,14 @@ test "a 16-bit I2S stream on SSIE0 is written as a stereo WAV at the asked rate"
     defer run.deinit();
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(1, 0, true));
     send(&board, &.{ 0x1111, 0x2222, 0x3333, 0x4444 });
-    try run.finish(output.said.writer(), std.testing.io);
+    try run.finish(&output.said.writer, std.testing.io);
     const bytes = try output.file();
     defer allocator.free(bytes);
     try std.testing.expectEqual(@as(u16, 2), std.mem.readInt(u16, bytes[22..24], .little));
     try std.testing.expectEqual(@as(u32, 22050), std.mem.readInt(u32, bytes[24..28], .little));
     try std.testing.expectEqual(@as(u16, 16), std.mem.readInt(u16, bytes[34..36], .little));
     try std.testing.expectEqualSlices(u8, &.{ 0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44 }, bytes[44..]);
-    try std.testing.expect(std.mem.indexOf(u8, output.said.items, "4 sample(s), 22050 Hz, 16-bit, 2 channel(s), 0 silent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output.said.written(), "4 sample(s), 22050 Hz, 16-bit, 2 channel(s), 0 silent") != null);
 }
 
 test "samples a quiet stretch of virtual time skipped come out as silence" {
@@ -111,8 +111,8 @@ test "a prohibited DWL is reported and no file is written" {
     defer run.deinit();
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(7, 0, false));
     send(&board, &.{0x1111});
-    try run.finish(output.said.writer(), std.testing.io);
-    try std.testing.expect(std.mem.indexOf(u8, output.said.items, "prohibited 111b; ") != null);
+    try run.finish(&output.said.writer, std.testing.io);
+    try std.testing.expect(std.mem.indexOf(u8, output.said.written(), "prohibited 111b; ") != null);
     try std.testing.expectError(error.FileNotFound, output.file());
 }
 
@@ -128,12 +128,12 @@ test "a shape change mid-stream stops the recording and keeps what came before" 
     send(&board, &.{ 0x1111, 0x2222 });
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(5, 0, true));
     send(&board, &.{ 0x3333, 0x4444 });
-    try run.finish(output.said.writer(), std.testing.io);
+    try run.finish(&output.said.writer, std.testing.io);
     try std.testing.expectEqual(audio_out.Stop.shape_changed, run.stop);
     const bytes = try output.file();
     defer allocator.free(bytes);
     try std.testing.expectEqual(@as(usize, 44 + 4), bytes.len);
-    try std.testing.expect(std.mem.indexOf(u8, output.said.items, "stopped early: SSICR changed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output.said.written(), "stopped early: SSICR changed") != null);
 }
 
 test "with no path the board is left without a listener and nothing is said" {
@@ -143,8 +143,8 @@ test "with no path the board is left without a listener and nothing is said" {
     run.arm(&board, .{});
     defer run.deinit();
     try std.testing.expect(board.audio.channels[0].listener == null);
-    var said = std.ArrayList(u8).init(allocator);
+    var said: std.Io.Writer.Allocating = .init(allocator);
     defer said.deinit();
-    try run.finish(said.writer(), std.testing.io);
-    try std.testing.expectEqual(@as(usize, 0), said.items.len);
+    try run.finish(&said.writer, std.testing.io);
+    try std.testing.expectEqual(@as(usize, 0), said.written().len);
 }

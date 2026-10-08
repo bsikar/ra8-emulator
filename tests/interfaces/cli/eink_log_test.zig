@@ -43,12 +43,12 @@ test "scripted full and partial refreshes produce JSONL and totals by waveform" 
     try std.testing.expect(!recorder.entries.items[1].full);
     try std.testing.expectEqual(@as(u16, 3), recorder.entries.items[1].waveform);
 
-    var totals = std.ArrayList(u8).init(std.testing.allocator);
+    var totals: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer totals.deinit();
-    var j = ra8.board.report.json.over(totals.writer());
+    var j = ra8.board.report.json.over(&totals.writer);
     try recorder.reportJson(&j);
-    try std.testing.expect(std.mem.indexOf(u8, totals.items, "\"waveform\":2,\"count\":2") != null);
-    try std.testing.expect(std.mem.indexOf(u8, totals.items, "\"waveform\":3,\"count\":1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, totals.written(), "\"waveform\":2,\"count\":2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, totals.written(), "\"waveform\":3,\"count\":1") != null);
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
