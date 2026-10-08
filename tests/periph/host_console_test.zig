@@ -5,7 +5,7 @@ const host_console = ra8.periph.host_console;
 
 fn key(char: u16, down: bool, repeat: u16) host_console.InputRecord {
     return .{ .event_type = host_console.key_event, .event = .{ .key = .{
-        .key_down = @intFromBool(down),
+        .key_down = if (down) .TRUE else .FALSE,
         .repeat_count = repeat,
         .virtual_key = 0,
         .virtual_scan = 0,

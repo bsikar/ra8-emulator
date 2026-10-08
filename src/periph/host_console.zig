@@ -47,7 +47,7 @@ pub fn isConsole(handle: windows.HANDLE) bool {
 pub fn keyBytes(record: InputRecord, out: []u8, at: usize) usize {
     if (record.event_type != key_event) return at;
     const key = record.event.key;
-    if (key.key_down == 0 or key.char == 0 or key.char > 0x7F) return at;
+    if (!key.key_down.toBool() or key.char == 0 or key.char > 0x7F) return at;
     const byte: u8 = if (key.char == '\r') '\n' else @intCast(key.char);
     var end = at;
     var left = @max(key.repeat_count, 1);
