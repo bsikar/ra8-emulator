@@ -45,6 +45,12 @@ pub const Ring = struct {
         return false;
     }
 
+    /// The oldest unread byte, left where it is (RA8EMU-949).
+    pub fn first(self: *const Ring) ?u8 {
+        if (self.empty()) return null;
+        return self.bytes[self.head];
+    }
+
     pub fn pop(self: *Ring) ?u8 {
         if (self.empty()) return null;
         const byte = self.bytes[self.head];

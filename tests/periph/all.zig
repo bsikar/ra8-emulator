@@ -227,6 +227,7 @@ test {
     _ = @import("sci/sci_line_test.zig");
     _ = @import("sci/sci_error_test.zig");
     _ = @import("sci/sci_ring_test.zig");
+    _ = @import("sci/sci_peek_test.zig");
     _ = @import("sci/sci_lin_test.zig");
     _ = @import("sci/sci_device_test.zig");
     _ = @import("sci/sci_spi_test.zig");
