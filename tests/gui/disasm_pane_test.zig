@@ -2,7 +2,8 @@
 //! corpus-like run decodes forward through a real session (a wide bl takes
 //! four bytes), unreadable and straddling reads take two bytes each, the pc
 //! band and the breakpoint square land only on their rows, a pane too narrow
-//! draws nothing, and a session capture rasterises to a pinned golden frame.
+//! draws nothing, a session capture rasterises to a pinned golden frame, and
+//! decodeRead decodes the same run out of bytes read over the link.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -188,4 +189,41 @@ test "a session capture rasterises to the pinned golden frame" {
     defer scene.deinit();
     try scene.render(&snapshot);
     try std.testing.expectEqual(@as(u64, 7011153241417841614), scene.digest());
+}
+
+/// Bytes as the shell reads them over the link, with which came back.
+const Read = struct { bytes: [2 * code.len]u8, readable: [2 * code.len]bool };
+
+/// `code` as read from `code_at`, every byte readable.
+fn readCode() Read {
+    var read: Read = .{ .bytes = undefined, .readable = @splat(true) };
+    for (code, 0..) |half, index| std.mem.writeInt(u16, read.bytes[2 * index ..][0..2], half, .little);
+    return read;
+}
+
+test "decodeRead decodes forward from pc out of bytes read from a row base" {
+    const read = readCode();
+    const snapshot = pane.decodeRead(pc, code_at, &read.bytes, &read.readable, 4);
+    try std.testing.expectEqual(pc, snapshot.pc);
+    try std.testing.expectEqual(@as(usize, 4), snapshot.count);
+    try std.testing.expectEqual(@as(u8, 4), snapshot.lines[0].size);
+    try std.testing.expect(snapshot.lines[0].decoded);
+    const after = [_]u32{ 0x2A, 0x2C, 0x2E };
+    for (after, snapshot.lines[1..4]) |address, line| {
+        try std.testing.expectEqual(address, line.address);
+        try std.testing.expectEqual(@as(u8, 2), line.size);
+    }
+}
+
+test "decodeRead marks a halfword not read, or past the read, unreadable" {
+    var read = readCode();
+    read.readable[0x2A - code_at + 1] = false;
+    const snapshot = pane.decodeRead(pc, code_at, &read.bytes, &read.readable, 6);
+    try std.testing.expectEqual(@as(u8, 0), snapshot.lines[1].size);
+    try std.testing.expectEqual(@as(u32, 0x2C), snapshot.lines[2].address);
+    try std.testing.expect(snapshot.lines[2].decoded);
+    try std.testing.expectEqual(@as(u32, 0x30), snapshot.lines[4].address);
+    try std.testing.expectEqual(@as(u8, 0), snapshot.lines[4].size);
+    const before = pane.decodeRead(code_at - 2, code_at, &read.bytes, &read.readable, 1);
+    try std.testing.expectEqual(@as(u8, 0), before.lines[0].size);
 }

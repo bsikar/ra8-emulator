@@ -6,6 +6,8 @@
 //! Thumb cannot be decoded backwards reliably, so `capture` starts where the
 //! caller says: pc to follow execution, or the shell's scroll anchor. `draw`
 //! reads only the snapshot and the breakpoint addresses it is handed.
+//! `decodeRead` builds the same snapshot from bytes the shell read over the
+//! session link (RA8EMU-821).
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
@@ -87,10 +89,52 @@ fn decode(session: *session_api.Session, core: session_api.Core, address: u32) a
         return err;
     };
     line.size = if (wide) 4 else 2;
-    const decoded = disasm.one(address, line.bytes[0..line.size]) catch return line;
+    decodeInto(&line);
+    return line;
+}
+
+/// Decodes up to `row_count` instructions (at most `max_rows`) forward from
+/// `pc` out of `bytes` read from `base`, where `readable[i]` says whether
+/// byte i came back. An instruction that runs past what was read, or into
+/// a byte that was not, is unreadable and takes two bytes.
+pub fn decodeRead(pc: u32, base: u32, bytes: []const u8, readable: []const bool, row_count: usize) Snapshot {
+    var snapshot: Snapshot = .{ .pc = pc, .count = @min(row_count, max_rows) };
+    var at = pc;
+    for (snapshot.lines[0..snapshot.count]) |*line| {
+        line.* = lineFrom(at, base, bytes, readable);
+        at +%= if (line.size == 0) session_view.encoding.narrow else line.size;
+    }
+    return snapshot;
+}
+
+fn lineFrom(address: u32, base: u32, bytes: []const u8, readable: []const bool) Line {
+    var line: Line = .{ .address = address };
+    const offset: usize = address -% base;
+    if (!present(offset, readable)) return line;
+    @memcpy(line.bytes[0..2], bytes[offset..][0..2]);
+    const first = std.mem.readInt(u16, line.bytes[0..2], .little);
+    const wide = first >= session_view.encoding.wide_first;
+    if (wide) {
+        if (!present(offset + 2, readable)) return line;
+        @memcpy(line.bytes[2..4], bytes[offset + 2 ..][0..2]);
+    }
+    line.size = if (wide) 4 else 2;
+    decodeInto(&line);
+    return line;
+}
+
+/// Whether the halfword at `offset` was read in full.
+fn present(offset: usize, readable: []const bool) bool {
+    if (offset > readable.len or readable.len - offset < 2) return false;
+    return readable[offset] and readable[offset + 1];
+}
+
+/// Fills a read line's text, leaving it undecoded when the bytes are not
+/// an instruction.
+fn decodeInto(line: *Line) void {
+    const decoded = disasm.one(line.address, line.bytes[0..line.size]) catch return;
     line.setText(decoded.slice());
     line.decoded = true;
-    return line;
 }
 
 /// The bus errors that mean this address cannot be read.

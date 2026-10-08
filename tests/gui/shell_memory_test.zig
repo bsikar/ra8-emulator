@@ -3,7 +3,8 @@
 //! asks one read per row only once due, its last answer publishes it with
 //! refused rows unreadable, a core the session has not attached keeps the
 //! last values with a note, a batch sent before a load is dropped, and the
-//! memory leaf draws in place of its note.
+//! memory leaf draws in place of its note. A code pair follows PC exactly,
+//! and a disassembly leaf decodes from it with the pc band.
 const std = @import("std");
 const ra8 = @import("ra8");
 const proto = ra8.interfaces.rpc.session;
@@ -15,6 +16,7 @@ const frame = ra8.gui.shell_frame;
 const panes = ra8.gui.shell_panes;
 const status_bar = ra8.gui.status_bar;
 const memory_pane = ra8.gui.memory_pane;
+const disasm_pane = ra8.gui.disasm_pane;
 const registers_pane = ra8.gui.registers_pane;
 const shell_registers = ra8.gui.shell_registers;
 const shell_memory = ra8.gui.shell_memory;
@@ -67,12 +69,13 @@ fn refuse(model: *Memory, id: u32, code: u16) void {
     model.observe(.{ .response = .{ .id = id, .result = .{ .err = @fromBackingInt(code) } } });
 }
 
-/// A registers pair whose `core` has published a batch with SP at `sp`.
-fn published(core: usize, sp: u32) shell_registers.Pair {
+/// A registers pair whose `core` has published a batch with `which` at
+/// `value`.
+fn published(core: usize, which: shell_registers.Register, value: u32) shell_registers.Pair {
     var pair: shell_registers.Pair = .{};
     var snapshot: shell_registers.Snapshot = .{};
-    for (registers_pane.shown, 0..) |which, index| {
-        if (which == .sp) snapshot.values[index] = sp;
+    for (registers_pane.shown, 0..) |shown, index| {
+        if (shown == which) snapshot.values[index] = value;
     }
     pair.cores[core].now = snapshot;
     pair.cores[core].serial = 1;
@@ -81,11 +84,11 @@ fn published(core: usize, sp: u32) shell_registers.Pair {
 
 test "memory follows a core's fresh registers from the row holding SP, once" {
     var memory: shell_memory.Pair = .{};
-    const registers = published(1, 0x2200_0F3C);
+    const registers = published(1, .sp, 0x2200_0F3C);
     memory.follow(&registers);
     try std.testing.expect(!memory.cores[0].want);
     try std.testing.expect(memory.cores[1].want);
-    try std.testing.expectEqual(@as(u32, 0x2200_0F30), memory.cores[1].base);
+    try std.testing.expectEqual(@as(u32, 0x2200_0F3C), memory.cores[1].address);
     memory.cores[1].want = false;
     memory.follow(&registers);
     try std.testing.expect(!memory.cores[1].want);
@@ -108,6 +111,22 @@ test "a batch asks one read per row, and only once due" {
     model.attach(&wire.link);
     try std.testing.expectEqual(first, model.asked[0]);
     try std.testing.expect(model.want);
+}
+
+test "a code pair follows PC, reads from its row and keeps the exact address" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    var code: shell_memory.Pair = .{ .follows = .pc };
+    const registers = published(0, .pc, 0x0000_0126);
+    code.follow(&registers);
+    const model = &code.cores[0];
+    try std.testing.expectEqual(@as(u32, 0x0000_0126), model.address);
+    code.attach(&wire.link);
+    try std.testing.expectEqual(@as(u32, 0x0000_0120), model.gathered.base);
+    for (model.asked) |asked| try answer(model, asked.?, 0x00);
+    try std.testing.expectEqual(@as(u32, 0x0000_0126), model.from);
+    try std.testing.expectEqual(@as(u32, 0x0000_0120), model.now.?.base);
 }
 
 test "the last answer publishes the batch, with a refused row unreadable" {
@@ -195,6 +214,46 @@ test "a memory leaf draws its core's rows in place of its note" {
         } else {
             waiting += 1;
             try std.testing.expect(!holds(&pixels, body, memory_pane.ink));
+            try std.testing.expect(holds(&pixels, body, frame.muted));
+        }
+    }
+    try std.testing.expect(drawn > 0 and waiting > 0);
+}
+
+test "a disassembly leaf decodes from its core's PC with the pc band" {
+    const gpa = std.testing.allocator;
+    var code: shell_memory.Pair = .{ .follows = .pc };
+    var read: shell_memory.Snapshot = .{ .base = 0x100, .count = rows };
+    @memset(&read.readable, true);
+    for (0..rows * per_row / 2) |half| std.mem.writeInt(u16, read.bytes[2 * half ..][0..2], 0xBF00, .little);
+    code.cores[0].now = read;
+    code.cores[0].from = 0x104;
+    var layout = try pane_layout.twoCore(gpa);
+    defer layout.deinit();
+    for (layout.nodes.items, 0..) |node, index| if (node.body == .leaf) {
+        try layout.setKind(@intCast(index), .disasm);
+    };
+    var solved = try frame.solve(&layout, gpa, 2000, 320);
+    defer solved.deinit(gpa);
+    var pixels = try raster.Framebuffer.init(gpa, 2000, 320);
+    defer pixels.deinit(gpa);
+    var list = draw_list.DrawList.init(gpa, 2000, 320);
+    defer list.deinit();
+    const status: status_bar.Status = .{};
+    var painter: panes.Panes = .{ .code = &code };
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = 2000, .height = 320, .painter = painter.painter() });
+    raster.draw(&pixels, &list, font.atlas);
+    var drawn: usize = 0;
+    var waiting: usize = 0;
+    for (solved.panes.items) |leaf| {
+        const placed = layout.pane(leaf.index) orelse continue;
+        const body = frame.bodyOf(leaf.area);
+        if (placed.core == .cpu0) {
+            drawn += 1;
+            try std.testing.expect(holds(&pixels, body, disasm_pane.pc_band));
+        } else {
+            waiting += 1;
+            try std.testing.expect(!holds(&pixels, body, disasm_pane.pc_band));
             try std.testing.expect(holds(&pixels, body, frame.muted));
         }
     }

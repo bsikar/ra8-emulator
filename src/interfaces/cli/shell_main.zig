@@ -125,7 +125,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     shell.registers = &registers;
     var memory: shell_memory.Pair = .{};
     shell.memory = &memory;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory };
+    var code: shell_memory.Pair = .{ .follows = .pc };
+    shell.code = &code;
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code };
     shell.painter = panes.painter();
     try drive(io, &shell, window, path, bytes);
     link.close();
