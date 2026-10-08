@@ -20,6 +20,7 @@ pub const border = Color.rgb(0x4A, 0x51, 0x5C);
 pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
 pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
 pub const face = Color.rgb(0x2C, 0x31, 0x3A);
+pub const pressed_face = Color.rgb(0x5C, 0x63, 0x70);
 pub const dark = Color.rgb(0x00, 0x00, 0x00);
 pub const off = Color.rgb(0x3A, 0x40, 0x4A);
 
@@ -95,6 +96,8 @@ pub const Layout = struct {
 pub const View = struct {
     leds: *const Leds,
     panel: ?draw_list.Image = null,
+    /// The switch held down by the pointer (RA8EMU-814), drawn pressed.
+    pressed: ?usize = null,
 };
 
 /// Paints the pane into `area`; an area under the minimum draws nothing.
@@ -114,7 +117,7 @@ pub fn draw(list: *draw_list.DrawList, area: Rect, view: View) !void {
     }
     for (layout.switches, 0..) |button, index| {
         try list.fill(button, border);
-        try list.fill(inset(button), face);
+        try list.fill(inset(button), if (view.pressed == index) pressed_face else face);
         try label(list, button, switch_names[index], ink);
     }
 }
