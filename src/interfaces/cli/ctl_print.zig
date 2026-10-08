@@ -7,7 +7,7 @@ const proto = @import("../rpc/session_rpc.zig");
 pub const Reg = struct { register: proto.Register, value: u32 };
 
 pub fn loaded(w: anytype, json: bool, path: []const u8, bytes: usize) !void {
-    if (json) return w.print("{{\"loaded\":{},\"bytes\":{d}}}\n", .{ std.json.fmt(path, .{}), bytes });
+    if (json) return w.print("{{\"loaded\":{f},\"bytes\":{d}}}\n", .{ std.json.fmt(path, .{}), bytes });
     try w.print("loaded {s} ({d} bytes)\n", .{ path, bytes });
 }
 
@@ -87,13 +87,13 @@ pub fn part(w: anytype, json: bool, method: proto.Method, spec: []const u8) !voi
         .clear_fault => "fault_cleared",
         else => unreachable,
     };
-    if (json) return w.print("{{\"{s}\":{}}}\n", .{ key, std.json.fmt(spec, .{}) });
+    if (json) return w.print("{{\"{s}\":{f}}}\n", .{ key, std.json.fmt(spec, .{}) });
     try w.print("{s} {s}\n", .{ key, spec });
 }
 
 pub fn files(w: anytype, json: bool, method: proto.Method, path: []const u8) !void {
     const key = if (method == .snapshot) "snapshot" else "restored";
-    if (json) return w.print("{{\"{s}\":{}}}\n", .{ key, std.json.fmt(path, .{}) });
+    if (json) return w.print("{{\"{s}\":{f}}}\n", .{ key, std.json.fmt(path, .{}) });
     try w.print("{s} {s}\n", .{ key, path });
 }
 
@@ -111,7 +111,7 @@ pub fn failed(io: std.Io, json: bool, err: anyerror, code: u16) u8 {
         var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
         const w = &stdout.interface;
         w.print("{{\"error\":\"{s}\",\"code\":{d}", .{ @errorName(err), code }) catch {};
-        if (why.len != 0) w.print(",\"message\":{}", .{std.json.fmt(why, .{})}) catch {};
+        if (why.len != 0) w.print(",\"message\":{f}", .{std.json.fmt(why, .{})}) catch {};
         w.writeAll("}\n") catch {};
     } else if (why.len != 0) {
         std.debug.print("ctl: {s} (code {d}): {s}\n", .{ @errorName(err), code, why });
@@ -137,10 +137,10 @@ pub fn explain(err: anyerror) []const u8 {
 
 pub fn uart(w: anytype, json: bool, sent: proto.Uart) !void {
     if (!json) return w.writeAll(sent.bytes);
-    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"virtual_ns\":{d},\"text\":{}}}}}\n", .{ @tagName(sent.core), sent.channel, sent.virtual_ns, std.json.fmt(sent.bytes, .{}) });
+    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"virtual_ns\":{d},\"text\":{f}}}}}\n", .{ @tagName(sent.core), sent.channel, sent.virtual_ns, std.json.fmt(sent.bytes, .{}) });
 }
 
 pub fn timeout(w: anytype, json: bool, until: []const u8) !void {
-    if (json) return w.print("{{\"timeout\":{{\"until\":{}}}}}\n", .{std.json.fmt(until, .{})});
+    if (json) return w.print("{{\"timeout\":{{\"until\":{f}}}}}\n", .{std.json.fmt(until, .{})});
     try w.print("\ntimed out waiting for {s}\n", .{until});
 }
