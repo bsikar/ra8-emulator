@@ -62,9 +62,9 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     };
     defer how.close();
     var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz), .io = args.io };
-    var stills_dir = try window_stills.openDir(args.options.frames.window_stills);
-    defer if (stills_dir) |*dir| dir.close();
-    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .dir = stills_dir orelse std.fs.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
+    const stills_dir = try window_stills.openDir(args.io, args.options.frames.window_stills);
+    defer if (stills_dir) |dir| dir.close(args.io);
+    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = args.io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
     var live = Live{ .args = args, .pacer = &pacer };
     var devices: window_devices.Devices = undefined;

@@ -26,12 +26,13 @@ pub fn encode(allocator: std.mem.Allocator, writer: anytype, frame: raster.Frame
 }
 
 /// Saves `frame` as `file_name` in `dir`.
-pub fn save(allocator: std.mem.Allocator, dir: std.fs.Dir, file_name: []const u8, frame: raster.Framebuffer) !void {
-    var file = try dir.createFile(file_name, .{});
-    defer file.close();
-    var buffered = std.io.bufferedWriter(file.writer());
-    try encode(allocator, buffered.writer(), frame);
-    try buffered.flush();
+pub fn save(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, file_name: []const u8, frame: raster.Framebuffer) !void {
+    var file = try dir.createFile(io, file_name, .{});
+    defer file.close(io);
+    var buffer: [4096]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+    try encode(allocator, &writer.interface, frame);
+    try writer.interface.flush();
 }
 
 /// The name of still `index` for `stem`: `stem-0003.png`, so a run of
