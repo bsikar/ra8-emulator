@@ -76,7 +76,7 @@ test "the readout follows a local session's virtual time across a run" {
 
     var readout: Readout = .{};
     var status: Status = .{};
-    const bytes = try std.fs.cwd().readFileAlloc(gpa, elf_path, 1 << 20);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, elf_path, gpa, .limited(1 << 20));
     defer gpa.free(bytes);
     try status.load(&link, elf_path, bytes);
     try readout.poll(&link);

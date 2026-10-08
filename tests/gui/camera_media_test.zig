@@ -4,8 +4,8 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const media = ra8.gui.camera_media;
 
-fn write(dir: std.fs.Dir, name: []const u8, bytes: []const u8) !void {
-    try dir.writeFile(.{ .sub_path = name, .data = bytes });
+fn write(dir: std.Io.Dir, name: []const u8, bytes: []const u8) !void {
+    try dir.writeFile(std.testing.io, .{ .sub_path = name, .data = bytes });
 }
 
 test "a file's first bytes decide its kind, not its name" {
@@ -25,7 +25,7 @@ test "pictures and clips are listed by name and the rest left out" {
     try write(tmp.dir, "clip.y4m", "YUV4MPEG2 W2 H2 F30:1\n");
     try write(tmp.dir, "notes.png", "not a picture");
     try write(tmp.dir, "empty", "");
-    try tmp.dir.makeDir("dir.png");
+    try tmp.dir.createDir(std.testing.io, "dir.png", .default_dir);
     var found = try media.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
     try std.testing.expectEqual(@as(usize, 2), found.images.len);
