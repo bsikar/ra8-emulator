@@ -187,7 +187,7 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     try driver.open(std.testing.allocator, std.testing.io, &board, cpu1_path, memory);
     defer driver.close();
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
-    var clock: ra8.board.zig_run.Clock = .{ .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };
+    var clock: ra8.board.zig_run.Clock = .{ .io = std.testing.io, .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };
     var final: ra8.core.cpu.boot.Regs = .{};
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     _ = try ra8.core.cpu.boot.start(std.io.null_writer, .zig, memory, &board.bus, vector_base, 100_000, &timebase.ticks, .{

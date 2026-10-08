@@ -38,7 +38,7 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const clock: *Clock = @ptrCast(@alignCast(context));
     const store = try storeOf(clock);
     const allocator = std.heap.page_allocator;
-    const bytes = try std.fs.cwd().readFileAlloc(allocator, clock.state.load.?, max_bytes);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
     defer allocator.free(bytes);
     try run_file.load(bytes, store, &.{core}, clock.board);
     try systick.load(.{ clock.timebase, &clock.ns_timebase }, bytes);
@@ -75,13 +75,15 @@ fn writeAt(context: *anyopaque, core: *const Cpu) anyerror!void {
 
 fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     const store = try storeOf(clock);
-    var out = try std.fs.cwd().createFile(path, .{});
-    defer out.close();
-    var buffered = std.io.bufferedWriter(out.writer());
-    try run_file.save(buffered.writer(), store, &.{core}, clock.board);
-    try systick.save(.{ clock.timebase, &clock.ns_timebase }, buffered.writer());
-    try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, buffered.writer());
-    try buffered.flush();
+    const file = try std.Io.Dir.cwd().createFile(clock.io, path, .{});
+    defer file.close(clock.io);
+    var staging: [4096]u8 = undefined;
+    var writer = file.writer(clock.io, &staging);
+    const out = &writer.interface;
+    try run_file.save(out, store, &.{core}, clock.board);
+    try systick.save(.{ clock.timebase, &clock.ns_timebase }, out);
+    try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, out);
+    try out.flush();
 }
 
 fn storeOf(clock: *const Clock) Error!*Store {

@@ -62,7 +62,7 @@ fn runAt(speed_milli: ?u64) !Run {
     var wall: FakeWall = .{};
     if (speed_milli) |factor| board.time.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), factor);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var timeline: Timeline = .{ .timebase = &timebase };
     const listener: ra8.core.cpu.cpu.RetireListener = .{ .context = &timeline, .instructionFn = Timeline.retire };
     var ran: u64 = 0;

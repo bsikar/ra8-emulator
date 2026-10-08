@@ -57,7 +57,7 @@ fn runIdler(skip: bool, reload: ?u32, cycles: u64) !Ended {
     defer board.deinit();
     try store_board.attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .idle_skip = skip };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = skip };
     var counted: Counted = .{ .clock = &clock };
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
