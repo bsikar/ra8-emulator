@@ -50,15 +50,15 @@ test "denied and restricted block; authorized and not asked pass" {
     try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.denied, av.verdict(.restricted));
     try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.allowed, av.verdict(.authorized));
     try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.unset, av.verdict(.not_determined));
-    var said = std.ArrayList(u8).init(std.testing.allocator);
+    var said: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer said.deinit();
-    try av.gate(.authorized, said.writer());
-    try av.gate(.not_determined, said.writer());
-    try std.testing.expectEqual(@as(usize, 0), said.items.len);
-    try std.testing.expectError(error.PrivacyBlocked, av.gate(.denied, said.writer()));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "Privacy & Security > Camera") != null);
-    try std.testing.expectError(error.PrivacyBlocked, av.gate(.restricted, said.writer()));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "Screen Time") != null);
+    try av.gate(.authorized, &said.writer);
+    try av.gate(.not_determined, &said.writer);
+    try std.testing.expectEqual(@as(usize, 0), said.written().len);
+    try std.testing.expectError(error.PrivacyBlocked, av.gate(.denied, &said.writer));
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "Privacy & Security > Camera") != null);
+    try std.testing.expectError(error.PrivacyBlocked, av.gate(.restricted, &said.writer));
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "Screen Time") != null);
 }
 
 test "hosts other than macOS read as not asked" {
