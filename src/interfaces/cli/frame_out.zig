@@ -27,8 +27,8 @@ pub fn opaqueRgba(pixels: []const u32, rgba: []u8) png.Error!void {
 /// Scan the panel into a buffer and write the board view to `path` as a
 /// PNG. A run with no frame (an LED-only example) still gets the view,
 /// with the LEDs as the pins left them round a dark panel.
-pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8, panel_only: bool) !Saved {
-    if (board.asks.attached_eink) |panel| return saveEink(allocator, panel, path);
+pub fn save(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: []const u8, panel_only: bool) !Saved {
+    if (board.asks.attached_eink) |panel| return saveEink(allocator, io, panel, path);
     const unit = &board.display;
     const scanned = unit.panelWidth() != 0 and unit.panelHeight() != 0;
     const width = if (scanned) unit.panelWidth() else board_view.panel_width;
@@ -39,15 +39,15 @@ pub fn save(allocator: std.mem.Allocator, board: *Board, path: []const u8, panel
     const frame = scanned and scan(board, pixels, width, height);
     if (!frame) @memset(pixels, 0);
     // No GLCDC frame: the board's own e-ink panel, once refreshed (RA8EMU-591).
-    if (!frame and board.panel.refreshes != 0) return saveEink(allocator, &board.panel, path);
+    if (!frame and board.panel.refreshes != 0) return saveEink(allocator, io, &board.panel, path);
     const view = if (panel_only) board_view.Size{ .width = width, .height = height } else board_view.size(width, height);
     if (panel_only) {
-        try write(allocator, pixels, view, path);
+        try write(allocator, io, pixels, view, path);
     } else {
         const canvas = try allocator.alloc(u32, @as(usize, view.width) * view.height);
         defer allocator.free(canvas);
         board_view.compose(canvas, pixels, width, height, &ledsOf(board));
-        try write(allocator, canvas, view, path);
+        try write(allocator, io, canvas, view, path);
     }
     return .{ .width = width, .height = height, .view = view, .frame = frame };
 }
@@ -60,7 +60,7 @@ fn scan(board: *Board, pixels: []u32, width: u32, height: u32) bool {
 }
 
 /// Save the requested e-ink panel's refreshed glass, as grey pixels.
-fn saveEink(allocator: std.mem.Allocator, panel: *const eink.Panel, path: []const u8) !Saved {
+fn saveEink(allocator: std.mem.Allocator, io: std.Io, panel: *const eink.Panel, path: []const u8) !Saved {
     const width: u32 = panel.planes.geometry.width;
     const height: u32 = panel.planes.geometry.height;
     const view = board_view.Size{ .width = width, .height = height };
@@ -69,11 +69,12 @@ fn saveEink(allocator: std.mem.Allocator, panel: *const eink.Panel, path: []cons
     if (panel.planes.glass.pixels.len == 0) {
         for (0..@as(usize, width) * height) |at| @memcpy(rgba[at * png.bytes_per_pixel ..][0..png.bytes_per_pixel], &[_]u8{ 0, 0, 0, 0xFF });
     } else try grayRgba(panel.planes.glass.pixels, rgba);
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
-    var buffered = std.io.bufferedWriter(file.writer());
-    try png.encode(allocator, buffered.writer(), width, height, rgba);
-    try buffered.flush();
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var staging: [4096]u8 = undefined;
+    var writer = file.writer(io, &staging);
+    try png.encode(allocator, &writer.interface, width, height, rgba);
+    try writer.interface.flush();
     return .{ .width = width, .height = height, .view = view, .frame = panel.refreshes != 0, .eink = true };
 }
 
@@ -96,21 +97,22 @@ pub fn ledsOf(board: *Board) [gpio.led_count]board_view.Led {
     return lit;
 }
 
-fn write(allocator: std.mem.Allocator, canvas: []const u32, view: board_view.Size, path: []const u8) !void {
+fn write(allocator: std.mem.Allocator, io: std.Io, canvas: []const u32, view: board_view.Size, path: []const u8) !void {
     const rgba = try allocator.alloc(u8, canvas.len * png.bytes_per_pixel);
     defer allocator.free(rgba);
     try opaqueRgba(canvas, rgba);
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
-    var buffered = std.io.bufferedWriter(file.writer());
-    try png.encode(allocator, buffered.writer(), view.width, view.height, rgba);
-    try buffered.flush();
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var staging: [4096]u8 = undefined;
+    var writer = file.writer(io, &staging);
+    try png.encode(allocator, &writer.interface, view.width, view.height, rgba);
+    try writer.interface.flush();
 }
 
 /// One line for the end of the run: what went into the view, and where.
-pub fn report(out: anytype, board: *Board, path: ?[]const u8, panel_only: bool) !void {
+pub fn report(out: anytype, io: std.Io, board: *Board, path: ?[]const u8, panel_only: bool) !void {
     const target = path orelse return;
-    const saved = try save(std.heap.page_allocator, board, target, panel_only);
+    const saved = try save(std.heap.page_allocator, io, board, target, panel_only);
     if (saved.eink) {
         if (!saved.frame) return out.print("frame-out: no e-ink refresh, the {d}x{d} grey glass written to {s}\n", .{
             saved.width, saved.height, target,
