@@ -28,7 +28,7 @@ test "rejects a file that is not a little-endian 32-bit ARM ELF" {
 
 test "finds secure vectors before SRAM helpers and the reset code" {
     const page = 0x1000;
-    var file = @as([page * 4]u8, @splat(0));
+    var file: [page * 4]u8 align(@alignOf(Header)) = @splat(0);
     const head: *Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
         .magic = .{ 0x7f, 'E', 'L', 'F' },
@@ -96,7 +96,7 @@ test "finds secure vectors before SRAM helpers and the reset code" {
 }
 
 test "a segment whose file bytes run past the end is refused, not trusted" {
-    var file = @as([@sizeOf(Header) + @sizeOf(ProgramHeader)]u8, @splat(0));
+    var file: [@sizeOf(Header) + @sizeOf(ProgramHeader)]u8 align(@alignOf(Header)) = @splat(0);
     const head: *Header = @ptrCast(@alignCast(&file[0]));
     head.magic = .{ 0x7f, 'E', 'L', 'F' };
     head.class = 1;

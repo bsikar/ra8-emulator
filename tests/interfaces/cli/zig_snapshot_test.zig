@@ -21,7 +21,7 @@ const stack: u32 = memmap.sram_base + 0x800;
 /// SP, reset, then a loop that counts r0 up and stores it to SRAM, so the
 /// core, memory and the run's time all move.
 fn image() [page * 2]u8 {
-    var file = @as([page * 2]u8, @splat(0));
+    var file: [page * 2]u8 align(@alignOf(elf.Header)) = @splat(0);
     const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{ .magic = .{ 0x7f, 'E', 'L', 'F' }, .class = 1, .data = 1, .version = 1, .osabi = 0, .abiversion = 0, .pad = @splat(0), .e_type = 2, .e_machine = elf.em_arm, .e_version = 1, .e_entry = vectors + 9, .e_phoff = @sizeOf(elf.Header), .e_shoff = 0, .e_flags = 0, .e_ehsize = @sizeOf(elf.Header), .e_phentsize = @sizeOf(elf.ProgramHeader), .e_phnum = 1, .e_shentsize = 0, .e_shnum = 0, .e_shstrndx = 0 };
     const header: *elf.ProgramHeader = @ptrCast(@alignCast(&file[@sizeOf(elf.Header)]));
