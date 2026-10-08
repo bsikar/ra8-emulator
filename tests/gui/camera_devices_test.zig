@@ -22,7 +22,7 @@ test "a directory's nodes list lowest number first" {
     for ([_][]const u8{ "video10", "video2", "vbi0", "video0", "tty1" }) |name| {
         (try tmp.dir.createFile(name, .{})).close();
     }
-    var found = try devices.list(std.testing.allocator, tmp.dir);
+    var found = try devices.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
     try std.testing.expectEqualSlices(u32, &.{ 0, 2, 10 }, found.numbers);
 }
@@ -30,7 +30,7 @@ test "a directory's nodes list lowest number first" {
 test "an empty directory has no webcams" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    var found = try devices.list(std.testing.allocator, tmp.dir);
+    var found = try devices.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
     try std.testing.expectEqual(@as(usize, 0), found.numbers.len);
 }
@@ -44,7 +44,7 @@ test "a listed device opens the node it came from" {
 }
 
 test "the host list never fails for want of devices" {
-    var found = try devices.listHost(std.testing.allocator);
+    var found = try devices.listHost(std.testing.allocator, std.testing.io);
     defer found.deinit();
     for (found.numbers) |n| try std.testing.expect(n <= devices.max_number);
 }
