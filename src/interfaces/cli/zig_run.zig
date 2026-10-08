@@ -317,7 +317,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
     } else try captureFrames(board, io, options);
-    try finishEinkLog(out, options, &eink_recorder);
+    try finishEinkLog(out, io, options, &eink_recorder);
     return status;
 }
 
@@ -333,9 +333,9 @@ fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Record
     return watched;
 }
 
-fn finishEinkLog(out: *std.Io.Writer, options: cli.Options, recorder: *eink_log.Run) !void {
+fn finishEinkLog(out: *std.Io.Writer, io: std.Io, options: cli.Options, recorder: *eink_log.Run) !void {
     const path = options.frames.eink_log orelse return;
-    try recorder.write(path);
+    try recorder.write(io, path);
     if (!options.report_json) try recorder.printTotals(out);
 }
 
