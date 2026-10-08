@@ -20,7 +20,7 @@ const Soak = struct {
     store: store_board.Store,
     board: ra8.board.Board,
     timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 },
-    pacer: Pacer = .{ .per_frame = per_frame },
+    pacer: Pacer = .{ .per_frame = per_frame, .io = std.testing.io },
     clock: zig_run.Clock = undefined,
     budget: u64,
     ran: u64 = 0,
@@ -31,7 +31,7 @@ const Soak = struct {
         const core = self.guest();
         try soaker.load(core, false);
         try store_board.attach(&self.board, core);
-        self.clock = .{ .memory = core, .board = &self.board, .timebase = &self.timebase, .pace = &self.pacer };
+        self.clock = .{ .io = std.testing.io, .memory = core, .board = &self.board, .timebase = &self.timebase, .pace = &self.pacer };
     }
 
     fn deinit(self: *Soak) void {
