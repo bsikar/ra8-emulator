@@ -54,7 +54,7 @@ const Gate = struct {
 };
 
 test "each step runs whole stretches until the frame's grant is spent" {
-    var pacer = Pacer{ .per_frame = 250 };
+    var pacer = Pacer{ .per_frame = 250, .io = std.testing.io };
     var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 1000 };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
     try std.testing.expect(pacer.step());
@@ -70,7 +70,7 @@ test "each step runs whole stretches until the frame's grant is spent" {
 }
 
 test "the engine holds before its first stretch until the window steps" {
-    var pacer = Pacer{ .per_frame = 100 };
+    var pacer = Pacer{ .per_frame = 100, .io = std.testing.io };
     var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300 };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
     while (true) {
@@ -89,7 +89,7 @@ test "the engine holds before its first stretch until the window steps" {
 }
 
 test "closing the window releases a parked engine and ends the run" {
-    var pacer = Pacer{ .per_frame = 50 };
+    var pacer = Pacer{ .per_frame = 50, .io = std.testing.io };
     var engine = Engine{ .pacer = &pacer, .stretch = 50, .total = 1_000_000 };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
     try std.testing.expect(pacer.step());
@@ -114,7 +114,7 @@ const Count = struct {
 
 test "the park hook runs on the engine at each park and once at the end" {
     var count = Count{};
-    var pacer = Pacer{ .per_frame = 250, .at_park = count.hook() };
+    var pacer = Pacer{ .per_frame = 250, .io = std.testing.io, .at_park = count.hook() };
     var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 1000 };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
     waitParked(&pacer);
@@ -127,7 +127,7 @@ test "the park hook runs on the engine at each park and once at the end" {
 }
 
 test "a grant never waits and never runs the engine more than a frame ahead" {
-    var pacer = Pacer{ .per_frame = 100 };
+    var pacer = Pacer{ .per_frame = 100, .io = std.testing.io };
     var gate = Gate{};
     var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300, .gate = &gate };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});

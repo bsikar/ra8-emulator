@@ -21,8 +21,10 @@ pub const Hook = struct {
 pub const Pacer = struct {
     /// Instructions the window grants per frame.
     per_frame: u64,
-    mutex: std.Thread.Mutex = .{},
-    changed: std.Thread.Condition = .{},
+    /// The engine and window threads lock through it; neither cancels.
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
+    changed: std.Io.Condition = .init,
     /// What is left of the current grant.
     left: u64 = 0,
     /// The engine is waiting at a boundary for a grant.
@@ -39,14 +41,14 @@ pub const Pacer = struct {
     /// stretch holds the engine until the window's first step. False once
     /// the window has quit, so the run ends there.
     pub fn charge(self: *Pacer, instructions: u64) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         self.left -|= instructions;
         if (self.left == 0 and !self.quit) self.park();
         while (self.left == 0 and !self.quit) {
             self.parked = true;
-            self.changed.broadcast();
-            self.changed.wait(&self.mutex);
+            self.changed.broadcast(self.io);
+            self.changed.wait(self.io, &self.mutex) catch {};
         }
         self.parked = false;
         return !self.quit;
@@ -54,23 +56,23 @@ pub const Pacer = struct {
 
     /// Engine side, once the run has ended, whatever ended it.
     pub fn finish(self: *Pacer) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         self.park();
         self.ended = true;
-        self.changed.broadcast();
+        self.changed.broadcast(self.io);
     }
 
     /// Window side: grant one frame and wait until the engine has spent it
     /// and parked, or the run has ended. False once it has ended.
     pub fn step(self: *Pacer) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.ended) return false;
         self.left = self.per_frame;
         self.parked = false;
-        self.changed.broadcast();
-        while (!self.ended and !(self.parked and self.left == 0)) self.changed.wait(&self.mutex);
+        self.changed.broadcast(self.io);
+        while (!self.ended and !(self.parked and self.left == 0)) self.changed.wait(self.io, &self.mutex) catch {};
         return !self.ended;
     }
 
@@ -79,23 +81,23 @@ pub const Pacer = struct {
     /// it be, so it never gets more than one frame ahead of the window.
     /// False once the run has ended.
     pub fn grant(self: *Pacer) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.ended) return false;
         if (self.parked and self.left == 0) {
             self.left = self.per_frame;
             self.parked = false;
-            self.changed.broadcast();
+            self.changed.broadcast(self.io);
         }
         return true;
     }
 
     /// Window side, when it closes: release a parked engine to stop.
     pub fn stop(self: *Pacer) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         self.quit = true;
-        self.changed.broadcast();
+        self.changed.broadcast(self.io);
     }
 
     fn park(self: *Pacer) void {
