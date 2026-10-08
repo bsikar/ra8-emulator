@@ -19,33 +19,32 @@ test "ctl alone loads a corpus image, speeds it up, waits for its banner, checks
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     var loaded = try ctl_run.run(gpa, spec, &.{ "load", ctl_run.uart_image });
     defer loaded.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, loaded.term);
     try std.testing.expectEqualStrings(ctl_run.uart_image, loaded.field("loaded").string);
 
     var fast = try ctl_run.run(gpa, spec, &.{ "speed", "100" });
     defer fast.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, fast.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, fast.term);
 
     const banner = "uart_irq_echo ready";
-    const ready = try ctl_run.stream(gpa, spec, &.{ "events", "--until", banner, "--timeout", "60s" });
-    defer ready.text.deinit();
-    defer ready.last.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, ready.term);
+    var ready = try ctl_run.stream(gpa, spec, &.{ "events", "--until", banner, "--timeout", "60s" });
+    defer ready.deinit(gpa);
+    try std.testing.expectEqual(Term{ .exited = 0 }, ready.term);
     try std.testing.expect(std.mem.indexOf(u8, ready.text.items, banner) != null);
 
     var word = try ctl_run.run(gpa, spec, &.{ "mem", vectors, "4" });
     defer word.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, word.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, word.term);
     try std.testing.expectEqual(@as(i64, 0x0200_0000), try ctl_run.expectInteger(word.field("address")));
     try std.testing.expectEqualStrings(initial_sp_hex, word.field("hex").string);
 
     var paused = try ctl_run.run(gpa, spec, &.{"pause"});
     defer paused.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, paused.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, paused.term);
     try std.testing.expect(paused.field("paused").bool);
 }

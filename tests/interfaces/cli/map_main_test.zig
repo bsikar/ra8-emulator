@@ -63,10 +63,10 @@ test "a region list that misses sections prints them as outside" {
 
 test "the binary prints the same map and exits 0" {
     const gpa = std.testing.allocator;
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = &.{ test_paths.emulator, "--map", fixture } });
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = &.{ test_paths.emulator, "--map", fixture } });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
-    try std.testing.expectEqual(std.process.Child.Term{ .Exited = 0 }, result.term);
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, result.term);
     var out = try rendered(gpa);
     defer out.deinit();
     try std.testing.expectEqualStrings(out.written(), result.stdout);
@@ -74,9 +74,9 @@ test "the binary prints the same map and exits 0" {
 
 test "a missing image argument is a usage error" {
     const gpa = std.testing.allocator;
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = &.{ test_paths.emulator, "--map" } });
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = &.{ test_paths.emulator, "--map" } });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
-    try std.testing.expectEqual(std.process.Child.Term{ .Exited = 2 }, result.term);
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 2 }, result.term);
     try std.testing.expect(std.mem.startsWith(u8, result.stderr, "usage: ra8_emulator --map"));
 }

@@ -32,10 +32,10 @@ fn listed(regions: Value, name: []const u8, section: []const u8, copy: []const u
 }
 
 fn stdoutOf(gpa: std.mem.Allocator, argv: []const []const u8) ![]u8 {
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv, .max_output_bytes = 1 << 20 });
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = argv, .stdout_limit = .limited(1 << 20) });
     defer gpa.free(result.stderr);
     errdefer gpa.free(result.stdout);
-    try std.testing.expectEqual(Term{ .Exited = 0 }, result.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, result.term);
     return result.stdout;
 }
 
@@ -48,16 +48,16 @@ test "ctl map follows the last loaded image, prints what --map prints, and carri
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     var loaded = try ctl_run.run(gpa, spec, &.{ "load", sections_image });
     defer loaded.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, loaded.term);
 
     var answer = try ctl_run.run(gpa, spec, &.{"map"});
     defer answer.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, answer.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, answer.term);
     const regions = answer.field("map").object.get("regions").?;
     try std.testing.expectEqual(@as(i64, 0x3576), try used(regions, "MRAM"));
     try std.testing.expectEqual(@as(i64, 0xb78), try used(regions, "SRAM"));
@@ -84,8 +84,8 @@ test "ctl map before any load maps the image serve was opened with" {
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     const text = try stdoutOf(gpa, &.{ test_paths.emulator, "ctl", "--connect", spec, "map" });
     defer gpa.free(text);
