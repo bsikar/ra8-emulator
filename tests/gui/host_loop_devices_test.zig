@@ -87,7 +87,7 @@ test "clicking the gauge's row unplugs it mid-run and a second click plugs it ba
     var window = Headless.init(std.testing.allocator, 400, 300);
     defer window.deinit();
     var fake = Fake{};
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useDevices(&rig.panel, &rig.post);
     try std.testing.expect(try loop.tick(window.platform(), fake.run()));
@@ -122,7 +122,7 @@ test "a click outside the devices pane changes nothing" {
     var window = Headless.init(std.testing.allocator, 400, 300);
     defer window.deinit();
     var fake = Fake{};
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useDevices(&rig.panel, &rig.post);
     try window.feed(press(.{ .x = 0, .y = 0, .w = 4, .h = 4 }));
