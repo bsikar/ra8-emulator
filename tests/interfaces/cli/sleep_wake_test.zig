@@ -38,9 +38,9 @@ fn sleepFor(seconds: u64) !Woke {
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
     var stream: std.Io.Writer = .fixed(&output);
-    var timer = try std.time.Timer.start();
+    const started = std.Io.Timestamp.now(std.testing.io, .awake);
     _ = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, seconds * hz, &ran, .{ .boundary = clock.boundary() });
-    const host_ns = timer.read();
+    const host_ns: u64 = @intCast(started.durationTo(std.Io.Timestamp.now(std.testing.io, .awake)).toNanoseconds());
     return .{ .wakes = try core.readWord(idler.counter_at), .virtual_ns = board.time.base.now(), .host_ns = host_ns };
 }
 

@@ -20,7 +20,7 @@ test "a window that has closed ends the run at the next boundary" {
     defer board.deinit();
     try store_board.attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var pacer = Pacer{ .per_frame = 20, .io = std.testing.io_000 };
+    var pacer = Pacer{ .per_frame = 20, .io = std.testing.io };
     pacer.stop();
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .pace = &pacer };
     try std.testing.expect(!clock.done());
@@ -57,7 +57,7 @@ test "a Zig-core run moves one frame per window step and stops when it closes" {
     defer board.deinit();
     try store_board.attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var pacer = Pacer{ .per_frame = 20, .io = std.testing.io_000 };
+    var pacer = Pacer{ .per_frame = 20, .io = std.testing.io };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .pace = &pacer };
     var paced = Paced{ .core = core, .board = &board, .clock = &clock, .pacer = &pacer };
     const thread = try std.Thread.spawn(.{}, Paced.run, .{&paced});
