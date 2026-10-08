@@ -22,6 +22,8 @@ pub const debug_read = @import("debug_read.zig");
 pub const stack_samples = @import("stack_samples.zig");
 /// One call stack for a sample, CFI first, else the frame records (RA8EMU-956).
 pub const stack_walk = @import("stack_walk.zig");
+/// Stacks sampled every Nth retired instruction (RA8EMU-953).
+pub const stack_sampler = @import("stack_sampler.zig");
 /// Re-exported for tests/debug/zig_session_test.zig, for the same reason.
 pub const zig_session = @import("zig_session.zig");
 /// Re-exported for tests/debug/session_report_test.zig, for the same reason.
