@@ -313,7 +313,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         if (!options.report_json) try textDumps(out, io, board, clock.memory, &final, image, options, watched);
         if (tracer) |*found| try rtos_hook.report.all(out, io, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, options, second.guest());
-        try finishFrames(out, board, options, &frames, &audio);
+        try finishFrames(out, io, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
     } else try captureFrames(board, io, options);
@@ -365,9 +365,9 @@ fn textDumps(out: *std.Io.Writer, io: std.Io, board: *Board, memory: Guest, fina
     try watchpoint.print(out, image, options.watch_place, watched);
 }
 
-fn finishFrames(out: *std.Io.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
+fn finishFrames(out: *std.Io.Writer, io: std.Io, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
     try frames.finish(board);
-    try audio.finish(out);
+    try audio.finish(out, io);
     try frame_out.report(out, board, options.frame_out, options.panel_only);
 }
 
