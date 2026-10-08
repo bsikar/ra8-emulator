@@ -22,7 +22,7 @@ test "Y4M writes exact grayscale frames held at ten virtual frames per second" {
     defer tmp.cleanup();
     const path = try outputPath(&tmp, std.testing.allocator, "capture.y4m");
     defer std.testing.allocator.free(path);
-    var writer = try video_out.Writer.init(std.testing.allocator, path);
+    var writer = try video_out.Writer.init(std.testing.allocator, std.testing.io, path);
     defer writer.deinit();
     const black = @as([4]u32, @splat(0xFF000000));
     const white = @as([4]u32, @splat(0xFFFFFFFF));
@@ -48,7 +48,7 @@ test "MP4 decodes virtual-time frames with the expected duration and quality" {
     defer tmp.cleanup();
     const path = try outputPath(&tmp, std.testing.allocator, "capture.mp4");
     defer std.testing.allocator.free(path);
-    var writer = video_out.Writer.init(std.testing.allocator, path) catch |err| {
+    var writer = video_out.Writer.init(std.testing.allocator, std.testing.io, path) catch |err| {
         if (err == error.FfmpegNotFound) return error.SkipZigTest;
         return err;
     };

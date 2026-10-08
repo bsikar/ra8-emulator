@@ -13,7 +13,7 @@ fn dumped(core: store_board.Guest, image: elf.Image, names: []const []const u8, 
     for (names, 0..) |name, index| options.dump[index] = name;
     options.dump_count = names.len;
     var stream: std.Io.Writer = .fixed(into);
-    try report_dumps.dumpSymbols(&stream, core, image, options);
+    try report_dumps.dumpSymbols(&stream, std.testing.io, core, image, options);
     return stream.buffered();
 }
 
