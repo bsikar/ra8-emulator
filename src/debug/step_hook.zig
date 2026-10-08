@@ -20,6 +20,8 @@ pub const core_view = @import("core_view.zig");
 pub const debug_read = @import("debug_read.zig");
 /// Tagged call-stack samples and their fold (RA8EMU-952).
 pub const stack_samples = @import("stack_samples.zig");
+/// One call stack for a sample, CFI first, else the frame records (RA8EMU-956).
+pub const stack_walk = @import("stack_walk.zig");
 /// Re-exported for tests/debug/zig_session_test.zig, for the same reason.
 pub const zig_session = @import("zig_session.zig");
 /// Re-exported for tests/debug/session_report_test.zig, for the same reason.
