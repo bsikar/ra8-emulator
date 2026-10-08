@@ -14,9 +14,9 @@ pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 const store_wiring = .{ "allocator", "blocks" };
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), board);
-    try file.writeSectionHeader(writer, .sd, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, board);
+    try file.writeSectionHeader(writer, .sd, counter.fullCount());
     try body(writer, board);
 }
 

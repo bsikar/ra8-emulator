@@ -26,54 +26,54 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try wire.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try wire.save(board, &list.writer);
 }
 
 test "a busy wire round-trips and the fresh wire keeps its registries" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{};
     try fresh.wire.controller.attachDevice(fresh.wire.expander.device());
-    try wire.load(&fresh, list.items);
+    try wire.load(&fresh, list.written());
     try std.testing.expect(fresh.wire.controller.devices.devices[0] != null);
     try std.testing.expect(fresh.wire.controller.devices.held_low);
-    var again = std.ArrayList(u8).init(std.testing.allocator);
+    var again = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer again.deinit();
     try saved(&fresh, &again);
-    try std.testing.expectEqualSlices(u8, list.items, again.items);
+    try std.testing.expectEqualSlices(u8, list.written(), again.written());
     try std.testing.expectEqual(@as(u8, 40), fresh.wire.gauge.battery.soc_pct);
 }
 
 test "a stage or queue index past its buffer is BadValue and nothing changes" {
     var board = busy();
     board.wire.touchline.staged_len = board.wire.touchline.staged.len + 1;
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{};
-    try std.testing.expectError(error.BadValue, wire.load(&fresh, list.items));
+    try std.testing.expectError(error.BadValue, wire.load(&fresh, list.written()));
     board = busy();
     board.wire.panel.queued_pos = board.wire.panel.queued_len + 1;
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expectError(error.BadValue, wire.load(&fresh, list.items));
+    try std.testing.expectError(error.BadValue, wire.load(&fresh, list.written()));
     try std.testing.expectEqual(@as(u32, 0), fresh.wire.touchline.transfers);
 }
 
 test "a missing section or a cut payload leaves the wire untouched" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var fresh: Stand = .{};
     fresh.wire.imu.writes = 9;
-    try std.testing.expectError(error.Missing, wire.load(&fresh, list.items));
+    try std.testing.expectError(error.Missing, wire.load(&fresh, list.written()));
     const board = busy();
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expect(std.meta.isError(wire.load(&fresh, list.items[0 .. list.items.len - 1])));
+    try std.testing.expect(std.meta.isError(wire.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.wire.imu.writes);
 }

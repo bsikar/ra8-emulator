@@ -51,28 +51,28 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try wired.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try wired.save(board, &list.writer);
 }
 
 test "every wired media and comms unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.wiredTo(&guard_a);
-    try wired.load(&target, list.items);
+    try wired.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
 }
 
 test "a load keeps the target's wiring" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.wiredTo(&guard_b);
-    try wired.load(&target, list.items);
+    try wired.load(&target, list.written());
     try std.testing.expectEqual(@as(u32, 3), target.capture.frames);
     try std.testing.expect(target.domains.graphics.protection == &guard_b);
     try std.testing.expect(target.domains.eswm.protection == &guard_b);
@@ -81,15 +81,15 @@ test "a load keeps the target's wiring" {
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target = Stand.wiredTo(&guard_b);
-    try std.testing.expectError(error.Missing, wired.load(&target, list.items));
+    try std.testing.expectError(error.Missing, wired.load(&target, list.written()));
     list.clearRetainingCapacity();
     const board = busy();
     try saved(&board, &list);
-    const cut = list.items[0 .. list.items.len - 3];
+    const cut = list.written()[0 .. list.written().len - 3];
     try std.testing.expect(std.meta.isError(wired.load(&target, cut)));
     try std.testing.expectEqualDeep(Stand.wiredTo(&guard_b), target);
 }

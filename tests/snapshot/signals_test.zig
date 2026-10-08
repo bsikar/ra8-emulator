@@ -44,31 +44,31 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try signals.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try signals.save(board, &list.writer);
 }
 
 test "every data path unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target: Stand = .{};
-    try signals.load(&target, list.items);
+    try signals.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target: Stand = .{};
-    try std.testing.expectError(error.Missing, signals.load(&target, list.items));
+    try std.testing.expectError(error.Missing, signals.load(&target, list.written()));
     list.clearRetainingCapacity();
     const board = busy();
     try saved(&board, &list);
-    const cut = list.items[0 .. list.items.len - 3];
+    const cut = list.written()[0 .. list.written().len - 3];
     try std.testing.expect(std.meta.isError(signals.load(&target, cut)));
     try std.testing.expectEqualDeep(Stand{}, target);
 }

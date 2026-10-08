@@ -12,9 +12,9 @@ fn put(store: *const memory.Store, address: u32, text: []const u8) void {
     @memcpy(store.span(address, text.len).?, text);
 }
 
-fn snapshot(store: *const memory.Store, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try memory.save(store, list.writer());
+fn snapshot(store: *const memory.Store, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try memory.save(store, &list.writer);
 }
 
 fn restore(bytes: []const u8) !memory.Store {
@@ -33,10 +33,10 @@ test "every region and a mapped window come back byte-identical" {
     put(&first, memmap.sram_base + 0x1234, "sram");
     put(&first, memmap.sdram_end - 4, "end!");
     put(&first, window_base + 0x1ffc, "win!");
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
-    var second = try restore(list.items);
+    var second = try restore(list.written());
     defer second.deinit();
     for (memmap.ram) |entry| {
         try std.testing.expectEqualSlices(u8, first.region(entry.base).?, second.region(entry.base).?);
@@ -49,10 +49,10 @@ test "only non-zero pages are written" {
     var store = try memory.Store.init(null);
     defer store.deinit();
     put(&store, memmap.sram_base, "x");
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&store, &list);
-    try std.testing.expect(list.items.len < 2 * memory.page);
+    try std.testing.expect(list.written().len < 2 * memory.page);
 }
 
 test "external fabric counters and pending contention survive a snapshot" {
@@ -66,7 +66,7 @@ test "external fabric counters and pending contention survive a snapshot" {
     defer first.deinit();
     try first.configureExternal(layout, &flash1);
     first.fabric.?.note(.cpu0, layout.locate(0x6800_0040, 4).?, .read, 4);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
 
@@ -75,7 +75,7 @@ test "external fabric counters and pending contention survive a snapshot" {
     var second = try memory.Store.init(null);
     defer second.deinit();
     try second.configureExternal(layout, &flash2);
-    const section = (try file.Reader.find(list.items, .memory)).?;
+    const section = (try file.Reader.find(list.written(), .memory)).?;
     try memory.load(&second, section.payload);
     const counters = second.fabric.?.counters(.sdram, 0);
     try std.testing.expectEqual(@as(u64, 4), counters.bytes_read);
@@ -98,10 +98,10 @@ test "a second core saves its own regions, not the SRAM it borrows" {
     defer second.deinit();
     put(&first, memmap.sram_base, "shared");
     put(&second, memmap.mram_base, "cpu1");
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&second, &list);
-    var back = try restore(list.items);
+    var back = try restore(list.written());
     defer back.deinit();
     try std.testing.expectEqualStrings("cpu1", back.span(memmap.mram_base, 4).?);
     try std.testing.expectEqual(@as(u8, 0), back.span(memmap.sram_base, 1).?[0]);

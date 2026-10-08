@@ -13,9 +13,9 @@ pub const Error = file.Error || fields.Error || error{Missing};
 const wiring = .{"memory"};
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try fields.writeExcept(counter.writer(), board.npu, wiring);
-    try file.writeSectionHeader(writer, .npu, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try fields.writeExcept(&counter.writer, board.npu, wiring);
+    try file.writeSectionHeader(writer, .npu, counter.fullCount());
     try fields.writeExcept(writer, board.npu, wiring);
 }
 
