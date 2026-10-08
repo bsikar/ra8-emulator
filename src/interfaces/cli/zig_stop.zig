@@ -17,13 +17,13 @@ const dumps = @import("report/dumps.zig");
 /// With `--ns`, a name the main image lacks is looked up in the Non-secure
 /// image too, as `--dump-sym` does (RA8EMU-651): a TrustZone build keeps its
 /// heartbeat counters on the Non-secure side.
-pub fn resolve(image: elf.Image, options: cli.Options) ?Stop {
+pub fn resolve(image: elf.Image, io: std.Io, options: cli.Options) ?Stop {
     const name = options.stop_symbol orelse return null;
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var images: [2]elf.Image = .{ image, undefined };
     var count: usize = 1;
-    if (dumps.nonSecure(arena.allocator(), options) catch null) |second| {
+    if (dumps.nonSecure(arena.allocator(), io, options) catch null) |second| {
         images[1] = second;
         count = 2;
     }

@@ -28,13 +28,13 @@ const json_regs = @import("json_regs.zig");
 /// the decimal value and something after it all have to be there. A symbol
 /// the image does not carry, or an address that will not read, says so
 /// plainly instead of printing a number nothing measured.
-pub fn dumpSymbols(out: anytype, core: Guest, image: elf.Image, options: cli.Options) !void {
+pub fn dumpSymbols(out: anytype, io: std.Io, core: Guest, image: elf.Image, options: cli.Options) !void {
     if (options.dumps().len == 0) return;
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var images: [2]elf.Image = .{ image, undefined };
     var count: usize = 1;
-    if (try nonSecure(arena.allocator(), options)) |second| {
+    if (try nonSecure(arena.allocator(), io, options)) |second| {
         images[1] = second;
         count = 2;
     }
@@ -58,9 +58,9 @@ pub fn dumpSymbols(out: anytype, core: Guest, image: elf.Image, options: cli.Opt
 /// side keeps (a heartbeat the bench reads by memprobe) is named only there.
 /// The run already loaded its segments; this reads the file once more and
 /// nothing else, so a run without `--ns` reads nothing.
-pub fn nonSecure(allocator: std.mem.Allocator, options: cli.Options) !?elf.Image {
+pub fn nonSecure(allocator: std.mem.Allocator, io: std.Io, options: cli.Options) !?elf.Image {
     const path = options.ns_path orelse return null;
-    const bytes = try std.fs.cwd().readFileAlloc(allocator, path, 64 << 20);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 << 20));
     return try elf.Image.init(bytes);
 }
 
