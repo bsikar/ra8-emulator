@@ -17,7 +17,7 @@ test "a small panel writes exact P6 bytes and skips an identical scan" {
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
 
-    var sequence = try frames_out.Sequence.init(std.testing.allocator, path, 1);
+    var sequence = try frames_out.Sequence.init(std.testing.allocator, std.testing.io, path, 1);
     defer sequence.deinit();
     const pixels = [_]u32{ 0xFF11_2233, 0x0044_5566 };
     try sequence.record(2, 1, &pixels, 0);
@@ -25,12 +25,10 @@ test "a small panel writes exact P6 bytes and skips an identical scan" {
     try std.testing.expectEqual(@as(usize, 2), sequence.scanned);
     try std.testing.expectEqual(@as(usize, 1), sequence.written);
 
-    var file = try sequence.directory.openFile("frame_00000.ppm", .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(std.testing.allocator, 128);
+    const bytes = try sequence.directory.readFileAlloc(std.testing.io, "frame_00000.ppm", std.testing.allocator, .limited(128));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, "P6\n2 1\n255\n\x11\x22\x33\x44\x55\x66", bytes);
-    try std.testing.expectError(error.FileNotFound, sequence.directory.openFile("frame_00001.ppm", .{}));
+    try std.testing.expectError(error.FileNotFound, sequence.directory.openFile(std.testing.io, "frame_00001.ppm", .{}));
 }
 
 test "every Nth scan gets a sequential filename" {
@@ -41,7 +39,7 @@ test "every Nth scan gets a sequential filename" {
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
 
-    var sequence = try frames_out.Sequence.init(std.testing.allocator, path, 2);
+    var sequence = try frames_out.Sequence.init(std.testing.allocator, std.testing.io, path, 2);
     defer sequence.deinit();
     const first = [_]u32{0xFF00_0001};
     const second = [_]u32{0xFF00_0002};
@@ -51,9 +49,7 @@ test "every Nth scan gets a sequential filename" {
     try sequence.record(1, 1, &third, 80);
     try std.testing.expectEqual(@as(usize, 2), sequence.written);
     try expectIndex(sequence, "frame_00000.ppm 0\nframe_00001.ppm 80\n");
-    var file = try sequence.directory.openFile("frame_00001.ppm", .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(std.testing.allocator, 64);
+    const bytes = try sequence.directory.readFileAlloc(std.testing.io, "frame_00001.ppm", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, "P6\n1 1\n255\n\x00\x00\x03", bytes);
 }
@@ -81,7 +77,7 @@ test "capture records the panel pixels from a completed GLCDC scan" {
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
 
-    var sequence = try frames_out.Sequence.init(std.testing.allocator, path, 1);
+    var sequence = try frames_out.Sequence.init(std.testing.allocator, std.testing.io, path, 1);
     defer sequence.deinit();
     var capture = (try frames_out.FrameCapture.init(std.testing.allocator, &board)).?;
     defer capture.deinit(&board);
@@ -90,9 +86,7 @@ test "capture records the panel pixels from a completed GLCDC scan" {
 
     try std.testing.expectEqual(@as(u32, 1), board.display.system.frames);
     try std.testing.expectEqual(@as(usize, 1), sequence.written);
-    var file = try sequence.directory.openFile("frame_00000.ppm", .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(std.testing.allocator, 64);
+    const bytes = try sequence.directory.readFileAlloc(std.testing.io, "frame_00000.ppm", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, "P6\n2 1\n255\n\x11\x22\x33\x11\x22\x33", bytes);
     try expectIndex(sequence, "frame_00000.ppm 0\n");
@@ -100,7 +94,7 @@ test "capture records the panel pixels from a completed GLCDC scan" {
 
 /// frames.txt names each written frame with the emulated time it was scanned.
 fn expectIndex(sequence: frames_out.Sequence, expected: []const u8) !void {
-    const bytes = try sequence.directory.readFileAlloc(std.testing.allocator, "frames.txt", 256);
+    const bytes = try sequence.directory.readFileAlloc(std.testing.io, "frames.txt", std.testing.allocator, .limited(256));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualStrings(expected, bytes);
 }
@@ -122,7 +116,7 @@ test "an armed run keeps one frame per period with its emulated time" {
     const gif_path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
     defer std.testing.allocator.free(gif_path);
 
-    const armed = (try frames_out.Armed.armOutputs(std.testing.allocator, &board, path, gif_path, 1)).?;
+    const armed = (try frames_out.Armed.armOutputs(std.testing.allocator, std.testing.io, &board, path, gif_path, 1)).?;
     defer armed.deinit();
     const period = ra8.periph.glcdc_out.vsync.default_period_ns;
     board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
@@ -138,14 +132,12 @@ test "an armed run keeps one frame per period with its emulated time" {
     board.display.output.vsync.?.tick(2 * period);
     try std.testing.expect(frames_out.Armed.of(&board) == armed);
 
-    var report = try frames_out.Run.init(std.testing.allocator, &board, path, 1);
+    var report = try frames_out.Run.init(std.testing.allocator, std.testing.io, &board, path, 1);
     try report.finish(&board);
     try std.testing.expectEqual(@as(usize, 2), armed.sequence.written);
     try std.testing.expectEqual(@as(usize, 2), armed.sequence.gif_writer.?.wrote);
     try expectIndex(armed.sequence, "frame_00000.ppm 16666667\nframe_00001.ppm 33333334\n");
-    var file = try armed.sequence.directory.openFile("frame_00001.ppm", .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(std.testing.allocator, 64);
+    const bytes = try armed.sequence.directory.readFileAlloc(std.testing.io, "frame_00001.ppm", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, "P6\n2 1\n255\n\x44\x55\x66\x44\x55\x66", bytes);
 }
@@ -163,7 +155,7 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
-    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    const armed = (try frames_out.Armed.arm(std.testing.allocator, std.testing.io, &board, path, 1)).?;
     defer armed.deinit();
 
     eInkRefresh(&board.panel, proto, 0x2211);
@@ -176,9 +168,7 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
         .{ .name = "frame_00000.ppm", .rgb = .{ 0x11, 0x11, 0x11, 0x22, 0x22, 0x22 } },
         .{ .name = "frame_00001.ppm", .rgb = .{ 0x33, 0x33, 0x33, 0x44, 0x44, 0x44 } },
     }) |frame| {
-        var file = try armed.sequence.directory.openFile(frame.name, .{});
-        defer file.close();
-        const bytes = try file.readToEndAlloc(std.testing.allocator, 128 * 128 * 3 + 32);
+        const bytes = try armed.sequence.directory.readFileAlloc(std.testing.io, frame.name, std.testing.allocator, .limited(128 * 128 * 3 + 32));
         defer std.testing.allocator.free(bytes);
         const header = "P6\n128 128\n255\n";
         try std.testing.expect(std.mem.startsWith(u8, bytes, header));
@@ -199,7 +189,7 @@ test "with no attach, the board's own e-ink refreshes become the sequence" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
-    const armed = (try frames_out.Armed.arm(std.testing.allocator, &board, path, 1)).?;
+    const armed = (try frames_out.Armed.arm(std.testing.allocator, std.testing.io, &board, path, 1)).?;
     eInkRefresh(&board.panel, proto, 0x2211);
     eInkRefresh(&board.panel, proto, 0x4433);
     try armed.finish();
@@ -238,7 +228,7 @@ test "GIF output follows the sampled sequence when no PPM directory is requested
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
     defer std.testing.allocator.free(path);
 
-    var sequence = try frames_out.Sequence.initOutputs(std.testing.allocator, null, path, 1);
+    var sequence = try frames_out.Sequence.initOutputs(std.testing.allocator, std.testing.io, null, path, 1);
     defer sequence.deinit();
     const first = [_]u32{0xFF00_0000};
     const second = [_]u32{0xFFFF_FFFF};
@@ -247,10 +237,11 @@ test "GIF output follows the sampled sequence when no PPM directory is requested
     try sequence.finish();
     try std.testing.expectEqual(@as(usize, 2), sequence.written);
 
-    var file = try temp.dir.openFile("movie.gif", .{});
-    defer file.close();
+    var file = try temp.dir.openFile(std.testing.io, "movie.gif", .{});
+    defer file.close(std.testing.io);
     var header: [6]u8 = undefined;
-    try file.reader().readNoEof(&header);
+    var reader = file.reader(std.testing.io, &.{});
+    try reader.interface.readSliceAll(&header);
     try std.testing.expectEqualSlices(u8, "GIF89a", &header);
 }
 
@@ -267,7 +258,7 @@ test "an overlapping e-ink refresh burst produces one settled frame" {
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
     defer std.testing.allocator.free(path);
     const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", path, "--settle-window-ms", "1" });
-    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, std.testing.io, &board, options.frames)).?;
     defer armed.deinit();
 
     board.panel.film.start();
@@ -288,7 +279,7 @@ test "a GLCDC burst settles once the picture holds for the window, and only once
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
     defer std.testing.allocator.free(path);
     const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", path });
-    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, std.testing.io, &board, options.frames)).?;
     defer armed.deinit();
     const a = [_]u32{ 1, 2 };
     const b = [_]u32{ 3, 4 };
@@ -314,7 +305,7 @@ test "frame-on-settle can share a run with ordinary frames" {
     const frames = try std.fs.path.join(std.testing.allocator, &.{ root, "b" });
     defer std.testing.allocator.free(frames);
     const options = try ra8.core.cli.parse(&.{ "emu", "image.elf", "--frame-on-settle", settled, "--frames-out", frames });
-    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, &board, options.frames)).?;
+    const armed = (try frames_out.Armed.armForCli(std.testing.allocator, std.testing.io, &board, options.frames)).?;
     defer armed.deinit();
     try std.testing.expect(!armed.settle_only);
     try std.testing.expect(armed.settle_sequence != null);
