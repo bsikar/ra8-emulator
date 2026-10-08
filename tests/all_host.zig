@@ -105,6 +105,7 @@ test {
     _ = @import("gui/time_bar_test.zig");
     _ = @import("gui/board_pane_test.zig");
     _ = @import("gui/board_input_test.zig");
+    _ = @import("gui/board_touch_test.zig");
     _ = @import("gui/session_button_wire_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
