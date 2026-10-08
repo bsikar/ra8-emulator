@@ -37,12 +37,14 @@ pub const Run = struct {
         self.entries.deinit(self.allocator);
     }
 
-    pub fn write(self: *Run, path: []const u8) !void {
+    pub fn write(self: *Run, io: std.Io, path: []const u8) !void {
         if (self.allocation_failed) return error.OutOfMemory;
-        const file = try std.fs.cwd().createFile(path, .{});
-        defer file.close();
+        const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+        defer file.close(io);
+        var staging: [4096]u8 = undefined;
+        var writer = file.writer(io, &staging);
         for (self.entries.items) |entry| {
-            var j = json.over(file.writer());
+            var j = json.over(&writer.interface);
             try j.open(null, '{');
             try j.field("virtual_time_ns", entry.virtual_time_ns);
             try j.field("x", entry.x);
@@ -52,8 +54,9 @@ pub const Run = struct {
             try j.field("waveform", entry.waveform);
             try j.field("full", entry.full);
             try j.close('}');
-            try file.writeAll("\n");
+            try writer.interface.writeAll("\n");
         }
+        try writer.interface.flush();
     }
 
     pub fn reportJson(self: *const Run, j: anytype) !void {
