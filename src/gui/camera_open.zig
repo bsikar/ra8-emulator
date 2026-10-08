@@ -50,10 +50,11 @@ pub fn spec(panel: Panel, args: Args) SpecError!registry.Spec {
 /// says why on stderr and leaves the running source to `Switcher.skip`.
 pub fn open(
     allocator: std.mem.Allocator,
+    io: std.Io,
     panel: Panel,
     args: Args,
     format_control: *const u8,
 ) !frame_source.FrameSource {
     const picked = try spec(panel, args);
-    return picked.open(allocator, format_control);
+    return picked.open(allocator, io, format_control);
 }

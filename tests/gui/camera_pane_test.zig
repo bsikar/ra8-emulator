@@ -53,7 +53,7 @@ test "settle keeps the running source until the panel switches" {
     var fake = Fake{};
     var source = fake.source();
     const format: u8 = 0;
-    pane.settle(std.testing.allocator, &source, &format);
+    pane.settle(std.testing.allocator, std.testing.io, &source, &format);
     try std.testing.expectEqual(@as(u32, 0), fake.closed);
     try std.testing.expectEqualStrings("fake", source.label);
 }
@@ -64,13 +64,13 @@ test "a pick that will not open leaves the source; the next pick that opens repl
     var source = fake.source();
     const format: u8 = 0;
     _ = pane.handle(press(pane.layout.source(.image), camera_pane.primary_button, true));
-    pane.settle(std.testing.allocator, &source, &format);
+    pane.settle(std.testing.allocator, std.testing.io, &source, &format);
     try std.testing.expectEqual(@as(u32, 0), fake.closed);
     try std.testing.expectEqualStrings("fake", source.label);
-    pane.settle(std.testing.allocator, &source, &format);
+    pane.settle(std.testing.allocator, std.testing.io, &source, &format);
     try std.testing.expectEqual(@as(u32, 0), fake.closed);
     _ = pane.handle(press(pane.layout.source(.gradient), camera_pane.primary_button, true));
-    pane.settle(std.testing.allocator, &source, &format);
+    pane.settle(std.testing.allocator, std.testing.io, &source, &format);
     defer source.close();
     try std.testing.expectEqual(@as(u32, 1), fake.closed);
     try std.testing.expectEqualStrings("synthetic gradient", source.label);
