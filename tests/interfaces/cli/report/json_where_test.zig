@@ -9,16 +9,16 @@ const where = json_run.json_where;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn render(board: *ra8.board.Board, of: where.Where, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .where = of });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn render(board: *ra8.board.Board, of: where.Where, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1, .where = of });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 test "a run that collected nothing writes null for every table" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, .{}, &buf);
     defer doc.deinit();
@@ -35,7 +35,7 @@ test "steps and a sampled table carry their counts" {
     pcs.sample(0x1000);
     pcs.sample(0x1000);
     pcs.sample(0x2000);
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, .{
         .steps = .{ .loops = .{ .stepped = 3 }, .selects = .{}, .worlds = .{} },

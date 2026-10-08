@@ -8,9 +8,9 @@ const json_timing = json_run.json_timing;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn render(board: *ra8.board.Board, timing: ?*const json_timing.Timing, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .timing = timing });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn render(board: *ra8.board.Board, timing: ?*const json_timing.Timing, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1, .timing = timing });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn quiet() json_timing.Timing {
@@ -29,7 +29,7 @@ test "a run with no timing hooks writes null" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, null, &buf);
     defer doc.deinit();
@@ -41,7 +41,7 @@ test "a quiet run writes every key with null first addresses" {
     try fix.open();
     defer fix.close();
     const of = quiet();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();
@@ -71,7 +71,7 @@ test "counters and the pend ledger carry the run's numbers" {
     of.pending.swallowed = 2;
     of.pending.reentered = 1;
     of.pending.reentered_at = 0x1234;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();

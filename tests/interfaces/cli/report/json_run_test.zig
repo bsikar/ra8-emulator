@@ -8,11 +8,11 @@ const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
 /// The document for `board`, parsed. The caller frees both.
-fn parsed(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 42, .bus_errors = .{ .raised = 2, .escalated = 1 } });
-    try std.testing.expect(std.mem.endsWith(u8, buf.items, "}\n"));
-    try std.testing.expect(std.mem.count(u8, buf.items, "\n") == 1);
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn parsed(board: *ra8.board.Board, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 42, .bus_errors = .{ .raised = 2, .escalated = 1 } });
+    try std.testing.expect(std.mem.endsWith(u8, buf.written(), "}\n"));
+    try std.testing.expect(std.mem.count(u8, buf.written(), "\n") == 1);
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn int(object: Value, key: []const u8) !i64 {
@@ -32,7 +32,7 @@ test "a quiet board has every run and cores key, and empty unit lists" {
     try fix.open();
     defer fix.close();
     const board = &fix.board;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try parsed(board, &buf);
     defer doc.deinit();
@@ -69,7 +69,7 @@ test "busy IPC units are listed with their index and counts" {
     board.mailbox.locks.semaphores[5].takes = 4;
     board.mailbox.locks.semaphores[5].locked = true;
     board.mailbox.locks.doorbells[1].sends = 2;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try parsed(board, &buf);
     defer doc.deinit();
