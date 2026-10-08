@@ -74,6 +74,7 @@ pub const core = struct {
     pub const sections = @import("debug/sections.zig");
     pub const region_map = @import("debug/region_map.zig");
     pub const region_map_json = @import("debug/region_map_json.zig");
+    pub const stack_low = @import("debug/stack_low.zig");
     pub const watch_table = @import("debug/watch_table.zig");
     pub const call_decode = @import("debug/call_decode.zig");
     pub const step_hook = @import("debug/step_hook.zig");
@@ -223,5 +224,6 @@ pub const interfaces = struct {
         pub const files = @import("interfaces/rpc/session_files.zig");
         pub const parts = @import("interfaces/rpc/session_parts.zig");
         pub const camera = @import("interfaces/rpc/session_camera.zig");
+        pub const stack = @import("interfaces/rpc/session_stack.zig");
     };
 };

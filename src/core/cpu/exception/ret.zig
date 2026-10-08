@@ -64,7 +64,7 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     // Returning to Thread mode with an exception number stacked, or to
     // Handler mode with none, is an INVPC UsageFault.
     if (target.thread != (f[frame.slot.xpsr] & regs_mod.xpsr_bits.ipsr == 0)) return error.InvalidReturn;
-    if (target.psp) r.psp = popped.sp else r.msp = popped.sp;
+    if (target.psp) r.setPsp(popped.sp) else r.setMsp(popped.sp);
     const spsel = regs_mod.control_bits.spsel;
     r.control = if (target.psp) r.control | spsel else r.control & ~spsel;
     const fpca = regs_mod.control_bits.fpca;

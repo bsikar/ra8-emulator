@@ -33,6 +33,18 @@ pub const Bank = struct {
     basepri: u32 = 0,
     faultmask: u32 = 0,
     control: u32 = 0,
+    low_msp: u32 = regs.never_low,
+    low_psp: u32 = regs.never_low,
+
+    fn setMsp(self: *Bank, value: u32) void {
+        self.msp = value;
+        self.low_msp = @min(self.low_msp, value);
+    }
+
+    fn setPsp(self: *Bank, value: u32) void {
+        self.psp = value;
+        self.low_psp = @min(self.low_psp, value);
+    }
 };
 
 pub const sysm = struct {
@@ -63,6 +75,8 @@ pub const Banked = struct {
             .basepri = r.basepri,
             .faultmask = r.faultmask,
             .control = r.control & control_banked,
+            .low_msp = r.low_msp,
+            .low_psp = r.low_psp,
         };
     }
 
@@ -74,6 +88,8 @@ pub const Banked = struct {
         r.primask = from.primask;
         r.basepri = from.basepri;
         r.faultmask = from.faultmask;
+        r.low_msp = from.low_msp;
+        r.low_psp = from.low_psp;
         r.control = (r.control & ~control_banked) | (from.control & control_banked);
     }
 
@@ -124,8 +140,8 @@ pub const Banked = struct {
         if (self.current != .secure) return false;
         const b = &self.other;
         switch (code) {
-            sysm.msp_ns => b.msp = value & ~@as(u32, 3),
-            sysm.psp_ns => b.psp = value & ~@as(u32, 3),
+            sysm.msp_ns => b.setMsp(value & ~@as(u32, 3)),
+            sysm.psp_ns => b.setPsp(value & ~@as(u32, 3)),
             sysm.msplim_ns => b.msplim = value & ~@as(u32, 7),
             sysm.psplim_ns => b.psplim = value & ~@as(u32, 7),
             sysm.primask_ns => b.primask = value & 1,
@@ -134,7 +150,7 @@ pub const Banked = struct {
             sysm.control_ns => b.control = value & control_banked,
             sysm.sp_ns => {
                 const process = !r.handlerMode() and b.control & regs.control_bits.spsel != 0;
-                if (process) b.psp = value & ~@as(u32, 3) else b.msp = value & ~@as(u32, 3);
+                if (process) b.setPsp(value & ~@as(u32, 3)) else b.setMsp(value & ~@as(u32, 3));
             },
             else => return false,
         }

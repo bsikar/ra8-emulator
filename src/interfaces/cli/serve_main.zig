@@ -56,7 +56,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     context.listing = .{ .context = owner.plugs(), .listFn = listParts };
     var camera: Camera = .{ .board = owner.board(), .allocator = allocator, .io = io };
     context.camera = .{ .context = &camera, .setFn = Camera.set };
-    context.mapping = .{ .context = &owner, .mapFn = mapImage };
+    context.mapping = .{ .context = &owner, .mapFn = mapImage, .stackFn = stackOf };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(io, spec, &context, buffers),
@@ -85,6 +85,14 @@ fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]
         try map_main.render(&w, image, &region_map.ek_ra8d2);
     }
     return w.buffered();
+}
+
+/// The main stack reservation of a core's last loaded image, if it names one.
+fn stackOf(context: *anyopaque, core: usize) ?region_map.Stack {
+    const owner: *harness.Harness = @ptrCast(@alignCast(context));
+    const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
+    const image = owner.loadedImage(which) orelse return null;
+    return region_map.stackOf(image, &region_map.ek_ra8d2);
 }
 
 /// The board, allocator and io set_camera_source opens sources with.

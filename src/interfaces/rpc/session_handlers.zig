@@ -5,6 +5,7 @@ const rpc = @import("ra8_rpc");
 const proto = @import("session_rpc.zig");
 const api = @import("../../debug/session_api.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
+const region_map = @import("../../debug/region_map.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 
 /// Refusal codes this message set adds above the library's own.
@@ -29,6 +30,8 @@ pub const Camera = struct {
 pub const Mapping = struct {
     context: *anyopaque,
     mapFn: *const fn (*anyopaque, usize, bool, []u8) anyerror![]const u8,
+    /// The main stack reservation of a core's last loaded image (RA8EMU-816).
+    stackFn: ?*const fn (*anyopaque, usize) ?region_map.Stack = null,
 };
 
 pub const Listing = struct {

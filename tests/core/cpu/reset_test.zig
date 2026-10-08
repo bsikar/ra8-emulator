@@ -49,3 +49,11 @@ test "a vector table nothing answers for fails the reset" {
     var r: regs.Regs = .{};
     try std.testing.expectError(bus.Error.Unmapped, reset.fromVectorTable(&r, table.view(), 0));
 }
+
+test "reset re-arms both stack low-water marks" {
+    var table: Table = .{ .words = &.{ 0x2200_2000, 0x0200_0401 } };
+    var r: regs.Regs = .{ .low_msp = 0x2200_0100, .low_psp = 0x2200_0200 };
+    try reset.fromVectorTable(&r, table.view(), 0);
+    try std.testing.expectEqual(@as(u32, 0x2200_2000), r.low_msp);
+    try std.testing.expectEqual(regs.never_low, r.low_psp);
+}

@@ -3,8 +3,8 @@ const rpc = @import("ra8_rpc");
 
 pub const protocol_version: u16 = 1;
 /// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
-/// Bit 2: advance. Bit 3: snapshot and restore.
-pub const capabilities: u32 = 0x0000_003F;
+/// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack.
+pub const capabilities: u32 = 0x0000_007F;
 pub const max_payload = 1_048_576;
 
 pub const Method = enum(u16) {
@@ -37,6 +37,7 @@ pub const Method = enum(u16) {
     list_parts = 0x011a,
     set_camera_source = 0x011b,
     map = 0x011c,
+    stack = 0x011d,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -131,6 +132,20 @@ pub const MapAsk = struct { core: Core, json: u8 = 0 };
 pub const MapText = struct {
     text: []const u8,
     pub const max_len = .{ .text = 65536 };
+};
+/// A core's stack pointers, the lowest MSP and PSP since reset, and the
+/// main stack reservation its image names (RA8EMU-816). With `has_stack`
+/// 0 the image names none, and `base`, `size` and `overflow` are 0.
+pub const StackReport = struct {
+    core: Core,
+    msp: u32,
+    psp: u32,
+    low_msp: u32,
+    low_psp: u32,
+    has_stack: u8,
+    base: u32,
+    size: u32,
+    overflow: u32,
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const Trace = struct {

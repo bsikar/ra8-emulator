@@ -89,3 +89,18 @@ test "a run reports the core's own stop and its count" {
     const stopped = core.runUntil(&.{}, 100);
     try std.testing.expectEqual(@as(u32, 0x0E), stopped.core.unknown.address);
 }
+
+test "stack reports both pointers and the lowest each reached" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    core.setRegister(.msp, 0x20);
+    core.setRegister(.msp, 0x30);
+    core.setRegister(.psp, 0x18);
+    const marks = core.stack();
+    try std.testing.expectEqual(@as(u32, 0x30), marks.msp);
+    try std.testing.expectEqual(@as(u32, 0x20), marks.low_msp);
+    try std.testing.expectEqual(@as(u32, 0x18), marks.psp);
+    try std.testing.expectEqual(@as(u32, 0x18), marks.low_psp);
+}

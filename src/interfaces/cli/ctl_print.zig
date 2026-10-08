@@ -103,6 +103,20 @@ pub fn map(w: anytype, json: bool, text: []const u8) !void {
     try w.writeAll(text);
 }
 
+/// The stack pointers, their low marks and the reservation (RA8EMU-816).
+pub fn stack(w: anytype, json: bool, r: proto.StackReport) !void {
+    if (json) {
+        try w.print("{{\"msp\":{d},\"psp\":{d},\"low_msp\":{d},\"low_psp\":{d},\"stack\":", .{ r.msp, r.psp, r.low_msp, r.low_psp });
+        if (r.has_stack == 0) return w.writeAll("null}\n");
+        return w.print("{{\"base\":{d},\"size\":{d},\"overflow\":{d}}}}}\n", .{ r.base, r.size, r.overflow });
+    }
+    try w.print("msp 0x{x:0>8} lowest 0x{x:0>8}\npsp 0x{x:0>8} lowest 0x{x:0>8}\n", .{ r.msp, r.low_msp, r.psp, r.low_psp });
+    if (r.has_stack == 0) return w.writeAll("stack: the image names no reservation\n");
+    try w.print("stack 0x{x:0>8}..0x{x:0>8} ", .{ r.base, r.base +% r.size });
+    if (r.overflow == 0) return w.writeAll("within bounds\n");
+    try w.print("overflowed by {d} bytes\n", .{r.overflow});
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(io: std.Io, json: bool, err: anyerror, code: u16) u8 {

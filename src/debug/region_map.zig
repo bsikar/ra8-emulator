@@ -131,7 +131,8 @@ pub fn build(image: elf.Image, regions: []const Region) Error!Map {
     return map;
 }
 
-fn stackOf(image: elf.Image, regions: []const Region) ?Stack {
+/// The main stack reservation the image's linker symbols name, if any.
+pub fn stackOf(image: elf.Image, regions: []const Region) ?Stack {
     const top = symbols.addressOf(image, stack_symbols.top) orelse return null;
     const size = symbols.addressOf(image, stack_symbols.size) orelse return null;
     if (size > top) return null;

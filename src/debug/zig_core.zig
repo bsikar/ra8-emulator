@@ -20,8 +20,17 @@ pub const Stop = union(enum) {
     core: cpu_mod.Stop,
 };
 
+/// Both stack pointers and the lowest each reached since reset
+/// (RA8EMU-816); a low mark of regs.never_low was never written.
+pub const StackMarks = struct { msp: u32, psp: u32, low_msp: u32, low_psp: u32 };
+
 pub const ZigCore = struct {
     cpu: *cpu_mod.Cpu,
+
+    pub fn stack(self: ZigCore) StackMarks {
+        const r = &self.cpu.regs;
+        return .{ .msp = r.msp, .psp = r.psp, .low_msp = r.low_msp, .low_psp = r.low_psp };
+    }
 
     pub fn register(self: ZigCore, which: Cortex) u32 {
         const r = &self.cpu.regs;
@@ -49,8 +58,8 @@ pub const ZigCore = struct {
             .lr => r.lr = value,
             .pc => r.pc = value,
             .xpsr => r.xpsr = value,
-            .msp => r.msp = value,
-            .psp => r.psp = value,
+            .msp => r.setMsp(value),
+            .psp => r.setPsp(value),
             .primask => r.primask = value,
             .basepri => r.basepri = value,
             .faultmask => r.faultmask = value,

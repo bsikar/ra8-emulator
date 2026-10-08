@@ -184,3 +184,24 @@ test "a state switch carries the running limits out and the parked ones in" {
     try std.testing.expectEqual(@as(u32, 0x2000_0100), b.other.msplim);
     try std.testing.expectEqual(@as(u32, 0x2000_0200), b.other.psplim);
 }
+
+test "each state keeps its own stack low-water marks across a switch" {
+    var r: Regs = .{};
+    var b = banked.Banked{};
+    r.setMsp(0x3000_0800);
+    b.switchTo(&r, .non_secure);
+    try std.testing.expectEqual(regs.never_low, r.low_msp);
+    r.setMsp(0x2000_0400);
+    b.switchTo(&r, .secure);
+    try std.testing.expectEqual(@as(u32, 0x3000_0800), r.low_msp);
+    try std.testing.expectEqual(@as(u32, 0x2000_0400), b.other.low_msp);
+}
+
+test "MSR MSP_NS from Secure lowers the Non-secure mark only" {
+    var r: Regs = .{};
+    var b = banked.Banked{};
+    r.setMsp(0x3000_0800);
+    try std.testing.expect(b.writeNs(&r, banked.sysm.msp_ns, 0x2000_0400));
+    try std.testing.expectEqual(@as(u32, 0x2000_0400), b.other.low_msp);
+    try std.testing.expectEqual(@as(u32, 0x3000_0800), r.low_msp);
+}
