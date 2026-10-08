@@ -212,6 +212,8 @@ pub const sci_line = @import("periph/sci/sci_line.zig");
 pub const sci_reply = @import("periph/sci/sci_reply.zig");
 pub const sci_error = @import("periph/sci/sci_error.zig");
 pub const sci_ring = @import("periph/sci/sci_ring.zig");
+/// What a debugger sees of a SCI channel (RA8EMU-949).
+pub const sci_peek = @import("periph/sci/sci_peek.zig");
 pub const sci_lin = @import("periph/sci/sci_lin.zig");
 pub const sci_device = @import("periph/sci/sci_device.zig");
 pub const sci_spi = @import("periph/sci/sci_spi.zig");

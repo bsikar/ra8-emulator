@@ -377,6 +377,7 @@ pub const Sci = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
+            .peekFn = @import("sci_peek.zig").thunk,
         };
     }
 };
