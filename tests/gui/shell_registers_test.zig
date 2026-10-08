@@ -234,6 +234,29 @@ test "a batch meeting a full pending table sends its other reads as slots free" 
     try std.testing.expectEqual(count, model.next);
 }
 
+test "a CPU1 batch never asks VPR, and a CPU0 batch does" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    const vpr = std.mem.indexOfScalar(proto.Register, &shell_registers.wire, .vpr).?;
+    for ([_]proto.Core{ .cpu0, .cpu1 }) |core| {
+        var model: Registers = .{ .core = core };
+        model.reload();
+        var done: usize = 0;
+        while (true) {
+            model.attach(&wire.link);
+            for (model.asked[done..model.next]) |id| if (id) |taken| {
+                _ = try wire.link.client.pending.take(taken);
+            };
+            done = model.next;
+            if (model.next == count) break;
+        }
+        const mve = registers_pane.hasMve(core);
+        try std.testing.expectEqual(mve, model.asked[vpr] != null);
+        try std.testing.expectEqual(if (mve) count else count - 1, model.left);
+    }
+}
+
 test "a press on a group header folds it, and a second unfolds it" {
     var model: Registers = .{ .core = .cpu0, .now = .{} };
     const body = draw_list.Rect{ .x = 10, .y = 20, .w = 600, .h = 300 };

@@ -51,6 +51,7 @@ pub const ZigCore = struct {
             .msplim => r.msplim,
             .psplim => r.psplim,
             .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)],
+            .vpr => @bitCast(self.cpu.fp.vpr),
         };
     }
 
@@ -73,6 +74,7 @@ pub const ZigCore = struct {
             .msplim => r.msplim = value & ~@as(u32, 7),
             .psplim => r.psplim = value & ~@as(u32, 7),
             .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)] = value,
+            .vpr => self.cpu.fp.vpr = @bitCast(value),
         }
     }
 

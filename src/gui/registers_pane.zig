@@ -23,7 +23,7 @@ pub const heading = Color.rgb(0x61, 0xAF, 0xEF);
 pub const pad: i32 = 4;
 /// A row is one text line with a pixel of air above and below.
 pub const row_h: i32 = @as(i32, @intCast(font.cell_h)) + 4;
-/// Characters a name takes: "faultmask" plus a gap.
+/// Characters a name takes: "faultmask" (or a lane, "q7[3]") plus a gap.
 pub const name_len: usize = 10;
 /// Characters one column takes: the name, eight hex digits and a gap.
 pub const column_len: usize = name_len + 8 + 2;
@@ -31,23 +31,64 @@ pub const column_len: usize = name_len + 8 + 2;
 /// The order the pane shows, group by group: the core group (the general
 /// registers, the three that say where execution is, and status), the
 /// system group (both stack pointers and their limits, the masks, CONTROL),
-/// then the FPU group (FPSCR and the single-precision bank, Ozone's order).
+/// the FPU group (FPSCR and the single-precision bank, Ozone's order), then
+/// VPR, which opens the MVE group.
 pub const shown = [_]Register{
     .r0,      .r1,    .r2,  .r3,  .r4,   .r5,  .r6,  .r7,     .r8,     .r9,      .r10,     .r11,
     .r12,     .sp,    .lr,  .pc,  .xpsr, .msp, .psp, .msplim, .psplim, .primask, .basepri, .faultmask,
     .control, .fpscr, .s0,  .s1,  .s2,   .s3,  .s4,  .s5,     .s6,     .s7,      .s8,      .s9,
     .s10,     .s11,   .s12, .s13, .s14,  .s15, .s16, .s17,    .s18,    .s19,     .s20,     .s21,
-    .s22,     .s23,   .s24, .s25, .s26,  .s27, .s28, .s29,    .s30,    .s31,
+    .s22,     .s23,   .s24, .s25, .s26,  .s27, .s28, .s29,    .s30,    .s31,     .vpr,
 };
 
-/// A run of `shown` under one header that folds it away.
+/// MVE's q0-q7 alias the FP bank (src/core/cpu/mve/qreg.zig): lane k of qN
+/// is S[4N+k]. The MVE group draws each q as four lane cells from the S
+/// values already read, so a vector costs no extra read and its changed
+/// mark is per lane (RA8EMU-947).
+pub const lanes: usize = 32;
+/// Every cell the pane can draw: one per shown register, then the q lanes.
+pub const cells: usize = shown.len + lanes;
+const s0_at = std.mem.indexOfScalar(Register, &shown, .s0).?;
+
+const lane_names: [lanes][]const u8 = blk: {
+    // 32 comptimePrint calls run past the default comptime branch budget.
+    @setEvalBranchQuota(20_000);
+    var out: [lanes][]const u8 = undefined;
+    for (0..lanes) |k| out[k] = std.fmt.comptimePrint("q{d}[{d}]", .{ k / 4, k % 4 });
+    break :blk out;
+};
+
+/// Which value in a Snapshot cell `cell` draws.
+pub fn valueIndex(cell: usize) usize {
+    return if (cell < shown.len) cell else s0_at + (cell - shown.len);
+}
+
+/// The name cell `cell` draws.
+pub fn label(cell: usize) []const u8 {
+    return if (cell < shown.len) @tagName(shown[cell]) else lane_names[cell - shown.len];
+}
+
+/// Only CPU0, the Cortex-M85 (core profile m85), has MVE; CPU1 runs the
+/// M33 profile, so its pane has no MVE group and never reads VPR.
+pub fn hasMve(core: anytype) bool {
+    return core == .cpu0;
+}
+
+/// A run of cells under one header that folds it away.
 pub const Group = struct { name: []const u8, first: usize, len: usize };
 
 pub const groups = [_]Group{
     .{ .name = "core", .first = 0, .len = 17 },
     .{ .name = "system", .first = 17, .len = 8 },
     .{ .name = "fpu", .first = 25, .len = 33 },
+    .{ .name = "mve", .first = 58, .len = 1 + lanes },
 };
+
+/// The groups a pane draws: all of them on an MVE core, all but the last
+/// (MVE) otherwise.
+pub fn groupCount(mve: bool) usize {
+    return if (mve) groups.len else groups.len - 1;
+}
 
 comptime {
     var next: usize = 0;
@@ -55,7 +96,8 @@ comptime {
         std.debug.assert(group.first == next);
         next += group.len;
     }
-    std.debug.assert(next == shown.len);
+    std.debug.assert(next == cells);
+    std.debug.assert(std.mem.eql(u8, groups[groups.len - 1].name, "mve"));
 }
 
 /// Which groups are folded down to their header.
@@ -64,6 +106,8 @@ pub const open: Fold = @splat(false);
 
 pub const Snapshot = struct {
     values: [shown.len]u32 = @splat(0),
+    /// The core has MVE: VPR was read and the MVE group draws.
+    mve: bool = false,
 
     /// Did register `index` change since `before`? Nothing has changed
     /// when there is no earlier snapshot.
@@ -75,8 +119,11 @@ pub const Snapshot = struct {
 
 /// Reads every shown register of `core` through the session.
 pub fn capture(session: *session_api.Session, core: session_api.Core) anyerror!Snapshot {
-    var snapshot: Snapshot = .{};
-    for (shown, 0..) |which, index| snapshot.values[index] = try session.register(core, which);
+    var snapshot: Snapshot = .{ .mve = hasMve(core) };
+    for (shown, 0..) |which, index| {
+        if (which == .vpr and !snapshot.mve) continue;
+        snapshot.values[index] = try session.register(core, which);
+    }
     return snapshot;
 }
 
@@ -95,7 +142,7 @@ pub fn columns(area: Rect) usize {
     return @intCast(@divTrunc(inner, width));
 }
 
-/// Register `index`'s cell, or null when its group is folded or it does
+/// Cell `index`'s rectangle, or null when its group is folded or it does
 /// not fit.
 pub fn cellRect(area: Rect, fold: Fold, index: usize) ?Rect {
     return slotRect(area, slotOf(fold, index) orelse return null);
@@ -106,9 +153,10 @@ pub fn headerRect(area: Rect, fold: Fold, which: usize) ?Rect {
     return slotRect(area, headerSlot(fold, which));
 }
 
-/// The group whose header holds (`x`, `y`), or null.
-pub fn headerAt(area: Rect, fold: Fold, x: i32, y: i32) ?usize {
-    for (0..groups.len) |which| {
+/// The group whose header holds (`x`, `y`), or null. `mve` says whether
+/// the MVE group is drawn.
+pub fn headerAt(area: Rect, fold: Fold, mve: bool, x: i32, y: i32) ?usize {
+    for (0..groupCount(mve)) |which| {
         const header = headerRect(area, fold, which) orelse return null;
         if (header.contains(x, y)) return which;
     }
@@ -160,13 +208,15 @@ pub fn draw(list: *draw_list.DrawList, area: Rect, now: Snapshot, before: ?Snaps
     try list.fill(area, background);
     try list.pushClip(area);
     defer list.popClip();
-    for (groups, fold, 0..) |group, folded, which| {
+    const count = groupCount(now.mve);
+    for (groups[0..count], fold[0..count], 0..) |group, folded, which| {
         const header = headerRect(area, fold, which) orelse break;
         try drawHeader(list, header, group.name, folded);
         if (folded) continue;
         for (group.first..group.first + group.len) |index| {
             const cell = cellRect(area, fold, index) orelse break;
-            try drawCell(list, cell, shown[index], now.values[index], now.changedAt(before, index));
+            const at = valueIndex(index);
+            try drawCell(list, cell, label(index), now.values[at], now.changedAt(before, at));
         }
     }
 }
@@ -176,8 +226,8 @@ fn drawHeader(list: *draw_list.DrawList, cell: Rect, name: []const u8, folded: b
     try font.draw(list, cell.x + 2 + @as(i32, @intCast(font.textWidth(2))), cell.y + 2, name, heading);
 }
 
-fn drawCell(list: *draw_list.DrawList, cell: Rect, which: Register, value: u32, moved: bool) !void {
-    try font.draw(list, cell.x + 2, cell.y + 2, @tagName(which), muted);
+fn drawCell(list: *draw_list.DrawList, cell: Rect, name: []const u8, value: u32, moved: bool) !void {
+    try font.draw(list, cell.x + 2, cell.y + 2, name, muted);
     var buffer: [8]u8 = undefined;
     const text = try std.fmt.bufPrint(&buffer, "{X:0>8}", .{value});
     const at = valueOrigin(cell);
