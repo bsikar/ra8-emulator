@@ -29,7 +29,7 @@ test "a board with no frame shows the dark default panel and its LEDs" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var counter = Counter{ .left = 1 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
     try std.testing.expect(!screen.frame);
     try std.testing.expectEqual(board_view.panel_width, screen.width);
@@ -42,7 +42,7 @@ test "the camera pane gets the CEU's source and the sensor's format register" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var counter = Counter{ .left = 1 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
     const run = screen.run();
     const camera = run.vtable.camera(run.ctx).?;
@@ -54,7 +54,7 @@ test "the window loop steps the board until the stepper ends and presents the vi
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var counter = Counter{ .left = 2 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
@@ -95,7 +95,7 @@ test "the window's scans leave the controller and its report as they were" {
     try std.testing.expectEqual(@as(u32, 64), board.display.panelWidth());
     const before = board.display;
     var counter = Counter{ .left = 3 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
@@ -112,7 +112,7 @@ test "scanning on the engine leaves a step to read only what was handed over" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var counter = Counter{ .left = 5 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
     screen.on_engine = true;
     const run = screen.run();
@@ -133,9 +133,9 @@ test "a park hands the console what the channels sent, stamped with board time" 
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var counter = Counter{ .left = 1 };
-    var screen = try window_board.Screen.init(std.testing.allocator, &board, counter.stepper());
+    var screen = try window_board.Screen.init(std.testing.allocator, std.testing.io, &board, counter.stepper());
     defer screen.deinit();
-    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .now = screen.clock() };
+    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .io = std.testing.io, .now = screen.clock() };
     defer feed.deinit();
     screen.feed = &feed;
     board.serial.tap = feed.tap();

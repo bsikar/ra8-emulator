@@ -34,7 +34,7 @@ test "console stamps equal the session stream's UART byte times" {
     var session: api.Session = .{ .live = undefined };
     ra8.board.session_events.attach(&board, &session);
     const subscription = session.event_stream.subscribe().?;
-    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .now = .{ .ctx = &board, .now = boardNow } };
+    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .io = std.testing.io, .now = .{ .ctx = &board, .now = boardNow } };
     defer feed.deinit();
     feed.next = board.serial.tap;
     board.serial.tap = feed.tap();

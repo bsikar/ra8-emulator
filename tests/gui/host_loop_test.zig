@@ -328,7 +328,7 @@ test "text and Enter typed with the pointer over the console go to the shown cha
     var logs: [3]ra8.gui.console_log.Log = undefined;
     for (&logs) |*log| log.* = .init(std.testing.allocator, 4);
     defer for (&logs) |*log| log.deinit();
-    var typed = ra8.gui.console_keys.Typed{};
+    var typed = ra8.gui.console_keys.Typed{ .io = std.testing.io };
     loop.useConsoles(&logs, 2);
     loop.typed = &typed;
     try window.feed(.{ .text = ra8.gui.platform.Text.of("X") });
