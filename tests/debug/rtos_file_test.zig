@@ -104,8 +104,8 @@ test "CPU0 saves to the path and CPU1 to path.cpu1" {
     var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, "{s}/run.trace", .{dir});
     const trace = sample();
-    try rtos_file.save(path, 0, &trace);
-    try rtos_file.save(path, 1, &trace);
+    try rtos_file.save(std.testing.io, path, 0, &trace);
+    try rtos_file.save(std.testing.io, path, 1, &trace);
     var text: [1024]u8 = undefined;
     var into: [8]Event = undefined;
     for ([_][]const u8{ "run.trace", "run.trace.cpu1" }) |name| {
