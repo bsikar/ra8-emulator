@@ -79,7 +79,7 @@ test "a corpus ELF loads, steps and runs through a local session, and the status
     link.open(local.transport(), rx, tx);
     try connect(&link);
 
-    const bytes = try std.fs.cwd().readFileAlloc(gpa, elf_path, 1 << 20);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, elf_path, gpa, .limited(1 << 20));
     defer gpa.free(bytes);
     var status: Status = .{};
     try status.load(&link, elf_path, bytes);

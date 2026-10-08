@@ -30,7 +30,7 @@ test "Y4M writes exact grayscale frames held at ten virtual frames per second" {
     try writer.record(2, 2, &white, 200_000_100);
     try writer.finish();
 
-    const bytes = try std.fs.cwd().readFileAlloc(std.testing.allocator, path, 4096);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, std.testing.allocator, .limited(4096));
     defer std.testing.allocator.free(bytes);
     const stream_header = "YUV4MPEG2 W2 H2 F10:1 Ip A1:1 Cmono\n";
     try std.testing.expect(std.mem.startsWith(u8, bytes, stream_header));
