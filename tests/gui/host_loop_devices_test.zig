@@ -43,7 +43,7 @@ const Rig = struct {
     arena: std.heap.ArenaAllocator,
     board: Board,
     plugs: session_plug.Plugs = undefined,
-    post: plug_post.PlugPost = .{},
+    post: plug_post.PlugPost = .{ .io = std.testing.io },
     session: api.Session = .{ .live = undefined },
     rows: [1]devices.Row = .{.{ .at = gauge_at, .part = null }},
     panel: devices.Panel = undefined,
