@@ -17,7 +17,7 @@ pub var stopping = std.atomic.Value(bool).init(false);
 
 /// Answer the client on stdin and stdout until stdin closes.
 pub fn answerStdio(context: *served.Context, buffers: Buffers) !void {
-    var stdio: Stdio = .{};
+    var stdio = Stdio.process();
     try answer(context, stdio.transport(), stdio.input, .pipe, buffers);
 }
 
