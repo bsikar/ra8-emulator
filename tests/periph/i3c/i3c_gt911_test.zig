@@ -5,6 +5,12 @@ const ra8 = @import("ra8");
 const gt911 = ra8.periph.i3c_gt911;
 const gpio = ra8.periph.gpio;
 
+/// Writes all of `bytes` to a pipe end, as the host side of the test.
+fn send(fd: std.posix.fd_t, bytes: []const u8) !void {
+    const end: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = true } };
+    try end.writeStreamingAll(std.testing.io, bytes);
+}
+
 fn point(panel: *gt911.Panel) [gt911.record.bytes]u8 {
     var buffer: [gt911.record.bytes]u8 = undefined;
     _ = panel.read(buffer[0..]);
@@ -204,17 +210,17 @@ fn frame(panel: *gt911.Panel) ?gt911.Contact {
 }
 
 test "host touches on a pipe reach the panel's point reads during a run" {
-    const ends = try std.posix.pipe2(.{ .NONBLOCK = true });
-    defer std.posix.close(ends[1]);
+    const ends = try std.Io.Threaded.pipe2(.{ .NONBLOCK = true });
+    defer std.Io.Threaded.closeFd(ends[1]);
     var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
-    defer std.posix.close(ends[0]);
+    defer std.Io.Threaded.closeFd(ends[0]);
     var panel = gt911.Panel{};
     var pins = gpio.Gpio.init();
-    _ = try std.posix.write(ends[1], "down 120,340\nmove 130,3");
+    try send(ends[1], "down 120,340\nmove 130,3");
     input.poll(&panel, &pins);
     try std.testing.expectEqual(gt911.Contact{ .x = 120, .y = 340 }, frame(&panel).?);
     try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
-    _ = try std.posix.write(ends[1], "50\nup\n\n");
+    try send(ends[1], "50\nup\n\n");
     input.poll(&panel, &pins);
     try std.testing.expectEqual(gt911.Contact{ .x = 130, .y = 350 }, frame(&panel).?);
     try std.testing.expectEqual(@as(?gt911.Contact, null), frame(&panel));
@@ -244,13 +250,13 @@ test "a drained queue starts over, so a live source never fills it" {
 }
 
 test "the end of a host touch file stops the polling" {
-    const ends = try std.posix.pipe2(.{ .NONBLOCK = true });
+    const ends = try std.Io.Threaded.pipe2(.{ .NONBLOCK = true });
     var input = gt911.host.Input{ .enabled = true, .fd = ends[0] };
-    defer std.posix.close(ends[0]);
+    defer std.Io.Threaded.closeFd(ends[0]);
     var panel = gt911.Panel{};
     var pins = gpio.Gpio.init();
-    _ = try std.posix.write(ends[1], "1,2\n");
-    std.posix.close(ends[1]);
+    try send(ends[1], "1,2\n");
+    std.Io.Threaded.closeFd(ends[1]);
     input.poll(&panel, &pins);
     try std.testing.expect(!input.enabled);
     try std.testing.expectEqual(gt911.Contact{ .x = 1, .y = 2 }, frame(&panel).?);
