@@ -54,7 +54,7 @@ test "prepare loads CPU0 onto its own store with no engine behind it" {
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};
-    const written = try main_path.prepare(&cpu0, &board, try elf.Image.init(&file), &parts, .{ .path = "cpu0.elf", .cpu = .zig, .ctl_cpu_load = true });
+    const written = try main_path.prepare(&cpu0, &board, std.testing.io, try elf.Image.init(&file), &parts, .{ .path = "cpu0.elf", .cpu = .zig, .ctl_cpu_load = true });
     try std.testing.expectEqual(@as(u32, 0xC), written);
     const memory = cpu0.own();
     try std.testing.expectEqual(stack, try memory.readWord(vectors));

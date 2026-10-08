@@ -52,20 +52,20 @@ test "GIF sequence round-trips both frames with emulated delay and deterministic
     defer std.testing.allocator.free(path_b);
     const first = [_]u32{ 0xFF11_2233, 0xFFAA_BBCC };
     const second = [_]u32{ 0xFFFF_0000, 0xFF00_FFFF };
-    var writer = try gif.Writer.init(std.testing.allocator, path_a, 2, 1);
+    var writer = try gif.Writer.init(std.testing.allocator, std.testing.io, path_a, 2, 1);
     try writer.record(2, 1, &first, 1_000_000);
     try writer.record(2, 1, &second, 31_000_000);
     try writer.finish();
     writer.deinit();
-    var again = try gif.Writer.init(std.testing.allocator, path_b, 2, 1);
+    var again = try gif.Writer.init(std.testing.allocator, std.testing.io, path_b, 2, 1);
     try again.record(2, 1, &first, 1_000_000);
     try again.record(2, 1, &second, 31_000_000);
     try again.finish();
     again.deinit();
 
-    const a = try temp.dir.readFileAlloc(std.testing.allocator, "a.gif", 4096);
+    const a = try temp.dir.readFileAlloc(std.testing.io, "a.gif", std.testing.allocator, .limited(4096));
     defer std.testing.allocator.free(a);
-    const b = try temp.dir.readFileAlloc(std.testing.allocator, "b.gif", 4096);
+    const b = try temp.dir.readFileAlloc(std.testing.io, "b.gif", std.testing.allocator, .limited(4096));
     defer std.testing.allocator.free(b);
     try std.testing.expectEqualSlices(u8, a, b);
     const first_frame = try decodeFrame(a, std.testing.allocator, 0);

@@ -36,13 +36,13 @@ fn enumerated() usbfs.host.Host {
 
 test "no port asked for leaves the USB tick alone" {
     var board = ra8.board.usb.Usb{};
-    try run.install(&board, std.testing.allocator, null);
+    try run.install(&board, std.testing.allocator, std.testing.io, null);
     try std.testing.expect(board.bridge == null);
 }
 
 test "a port puts a bridge on the tick that waits for enumeration" {
     var board = ra8.board.usb.Usb{};
-    try run.install(&board, std.testing.allocator, 0);
+    try run.install(&board, std.testing.allocator, std.testing.io, 0);
     const hook = board.bridge.?;
     const live: *run.Live = @ptrCast(@alignCast(hook.context));
     defer {
@@ -55,7 +55,7 @@ test "a port puts a bridge on the tick that waits for enumeration" {
 }
 
 test "the events read as plain lines" {
-    var link = try exp.bridge.Bridge.init(std.testing.allocator, 0);
+    var link = try exp.bridge.Bridge.init(std.testing.allocator, std.testing.io, 0);
     defer link.deinit(std.testing.allocator);
     var board = usbfs.Device{};
     const script = enumerated();
