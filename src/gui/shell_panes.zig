@@ -21,6 +21,7 @@ const console_pane = @import("console_pane.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
+const shell_fault = @import("shell_fault.zig");
 const shell_camera = @import("shell_camera.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
@@ -51,6 +52,8 @@ pub const Panes = struct {
     console: ?*const shell_console.Console = null,
     board: ?*const shell_board.Board = null,
     devices: ?*const shell_devices.Devices = null,
+    /// Each device row's fault mode, drawn in its cell (RA8EMU-817).
+    faults: ?*const shell_fault.Faults = null,
     camera: ?*const shell_camera.Camera = null,
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
@@ -79,8 +82,14 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
         if (console.hasOutput()) return console_pane.draw(list, body, &console.log, 0);
     };
     if (pane.kind == .devices) if (self.devices) |devices| {
-        if (self.plug) |plug| if (devices.answered and !devices.refused) return shell_plug.draw(list, body, devices, plug);
-        if (devices.answered and devices.note() == null) return shell_devices.draw(list, body, devices);
+        if (self.plug) |plug| if (devices.answered and !devices.refused) {
+            try shell_plug.draw(list, body, devices, plug);
+            return drawFaults(self, list, shell_plug.rowsRect(body), devices);
+        };
+        if (devices.answered and devices.note() == null) {
+            try shell_devices.draw(list, body, devices);
+            return drawFaults(self, list, body, devices);
+        }
     };
     if (pane.kind == .camera) if (self.camera) |camera| {
         if (self.camera_file) |file| return shell_camera_file.draw(list, body, camera, file);
@@ -103,6 +112,13 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     const note = noteFor(self, pane) orelse return;
     const at = noteAt(body) orelse return;
     try font.draw(list, at.x, at.y, font.fit(note, at.room), shell_frame.muted);
+}
+
+/// The fault cells over a listed devices leaf's rows, when the shell keeps faults.
+fn drawFaults(self: *const Panes, list: *draw_list.DrawList, rows: Rect, devices: *const shell_devices.Devices) !void {
+    const faults = self.faults orelse return;
+    if (devices.note() != null) return;
+    try shell_fault.draw(list, rows, devices, faults);
 }
 
 /// Instructions decoded forward from `pc` out of the rows read around it.

@@ -13,6 +13,7 @@ const shell_panes = @import("../../gui/shell_panes.zig");
 const shell_console = @import("../../gui/shell_console.zig");
 const shell_board = @import("../../gui/shell_board.zig");
 const shell_devices = @import("../../gui/shell_devices.zig");
+const shell_fault = @import("../../gui/shell_fault.zig");
 const shell_camera = @import("../../gui/shell_camera.zig");
 const shell_plug = @import("../../gui/shell_plug.zig");
 const shell_camera_file = @import("../../gui/shell_camera_file.zig");
@@ -113,6 +114,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     shell.board = &board;
     var devices: shell_devices.Devices = .{};
     shell.devices = &devices;
+    var faults: shell_fault.Faults = .{};
+    shell.faults = &faults;
     var camera: shell_camera.Camera = .{};
     shell.camera = &camera;
     var plug: shell_plug.Plug = .{};
@@ -127,7 +130,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     shell.memory = &memory;
     var code: shell_memory.Pair = .{ .follows = .pc };
     shell.code = &code;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code };
     shell.painter = panes.painter();
     try drive(io, &shell, window, path, bytes);
     link.close();
