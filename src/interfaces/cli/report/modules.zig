@@ -15,7 +15,7 @@ const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// The peripheral clock branches a run switched, and any switch PRCR ate.
 /// A branch nobody asked for stays out of the report.

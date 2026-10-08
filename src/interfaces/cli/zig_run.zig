@@ -74,7 +74,7 @@ pub const cpu0_memory = @import("zig_memory.zig");
 pub const main_path = @import("zig_main.zig");
 
 const BootWriter = struct {
-    output: *std.fs.File.Writer,
+    output: *std.Io.Writer,
     quiet: bool,
 
     pub fn print(self: BootWriter, comptime format: []const u8, args: anytype) !void {
@@ -243,7 +243,7 @@ fn abortThunk(context: *anyopaque) void {
 
 /// Run, then print what the board has to say.
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
-pub fn run(out: std.fs.File.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
+pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
     var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
@@ -322,7 +322,7 @@ pub fn run(out: std.fs.File.Writer, io: std.Io, memory: Guest, board: *Board, ti
     return status;
 }
 
-fn postBootReport(out: std.fs.File.Writer, clock: *Clock, watcher: *zig_watch.Recorder, final: *const boot.Regs, image: elf.Image, options: cli.Options, ends: Ends, retire_at: u32, budget: usize) !?watchpoint.Watched {
+fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Recorder, final: *const boot.Regs, image: elf.Image, options: cli.Options, ends: Ends, retire_at: u32, budget: usize) !?watchpoint.Watched {
     clock.soakFaults();
     const watched = watcher.result(final.pc);
     clock.board.time.soak.place(final.pc, if (clock.board.clock.running()) clock.board.clock.now else null);
@@ -335,7 +335,7 @@ fn postBootReport(out: std.fs.File.Writer, clock: *Clock, watcher: *zig_watch.Re
     return watched;
 }
 
-fn finishEinkLog(out: std.fs.File.Writer, options: cli.Options, recorder: *eink_log.Run) !void {
+fn finishEinkLog(out: *std.Io.Writer, options: cli.Options, recorder: *eink_log.Run) !void {
     const path = options.frames.eink_log orelse return;
     try recorder.write(path);
     if (!options.report_json) try recorder.printTotals(out);
@@ -359,7 +359,7 @@ fn openSecond(pair: *second_core.zig_run.Driver, io: std.Io, board: *Board, name
 /// The flag-asked dumps of a text run, in the engine report's order
 /// (RA8EMU-638): globals, the card block, registers, memory words, then
 /// what landed in the `--watch` word (RA8EMU-639).
-fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options, watched: ?watchpoint.Watched) !void {
+fn textDumps(out: *std.Io.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options, watched: ?watchpoint.Watched) !void {
     try report_dumps.dumpSymbols(out, memory, image, options);
     try report_dumps.dumpBlock(out, board, options);
     try report_dumps.dumpRegisters(out, .{ .zig = final }, memory, options);
@@ -367,7 +367,7 @@ fn textDumps(out: std.fs.File.Writer, board: *Board, memory: Guest, final: *cons
     try watchpoint.print(out, image, options.watch_place, watched);
 }
 
-fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
+fn finishFrames(out: *std.Io.Writer, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
     try frames.finish(board);
     try audio.finish(out);
     try frame_out.report(out, board, options.frame_out, options.panel_only);
@@ -380,7 +380,7 @@ fn captureFrames(board: *Board, io: std.Io, options: cli.Options) !void {
 }
 
 /// `ctl cpu-load` prints only the load object, then the run's status.
-fn ctlLoad(out: std.fs.File.Writer, load: json_run.json_load.Load, status: u8) !u8 {
+fn ctlLoad(out: *std.Io.Writer, load: json_run.json_load.Load, status: u8) !u8 {
     try json_run.json_load.document(out, &load);
     return status;
 }

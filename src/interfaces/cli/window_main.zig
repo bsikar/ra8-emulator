@@ -23,7 +23,7 @@ pub const frame_ns: u64 = 16_666_667;
 /// What zig_run.run takes, gathered by zig_main.
 pub const Args = struct {
     io: std.Io,
-    out: std.fs.File.Writer,
+    out: *std.Io.Writer,
     memory: Guest,
     board: *Board,
     timebase: *clocks.Clocks,
