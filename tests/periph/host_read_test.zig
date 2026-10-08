@@ -25,7 +25,7 @@ test "bytes waiting on a pipe are read, then its closed writer reads as the end"
 test "a file opened by path reads its contents and then the end" {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    try dir.dir.writeFile(.{ .sub_path = "touch.txt", .data = "1,2\n" });
+    try dir.dir.writeFile(std.testing.io, .{ .sub_path = "touch.txt", .data = "1,2\n" });
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = path_buf[0..try dir.dir.realPathFile(std.testing.io, "touch.txt", &path_buf)];
     const handle = try host_read.open(std.testing.io, path);

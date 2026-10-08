@@ -33,8 +33,8 @@ test "a picture file loads as its preview; anything else is refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const ppm = "P6\n2 1\n255\n" ++ "\x0a\x14\x1e" ++ "\xc8\x00\x64";
-    try tmp.dir.writeFile(.{ .sub_path = "p.ppm", .data = ppm });
-    try tmp.dir.writeFile(.{ .sub_path = "n.txt", .data = "not a picture" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "p.ppm", .data = ppm });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "n.txt", .data = "not a picture" });
     const t = try thumb.load(std.testing.allocator, std.testing.io, tmp.dir, "p.ppm");
     defer t.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u32, 2), t.width);
@@ -62,9 +62,9 @@ test "a clip previews as its first frame; a cut-short clip is refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const header = "YUV4MPEG2 W2 H1 F25:1 Cmono\n";
-    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = header ++ "FRAME\n\x10\xeb" ++ "FRAME\n\xeb\x10" });
-    try tmp.dir.writeFile(.{ .sub_path = "short.y4m", .data = header ++ "FRAME\n\x10" });
-    try tmp.dir.writeFile(.{ .sub_path = "bad.y4m", .data = header ++ "JUNK\n\x10\xeb" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "c.y4m", .data = header ++ "FRAME\n\x10\xeb" ++ "FRAME\n\xeb\x10" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "short.y4m", .data = header ++ "FRAME\n\x10" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bad.y4m", .data = header ++ "JUNK\n\x10\xeb" });
     const t = try thumb.load(std.testing.allocator, std.testing.io, tmp.dir, "c.y4m");
     defer t.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u32, 2), t.width);

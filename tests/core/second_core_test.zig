@@ -206,11 +206,13 @@ test "CCR, SHCSR and the fault status words are each core's own" {
 fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const file = try dir.dir.createFile("report.txt", .{ .read = true });
-    defer file.close();
-    try mod.report(file.writer(), second);
-    try file.seekTo(0);
-    return buffer[0..try file.readAll(buffer)];
+    const file = try dir.dir.createFile(std.testing.io, "report.txt", .{ .read = true });
+    defer file.close(std.testing.io);
+    var held: [512]u8 = undefined;
+    var writer = file.writer(std.testing.io, &held);
+    try mod.report(&writer.interface, second);
+    try writer.interface.flush();
+    return buffer[0..try file.readPositionalAll(std.testing.io, buffer, 0)];
 }
 
 test "the report says how often CPU1 parked in WFE and what woke it" {

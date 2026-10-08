@@ -109,7 +109,7 @@ test "CPU0 saves to the path and CPU1 to path.cpu1" {
     var text: [1024]u8 = undefined;
     var into: [8]Event = undefined;
     for ([_][]const u8{ "run.trace", "run.trace.cpu1" }) |name| {
-        const got = try tmp.dir.readFile(name, &text);
+        const got = try tmp.dir.readFile(std.testing.io, name, &text);
         const loaded = try rtos_file.read(got, &into);
         try std.testing.expectEqual(trace.len, loaded.events.len);
     }

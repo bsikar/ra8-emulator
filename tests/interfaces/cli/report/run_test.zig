@@ -22,11 +22,13 @@ fn zigReportWith(buf: []u8, timebase: ra8.periph.clocks.Clocks) ![]const u8 {
     try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const file = try dir.dir.createFile("report.txt", .{ .read = true });
-    defer file.close();
-    try report_run.zigCore(file.writer(), &board, timebase, 42, .{});
-    try file.seekTo(0);
-    const len = try file.readAll(buf);
+    const file = try dir.dir.createFile(std.testing.io, "report.txt", .{ .read = true });
+    defer file.close(std.testing.io);
+    var held: [512]u8 = undefined;
+    var writer = file.writer(std.testing.io, &held);
+    try report_run.zigCore(&writer.interface, &board, timebase, 42, .{});
+    try writer.interface.flush();
+    const len = try file.readPositionalAll(std.testing.io, buf, 0);
     return buf[0..len];
 }
 
@@ -48,11 +50,13 @@ test "a quiet board prints no console line" {
 fn busLine(buf: []u8, tally: ra8.periph.fault_status.bus.Tally) ![]const u8 {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const file = try dir.dir.createFile("bus.txt", .{ .read = true });
-    defer file.close();
-    try report_run.busErrors(file.writer(), tally);
-    try file.seekTo(0);
-    const len = try file.readAll(buf);
+    const file = try dir.dir.createFile(std.testing.io, "bus.txt", .{ .read = true });
+    defer file.close(std.testing.io);
+    var held: [256]u8 = undefined;
+    var writer = file.writer(std.testing.io, &held);
+    try report_run.busErrors(&writer.interface, tally);
+    try writer.interface.flush();
+    const len = try file.readPositionalAll(std.testing.io, buf, 0);
     return buf[0..len];
 }
 
