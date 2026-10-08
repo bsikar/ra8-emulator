@@ -1,12 +1,14 @@
 //! The time bar's clock readout (RA8EMU-806): the session's virtual elapsed
 //! time and the achieved speed, shown only when it falls short of the speed
 //! asked for. A model, no paint: poll() asks, observe() takes the answers,
-//! text() reads the line. The RTC date waits on the session reading the RTC
-//! (RA8EMU-809): a debugger read of its window is refused today.
+//! text() reads the line. The board's RTC date leads the line when the
+//! session has one (RA8EMU-809); a server without the rtc method refuses it
+//! once and is not asked again.
 const std = @import("std");
 const proto = @import("../interfaces/rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
 const speed_field = @import("speed_field.zig");
+const session_rtc = @import("../debug/session_rtc.zig");
 const Link = session_link.Link;
 const Arrival = session_link.Arrival;
 
@@ -37,10 +39,21 @@ pub const Readout = struct {
     last: ?Sample = null,
     achieved_milli: ?u64 = null,
     now_id: ?u32 = null,
+    /// The RTC date at the last answer; null when the counters hold none.
+    date: ?session_rtc.Calendar = null,
+    rtc_id: ?u32 = null,
+    /// The server refused rtc: it has no clock, so stop asking.
+    no_rtc: bool = false,
 
-    /// Ask for the virtual time, unless still waiting on the last answer.
+    /// Ask for the virtual time and the RTC date, unless still waiting.
     pub fn poll(self: *Readout, link: *Link) !void {
         if (self.now_id == null) self.now_id = try link.send(proto.Now, .now, .{ .core = self.core });
+        if (self.rtc_id == null and !self.no_rtc) self.rtc_id = try link.send(proto.CoreOnly, .rtc, .{ .core = self.core });
+    }
+
+    /// Still waiting on an answer to the last poll.
+    pub fn waiting(self: *const Readout) bool {
+        return self.now_id != null or self.rtc_id != null;
     }
 
     /// Take one answer; `wall_ns` is the host's monotonic clock as it arrived.
@@ -49,6 +62,7 @@ pub const Readout = struct {
             .response => |response| response,
             .event => return,
         };
+        if (self.rtc_id != null and response.id == self.rtc_id.?) return self.observeRtc(response.result);
         if (response.id != self.now_id) return;
         self.now_id = null;
         if (response.result == .err) return;
@@ -59,10 +73,35 @@ pub const Readout = struct {
         self.virtual_ns = time.value;
     }
 
-    /// "T+h:mm:ss.mmm", then "| 0.42x of 1x" when short of the request.
+    fn observeRtc(self: *Readout, result: proto.Client.Env.Result) void {
+        self.rtc_id = null;
+        const bytes = switch (result) {
+            .ok => |bytes| bytes,
+            .err => {
+                self.no_rtc = true;
+                self.date = null;
+                return;
+            },
+        };
+        const report = proto.decode(proto.RtcReport, bytes) catch return;
+        self.date = if (report.valid == 0) null else .{
+            .year = report.year,
+            .month = report.month,
+            .day = report.day,
+            .hour = report.hour,
+            .minute = report.minute,
+            .second = report.second,
+        };
+    }
+
+    /// "yyyy-mm-dd hh:mm:ss | " when the RTC holds a date, "T+h:mm:ss.mmm", then "| 0.42x of 1x" when short of the request.
     pub fn text(self: *const Readout, requested_milli: u64, buf: []u8) ![]const u8 {
         var stream: std.Io.Writer = .fixed(buf);
         const w = &stream;
+        if (self.date) |date| {
+            var date_buf: [19]u8 = undefined;
+            try w.print("{s} | ", .{date.format(&date_buf)});
+        }
         if (self.virtual_ns) |ns| {
             const ms = ns / std.time.ns_per_ms;
             try w.print("T+{d}:{d:0>2}:{d:0>2}.{d:0>3}", .{ ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000 });
