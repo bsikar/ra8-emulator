@@ -11,15 +11,16 @@ const window_still = @import("window_still.zig");
 
 /// The directory `--window-stills` named, made if missing; null when the
 /// run did not ask for stills.
-pub fn openDir(path: ?[]const u8) !?std.fs.Dir {
+pub fn openDir(io: std.Io, path: ?[]const u8) !?std.Io.Dir {
     const target = path orelse return null;
-    return try std.fs.cwd().makeOpenPath(target, .{});
+    return try std.Io.Dir.cwd().createDirPathOpen(io, target, .{});
 }
 
 pub const Recorder = struct {
     allocator: std.mem.Allocator,
     inner: platform_mod.Platform,
-    dir: std.fs.Dir,
+    io: std.Io,
+    dir: std.Io.Dir,
     /// Stills are named `stem-NNNN.png`.
     stem: []const u8,
     /// Keep frame 0, then every `every`-th frame; 0 is treated as 1.
@@ -58,9 +59,9 @@ pub const Recorder = struct {
         try self.inner.present(frame);
         defer self.frames += 1;
         if (!self.keeps(self.frames)) return;
-        var buffer: [std.fs.max_name_bytes]u8 = undefined;
+        var buffer: [std.Io.Dir.max_name_bytes]u8 = undefined;
         const file_name = try window_still.name(&buffer, self.stem, self.saved);
-        try window_still.save(self.allocator, self.dir, file_name, frame.*);
+        try window_still.save(self.allocator, self.io, self.dir, file_name, frame.*);
         self.saved += 1;
     }
 };

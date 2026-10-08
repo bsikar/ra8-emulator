@@ -22,8 +22,8 @@ test "a saved still is a PNG of the frame's size" {
     var frame = try raster.Framebuffer.init(std.testing.allocator, 3, 2);
     defer frame.deinit(std.testing.allocator);
     @memset(frame.pixels, Color.rgb(9, 8, 7));
-    try still.save(std.testing.allocator, tmp.dir, "w.png", frame);
-    const bytes = try tmp.dir.readFileAlloc(std.testing.allocator, "w.png", 1 << 16);
+    try still.save(std.testing.allocator, std.testing.io, tmp.dir, "w.png", frame);
+    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "w.png", std.testing.allocator, .limited(1 << 16));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, &png.signature, bytes[0..8]);
     try std.testing.expectEqualStrings("IHDR", bytes[12..16]);
