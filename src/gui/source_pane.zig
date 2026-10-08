@@ -69,37 +69,33 @@ pub const Snapshot = struct {
 
 /// Reads `core`'s pc, finds its line in `sections`, and reads up to
 /// `row_count` lines of that file from `dir`, the current one in the middle.
-pub fn capture(session: *session_api.Session, core: session_api.Core, sections: dwarf_line.Sections, dir: std.fs.Dir, row_count: usize) anyerror!Snapshot {
+pub fn capture(session: *session_api.Session, core: session_api.Core, sections: dwarf_line.Sections, io: std.Io, dir: std.Io.Dir, row_count: usize) anyerror!Snapshot {
     var snapshot: Snapshot = .{ .pc = try session.register(core, .pc) };
     const place = (dwarf_line.lookup(sections, snapshot.pc) catch null) orelse return snapshot;
-    var spelled = std.io.fixedBufferStream(&snapshot.path_buf);
-    session_source.path(spelled.writer(), place.file) catch return snapshot;
-    snapshot.path_len = spelled.getWritten().len;
+    var spelled: std.Io.Writer = .fixed(&snapshot.path_buf);
+    session_source.path(&spelled, place.file) catch return snapshot;
+    snapshot.path_len = spelled.buffered().len;
     snapshot.current = place.line;
     snapshot.state = .no_file;
-    const file = dir.openFile(snapshot.path(), .{}) catch return snapshot;
-    defer file.close();
+    const file = dir.openFile(io, snapshot.path(), .{}) catch return snapshot;
+    defer file.close(io);
     const wanted = @min(row_count, max_rows);
     const half: u32 = @intCast(wanted / 2);
     const first = if (place.line > half) place.line - half else 1;
-    var buffered = std.io.bufferedReader(file.reader());
-    try readRows(&snapshot, buffered.reader(), first, wanted);
+    var staging: [4096]u8 = undefined;
+    var reader = file.reader(io, &staging);
+    try readRows(&snapshot, &reader.interface, first, wanted);
     snapshot.state = .shown;
     return snapshot;
 }
 
-fn readRows(snapshot: *Snapshot, reader: anytype, first: u32, wanted: usize) !void {
+fn readRows(snapshot: *Snapshot, reader: *std.Io.Reader, first: u32, wanted: usize) !void {
     var number: u32 = 1;
     while (snapshot.count < wanted) : (number += 1) {
         var row: Row = .{ .number = number };
-        var held = std.io.fixedBufferStream(&row.buf);
-        var ended = false;
-        reader.streamUntilDelimiter(held.writer(), '\n', null) catch |err| switch (err) {
-            error.EndOfStream => ended = true,
-            error.NoSpaceLeft => try reader.skipUntilDelimiterOrEof('\n'),
-            else => |other| return other,
-        };
-        row.len = held.getWritten().len;
+        var held: std.Io.Writer = .fixed(&row.buf);
+        const ended = try takeLine(reader, &held);
+        row.len = held.buffered().len;
         if (ended and row.len == 0) return;
         if (number >= first) {
             std.mem.replaceScalar(u8, row.buf[0..row.len], '\t', ' ');
@@ -108,6 +104,26 @@ fn readRows(snapshot: *Snapshot, reader: anytype, first: u32, wanted: usize) !vo
         }
         if (ended) return;
     }
+}
+
+/// Streams one line into `held`, at most its capacity, and drops the rest of
+/// the line and its newline. True when the stream ended on this line.
+fn takeLine(reader: *std.Io.Reader, held: *std.Io.Writer) !bool {
+    _ = reader.streamDelimiterLimit(held, '\n', .limited(held.buffer.len)) catch |err| switch (err) {
+        error.StreamTooLong => {
+            _ = reader.discardDelimiterInclusive('\n') catch |e| switch (e) {
+                error.EndOfStream => return true,
+                else => |other| return other,
+            };
+            return false;
+        },
+        else => |other| return other,
+    };
+    _ = reader.takeByte() catch |err| switch (err) {
+        error.EndOfStream => return true,
+        else => |other| return other,
+    };
+    return false;
 }
 
 pub const Mark = struct {
