@@ -99,6 +99,7 @@ test {
     _ = @import("gui/speed_field_test.zig");
     _ = @import("gui/time_readout_test.zig");
     _ = @import("gui/session_input_wire_test.zig");
+    _ = @import("gui/session_event_wire_test.zig");
     _ = @import("gui/time_bar_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
@@ -145,4 +146,5 @@ test {
     _ = @import("interfaces/rpc/session_stack_test.zig");
     _ = @import("interfaces/rpc/session_rtc_test.zig");
     _ = @import("interfaces/rpc/session_input_test.zig");
+    _ = @import("interfaces/rpc/session_event_feed_test.zig");
 }
