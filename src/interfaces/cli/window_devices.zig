@@ -30,8 +30,8 @@ pub const click_gauge: session_api.Endpoint = .{ .i2c = .{ .line = .touch, .addr
 pub const Devices = struct {
     arena: std.heap.ArenaAllocator,
     plugs: session_plug.Plugs,
-    post: plug_post.PlugPost = .{},
-    speed: speed_post.SpeedPost = .{},
+    post: plug_post.PlugPost,
+    speed: speed_post.SpeedPost,
     board: *Board,
     io: std.Io,
     session: session_api.Session = .{ .live = undefined },
@@ -41,7 +41,7 @@ pub const Devices = struct {
 
     /// Builds in place: the session and the panel point into `self`.
     pub fn init(self: *Devices, allocator: std.mem.Allocator, io: std.Io, board: *Board, attaches: []const request.Request, click: bool) void {
-        self.* = .{ .arena = .init(allocator), .plugs = undefined, .board = board, .io = io };
+        self.* = .{ .arena = .init(allocator), .plugs = undefined, .post = .{ .io = io }, .speed = .{ .io = io }, .board = board, .io = io };
         self.plugs = session_plug.Plugs.init(board, self.arena.allocator());
         self.event_ns.store(board.time.base.now(), .monotonic);
         self.session.attachEventClock(.{ .context = self, .nowFn = eventNow });
