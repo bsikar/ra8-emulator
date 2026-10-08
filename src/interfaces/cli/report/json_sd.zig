@@ -30,7 +30,7 @@ pub fn block(j: anytype, board: *Board, asked: ?u32) !void {
         var hex: [2 * sd_dump.row_bytes]u8 = undefined;
         try j.open(null, '{');
         try j.field("offset", offset);
-        try j.field("hex", try std.fmt.bufPrint(&hex, "{}", .{std.fmt.fmtSliceHexLower(row)}));
+        try j.field("hex", try std.fmt.bufPrint(&hex, "{x}", .{row}));
         try j.close('}');
     }
     try j.close(']');
