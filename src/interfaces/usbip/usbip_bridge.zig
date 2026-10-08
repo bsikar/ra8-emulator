@@ -16,30 +16,45 @@ const usbfs = @import("../../periph/usbfs/usbfs.zig");
 /// What one poll changed.
 pub const Event = enum { none, listening, attached, hung_up, unusable };
 
+/// One accepted host: its stream with the reader and writer over it. Built
+/// in place inside the bridge, so the interfaces never move, and kept from
+/// the import phase into the URB phase so nothing buffered is lost.
+const Conn = struct {
+    stream: std.Io.net.Stream,
+    reader: std.Io.net.Stream.Reader,
+    writer: std.Io.net.Stream.Writer,
+    rbuf: [buffer_len]u8,
+    wbuf: [buffer_len]u8,
+
+    /// Room for a header and the largest URB's data.
+    const buffer_len = 2 * session.max_length;
+};
+
 pub const Bridge = struct {
+    io: std.Io,
     wanted: u16,
     live: *session.Session,
     exports: [1]exp.Export = undefined,
-    listener: ?std.net.Server = null,
-    stream: ?std.net.Stream = null,
+    listener: ?std.Io.net.Server = null,
+    conn: ?Conn = null,
     given_up: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, wanted: u16) !Bridge {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, wanted: u16) !Bridge {
         const live = try allocator.create(session.Session);
         live.* = .{};
-        return .{ .wanted = wanted, .live = live };
+        return .{ .io = io, .wanted = wanted, .live = live };
     }
 
     pub fn deinit(self: *Bridge, allocator: std.mem.Allocator) void {
-        if (self.stream) |stream| stream.close();
-        if (self.listener) |*listener| listener.deinit();
+        if (self.conn) |*conn| conn.stream.close(self.io);
+        if (self.listener) |*listener| listener.deinit(self.io);
         allocator.destroy(self.live);
     }
 
     /// The port the listener is bound to, once it is.
     pub fn port(self: *const Bridge) ?u16 {
         const listener = self.listener orelse return null;
-        return listener.listen_address.getPort();
+        return listener.socket.address.getPort();
     }
 
     /// The exported device, once there is one.
@@ -49,7 +64,7 @@ pub const Bridge = struct {
 
     /// Advance whatever stage the bridge is in, without waiting.
     pub fn poll(self: *Bridge, device: *usbfs.Device, script: *const usbfs.host.Host) !Event {
-        if (self.stream) |stream| return self.traffic(stream, device);
+        if (self.conn) |*conn| return self.traffic(conn, device);
         if (self.listener) |*listener| return self.accept(listener);
         if (self.given_up) return .none;
         return self.offer(script);
@@ -61,34 +76,44 @@ pub const Bridge = struct {
             return .unusable;
         } orelse return .none;
         self.exports[0] = found;
-        self.listener = try listen.open(self.wanted);
+        self.listener = try listen.open(self.io, self.wanted);
         return .listening;
     }
 
-    fn accept(self: *Bridge, listener: *std.net.Server) !Event {
-        if (!readable(listener.stream.handle)) return .none;
-        const connection = try listener.accept();
-        const imported = server.serve(connection.stream.reader(), connection.stream.writer(), &self.exports) catch null;
+    fn accept(self: *Bridge, listener: *std.Io.net.Server) !Event {
+        if (!readable(listener.socket.handle)) return .none;
+        const conn = self.connect(try listener.accept(self.io));
+        const imported = server.serve(&conn.reader.interface, &conn.writer.interface, &self.exports) catch null;
         if (imported == null) {
-            connection.stream.close();
+            _ = self.hangUp(conn);
             return .none;
         }
-        self.stream = connection.stream;
         return .attached;
     }
 
-    fn traffic(self: *Bridge, stream: std.net.Stream, device: *usbfs.Device) !Event {
-        while (readable(stream.handle)) {
-            const more = self.live.receive(stream.reader(), stream.writer()) catch false;
-            if (!more) return self.hangUp(stream);
+    fn connect(self: *Bridge, stream: std.Io.net.Stream) *Conn {
+        self.conn = .{ .stream = stream, .reader = undefined, .writer = undefined, .rbuf = undefined, .wbuf = undefined };
+        const conn = &self.conn.?;
+        conn.reader = stream.reader(self.io, &conn.rbuf);
+        conn.writer = stream.writer(self.io, &conn.wbuf);
+        return conn;
+    }
+
+    fn traffic(self: *Bridge, conn: *Conn, device: *usbfs.Device) !Event {
+        const reader = &conn.reader.interface;
+        const writer = &conn.writer.interface;
+        while (reader.bufferedLen() > 0 or readable(conn.stream.socket.handle)) {
+            const more = self.live.receive(reader, writer) catch false;
+            if (!more) return self.hangUp(conn);
         }
-        _ = self.live.pump(device, stream.writer()) catch return self.hangUp(stream);
+        _ = self.live.pump(device, writer) catch return self.hangUp(conn);
+        writer.flush() catch return self.hangUp(conn);
         return .none;
     }
 
-    fn hangUp(self: *Bridge, stream: std.net.Stream) Event {
-        stream.close();
-        self.stream = null;
+    fn hangUp(self: *Bridge, conn: *Conn) Event {
+        conn.stream.close(self.io);
+        self.conn = null;
         self.live.* = .{};
         return .hung_up;
     }

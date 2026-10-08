@@ -15,22 +15,23 @@ pub const Live = struct {
     fn poll(context: *anyopaque, device: *usbfs.Device, script: *const usbfs.host.Host) void {
         const self: *Live = @ptrCast(@alignCast(context));
         if (self.stopped) return;
-        const stderr = std.io.getStdErr().writer();
+        var stderr = std.Io.File.stderr().writerStreaming(self.link.io, &.{});
+        const out = &stderr.interface;
         const event = self.link.poll(device, script) catch |err| {
             self.stopped = true;
-            stderr.print("usbip: the bridge stopped ({s})\n", .{@errorName(err)}) catch {};
+            out.print("usbip: the bridge stopped ({s})\n", .{@errorName(err)}) catch {};
             return;
         };
-        report(stderr, event, &self.link) catch {};
+        report(out, event, &self.link) catch {};
     }
 };
 
 /// Put a bridge on the board's USB tick when `port` is set. The bridge
 /// lives as long as `allocator`; the run's arena outlives the run.
-pub fn install(target: *usb.Usb, allocator: std.mem.Allocator, port: ?u16) !void {
+pub fn install(target: *usb.Usb, allocator: std.mem.Allocator, io: std.Io, port: ?u16) !void {
     const wanted = port orelse return;
     const live = try allocator.create(Live);
-    live.* = .{ .link = try bridge.Bridge.init(allocator, wanted) };
+    live.* = .{ .link = try bridge.Bridge.init(allocator, io, wanted) };
     target.bridge = .{ .context = live, .pollFn = Live.poll };
 }
 

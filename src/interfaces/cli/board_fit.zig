@@ -60,7 +60,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     }
     try setBattery(board, options);
     try usb_plug.apply(&board.usb, allocator, io, options.usb_disk);
-    try cli.usbip_export.run.install(&board.usb, allocator, options.usbip);
+    try cli.usbip_export.run.install(&board.usb, allocator, io, options.usbip);
 }
 
 /// Put the contacts the command line asked for on the touch panel. The queue

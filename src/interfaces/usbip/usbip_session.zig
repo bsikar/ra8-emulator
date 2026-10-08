@@ -26,9 +26,9 @@ pub const Session = struct {
     slots: [slot_count]?Slot = @splat(null),
 
     /// Read one command. False on a clean hangup before its header.
-    pub fn receive(self: *Session, reader: anytype, writer: anytype) !bool {
+    pub fn receive(self: *Session, reader: *std.Io.Reader, writer: *std.Io.Writer) !bool {
         var header: [wire.basic_len]u8 = undefined;
-        const got = try reader.readAll(&header);
+        const got = try reader.readSliceShort(&header);
         if (got == 0) return false;
         if (got < header.len) return error.Short;
         switch (try wire.command(&header)) {
@@ -40,7 +40,7 @@ pub const Session = struct {
     }
 
     /// Advance every URB in flight; returns how many finished.
-    pub fn pump(self: *Session, device: *usbfs.Device, writer: anytype) !usize {
+    pub fn pump(self: *Session, device: *usbfs.Device, writer: *std.Io.Writer) !usize {
         var finished: usize = 0;
         for (&self.slots) |*entry| {
             const slot = &(entry.* orelse continue);
@@ -63,18 +63,18 @@ pub const Session = struct {
         return count;
     }
 
-    fn submit(self: *Session, request: wire.Submit, reader: anytype, writer: anytype) !void {
+    fn submit(self: *Session, request: wire.Submit, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         const carried = request.outBytes();
         if (request.length > max_length) {
-            try reader.skipBytes(carried, .{});
+            try reader.discardAll(carried);
             return answer(writer, request.seqnum, .{ .status = emsgsize, .actual = 0 }, &.{});
         }
         const entry = self.free() orelse return error.Busy;
         entry.* = .{ .transfer = .{ .submit = request } };
-        try reader.readNoEof(entry.*.?.data[0..carried]);
+        try reader.readSliceAll(entry.*.?.data[0..carried]);
     }
 
-    fn unlink(self: *Session, request: wire.Unlink, writer: anytype) !void {
+    fn unlink(self: *Session, request: wire.Unlink, writer: *std.Io.Writer) !void {
         var status: i32 = 0;
         for (&self.slots) |*entry| {
             const slot = entry.* orelse continue;
@@ -93,7 +93,7 @@ pub const Session = struct {
     }
 };
 
-fn answer(writer: anytype, seqnum: u32, reply: urb.Reply, data: []const u8) !void {
+fn answer(writer: *std.Io.Writer, seqnum: u32, reply: urb.Reply, data: []const u8) !void {
     var out: [wire.basic_len]u8 = undefined;
     wire.retSubmit(&out, seqnum, reply.status, reply.actual);
     try writer.writeAll(&out);
