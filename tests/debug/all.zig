@@ -34,6 +34,7 @@ test {
     _ = @import("script_test.zig");
     _ = @import("break_list_test.zig");
     _ = @import("boot_slots_test.zig");
+    _ = @import("boot_slots_dfu_test.zig");
     _ = @import("sections_test.zig");
     _ = @import("region_map_test.zig");
     _ = @import("pc_hits_test.zig");
