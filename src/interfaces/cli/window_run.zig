@@ -47,19 +47,19 @@ pub const Shown = struct {
 /// starting on `camera`, the run's own source. The panel is scanned once
 /// before the engine starts, so the first frame never races it. The
 /// devices pane lists `devices` and plugs through it; null shows none.
-pub fn show(allocator: std.mem.Allocator, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec, devices: ?*window_devices.Devices) !Shown {
-    var screen = try window_board.Screen.init(allocator, board, pacer.granter());
+pub fn show(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec, devices: ?*window_devices.Devices) !Shown {
+    var screen = try window_board.Screen.init(allocator, io, board, pacer.granter());
     defer screen.deinit();
     screen.on_engine = true;
     screen.devices = devices;
     pacer.at_park = screen.parkHook();
-    var feed = console_feed.Feed{ .allocator = allocator, .now = screen.clock() };
+    var feed = console_feed.Feed{ .allocator = allocator, .io = io, .now = screen.clock() };
     defer feed.deinit();
     var logs: [sci.channels]console_log.Log = undefined;
     for (&logs) |*log| log.* = .init(allocator, console_capacity);
     defer for (&logs) |*log| log.deinit();
     screen.feed = &feed;
-    var typed = console_keys.Typed{};
+    var typed = console_keys.Typed{ .io = io };
     screen.typed = &typed;
     const prior = board.serial.tap;
     feed.next = prior;

@@ -40,7 +40,7 @@ pub const Screen = struct {
     /// handoff; otherwise the step scans after the slice itself.
     on_engine: bool = false,
     /// Camera picks the window opened, for the engine to install at a park.
-    swap: SourceSwap = .{},
+    swap: SourceSwap,
     /// What the SCI channels sent, handed over at each park (RA8EMU-206).
     feed: ?*console_feed.Feed = null,
     /// Keys typed into the console pane, fed into the SCI at each park.
@@ -48,8 +48,8 @@ pub const Screen = struct {
     /// Plugs the devices pane queued, applied at each park (RA8EMU-703).
     devices: ?*window_devices.Devices = null,
 
-    pub fn init(allocator: std.mem.Allocator, board: *Board, stepper: Stepper) !Screen {
-        var screen = Screen{ .allocator = allocator, .board = board, .stepper = stepper, .handoff = .init(allocator) };
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, board: *Board, stepper: Stepper) !Screen {
+        var screen = Screen{ .allocator = allocator, .swap = .{ .io = io }, .board = board, .stepper = stepper, .handoff = .init(allocator) };
         errdefer screen.deinit();
         try screen.publishScan();
         _ = screen.handoff.latest();

@@ -30,7 +30,7 @@ test "a post waits for the engine, which closes the old source as it installs" {
     var old = Held{};
     var new = Held{};
     var running = old.source("old");
-    var swap = SourceSwap{};
+    var swap = SourceSwap{ .io = std.testing.io };
     defer swap.deinit();
     try std.testing.expect(!swap.take(&running));
     swap.post(new.source("new"));
@@ -45,7 +45,7 @@ test "a post waits for the engine, which closes the old source as it installs" {
 test "the newest post wins and a pick never taken is closed with the swap" {
     var first = Held{};
     var second = Held{};
-    var swap = SourceSwap{};
+    var swap = SourceSwap{ .io = std.testing.io };
     swap.post(first.source("first"));
     swap.post(second.source("second"));
     try std.testing.expectEqual(@as(u32, 1), first.closed);
