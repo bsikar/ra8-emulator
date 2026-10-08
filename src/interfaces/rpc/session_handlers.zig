@@ -56,6 +56,9 @@ pub const Context = struct {
     /// The event-stream queue panel refreshes are read from while any core
     /// wants lcd_dirty (RA8EMU-789).
     lcd_feed: ?usize = null,
+    /// The event-stream queue session events are read from while any core
+    /// wants the session topic (RA8EMU-942).
+    session_feed: ?usize = null,
     /// Owns each captured panel frame. A server without one, or a session
     /// without a display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
@@ -198,6 +201,9 @@ pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
     if (args.topic == .uart and context.uart_feed == null) {
         context.uart_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
     }
+    if (args.topic == .session and context.session_feed == null) {
+        context.session_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
+    }
     if (args.topic == .lcd_dirty and context.lcd_feed == null) {
         if (context.gpa == null or context.session.display == null) return .{ .err = code(app_codes.refused) };
         context.lcd_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
@@ -210,6 +216,7 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
     context.topics[@backingInt(args.core)] &= ~bit(args.topic);
     if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) release(context, &context.uart_feed);
     if (!context.wants(.cpu0, .lcd_dirty) and !context.wants(.cpu1, .lcd_dirty)) release(context, &context.lcd_feed);
+    if (!context.wants(.cpu0, .session) and !context.wants(.cpu1, .session)) release(context, &context.session_feed);
     return ack;
 }
 
@@ -219,6 +226,7 @@ pub fn forget(context: *Context) void {
     context.pending = null;
     release(context, &context.uart_feed);
     release(context, &context.lcd_feed);
+    release(context, &context.session_feed);
 }
 
 fn release(context: *Context, feed: *?usize) void {
