@@ -103,7 +103,7 @@ fn runThenFinish(engine: Engine, pacer: *window_pace.Pacer) void {
 }
 
 fn ended(pacer: *window_pace.Pacer) bool {
-    pacer.mutex.lock();
-    defer pacer.mutex.unlock();
+    pacer.mutex.lockUncancelable(pacer.io);
+    defer pacer.mutex.unlock(pacer.io);
     return pacer.ended;
 }
