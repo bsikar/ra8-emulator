@@ -80,8 +80,10 @@ test "a batch asks one read per shown register, and only once due" {
     try std.testing.expectEqual(@as(usize, 0), model.left);
     model.reload();
     model.attach(&wire.link);
-    try std.testing.expectEqual(count, model.left);
-    for (model.asked, 0..) |asked, index| {
+    // More registers than pending slots: the first attach fills the table.
+    try std.testing.expectEqual(@as(usize, proto.pending_slots), model.left);
+    try std.testing.expectEqual(@as(usize, proto.pending_slots), model.next);
+    for (model.asked[0..model.next], 0..) |asked, index| {
         for (model.asked[0..index]) |earlier| try std.testing.expect(earlier.? != asked.?);
     }
     const first = model.asked[0];
@@ -224,6 +226,9 @@ test "a batch meeting a full pending table sends its other reads as slots free" 
     try std.testing.expectEqual(@as(usize, 12), model.left);
     try std.testing.expect(!model.refused);
     for (held) |id| _ = try wire.link.client.pending.take(id);
+    model.attach(&wire.link);
+    try std.testing.expectEqual(@as(usize, proto.pending_slots), model.next);
+    for (model.asked[0..model.next]) |id| _ = try wire.link.client.pending.take(id.?);
     model.attach(&wire.link);
     try std.testing.expectEqual(count, model.left);
     try std.testing.expectEqual(count, model.next);

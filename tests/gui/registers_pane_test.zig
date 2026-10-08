@@ -1,7 +1,8 @@
 //! Covers src/gui/registers_pane.zig (RA8EMU-741, groups RA8EMU-945):
 //! headers and cells run down a column and then across, a folded group
 //! keeps only its header, the pane rasterises to pinned golden frames open
-//! and with the system group folded, a changed register is the only text
+//! with the system group folded and with
+//! the fpu group folded to its header, a changed register is the only text
 //! drawn in the changed colour, a pane too small for one cell draws
 //! nothing, and capture reads CPU0 and CPU1 separately through a real
 //! session.
@@ -19,10 +20,11 @@ const font = ra8.gui.font;
 const pane = ra8.gui.registers_pane;
 
 const Rect = draw_list.Rect;
-/// Eight rows down, four columns across: room for both headers and all 26
-/// registers.
-const area = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 4 * 120, .h = 2 * pane.pad + 8 * pane.row_h };
-const system_folded: pane.Fold = .{ false, true };
+/// Eight rows down, eight columns across: room for the three headers and
+/// all 58 registers.
+const area = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 8 * 120, .h = 2 * pane.pad + 8 * pane.row_h };
+const system_folded: pane.Fold = .{ false, true, false };
+const fpu_folded: pane.Fold = .{ false, false, true };
 
 fn sample() pane.Snapshot {
     var snapshot: pane.Snapshot = .{};
@@ -57,7 +59,7 @@ const Scene = struct {
 
 test "headers and cells run down a column and then across" {
     try std.testing.expectEqual(@as(usize, 8), pane.rows(area));
-    try std.testing.expectEqual(@as(usize, 4), pane.columns(area));
+    try std.testing.expectEqual(@as(usize, 8), pane.columns(area));
     const core = pane.headerRect(area, pane.open, 0).?;
     try std.testing.expectEqual(pane.pad, core.x);
     try std.testing.expectEqual(pane.pad, core.y);
@@ -69,20 +71,26 @@ test "headers and cells run down a column and then across" {
     try std.testing.expectEqual(pane.pad, eighth.y);
     const system = pane.headerRect(area, pane.open, 1).?;
     try std.testing.expectEqual(pane.pad + 2 * 120, system.x);
-    try std.testing.expectEqual(pane.pad + 3 * pane.row_h, system.y);
-    const last = pane.cellRect(area, pane.open, 25).?;
-    try std.testing.expectEqual(pane.pad + 3 * 120, last.x);
-    try std.testing.expectEqual(pane.pad + 3 * pane.row_h, last.y);
-    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, pane.open, 26));
+    try std.testing.expectEqual(pane.pad + 2 * pane.row_h, system.y);
+    const fpu = pane.headerRect(area, pane.open, 2).?;
+    try std.testing.expectEqual(pane.pad + 3 * 120, fpu.x);
+    try std.testing.expectEqual(pane.pad + 3 * pane.row_h, fpu.y);
+    const last = pane.cellRect(area, pane.open, 57).?;
+    try std.testing.expectEqual(pane.pad + 7 * 120, last.x);
+    try std.testing.expectEqual(pane.pad + 4 * pane.row_h, last.y);
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, pane.open, 58));
 }
 
 test "a folded group keeps only its header, and the next group moves up" {
-    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, system_folded, 18));
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, system_folded, 17));
     try std.testing.expectEqual(pane.headerRect(area, pane.open, 1), pane.headerRect(area, system_folded, 1));
-    const core_folded: pane.Fold = .{ true, false };
+    const core_folded: pane.Fold = .{ true, false, false };
     try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, core_folded, 0));
     try std.testing.expectEqual(pane.pad + pane.row_h, pane.headerRect(area, core_folded, 1).?.y);
-    try std.testing.expectEqual(pane.pad + 2 * pane.row_h, pane.cellRect(area, core_folded, 18).?.y);
+    try std.testing.expectEqual(pane.pad + 2 * pane.row_h, pane.cellRect(area, core_folded, 17).?.y);
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, fpu_folded, 25));
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, fpu_folded, 57));
+    try std.testing.expectEqual(pane.headerRect(area, pane.open, 2), pane.headerRect(area, fpu_folded, 2));
 }
 
 test "a press finds a group header and nothing on a cell" {
@@ -96,14 +104,21 @@ test "the pane rasterises to the pinned golden frame with every group open" {
     var scene = try Scene.init();
     defer scene.deinit();
     try scene.render(sample(), sample(), pane.open);
-    try std.testing.expectEqual(@as(u64, 7508780865518467467), scene.digest());
+    try std.testing.expectEqual(@as(u64, 8997249121321803031), scene.digest());
 }
 
 test "the pane rasterises to the pinned golden frame with the system group folded" {
     var scene = try Scene.init();
     defer scene.deinit();
     try scene.render(sample(), sample(), system_folded);
-    try std.testing.expectEqual(@as(u64, 5341974659234707467), scene.digest());
+    try std.testing.expectEqual(@as(u64, 10111515778278663327), scene.digest());
+}
+
+test "the pane rasterises to the pinned golden frame with the fpu group folded to its header" {
+    var scene = try Scene.init();
+    defer scene.deinit();
+    try scene.render(sample(), sample(), fpu_folded);
+    try std.testing.expectEqual(@as(u64, 2028304080827427193), scene.digest());
 }
 
 test "a changed register is the only text in the changed colour" {

@@ -29,22 +29,24 @@ pub const name_len: usize = 10;
 pub const column_len: usize = name_len + 8 + 2;
 
 /// The order the pane shows, group by group: the core group (the general
-/// registers, the three that say where execution is, status, and FPSCR
-/// until the FPU group lands), then the system group (both stack pointers
-/// and their limits, the masks, CONTROL).
+/// registers, the three that say where execution is, and status), the
+/// system group (both stack pointers and their limits, the masks, CONTROL),
+/// then the FPU group (FPSCR and the single-precision bank, Ozone's order).
 pub const shown = [_]Register{
-    .r0,        .r1,      .r2,  .r3,  .r4,     .r5,     .r6,      .r7,
-    .r8,        .r9,      .r10, .r11, .r12,    .sp,     .lr,      .pc,
-    .xpsr,      .fpscr,   .msp, .psp, .msplim, .psplim, .primask, .basepri,
-    .faultmask, .control,
+    .r0,      .r1,    .r2,  .r3,  .r4,   .r5,  .r6,  .r7,     .r8,     .r9,      .r10,     .r11,
+    .r12,     .sp,    .lr,  .pc,  .xpsr, .msp, .psp, .msplim, .psplim, .primask, .basepri, .faultmask,
+    .control, .fpscr, .s0,  .s1,  .s2,   .s3,  .s4,  .s5,     .s6,     .s7,      .s8,      .s9,
+    .s10,     .s11,   .s12, .s13, .s14,  .s15, .s16, .s17,    .s18,    .s19,     .s20,     .s21,
+    .s22,     .s23,   .s24, .s25, .s26,  .s27, .s28, .s29,    .s30,    .s31,
 };
 
 /// A run of `shown` under one header that folds it away.
 pub const Group = struct { name: []const u8, first: usize, len: usize };
 
 pub const groups = [_]Group{
-    .{ .name = "core", .first = 0, .len = 18 },
-    .{ .name = "system", .first = 18, .len = 8 },
+    .{ .name = "core", .first = 0, .len = 17 },
+    .{ .name = "system", .first = 17, .len = 8 },
+    .{ .name = "fpu", .first = 25, .len = 33 },
 };
 
 comptime {
