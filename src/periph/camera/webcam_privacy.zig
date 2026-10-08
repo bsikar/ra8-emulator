@@ -19,6 +19,20 @@ pub const blocked_message = "webcam blocked by Windows privacy settings: turn on
 
 pub const Error = error{PrivacyBlocked};
 
+/// RRF_RT_REG_SZ: accept only a string value.
+const rrf_rt_reg_sz: u32 = 0x0000_0002;
+
+// Zig 0.17's std has no advapi32 bindings, so the one call is declared here.
+extern "advapi32" fn RegGetValueW(
+    root: std.os.windows.HKEY,
+    sub_key: ?[*:0]const u16,
+    value: ?[*:0]const u16,
+    flags: u32,
+    kind: ?*u32,
+    data: ?*anyopaque,
+    size: ?*u32,
+) callconv(.winapi) i32;
+
 pub fn parse(value: []const u8) Verdict {
     if (std.mem.eql(u8, value, "Allow")) return .allowed;
     if (std.mem.eql(u8, value, "Deny")) return .denied;
@@ -66,7 +80,7 @@ fn read(root: std.os.windows.HKEY) Verdict {
     const name = std.unicode.utf8ToUtf16LeStringLiteral("Value");
     var units: [16]u16 = undefined;
     var size: windows.DWORD = @sizeOf(@TypeOf(units));
-    const status = windows.advapi32.RegGetValueW(root, sub, name, windows.advapi32.RRF.RT_REG_SZ, null, &units, &size);
+    const status = RegGetValueW(root, sub, name, rrf_rt_reg_sz, null, &units, &size);
     if (status != 0) return .unset;
     return parseWide(units[0 .. size / 2]);
 }

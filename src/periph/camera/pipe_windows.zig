@@ -47,6 +47,23 @@ const first_instance: windows.DWORD = 0x0008_0000;
 const mode_nowait: windows.DWORD = 0x0000_0001;
 const reject_remote: windows.DWORD = 0x0000_0008;
 
+extern "kernel32" fn CreateNamedPipeW(
+    name: [*:0]const u16,
+    open_mode: windows.DWORD,
+    pipe_mode: windows.DWORD,
+    max_instances: windows.DWORD,
+    out_size: windows.DWORD,
+    in_size: windows.DWORD,
+    timeout_ms: windows.DWORD,
+    security: ?*anyopaque,
+) callconv(.winapi) windows.HANDLE;
+extern "kernel32" fn ReadFile(
+    file: windows.HANDLE,
+    into: [*]u8,
+    len: windows.DWORD,
+    read: ?*windows.DWORD,
+    overlapped: ?*anyopaque,
+) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn ConnectNamedPipe(pipe: windows.HANDLE, overlapped: ?*anyopaque) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn PeekNamedPipe(
     pipe: windows.HANDLE,
@@ -64,7 +81,7 @@ pub fn serve(path: []const u8, in_size: usize) !windows.HANDLE {
     var wide: [256:0]u16 = undefined;
     const len = try std.unicode.utf8ToUtf16Le(&wide, name);
     wide[len] = 0;
-    const handle = kernel32.CreateNamedPipeW(
+    const handle = CreateNamedPipeW(
         wide[0..len :0],
         access_inbound | first_instance,
         mode_nowait | reject_remote,
@@ -74,7 +91,7 @@ pub fn serve(path: []const u8, in_size: usize) !windows.HANDLE {
         0,
         null,
     );
-    if (handle == windows.INVALID_HANDLE_VALUE) return windows.unexpectedError(kernel32.GetLastError());
+    if (handle == windows.INVALID_HANDLE_VALUE) return windows.unexpectedError(windows.GetLastError());
     return handle;
 }
 
@@ -84,17 +101,17 @@ pub fn readNow(handle: windows.HANDLE, stdin: bool, into: []u8) error{ WouldBloc
     var want: windows.DWORD = @intCast(@min(into.len, std.math.maxInt(windows.DWORD)));
     if (stdin) {
         var available: windows.DWORD = 0;
-        if (PeekNamedPipe(handle, null, 0, null, &available, null) != 0) {
+        if (PeekNamedPipe(handle, null, 0, null, &available, null).toBool()) {
             if (available == 0) return error.WouldBlock;
             want = @min(want, available);
-        } else switch (outcome(kernel32.GetLastError())) {
+        } else switch (outcome(windows.GetLastError())) {
             .closed => return 0,
             else => {}, // a file: a plain read never waits
         }
     }
     var got: windows.DWORD = 0;
-    if (kernel32.ReadFile(handle, into.ptr, want, &got, null) != 0) return got;
-    return switch (outcome(kernel32.GetLastError())) {
+    if (ReadFile(handle, into.ptr, want, &got, null).toBool()) return got;
+    return switch (outcome(windows.GetLastError())) {
         .would_block => error.WouldBlock,
         .listening => {
             _ = ConnectNamedPipe(handle, null);
