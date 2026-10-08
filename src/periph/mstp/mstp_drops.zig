@@ -54,7 +54,7 @@ pub const Verdict = struct {
 pub const StillStopped = *const fn (context: *const anyopaque, address: u32) bool;
 
 pub const Log = struct {
-    entries: [capacity]Entry = undefined,
+    entries: [capacity]Entry = @splat(.{ .name = "", .address = 0 }),
     len: usize = 0,
     /// Drops that arrived after the table was full: counted, not split.
     overflow_reads: u32 = 0,
