@@ -26,30 +26,30 @@ const Engine = struct {
 
 /// Lets a test hold the engine after it takes a grant but before it spends it.
 const Gate = struct {
-    mutex: std.Thread.Mutex = .{},
-    changed: std.Thread.Condition = .{},
+    mutex: std.Io.Mutex = .init,
+    changed: std.Io.Condition = .init,
     arrived: bool = false,
     released: bool = false,
 
     fn hold(self: *Gate) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(std.testing.io);
+        defer self.mutex.unlock(std.testing.io);
         self.arrived = true;
-        self.changed.broadcast();
-        while (!self.released) self.changed.wait(&self.mutex);
+        self.changed.broadcast(std.testing.io);
+        while (!self.released) self.changed.waitUncancelable(std.testing.io, &self.mutex);
     }
 
     fn waitArrived(self: *Gate) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        while (!self.arrived) self.changed.wait(&self.mutex);
+        self.mutex.lockUncancelable(std.testing.io);
+        defer self.mutex.unlock(std.testing.io);
+        while (!self.arrived) self.changed.waitUncancelable(std.testing.io, &self.mutex);
     }
 
     fn release(self: *Gate) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(std.testing.io);
+        defer self.mutex.unlock(std.testing.io);
         self.released = true;
-        self.changed.broadcast();
+        self.changed.broadcast(std.testing.io);
     }
 };
 
@@ -74,9 +74,9 @@ test "the engine holds before its first stretch until the window steps" {
     var engine = Engine{ .pacer = &pacer, .stretch = 100, .total = 300 };
     const thread = try std.Thread.spawn(.{}, Engine.run, .{&engine});
     while (true) {
-        pacer.mutex.lock();
+        pacer.mutex.lockUncancelable(pacer.io);
         const parked = pacer.parked;
-        pacer.mutex.unlock();
+        pacer.mutex.unlock(pacer.io);
         if (parked) break;
         std.Thread.yield() catch {};
     }
@@ -137,13 +137,13 @@ test "a grant never waits and never runs the engine more than a frame ahead" {
 
     const first = pacer.grant();
     gate.waitArrived();
-    pacer.mutex.lock();
+    pacer.mutex.lockUncancelable(pacer.io);
     const before = pacer.left;
-    pacer.mutex.unlock();
+    pacer.mutex.unlock(pacer.io);
     const second = pacer.grant();
-    pacer.mutex.lock();
+    pacer.mutex.lockUncancelable(pacer.io);
     const after = pacer.left;
-    pacer.mutex.unlock();
+    pacer.mutex.unlock(pacer.io);
     gate.release();
 
     try std.testing.expect(first);
@@ -159,9 +159,9 @@ test "a grant never waits and never runs the engine more than a frame ahead" {
 /// before the first stretch is a park and not raced by the first grant.
 fn waitParked(pacer: *Pacer) void {
     while (true) {
-        pacer.mutex.lock();
+        pacer.mutex.lockUncancelable(pacer.io);
         const parked = pacer.parked;
-        pacer.mutex.unlock();
+        pacer.mutex.unlock(pacer.io);
         if (parked) return;
         std.Thread.yield() catch {};
     }
