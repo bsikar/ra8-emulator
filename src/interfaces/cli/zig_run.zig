@@ -368,7 +368,7 @@ fn textDumps(out: *std.Io.Writer, io: std.Io, board: *Board, memory: Guest, fina
 fn finishFrames(out: *std.Io.Writer, io: std.Io, board: *Board, options: cli.Options, frames: *frames_out.Run, audio: *audio_out.Run) !void {
     try frames.finish(board);
     try audio.finish(out, io);
-    try frame_out.report(out, board, options.frame_out, options.panel_only);
+    try frame_out.report(out, io, board, options.frame_out, options.panel_only);
 }
 
 fn captureFrames(board: *Board, io: std.Io, options: cli.Options) !void {
