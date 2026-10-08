@@ -70,7 +70,7 @@ test "a corpus ELF loads, steps and runs through a local session, and the status
     const gpa = std.testing.allocator;
     var local: session_link.Local = undefined;
     try local.spawn(std.testing.io, test_paths.emulator, elf_path);
-    errdefer _ = local.child.kill() catch {};
+    errdefer local.child.kill(std.testing.io);
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
     defer gpa.free(rx);
     const tx = try gpa.alloc(u8, Env.max_frame);
@@ -111,5 +111,5 @@ test "a corpus ELF loads, steps and runs through a local session, and the status
     try std.testing.expect(status.run == .halted);
 
     local.end();
-    try std.testing.expectEqual(std.process.Child.Term{ .Exited = 0 }, try local.reap());
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
 }

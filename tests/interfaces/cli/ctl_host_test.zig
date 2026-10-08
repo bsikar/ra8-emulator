@@ -41,19 +41,19 @@ const Rig = struct {
 
     /// Run one ctl command on `host` and return its stdout; exit 0 is required.
     fn ctl(self: *const Rig, gpa: std.mem.Allocator, host: []const u8, words: []const []const u8) ![]u8 {
-        var argv = std.ArrayList([]const u8).init(gpa);
-        defer argv.deinit();
-        try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--host", host, "--hosts", self.hosts, "--image", uart_image, "--json" });
-        try argv.appendSlice(words);
-        const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
+        var argv: std.ArrayList([]const u8) = .empty;
+        defer argv.deinit(gpa);
+        try argv.appendSlice(gpa, &.{ test_paths.emulator, "ctl", "--host", host, "--hosts", self.hosts, "--image", uart_image, "--json" });
+        try argv.appendSlice(gpa, words);
+        const result = try std.process.run(gpa, std.testing.io, .{ .argv = argv.items });
         defer gpa.free(result.stderr);
         errdefer gpa.free(result.stdout);
-        try std.testing.expectEqual(std.process.Child.Term{ .Exited = 0 }, result.term);
+        try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, result.term);
         return result.stdout;
     }
 
     fn count(self: *const Rig, gpa: std.mem.Allocator, needle: []const u8) !usize {
-        const log = try self.tmp.dir.readFileAlloc(gpa, "ssh.log", 64 * 1024);
+        const log = try self.tmp.dir.readFileAlloc(std.testing.io, "ssh.log", gpa, .limited(64 * 1024));
         defer gpa.free(log);
         return std.mem.count(u8, log, needle);
     }
@@ -79,22 +79,22 @@ test "the image is copied to the remote cache once and reused after that" {
     try std.testing.expectEqual(@as(usize, 2), try rig.count(gpa, "test -f"));
     try std.testing.expectEqual(@as(usize, 1), try rig.count(gpa, "mkdir -p"));
     try std.testing.expectEqual(@as(usize, 2), try rig.count(gpa, "serve --stdio"));
-    var cache = try rig.tmp.dir.openDir("cache", .{ .iterate = true });
-    defer cache.close();
+    var cache = try rig.tmp.dir.openDir(std.testing.io, "cache", .{ .iterate = true });
+    defer cache.close(std.testing.io);
     var it = cache.iterate();
-    const entry = (try it.next()).?;
+    const entry = (try it.next(std.testing.io)).?;
     try std.testing.expect(std.mem.endsWith(u8, entry.name, ".elf"));
-    try std.testing.expectEqual(@as(?std.fs.Dir.Entry, null), try it.next());
+    try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(std.testing.io));
 }
 
 test "an unknown profile names the hosts file problem and exits 1" {
     const gpa = std.testing.allocator;
     var rig = try Rig.init(gpa);
     defer rig.deinit(gpa);
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = &.{ test_paths.emulator, "ctl", "--host", "nowhere", "--hosts", rig.hosts, "--image", uart_image, "--json", "pause" } });
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = &.{ test_paths.emulator, "ctl", "--host", "nowhere", "--hosts", rig.hosts, "--image", uart_image, "--json", "pause" } });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
-    try std.testing.expectEqual(std.process.Child.Term{ .Exited = 1 }, result.term);
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 1 }, result.term);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "\"error\":\"UnknownHost\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "\"message\":") != null);
 }
