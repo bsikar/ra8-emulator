@@ -245,7 +245,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.board.reboot = &state.reboot;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index };
     state.session.live.boundary = state.edge.hook();
-    state.files = .{ .allocator = allocator, .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
+    state.files = .{ .allocator = allocator, .io = io, .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
     state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });

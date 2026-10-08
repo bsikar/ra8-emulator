@@ -38,6 +38,7 @@ pub const Hook = struct {
 /// The parts of a harness the file holds.
 pub const Files = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *Store,
     cpu: *Cpu,
     board: *Board,
@@ -50,14 +51,15 @@ pub const Files = struct {
     fn save(context: *anyopaque, path: []const u8) anyerror!void {
         const self: *Files = @ptrCast(@alignCast(context));
         try self.single();
-        var out = try std.fs.cwd().createFile(path, .{});
-        defer out.close();
-        var buffered = std.io.bufferedWriter(out.writer());
-        const writer = buffered.writer();
+        var out = try std.Io.Dir.cwd().createFile(self.io, path, .{});
+        defer out.close(self.io);
+        var buffer: [4096]u8 = undefined;
+        var file_writer = out.writer(self.io, &buffer);
+        const writer = &file_writer.interface;
         try run_file.save(writer, self.store, &.{self.cpu}, self.board);
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{}, writer);
-        try buffered.flush();
+        try writer.flush();
     }
 
     /// The store is wiped first: a page the file leaves out was zero when
@@ -65,7 +67,7 @@ pub const Files = struct {
     fn restore(context: *anyopaque, path: []const u8) anyerror!void {
         const self: *Files = @ptrCast(@alignCast(context));
         try self.single();
-        const bytes = try std.fs.cwd().readFileAlloc(self.allocator, path, max_bytes);
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(self.io, path, self.allocator, .limited(max_bytes));
         defer self.allocator.free(bytes);
         try run_file.check(bytes, self.board);
         self.store.wipe();
