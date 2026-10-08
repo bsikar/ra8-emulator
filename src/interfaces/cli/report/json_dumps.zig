@@ -27,6 +27,8 @@ pub const Dumps = struct {
     memory: Guest,
     image: elf.Image,
     options: *const cli.Options,
+    /// Reads the `--ns` image again for its symbols.
+    io: std.Io,
     /// The `--watch` log as the run left it, null when nothing was watched.
     watched: ?watchpoint.Watched = null,
 };
@@ -50,7 +52,7 @@ fn globals(j: anytype, of: *const Dumps) !void {
     var images: [2]elf.Image = .{ of.image, undefined };
     var count: usize = 1;
     if (of.options.dumps().len != 0) {
-        if (try report_dumps.nonSecure(arena.allocator(), of.options.*)) |second| {
+        if (try report_dumps.nonSecure(arena.allocator(), of.io, of.options.*)) |second| {
             images[1] = second;
             count = 2;
         }

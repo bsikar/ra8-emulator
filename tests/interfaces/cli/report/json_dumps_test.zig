@@ -35,7 +35,7 @@ test "nothing asked writes an empty list and nulls" {
     defer fix.close();
     const regs: Regs = .{};
     const options = Options{ .path = "unused.elf" };
-    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = fix.memory(), .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = fix.memory(), .image = undefined, .options = &options, .io = std.testing.io };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -60,7 +60,7 @@ test "registers and memory words read off the core" {
     const spec = try std.fmt.bufPrint(&spec_buf, "0x{X}", .{base});
     var options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem_count = 1 };
     options.dump_mem[0] = .{ .spec = spec, .words = 2 };
-    const of = json_dumps.Dumps{ .registers = .{ .zig = &file }, .memory = core, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &file }, .memory = core, .image = undefined, .options = &options, .io = std.testing.io };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
@@ -93,7 +93,7 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     options.dump_mem[0] = .{ .spec = first, .words = 1 };
     options.dump_mem[1] = .{ .spec = second, .words = 1 };
     options.dump_mem_count = 2;
-    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = core, .image = undefined, .options = &options };
+    const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = core, .image = undefined, .options = &options, .io = std.testing.io };
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
