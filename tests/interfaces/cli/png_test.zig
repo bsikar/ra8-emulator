@@ -26,23 +26,25 @@ fn chunks(bytes: []const u8, out: []Chunk) !usize {
 
 test "an RGBA image encodes as IHDR, IDAT and IEND with filtered rows inside" {
     const rgba = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try png.encode(std.testing.allocator, out.writer(), 2, 2, &rgba);
+    try png.encode(std.testing.allocator, &out.writer, 2, 2, &rgba);
     var found: [4]Chunk = undefined;
-    try std.testing.expectEqual(@as(usize, 3), try chunks(out.items, &found));
+    try std.testing.expectEqual(@as(usize, 3), try chunks(out.written(), &found));
     try std.testing.expectEqualStrings("IHDR", found[0].kind);
     try std.testing.expectEqualSlices(u8, &png.header(2, 2), found[0].data);
     try std.testing.expectEqualStrings("IDAT", found[1].kind);
     try std.testing.expectEqualStrings("IEND", found[2].kind);
     try std.testing.expectEqual(@as(usize, 0), found[2].data.len);
 
-    var stream = std.io.fixedBufferStream(found[1].data);
-    var raw = std.ArrayList(u8).init(std.testing.allocator);
+    var stream: std.Io.Reader = .fixed(found[1].data);
+    var raw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer raw.deinit();
-    try std.compress.zlib.decompress(stream.reader(), raw.writer());
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var inflate: std.compress.flate.Decompress = .init(&stream, .zlib, &window);
+    _ = try inflate.reader.streamRemaining(&raw.writer);
     const rows = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 9, 10, 11, 12, 13, 14, 15, 16 };
-    try std.testing.expectEqualSlices(u8, &rows, raw.items);
+    try std.testing.expectEqualSlices(u8, &rows, raw.written());
 }
 
 test "the header names 8-bit RGBA, deflate, no interlace, big-endian size" {
@@ -53,12 +55,12 @@ test "the header names 8-bit RGBA, deflate, no interlace, big-endian size" {
 }
 
 test "a wrong-sized buffer or an empty image is refused before anything is written" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const three = [_]u8{ 0, 0, 0 };
-    try std.testing.expectError(png.Error.BadShape, png.encode(std.testing.allocator, out.writer(), 1, 1, &three));
-    try std.testing.expectError(png.Error.EmptyImage, png.encode(std.testing.allocator, out.writer(), 0, 1, &three));
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try std.testing.expectError(png.Error.BadShape, png.encode(std.testing.allocator, &out.writer, 1, 1, &three));
+    try std.testing.expectError(png.Error.EmptyImage, png.encode(std.testing.allocator, &out.writer, 0, 1, &three));
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
 test "ARGB8888 words unpack to R, G, B, A bytes" {

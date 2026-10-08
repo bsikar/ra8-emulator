@@ -28,10 +28,10 @@ test "--eink-log takes a path and is off by default" {
 }
 
 test "no path means no line and no file" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buffer.deinit();
-    try frame_out.report(buffer.writer(), std.testing.io, undefined, null, false);
-    try std.testing.expectEqual(@as(usize, 0), buffer.items.len);
+    try frame_out.report(&buffer.writer, std.testing.io, undefined, null, false);
+    try std.testing.expectEqual(@as(usize, 0), buffer.written().len);
 }
 
 test "a run with no panel frame still writes the board view with its LEDs" {
@@ -39,16 +39,18 @@ test "a run with no panel frame still writes the board view with its LEDs" {
     defer board.deinit();
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "view.png" });
     defer std.testing.allocator.free(path);
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buffer.deinit();
-    try frame_out.report(buffer.writer(), std.testing.io, &board, path, false);
-    try std.testing.expect(std.mem.startsWith(u8, buffer.items, "frame-out: no panel frame, the LEDs on a 1056x664 board view"));
+    try frame_out.report(&buffer.writer, std.testing.io, &board, path, false);
+    try std.testing.expect(std.mem.startsWith(u8, buffer.written(), "frame-out: no panel frame, the LEDs on a 1056x664 board view"));
     var magic: [8]u8 = undefined;
-    _ = try (try dir.dir.openFile("view.png", .{})).readAll(&magic);
+    var view = try dir.dir.openFile(std.testing.io, "view.png", .{});
+    defer view.close(std.testing.io);
+    _ = try view.readPositionalAll(std.testing.io, &magic, 0);
     try std.testing.expectEqualSlices(u8, "\x89PNG\r\n\x1a\n", &magic);
 }
 
@@ -61,7 +63,7 @@ test "--panel-only writes the dark fallback panel at its own size" {
     defer board.deinit();
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "panel.png" });
     defer std.testing.allocator.free(path);
@@ -71,10 +73,10 @@ test "--panel-only writes the dark fallback panel at its own size" {
     try std.testing.expectEqual(@as(u32, 600), saved.view.height);
     try std.testing.expectEqual(saved.width, saved.view.width);
     try std.testing.expectEqual(saved.height, saved.view.height);
-    var file = try dir.dir.openFile("panel.png", .{});
-    defer file.close();
+    var file = try dir.dir.openFile(std.testing.io, "panel.png", .{});
+    defer file.close(std.testing.io);
     var header: [24]u8 = undefined;
-    _ = try file.readAll(&header);
+    _ = try file.readPositionalAll(std.testing.io, &header, 0);
     try std.testing.expectEqualSlices(u8, "\x89PNG\r\n\x1a\n", header[0..8]);
     try std.testing.expectEqual(@as(u32, 1024), std.mem.readInt(u32, header[16..20], .big));
     try std.testing.expectEqual(@as(u32, 600), std.mem.readInt(u32, header[20..24], .big));
@@ -103,7 +105,7 @@ test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "eink.png" });
     defer std.testing.allocator.free(path);
@@ -111,17 +113,19 @@ test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
     try std.testing.expect(saved.frame);
     try std.testing.expectEqual(@as(u32, 128), saved.width);
 
-    const bytes = try std.fs.cwd().readFileAlloc(std.testing.allocator, path, 1024 * 1024);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, std.testing.allocator, .limited(1024 * 1024));
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, &ra8.board.report.png.signature, bytes[0..8]);
     const idat_len = std.mem.readInt(u32, bytes[33..37], .big);
     try std.testing.expectEqualStrings("IDAT", bytes[37..41]);
-    var compressed = std.io.fixedBufferStream(bytes[41 .. 41 + idat_len]);
-    var raw = std.ArrayList(u8).init(std.testing.allocator);
+    var compressed: std.Io.Reader = .fixed(bytes[41 .. 41 + idat_len]);
+    var raw: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer raw.deinit();
-    try std.compress.zlib.decompress(compressed.reader(), raw.writer());
-    try std.testing.expectEqual(@as(u8, 0), raw.items[0]);
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 0x11, 0x11, 0x11, 0xFF, 0x22, 0x22, 0x22, 0xFF }, raw.items[1..9]);
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var inflate: std.compress.flate.Decompress = .init(&compressed, .zlib, &window);
+    _ = try inflate.reader.streamRemaining(&raw.writer);
+    try std.testing.expectEqual(@as(u8, 0), raw.written()[0]);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0x11, 0x11, 0x11, 0xFF, 0x22, 0x22, 0x22, 0xFF }, raw.written()[1..9]);
 }
 
 fn word(panel: anytype, value: u16) void {
@@ -150,7 +154,7 @@ test "with no attach and no GLCDC frame, frame-out saves the board's refreshed e
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "board_eink.png" });
     defer std.testing.allocator.free(path);
@@ -166,7 +170,7 @@ test "an unrefreshed board panel leaves frame-out on the board view" {
     defer board.deinit();
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "view.png" });
     defer std.testing.allocator.free(path);
