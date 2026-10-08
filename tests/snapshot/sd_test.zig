@@ -40,25 +40,25 @@ fn busy() !Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try sd.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try sd.save(board, &list.writer);
 }
 
 test "both cards round-trip byte for byte and read back their blocks" {
     var board = try busy();
     defer board.deinit();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh = Stand.init();
     defer fresh.deinit();
     try std.testing.expect(fresh.sd.img.write(9, &filled(1)));
-    try sd.load(&fresh, list.items);
-    var again = std.ArrayList(u8).init(std.testing.allocator);
+    try sd.load(&fresh, list.written());
+    var again = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer again.deinit();
     try saved(&fresh, &again);
-    try std.testing.expectEqualSlices(u8, list.items, again.items);
+    try std.testing.expectEqualSlices(u8, list.written(), again.written());
     var out: [512]u8 = undefined;
     try std.testing.expect(fresh.sd.img.read(7, &out));
     try std.testing.expectEqual(@as(u8, 0xA5), out[511]);
@@ -72,13 +72,13 @@ test "both cards round-trip byte for byte and read back their blocks" {
 test "a block past capacity or out of order is BadValue and nothing changes" {
     var board = try busy();
     defer board.deinit();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh = Stand.init();
     defer fresh.deinit();
     fresh.sd.commands = 5;
-    const bad = try std.testing.allocator.dupe(u8, list.items);
+    const bad = try std.testing.allocator.dupe(u8, list.written());
     defer std.testing.allocator.free(bad);
     // The SPI card's blocks are written 2 then 7; renumber the first to 9
     // (out of order), then past the card's end.
@@ -92,18 +92,18 @@ test "a block past capacity or out of order is BadValue and nothing changes" {
 }
 
 test "a missing section or a cut payload leaves both cards untouched" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var fresh = Stand.init();
     defer fresh.deinit();
     fresh.card.reads = 9;
-    try std.testing.expectError(error.Missing, sd.load(&fresh, list.items));
+    try std.testing.expectError(error.Missing, sd.load(&fresh, list.written()));
     var board = try busy();
     defer board.deinit();
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expect(std.meta.isError(sd.load(&fresh, list.items[0 .. list.items.len - 1])));
+    try std.testing.expect(std.meta.isError(sd.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.card.reads);
     try std.testing.expectEqual(@as(u32, 0), fresh.card.card.held());
 }

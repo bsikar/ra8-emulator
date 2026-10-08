@@ -18,12 +18,12 @@ const Sample = struct {
 
 test "every supported kind of field reads back as written" {
     const value: Sample = .{ .small = 0x1A5, .signed = -2, .on = true, .mode = .done, .flags = .{ .a = 1, .b = 5, .rest = 9 }, .list = .{ 1, 0xFFFF_FFFF, 7 }, .maybe = 0xDEAD_BEEF, .never = null };
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try fields.write(list.writer(), value);
+    try fields.write(&list.writer, value);
     // u9 2, i16 2, bool 1, enum 1, packed 1, array 12, optional 5, null 1.
-    try std.testing.expectEqual(@as(usize, 25), list.items.len);
-    var cursor: fields.Cursor = .{ .bytes = list.items };
+    try std.testing.expectEqual(@as(usize, 25), list.written().len);
+    var cursor: fields.Cursor = .{ .bytes = list.written() };
     try std.testing.expectEqualDeep(value, try fields.read(Sample, &cursor));
     try std.testing.expect(cursor.done());
 }
@@ -50,10 +50,10 @@ const Reason = union(enum) { stopped, spent, unsupported: Why };
 test "a tagged union reads back as its tag and active payload" {
     const values = [_]Reason{ .stopped, .spent, .{ .unsupported = .bad_mode } };
     for (values) |value| {
-        var list = std.ArrayList(u8).init(std.testing.allocator);
+        var list = std.Io.Writer.Allocating.init(std.testing.allocator);
         defer list.deinit();
-        try fields.write(list.writer(), value);
-        var cursor: fields.Cursor = .{ .bytes = list.items };
+        try fields.write(&list.writer, value);
+        var cursor: fields.Cursor = .{ .bytes = list.written() };
         try std.testing.expectEqual(value, try fields.read(Reason, &cursor));
         try std.testing.expect(cursor.done());
     }
@@ -76,12 +76,12 @@ fn holder(head: u16, keep: u8, wire: *const u8) Holder {
 }
 
 test "a dotted skip leaves out a field inside structs and arrays" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try fields.writeExcept(list.writer(), holder(7, 3, &wire_a), leaf_skip);
-    try std.testing.expectEqual(@as(usize, 2 + 3), list.items.len);
+    try fields.writeExcept(&list.writer, holder(7, 3, &wire_a), leaf_skip);
+    try std.testing.expectEqual(@as(usize, 2 + 3), list.written().len);
     var out = holder(0, 0, &wire_b);
-    var cursor: fields.Cursor = .{ .bytes = list.items };
+    var cursor: fields.Cursor = .{ .bytes = list.written() };
     try fields.readOver(&cursor, &out, leaf_skip);
     try std.testing.expect(cursor.done());
     try std.testing.expectEqual(@as(u16, 7), out.head);

@@ -26,9 +26,9 @@ const Where = enum(u8) { none, disk, scratch, inquiry };
 const Span = struct { where: Where = .none, offset: u32 = 0, len: u32 = 0 };
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), board);
-    try file.writeSectionHeader(writer, .usb, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, board);
+    try file.writeSectionHeader(writer, .usb, counter.fullCount());
     try body(writer, board);
 }
 

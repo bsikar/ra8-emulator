@@ -30,9 +30,9 @@ fn busy(domain: *const pdctr.Pdctr) Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try display.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try display.save(board, &list.writer);
 }
 
 var frames: u32 = 0;
@@ -47,20 +47,20 @@ test "a busy controller round-trips and the fresh one keeps its wiring" {
     var domain = pdctr.Pdctr.init(&lock, .graphics);
     var other = pdctr.Pdctr.init(&lock, .graphics);
     const board = busy(&domain);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{ .display = glcdc.Glcdc.init(&other) };
     fresh.display.output.vsync = .{ .sink = .{ .context = &other, .frame = onFrame } };
-    try display.load(&fresh, list.items);
+    try display.load(&fresh, list.written());
     try std.testing.expect(fresh.display.domain == &other);
     try std.testing.expect(fresh.display.output.vsync != null);
     try std.testing.expectEqual(@as(u32, 0xFF11_2233), fresh.display.palettes[1].planes[0][7]);
     try std.testing.expectEqual(@as(u32, 1024), fresh.display.timing.h_active);
-    var again = std.ArrayList(u8).init(std.testing.allocator);
+    var again = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer again.deinit();
     try saved(&fresh, &again);
-    try std.testing.expectEqualSlices(u8, list.items, again.items);
+    try std.testing.expectEqualSlices(u8, list.written(), again.written());
 }
 
 test "a palette plane or filled count out of range is BadValue and nothing changes" {
@@ -68,31 +68,31 @@ test "a palette plane or filled count out of range is BadValue and nothing chang
     var domain = pdctr.Pdctr.init(&lock, .graphics);
     var board = busy(&domain);
     board.display.palettes[0].selected = 2;
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{ .display = glcdc.Glcdc.init(&domain) };
-    try std.testing.expectError(error.BadValue, display.load(&fresh, list.items));
+    try std.testing.expectError(error.BadValue, display.load(&fresh, list.written()));
     board.display.palettes[0].selected = 0;
     board.display.palettes[0].filled[1] = 257;
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expectError(error.BadValue, display.load(&fresh, list.items));
+    try std.testing.expectError(error.BadValue, display.load(&fresh, list.written()));
     try std.testing.expectEqual(@as(u32, 0), fresh.display.starts);
 }
 
 test "a missing section or a cut payload leaves the controller untouched" {
     const lock = guard();
     var domain = pdctr.Pdctr.init(&lock, .graphics);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var fresh: Stand = .{ .display = glcdc.Glcdc.init(&domain) };
     fresh.display.latches = 9;
-    try std.testing.expectError(error.Missing, display.load(&fresh, list.items));
+    try std.testing.expectError(error.Missing, display.load(&fresh, list.written()));
     const board = busy(&domain);
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expect(std.meta.isError(display.load(&fresh, list.items[0 .. list.items.len - 1])));
+    try std.testing.expect(std.meta.isError(display.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.display.latches);
 }

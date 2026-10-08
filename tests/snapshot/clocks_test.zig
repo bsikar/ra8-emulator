@@ -95,28 +95,28 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try clocks.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try clocks.save(board, &list.writer);
 }
 
 test "every clock unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = fresh(&first);
-    try clocks.load(&target, list.items);
+    try clocks.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
 }
 
 test "a load keeps the target's wiring" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = fresh(&second);
-    try clocks.load(&target, list.items);
+    try clocks.load(&target, list.written());
     try std.testing.expectEqual(&second.protection, target.tree.protection);
     try std.testing.expectEqual(&second.brownout, target.tree.brownout);
     try std.testing.expectEqual(&second.voltage, target.brownout.voltage);
@@ -127,16 +127,16 @@ test "a load keeps the target's wiring" {
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target = fresh(&first);
     target.tree.divcr = 9;
-    try std.testing.expectError(error.Missing, clocks.load(&target, list.items));
+    try std.testing.expectError(error.Missing, clocks.load(&target, list.written()));
     list.clearRetainingCapacity();
     const board = busy();
     try saved(&board, &list);
-    const short = list.items[0 .. list.items.len - 1];
+    const short = list.written()[0 .. list.written().len - 1];
     try std.testing.expect(std.meta.isError(clocks.load(&target, short)));
     try std.testing.expectEqual(@as(u32, 9), target.tree.divcr);
     try std.testing.expect(!target.octa.wedged);
