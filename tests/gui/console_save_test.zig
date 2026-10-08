@@ -28,7 +28,7 @@ test "a save writes the stamped log the way console_log formats it" {
     var want = std.ArrayList(u8).init(std.testing.allocator);
     defer want.deinit();
     try log.save(want.writer(), true);
-    try console_save.save(tmp.dir, 3, &log);
+    try console_save.save(std.testing.io, tmp.dir, 3, &log);
     var buffer: [256]u8 = undefined;
     try std.testing.expectEqualStrings(want.items, try read(tmp.dir, "console-sci3.txt", &buffer));
 }
@@ -40,12 +40,12 @@ test "only a click on the SAVE tab saves the shown channel" {
     for (&logs) |*log| log.* = .init(std.testing.allocator, 4);
     defer for (&logs) |*log| log.deinit();
     try logs[1].feedAll("hi\n", 0);
-    try std.testing.expect(!console_save.click(area, area.x + 1, area.y + 1, tmp.dir, &logs, 1));
+    try std.testing.expect(!console_save.click(area, area.x + 1, area.y + 1, std.testing.io, tmp.dir, &logs, 1));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access("console-sci1.txt", .{}));
     const tab = console_pick.saveTab(area);
-    try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, tmp.dir, &logs, 1));
+    try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, std.testing.io, tmp.dir, &logs, 1));
     try tmp.dir.access("console-sci1.txt", .{});
     // Without a project directory the click is still taken, and nothing is written.
-    try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, null, &logs, 0));
+    try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, std.testing.io, null, &logs, 0));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access("console-sci0.txt", .{}));
 }
