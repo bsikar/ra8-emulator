@@ -105,6 +105,7 @@ test {
     _ = @import("interfaces/gui/session_event_wire_test.zig");
     _ = @import("interfaces/gui/session_led_wire_test.zig");
     _ = @import("interfaces/gui/time_bar_test.zig");
+    _ = @import("interfaces/gui/menu_test.zig");
     _ = @import("interfaces/gui/board_pane_test.zig");
     _ = @import("interfaces/gui/board_input_test.zig");
     _ = @import("interfaces/gui/board_touch_test.zig");
