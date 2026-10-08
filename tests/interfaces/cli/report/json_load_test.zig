@@ -26,16 +26,16 @@ fn run(clock: *u64) rtos_hook.Tracer {
     return tracer;
 }
 
-fn render(board: *ra8.board.Board, load: ?*const json_load.Load, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .load = load });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn render(board: *ra8.board.Board, load: ?*const json_load.Load, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1, .load = load });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 test "no --cpu-load writes null" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, null, &buf);
     defer doc.deinit();
@@ -46,7 +46,7 @@ test "a core with nothing traced is null inside the object" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &.{}, &buf);
     defer doc.deinit();
@@ -62,7 +62,7 @@ test "the known run's owners, instructions and permille" {
     var clock: u64 = 0;
     const tracer = run(&clock);
     const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = fix.memory() } } };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &load, &buf);
     defer doc.deinit();
@@ -92,7 +92,7 @@ test "shares on a core add up to exactly 1000" {
     tracer.onStore(0x2200_1ABC, 4, thread_a + 0x100);
     clock = 3;
     const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = fix.memory() } } };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &load, &buf);
     defer doc.deinit();
@@ -119,14 +119,14 @@ test "ctl cpu-load emits the same per-core object as the report field" {
     var clock: u64 = 0;
     const tracer = run(&clock);
     const load = json_load.Load{ .cpu0 = .{ .tracer = &tracer, .memory = .{ .guest = fix.memory() } } };
-    var report_buf = std.ArrayList(u8).init(std.testing.allocator);
+    var report_buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer report_buf.deinit();
     const report_doc = try render(&fix.board, &load, &report_buf);
     defer report_doc.deinit();
-    var ctl_buf = std.ArrayList(u8).init(std.testing.allocator);
+    var ctl_buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer ctl_buf.deinit();
-    try json_load.document(ctl_buf.writer(), &load);
-    const ctl_doc = try std.json.parseFromSlice(Value, std.testing.allocator, ctl_buf.items, .{});
+    try json_load.document(&ctl_buf.writer, &load);
+    const ctl_doc = try std.json.parseFromSlice(Value, std.testing.allocator, ctl_buf.written(), .{});
     defer ctl_doc.deinit();
 
     const report_load = report_doc.value.object.get("cpu_load").?.object;

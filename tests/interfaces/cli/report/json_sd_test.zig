@@ -9,19 +9,19 @@ const geometry = json_sd.geometry;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn render(board: *ra8.board.Board, asked: ?u32, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    var j = ra8.board.report.json.Json(@TypeOf(buf.writer())).init(buf.writer());
+fn render(board: *ra8.board.Board, asked: ?u32, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    var j = ra8.board.report.json.Json(@TypeOf(&buf.writer)).init(&buf.writer);
     try j.open(null, '{');
     try json_sd.block(&j, board, asked);
     try j.close('}');
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 test "no --dump-sd writes null" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, null, &buf);
     defer doc.deinit();
@@ -32,7 +32,7 @@ test "a block past the card is off the card with no rows" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, 0xFFFF_FFF0, &buf);
     defer doc.deinit();
@@ -52,7 +52,7 @@ test "a written block keeps its non-zero rows and counts the rest" {
     @memset(bytes, 0);
     bytes[geometry.block_bytes + 17] = 0xAB;
     try fix.board.sd.img.loadBytes(bytes);
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, 1, &buf);
     defer doc.deinit();

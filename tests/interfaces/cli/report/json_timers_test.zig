@@ -7,9 +7,9 @@ const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn timers(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1 });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn timers(board: *ra8.board.Board, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1 });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn has(object: Value, keys: []const []const u8) !void {
@@ -25,7 +25,7 @@ test "a quiet board has every timers key and empty channel lists" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try timers(&fix.board, &buf);
     defer doc.deinit();
@@ -45,7 +45,7 @@ test "an AGT channel with underflows is listed with its index" {
     try fix.open();
     defer fix.close();
     fix.board.interval.channels[1].underflows = 5;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try timers(&fix.board, &buf);
     defer doc.deinit();

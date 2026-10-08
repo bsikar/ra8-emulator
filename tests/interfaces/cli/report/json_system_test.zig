@@ -8,9 +8,9 @@ const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn render(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1 });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn render(board: *ra8.board.Board, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1 });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn has(object: Value, keys: []const []const u8) !void {
@@ -26,7 +26,7 @@ test "a quiet board has every icu, pinfunc, options, part, backup and analog key
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &buf);
     defer doc.deinit();
@@ -53,7 +53,7 @@ test "event and pin counts carry through" {
     defer fix.close();
     fix.board.events.raised = 4;
     fix.board.pinfunc.programmed = 9;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &buf);
     defer doc.deinit();
