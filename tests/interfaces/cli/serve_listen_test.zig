@@ -14,13 +14,14 @@ fn session(gpa: std.mem.Allocator, child: *std.process.Child, connection: *Conne
     defer peer.deinit();
     try peer.drive();
     connection.close();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, try child.kill());
+    try std.posix.kill(child.id.?, .TERM);
+    try std.testing.expectEqual(Term{ .exited = 0 }, try child.wait(std.testing.io));
 }
 
 test "serve --listen tcp::0 binds localhost, serves a client and exits 0 on SIGTERM" {
     const gpa = std.testing.allocator;
     var line: [128]u8 = undefined;
-    var started = try serve_peer.listen(gpa, "tcp::0", &line);
+    var started = try serve_peer.listen("tcp::0", &line);
     try std.testing.expect(std.mem.startsWith(u8, started.bound, "tcp:127.0.0.1:"));
     const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
     const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
@@ -37,7 +38,7 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var started = try serve_peer.listen(gpa, spec, &line);
+    var started = try serve_peer.listen(spec, &line);
     try std.testing.expectEqualStrings(spec, started.bound);
     var connection = try Connection.unix(std.testing.io, path);
     try session(gpa, &started.child, &connection);
@@ -47,13 +48,12 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
 test "serve --listen with a bad spec prints its usage and exits 2" {
     const specs = [_][]const u8{ "tcp:nope", "tcp:host.example:1", "udp::1", "unix:" };
     for (specs) |spec| {
-        const result = try std.process.Child.run(.{
-            .allocator = std.testing.allocator,
+        const result = try std.process.run(std.testing.allocator, std.testing.io, .{
             .argv = &.{ test_paths.emulator, "serve", "--listen", spec, image_path },
         });
         defer std.testing.allocator.free(result.stdout);
         defer std.testing.allocator.free(result.stderr);
-        try std.testing.expectEqual(Term{ .Exited = 2 }, result.term);
+        try std.testing.expectEqual(Term{ .exited = 2 }, result.term);
         try std.testing.expectEqualStrings(ra8.core.serve_main.usage, result.stderr);
     }
 }

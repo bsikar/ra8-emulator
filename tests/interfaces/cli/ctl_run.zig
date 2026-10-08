@@ -21,11 +21,11 @@ pub const Answer = struct {
 };
 
 pub fn run(gpa: std.mem.Allocator, spec: []const u8, words: []const []const u8) !Answer {
-    var argv = std.ArrayList([]const u8).init(gpa);
-    defer argv.deinit();
-    try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
-    try argv.appendSlice(words);
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(gpa);
+    try argv.appendSlice(gpa, &.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
+    try argv.appendSlice(gpa, words);
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = argv.items });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
     const parsed = try std.json.parseFromSlice(Value, gpa, result.stdout, .{ .allocate = .alloc_always });
@@ -38,25 +38,33 @@ pub fn expectInteger(value: Value) !i64 {
 }
 
 /// One ctl run's exit code and the UART text and last line its JSON lines carried.
-pub const Stream = struct { term: Term, text: std.ArrayList(u8), last: std.ArrayList(u8) };
+pub const Stream = struct {
+    term: Term,
+    text: std.ArrayList(u8),
+    last: std.ArrayList(u8),
+    pub fn deinit(self: *Stream, gpa: std.mem.Allocator) void {
+        self.text.deinit(gpa);
+        self.last.deinit(gpa);
+    }
+};
 
 pub fn stream(gpa: std.mem.Allocator, spec: []const u8, words: []const []const u8) !Stream {
-    var argv = std.ArrayList([]const u8).init(gpa);
-    defer argv.deinit();
-    try argv.appendSlice(&.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
-    try argv.appendSlice(words);
-    const result = try std.process.Child.run(.{ .allocator = gpa, .argv = argv.items });
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(gpa);
+    try argv.appendSlice(gpa, &.{ test_paths.emulator, "ctl", "--connect", spec, "--json" });
+    try argv.appendSlice(gpa, words);
+    const result = try std.process.run(gpa, std.testing.io, .{ .argv = argv.items });
     defer gpa.free(result.stdout);
     defer gpa.free(result.stderr);
-    var got: Stream = .{ .term = result.term, .text = .init(gpa), .last = .init(gpa) };
+    var got: Stream = .{ .term = result.term, .text = .empty, .last = .empty };
     var lines = std.mem.tokenizeScalar(u8, result.stdout, '\n');
     while (lines.next()) |line| {
         got.last.clearRetainingCapacity();
-        try got.last.appendSlice(line);
+        try got.last.appendSlice(gpa, line);
         const parsed = try std.json.parseFromSlice(Value, gpa, line, .{});
         defer parsed.deinit();
         const uart = parsed.value.object.get("uart") orelse continue;
-        try got.text.appendSlice(uart.object.get("text").?.string);
+        try got.text.appendSlice(gpa, uart.object.get("text").?.string);
     }
     return got;
 }

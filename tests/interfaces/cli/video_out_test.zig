@@ -59,14 +59,13 @@ test "MP4 decodes virtual-time frames with the expected duration and quality" {
     try writer.record(16, 16, &white, 200_000_000);
     try writer.finish();
 
-    const decoded = try std.process.Child.run(.{
-        .allocator = std.testing.allocator,
+    const decoded = try std.process.run(std.testing.allocator, std.testing.io, .{
         .argv = &.{ "ffmpeg", "-v", "error", "-i", path, "-f", "rawvideo", "-pix_fmt", "gray", "-" },
-        .max_output_bytes = 16 * 16 * 20,
+        .stdout_limit = .limited(16 * 16 * 20),
     });
     defer std.testing.allocator.free(decoded.stdout);
     defer std.testing.allocator.free(decoded.stderr);
-    try std.testing.expect(decoded.term == .Exited and decoded.term.Exited == 0);
+    try std.testing.expect(decoded.term == .exited and decoded.term.exited == 0);
     const frame_bytes = 16 * 16;
     try std.testing.expectEqual(@as(usize, 12 * frame_bytes), decoded.stdout.len);
     var total_error: u64 = 0;

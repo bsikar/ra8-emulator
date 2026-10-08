@@ -73,14 +73,17 @@ pub const Listening = struct { child: std.process.Child, bound: []const u8 };
 
 /// Start `serve --listen spec` on the fixture and read its bound address
 /// off stderr into `line`.
-pub fn listen(gpa: std.mem.Allocator, spec: []const u8, line: []u8) !Listening {
-    var child = std.process.Child.init(&.{ test_paths.emulator, "serve", "--listen", spec, image_path }, gpa);
-    child.stdin_behavior = .Ignore;
-    child.stdout_behavior = .Ignore;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
-    errdefer _ = child.kill() catch {};
-    const said = try child.stderr.?.reader().readUntilDelimiter(line, '\n');
+pub fn listen(spec: []const u8, line: []u8) !Listening {
+    const io = std.testing.io;
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ test_paths.emulator, "serve", "--listen", spec, image_path },
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .pipe,
+    });
+    errdefer child.kill(io);
+    var reader = child.stderr.?.reader(io, line);
+    const said = try reader.interface.takeDelimiterExclusive('\n');
     const prefix = "serve: listening on ";
     try std.testing.expect(std.mem.startsWith(u8, said, prefix));
     return .{ .child = child, .bound = said[prefix.len..] };
