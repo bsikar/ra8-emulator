@@ -45,8 +45,8 @@ test "a malformed or missing schedule is refused before the run" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var run: fault_file.Run = undefined;
-    try std.testing.expectError(error.TimeBackwards, run.open(&board, bad));
-    try std.testing.expectError(error.FileNotFound, run.open(&board, "/nonexistent/ra8.faults"));
+    try std.testing.expectError(error.TimeBackwards, run.open(&board, std.testing.io, bad));
+    try std.testing.expectError(error.FileNotFound, run.open(&board, std.testing.io, "/nonexistent/ra8.faults"));
 }
 
 test "a soak run applies every scheduled event at its exact virtual time" {
@@ -66,7 +66,7 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     board.time.soak.armed = true; // as `--run-for` arms it
 
     var run: fault_file.Run = undefined;
-    try run.open(&board, path);
+    try run.open(&board, std.testing.io, path);
     defer run.deinit();
     var applied: [5]u64 = .{ 0, 0, 0, 0, 0 };
     run.applier.applied_ns = &applied;

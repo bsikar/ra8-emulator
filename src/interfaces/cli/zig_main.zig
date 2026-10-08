@@ -43,12 +43,12 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var reboot = Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     const table = if (parts.profile) |*one| one else null;
-    var stop = zig_run.stop_sym.resolve(image, options);
+    var stop = zig_run.stop_sym.resolve(image, io, options);
     var point = zig_run.break_sym.resolve(image, options);
     var timed = zig_run.stop_sym.deadline(options);
     var swept = zig_run.undefined_sites.resolve(image, options);
     var schedule: fault_file.Run = undefined;
-    if (options.faults) |path| schedule.open(&board, path) catch return 2;
+    if (options.faults) |path| schedule.open(&board, io, path) catch return 2;
     defer if (options.faults != null) schedule.deinit();
     const ends: zig_run.Ends = .{
         .stop = if (stop) |*watch| watch else null,
