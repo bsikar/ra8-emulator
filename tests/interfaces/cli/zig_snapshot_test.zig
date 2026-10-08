@@ -34,12 +34,12 @@ fn image() [page * 2]u8 {
 }
 
 /// Runs the loop image; returns the virtual time the run ended at.
-fn run(dir: std.fs.Dir, instructions: usize, state: zig_run.state_args.Options) !u64 {
+fn run(dir: std.Io.Dir, instructions: usize, state: zig_run.state_args.Options) !u64 {
     var file = image();
     return runImage(dir, &file, instructions, state);
 }
 
-fn runImage(dir: std.fs.Dir, file: []const u8, instructions: usize, state: zig_run.state_args.Options) !u64 {
+fn runImage(dir: std.Io.Dir, file: []const u8, instructions: usize, state: zig_run.state_args.Options) !u64 {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     const options: Options = .{ .path = "cpu0.elf", .cpu = .zig, .instructions = instructions, .state = state };
@@ -48,15 +48,18 @@ fn runImage(dir: std.fs.Dir, file: []const u8, instructions: usize, state: zig_r
     defer cpu0.close();
     var parts = Parts{};
     const loaded = try elf.Image.init(file);
-    _ = try main_path.prepare(&cpu0, &board, loaded, &parts, options);
-    var log = try dir.createFile("run.log", .{});
-    defer log.close();
-    _ = try zig_run.run(log.writer(), std.testing.io, cpu0.own(), &board, &parts.timebase, loaded, options, vectors, null, parts.tap.waiting(), .{});
+    _ = try main_path.prepare(&cpu0, &board, std.testing.io, loaded, &parts, options);
+    var log = try dir.createFile(std.testing.io, "run.log", .{});
+    defer log.close(std.testing.io);
+    var buffer: [4096]u8 = undefined;
+    var writer = log.writer(std.testing.io, &buffer);
+    defer writer.interface.flush() catch {};
+    _ = try zig_run.run(&writer.interface, std.testing.io, cpu0.own(), &board, &parts.timebase, loaded, options, vectors, null, parts.tap.waiting(), .{});
     return board.time.base.now();
 }
 
-fn read(dir: std.fs.Dir, name: []const u8) ![]u8 {
-    return dir.readFileAlloc(std.testing.allocator, name, 1 << 28);
+fn read(dir: std.Io.Dir, name: []const u8) ![]u8 {
+    return dir.readFileAlloc(std.testing.io, name, std.testing.allocator, .limited(1 << 28));
 }
 
 test "two chunks straight end where one chunk, saved, then one restored end" {

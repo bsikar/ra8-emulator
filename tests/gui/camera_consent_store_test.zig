@@ -21,9 +21,9 @@ test "a saved Always loads in the next run, and saving twice is harmless" {
 test "a marker that does not say always is not consent" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.makePath(store.dir_name);
-    try tmp.dir.writeFile(.{ .sub_path = store.dir_name ++ "/" ++ store.file_name, .data = "" });
+    try tmp.dir.createDirPath(std.testing.io, store.dir_name);
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = store.dir_name ++ "/" ++ store.file_name, .data = "" });
     try std.testing.expect(!store.load(std.testing.io, tmp.dir));
-    try tmp.dir.writeFile(.{ .sub_path = store.dir_name ++ "/" ++ store.file_name, .data = "always\nmore\n" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = store.dir_name ++ "/" ++ store.file_name, .data = "always\nmore\n" });
     try std.testing.expect(!store.load(std.testing.io, tmp.dir));
 }

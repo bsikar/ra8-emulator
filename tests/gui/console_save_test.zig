@@ -9,8 +9,8 @@ const Rect = ra8.gui.draw_list.Rect;
 
 const area = Rect{ .x = 0, .y = 100, .w = 400, .h = 60 };
 
-fn read(dir: std.fs.Dir, name: []const u8, buffer: []u8) ![]const u8 {
-    return dir.readFile(name, buffer);
+fn read(dir: std.Io.Dir, name: []const u8, buffer: []u8) ![]const u8 {
+    return dir.readFile(std.testing.io, name, buffer);
 }
 
 test "the file is named for its channel" {

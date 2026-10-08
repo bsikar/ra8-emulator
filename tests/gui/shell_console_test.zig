@@ -90,7 +90,7 @@ test "a local session's banner reaches the console stamped with board time" {
     defer console.deinit();
     try pumpUntil(&link, &status, &console, connected);
 
-    const bytes = try std.fs.cwd().readFileAlloc(gpa, uart_image, 1 << 20);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, uart_image, gpa, .limited(1 << 20));
     defer gpa.free(bytes);
     try status.load(&link, uart_image, bytes);
     try pumpUntil(&link, &status, &console, loaded);
