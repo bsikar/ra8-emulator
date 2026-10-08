@@ -5,12 +5,15 @@ const profile = @import("../../../debug/profile.zig");
 const symbols = @import("../../../debug/symbols.zig");
 const Writer = @import("../report.zig").Writer;
 
-pub fn write(out: Writer, image: elf.Image, table: profile.Table, path: ?[]const u8) !void {
+pub fn write(out: Writer, io: std.Io, image: elf.Image, table: profile.Table, path: ?[]const u8) !void {
     try print(out, image, table);
     if (path) |destination| {
-        const file = try std.fs.cwd().createFile(destination, .{});
-        defer file.close();
-        try folded(file.writer(), image, table);
+        const file = try std.Io.Dir.cwd().createFile(io, destination, .{});
+        defer file.close(io);
+        var buffer: [4096]u8 = undefined;
+        var writer = file.writer(io, &buffer);
+        try folded(&writer.interface, image, table);
+        try writer.interface.flush();
     }
 }
 
