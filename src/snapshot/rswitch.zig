@@ -16,9 +16,9 @@ pub const Error = file.Error || fields.Error || error{Missing};
 const skip: []const []const u8 = &.{ "ports.domain", "gateway.fwpc", "queues.mode", "queues.rings.memory" };
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try fields.writeExcept(counter.writer(), board.rswitch, skip);
-    try file.writeSectionHeader(writer, .rswitch, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try fields.writeExcept(&counter.writer, board.rswitch, skip);
+    try file.writeSectionHeader(writer, .rswitch, counter.fullCount());
     try fields.writeExcept(writer, board.rswitch, skip);
 }
 

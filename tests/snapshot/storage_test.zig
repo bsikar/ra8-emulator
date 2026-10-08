@@ -45,24 +45,24 @@ fn busy() !Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try storage.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try storage.save(board, &list.writer);
 }
 
 test "both memories round-trip with their contents" {
     var board = try busy();
     defer board.deinit();
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.Io.Writer.Allocating.init(allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.init();
     defer target.deinit();
-    try storage.load(&target, list.items);
-    var again = std.ArrayList(u8).init(allocator);
+    try storage.load(&target, list.written());
+    var again = std.Io.Writer.Allocating.init(allocator);
     defer again.deinit();
     try saved(&target, &again);
-    try std.testing.expectEqualSlices(u8, list.items, again.items);
+    try std.testing.expectEqualSlices(u8, list.written(), again.written());
     try std.testing.expectEqual(@as(u8, 0x34), target.options.otp.byte(cell + 1));
     try std.testing.expectEqual(@as(u8, 0xA5), target.flash.flash.byte(0x10_0004));
     try std.testing.expectEqual(@as(u32, 2), target.flash.flash.live());
@@ -72,44 +72,44 @@ test "both memories round-trip with their contents" {
 test "a different configured flash capacity is refused" {
     var board = try busy();
     defer board.deinit();
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.Io.Writer.Allocating.init(allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.init();
     defer target.deinit();
     try target.flash.flash.resize(32 * 1024 * 1024);
-    try std.testing.expectError(error.BadValue, storage.load(&target, list.items));
+    try std.testing.expectError(error.BadValue, storage.load(&target, list.written()));
     try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
 }
 
 test "a sector past the part is refused" {
     var board = try busy();
     defer board.deinit();
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.Io.Writer.Allocating.init(allocator);
     defer list.deinit();
     try saved(&board, &list);
     // The last sector entry's number sits 4 KiB + 4 bytes from the end.
-    const at = list.items.len - 4 - 0x1000;
-    std.mem.writeInt(u32, list.items[at..][0..4], 0xFFFF, .little);
+    const at = list.written().len - 4 - 0x1000;
+    std.mem.writeInt(u32, list.written()[at..][0..4], 0xFFFF, .little);
     var target = Stand.init();
     defer target.deinit();
-    try std.testing.expectError(error.BadValue, storage.load(&target, list.items));
+    try std.testing.expectError(error.BadValue, storage.load(&target, list.written()));
     try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
     try std.testing.expect(!target.options.locked);
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.Io.Writer.Allocating.init(allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target = Stand.init();
     defer target.deinit();
-    try std.testing.expectError(error.Missing, storage.load(&target, list.items));
+    try std.testing.expectError(error.Missing, storage.load(&target, list.written()));
     list.clearRetainingCapacity();
     var board = try busy();
     defer board.deinit();
     try saved(&board, &list);
-    const cut = list.items[0 .. list.items.len - 1];
+    const cut = list.written()[0 .. list.written().len - 1];
     try std.testing.expect(std.meta.isError(storage.load(&target, cut)));
     try std.testing.expectEqual(@as(u32, 0), target.options.otp.live());
     try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());

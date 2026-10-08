@@ -51,19 +51,19 @@ fn fill(board: *Stand) void {
     storage.sink = disk_a[512..1024];
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try usb.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try usb.save(board, &list.writer);
 }
 
 test "the USB side round-trips mid-command" {
     var board: Stand = undefined;
     fill(&board);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.on(&disk_a);
-    try usb.load(&target, list.items);
+    try usb.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
     const storage = &target.usb.host.xfer.device.storage;
     try std.testing.expect(storage.data.ptr == @as([*]const u8, &storage.scratch) + 2);
@@ -73,12 +73,12 @@ test "the USB side round-trips mid-command" {
 test "a load keeps the target's wiring" {
     var board: Stand = undefined;
     fill(&board);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.on(&disk_b);
     target.usb.bridge = Hook{ .context = &context, .pollFn = poll };
-    try usb.load(&target, list.items);
+    try usb.load(&target, list.written());
     const storage = &target.usb.host.xfer.device.storage;
     try std.testing.expectEqual(@as(u32, 5), target.usb.host.xfer.setups);
     try std.testing.expect(storage.disk.ptr == @as([*]u8, &disk_b));
@@ -88,19 +88,19 @@ test "a load keeps the target's wiring" {
 }
 
 test "a missing, short or unplaceable section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target = Stand.on(&disk_b);
-    try std.testing.expectError(error.Missing, usb.load(&target, list.items));
+    try std.testing.expectError(error.Missing, usb.load(&target, list.written()));
     list.clearRetainingCapacity();
     var board: Stand = undefined;
     fill(&board);
     try saved(&board, &list);
-    const cut = list.items[0 .. list.items.len - 3];
+    const cut = list.written()[0 .. list.written().len - 3];
     try std.testing.expect(std.meta.isError(usb.load(&target, cut)));
     try std.testing.expectEqualDeep(Stand.on(&disk_b), target);
     var diskless: Stand = .{};
-    try std.testing.expectError(error.BadValue, usb.load(&diskless, list.items));
+    try std.testing.expectError(error.BadValue, usb.load(&diskless, list.written()));
     try std.testing.expectEqualDeep(Stand{}, diskless);
 }

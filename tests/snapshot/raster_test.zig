@@ -30,9 +30,9 @@ fn busy(domain: *const pdctr.Pdctr) Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try raster.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try raster.save(board, &list.writer);
 }
 
 test "a busy engine round-trips and the fresh one keeps its domain" {
@@ -40,18 +40,18 @@ test "a busy engine round-trips and the fresh one keeps its domain" {
     var domain = pdctr.Pdctr.init(&lock, .graphics);
     var other = pdctr.Pdctr.init(&lock, .graphics);
     const board = busy(&domain);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{ .raster = drw.Drw.init(&other) };
-    try raster.load(&fresh, list.items);
+    try raster.load(&fresh, list.written());
     try std.testing.expect(fresh.raster.domain == &other);
     try std.testing.expectEqual(@as(u32, 7), fresh.raster.renders);
     try std.testing.expectEqual(@as(i32, -3), fresh.raster.limits.edges[1].xadd);
-    var again = std.ArrayList(u8).init(std.testing.allocator);
+    var again = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer again.deinit();
     try saved(&fresh, &again);
-    try std.testing.expectEqualSlices(u8, list.items, again.items);
+    try std.testing.expectEqualSlices(u8, list.written(), again.written());
 }
 
 test "a pixel cache count past its cells is BadValue and nothing changes" {
@@ -59,26 +59,26 @@ test "a pixel cache count past its cells is BadValue and nothing changes" {
     var domain = pdctr.Pdctr.init(&lock, .graphics);
     var board = busy(&domain);
     board.raster.pixel_cache.used = board.raster.pixel_cache.cells.len + 1;
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var fresh: Stand = .{ .raster = drw.Drw.init(&domain) };
-    try std.testing.expectError(error.BadValue, raster.load(&fresh, list.items));
+    try std.testing.expectError(error.BadValue, raster.load(&fresh, list.written()));
     try std.testing.expectEqual(@as(u32, 0), fresh.raster.renders);
 }
 
 test "a missing section or a cut payload leaves the engine untouched" {
     const lock = guard();
     var domain = pdctr.Pdctr.init(&lock, .graphics);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var fresh: Stand = .{ .raster = drw.Drw.init(&domain) };
     fresh.raster.faults = 9;
-    try std.testing.expectError(error.Missing, raster.load(&fresh, list.items));
+    try std.testing.expectError(error.Missing, raster.load(&fresh, list.written()));
     const board = busy(&domain);
     list.clearRetainingCapacity();
     try saved(&board, &list);
-    try std.testing.expect(std.meta.isError(raster.load(&fresh, list.items[0 .. list.items.len - 1])));
+    try std.testing.expect(std.meta.isError(raster.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.raster.faults);
 }

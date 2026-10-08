@@ -20,9 +20,9 @@ const parts = [_][]const u8{
 const none: []const []const u8 = &.{};
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), board);
-    try file.writeSectionHeader(writer, .media, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, board);
+    try file.writeSectionHeader(writer, .media, counter.fullCount());
     try body(writer, board);
 }
 
@@ -49,5 +49,5 @@ fn Copies(comptime Board: type) type {
     const Child = @typeInfo(Board).pointer.child;
     var types: [parts.len]type = undefined;
     for (parts, 0..) |name, i| types[i] = @FieldType(Child, name);
-    return std.meta.Tuple(&types);
+    return @Tuple(&types);
 }

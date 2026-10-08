@@ -33,24 +33,24 @@ fn fill(board: *Stand) void {
     board.c6.wire.replies_sent = 6;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try section.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try section.save(board, &list.writer);
 }
 
 test "a C6 mid-exchange round-trips byte for byte" {
     var board = fresh();
     fill(&board);
-    var first = std.ArrayList(u8).init(std.testing.allocator);
+    var first = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer first.deinit();
     try saved(&board, &first);
 
     var target = fresh();
-    try section.load(&target, first.items);
-    var second = std.ArrayList(u8).init(std.testing.allocator);
+    try section.load(&target, first.written());
+    var second = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer second.deinit();
     try saved(&target, &second);
-    try std.testing.expectEqualSlices(u8, first.items, second.items);
+    try std.testing.expectEqualSlices(u8, first.written(), second.written());
     try std.testing.expectEqual(@as(u8, 0x33), target.c6.wire.queue.slots[1][0]);
     try std.testing.expectEqual(@as(u32, 6), target.c6.wire.replies_sent);
 }
@@ -58,37 +58,37 @@ test "a C6 mid-exchange round-trips byte for byte" {
 test "the target keeps its own pins and a bad queue is refused" {
     var board = fresh();
     fill(&board);
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&board, &bytes);
 
     var pins: gpio.Gpio = undefined;
     var target = fresh();
     target.c6.pins = &pins;
-    try section.load(&target, bytes.items);
+    try section.load(&target, bytes.written());
     try std.testing.expect(target.c6.pins == &pins);
 
     board.c6.wire.queue.len = board.c6.wire.queue.slots.len + 1;
     bytes.clearRetainingCapacity();
     try saved(&board, &bytes);
     var other = fresh();
-    try std.testing.expectError(error.BadValue, section.load(&other, bytes.items));
+    try std.testing.expectError(error.BadValue, section.load(&other, bytes.written()));
     try std.testing.expectEqual(@as(u32, 0), other.c6.wire.replies_sent);
 }
 
 test "a missing or short section leaves the C6 alone" {
-    var header = std.ArrayList(u8).init(std.testing.allocator);
+    var header = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer header.deinit();
-    try file.writeHeader(header.writer());
+    try file.writeHeader(&header.writer);
     var target = fresh();
-    try std.testing.expectError(error.Missing, section.load(&target, header.items));
+    try std.testing.expectError(error.Missing, section.load(&target, header.written()));
 
     var board = fresh();
     fill(&board);
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&board, &bytes);
-    try std.testing.expect(std.meta.isError(section.load(&target, bytes.items[0 .. bytes.items.len - 3])));
+    try std.testing.expect(std.meta.isError(section.load(&target, bytes.written()[0 .. bytes.written().len - 3])));
     try std.testing.expectEqual(@as(u32, 0), target.c6.wire.boots_sent);
 }
 
@@ -99,14 +99,14 @@ fn fakeLookup(_: ?*anyopaque, _: ?std.Io, _: []const u8, _: *[esp_hosted.dns.max
 test "snapshot failure preserves the live bridge and success resets it" {
     var board = fresh();
     fill(&board);
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&board, &bytes);
 
     var target = fresh();
     target.c6.wire.bridge.resolver.lookupFn = fakeLookup;
-    try std.testing.expect(std.meta.isError(section.load(&target, bytes.items[0 .. bytes.items.len - 1])));
+    try std.testing.expect(std.meta.isError(section.load(&target, bytes.written()[0 .. bytes.written().len - 1])));
     try std.testing.expect(target.c6.wire.bridge.resolver.lookupFn == fakeLookup);
-    try section.load(&target, bytes.items);
+    try section.load(&target, bytes.written());
     try std.testing.expect(target.c6.wire.bridge.resolver.lookupFn != fakeLookup);
 }

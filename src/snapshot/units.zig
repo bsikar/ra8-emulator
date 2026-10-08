@@ -11,9 +11,9 @@ const fields = @import("fields.zig");
 pub const Error = file.Error || fields.Error || error{Missing};
 
 pub fn save(writer: anytype, kind: file.Kind, units: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), units);
-    try file.writeSectionHeader(writer, kind, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, units);
+    try file.writeSectionHeader(writer, kind, counter.fullCount());
     try body(writer, units);
 }
 
@@ -36,7 +36,7 @@ pub fn load(bytes: []const u8, kind: file.Kind, units: anytype) Error!void {
 /// A tuple of the pointees of a tuple of pointers.
 fn Copies(comptime Units: type) type {
     const info = @typeInfo(Units).@"struct";
-    var types: [info.fields.len]type = undefined;
-    for (info.fields, 0..) |field, i| types[i] = @typeInfo(field.type).pointer.child;
-    return std.meta.Tuple(&types);
+    var types: [info.field_types.len]type = undefined;
+    for (info.field_types, 0..) |F, i| types[i] = @typeInfo(F).pointer.child;
+    return @Tuple(&types);
 }

@@ -60,7 +60,7 @@ pub const Fetch = enum {
 pub const Cache = struct {
     /// The vector the copy belongs to. Null means nothing is held.
     vector: ?u8 = null,
-    info: xfer.Info = undefined,
+    info: xfer.Info = .decode(0, 0, 0, 0, 0),
     /// Activations that read RAM.
     reads: u32 = 0,
     /// Activations that skipped the read.

@@ -24,9 +24,9 @@ const parts = [_]Part{
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), board);
-    try file.writeSectionHeader(writer, .channels, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, board);
+    try file.writeSectionHeader(writer, .channels, counter.fullCount());
     try body(writer, board);
 }
 
@@ -60,12 +60,12 @@ fn target(board: anytype, comptime part: Part) Pointer(@TypeOf(board), part) {
 
 fn Pointer(comptime Board: type, comptime part: Part) type {
     const info = @typeInfo(Board).pointer;
-    return if (info.is_const) *const Target(Board, part) else *Target(Board, part);
+    return if (info.attrs.@"const") *const Target(Board, part) else *Target(Board, part);
 }
 
 /// The types of `parts`' targets in `Board`, as a tuple.
 fn Copies(comptime Board: type) type {
     var types: [parts.len]type = undefined;
     for (parts, 0..) |part, i| types[i] = Target(Board, part);
-    return std.meta.Tuple(&types);
+    return @Tuple(&types);
 }

@@ -40,21 +40,21 @@ fn busy() Stand {
 
 test "every timer unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
-    try timers.save(&board, list.writer());
+    try file.writeHeader(&list.writer);
+    try timers.save(&board, &list.writer);
     var fresh: Stand = .{};
-    try timers.load(&fresh, list.items);
+    try timers.load(&fresh, list.written());
     try std.testing.expectEqualDeep(board, fresh);
 }
 
 test "a file without a timers section is Missing and nothing changes" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var fresh: Stand = .{};
     fresh.watchdog.counter = 9;
-    try std.testing.expectError(error.Missing, timers.load(&fresh, list.items));
+    try std.testing.expectError(error.Missing, timers.load(&fresh, list.written()));
     try std.testing.expectEqual(@as(u32, 9), fresh.watchdog.counter);
 }

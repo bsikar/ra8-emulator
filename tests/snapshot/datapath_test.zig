@@ -55,29 +55,29 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try datapath.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try datapath.save(board, &list.writer);
 }
 
 test "every wired data path unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.wiredTo(&guard_a, &bank_a);
-    try datapath.load(&target, list.items);
+    try datapath.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
 }
 
 test "a load keeps the target's wiring" {
     var board = busy();
     board.transfers.twin = &board.transfers1;
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = Stand.wiredTo(&guard_b, &bank_b);
-    try datapath.load(&target, list.items);
+    try datapath.load(&target, list.written());
     try std.testing.expect(target.dma.bank == &bank_b);
     try std.testing.expect(target.backup.protection == &guard_b);
     try std.testing.expect(target.battery_switch.protection == &guard_b);
@@ -86,16 +86,16 @@ test "a load keeps the target's wiring" {
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     const fresh = Stand.wiredTo(&guard_a, &bank_a);
     var target = fresh;
-    try std.testing.expectError(error.Missing, datapath.load(&target, list.items));
+    try std.testing.expectError(error.Missing, datapath.load(&target, list.written()));
     list.clearRetainingCapacity();
     const board = busy();
     try saved(&board, &list);
-    const cut = list.items[0 .. list.items.len - 3];
+    const cut = list.written()[0 .. list.written().len - 3];
     try std.testing.expect(std.meta.isError(datapath.load(&target, cut)));
     try std.testing.expectEqualDeep(fresh, target);
 }
