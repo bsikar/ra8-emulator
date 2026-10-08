@@ -24,12 +24,12 @@ test "ctl --json drives load, run, step, pause, regs and mem against a running s
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     var loaded = try run(gpa, spec, &.{ "load", serve_peer.image_path });
     defer loaded.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, loaded.term);
     try std.testing.expectEqualStrings(serve_peer.image_path, loaded.field("loaded").string);
     try std.testing.expect(try expectInteger(loaded.field("bytes")) > 0);
 
@@ -68,14 +68,14 @@ test "ctl --json drives load, run, step, pause, regs and mem against a running s
     defer gpa.free(at);
     var memory = try run(gpa, spec, &.{ "mem", at, "4" });
     defer memory.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, memory.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, memory.term);
     try std.testing.expectEqual(code, try expectInteger(memory.field("address")));
     try std.testing.expectEqual(@as(i64, 4), try expectInteger(memory.field("length")));
     try std.testing.expectEqual(@as(usize, 8), memory.field("hex").string.len);
 
     var refused = try run(gpa, spec, &.{ "mem", "0", "0x200000" });
     defer refused.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 1 }, refused.term);
+    try std.testing.expectEqual(Term{ .exited = 1 }, refused.term);
     try std.testing.expectEqualStrings("Refused", refused.field("error").string);
     try std.testing.expectEqual(@as(i64, ra8.interfaces.rpc.server.app_codes.too_long), try expectInteger(refused.field("code")));
 }
@@ -94,8 +94,8 @@ test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     var loaded = try run(gpa, spec, &.{ "load", serve_peer.image_path });
     defer loaded.deinit();
@@ -111,7 +111,7 @@ test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops
     defer gpa.free(at);
     var set = try run(gpa, spec, &.{ "break", at });
     defer set.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, set.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, set.term);
     const id = try expectInteger(set.field("breakpoint"));
     try std.testing.expectEqual(second, try expectInteger(set.field("address")));
 
@@ -129,14 +129,14 @@ test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops
 
     var watch = try run(gpa, spec, &.{ "watch", "0x20000000", "write" });
     defer watch.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, watch.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, watch.term);
     try std.testing.expectEqualStrings("write", watch.field("access").string);
     try std.testing.expectEqual(@as(i64, 0x2000_0000), try expectInteger(watch.field("address")));
     const watch_id = try std.fmt.allocPrint(gpa, "{d}", .{try expectInteger(watch.field("watchpoint"))});
     defer gpa.free(watch_id);
     var unwatched = try run(gpa, spec, &.{ "watch", "--clear", watch_id });
     defer unwatched.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, unwatched.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, unwatched.term);
 
     var fast = try run(gpa, spec, &.{ "speed", "100" });
     defer fast.deinit();
@@ -147,13 +147,12 @@ test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops
 }
 
 test "ctl with a bad command prints its usage and exits 2" {
-    const result = try std.process.Child.run(.{
-        .allocator = std.testing.allocator,
+    const result = try std.process.run(std.testing.allocator, std.testing.io, .{
         .argv = &.{ test_paths.emulator, "ctl", "--connect", "unix:/nonexistent/ctl.sock", "--json", "fly" },
     });
     defer std.testing.allocator.free(result.stdout);
     defer std.testing.allocator.free(result.stderr);
-    try std.testing.expectEqual(Term{ .Exited = 2 }, result.term);
+    try std.testing.expectEqual(Term{ .exited = 2 }, result.term);
     try std.testing.expect(std.mem.endsWith(u8, result.stderr, ctl.usage));
 }
 
@@ -204,16 +203,16 @@ test "ctl load takes a firmware image with option-setting segments and resets to
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     // uart_irq_echo carries OFS, SAS, BPS and OTP segments beside its code.
     var loaded = try run(gpa, spec, &.{ "load", "tests/fixtures/uart/uart_irq_echo.elf" });
     defer loaded.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, loaded.term);
     var regs = try run(gpa, spec, &.{ "regs", "pc" });
     defer regs.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, regs.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, regs.term);
     const pc = regs.field("registers").object.get("pc").?;
     try std.testing.expectEqual(@as(i64, 0x02000AFC), try expectInteger(pc));
 }
@@ -227,22 +226,20 @@ test "ctl events waits for a UART line and times out on one that never comes" {
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
     var loaded = try run(gpa, spec, &.{ "load", uart_image });
     defer loaded.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, loaded.term);
+    try std.testing.expectEqual(Term{ .exited = 0 }, loaded.term);
 
-    const ready = try stream(gpa, spec, &.{ "events", "--until", "uart_irq_echo ready", "--timeout", "60s" });
-    defer ready.text.deinit();
-    defer ready.last.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 0 }, ready.term);
+    var ready = try stream(gpa, spec, &.{ "events", "--until", "uart_irq_echo ready", "--timeout", "60s" });
+    defer ready.deinit(gpa);
+    try std.testing.expectEqual(Term{ .exited = 0 }, ready.term);
     try std.testing.expect(std.mem.indexOf(u8, ready.text.items, "uart_irq_echo ready") != null);
 
-    const never = try stream(gpa, spec, &.{ "events", "--until", "never printed", "--timeout", "1s" });
-    defer never.text.deinit();
-    defer never.last.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 1 }, never.term);
+    var never = try stream(gpa, spec, &.{ "events", "--until", "never printed", "--timeout", "1s" });
+    defer never.deinit(gpa);
+    try std.testing.expectEqual(Term{ .exited = 1 }, never.term);
     try std.testing.expect(std.mem.startsWith(u8, never.last.items, "{\"timeout\""));
 }
 
@@ -269,8 +266,8 @@ test "ctl --json plugs a part, faults it, clears it, unplugs it and refuses a ty
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var served = try serve_peer.listen(gpa, spec, &line);
-    defer _ = served.child.kill() catch {};
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
 
     const steps = [_]struct { words: []const []const u8, key: []const u8, value: []const u8 }{
         .{ .words = &.{ "plug", "max17048@i2c:riic@0x36" }, .key = "plugged", .value = "max17048@i2c:riic@0x36" },
@@ -281,13 +278,13 @@ test "ctl --json plugs a part, faults it, clears it, unplugs it and refuses a ty
     for (steps) |step| {
         var answer = try run(gpa, spec, step.words);
         defer answer.deinit();
-        try std.testing.expectEqual(Term{ .Exited = 0 }, answer.term);
+        try std.testing.expectEqual(Term{ .exited = 0 }, answer.term);
         try std.testing.expectEqualStrings(step.value, answer.field(step.key).string);
     }
 
     var typo = try run(gpa, spec, &.{ "plug", "nosuch@i2c:riic@0x36" });
     defer typo.deinit();
-    try std.testing.expectEqual(Term{ .Exited = 1 }, typo.term);
+    try std.testing.expectEqual(Term{ .exited = 1 }, typo.term);
     try std.testing.expectEqualStrings("Refused", typo.field("error").string);
 }
 
