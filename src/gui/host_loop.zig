@@ -288,8 +288,8 @@ pub const Loop = struct {
         if (self.quit) return false;
         if (run.vtable.camera(run.ctx)) |camera| {
             if (camera.swap) |swap| {
-                self.pane.settleInto(self.allocator, swap, camera.format_control);
-            } else self.pane.settle(self.allocator, camera.source, camera.format_control);
+                self.pane.settleInto(self.allocator, self.io, swap, camera.format_control);
+            } else self.pane.settle(self.allocator, self.io, camera.source, camera.format_control);
         }
         const running = run.vtable.step(run.ctx);
         if (self.console) |log| self.scroll.follow(log);
