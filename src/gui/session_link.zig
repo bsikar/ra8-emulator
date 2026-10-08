@@ -91,10 +91,12 @@ pub const Link = struct {
     }
 
     /// Send a request and return its id; the response comes back by pump.
+    /// A full pending table is back-pressure, not a broken session: the
+    /// link stays up, and the caller sends again once answers free slots.
     pub fn send(self: *Link, comptime Args: type, method: proto.Method, args: Args) !u32 {
         if (self.state != .connected) return error.NotConnected;
         return self.client.call(Args, @backingInt(method), args, 0, self.tx) catch |err| {
-            self.fail(err);
+            if (err != error.TableFull) self.fail(err);
             return err;
         };
     }

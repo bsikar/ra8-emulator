@@ -209,3 +209,22 @@ test "a registers leaf draws its core's values, changes in amber, in place of it
     }
     try std.testing.expect(drawn > 0 and waiting > 0);
 }
+
+test "a batch meeting a full pending table sends its other reads as slots free" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    var held: [20]u32 = undefined;
+    const pc: proto.ReadRegister = .{ .core = .cpu1, .register = shell_registers.wire[15] };
+    for (&held) |*id| id.* = try wire.link.send(proto.ReadRegister, .read_register, pc);
+    var model: Registers = .{ .core = .cpu0 };
+    model.reload();
+    model.attach(&wire.link);
+    try std.testing.expect(wire.link.state == .connected);
+    try std.testing.expectEqual(@as(usize, 12), model.left);
+    try std.testing.expect(!model.refused);
+    for (held) |id| _ = try wire.link.client.pending.take(id);
+    model.attach(&wire.link);
+    try std.testing.expectEqual(count, model.left);
+    try std.testing.expectEqual(count, model.next);
+}
