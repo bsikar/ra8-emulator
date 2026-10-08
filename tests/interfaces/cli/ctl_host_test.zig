@@ -24,12 +24,12 @@ const Rig = struct {
         errdefer tmp.cleanup();
         const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
         errdefer gpa.free(root);
-        const script = try tmp.dir.createFile("fake_ssh", .{ .mode = 0o755 });
-        try script.writeAll(fake_ssh);
-        script.close();
+        const script = try tmp.dir.createFile(std.testing.io, "fake_ssh", .{ .permissions = .executable_file });
+        try script.writeStreamingAll(std.testing.io, fake_ssh);
+        script.close(std.testing.io);
         const lines = try std.fmt.allocPrint(gpa, "local here\nssh lab labvm emulator={s} cache={s}/cache ssh={s}/fake_ssh\n", .{ test_paths.emulator, root, root });
         defer gpa.free(lines);
-        try tmp.dir.writeFile(.{ .sub_path = "hosts", .data = lines });
+        try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "hosts", .data = lines });
         return .{ .tmp = tmp, .root = root, .hosts = try std.fs.path.join(gpa, &.{ root, "hosts" }) };
     }
 
