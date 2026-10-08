@@ -307,11 +307,11 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
-            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .elapsed_cycles = clock.wall_cycles, .external = clock.memory, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .watched = watched }, .load = if (options.cpu_load) &load else null, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
+            try json_run.document(out, board, .{ .engine = "zig", .elapsed = ran, .elapsed_cycles = clock.wall_cycles, .external = clock.memory, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = &final }, .memory = clock.memory, .image = image, .options = &options, .io = io, .watched = watched }, .load = if (options.cpu_load) &load else null, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
         } else try report_run.zigCore(out, board, timebase.*, ran, clock.bus_tally);
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.
-        if (!options.report_json) try textDumps(out, board, clock.memory, &final, image, options, watched);
+        if (!options.report_json) try textDumps(out, io, board, clock.memory, &final, image, options, watched);
         if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
         try finishFrames(out, board, options, &frames, &audio);
@@ -359,8 +359,8 @@ fn openSecond(pair: *second_core.zig_run.Driver, io: std.Io, board: *Board, name
 /// The flag-asked dumps of a text run, in the engine report's order
 /// (RA8EMU-638): globals, the card block, registers, memory words, then
 /// what landed in the `--watch` word (RA8EMU-639).
-fn textDumps(out: *std.Io.Writer, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options, watched: ?watchpoint.Watched) !void {
-    try report_dumps.dumpSymbols(out, memory, image, options);
+fn textDumps(out: *std.Io.Writer, io: std.Io, board: *Board, memory: Guest, final: *const boot.Regs, image: elf.Image, options: cli.Options, watched: ?watchpoint.Watched) !void {
+    try report_dumps.dumpSymbols(out, io, memory, image, options);
     try report_dumps.dumpBlock(out, board, options);
     try report_dumps.dumpRegisters(out, .{ .zig = final }, memory, options);
     try mem_dump.printAll(out, memory, &board.bus, image, options.memDumps());
