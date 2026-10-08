@@ -13,6 +13,7 @@ const pane_layout = @import("pane_layout.zig");
 
 const Env = proto.Client.Env;
 const shown = registers_pane.shown;
+const sp_index = std.mem.indexOfScalar(@TypeOf(shown[0]), &shown, .sp).?;
 pub const Snapshot = registers_pane.Snapshot;
 
 /// The wire's name for each register the pane shows, in the pane's order.
@@ -38,6 +39,8 @@ pub const Registers = struct {
     /// A load landed while a batch was in flight: its answers describe the
     /// old image, so it publishes nothing and a fresh batch follows it.
     stale: bool = false,
+    /// Counts published batches, so the memory leaf can follow each one.
+    serial: u32 = 0,
 
     /// Send the due batch, one read per shown register, unless one is
     /// already in flight or the session has not greeted.
@@ -68,6 +71,12 @@ pub const Registers = struct {
         self.stale = self.left != 0;
         self.now = null;
         self.before = null;
+    }
+
+    /// SP from the shown batch, or null before one has published.
+    pub fn stackPointer(self: *const Registers) ?u32 {
+        const now = self.now orelse return null;
+        return now.values[sp_index];
     }
 
     /// The leaf's note while it has no values to draw, or null.
@@ -115,6 +124,7 @@ pub const Registers = struct {
         if (self.refused) return;
         self.before = self.now;
         self.now = self.gathered;
+        self.serial +%= 1;
     }
 };
 

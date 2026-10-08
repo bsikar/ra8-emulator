@@ -4,7 +4,7 @@
 //! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
 //! (RA8EMU-802) and the camera leaf's file field (RA8EMU-799), which take
 //! typing, and the registers leaves (RA8EMU-821), read again after a load
-//! or a stop; a press on a leaf's
+//! or a stop, with the memory leaves following each core's SP; a press on a leaf's
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
@@ -24,6 +24,7 @@ const shell_titles = @import("shell_titles.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
+const shell_memory = @import("shell_memory.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -42,6 +43,7 @@ pub const Shell = struct {
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*shell_registers.Pair = null,
+    memory: ?*shell_memory.Pair = null,
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
     open: bool = true,
@@ -141,15 +143,13 @@ pub const Shell = struct {
         }
         if (self.plug) |plug| _ = plug.attach(link);
         if (self.registers) |registers| registers.attach(link);
+        if (self.memory) |memory| memory.attach(link);
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
             const arrival = link.pump() orelse return;
             const loading = self.status.load_id;
             self.status.observe(link, arrival);
-            if (self.registers) |registers| {
-                if (loading != null and self.status.load_id == null) registers.reload();
-                registers.observe(arrival);
-            }
+            self.observeCore(loading != null and self.status.load_id == null, arrival);
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);
@@ -158,6 +158,18 @@ pub const Shell = struct {
                 devices.want = true;
             };
         }
+    }
+
+    /// The registers and memory leaves: both start over after a load, then
+    /// take the arrival, and memory follows each core's fresh registers.
+    fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
+        const registers = self.registers orelse return;
+        if (loaded) registers.reload();
+        registers.observe(arrival);
+        const memory = self.memory orelse return;
+        if (loaded) memory.reload();
+        memory.observe(arrival);
+        memory.follow(registers);
     }
 
     fn fitFrame(self: *Shell, size: platform.Size) !*raster.Framebuffer {

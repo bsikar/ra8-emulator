@@ -50,6 +50,7 @@ pub fn kindName(kind: pane_layout.Kind) []const u8 {
         .camera => "Camera",
         .devices => "Devices",
         .registers => "Registers",
+        .memory => "Memory",
     };
 }
 
