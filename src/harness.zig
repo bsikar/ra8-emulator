@@ -227,6 +227,9 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.quiet = .{ .inner = state.pending.source(), .memory = state.watching.view() };
     state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
     state.pending.banked = &state.cpu.banked;
+    // CPACR and the FP context words reach the core's FP state, as in a
+    // plain run (boot.zig); otherwise every FP instruction is NOCP (RA8EMU-950).
+    state.memory.scs.fp = &state.cpu.fp;
     try state.cpu.reset(vector);
     state.loading = .{ .allocator = allocator };
     errdefer state.loading.deinit();
