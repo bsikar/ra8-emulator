@@ -2,7 +2,7 @@
 //! the window's events (quit, gutter drags), pumps the session link into the
 //! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
 //! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
-//! (RA8EMU-802) and the camera leaf's file field (RA8EMU-799), which take
+//! (RA8EMU-802), a device row's fault cell (RA8EMU-817), and the camera leaf's file field (RA8EMU-799), which take
 //! typing, and the registers leaves (RA8EMU-821), read again after a load
 //! or a stop, with the memory leaves following each core's SP and the
 //! disassembly leaves its PC; a press on a leaf's
@@ -20,6 +20,7 @@ const session_link = @import("session_link.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
+const shell_fault = @import("shell_fault.zig");
 const shell_camera = @import("shell_camera.zig");
 const shell_titles = @import("shell_titles.zig");
 const shell_plug = @import("shell_plug.zig");
@@ -40,6 +41,8 @@ pub const Shell = struct {
     console: ?*shell_console.Console = null,
     board: ?*shell_board.Board = null,
     devices: ?*shell_devices.Devices = null,
+    /// Each device row's fault mode (RA8EMU-817), stepped by its cell.
+    faults: ?*shell_fault.Faults = null,
     camera: ?*shell_camera.Camera = null,
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
@@ -108,6 +111,7 @@ pub const Shell = struct {
                 if (self.pressFields(press.x, press.y)) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.devices) |devices| {
+                    if (self.faults) |faults| if (faults.clickIn(link, devices, &self.layout, solved, press.x, press.y)) return;
                     if (devices.clickIn(link, &self.layout, solved, press.x, press.y)) return;
                 };
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
@@ -157,6 +161,9 @@ pub const Shell = struct {
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);
+            if (self.faults) |faults| if (faults.observe(arrival)) if (self.devices) |devices| {
+                devices.want = true;
+            };
             if (self.camera) |camera| camera.observe(arrival);
             if (self.plug) |plug| if (plug.observe(arrival)) if (self.devices) |devices| {
                 devices.want = true;

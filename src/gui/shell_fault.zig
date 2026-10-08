@@ -139,6 +139,8 @@ pub fn rowAt(body: draw_list.Rect, x: i32, y: i32) ?usize {
 }
 
 /// Draw each listed row's mode in its fault cell: a mode in ink, none muted.
+/// A refused ask leaves its note on the line under the rows (and under the
+/// unplug refusal when that is up too).
 pub fn draw(list: *draw_list.DrawList, body: draw_list.Rect, devices: *const shell_devices.Devices, faults: *const Faults) !void {
     var rows = devices.lines();
     var row: usize = 0;
@@ -149,4 +151,10 @@ pub fn draw(list: *draw_list.DrawList, body: draw_list.Rect, devices: *const she
         const color = if (mode == 0) shell_frame.muted else shell_frame.ink;
         try font.draw(list, at.x, at.y, label(mode), color);
     }
+    if (!faults.refused) return;
+    if (devices.unplug_refused) row += 1;
+    const y = body.y + shell_frame.pad + @as(i32, @intCast(row)) * shell_devices.row_h;
+    const room = body.w - 2 * shell_frame.pad;
+    if (room <= 0 or y + font.glyph_h > body.y + body.h) return;
+    try font.draw(list, body.x + shell_frame.pad, y, font.fit(refused_note, @intCast(room)), shell_frame.muted);
 }
