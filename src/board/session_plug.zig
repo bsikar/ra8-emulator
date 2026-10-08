@@ -114,14 +114,17 @@ pub const Plugs = struct {
     /// Each fitted part as `MODEL@ENDPOINT`, one per line, in the order
     /// they went on; `error.NoSpaceLeft` when `out` cannot hold them all.
     pub fn list(self: *const Plugs, out: []u8) ![]const u8 {
-        var stream = std.io.fixedBufferStream(out);
-        const w = stream.writer();
+        var w: std.Io.Writer = .fixed(out);
+        self.listTo(&w) catch return error.NoSpaceLeft;
+        return w.buffered();
+    }
+
+    fn listTo(self: *const Plugs, w: *std.Io.Writer) std.Io.Writer.Error!void {
         for (self.fitted[0..self.fitted_count]) |part| {
             try w.print("{s}@", .{part.name});
             try part.at.write(w);
             try w.writeByte('\n');
         }
-        return stream.getWritten();
     }
 
     /// `name` is on `at` now, in place of whatever was.
