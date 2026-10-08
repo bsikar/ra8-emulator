@@ -56,7 +56,7 @@ test "scripted full and partial refreshes produce JSONL and totals by waveform" 
     defer std.testing.allocator.free(path);
     const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "refresh.jsonl" });
     defer std.testing.allocator.free(log_path);
-    try recorder.write(log_path);
+    try recorder.write(std.testing.io, log_path);
     const file = try std.fs.cwd().openFile(log_path, .{});
     defer file.close();
     const contents = try file.readToEndAlloc(std.testing.allocator, 4096);
