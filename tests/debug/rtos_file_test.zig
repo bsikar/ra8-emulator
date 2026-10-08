@@ -100,7 +100,7 @@ test "CPU0 saves to the path and CPU1 to path.cpu1" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var where: [std.fs.max_path_bytes]u8 = undefined;
-    const dir = try tmp.dir.realpath(".", &where);
+    const dir = where[0..try tmp.dir.realPathFile(std.testing.io, ".", &where)];
     var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, "{s}/run.trace", .{dir});
     const trace = sample();

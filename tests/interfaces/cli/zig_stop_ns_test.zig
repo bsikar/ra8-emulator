@@ -13,7 +13,7 @@ test "a --stop-sym name only the --ns image carries resolves there" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(.{ .sub_path = "ns.elf", .data = ns_bytes });
-    const ns_path = try tmp.dir.realpathAlloc(std.testing.allocator, "ns.elf");
+    const ns_path = try tmp.dir.realPathFileAlloc(std.testing.io, "ns.elf", std.testing.allocator);
     defer std.testing.allocator.free(ns_path);
     const image = try ra8.core.elf.Image.init(secure_bytes);
     const options: ra8.core.cli.Options = .{ .path = "s.elf", .ns_path = ns_path, .stop_symbol = counter, .stop_at = 50 };

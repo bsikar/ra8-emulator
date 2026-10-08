@@ -35,7 +35,7 @@ test "RA8EMU-768: restore returns the session to a saved screen, frame for frame
     if (builtin.mode != .ReleaseFast) return error.SkipZigTest;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
     const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "screen.ra8snap" });
     defer std.testing.allocator.free(path);

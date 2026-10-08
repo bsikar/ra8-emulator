@@ -44,7 +44,7 @@ fn decodeFrame(bytes: []const u8, allocator: std.mem.Allocator, requested: usize
 test "GIF sequence round-trips both frames with emulated delay and deterministic bytes" {
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path_a = try std.fs.path.join(std.testing.allocator, &.{ root, "a.gif" });
     defer std.testing.allocator.free(path_a);

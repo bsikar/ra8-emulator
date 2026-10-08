@@ -45,7 +45,7 @@ test "any other host comes from the hosts file" {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
     try dir.dir.writeFile(.{ .sub_path = "hosts", .data = "local here\nssh lab bsikar@labvm\n" });
-    const file = try dir.dir.realpathAlloc(gpa, "hosts");
+    const file = try dir.dir.realPathFileAlloc(std.testing.io, "hosts", gpa);
     const lab = try shell_main.pick(gpa, std.testing.io, &empty_env, .{ .image = "app.elf", .host = "lab", .hosts = file });
     try std.testing.expectEqualStrings("bsikar@labvm", lab.ssh.destination);
     try std.testing.expectEqual(Profile.local, try shell_main.pick(gpa, std.testing.io, &empty_env, .{ .image = "app.elf", .host = "here", .hosts = file }));

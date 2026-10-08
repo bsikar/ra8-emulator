@@ -25,7 +25,7 @@ const Output = struct {
     fn init() !Output {
         var dir = std.testing.tmpDir(.{});
         errdefer dir.cleanup();
-        const root = try dir.dir.realpathAlloc(allocator, ".");
+        const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", allocator);
         defer allocator.free(root);
         const path = try std.fs.path.join(allocator, &.{ root, "out.wav" });
         return .{ .dir = dir, .path = path, .said = std.ArrayList(u8).init(allocator) };
