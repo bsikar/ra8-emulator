@@ -29,18 +29,18 @@ test "--ms gives a window in SysTick periods" {
 
 test "the verdict says which of counter, deadline and budget ended the run" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var stream: std.Io.Writer = .fixed(&buffer);
     const options: ra8.core.cli.Options = .{ .path = "x.elf", .stop_symbol = "g_tick", .stop_at = 3 };
     const spent: ra8.core.deadline.Deadline = .{ .periods = 50, .reached = true };
-    try zig_stop.verdict(stream.writer(), .{ .path = "x.elf" }, null, spent, 0x10, 99);
-    try std.testing.expectEqualStrings("stopped clean after 50 ms, pc 0x00000010\n", stream.getWritten());
-    stream.reset();
-    try zig_stop.verdict(stream.writer(), options, .{ .address = 0x2200_0000, .reaches = 3 }, spent, 0x10, 99);
-    try std.testing.expectEqualStrings("ran 50 ms, g_tick never reached 3, pc 0x00000010\n", stream.getWritten());
-    stream.reset();
-    try zig_stop.verdict(stream.writer(), options, .{ .address = 0x2200_0000, .reaches = 3 }, null, 0x10, 99);
-    try std.testing.expectEqualStrings("ran 99 instructions, g_tick never reached 3, pc 0x00000010\n", stream.getWritten());
-    stream.reset();
-    try zig_stop.verdict(stream.writer(), .{ .path = "x.elf" }, null, null, 0x10, 99);
-    try std.testing.expectEqualStrings("", stream.getWritten());
+    try zig_stop.verdict(&stream, .{ .path = "x.elf" }, null, spent, 0x10, 99);
+    try std.testing.expectEqualStrings("stopped clean after 50 ms, pc 0x00000010\n", stream.buffered());
+    stream.end = 0;
+    try zig_stop.verdict(&stream, options, .{ .address = 0x2200_0000, .reaches = 3 }, spent, 0x10, 99);
+    try std.testing.expectEqualStrings("ran 50 ms, g_tick never reached 3, pc 0x00000010\n", stream.buffered());
+    stream.end = 0;
+    try zig_stop.verdict(&stream, options, .{ .address = 0x2200_0000, .reaches = 3 }, null, 0x10, 99);
+    try std.testing.expectEqualStrings("ran 99 instructions, g_tick never reached 3, pc 0x00000010\n", stream.buffered());
+    stream.end = 0;
+    try zig_stop.verdict(&stream, .{ .path = "x.elf" }, null, null, 0x10, 99);
+    try std.testing.expectEqualStrings("", stream.buffered());
 }

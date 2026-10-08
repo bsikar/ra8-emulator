@@ -208,9 +208,9 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
         .sfsr = try memory.readWord(ra8.periph.fault_status.secure.sfsr),
     };
     var fault_line: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&fault_line);
-    try ra8.periph.fault_status.line(stream.writer(), words);
-    try std.testing.expectEqualStrings("", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&fault_line);
+    try ra8.periph.fault_status.line(&stream, words);
+    try std.testing.expectEqualStrings("", stream.buffered());
 }
 
 test "a divided CPU1 charges cycles for the CPU0 boundary duration" {

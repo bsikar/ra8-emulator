@@ -38,9 +38,9 @@ fn runTone(path: []const u8, said: *std.ArrayList(u8)) !void {
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, vector_base, 200_000, &ran, .{
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, vector_base, 200_000, &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,

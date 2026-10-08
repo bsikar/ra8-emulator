@@ -44,10 +44,10 @@ test "a save writes each line, stamped in virtual seconds when asked" {
     try log.feedAll("hello\n", 12_000_345_678);
     try log.feedAll("tail", 13_000_000_000);
     var buf: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try log.save(stream.writer(), true);
-    try std.testing.expectEqualStrings("[  12.000345678] hello\ntail\n", stream.getWritten());
-    stream.reset();
-    try log.save(stream.writer(), false);
-    try std.testing.expectEqualStrings("hello\ntail\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buf);
+    try log.save(&stream, true);
+    try std.testing.expectEqualStrings("[  12.000345678] hello\ntail\n", stream.buffered());
+    stream.end = 0;
+    try log.save(&stream, false);
+    try std.testing.expectEqualStrings("hello\ntail\n", stream.buffered());
 }

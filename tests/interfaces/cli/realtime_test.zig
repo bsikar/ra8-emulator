@@ -14,16 +14,16 @@ test "a run is unpaced unless it asks for --realtime" {
 
 test "an unpaced run prints no pace line" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var stream: std.Io.Writer = .fixed(&buffer);
     const time = clocks.Time{};
-    try realtime.line(stream.writer(), &time);
-    try std.testing.expectEqualStrings("", stream.getWritten());
+    try realtime.line(&stream, &time);
+    try std.testing.expectEqualStrings("", stream.buffered());
 }
 
 test "the pace line gives requested and achieved speed, drift and slips" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try realtime.write(stream.writer(), .{
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try realtime.write(&stream, .{
         .requested_milli = 1000,
         .achieved_milli = 987,
         .drift_ns = 12_345_678,
@@ -32,7 +32,7 @@ test "the pace line gives requested and achieved speed, drift and slips" {
     });
     try std.testing.expectEqualStrings(
         "pace: requested 1.000x, achieved 0.987x, drift 12.345 ms, 2 slips\n",
-        stream.getWritten(),
+        stream.buffered(),
     );
 }
 

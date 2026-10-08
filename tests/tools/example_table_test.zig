@@ -62,11 +62,11 @@ test "an LED set once and left stays unknown, and a blink that faulted fails" {
 
 test "a row prints in table order" {
     var buffer: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try table.writeRow(stream.writer(), "power_profiler.elf", table.parse(console_report));
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try table.writeRow(&stream, "power_profiler.elf", table.parse(console_report));
     try std.testing.expectEqualStrings(
         "| power_profiler.elf | pass | budget | pp: profile OK | LED1 | 1 |\n",
-        stream.getWritten(),
+        stream.buffered(),
     );
 }
 

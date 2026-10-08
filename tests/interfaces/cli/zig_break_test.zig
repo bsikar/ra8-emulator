@@ -38,12 +38,12 @@ test "nothing to listen for gives no listener" {
 
 test "the verdict names the arrival and the pc" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
+    var stream: std.Io.Writer = .fixed(&buffer);
     const met: zig_break.Break = .{ .address = 0x100, .arrival = 1, .seen = 1, .reached = true };
-    try zig_break.verdict(stream.writer(), "f", met, 0x100, 0x200, 10);
-    try std.testing.expectEqualStrings("reached f arrival 1, pc 0x00000100\n", stream.getWritten());
-    stream.reset();
+    try zig_break.verdict(&stream, "f", met, 0x100, 0x200, 10);
+    try std.testing.expectEqualStrings("reached f arrival 1, pc 0x00000100\n", stream.buffered());
+    stream.end = 0;
     const short: zig_break.Break = .{ .address = 0x100, .arrival = 3, .seen = 1 };
-    try zig_break.verdict(stream.writer(), "f", short, 0, 0x200, 10);
-    try std.testing.expectEqualStrings("ran 10 instructions, reached f 1 time(s) of 3, pc 0x00000200\n", stream.getWritten());
+    try zig_break.verdict(&stream, "f", short, 0, 0x200, 10);
+    try std.testing.expectEqualStrings("ran 10 instructions, reached f 1 time(s) of 3, pc 0x00000200\n", stream.buffered());
 }

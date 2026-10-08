@@ -67,8 +67,8 @@ fn runAt(speed_milli: ?u64) !Run {
     const listener: ra8.core.cpu.cpu.RetireListener = .{ .context = &timeline, .instructionFn = Timeline.retire };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, budget, &ran, .{ .boundary = clock.boundary(), .retire_listener = listener });
+    var stream: std.Io.Writer = .fixed(&output);
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, budget, &ran, .{ .boundary = clock.boundary(), .retire_listener = listener });
     return .{ .timeline = timeline, .wall_ns = wall.ns };
 }
 

@@ -68,9 +68,9 @@ test "a fault schedule applies every event at its exact virtual time" {
 
     var ran: u64 = 0;
     var output: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
-    _ = try boot.start(stream.writer(), .zig, core, &board.bus, vector_base, 500_000, &ran, .{
+    _ = try boot.start(&stream, .zig, core, &board.bus, vector_base, 500_000, &ran, .{
         .boundary = applier.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
