@@ -147,8 +147,8 @@ pub const Sdl = struct {
 
 /// RA8_GUI_CPU set to anything but empty or "0" forces the CPU path.
 fn cpuForced() bool {
-    const value = std.process.getEnvVarOwned(std.heap.page_allocator, "RA8_GUI_CPU") catch return false;
-    defer std.heap.page_allocator.free(value);
+    const raw = c.SDL_getenv("RA8_GUI_CPU") orelse return false;
+    const value = std.mem.span(raw);
     return value.len > 0 and !std.mem.eql(u8, value, "0");
 }
 

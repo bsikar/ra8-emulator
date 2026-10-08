@@ -26,6 +26,7 @@
 //!
 //! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
+const Translator = @import("translate_c").Translator;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -248,6 +249,7 @@ fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     const sdl_mod = b.createModule(.{ .root_source_file = b.path("src/gui/sdl.zig"), .target = target, .optimize = optimize });
     sdl_mod.addImport("ra8", emu);
     sdl_mod.linkLibrary(sdl_dep.artifact("SDL3"));
+    sdl_mod.addImport("sdl3", sdlTranslation(b, target, optimize, sdl_dep.artifact("SDL3")));
     const hello_mod = b.createModule(.{ .root_source_file = b.path("src/gui_hello.zig"), .target = target, .optimize = optimize });
     hello_mod.addImport("ra8", emu);
     hello_mod.addImport("gui_sdl", sdl_mod);
@@ -261,6 +263,15 @@ fn guiHello(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     run.addPassthruArgs();
     step.dependOn(&run.step);
     return sdl_mod;
+}
+
+/// SDL3's C API as a Zig module, translated by the translate-c package
+/// (0.17 has no @cImport) against the SDL3 artifact's headers.
+fn sdlTranslation(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, sdl: *std.Build.Step.Compile) *std.Build.Module {
+    const header = b.addWriteFiles().add("sdl3.h", "#include <SDL3/SDL.h>\n");
+    const translator: Translator = .init(b.dependency("translate_c", .{}), .{ .c_source_file = header, .target = target, .optimize = optimize });
+    translator.linkLibrary(sdl);
+    return translator.mod;
 }
 
 /// The SDL-backed GUI tests (RA8EMU-733): the geometry presenter against
