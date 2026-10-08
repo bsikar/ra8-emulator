@@ -52,7 +52,7 @@ test "docs/conformance.md matches the suite, or is rewritten when blessed" {
     const allocator = std.testing.allocator;
     const want = try expectedDocument(allocator);
     defer allocator.free(want);
-    if (std.process.hasEnvVarConstant("RA8_BLESS_CONFORMANCE")) {
+    if (try std.testing.environ.contains(allocator, "RA8_BLESS_CONFORMANCE")) {
         try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = suite.table_path, .data = want });
         return;
     }
