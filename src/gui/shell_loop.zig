@@ -3,7 +3,8 @@
 //! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
 //! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
 //! (RA8EMU-802) and the camera leaf's file field (RA8EMU-799), which take
-//! typing; a press on a leaf's
+//! typing, and the registers leaves (RA8EMU-821), read again after a load
+//! or a stop; a press on a leaf's
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
@@ -22,6 +23,7 @@ const shell_camera = @import("shell_camera.zig");
 const shell_titles = @import("shell_titles.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
+const shell_registers = @import("shell_registers.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -39,6 +41,7 @@ pub const Shell = struct {
     camera: ?*shell_camera.Camera = null,
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
+    registers: ?*shell_registers.Pair = null,
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
     open: bool = true,
@@ -137,10 +140,16 @@ pub const Shell = struct {
             camera.attach(link);
         }
         if (self.plug) |plug| _ = plug.attach(link);
+        if (self.registers) |registers| registers.attach(link);
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
             const arrival = link.pump() orelse return;
+            const loading = self.status.load_id;
             self.status.observe(link, arrival);
+            if (self.registers) |registers| {
+                if (loading != null and self.status.load_id == null) registers.reload();
+                registers.observe(arrival);
+            }
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);

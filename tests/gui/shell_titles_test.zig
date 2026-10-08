@@ -7,12 +7,13 @@ const pane_layout = ra8.gui.pane_layout;
 const frame = ra8.gui.shell_frame;
 const titles = ra8.gui.shell_titles;
 
-test "the kinds cycle from empty through devices and back to empty" {
+test "the kinds cycle from empty through registers and back to empty" {
     try std.testing.expectEqual(pane_layout.Kind.board, titles.nextKind(.empty));
     try std.testing.expectEqual(pane_layout.Kind.console, titles.nextKind(.board));
     try std.testing.expectEqual(pane_layout.Kind.camera, titles.nextKind(.console));
     try std.testing.expectEqual(pane_layout.Kind.devices, titles.nextKind(.camera));
-    try std.testing.expectEqual(pane_layout.Kind.empty, titles.nextKind(.devices));
+    try std.testing.expectEqual(pane_layout.Kind.registers, titles.nextKind(.devices));
+    try std.testing.expectEqual(pane_layout.Kind.empty, titles.nextKind(.registers));
 }
 
 test "a press on a title steps that leaf's kind and keeps its core" {

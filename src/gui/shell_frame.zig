@@ -49,6 +49,7 @@ pub fn kindName(kind: pane_layout.Kind) []const u8 {
         .console => "Console",
         .camera => "Camera",
         .devices => "Devices",
+        .registers => "Registers",
     };
 }
 
