@@ -19,7 +19,7 @@ pub const Builder = struct {
     pub fn build(buffer: []u8, names: []const []const u8, values: []const u32) []u8 {
         @memset(buffer, 0);
         // The string table: a leading null, then each name terminated.
-        var strings = std.ArrayListUnmanaged(u8){};
+        var strings: std.ArrayListUnmanaged(u8) = .empty;
         var offsets: [8]u32 = undefined;
         var backing: [512]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&backing);
