@@ -111,13 +111,12 @@ pub fn declaredName(line: []const u8) ?[]const u8 {
 ///
 /// A path is a .zig file or a directory to walk. Every violation is printed;
 /// the exit status is 1 when there was at least one.
-pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-
-    const argv = try std.process.argsAlloc(alloc);
-    var run: Run = .{ .alloc = alloc, .out = std.io.getStdErr().writer() };
+pub fn main(init: std.process.Init) !void {
+    const alloc = init.arena.allocator();
+    const argv = try init.minimal.args.toSlice(alloc);
+    var buf: [4096]u8 = undefined;
+    var err = std.Io.File.stderr().writer(init.io, &buf);
+    var run: Run = .{ .alloc = alloc, .io = init.io, .out = &err.interface };
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
@@ -132,13 +131,25 @@ pub fn main() !void {
     }
     if (run.scanned == 0) return error.NothingToCheck;
     try run.report();
+    try run.out.flush();
     if (run.findings > 0) std.process.exit(1);
+}
+
+/// A directory the build fills in (caches, outputs, fetched packages) rather
+/// than one the repository owns.
+fn isFetched(path: []const u8) bool {
+    var parts = std.mem.tokenizeAny(u8, path, "/\\");
+    while (parts.next()) |part| {
+        if (part[0] == '.' or std.mem.eql(u8, part, "zig-out") or std.mem.eql(u8, part, "zig-pkg")) return true;
+    }
+    return false;
 }
 
 /// One invocation: the limits it is holding files to and what it has seen.
 const Run = struct {
     alloc: std.mem.Allocator,
-    out: std.fs.File.Writer,
+    io: std.Io,
+    out: *std.Io.Writer,
     max_file: usize = limits.file_lines,
     max_fn: usize = limits.fn_lines,
     scanned: usize = 0,
@@ -147,22 +158,23 @@ const Run = struct {
     worst_fn: usize = 0,
 
     fn walk(self: *Run, path: []const u8) !void {
-        var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| switch (err) {
+        var dir = std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true }) catch |err| switch (err) {
             error.NotDir => return self.check(path),
             else => return err,
         };
-        defer dir.close();
+        defer dir.close(self.io);
 
         var it = try dir.walk(self.alloc);
-        while (try it.next()) |entry| {
+        while (try it.next(self.io)) |entry| {
             if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            if (isFetched(entry.path)) continue;
             const full = try std.fs.path.join(self.alloc, &.{ path, entry.path });
             try self.check(full);
         }
     }
 
     fn check(self: *Run, path: []const u8) !void {
-        const text = try std.fs.cwd().readFileAlloc(self.alloc, path, 4 << 20);
+        const text = try std.Io.Dir.cwd().readFileAlloc(self.io, path, self.alloc, .limited(4 << 20));
         self.scanned += 1;
 
         const file_lines = countLines(text);
