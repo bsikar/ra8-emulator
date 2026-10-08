@@ -41,6 +41,7 @@ fn closed(fd: std.posix.fd_t, link: Link) !bool {
     if (link == .pipe) return false;
     var byte: [1]u8 = undefined;
     const flags = socket_flags.peek | socket_flags.dontwait;
-    const got = std.posix.recvfrom(fd, &byte, flags, null, null) catch |err| return err != error.WouldBlock;
+    const got = std.c.recv(fd, &byte, byte.len, @intCast(flags));
+    if (got < 0) return std.c.errno(got) != .AGAIN;
     return got == 0;
 }
