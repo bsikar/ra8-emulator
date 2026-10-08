@@ -10,7 +10,8 @@
 //! its field, and with a file field (RA8EMU-799) so does the camera leaf.
 //! A registers leaf draws its bound core's registers once the session has
 //! answered a read of them (RA8EMU-821), and a memory leaf the rows from
-//! its core's SP once they have been read.
+//! its core's SP once they have been read, and a disassembly leaf the
+//! instructions from its core's PC.
 //! An empty leaf stays blank.
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
@@ -27,6 +28,7 @@ const shell_registers = @import("shell_registers.zig");
 const registers_pane = @import("registers_pane.zig");
 const shell_memory = @import("shell_memory.zig");
 const memory_pane = @import("memory_pane.zig");
+const disasm_pane = @import("disasm_pane.zig");
 
 const Rect = draw_list.Rect;
 
@@ -40,6 +42,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .devices => "waiting for the device list",
         .registers => "waiting for the registers",
         .memory => "waiting for memory",
+        .disasm => "waiting for the code",
     };
 }
 
@@ -53,6 +56,8 @@ pub const Panes = struct {
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*const shell_registers.Pair = null,
     memory: ?*const shell_memory.Pair = null,
+    /// The memory read from each core's PC, for the disassembly leaves.
+    code: ?*const shell_memory.Pair = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -88,6 +93,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| return memory_pane.draw(list, body, now);
     };
+    if (pane.kind == .disasm) if (self.code) |pair| {
+        const model = pair.of(pane.core);
+        if (model.now) |*read| return drawCode(list, body, model.from, read);
+    };
     if (pane.kind == .board) if (self.board) |board| {
         if (board.hasFrame()) return list.image(shell_board.fitIn(body, board.width, board.height), board.image());
     };
@@ -96,8 +105,16 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     try font.draw(list, at.x, at.y, font.fit(note, at.room), shell_frame.muted);
 }
 
-/// The note a leaf shows: the device list's, the registers' or memory's
-/// own once they have answered.
+/// Instructions decoded forward from `pc` out of the rows read around it.
+/// The link carries no breakpoint list yet, so none are marked.
+fn drawCode(list: *draw_list.DrawList, body: Rect, pc: u32, read: *const shell_memory.Snapshot) !void {
+    const length = read.count * memory_pane.per_row;
+    const lines = disasm_pane.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
+    return disasm_pane.draw(list, body, &lines, &.{});
+}
+
+/// The note a leaf shows: the device list's, the registers', memory's or
+/// the code's own once they have answered.
 fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
     if (pane.kind == .devices) if (self.devices) |devices| {
         if (devices.note()) |note| return note;
@@ -107,6 +124,9 @@ fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).note()) |note| return note;
+    };
+    if (pane.kind == .disasm) if (self.code) |pair| {
+        if (pair.of(pane.core).refused) return "the session would not read the code";
     };
     return waitingFor(pane.kind);
 }

@@ -4,7 +4,8 @@
 //! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
 //! (RA8EMU-802) and the camera leaf's file field (RA8EMU-799), which take
 //! typing, and the registers leaves (RA8EMU-821), read again after a load
-//! or a stop, with the memory leaves following each core's SP; a press on a leaf's
+//! or a stop, with the memory leaves following each core's SP and the
+//! disassembly leaves its PC; a press on a leaf's
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
@@ -44,6 +45,7 @@ pub const Shell = struct {
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*shell_registers.Pair = null,
     memory: ?*shell_memory.Pair = null,
+    code: ?*shell_memory.Pair = null,
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
     open: bool = true,
@@ -144,6 +146,7 @@ pub const Shell = struct {
         if (self.plug) |plug| _ = plug.attach(link);
         if (self.registers) |registers| registers.attach(link);
         if (self.memory) |memory| memory.attach(link);
+        if (self.code) |code| code.attach(link);
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
             const arrival = link.pump() orelse return;
@@ -160,16 +163,18 @@ pub const Shell = struct {
         }
     }
 
-    /// The registers and memory leaves: both start over after a load, then
-    /// take the arrival, and memory follows each core's fresh registers.
+    /// The registers, memory and code leaves: all start over after a load,
+    /// then take the arrival, and memory and code follow each core's fresh
+    /// registers.
     fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
         const registers = self.registers orelse return;
         if (loaded) registers.reload();
         registers.observe(arrival);
-        const memory = self.memory orelse return;
-        if (loaded) memory.reload();
-        memory.observe(arrival);
-        memory.follow(registers);
+        for ([_]?*shell_memory.Pair{ self.memory, self.code }) |leaf| if (leaf) |memory| {
+            if (loaded) memory.reload();
+            memory.observe(arrival);
+            memory.follow(registers);
+        };
     }
 
     fn fitFrame(self: *Shell, size: platform.Size) !*raster.Framebuffer {

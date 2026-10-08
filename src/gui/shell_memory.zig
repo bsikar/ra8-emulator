@@ -1,8 +1,9 @@
-//! The shell's memory leaf (RA8EMU-821): the bound core's stack read over
+//! The shell's memory leaf (RA8EMU-821): the bound core's memory read over
 //! the session link (read_memory 0x0107) into the memory pane's
 //! (RA8EMU-746) Snapshot, so the pane draws in the shell unchanged. Each
 //! time the registers leaf publishes that core's registers, a batch reads
-//! `rows` sixteen-byte rows from SP rounded down to a row, one read per
+//! `rows` sixteen-byte rows from the followed register (SP for the memory
+//! leaf, PC for the disassembly leaf) rounded down to a row, one read per
 //! row, and publishes once every row has answered. A row the session
 //! refuses is drawn unreadable; a core the session has not attached keeps
 //! the last values with a note. A load drops a batch in flight, since it
@@ -26,8 +27,12 @@ pub const Memory = struct {
     core: proto.Core,
     /// A batch is due on the next attach.
     want: bool = false,
-    /// The first row's address for the next batch.
-    base: u32 = 0,
+    /// The followed address for the next batch; rows start at its row.
+    address: u32 = 0,
+    /// The followed address of the batch in flight.
+    asked_from: u32 = 0,
+    /// The followed address of the published batch, `now`.
+    from: u32 = 0,
     /// The registers batch this leaf last followed (Registers.serial).
     seen: u32 = 0,
     /// The ids of the batch in flight, one per row.
@@ -41,11 +46,11 @@ pub const Memory = struct {
     /// A load landed while a batch was in flight: it publishes nothing.
     stale: bool = false,
 
-    /// Read next from the row holding `sp`, following registers batch
+    /// Read next from the row holding `address`, following registers batch
     /// `serial`.
-    pub fn follow(self: *Memory, sp: u32, serial: u32) void {
+    pub fn follow(self: *Memory, address: u32, serial: u32) void {
         self.seen = serial;
-        self.base = sp & row_mask;
+        self.address = address;
         self.want = true;
     }
 
@@ -55,7 +60,8 @@ pub const Memory = struct {
         if (!self.want or self.left != 0 or link.state != .connected) return;
         self.want = false;
         self.batch_refused = false;
-        self.gathered = .{ .base = self.base, .count = rows };
+        self.gathered = .{ .base = self.address & row_mask, .count = rows };
+        self.asked_from = self.address;
         for (&self.asked, 0..) |*asked, row| {
             const args: proto.ReadMemory = .{ .core = self.core, .address = self.gathered.rowAddress(row), .length = per_row };
             asked.* = link.send(proto.ReadMemory, .read_memory, args) catch null;
@@ -125,12 +131,15 @@ pub const Memory = struct {
         self.refused = self.batch_refused;
         if (self.refused) return;
         self.now = self.gathered;
+        self.from = self.asked_from;
     }
 };
 
 /// One model per core, so each leaf shows the core it is bound to.
 pub const Pair = struct {
     cores: [2]Memory = .{ .{ .core = .cpu0 }, .{ .core = .cpu1 } },
+    /// The register each core's batch starts from.
+    follows: shell_registers.Register = .sp,
 
     pub fn of(self: *const Pair, core: pane_layout.Core) *const Memory {
         return &self.cores[@backingInt(core)];
@@ -141,8 +150,8 @@ pub const Pair = struct {
     pub fn follow(self: *Pair, registers: *const shell_registers.Pair) void {
         for (&self.cores, registers.cores) |*model, core| {
             if (core.serial == model.seen) continue;
-            const sp = core.stackPointer() orelse continue;
-            model.follow(sp, core.serial);
+            const address = core.value(self.follows) orelse continue;
+            model.follow(address, core.serial);
         }
     }
 

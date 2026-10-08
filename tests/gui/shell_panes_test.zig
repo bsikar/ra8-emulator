@@ -15,7 +15,7 @@ const height: i32 = 320;
 
 test "every kind but empty names the feed it waits for" {
     try std.testing.expectEqual(@as(?[]const u8, null), panes.waitingFor(.empty));
-    for ([_]pane_layout.Kind{ .board, .camera, .console, .devices, .registers, .memory }) |kind| {
+    for ([_]pane_layout.Kind{ .board, .camera, .console, .devices, .registers, .memory, .disasm }) |kind| {
         const note = panes.waitingFor(kind).?;
         try std.testing.expect(std.mem.startsWith(u8, note, "waiting for "));
     }

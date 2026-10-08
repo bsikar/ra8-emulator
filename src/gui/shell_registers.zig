@@ -13,7 +13,7 @@ const pane_layout = @import("pane_layout.zig");
 
 const Env = proto.Client.Env;
 const shown = registers_pane.shown;
-const sp_index = std.mem.indexOfScalar(@TypeOf(shown[0]), &shown, .sp).?;
+pub const Register = @TypeOf(shown[0]);
 pub const Snapshot = registers_pane.Snapshot;
 
 /// The wire's name for each register the pane shows, in the pane's order.
@@ -73,10 +73,12 @@ pub const Registers = struct {
         self.before = null;
     }
 
-    /// SP from the shown batch, or null before one has published.
-    pub fn stackPointer(self: *const Registers) ?u32 {
+    /// `which` from the shown batch, or null before one has published or
+    /// when the pane does not show it.
+    pub fn value(self: *const Registers, which: Register) ?u32 {
         const now = self.now orelse return null;
-        return now.values[sp_index];
+        const index = std.mem.indexOfScalar(Register, &shown, which) orelse return null;
+        return now.values[index];
     }
 
     /// The leaf's note while it has no values to draw, or null.
