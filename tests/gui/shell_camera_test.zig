@@ -28,8 +28,8 @@ const Wire = struct {
     tx: [Env.max_frame]u8 = undefined,
 
     fn open(self: *Wire) !void {
-        const down = try std.posix.pipe();
-        const up = try std.posix.pipe();
+        const down = try std.Io.Threaded.pipe2(.{});
+        const up = try std.Io.Threaded.pipe2(.{});
         self.fds = .{ down[0], down[1], up[0], up[1] };
         self.io = .{ .input = up[0], .output = down[1] };
         self.link.open(self.io.transport(), &self.rx, &self.tx);
@@ -38,7 +38,7 @@ const Wire = struct {
     }
 
     fn close(self: *Wire) void {
-        for (self.fds) |fd| std.posix.close(fd);
+        for (self.fds) |fd| std.Io.Threaded.closeFd(fd);
     }
 };
 
