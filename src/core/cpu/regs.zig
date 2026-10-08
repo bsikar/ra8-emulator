@@ -71,6 +71,9 @@ pub const Name = enum(u5) {
     faultmask,
 };
 
+/// The low-water mark of a stack pointer nothing has written yet.
+pub const never_low: u32 = 0xFFFF_FFFF;
+
 pub const Regs = struct {
     low: [13]u32 = @splat(0),
     msp: u32 = 0,
@@ -85,6 +88,10 @@ pub const Regs = struct {
     /// The stack limits MSR and MRS reach. Bits 2:0 are RES0.
     msplim: u32 = 0,
     psplim: u32 = 0,
+    /// The lowest MSP and PSP this state has held since reset, lowered only
+    /// where a pointer is written (RA8EMU-816). All ones means never written.
+    low_msp: u32 = never_low,
+    low_psp: u32 = never_low,
     /// The privileged and unprivileged 128-bit PAC keys for this Security
     /// state. Word 3 is the most significant key word (DDI0553 SYSm 0x20-27).
     pac_key_p: [4]u32 = .{ 0, 0, 0, 0 },
@@ -155,7 +162,19 @@ pub const Regs = struct {
     /// SP[1:0] read as zero and ignore writes, on both banked pointers.
     pub fn setSp(self: *Regs, value: u32) void {
         const aligned = value & ~@as(u32, 3);
-        if (self.usesPsp()) self.psp = aligned else self.msp = aligned;
+        if (self.usesPsp()) self.setPsp(aligned) else self.setMsp(aligned);
+    }
+
+    /// Write MSP as stored, lowering its low-water mark.
+    pub fn setMsp(self: *Regs, value: u32) void {
+        self.msp = value;
+        self.low_msp = @min(self.low_msp, value);
+    }
+
+    /// Write PSP as stored, lowering its low-water mark.
+    pub fn setPsp(self: *Regs, value: u32) void {
+        self.psp = value;
+        self.low_psp = @min(self.low_psp, value);
     }
 
     pub fn read(self: *const Regs, name: Name) u32 {
@@ -179,8 +198,8 @@ pub const Regs = struct {
         const n = @backingInt(name);
         if (n <= 15) return self.set(@intCast(n), value);
         switch (name) {
-            .msp => self.msp = value & ~@as(u32, 3),
-            .psp => self.psp = value & ~@as(u32, 3),
+            .msp => self.setMsp(value & ~@as(u32, 3)),
+            .psp => self.setPsp(value & ~@as(u32, 3)),
             .xpsr => self.xpsr = value,
             .control => self.control = value,
             .primask => self.primask = value & 1,

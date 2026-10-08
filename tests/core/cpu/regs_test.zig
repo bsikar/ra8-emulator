@@ -48,3 +48,22 @@ test "mask registers keep only their implemented bits" {
     try std.testing.expectEqual(@as(u32, 0), r.read(.faultmask));
     try std.testing.expectEqual(@as(u32, 0xA0), r.read(.basepri));
 }
+
+test "the MSP low-water mark follows SP down and never back up" {
+    var r: regs.Regs = .{};
+    r.setSp(0x2000_1000);
+    r.setSp(0x2000_0F00);
+    r.setSp(0x2000_1000);
+    try std.testing.expectEqual(@as(u32, 0x2000_0F00), r.low_msp);
+    try std.testing.expectEqual(regs.never_low, r.low_psp);
+}
+
+test "MSR PSP then a Thread-mode push lowers only the PSP mark" {
+    var r: regs.Regs = .{};
+    r.write(.msp, 0x2000_2000);
+    r.write(.psp, 0x2000_1000);
+    r.control = regs.control_bits.spsel;
+    r.setSp(r.sp() - 32);
+    try std.testing.expectEqual(@as(u32, 0x2000_0FE0), r.low_psp);
+    try std.testing.expectEqual(@as(u32, 0x2000_2000), r.low_msp);
+}

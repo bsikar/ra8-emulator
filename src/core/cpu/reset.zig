@@ -12,7 +12,7 @@ pub fn fromVectorTable(regs: *regs_mod.Regs, from: bus.Bus, vtor: u32) bus.Error
     const initial_sp = try from.readWord(vtor);
     const handler = try from.readWord(vtor +% 4);
     regs.* = .{};
-    regs.msp = initial_sp & ~@as(u32, 3);
+    regs.setMsp(initial_sp & ~@as(u32, 3));
     regs.lr = lr_at_reset;
     regs.pc = handler & ~@as(u32, 1);
     if (handler & 1 != 0) regs.xpsr = regs_mod.xpsr_bits.thumb;

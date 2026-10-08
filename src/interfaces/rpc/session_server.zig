@@ -17,6 +17,7 @@ const session_camera = @import("session_camera.zig");
 const session_advance = @import("session_advance.zig");
 const session_files = @import("session_files.zig");
 const session_map = @import("session_map.zig");
+const session_stack = @import("session_stack.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -52,6 +53,7 @@ const routes = .{
     .{ @backingInt(M.list_parts), parts.listParts },
     .{ @backingInt(M.set_camera_source), session_camera.setCameraSource },
     .{ @backingInt(M.map), session_map.map },
+    .{ @backingInt(M.stack), session_stack.stack },
     .{ @backingInt(M.advance), session_advance.advance },
     .{ @backingInt(M.snapshot), session_files.snapshot },
     .{ @backingInt(M.restore), session_files.restore },

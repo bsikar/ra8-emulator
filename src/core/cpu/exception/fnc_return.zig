@@ -31,7 +31,7 @@ pub fn from(cpu: *Cpu) Error!void {
     const exception = retpsr & xpsr_bits.ipsr;
     if (!consistent(ipsr, exception)) return error.InconsistentFrame;
     cpu.banked.switchTo(&cpu.regs, .secure);
-    if (process) cpu.regs.psp = frame +% 8 else cpu.regs.msp = frame +% 8;
+    if (process) cpu.regs.setPsp(frame +% 8) else cpu.regs.setMsp(frame +% 8);
     cpu.regs.xpsr = (cpu.regs.xpsr & ~xpsr_bits.ipsr) | exception;
     if (retpsr & retpsr_sfpa != 0)
         cpu.regs.control |= control_bits.sfpa

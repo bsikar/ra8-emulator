@@ -27,6 +27,7 @@ pub const usage =
     \\            plug MODEL@ENDPOINT | unplug ENDPOINT
     \\            snapshot PATH | restore PATH (paths on the serving host)
     \\            map (the memory map of the image last loaded)
+    \\            stack (MSP and PSP, the lowest each reached, any overflow)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
 ;
@@ -57,6 +58,8 @@ pub const Command = union(enum) {
     files: Files,
     /// The memory map of the last loaded image (RA8EMU-794).
     map,
+    /// The stack pointers, their low marks and any overflow (RA8EMU-816).
+    stack,
 };
 
 pub const Part = struct { method: proto.Method, text: []const u8 };
@@ -120,6 +123,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
     if (eql(u8, name, "map")) return if (args.len == 0) .map else error.BadArguments;
+    if (eql(u8, name, "stack")) return if (args.len == 0) .stack else error.BadArguments;
     if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
     if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
     if (eql(u8, name, "break")) return parseBreak(args);
@@ -261,6 +265,10 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
         .map => {
             const map = try client.call(proto.MapText, proto.MapAsk, .map, .{ .core = .cpu0, .json = @intFromBool(json) });
             try out.map(w, json, map.text);
+        },
+        .stack => {
+            const report = try client.call(proto.StackReport, proto.CoreOnly, .stack, .{ .core = .cpu0 });
+            try out.stack(w, json, report);
         },
     }
     return 0;

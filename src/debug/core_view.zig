@@ -17,6 +17,12 @@ pub const View = union(enum) {
         };
     }
 
+    pub fn stack(self: View) zig_core.StackMarks {
+        return switch (self) {
+            .zig => |core| core.stack(),
+        };
+    }
+
     pub fn setRegister(self: View, which: Cortex, value: u32) Error!void {
         switch (self) {
             .zig => |core| core.setRegister(which, value),

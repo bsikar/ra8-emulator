@@ -62,6 +62,9 @@ fn roundTrip(profile: Profile) !void {
     cpu.regs.basepri = secure.basepri;
     cpu.regs.faultmask = secure.faultmask;
     cpu.regs.control = secure.control;
+    // Reset left its own low-water marks; the round trip carries this bank's.
+    cpu.regs.low_msp = secure.low_msp;
+    cpu.regs.low_psp = secure.low_psp;
     cpu.banked.other = non_secure;
     cpu.regs.low[0] = entry; // bit 0 clear: a Non-secure target
 
