@@ -169,8 +169,8 @@ const pingpong_cpu1_bytes = @embedFile("../fixtures/trustzone/cpu1_pingpong_ipc_
 test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "cpu1.elf", .data = pingpong_cpu1_bytes });
-    const cpu1_path = try tmp.dir.realpathAlloc(std.testing.allocator, "cpu1.elf");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "cpu1.elf", .data = pingpong_cpu1_bytes });
+    const cpu1_path = try tmp.dir.realPathFileAlloc(std.testing.io, "cpu1.elf", std.testing.allocator);
     defer std.testing.allocator.free(cpu1_path);
 
     const image = try ra8.core.elf.Image.init(pingpong_bytes);
@@ -190,7 +190,8 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     var clock: ra8.board.zig_run.Clock = .{ .io = std.testing.io, .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };
     var final: ra8.core.cpu.boot.Regs = .{};
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
-    _ = try ra8.core.cpu.boot.start(std.io.null_writer, .zig, memory, &board.bus, vector_base, 100_000, &timebase.ticks, .{
+    var discard: std.Io.Writer.Discarding = .init(&.{});
+    _ = try ra8.core.cpu.boot.start(&discard.writer, .zig, memory, &board.bus, vector_base, 100_000, &timebase.ticks, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,
