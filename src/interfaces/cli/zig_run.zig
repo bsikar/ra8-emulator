@@ -269,14 +269,13 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     var eink_recorder = eink_log.Run.init(std.heap.page_allocator, board);
     if (options.frames.eink_log != null) eink_recorder.arm();
     defer eink_recorder.deinit();
-    var boot_output = out;
     var final: boot.Regs = .{};
     var audio: audio_out.Run = .{};
     audio.arm(board, if (options.cpu == .zig) options.audio else .{});
     defer audio.deinit();
     var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
     if (options.console) try itm_console.prime(clock.memory, &itm_port);
-    const status = try boot.start(BootWriter{ .output = &boot_output, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory.asInitiator(.cpu0), &board.bus, vector_base, budget, &ran, .{
+    const status = try boot.start(BootWriter{ .output = out, .quiet = options.ctl_cpu_load }, options.cpu, clock.memory.asInitiator(.cpu0), &board.bus, vector_base, budget, &ran, .{
         .boundary = try fault_file.boundary(ends.schedule, clock.boundary()),
         .partitions = &board.partitions,
         .idau = &board.idau,
@@ -326,8 +325,7 @@ fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Record
     clock.soakFaults();
     const watched = watcher.result(final.pc);
     clock.board.time.soak.place(final.pc, if (clock.board.clock.running()) clock.board.clock.now else null);
-    var output = out;
-    const said = BootWriter{ .output = &output, .quiet = options.ctl_cpu_load };
+    const said = BootWriter{ .output = out, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire_at, final.pc, budget);
     } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);

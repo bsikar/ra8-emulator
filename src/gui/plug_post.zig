@@ -25,7 +25,9 @@ pub const limits = struct {
 };
 
 pub const PlugPost = struct {
-    mutex: std.Thread.Mutex = .{},
+    /// Window and engine threads lock through it; neither cancels.
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
     queue: [limits.pending]Request = undefined,
     count: usize = 0,
     refused: [limits.pending]Request = undefined,
@@ -38,8 +40,8 @@ pub const PlugPost = struct {
 
     fn post(context: *anyopaque, at: Endpoint, name: ?[]const u8) anyerror!void {
         const self: *PlugPost = @ptrCast(@alignCast(context));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.count == limits.pending) return Error.QueueFull;
         self.queue[self.count] = .{ .at = at, .name = name };
         self.count += 1;
@@ -48,8 +50,8 @@ pub const PlugPost = struct {
     /// Engine side, at a park: apply every queued change through `board`,
     /// oldest first, keeping the ones it refused. Returns how many landed.
     pub fn apply(self: *PlugPost, board: session_api.PlugHook) usize {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         var landed: usize = 0;
         for (self.queue[0..self.count]) |request| {
             if (board.plugFn(board.context, request.at, request.name)) |_| {
@@ -73,8 +75,8 @@ pub const PlugPost = struct {
     /// Window side: the changes the board refused since the last call,
     /// oldest first, copied into `out` (at most `limits.pending`).
     pub fn takeRefused(self: *PlugPost, out: *[limits.pending]Request) []Request {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const count = self.refused_count;
         @memcpy(out[0..count], self.refused[0..count]);
         self.refused_count = 0;
