@@ -47,7 +47,7 @@ test "fetch reads a second halfword only for a wide encoding" {
 test "an instruction prints its address and halfwords" {
     var buf: [64]u8 = undefined;
     const narrow: Instr = .{ .address = 0x0800_0010, .hw1 = 0xDE00, .size = 2 };
-    try std.testing.expectEqualStrings("0x08000010: 0xde00", try std.fmt.bufPrint(&buf, "{}", .{narrow}));
+    try std.testing.expectEqualStrings("0x08000010: 0xde00", try std.fmt.bufPrint(&buf, "{f}", .{narrow}));
     const wide: Instr = .{ .address = 0x0800_0012, .hw1 = 0xF7F0, .hw2 = 0xA000, .size = 4 };
-    try std.testing.expectEqualStrings("0x08000012: 0xf7f0 0xa000", try std.fmt.bufPrint(&buf, "{}", .{wide}));
+    try std.testing.expectEqualStrings("0x08000012: 0xf7f0 0xa000", try std.fmt.bufPrint(&buf, "{f}", .{wide}));
 }
