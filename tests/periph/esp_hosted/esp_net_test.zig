@@ -44,7 +44,7 @@ fn waitFrame(bridge: *Bridge, queue: *Queue, out: *[frame.max_payload]u8) ![]con
     for (0..2000) |_| {
         bridge.poll(queue);
         if (popEthernet(queue, out)) |bytes| return bytes;
-        std.Thread.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
     return error.Timeout;
 }
@@ -66,7 +66,7 @@ const TcpHost = struct {
         const connection = while (!self.stop.load(.acquire)) {
             break self.server.accept() catch |err| switch (err) {
                 error.WouldBlock => {
-                    std.Thread.sleep(std.time.ns_per_ms);
+                    try std.testing.io.sleep(.fromMilliseconds(1), .awake);
                     continue;
                 },
                 else => return err,
@@ -151,7 +151,7 @@ const UdpHost = struct {
         while (!self.stop.load(.acquire)) {
             self.got_len = std.posix.recvfrom(self.fd, &self.got, 0, &source.any, &source_len) catch |err| switch (err) {
                 error.WouldBlock => {
-                    std.Thread.sleep(std.time.ns_per_ms);
+                    try std.testing.io.sleep(.fromMilliseconds(1), .awake);
                     continue;
                 },
                 else => return err,

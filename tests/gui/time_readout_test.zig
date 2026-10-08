@@ -33,10 +33,10 @@ test "the achieved speed shows only when short of the request, never for max" {
 }
 
 fn connect(link: *Link) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
-    while (link.state == .connecting and std.time.milliTimestamp() < deadline) {
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while (link.state == .connecting and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
         _ = link.pump();
-        std.time.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
     try std.testing.expect(link.state == .connected);
 }
@@ -48,15 +48,15 @@ fn busy(readout: *const Readout, status: *const Status) bool {
 /// Pump the link into the readout and the status until nothing is
 /// outstanding, for ten seconds.
 fn settle(link: *Link, readout: *Readout, status: *Status) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (busy(readout, status)) {
-        if (std.time.milliTimestamp() > deadline) return error.Timeout;
+        if (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() > deadline) return error.Timeout;
         if (link.state != .connected) return error.LinkLost;
         const arrival = link.pump() orelse {
-            std.time.sleep(std.time.ns_per_ms);
+            try std.testing.io.sleep(.fromMilliseconds(1), .awake);
             continue;
         };
-        readout.observe(arrival, @intCast(std.time.nanoTimestamp()));
+        readout.observe(arrival, @intCast(std.Io.Timestamp.now(std.testing.io, .awake).toNanoseconds()));
         status.observe(link, arrival);
     }
 }

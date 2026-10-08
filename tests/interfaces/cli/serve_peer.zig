@@ -32,10 +32,10 @@ pub const Peer = struct {
 
     /// The next frame from the server, or an error after ten seconds.
     fn next(self: *Peer) !Incoming {
-        const deadline = std.time.milliTimestamp() + 10_000;
-        while (std.time.milliTimestamp() < deadline) {
+        const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+        while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| return incoming;
-            std.time.sleep(std.time.ns_per_ms);
+            try std.testing.io.sleep(.fromMilliseconds(1), .awake);
         }
         return error.ServerSilent;
     }

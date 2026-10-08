@@ -38,7 +38,7 @@ fn waitSegment(bridge: *Bridge, queue: *Queue, out: *[frame.max_payload]u8) !eth
             @memcpy(out[0..parsed.payload.len], parsed.payload);
             return eth.tcp(eth.ipv4(out[0..parsed.payload.len]).?).?;
         }
-        std.Thread.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
     return error.Timeout;
 }
@@ -84,7 +84,7 @@ const Server = struct {
         const connection = for (0..2000) |_| {
             break self.server.accept() catch |err| switch (err) {
                 error.WouldBlock => {
-                    std.Thread.sleep(std.time.ns_per_ms);
+                    try std.testing.io.sleep(.fromMilliseconds(1), .awake);
                     continue;
                 },
                 else => return err,

@@ -23,19 +23,20 @@ pub const Config = struct {
 pub const Run = struct { elapsed_ns: u64, publishes: u32, reads: u32, checksum: u64 };
 
 const Reader = struct {
+    io: std.Io,
     handoff: *snapshot.Handoff,
     period_ns: u64,
     done: std.atomic.Value(bool) = .init(false),
     reads: u32 = 0,
     sum: u64 = 0,
 
-    fn loop(self: *Reader) void {
+    fn loop(self: *Reader) std.Io.Cancelable!void {
         while (!self.done.load(.acquire)) {
             if (self.handoff.latest()) |board| {
                 self.reads += 1;
                 for (board.panel) |pixel| self.sum +%= pixel;
             }
-            std.time.sleep(self.period_ns);
+            try self.io.sleep(.fromNanoseconds(self.period_ns), .awake);
         }
     }
 };
@@ -54,30 +55,30 @@ fn emulate(state: *u64, panel: []u32, work: u32) void {
 }
 
 /// One timed writer run, with a reader when `reader` is set.
-pub fn once(allocator: std.mem.Allocator, config: Config, reader: bool) !Run {
+pub fn once(allocator: std.mem.Allocator, io: std.Io, config: Config, reader: bool) !Run {
     var handoff = snapshot.Handoff.init(allocator);
     defer handoff.deinit();
     const panel = try allocator.alloc(u32, @as(usize, config.width) * config.height);
     defer allocator.free(panel);
-    var watcher = Reader{ .handoff = &handoff, .period_ns = std.time.ns_per_s / @max(config.reader_hz, 1) };
+    var watcher = Reader{ .io = io, .handoff = &handoff, .period_ns = std.time.ns_per_s / @max(config.reader_hz, 1) };
     const thread = if (reader) try std.Thread.spawn(.{}, Reader.loop, .{&watcher}) else null;
     var state: u64 = 0x9E3779B97F4A7C15;
-    var timer = try std.time.Timer.start();
+    const start = std.Io.Timestamp.now(io, .awake);
     for (0..config.frames) |_| {
         emulate(&state, panel, config.work_per_frame);
         _ = try handoff.publish(.{ .panel = panel, .width = config.width, .height = config.height, .leds = &.{} });
     }
-    const elapsed = timer.read();
+    const elapsed: u64 = @intCast(start.untilNow(io, .awake).toNanoseconds());
     watcher.done.store(true, .release);
     if (thread) |t| t.join();
     return .{ .elapsed_ns = elapsed, .publishes = config.frames, .reads = watcher.reads, .checksum = state +% watcher.sum };
 }
 
 /// The best of `trials` runs: the least the box's noise added.
-pub fn best(allocator: std.mem.Allocator, config: Config, reader: bool) !Run {
-    var fastest = try once(allocator, config, reader);
+pub fn best(allocator: std.mem.Allocator, io: std.Io, config: Config, reader: bool) !Run {
+    var fastest = try once(allocator, io, config, reader);
     for (1..config.trials) |_| {
-        const next = try once(allocator, config, reader);
+        const next = try once(allocator, io, config, reader);
         if (next.elapsed_ns < fastest.elapsed_ns) fastest = next;
     }
     return fastest;
@@ -90,12 +91,10 @@ pub fn slowdown(base: Run, loaded: Run) f64 {
     return (l - b) / b * 100.0;
 }
 
-pub fn main() !u8 {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+pub fn main(init: std.process.Init) !u8 {
     const config = Config{};
-    const base = try best(gpa.allocator(), config, false);
-    const loaded = try best(gpa.allocator(), config, true);
+    const base = try best(init.gpa, init.io, config, false);
+    const loaded = try best(init.gpa, init.io, config, true);
     const percent = slowdown(base, loaded);
     const bytes = @as(usize, config.width) * config.height * @sizeOf(u32);
     std.debug.print("handoff: {d} frames of {d} bytes; no reader {d} ms, {d} Hz reader {d} ms ({d} reads), slowdown {d:.2}% (limit {d:.1}%)\n", .{

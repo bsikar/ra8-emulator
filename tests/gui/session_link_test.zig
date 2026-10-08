@@ -149,11 +149,11 @@ test "a session on another protocol version shows as failed with a version messa
 }
 
 /// Pump `link` until it pumps something out or leaves `from`, for ten seconds.
-fn pumpWhile(link: *Link, from: std.meta.Tag(State)) ?Arrival {
-    const deadline = std.time.milliTimestamp() + 10_000;
-    while (std.time.milliTimestamp() < deadline and link.state == from) {
+fn pumpWhile(link: *Link, from: std.meta.Tag(State)) !?Arrival {
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline and link.state == from) {
         if (link.pump()) |arrival| return arrival;
-        std.time.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
     return null;
 }
@@ -169,16 +169,16 @@ test "a spawned serve --stdio child connects, answers, and shows as failed once 
     defer gpa.free(tx);
     var link: Link = undefined;
     link.open(local.transport(), rx, tx);
-    _ = pumpWhile(&link, .connecting);
+    _ = try pumpWhile(&link, .connecting);
     try std.testing.expect(link.state == .connected);
 
     const id = try link.send(proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = .sp });
-    const response = pumpWhile(&link, .connected).?.response;
+    const response = (try pumpWhile(&link, .connected)).?.response;
     try std.testing.expectEqual(id, response.id);
     try std.testing.expect((try proto.decode(proto.U32, response.result.ok)).value != 0);
 
     local.end();
-    _ = pumpWhile(&link, .connected);
+    _ = try pumpWhile(&link, .connected);
     try std.testing.expectEqual(State{ .failed = .ended }, link.state);
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
 }

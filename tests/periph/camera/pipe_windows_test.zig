@@ -71,7 +71,7 @@ test "real Windows named pipe streams frames without administrator rights" {
     if (builtin.os.tag != .windows) return error.SkipZigTest;
 
     var name_buf: [96]u8 = undefined;
-    const name = try std.fmt.bufPrint(&name_buf, "ra8emu-585-{d}-{d}", .{ Live.processId(), std.time.nanoTimestamp() });
+    const name = try std.fmt.bufPrint(&name_buf, "ra8emu-585-{d}-{d}", .{ Live.processId(), std.Io.Timestamp.now(std.testing.io, .real).toNanoseconds() });
     var arg_buf: [128]u8 = undefined;
     const arg = try std.fmt.bufPrint(&arg_buf, "{s},2x1,rgb24", .{name});
     var format_control: u8 = 0x6F;
