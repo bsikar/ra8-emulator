@@ -33,7 +33,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var cpu0: Cpu0 = .{};
     defer cpu0.close();
     var parts = Parts{};
-    const written = try prepare(&cpu0, &board, image, &parts, options);
+    const written = try prepare(&cpu0, &board, io, image, &parts, options);
     if (options.ns_path) |path| loadNonSecure(allocator, &cpu0, path) catch return 1;
     const vector_base = vectorBase(image) catch return 1;
     const memory = cpu0.own();
@@ -61,11 +61,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
 
 /// CPU0's store, the console tap, the profile table and option memory: what
 /// main's `loadAll` sets up that a Zig run reads. Returns the bytes loaded.
-pub fn prepare(cpu0: *Cpu0, board: *Board, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
+pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
     const written = try cpu0.attachStore(board, image);
     if (options.console) board.console_input.enabled = true;
     board.console_input.reply = options.console_reply;
-    parts.tap = .{ .echo = options.console, .wait = if (options.until) |text| .{ .needle = text } else null };
+    parts.tap = .{ .echo = if (options.console) io else null, .wait = if (options.until) |text| .{ .needle = text } else null };
     if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;
     cli.console_output.configure(&board.serial.line, &parts.tap);
     if (options.profile) parts.prepareProfile(image);
