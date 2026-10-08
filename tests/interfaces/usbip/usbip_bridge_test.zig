@@ -52,28 +52,32 @@ const Seen = struct { done: std.atomic.Value(bool) = .init(false), actual: u32 =
 /// A host that imports 1-1, submits one bulk IN URB on ep1 and reads its reply.
 fn host(port: u16, seen: *Seen) void {
     defer seen.done.store(true, .release);
-    const address = std.net.Address.parseIp4("127.0.0.1", port) catch return;
-    const stream = std.net.tcpConnectToAddress(address) catch return;
-    defer stream.close();
+    const io = std.testing.io;
+    const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch return;
+    const stream = address.connect(io, .{ .mode = .stream }) catch return;
+    defer stream.close(io);
+    var out = stream.writer(io, &.{});
+    var in_buffer: [256]u8 = undefined;
+    var in = stream.reader(io, &in_buffer);
     var header: [wire.op_header_len]u8 = undefined;
     (wire.OpHeader{ .code = wire.op.req_import }).encode(&header);
     var busid = @as([wire.busid_len]u8, @splat(0));
     @memcpy(busid[0..3], "1-1");
-    stream.writeAll(&header) catch return;
-    stream.writeAll(&busid) catch return;
+    out.interface.writeAll(&header) catch return;
+    out.interface.writeAll(&busid) catch return;
     var reply: [wire.op_header_len + wire.device_len]u8 = undefined;
-    stream.reader().readNoEof(&reply) catch return;
+    in.interface.readSliceAll(&reply) catch return;
     var submit = @as([wire.basic_len]u8, @splat(0));
     std.mem.writeInt(u32, submit[0..4], wire.cmd.submit, .big);
     std.mem.writeInt(u32, submit[4..8], 1, .big);
     std.mem.writeInt(u32, submit[12..16], 1, .big);
     std.mem.writeInt(u32, submit[16..20], 1, .big);
     std.mem.writeInt(u32, submit[24..28], 64, .big);
-    stream.writeAll(&submit) catch return;
+    out.interface.writeAll(&submit) catch return;
     var ret: [wire.basic_len]u8 = undefined;
-    stream.reader().readNoEof(&ret) catch return;
+    in.interface.readSliceAll(&ret) catch return;
     seen.actual = std.mem.readInt(u32, ret[24..28], .big);
-    stream.reader().readNoEof(seen.data[0..@min(seen.actual, 2)]) catch return;
+    in.interface.readSliceAll(seen.data[0..@min(seen.actual, 2)]) catch return;
 }
 
 test "nothing is bound while the device has not enumerated" {
