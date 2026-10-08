@@ -251,7 +251,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
         if (!openSecond(&pair, io, board, named, memory, options.blocks)) return 1;
         clock.cpu1 = &pair;
-        rtos_hook.second.armZig(&pair, options.rtosWanted(), named);
+        rtos_hook.second.armZig(&pair, io, options.rtosWanted(), named);
     }
     defer if (clock.cpu1) |second| second.close();
     if (board.time.soak.armed) soak_symbols.resolve(image, &board.time.soak.threads);
@@ -311,8 +311,8 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         try second_core.report(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.
         if (!options.report_json) try textDumps(out, io, board, clock.memory, &final, image, options, watched);
-        if (tracer) |*found| try rtos_hook.report.all(out, options, found, rtos_hook.Memory{ .guest = clock.memory });
-        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, options, second.guest());
+        if (tracer) |*found| try rtos_hook.report.all(out, io, options, found, rtos_hook.Memory{ .guest = clock.memory });
+        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, options, second.guest());
         try finishFrames(out, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);

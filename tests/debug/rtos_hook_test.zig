@@ -156,7 +156,7 @@ test "a CPU1 image without ThreadX traces nothing, and no flag traces nothing" {
 test "no CPU1 prints nothing for CPU1" {
     var out = std.ArrayList(u8).init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.second.print(out.writer(), .{ .trace_rtos = true, .cpu_load = true }, null);
+    try rtos_hook.second.print(out.writer(), std.testing.io, .{ .trace_rtos = true, .cpu_load = true }, null);
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 

@@ -37,11 +37,11 @@ pub fn sideOf(tracer: ?*const rtos_hook.Tracer, memory: rtos_hook.Memory) ?Side 
 /// The trace when `--trace-rtos` asked, then the load when `--cpu-load` did.
 /// Under `--report json` the load is in the document, so its table is not
 /// printed again.
-pub fn all(out: anytype, options: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
+pub fn all(out: anytype, io: std.Io, options: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
     if (options.trace_rtos) try rtos_hook.print(out, tracer, memory);
     if (options.cpu_load and !asJson(options)) try load(out, tracer, memory);
     const one = tracer orelse return;
-    if (outPath(options)) |path| try rtos_file.save(path, one.core, &one.trace);
+    if (outPath(options)) |path| try rtos_file.save(io, path, one.core, &one.trace);
 }
 
 /// `--trace-rtos-out`, when the options carry it and it was given.
