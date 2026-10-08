@@ -52,7 +52,7 @@ test "scripted full and partial refreshes produce JSONL and totals by waveform" 
 
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const path = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const path = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(path);
     const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "refresh.jsonl" });
     defer std.testing.allocator.free(log_path);

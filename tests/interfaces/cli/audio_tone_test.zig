@@ -71,7 +71,7 @@ fn halfPeriods(data: []const u8, into: []usize) usize {
 test "the tone image's WAV is 1 kHz for 10 ms at a 48 kHz audio rate" {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const root = try dir.dir.realpathAlloc(allocator, ".");
+    const root = try dir.dir.realPathFileAlloc(std.testing.io, ".", allocator);
     defer allocator.free(root);
     const path = try std.fs.path.join(allocator, &.{ root, "tone.wav" });
     defer allocator.free(path);

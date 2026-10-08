@@ -62,7 +62,7 @@ fn read(dir: std.fs.Dir, name: []const u8) ![]u8 {
 test "two chunks straight end where one chunk, saved, then one restored end" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const paths = [_][]const u8{ "straight", "half", "resumed" };
     var full: [3][]u8 = undefined;
@@ -85,7 +85,7 @@ test "two chunks straight end where one chunk, saved, then one restored end" {
 test "a split off a chunk boundary ends where the straight run ends too" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const paths = [_][]const u8{ "straight", "half", "resumed" };
     var full: [3][]u8 = undefined;
@@ -110,7 +110,7 @@ test "a split off a chunk boundary ends where the straight run ends too" {
 test "threadx_stkof split mid-run or during boot ends where the straight run ends" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const paths = [_][]const u8{ "straight", "half", "resumed" };
     var full: [3][]u8 = undefined;
@@ -136,7 +136,7 @@ test "threadx_stkof split mid-run or during boot ends where the straight run end
 test "snapshot-at mid-run restores to the straight run's end" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const root = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const paths = [_][]const u8{ "straight", "half", "mid", "resumed" };
     var full: [4][]u8 = undefined;

@@ -40,7 +40,7 @@ fn writeFile(dir: std.fs.Dir, name: []const u8, bytes: []const u8) !void {
 }
 
 fn loadFrom(dir: std.testing.TmpDir, name: []const u8, format_control: *const u8) !*still.ImageSource {
-    const path = try dir.dir.realpathAlloc(allocator, name);
+    const path = try dir.dir.realPathFileAlloc(std.testing.io, name, allocator);
     defer allocator.free(path);
     return still.ImageSource.load(allocator, std.testing.io, path, format_control);
 }
