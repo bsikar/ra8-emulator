@@ -77,6 +77,8 @@ pub const SecondZig = struct {
         self.cpu = .{ .bus = self.quiet.bus(), .source = self.quiet.source(), .quiet = &self.quiet, .profile = part.cpu1_profile };
         self.cpu.decoded = &self.decoded;
         self.board.security = &self.cpu.banked;
+        // CPACR reaches CPU1's own FP state (RA8EMU-950).
+        self.board.scs.fp = &self.cpu.fp;
         self.pending.banked = &self.cpu.banked;
         self.check = .{ .unit = units.regions };
         self.board.check = &self.check;

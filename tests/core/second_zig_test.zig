@@ -223,3 +223,14 @@ test "CPU1 on its own store shares CPU0's SRAM and answers as an M33" {
     try std.testing.expectEqual(ra8.core.cpu.cpu.Stop.count, own.core.turn(2));
     try std.testing.expectEqual(@as(u32, 6), own.core.cpu.regs.get(0));
 }
+
+test "RA8EMU-950: CPU1's board bus files CPACR into its own FP state" {
+    var pair: Pair = undefined;
+    try pair.open();
+    defer pair.part();
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var core: SecondZig = undefined;
+    try pair.bring(&core, &board);
+    try std.testing.expectEqual(&core.cpu.fp, core.board.scs.fp.?);
+}

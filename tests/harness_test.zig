@@ -190,3 +190,19 @@ test "a subscriber that never reads does not change the run" {
     try std.testing.expectEqual(free.recorded, stalled.recorded);
     if (stalled.total > ra8.core.session_event_stream.capacity) try std.testing.expect(stalled.dropped > 0);
 }
+
+test "RA8EMU-950: a session core sees CPACR, so fp_basic's first VADD lands" {
+    var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = "tests/fixtures/fpu/fp_basic.elf",
+    });
+    defer opened.deinit();
+    const first_result: u32 = 0x2200_0100;
+    var bytes: [4]u8 = undefined;
+    var steps: usize = 0;
+    while (steps < 400) : (steps += 1) {
+        _ = try opened.session().step(.cpu0);
+        try opened.session().read(.cpu0, first_result, &bytes);
+        if (std.mem.readInt(u32, &bytes, .little) == 0x4080_0000) break;
+    } else return error.SumNeverStored;
+    try std.testing.expectEqual(@as(u32, 0x00F0_0000), opened.primaryCpu().fp.cpacr);
+}
