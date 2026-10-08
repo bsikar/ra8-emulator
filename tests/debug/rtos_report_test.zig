@@ -55,9 +55,9 @@ test "shares add up to exactly 100.0% by largest remainder" {
 test "the load table charges a known run to its owners" {
     var clock: u64 = 0;
     const tracer = run(&clock);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try report.all(out.writer(), Flags{ .cpu_load = true }, &tracer, Blink{});
+    try report.all(&out.writer, std.testing.io, Flags{ .cpu_load = true }, &tracer, Blink{});
     const want =
         \\  cpu load cpu0 : 200 instruction(s)
         \\                    5.0%         10  before the first switch
@@ -66,19 +66,19 @@ test "the load table charges a known run to its owners" {
         \\                   50.0%        100  0x220011A0 blink_b
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 test "neither flag prints nothing, and --trace-rtos alone prints no load" {
     var clock: u64 = 0;
     const tracer = run(&clock);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try report.all(out.writer(), Flags{}, &tracer, Blink{});
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
-    try report.all(out.writer(), Flags{ .trace_rtos = true }, &tracer, Blink{});
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "cpu load") == null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "rtos trace") != null);
+    try report.all(&out.writer, std.testing.io, Flags{}, &tracer, Blink{});
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
+    try report.all(&out.writer, std.testing.io, Flags{ .trace_rtos = true }, &tracer, Blink{});
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "cpu load") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "rtos trace") != null);
 }
 
 test "an attached tracer charges load in the instructions its hook saw" {
@@ -87,14 +87,14 @@ test "an attached tracer charges load in the instructions its hook saw" {
     for (0..30) |_| tracer.onInstruction();
     tracer.onStore(0x2200_1ABC, 4, blink_a);
     for (0..70) |_| tracer.onInstruction();
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try report.load(out.writer(), &tracer, Blink{});
+    try report.load(&out.writer, &tracer, Blink{});
     const want =
         \\  cpu load cpu0 : 100 instruction(s)
         \\                   30.0%         30  before the first switch
         \\                   70.0%         70  0x220010F0 blink_a
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
