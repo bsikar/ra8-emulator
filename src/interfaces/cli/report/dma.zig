@@ -19,7 +19,7 @@ const std = @import("std");
 const Board = @import("../../../board/board.zig").Board;
 const dmac = @import("../../../periph/dmac/dmac.zig");
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// What the eight channels did between them, gathered before anything is
 /// printed so the header can lead with the totals and the per-channel lines

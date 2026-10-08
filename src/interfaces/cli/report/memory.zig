@@ -10,7 +10,7 @@ const std = @import("std");
 const Board = @import("../../../board/board.zig").Board;
 const cache = @import("../../../periph/cache/cache.zig");
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// Quiet unless the run touched the ECC path. The refused store is the loud
 /// case: SRAMESR is what the decoder found, so an image that wrote it was

@@ -68,7 +68,7 @@ const scb = @import("../../periph/scb.zig");
 const lob = @import("../../core/lob.zig");
 const unmodelled = @import("report/unmodelled.zig");
 
-pub const Writer = std.fs.File.Writer;
+pub const Writer = *std.Io.Writer;
 
 pub fn bus(board: *Board, out: Writer) !void {
     try out.print(
