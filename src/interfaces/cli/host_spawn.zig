@@ -30,7 +30,7 @@ pub fn serveArgv(allocator: std.mem.Allocator, io: std.Io, profile: profiles.Pro
 pub fn cachePath(allocator: std.mem.Allocator, cache: []const u8, bytes: []const u8) ![]const u8 {
     var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
-    return std.fmt.allocPrint(allocator, "{s}/{s}.elf", .{ cache, std.fmt.fmtSliceHexLower(&digest) });
+    return std.fmt.allocPrint(allocator, "{s}/{x}.elf", .{ cache, &digest });
 }
 
 /// Copy `bytes` to `remote` unless a `test -f` there says it is present.
