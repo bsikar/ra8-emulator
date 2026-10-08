@@ -351,7 +351,7 @@ pub const Loop = struct {
         const lines = if (self.consoles.len > 0) console_pick.below(strip) else strip;
         if (self.console) |log| try console_pane.draw(&list, lines, log, self.scroll.back);
         const digest = present_gate.digest(&list);
-        const now = std.time.nanoTimestamp();
+        const now: i128 = std.Io.Timestamp.now(self.io, .awake).toNanoseconds();
         if (!self.gate.due(digest, now, window.interval())) return;
         if (!try window.show(&list, font.atlas)) {
             const frame = try self.fitFrame(size);
