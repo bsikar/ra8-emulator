@@ -19,6 +19,12 @@ const Arrival = session_link.Arrival;
 
 const Env = proto.Client.Env;
 
+/// Writes all of `bytes` to a pipe end, as the host side of the test.
+fn send(fd: std.posix.fd_t, bytes: []const u8) !void {
+    const end: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+    try end.writeStreamingAll(std.testing.io, bytes);
+}
+
 /// Vector table (SP 0x40, reset 0x09) then nops at 0x08.
 const Ram = struct {
     bytes: [64]u8 = @splat(0),
@@ -61,8 +67,8 @@ const Far = struct {
         try self.cpu.reset(0);
         self.session = .{ .live = .{ .core = .{ .cpu = &self.cpu }, .machine = &self.machine, .budget = 100 } };
         self.context = .{ .session = &self.session, .scratch = &self.scratch };
-        const down = try std.posix.pipe();
-        const up = try std.posix.pipe();
+        const down = try std.Io.Threaded.pipe2(.{});
+        const up = try std.Io.Threaded.pipe2(.{});
         self.io = .{ .input = up[0], .output = down[1] };
         self.near = .{ .input = down[0], .output = up[1] };
         self.host = served.Host.init(self.io.transport(), self.buffers[0], &self.context);
@@ -71,8 +77,8 @@ const Far = struct {
 
     fn deinit(self: *Far) void {
         self.hangUp();
-        std.posix.close(self.near.input);
-        std.posix.close(self.near.output);
+        std.Io.Threaded.closeFd(self.near.input);
+        std.Io.Threaded.closeFd(self.near.output);
         for (self.buffers) |buffer| self.gpa.free(buffer);
         self.gpa.destroy(self);
     }
@@ -80,8 +86,8 @@ const Far = struct {
     /// The far end goes away, as a session that exits does.
     fn hangUp(self: *Far) void {
         if (self.io.output < 0) return;
-        std.posix.close(self.io.output);
-        std.posix.close(self.io.input);
+        std.Io.Threaded.closeFd(self.io.output);
+        std.Io.Threaded.closeFd(self.io.input);
         self.io = .{ .input = -1, .output = -1 };
     }
 
@@ -142,7 +148,7 @@ test "a session on another protocol version shows as failed with a version messa
     far.openLink(&link);
     var frame: [64]u8 = undefined;
     const hello = try rpc.frame.encode(rpc.Hello, rpc.Kind.hello, .{ .caps = 1, .version = rpc.Protocol.version + 1 }, &frame);
-    _ = try std.posix.write(far.io.output, hello);
+    try send(far.io.output, hello);
     try std.testing.expectEqual(@as(?Arrival, null), link.pump());
     try std.testing.expectEqual(State{ .failed = .version_mismatch }, link.state);
     try std.testing.expectEqualStrings("the session speaks another protocol version", link.state.failed.message());
