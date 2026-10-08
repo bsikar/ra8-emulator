@@ -13,8 +13,8 @@ const scb = mod.scb;
 const syst = mod.syst;
 test "every named PPB register falls inside the PPB window" {
     inline for (.{ scb, syst, nvic, dwt }) |block| {
-        inline for (@typeInfo(block).@"struct".decls) |decl| {
-            const address = @field(block, decl.name);
+        inline for (@typeInfo(block).@"struct".decl_names) |name| {
+            const address = @field(block, name);
             try std.testing.expect(address >= ppb_base);
             try std.testing.expect(address < ppb_base + ppb_size);
         }
