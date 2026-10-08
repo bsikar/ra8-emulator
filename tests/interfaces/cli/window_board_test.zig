@@ -58,7 +58,7 @@ test "the window loop steps the board until the stepper ends and presents the vi
     defer screen.deinit();
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = screen.run();
     while (try loop.tick(window.platform(), run)) {}
@@ -99,7 +99,7 @@ test "the window's scans leave the controller and its report as they were" {
     defer screen.deinit();
     var window = Headless.init(std.testing.allocator, 1280, 700);
     defer window.deinit();
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = screen.run();
     while (try loop.tick(window.platform(), run)) {}

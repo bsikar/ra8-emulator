@@ -25,11 +25,11 @@ pub const Devices = struct {
 /// The video nodes in `dir`, lowest number first. Names that are not
 /// `video` followed by digits, and numbers `webcam:N` cannot name, are
 /// left out.
-pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Devices {
+pub fn list(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !Devices {
     var found: std.ArrayList(u32) = .empty;
     errdefer found.deinit(allocator);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (number(entry.name)) |n| try found.append(allocator, n);
     }
     const numbers = try found.toOwnedSlice(allocator);
@@ -38,11 +38,11 @@ pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Devices {
 }
 
 /// The host's webcams. A host with no /dev to read has none.
-pub fn listHost(allocator: std.mem.Allocator) !Devices {
-    var dir = std.fs.openDirAbsolute(host_dir, .{ .iterate = true }) catch
+pub fn listHost(allocator: std.mem.Allocator, io: std.Io) !Devices {
+    const dir = std.Io.Dir.openDirAbsolute(io, host_dir, .{ .iterate = true }) catch
         return .{ .allocator = allocator, .numbers = try allocator.alloc(u32, 0) };
-    defer dir.close();
-    return list(allocator, dir);
+    defer dir.close(io);
+    return list(allocator, io, dir);
 }
 
 /// N for a `videoN` node name, or null for any other name.

@@ -86,6 +86,7 @@ pub fn consoleArea(window: platform.Platform, board: Board) draw_list.Rect {
 
 pub const Loop = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     pane: camera_pane.Pane = .{ .layout = .{ .x = 0, .y = 0 } },
     canvas: []u32 = &.{},
     pixels: []Color = &.{},
@@ -94,7 +95,7 @@ pub const Loop = struct {
     /// Where the host's webcams are listed again each time the webcam comes
     /// up (its dialog opens or it becomes the source), so one plugged in
     /// after the window opened is offered; null keeps the adopted list.
-    device_dir: ?std.fs.Dir = null,
+    device_dir: ?std.Io.Dir = null,
     /// The pictures and clips the pane offers, and every earlier listing:
     /// a running source and the pane's arguments may still name a file from
     /// one, so no listing is freed before the loop is.
@@ -102,13 +103,13 @@ pub const Loop = struct {
     retired: std.ArrayListUnmanaged(camera_media.Media) = .empty,
     /// Where the project's pictures and clips are listed again each time
     /// the image or video source comes up; null offers none.
-    media_dir: ?std.fs.Dir = null,
+    media_dir: ?std.Io.Dir = null,
     /// The chosen picture's or clip's preview and the name it was read from; the
     /// name points into a listing, which outlives the loop's frames.
     thumb: ?camera_thumb.Thumb = null,
     thumb_of: []const u8 = "",
     /// Where Always for this project is kept; null keeps it for this run.
-    project: ?std.fs.Dir = null,
+    project: ?std.Io.Dir = null,
     /// The console the pane under the board shows; null shows none.
     console: ?*const console_log.Log = null,
     /// Every channel's console the pane's tabs pick from, and the one shown;
@@ -148,7 +149,7 @@ pub const Loop = struct {
 
     /// Lists the webcams in `dir` now and again whenever the webcam comes
     /// up. The caller keeps `dir` open while the loop runs.
-    pub fn useDeviceDir(self: *Loop, dir: std.fs.Dir) void {
+    pub fn useDeviceDir(self: *Loop, dir: std.Io.Dir) void {
         self.device_dir = dir;
         self.relist();
     }
@@ -156,7 +157,7 @@ pub const Loop = struct {
     /// A listing that fails keeps the webcams already offered.
     fn relist(self: *Loop) void {
         const dir = self.device_dir orelse return;
-        const found = camera_devices.list(self.allocator, dir) catch return;
+        const found = camera_devices.list(self.allocator, self.io, dir) catch return;
         self.adoptDevices(found);
     }
 
@@ -183,7 +184,7 @@ pub const Loop = struct {
 
     /// Lists the pictures and clips in `dir` now and again whenever the
     /// image or video source comes up. The caller keeps `dir` open.
-    pub fn useMediaDir(self: *Loop, dir: std.fs.Dir) void {
+    pub fn useMediaDir(self: *Loop, dir: std.Io.Dir) void {
         self.media_dir = dir;
         self.relistMedia();
     }
@@ -191,7 +192,7 @@ pub const Loop = struct {
     /// A listing that fails keeps the files already offered.
     fn relistMedia(self: *Loop) void {
         const dir = self.media_dir orelse return;
-        const found = camera_media.list(self.allocator, dir) catch return;
+        const found = camera_media.list(self.allocator, self.io, dir) catch return;
         self.adoptMedia(found);
     }
 
@@ -253,9 +254,9 @@ pub const Loop = struct {
     }
 
     /// Keeps Always in `project`, starting from what an earlier run saved.
-    pub fn useProject(self: *Loop, project: std.fs.Dir) void {
+    pub fn useProject(self: *Loop, project: std.Io.Dir) void {
         self.project = project;
-        if (consent_store.load(project)) self.pane.panel.always = true;
+        if (consent_store.load(self.io, project)) self.pane.panel.always = true;
     }
 
     /// One frame. Returns false once the run ended or the window closed;
@@ -328,7 +329,7 @@ pub const Loop = struct {
     /// A project that will not take the marker asks again next run.
     fn remember(self: *Loop) void {
         const project = self.project orelse return;
-        consent_store.save(project) catch {};
+        consent_store.save(self.io, project) catch {};
     }
 
     fn draw(self: *Loop, window: platform.Platform, board: Board) !void {
