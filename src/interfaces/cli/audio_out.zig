@@ -123,13 +123,13 @@ pub const Run = struct {
 
     /// Write the WAV and say what went into it. A run where SSIE0 sent
     /// nothing writes no file, because a WAV needs a shape and nothing set one.
-    pub fn finish(self: *Run, out: anytype) !void {
+    pub fn finish(self: *Run, out: anytype, io: std.Io) !void {
         const path = self.options.path orelse return;
         const recorder = if (self.recorder) |*found| found else {
             const why = if (self.stop == .none) "SSIE0 sent no samples" else self.stop.said();
             return out.print("audio-out: {s}; {s} not written\n", .{ why, path });
         };
-        writeFile(recorder, path) catch |err| {
+        writeFile(recorder, io, path) catch |err| {
             return out.print("audio-out: could not write {s}: {s}\n", .{ path, @errorName(err) });
         };
         const f = recorder.format;
@@ -140,10 +140,11 @@ pub const Run = struct {
     }
 };
 
-fn writeFile(recorder: *const wav.Recorder, path: []const u8) !void {
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
-    var buffered = std.io.bufferedWriter(file.writer());
-    try recorder.write(buffered.writer());
-    try buffered.flush();
+fn writeFile(recorder: *const wav.Recorder, io: std.Io, path: []const u8) !void {
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var staging: [4096]u8 = undefined;
+    var writer = file.writer(io, &staging);
+    try recorder.write(&writer.interface);
+    try writer.interface.flush();
 }

@@ -49,7 +49,7 @@ fn runTone(path: []const u8, said: *std.ArrayList(u8)) !void {
         .clears = &board.clears,
     });
     try std.testing.expectEqual(done_marker, try core.readWord(done_at));
-    try audio.finish(said.writer());
+    try audio.finish(said.writer(), std.testing.io);
 }
 
 /// Frames between each sign change of the left channel.
