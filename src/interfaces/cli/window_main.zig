@@ -61,7 +61,7 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
         return 2;
     };
     defer how.close();
-    var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz) };
+    var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz), .io = args.io };
     var stills_dir = try window_stills.openDir(args.options.frames.window_stills);
     defer if (stills_dir) |*dir| dir.close();
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .dir = stills_dir orelse std.fs.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
