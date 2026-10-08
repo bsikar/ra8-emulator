@@ -9,11 +9,20 @@ test "stream kinds the wire names map to the same wire kind" {
     try std.testing.expectEqual(proto.EventKind.breakpoint_set, feed.wireKind(.breakpoint_set).?);
     try std.testing.expectEqual(proto.EventKind.input_scheduled, feed.wireKind(.input_scheduled).?);
     try std.testing.expectEqual(proto.EventKind.unplugged, feed.wireKind(.unplugged).?);
+    try std.testing.expectEqual(proto.EventKind.led_changed, feed.wireKind(.led_changed).?);
 }
 
 test "stream kinds with their own topic or no wire name are skipped" {
     try std.testing.expect(feed.wireKind(.uart_byte) == null);
     try std.testing.expect(feed.wireKind(.lcd_frame) == null);
-    try std.testing.expect(feed.wireKind(.led_changed) == null);
     try std.testing.expect(feed.wireKind(.isr_enter) == null);
+}
+
+test "an LED change carries its index and level in the address" {
+    const on: ra8.core.session_api.Event = .{ .core = .cpu0, .kind = .led_changed, .payload = .{ .led = .{ .index = 2, .level = true } } };
+    try std.testing.expectEqual(@as(u32, 0x102), feed.addressOf(on));
+    const off: ra8.core.session_api.Event = .{ .core = .cpu0, .kind = .led_changed, .payload = .{ .led = .{ .index = 0, .level = false } } };
+    try std.testing.expectEqual(@as(u32, 0), feed.addressOf(off));
+    const point: ra8.core.session_api.Event = .{ .core = .cpu0, .kind = .breakpoint_set, .address = 0x0200_0040 };
+    try std.testing.expectEqual(@as(u32, 0x0200_0040), feed.addressOf(point));
 }
