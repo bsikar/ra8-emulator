@@ -88,6 +88,7 @@ const BootWriter = struct {
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
+    io: std.Io,
     /// The memory the clocks, the board tick and the reports read and write.
     memory: Guest,
     board: *Board,
@@ -245,7 +246,7 @@ fn abortThunk(context: *anyopaque) void {
 /// `memory` is CPU0's store (RA8EMU-577); no engine is opened (RA8EMU-607).
 pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var ran: u64 = 0;
-    var clock: Clock = .{ .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
+    var clock: Clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state };
     var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
     var pair: second_core.zig_run.Driver = undefined;
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {

@@ -34,7 +34,7 @@ fn sleepFor(seconds: u64) !Woke {
     try store_board.attach(&board, core);
     board.time.base.setRate(hz);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);

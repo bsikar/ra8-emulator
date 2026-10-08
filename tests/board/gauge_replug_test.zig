@@ -92,7 +92,7 @@ test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     try session.plug(.cpu0, gauge_at, "max17048");
 
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var cuts: Cuts = .{ .inner = clock.boundary(), .session = &session, .memory = core };
     var ran: u64 = 0;
     var output: [256]u8 = undefined;

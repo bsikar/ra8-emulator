@@ -27,7 +27,7 @@ test "a ThreadX thread overflowing its stack is caught by the stack limit" {
     // the loader maps its option-setting windows too.
     _ = try loader.image(core, image);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);
