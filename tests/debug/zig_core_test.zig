@@ -63,6 +63,19 @@ test "the stack limits read back with bits 2:0 cleared, as MSR writes them" {
     try std.testing.expectEqual(@as(u32, 0x2000_0100), cpu.regs.msplim);
 }
 
+test "the single-precision bank reads and writes raw bits, one S register at a time" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    core.setRegister(.s0, 0x3F80_0000);
+    core.setRegister(.s31, 0x7FC0_0001);
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), core.register(.s0));
+    try std.testing.expectEqual(@as(u32, 0x7FC0_0001), core.register(.s31));
+    try std.testing.expectEqual(@as(u32, 0), core.register(.s1));
+    try std.testing.expectEqual(@as(u32, 0x3F80_0000), cpu.fp.bank.s[0]);
+}
+
 test "memory goes through the core's bus" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };

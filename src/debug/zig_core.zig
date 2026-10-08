@@ -50,6 +50,7 @@ pub const ZigCore = struct {
             .fpscr => self.cpu.fp.fpscr.bits(),
             .msplim => r.msplim,
             .psplim => r.psplim,
+            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)],
         };
     }
 
@@ -71,6 +72,7 @@ pub const ZigCore = struct {
             // Bits 2:0 of a stack limit are RES0, as MSR writes them.
             .msplim => r.msplim = value & ~@as(u32, 7),
             .psplim => r.psplim = value & ~@as(u32, 7),
+            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)] = value,
         }
     }
 
@@ -110,6 +112,11 @@ pub const ZigCore = struct {
 };
 
 /// R0-R12's index into `Regs.low`.
+/// S0 to S31 sit last in `Cortex`, in order.
+fn single(which: Cortex) usize {
+    return @backingInt(which) - @backingInt(Cortex.s0);
+}
+
 fn low(which: Cortex) usize {
     return switch (which) {
         .r0 => 0,

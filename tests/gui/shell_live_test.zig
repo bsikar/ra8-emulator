@@ -1,7 +1,8 @@
 //! Host test for the shell's core leaves against a live session
 //! (RA8EMU-821): a spawned `serve --stdio` steps cpu0 twice, and the
 //! registers, memory and disassembly leaves each draw its live values, with
-//! the registers the step changed marked.
+//! the registers the step changed marked; and the FPU group shows the bits
+//! fp_basic computes, marked on the step that wrote them (RA8EMU-944).
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
@@ -166,6 +167,45 @@ test "a spawned serve --stdio feeds live registers, memory and disassembly leave
     try expectFrame(gpa, &leaves, link.state, .registers, registers_pane.changed);
     try expectFrame(gpa, &leaves, link.state, .memory, memory_pane.ink);
     try expectFrame(gpa, &leaves, link.state, .disasm, disasm_pane.pc_band);
+
+    local.end();
+    while (link.state == .connected) {
+        if (link.pump() == null) try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+    }
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}
+
+/// Where `bits` sits among the S registers of `snapshot`, if anywhere.
+fn singleHolding(snapshot: registers_pane.Snapshot, bits: u32) ?usize {
+    const s0 = std.mem.indexOfScalar(shell_registers.Register, &registers_pane.shown, .s0).?;
+    for (s0..s0 + 32) |index| if (snapshot.values[index] == bits) return index;
+    return null;
+}
+
+test "the fpu group shows the sum fp_basic computes, marked on the step that wrote it" {
+    const gpa = std.testing.allocator;
+    var local: session_link.Local = undefined;
+    try local.spawn(std.testing.io, test_paths.emulator, image_path);
+    errdefer local.child.kill(std.testing.io);
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: Link = undefined;
+    link.open(local.transport(), rx, tx);
+    var leaves: Leaves = .{};
+    try pumpUntil(&link, &leaves, null);
+    _ = try link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
+
+    // fp_basic's first single-precision result: 1.0 + 3.0 = 4.0.
+    const sum: u32 = 0x4080_0000;
+    var steps: usize = 0;
+    const at = while (steps < 2000) : (steps += 1) {
+        try step(&link, &leaves);
+        if (singleHolding(leaves.registers.cores[0].now.?, sum)) |index| break index;
+    } else return error.SumNeverShown;
+    const registers = &leaves.registers.cores[0];
+    try std.testing.expect(registers.now.?.changedAt(registers.before.?, at));
 
     local.end();
     while (link.state == .connected) {
