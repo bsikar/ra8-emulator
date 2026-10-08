@@ -10,6 +10,8 @@ const proto = @import("../interfaces/rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
 const registers_pane = @import("registers_pane.zig");
 const pane_layout = @import("pane_layout.zig");
+const shell_frame = @import("shell_frame.zig");
+const draw_list = @import("draw_list.zig");
 
 const Env = proto.Client.Env;
 const shown = registers_pane.shown;
@@ -31,6 +33,8 @@ pub const Registers = struct {
     asked: [shown.len]?u32 = @splat(null),
     /// Answers still missing from the batch in flight.
     left: usize = 0,
+    /// Which groups this leaf shows folded to their header.
+    fold: registers_pane.Fold = registers_pane.open,
     /// The next register of the open batch to send; shown.len when all are.
     next: usize = shown.len,
     gathered: Snapshot = .{},
@@ -73,6 +77,15 @@ pub const Registers = struct {
             .event => |event| self.stopped(event),
             .response => |response| self.answered(response.id, response.result),
         }
+    }
+
+    /// Fold or unfold the group whose header holds (`x`, `y`) in a leaf
+    /// drawn in `body`. Returns whether a header was hit.
+    pub fn toggle(self: *Registers, body: draw_list.Rect, x: i32, y: i32) bool {
+        if (self.now == null) return false;
+        const which = registers_pane.headerAt(body, self.fold, x, y) orelse return false;
+        self.fold[which] = !self.fold[which];
+        return true;
     }
 
     /// A new image: read again and mark nothing against the old one.
@@ -159,5 +172,16 @@ pub const Pair = struct {
 
     pub fn reload(self: *Pair) void {
         for (&self.cores) |*model| model.reload();
+    }
+
+    /// Route a left press at (`x`, `y`) to a registers leaf's group
+    /// header. Returns whether a group folded or unfolded.
+    pub fn clickIn(self: *Pair, layout: *const pane_layout.Layout, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
+        for (solved.panes.items) |placed| {
+            const pane = layout.pane(placed.index) orelse continue;
+            if (pane.kind != .registers) continue;
+            if (self.cores[@backingInt(pane.core)].toggle(shell_frame.bodyOf(placed.area), x, y)) return true;
+        }
+        return false;
     }
 };

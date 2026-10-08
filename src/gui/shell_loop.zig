@@ -110,6 +110,7 @@ pub const Shell = struct {
                 if (self.link) |link| if (self.devices) |devices| {
                     if (devices.clickIn(link, &self.layout, solved, press.x, press.y)) return;
                 };
+                if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
                 const camera = self.camera orelse return;
                 _ = camera.clickIn(&self.layout, solved, press.x, press.y);
             },

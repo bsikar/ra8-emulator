@@ -47,6 +47,8 @@ pub const ZigCore = struct {
             .faultmask => r.faultmask,
             .control => r.control,
             .fpscr => self.cpu.fp.fpscr.bits(),
+            .msplim => r.msplim,
+            .psplim => r.psplim,
         };
     }
 
@@ -65,6 +67,9 @@ pub const ZigCore = struct {
             .faultmask => r.faultmask = value,
             .control => r.control = value,
             .fpscr => self.cpu.fp.fpscr = @TypeOf(self.cpu.fp.fpscr).fromBits(value),
+            // Bits 2:0 of a stack limit are RES0, as MSR writes them.
+            .msplim => r.msplim = value & ~@as(u32, 7),
+            .psplim => r.psplim = value & ~@as(u32, 7),
         }
     }
 

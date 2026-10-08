@@ -23,7 +23,7 @@ pub const State = enum { editing, written, cancelled };
 /// The register whose value text a click at (x, y) lands on.
 pub fn registerAt(area: Rect, x: i32, y: i32) ?usize {
     for (0..registers_pane.shown.len) |index| {
-        const cell = registers_pane.cellRect(area, index) orelse return null;
+        const cell = registers_pane.cellRect(area, registers_pane.open, index) orelse return null;
         const at = registers_pane.valueOrigin(cell);
         const w: i32 = @intCast(font.textWidth(8));
         if (x >= at.x and x < at.x + w and y >= cell.y and y < cell.y + cell.h) return index;
@@ -48,7 +48,7 @@ pub fn byteAt(area: Rect, snapshot: *const memory_pane.Snapshot, x: i32, y: i32)
 
 /// Where the field's text starts over a register's value.
 pub fn registerOrigin(area: Rect, index: usize) ?struct { x: i32, y: i32 } {
-    const cell = registers_pane.cellRect(area, index) orelse return null;
+    const cell = registers_pane.cellRect(area, registers_pane.open, index) orelse return null;
     const at = registers_pane.valueOrigin(cell);
     return .{ .x = at.x, .y = at.y };
 }

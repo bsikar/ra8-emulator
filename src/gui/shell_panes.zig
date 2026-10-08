@@ -88,7 +88,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     };
     if (pane.kind == .registers) if (self.registers) |pair| {
         const model = pair.of(pane.core);
-        if (model.now) |now| return registers_pane.draw(list, body, now, model.before);
+        if (model.now) |now| return registers_pane.draw(list, body, now, model.before, model.fold);
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| return memory_pane.draw(list, body, now);

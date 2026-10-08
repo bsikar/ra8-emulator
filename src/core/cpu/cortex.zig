@@ -36,4 +36,8 @@ pub const Cortex = enum {
     faultmask,
     control,
     fpscr,
+    // The Armv8-M stack limits. Only the debugger names them here; no dump
+    // or run loop reads them through this enum.
+    msplim,
+    psplim,
 };
