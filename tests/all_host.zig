@@ -138,4 +138,5 @@ test {
     _ = @import("interfaces/rpc/session_advance_test.zig");
     _ = @import("interfaces/rpc/session_files_test.zig");
     _ = @import("interfaces/rpc/session_stack_test.zig");
+    _ = @import("interfaces/rpc/session_rtc_test.zig");
 }

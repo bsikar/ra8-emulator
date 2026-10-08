@@ -28,6 +28,7 @@ pub const usage =
     \\            snapshot PATH | restore PATH (paths on the serving host)
     \\            map (the memory map of the image last loaded)
     \\            stack (MSP and PSP, the lowest each reached, any overflow)
+    \\            rtc (the board's RTC date and time)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\
 ;
@@ -60,6 +61,8 @@ pub const Command = union(enum) {
     map,
     /// The stack pointers, their low marks and any overflow (RA8EMU-816).
     stack,
+    /// The board's RTC calendar (RA8EMU-809).
+    rtc,
 };
 
 pub const Part = struct { method: proto.Method, text: []const u8 };
@@ -124,6 +127,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
     if (eql(u8, name, "map")) return if (args.len == 0) .map else error.BadArguments;
     if (eql(u8, name, "stack")) return if (args.len == 0) .stack else error.BadArguments;
+    if (eql(u8, name, "rtc")) return if (args.len == 0) .rtc else error.BadArguments;
     if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
     if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
     if (eql(u8, name, "break")) return parseBreak(args);
@@ -269,6 +273,10 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
         .stack => {
             const report = try client.call(proto.StackReport, proto.CoreOnly, .stack, .{ .core = .cpu0 });
             try out.stack(w, json, report);
+        },
+        .rtc => {
+            const report = try client.call(proto.RtcReport, proto.CoreOnly, .rtc, .{ .core = .cpu0 });
+            try out.rtc(w, json, report);
         },
     }
     return 0;

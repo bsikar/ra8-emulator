@@ -117,6 +117,24 @@ pub fn stack(w: anytype, json: bool, r: proto.StackReport) !void {
     try w.print("overflowed by {d} bytes\n", .{r.overflow});
 }
 
+/// The RTC calendar as yyyy-mm-dd hh:mm:ss (RA8EMU-809).
+pub fn rtc(w: anytype, json: bool, r: proto.RtcReport) !void {
+    const state = if (r.running != 0) "running" else "stopped";
+    if (r.valid == 0) {
+        if (json) return w.print("{{\"running\":{},\"date\":null}}\n", .{r.running != 0});
+        return w.print("rtc {s}: the counters hold no date\n", .{state});
+    }
+    const fmt = "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}";
+    const args = .{ r.year, r.month, r.day, r.hour, r.minute, r.second };
+    if (json) {
+        try w.print("{{\"running\":{},\"date\":\"", .{r.running != 0});
+        try w.print(fmt, args);
+        return w.writeAll("\"}\n");
+    }
+    try w.print(fmt, args);
+    try w.print(" ({s})\n", .{state});
+}
+
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
 pub fn failed(io: std.Io, json: bool, err: anyerror, code: u16) u8 {

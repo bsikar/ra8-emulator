@@ -3,8 +3,8 @@ const rpc = @import("ra8_rpc");
 
 pub const protocol_version: u16 = 1;
 /// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
-/// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack.
-pub const capabilities: u32 = 0x0000_007F;
+/// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack. Bit 7: rtc.
+pub const capabilities: u32 = 0x0000_00FF;
 pub const max_payload = 1_048_576;
 
 pub const Method = enum(u16) {
@@ -38,6 +38,7 @@ pub const Method = enum(u16) {
     set_camera_source = 0x011b,
     map = 0x011c,
     stack = 0x011d,
+    rtc = 0x011e,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -146,6 +147,18 @@ pub const StackReport = struct {
     base: u32,
     size: u32,
     overflow: u32,
+};
+/// The board's RTC calendar (RA8EMU-809). With `valid` 0 the counters hold
+/// no date and every date field is 0; `running` is RCR2.START.
+pub const RtcReport = struct {
+    running: u8,
+    valid: u8,
+    year: u16,
+    month: u8,
+    day: u8,
+    hour: u8,
+    minute: u8,
+    second: u8,
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const Trace = struct {
