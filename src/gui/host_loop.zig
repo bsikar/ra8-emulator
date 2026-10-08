@@ -309,7 +309,7 @@ pub const Loop = struct {
         if (event != .button or self.consoles.len == 0) return false;
         const press = event.button;
         if (!press.down or press.button != camera_pane.primary_button) return false;
-        if (console_save.click(area, press.x, press.y, self.project, self.consoles, self.channel)) return true;
+        if (console_save.click(area, press.x, press.y, self.io, self.project, self.consoles, self.channel)) return true;
         const channel = console_pick.tabAt(area, self.consoles.len, press.x, press.y) orelse return false;
         self.useConsoles(self.consoles, channel);
         return true;
