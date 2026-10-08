@@ -1,7 +1,7 @@
 //! Host tests for the time bar's clock readout (RA8EMU-806): the achieved
 //! speed and when it shows, the line it reads, and the readout following a
 //! spawned `serve --stdio` session's virtual time and RTC date (RA8EMU-809)
-//! across a run.
+//! across a run, including a date written into its RTC counters.
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
@@ -106,6 +106,64 @@ test "the readout follows a local session's virtual time across a run" {
     var date_buf: [19]u8 = undefined;
     try std.testing.expectEqualStrings("2000-01-01 00:00:00", date.format(&date_buf));
     try std.testing.expect(std.mem.startsWith(u8, try readout.text(1000, &buf), "2000-01-01 00:00:00 | T+"));
+
+    local.end();
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}
+
+/// The RTC counters and the date written into them: year, month, day,
+/// hour, minute, second, each a BCD byte at its RCR offset.
+const rtc_base: u32 = 0x4020_2000;
+const set_date = [_][2]u8{ .{ 0x0E, 0x26 }, .{ 0x0C, 0x10 }, .{ 0x0A, 0x08 }, .{ 0x06, 0x09 }, .{ 0x04, 0x47 }, .{ 0x02, 0x05 } };
+
+/// Write one byte through the session and wait for its answer, passing
+/// everything else that arrives to the readout and the status.
+fn writeByte(link: *Link, readout: *Readout, status: *Status, address: u32, byte: u8) !void {
+    const id = try link.send(proto.WriteMemory, .write_memory, .{ .core = .cpu0, .address = address, .bytes = &.{byte} });
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
+        if (link.state != .connected) return error.LinkLost;
+        const arrival = link.pump() orelse {
+            try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+            continue;
+        };
+        switch (arrival) {
+            .response => |response| if (response.id == id) {
+                if (response.result == .err) return error.WriteRefused;
+                return;
+            },
+            .event => {},
+        }
+        readout.observe(arrival, 0);
+        status.observe(link, arrival);
+    }
+    return error.Timeout;
+}
+
+test "the readout shows the date written into a served session's RTC" {
+    const gpa = std.testing.allocator;
+    var local: session_link.Local = undefined;
+    try local.spawn(std.testing.io, test_paths.emulator, elf_path);
+    errdefer local.child.kill(std.testing.io);
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: Link = undefined;
+    link.open(local.transport(), rx, tx);
+    try connect(&link);
+
+    var readout: Readout = .{};
+    var status: Status = .{};
+    // The clock is stopped out of reset, which is when the counters take a write.
+    for (set_date) |field| try writeByte(&link, &readout, &status, rtc_base + field[0], field[1]);
+    try readout.poll(&link);
+    try settle(&link, &readout, &status);
+    const date = readout.date orelse return error.NoDate;
+    var date_buf: [19]u8 = undefined;
+    try std.testing.expectEqualStrings("2026-10-08 09:47:05", date.format(&date_buf));
+    var buf: [96]u8 = undefined;
+    try std.testing.expect(std.mem.startsWith(u8, try readout.text(1000, &buf), "2026-10-08 09:47:05 | T+"));
 
     local.end();
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
