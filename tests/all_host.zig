@@ -100,6 +100,7 @@ test {
     _ = @import("gui/time_readout_test.zig");
     _ = @import("gui/session_input_wire_test.zig");
     _ = @import("gui/session_event_wire_test.zig");
+    _ = @import("gui/session_led_wire_test.zig");
     _ = @import("gui/time_bar_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
