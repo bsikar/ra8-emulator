@@ -31,6 +31,8 @@ pub const Registers = struct {
     asked: [shown.len]?u32 = @splat(null),
     /// Answers still missing from the batch in flight.
     left: usize = 0,
+    /// The next register of the open batch to send; shown.len when all are.
+    next: usize = shown.len,
     gathered: Snapshot = .{},
     batch_refused: bool = false,
     now: ?Snapshot = null,
@@ -45,13 +47,21 @@ pub const Registers = struct {
     /// Send the due batch, one read per shown register, unless one is
     /// already in flight or the session has not greeted.
     pub fn attach(self: *Registers, link: *session_link.Link) void {
-        if (!self.want or self.left != 0 or link.state != .connected) return;
-        self.want = false;
-        self.batch_refused = false;
-        for (wire, 0..) |register, index| {
-            const args: proto.ReadRegister = .{ .core = self.core, .register = register };
-            self.asked[index] = link.send(proto.ReadRegister, .read_register, args) catch null;
-            if (self.asked[index] == null) self.batch_refused = true else self.left += 1;
+        if (link.state != .connected) return;
+        if (self.want and self.left == 0 and self.next == shown.len) {
+            self.want = false;
+            self.batch_refused = false;
+            self.next = 0;
+        }
+        if (self.next == shown.len) return;
+        while (self.next < shown.len) : (self.next += 1) {
+            const args: proto.ReadRegister = .{ .core = self.core, .register = wire[self.next] };
+            const asked = link.send(proto.ReadRegister, .read_register, args) catch |err| switch (err) {
+                error.TableFull => return,
+                else => null,
+            };
+            self.asked[self.next] = asked;
+            if (asked == null) self.batch_refused = true else self.left += 1;
         }
         if (self.left == 0) self.finish();
     }
@@ -68,6 +78,7 @@ pub const Registers = struct {
     /// A new image: read again and mark nothing against the old one.
     pub fn reload(self: *Registers) void {
         self.want = true;
+        self.next = shown.len;
         self.stale = self.left != 0;
         self.now = null;
         self.before = null;
@@ -106,7 +117,7 @@ pub const Registers = struct {
             },
             .err => self.batch_refused = true,
         }
-        if (self.left == 0) self.finish();
+        if (self.left == 0 and self.next == shown.len) self.finish();
     }
 
     fn slot(self: *const Registers, id: u32) ?usize {

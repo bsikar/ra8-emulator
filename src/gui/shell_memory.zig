@@ -39,6 +39,8 @@ pub const Memory = struct {
     asked: [rows]?u32 = @splat(null),
     /// Answers still missing from the batch in flight.
     left: usize = 0,
+    /// The next row of the open batch to send; rows when all are sent.
+    next: usize = rows,
     gathered: Snapshot = .{},
     batch_refused: bool = false,
     now: ?Snapshot = null,
@@ -57,17 +59,27 @@ pub const Memory = struct {
     /// Send the due batch, one read per row, unless one is already in
     /// flight or the session has not greeted.
     pub fn attach(self: *Memory, link: *session_link.Link) void {
-        if (!self.want or self.left != 0 or link.state != .connected) return;
+        if (link.state != .connected) return;
+        if (self.want and self.left == 0 and self.next == rows) self.start();
+        if (self.next == rows) return;
+        while (self.next < rows) : (self.next += 1) {
+            const args: proto.ReadMemory = .{ .core = self.core, .address = self.gathered.rowAddress(self.next), .length = per_row };
+            const asked = link.send(proto.ReadMemory, .read_memory, args) catch |err| switch (err) {
+                error.TableFull => return,
+                else => null,
+            };
+            self.asked[self.next] = asked;
+            if (asked == null) self.batch_refused = true else self.left += 1;
+        }
+        if (self.left == 0) self.finish();
+    }
+
+    fn start(self: *Memory) void {
         self.want = false;
         self.batch_refused = false;
         self.gathered = .{ .base = self.address & row_mask, .count = rows };
         self.asked_from = self.address;
-        for (&self.asked, 0..) |*asked, row| {
-            const args: proto.ReadMemory = .{ .core = self.core, .address = self.gathered.rowAddress(row), .length = per_row };
-            asked.* = link.send(proto.ReadMemory, .read_memory, args) catch null;
-            if (asked.* == null) self.batch_refused = true else self.left += 1;
-        }
-        if (self.left == 0) self.finish();
+        self.next = 0;
     }
 
     /// An answer to the batch in flight fills its row; everything else is
@@ -83,6 +95,7 @@ pub const Memory = struct {
     pub fn reload(self: *Memory) void {
         self.want = false;
         self.now = null;
+        self.next = rows;
         self.stale = self.left != 0;
     }
 
@@ -103,7 +116,7 @@ pub const Memory = struct {
                 self.batch_refused = true;
             },
         }
-        if (self.left == 0) self.finish();
+        if (self.left == 0 and self.next == rows) self.finish();
     }
 
     /// A whole row read becomes readable; a short or garbled one stays

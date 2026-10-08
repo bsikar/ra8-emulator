@@ -1,0 +1,175 @@
+//! Host test for the shell's core leaves against a live session
+//! (RA8EMU-821): a spawned `serve --stdio` steps cpu0 twice, and the
+//! registers, memory and disassembly leaves each draw its live values, with
+//! the registers the step changed marked.
+const std = @import("std");
+const ra8 = @import("ra8");
+const test_paths = @import("test_paths");
+const proto = ra8.interfaces.rpc.session;
+const draw_list = ra8.gui.draw_list;
+const raster = ra8.gui.raster;
+const font = ra8.gui.font;
+const pane_layout = ra8.gui.pane_layout;
+const frame = ra8.gui.shell_frame;
+const panes = ra8.gui.shell_panes;
+const status_bar = ra8.gui.status_bar;
+const registers_pane = ra8.gui.registers_pane;
+const memory_pane = ra8.gui.memory_pane;
+const disasm_pane = ra8.gui.disasm_pane;
+const shell_registers = ra8.gui.shell_registers;
+const shell_memory = ra8.gui.shell_memory;
+const session_link = ra8.gui.session_link;
+const Link = session_link.Link;
+const Env = proto.Client.Env;
+
+const image_path = "tests/fixtures/fpu/fp_basic.elf";
+const width = 2000;
+const height = 320;
+
+/// The three core leaves, fed in the shell's own order (shell_loop
+/// observeCore): registers take the arrival, then memory and code follow.
+const Leaves = struct {
+    registers: shell_registers.Pair = .{},
+    memory: shell_memory.Pair = .{},
+    code: shell_memory.Pair = .{ .follows = .pc },
+
+    fn attach(self: *Leaves, link: *Link) void {
+        self.registers.attach(link);
+        self.memory.attach(link);
+        self.code.attach(link);
+    }
+
+    fn observe(self: *Leaves, arrival: session_link.Arrival) void {
+        self.registers.observe(arrival);
+        for ([_]*shell_memory.Pair{ &self.memory, &self.code }) |memory| {
+            memory.observe(arrival);
+            memory.follow(&self.registers);
+        }
+    }
+
+    /// cpu0 has published registers batch `serial`, and memory and code
+    /// have published the batch that followed it.
+    fn settled(self: *const Leaves, serial: u32) bool {
+        const registers = &self.registers.cores[0];
+        if (registers.serial != serial or registers.left != 0 or registers.want) return false;
+        for ([_]*const shell_memory.Pair{ &self.memory, &self.code }) |memory| {
+            const core = &memory.cores[0];
+            if (core.seen != serial or core.left != 0 or core.want or core.now == null) return false;
+        }
+        return true;
+    }
+};
+
+fn nowMs() i64 {
+    return std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds();
+}
+
+/// Pump `link` into `leaves` for up to ten seconds: until it connects when
+/// `serial` is null, else until cpu0 settles on registers batch `serial`.
+fn pumpUntil(link: *Link, leaves: *Leaves, serial: ?u32) !void {
+    const deadline = nowMs() + 10_000;
+    while (nowMs() < deadline) {
+        if (link.state != .connecting and link.state != .connected) {
+            return error.LinkDown;
+        }
+        leaves.attach(link);
+        if (link.pump()) |arrival| {
+            leaves.observe(arrival);
+            continue;
+        }
+        const done = if (serial) |want| leaves.settled(want) else link.state == .connected;
+        if (done) return;
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+    }
+    return error.Timeout;
+}
+
+/// Step cpu0 once and wait for every leaf to follow the stop.
+fn step(link: *Link, leaves: *Leaves) !void {
+    const serial = leaves.registers.cores[0].serial +% 1;
+    _ = try link.send(proto.Run, .run, .{ .core = .cpu0, .mode = .step, .budget = 0 });
+    try pumpUntil(link, leaves, serial);
+}
+
+fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_list.Color) bool {
+    var y = area.y;
+    while (y < area.y + area.h) : (y += 1) {
+        var x = area.x;
+        while (x < area.x + area.w) : (x += 1) {
+            if (std.meta.eql(pixels.at(@intCast(x), @intCast(y)), color)) return true;
+        }
+    }
+    return false;
+}
+
+/// Every leaf shows `kind`: cpu0's leaves hold `color`, cpu1's (never
+/// stopped) hold only their muted note.
+fn expectFrame(gpa: std.mem.Allocator, leaves: *const Leaves, state: session_link.State, kind: pane_layout.Kind, color: draw_list.Color) !void {
+    var layout = try pane_layout.twoCore(gpa);
+    defer layout.deinit();
+    for (layout.nodes.items, 0..) |node, index| if (node.body == .leaf) {
+        try layout.setKind(@intCast(index), kind);
+    };
+    var solved = try frame.solve(&layout, gpa, width, height);
+    defer solved.deinit(gpa);
+    var pixels = try raster.Framebuffer.init(gpa, width, height);
+    defer pixels.deinit(gpa);
+    var list = draw_list.DrawList.init(gpa, width, height);
+    defer list.deinit();
+    const status: status_bar.Status = .{};
+    var painter: panes.Panes = .{ .registers = &leaves.registers, .memory = &leaves.memory, .code = &leaves.code };
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = state, .width = width, .height = height, .painter = painter.painter() });
+    raster.draw(&pixels, &list, font.atlas);
+    var drawn: usize = 0;
+    var waiting: usize = 0;
+    for (solved.panes.items) |leaf| {
+        const placed = layout.pane(leaf.index) orelse continue;
+        const body = frame.bodyOf(leaf.area);
+        if (placed.core == .cpu0) {
+            drawn += 1;
+            try std.testing.expect(holds(&pixels, body, color));
+        } else {
+            waiting += 1;
+            try std.testing.expect(!holds(&pixels, body, color));
+            try std.testing.expect(holds(&pixels, body, frame.muted));
+        }
+    }
+    try std.testing.expect(drawn > 0 and waiting > 0);
+}
+
+test "a spawned serve --stdio feeds live registers, memory and disassembly leaves after a step" {
+    const gpa = std.testing.allocator;
+    var local: session_link.Local = undefined;
+    try local.spawn(std.testing.io, test_paths.emulator, image_path);
+    errdefer local.child.kill(std.testing.io);
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: Link = undefined;
+    link.open(local.transport(), rx, tx);
+    var leaves: Leaves = .{};
+    try pumpUntil(&link, &leaves, null);
+    // Stops reach only subscribers; the shell's status bar subscribes for it.
+    _ = try link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
+
+    try step(&link, &leaves);
+    const first_pc = leaves.registers.cores[0].value(.pc).?;
+    try step(&link, &leaves);
+    const registers = &leaves.registers.cores[0];
+    try std.testing.expect(registers.before != null);
+    try std.testing.expect(registers.value(.pc).? != first_pc);
+    try std.testing.expectEqual(registers.value(.sp).?, leaves.memory.cores[0].from);
+    try std.testing.expectEqual(registers.value(.pc).?, leaves.code.cores[0].from);
+    try std.testing.expect(leaves.registers.cores[1].now == null);
+
+    try expectFrame(gpa, &leaves, link.state, .registers, registers_pane.changed);
+    try expectFrame(gpa, &leaves, link.state, .memory, memory_pane.ink);
+    try expectFrame(gpa, &leaves, link.state, .disasm, disasm_pane.pc_band);
+
+    local.end();
+    while (link.state == .connected) {
+        if (link.pump() == null) try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+    }
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}

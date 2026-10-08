@@ -109,6 +109,7 @@ test {
     _ = @import("gui/shell_plug_test.zig");
     _ = @import("gui/shell_registers_test.zig");
     _ = @import("gui/shell_memory_test.zig");
+    _ = @import("gui/shell_live_test.zig");
     _ = @import("gui/shell_camera_test.zig");
     _ = @import("gui/shell_camera_file_test.zig");
     _ = @import("gui/shell_titles_test.zig");

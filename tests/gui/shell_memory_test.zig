@@ -259,3 +259,23 @@ test "a disassembly leaf decodes from its core's PC with the pc band" {
     }
     try std.testing.expect(drawn > 0 and waiting > 0);
 }
+
+test "a batch meeting a full pending table sends its other rows as slots free" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    var held: [20]u32 = undefined;
+    const pc: proto.ReadRegister = .{ .core = .cpu0, .register = shell_registers.wire[15] };
+    for (&held) |*id| id.* = try wire.link.send(proto.ReadRegister, .read_register, pc);
+    var model: Memory = .{ .core = .cpu0 };
+    model.follow(0x2000_0100, 1);
+    model.attach(&wire.link);
+    try std.testing.expect(wire.link.state == .connected);
+    try std.testing.expectEqual(@as(usize, 12), model.left);
+    try std.testing.expectEqual(@as(usize, 12), model.next);
+    try std.testing.expectEqualStrings("waiting for memory", model.note().?);
+    for (held) |id| _ = try wire.link.client.pending.take(id);
+    model.attach(&wire.link);
+    try std.testing.expectEqual(rows, model.left);
+    try std.testing.expectEqual(rows, model.next);
+}
