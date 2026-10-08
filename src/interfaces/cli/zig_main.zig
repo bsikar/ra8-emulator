@@ -34,7 +34,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     defer cpu0.close();
     var parts = Parts{};
     const written = try prepare(&cpu0, &board, io, image, &parts, options);
-    if (options.ns_path) |path| loadNonSecure(allocator, &cpu0, path) catch return 1;
+    if (options.ns_path) |path| loadNonSecure(allocator, io, &cpu0, path) catch return 1;
     const vector_base = vectorBase(image) catch return 1;
     const memory = cpu0.own();
     const out = try announce(memory, written, vector_base, options.ctl_cpu_load);
@@ -84,13 +84,11 @@ pub fn vectorBase(image: elf.Image) error{NoVectors}!u32 {
 }
 
 /// A TrustZone build's Non-Secure half (`--ns`), beside the main image.
-fn loadNonSecure(allocator: std.mem.Allocator, cpu0: *Cpu0, path: []const u8) !void {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+fn loadNonSecure(allocator: std.mem.Allocator, io: std.Io, cpu0: *Cpu0, path: []const u8) !void {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
-    defer file.close();
-    const bytes = try file.readToEndAlloc(allocator, 64 * 1024 * 1024);
     const ns = elf.Image.init(bytes) catch |err| {
         std.debug.print("{s} is not a loadable image: {s}\n", .{ path, @errorName(err) });
         return err;
