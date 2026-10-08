@@ -102,6 +102,7 @@ test {
     _ = @import("gui/session_event_wire_test.zig");
     _ = @import("gui/session_led_wire_test.zig");
     _ = @import("gui/time_bar_test.zig");
+    _ = @import("gui/board_pane_test.zig");
     _ = @import("gui/shell_frame_test.zig");
     _ = @import("gui/shell_loop_test.zig");
     _ = @import("gui/shell_panes_test.zig");
