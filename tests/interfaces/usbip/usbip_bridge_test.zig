@@ -77,7 +77,7 @@ fn host(port: u16, seen: *Seen) void {
 }
 
 test "nothing is bound while the device has not enumerated" {
-    var link = try bridge.Bridge.init(std.testing.allocator, 0);
+    var link = try bridge.Bridge.init(std.testing.allocator, std.testing.io, 0);
     defer link.deinit(std.testing.allocator);
     var board = usbfs.Device{};
     const script = usbfs.host.Host{};
@@ -86,7 +86,7 @@ test "nothing is bound while the device has not enumerated" {
 }
 
 test "a host imports, submits an IN URB and gets the firmware's packet" {
-    var link = try bridge.Bridge.init(std.testing.allocator, 0);
+    var link = try bridge.Bridge.init(std.testing.allocator, std.testing.io, 0);
     defer link.deinit(std.testing.allocator);
     var board = usbfs.Device{};
     openIn(&board);

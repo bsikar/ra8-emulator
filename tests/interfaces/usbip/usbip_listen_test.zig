@@ -71,13 +71,13 @@ const Host = struct {
 
 test "a host lists, reconnects and imports the export" {
     const items = [_]exp.Export{try exp.fromDescriptors(place, &device, &config)};
-    var listener = try lis.open(0);
-    defer listener.deinit();
+    var listener = try lis.open(std.testing.io, 0);
+    defer listener.deinit(std.testing.io);
     var host = Host{ .port = lis.port(&listener) };
     const thread = try std.Thread.spawn(.{}, Host.run, .{&host});
-    const attached = try lis.attach(&listener, &items);
+    const attached = try lis.attach(std.testing.io, &listener, &items);
     thread.join();
-    attached.stream.close();
+    attached.stream.close(std.testing.io);
     try std.testing.expect(!host.failed);
     try std.testing.expectEqual(&items[0], attached.item);
     try std.testing.expectEqual(devlist_len, host.listed_len);
@@ -85,8 +85,8 @@ test "a host lists, reconnects and imports the export" {
 }
 
 test "a bound listener reports a real port and the usbip default is 3240" {
-    var listener = try lis.open(0);
-    defer listener.deinit();
+    var listener = try lis.open(std.testing.io, 0);
+    defer listener.deinit(std.testing.io);
     try std.testing.expect(lis.port(&listener) != 0);
     try std.testing.expectEqual(@as(u16, 3240), lis.default_port);
 }
