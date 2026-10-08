@@ -27,14 +27,14 @@ const dies = [_]u8{
     0x01, 0x00,
 };
 
-fn unit(list: *std.ArrayList(u8), version: u16) !void {
+fn unit(list: *std.Io.Writer, version: u16) !void {
     const head: u32 = if (version >= 5) 8 else 7;
-    try list.writer().writeInt(u32, head + @as(u32, dies.len), .little);
-    try list.writer().writeInt(u16, version, .little);
-    if (version >= 5) try list.appendSlice(&.{ 0x01, 0x04 });
-    try list.writer().writeInt(u32, 0, .little);
-    if (version < 5) try list.append(0x04);
-    try list.appendSlice(&dies);
+    try list.writeInt(u32, head + @as(u32, dies.len), .little);
+    try list.writeInt(u16, version, .little);
+    if (version >= 5) try list.writeAll(&.{ 0x01, 0x04 });
+    try list.writeInt(u32, 0, .little);
+    if (version < 5) try list.writeByte(0x04);
+    try list.writeAll(&dies);
 }
 
 fn expectFunction(sections: info.Sections, address: u32, low: u32, high: u32, line: u32) !void {
@@ -43,10 +43,10 @@ fn expectFunction(sections: info.Sections, address: u32, low: u32, high: u32, li
 }
 
 test "a DWARF 4 subprogram's bounds come from a length or an end address" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer list.deinit();
-    try unit(&list, 4);
-    const sections = info.Sections{ .info = list.items, .abbrev = &abbrev };
+    try unit(&list.writer, 4);
+    const sections = info.Sections{ .info = list.written(), .abbrev = &abbrev };
     try expectFunction(sections, 0x1000, 0x1000, 0x1020, 7);
     try expectFunction(sections, 0x101F, 0x1000, 0x1020, 7);
     try expectFunction(sections, 0x2008, 0x2000, 0x2010, 300);
@@ -55,11 +55,11 @@ test "a DWARF 4 subprogram's bounds come from a length or an end address" {
 }
 
 test "a DWARF 5 unit reads the same, after a second unit is skipped past" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer list.deinit();
-    try unit(&list, 4);
-    try unit(&list, 5);
-    const sections = info.Sections{ .info = list.items, .abbrev = &abbrev };
+    try unit(&list.writer, 4);
+    try unit(&list.writer, 5);
+    const sections = info.Sections{ .info = list.written(), .abbrev = &abbrev };
     try expectFunction(sections, 0x2000, 0x2000, 0x2010, 300);
 }
 

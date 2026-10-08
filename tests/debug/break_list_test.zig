@@ -6,9 +6,9 @@ const break_table = ra8.core.break_table;
 const watch_table = ra8.core.watch_table;
 
 fn listed(view: break_list.View) ![]u8 {
-    var text = std.ArrayList(u8).init(std.testing.allocator);
+    var text: std.Io.Writer.Allocating = .init(std.testing.allocator);
     errdefer text.deinit();
-    try break_list.write(text.writer(), view);
+    try break_list.write(&text.writer, view);
     return text.toOwnedSlice();
 }
 

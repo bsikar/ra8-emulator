@@ -46,9 +46,9 @@ test "the report lists the opening switches of threadx_blink in order" {
     // other, idles.
     var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
     for ([_]u32{ 0, 0x2200_10F0, 0, 0x2200_11A0, 0 }) |value| tracer.onStore(0x2200_1ABC, 4, value);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), &tracer, rtos_hook.names.none);
+    try rtos_hook.print(&out.writer, &tracer, rtos_hook.names.none);
     const want =
         \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 event(s)
         \\                  tick 0 cpu0 idle
@@ -58,7 +58,7 @@ test "the report lists the opening switches of threadx_blink in order" {
         \\                  tick 0 cpu0 idle
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 /// threadx_blink's two TX_THREAD blocks, as far as their name pointers, and
@@ -85,9 +85,9 @@ const Blink = struct {
 test "each switch carries the name its control block points at" {
     var tracer = rtos_hook.Tracer{ .address = 0x2200_1ABC };
     for ([_]u32{ 0, 0x2200_10F0, 0, 0x2200_11A0, 0x2200_1234 }) |value| tracer.onStore(0x2200_1ABC, 4, value);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    try rtos_hook.print(&out.writer, &tracer, Blink{});
     const want =
         \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 5 event(s)
         \\                  tick 0 cpu0 idle
@@ -97,7 +97,7 @@ test "each switch carries the name its control block points at" {
         \\                  tick 0 cpu0 -> 0x22001234
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 test "exceptions print between the switches they bracket" {
@@ -111,9 +111,9 @@ test "exceptions print between the switches they bracket" {
     tracer.trace.exception(0, 1, .leave, 14);
     tracer.trace.exception(0, 2, .enter, 16 + 7);
     tracer.trace.exception(0, 2, .leave, 9);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    try rtos_hook.print(&out.writer, &tracer, Blink{});
     const want =
         \\  rtos trace    : _tx_thread_current_ptr @0x22001ABC, 7 event(s)
         \\                  tick 1 cpu0 enter SysTick
@@ -125,7 +125,7 @@ test "exceptions print between the switches they bracket" {
         \\                  tick 2 cpu0 leave exception 9
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 test "a CPU1 tracer tags its events and its header cpu1" {
@@ -133,9 +133,9 @@ test "a CPU1 tracer tags its events and its header cpu1" {
     tracer.trace.exception(1, 4, .enter, 14);
     tracer.onStore(0x2200_1ABC, 4, 0x2200_10F0);
     tracer.trace.exception(1, 4, .leave, 14);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), &tracer, Blink{});
+    try rtos_hook.print(&out.writer, &tracer, Blink{});
     const want =
         \\  rtos cpu1     : _tx_thread_current_ptr @0x22001ABC, 3 event(s)
         \\                  tick 4 cpu1 enter PendSV
@@ -143,7 +143,7 @@ test "a CPU1 tracer tags its events and its header cpu1" {
         \\                  tick 4 cpu1 leave PendSV
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 test "a CPU1 image without ThreadX traces nothing, and no flag traces nothing" {
@@ -154,15 +154,15 @@ test "a CPU1 image without ThreadX traces nothing, and no flag traces nothing" {
 }
 
 test "no CPU1 prints nothing for CPU1" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.second.print(out.writer(), std.testing.io, .{ .trace_rtos = true, .cpu_load = true }, null);
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try rtos_hook.second.print(&out.writer, std.testing.io, .{ .trace_rtos = true, .cpu_load = true }, null);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
 test "no trace asked for prints nothing" {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.print(out.writer(), null, rtos_hook.names.none);
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try rtos_hook.print(&out.writer, null, rtos_hook.names.none);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
