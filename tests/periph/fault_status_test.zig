@@ -89,14 +89,14 @@ test "the MPU's MemManage bits and the escalation's FORCED come from this table"
 
 test "the fault line is silent when CFSR, HFSR and SFSR are clear" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try status.line(stream.writer(), .{});
-    try std.testing.expectEqualStrings("", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try status.line(&stream, .{});
+    try std.testing.expectEqualStrings("", stream.buffered());
 }
 
 test "the fault line names INVSTATE and HFSR.FORCED (RA8EMU-394)" {
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try status.line(stream.writer(), .{ .cfsr = 0x0002_0000, .hfsr = 0x4000_0000 });
-    try std.testing.expectEqualStrings("faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try status.line(&stream, .{ .cfsr = 0x0002_0000, .hfsr = 0x4000_0000 });
+    try std.testing.expectEqualStrings("faults: CFSR 0x00020000 invstate, HFSR 0x40000000 forced, SFSR 0x00000000\n", stream.buffered());
 }

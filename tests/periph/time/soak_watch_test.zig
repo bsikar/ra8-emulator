@@ -64,9 +64,9 @@ test "an armed soak ends on a changed word and names it" {
     const event = state.event orelse return error.NoEvent;
     try std.testing.expectEqual(soak.Kind.stack_canary, event.kind);
     var buffer: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buffer);
-    try state.line(stream.writer());
-    try std.testing.expectEqualStrings("soak: stopped on stack canary overwritten at 120.000000000 s virtual, core 0, word 0x20000004\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try state.line(&stream);
+    try std.testing.expectEqualStrings("soak: stopped on stack canary overwritten at 120.000000000 s virtual, core 0, word 0x20000004\n", stream.buffered());
 }
 
 test "an unarmed soak reads nothing" {

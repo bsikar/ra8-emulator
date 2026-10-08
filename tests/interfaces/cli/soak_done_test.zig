@@ -42,8 +42,8 @@ fn runSoak(overflow: bool) !Ended {
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
+    var stream: std.Io.Writer = .fixed(&output);
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, soaker.base, week_cycles, &ran, .{ .boundary = clock.boundary(), .final = &final });
     clock.soakFaults();
     return .{ .event = board.time.soak.event, .now_ns = board.time.base.now(), .count = try core.readWord(soaker.counter_at), .ticks = timebase.ticks, .collapsed = timebase.collapsed };
 }
