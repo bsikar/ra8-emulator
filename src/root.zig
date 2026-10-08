@@ -145,6 +145,7 @@ pub const board = struct {
     pub const profile = @import("board/profile.zig");
     pub const session_display = @import("board/session_display.zig");
     pub const session_rtc = @import("board/session_rtc.zig");
+    pub const periph_layout = @import("board/periph_layout.zig");
     pub const boundary = @import("board/boundary.zig");
     pub const wiring = @import("board/wiring.zig");
     pub const option_memory = @import("board/option_memory.zig");
