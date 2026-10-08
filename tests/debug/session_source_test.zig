@@ -14,15 +14,15 @@ const tables = "src\x00\x00main.c\x00\x01\x00\x00/abs/boot.s\x00\x00\x00\x00\x00
 const program = [_]u8{ 0x00, 0x05, 0x02, 0x00, 0x10, 0x00, 0x00, 0x01, 0x02, 0x02, 0x04, 0x02, 0x03, 0x06, 0x01, 0x02, 0x01, 0x00, 0x01, 0x01 };
 
 fn said(sections: ra8.core.dwarf_line.Sections, address: u32, expected: []const u8) !void {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.line(out.writer(), sections, address);
-    try std.testing.expectEqualStrings(expected, out.items);
+    try session_source.line(&out.writer, sections, address);
+    try std.testing.expectEqualStrings(expected, out.written());
 }
 
 test "info line names the file under its directory and the row's addresses" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables, &program);
     const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
     try said(sections, 0x1002, "Line 1 of \"src/main.c\" starts at address 0x00001000 and ends at 0x00001004.\n");
@@ -35,8 +35,8 @@ test "info line ends where the line changes, past rows on the same line" {
     // 1 again); advance_pc 1 op; advance_line +1; copy (0x1004, line 2);
     // advance_pc 1 op; end_sequence at 0x1006.
     const repeated = [_]u8{ 0x00, 0x05, 0x02, 0x00, 0x10, 0x00, 0x00, 0x01, 0x02, 0x01, 0x01, 0x02, 0x01, 0x03, 0x01, 0x01, 0x02, 0x01, 0x00, 0x01, 0x01 };
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables, &repeated);
     const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
     try said(sections, 0x1000, "Line 1 of \"src/main.c\" starts at address 0x00001000 and ends at 0x00001004.\n");
@@ -56,46 +56,46 @@ test "info line takes one place" {
     try std.testing.expectError(error.ExtraArgument, commands.parse("info line a b"));
 }
 
-fn listed(reader: anytype, first: u32, last: u32, expected: []const u8) !void {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+fn listed(reader: *std.Io.Reader, first: u32, last: u32, expected: []const u8) !void {
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.lines(out.writer(), reader, first, last);
-    try std.testing.expectEqualStrings(expected, out.items);
+    try session_source.lines(&out.writer, reader, first, last);
+    try std.testing.expectEqualStrings(expected, out.written());
 }
 
 test "list numbers the window's lines and stops where the source does" {
-    var whole = std.io.fixedBufferStream("a\nb\nc\nd\ne\n");
-    try listed(whole.reader(), 2, 3, "2\tb\n3\tc\n");
-    var short = std.io.fixedBufferStream("a\nb\nlast");
-    try listed(short.reader(), 1, 10, "1\ta\n2\tb\n3\tlast\n");
-    var empty = std.io.fixedBufferStream("");
-    try listed(empty.reader(), 1, 10, "");
+    var whole: std.Io.Reader = .fixed("a\nb\nc\nd\ne\n");
+    try listed(&whole, 2, 3, "2\tb\n3\tc\n");
+    var short: std.Io.Reader = .fixed("a\nb\nlast");
+    try listed(&short, 1, 10, "1\ta\n2\tb\n3\tlast\n");
+    var empty: std.Io.Reader = .fixed("");
+    try listed(&empty, 1, 10, "");
 }
 
 test "list keeps the start of an overlong line and carries on after it" {
     const long = &@as([session_source.limits.line_bytes + 10:0]u8, @splat('x'));
-    var source = std.io.fixedBufferStream(long ++ "\nnext\n");
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var source: std.Io.Reader = .fixed(long ++ "\nnext\n");
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.lines(out.writer(), source.reader(), 1, 2);
-    try std.testing.expect(std.mem.endsWith(u8, out.items, "\n2\tnext\n"));
-    try std.testing.expectEqual(session_source.limits.line_bytes + 3 + 7, out.items.len);
+    try session_source.lines(&out.writer, &source, 1, 2);
+    try std.testing.expect(std.mem.endsWith(u8, out.written(), "\n2\tnext\n"));
+    try std.testing.expectEqual(session_source.limits.line_bytes + 3 + 7, out.written().len);
 }
 
-fn sourced(dir: std.fs.Dir, sections: ra8.core.dwarf_line.Sections, address: u32, expected: []const u8) !void {
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+fn sourced(dir: std.Io.Dir, sections: ra8.core.dwarf_line.Sections, address: u32, expected: []const u8) !void {
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.list(out.writer(), sections, dir, address);
-    try std.testing.expectEqualStrings(expected, out.items);
+    try session_source.list(&out.writer, sections, std.testing.io, dir, address);
+    try std.testing.expectEqualStrings(expected, out.written());
 }
 
 test "list reads the line's file under its directory, or says it is missing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.makeDir("src");
-    try tmp.dir.writeFile(.{ .sub_path = "src/main.c", .data = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n" });
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    try tmp.dir.createDirPath(std.testing.io, "src");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "src/main.c", .data = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n" });
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables, &program);
     const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
     try sourced(tmp.dir, sections, 0x1000, "1\t1\n2\t2\n3\t3\n4\t4\n5\t5\n6\t6\n7\t7\n8\t8\n9\t9\n10\t10\n");
@@ -110,15 +110,15 @@ test "list takes an optional place" {
 }
 
 test "a backtrace frame gets at FILE:LINE, and nothing without a line" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables, &program);
     const sections = ra8.core.dwarf_line.Sections{ .line = list.items };
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.at(out.writer(), sections, 0x1002);
-    try session_source.at(out.writer(), sections, 0x1005);
-    try session_source.at(out.writer(), sections, 0x1006);
-    try session_source.at(out.writer(), .{}, 0x1002);
-    try std.testing.expectEqualStrings(" at src/main.c:1 at /abs/boot.s:7", out.items);
+    try session_source.at(&out.writer, sections, 0x1002);
+    try session_source.at(&out.writer, sections, 0x1005);
+    try session_source.at(&out.writer, sections, 0x1006);
+    try session_source.at(&out.writer, .{}, 0x1002);
+    try std.testing.expectEqualStrings(" at src/main.c:1 at /abs/boot.s:7", out.written());
 }
