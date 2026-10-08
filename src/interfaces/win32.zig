@@ -32,6 +32,7 @@ pub fn pipeWaiting(pipe: HANDLE) ?DWORD {
 /// WSAPOLLFD, and the WSAPoll bits the serve front asks for (RA8EMU-828).
 pub const PollFd = extern struct { fd: HANDLE, events: i16, revents: i16 };
 pub const poll_in: i16 = 0x0300;
+pub const poll_out: i16 = 0x0010;
 pub const poll_hup: i16 = 0x0002;
 pub const poll_err: i16 = 0x0001;
 pub const msg_peek: c_int = 0x2;
