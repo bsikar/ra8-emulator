@@ -15,9 +15,9 @@ pub const Error = file.Error || fields.Error || error{Missing};
 const wiring = .{ "per_chunk", "words" };
 
 pub fn save(bases: [2]*const Clocks, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(bases, counter.writer());
-    try file.writeSectionHeader(writer, .systick, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(bases, &counter.writer);
+    try file.writeSectionHeader(writer, .systick, counter.fullCount());
     try body(bases, writer);
 }
 

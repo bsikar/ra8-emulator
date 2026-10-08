@@ -15,9 +15,9 @@ const channel_wiring = .{"device"};
 const line_wiring = .{"sink"};
 
 pub fn save(board: anytype, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(counter.writer(), &board.serial);
-    try file.writeSectionHeader(writer, .serial, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(&counter.writer, &board.serial);
+    try file.writeSectionHeader(writer, .serial, counter.fullCount());
     try body(writer, &board.serial);
 }
 

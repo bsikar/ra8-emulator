@@ -16,7 +16,7 @@ fn Whole(comptime T: type) type {
     return @Int(info.signedness, (info.bits + 7) / 8 * 8);
 }
 
-pub fn write(writer: anytype, value: anytype) @TypeOf(writer).Error!void {
+pub fn write(writer: *std.Io.Writer, value: anytype) std.Io.Writer.Error!void {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .int => try writer.writeInt(Whole(T), value, .little),
@@ -29,7 +29,7 @@ pub fn write(writer: anytype, value: anytype) @TypeOf(writer).Error!void {
         } else try writer.writeByte(0),
         .@"struct" => |s| if (s.layout == .@"packed") {
             try write(writer, @as(s.backing_integer.?, @bitCast(value)));
-        } else inline for (s.fields) |field| try write(writer, @field(value, field.name)),
+        } else inline for (s.field_names) |name| try write(writer, @field(value, name)),
         .@"union" => |u| {
             const Tag = u.tag_type orelse @compileError("a snapshot cannot hold untagged " ++ @typeName(T));
             try write(writer, @as(Tag, value));
@@ -86,14 +86,14 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
         .@"struct" => |s| {
             if (s.layout == .@"packed") return @bitCast(try read(s.backing_integer.?, cursor));
             var out: T = undefined;
-            inline for (s.fields) |field| @field(out, field.name) = try read(field.type, cursor);
+            inline for (s.field_names, s.field_types) |name, F| @field(out, name) = try read(F, cursor);
             return out;
         },
         .@"union" => |u| {
             const Tag = u.tag_type orelse @compileError("a snapshot cannot hold untagged " ++ @typeName(T));
             const tag = try read(Tag, cursor);
-            inline for (u.fields) |field| {
-                if (tag == @field(Tag, field.name)) return @unionInit(T, field.name, try read(field.type, cursor));
+            inline for (u.field_names, u.field_types) |name, F| {
+                if (tag == @field(Tag, name)) return @unionInit(T, name, try read(F, cursor));
             }
             unreachable;
         },
@@ -107,7 +107,7 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
 /// otherwise plain state carries. A dotted name skips a field further down
 /// (RA8EMU-681): "channels.listener" leaves out `listener` in every element
 /// of `channels`.
-pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
+pub fn writeExcept(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) std.Io.Writer.Error!void {
     inline for (@typeInfo(@TypeOf(value)).@"struct".field_names) |name| {
         if (comptime named(name, skip)) continue;
         const inner = comptime below(name, skip);
@@ -117,7 +117,7 @@ pub fn writeExcept(writer: anytype, value: anytype, comptime skip: anytype) @Typ
     }
 }
 
-fn writeInner(writer: anytype, value: anytype, comptime skip: anytype) @TypeOf(writer).Error!void {
+fn writeInner(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) std.Io.Writer.Error!void {
     switch (@typeInfo(@TypeOf(value))) {
         .array => for (value) |item| try writeInner(writer, item, skip),
         .@"struct" => try writeExcept(writer, value, skip),

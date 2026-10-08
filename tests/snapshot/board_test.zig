@@ -28,9 +28,9 @@ const Rig = struct {
     }
 };
 
-fn saved(board: *const Board, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try section.save(board, list.writer());
+fn saved(board: *const Board, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try section.save(board, &list.writer);
 }
 
 test "a whole board loaded into a fresh one saves the same bytes" {
@@ -39,20 +39,20 @@ test "a whole board loaded into a fresh one saves the same bytes" {
     defer rig.deinit();
     rig.board.c6.reply = .{0x5A};
     rig.board.c6.wire.replies_sent = 6;
-    var first = std.ArrayList(u8).init(std.testing.allocator);
+    var first = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer first.deinit();
     try saved(&rig.board, &first);
 
     var fresh: Rig = undefined;
     try fresh.build();
     defer fresh.deinit();
-    try section.load(&fresh.board, first.items);
+    try section.load(&fresh.board, first.written());
     try std.testing.expectEqual(@as(u8, 0x5A), fresh.board.c6.reply[0]);
     try std.testing.expectEqual(@as(u32, 6), @as(u32, @intCast(fresh.board.c6.wire.replies_sent)));
-    var second = std.ArrayList(u8).init(std.testing.allocator);
+    var second = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer second.deinit();
     try saved(&fresh.board, &second);
-    try std.testing.expectEqualSlices(u8, first.items, second.items);
+    try std.testing.expectEqualSlices(u8, first.written(), second.written());
 }
 
 test "a file from another part is refused and the board is untouched" {
@@ -60,7 +60,7 @@ test "a file from another part is refused and the board is untouched" {
     try rig.build();
     defer rig.deinit();
     rig.board.c6.reply = .{0x5A};
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&rig.board, &bytes);
 
@@ -69,16 +69,16 @@ test "a file from another part is refused and the board is untouched" {
     defer other.deinit();
     other.board.part = .ra8p1;
     const before = other.board.c6.reply[0];
-    try std.testing.expectError(error.WrongPart, section.load(&other.board, bytes.items));
+    try std.testing.expectError(error.WrongPart, section.load(&other.board, bytes.written()));
     try std.testing.expectEqual(before, other.board.c6.reply[0]);
 }
 
 test "a file without a part section is refused" {
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
-    try file.writeHeader(bytes.writer());
+    try file.writeHeader(&bytes.writer);
     var rig: Rig = undefined;
     try rig.build();
     defer rig.deinit();
-    try std.testing.expectError(error.Missing, section.load(&rig.board, bytes.items));
+    try std.testing.expectError(error.Missing, section.load(&rig.board, bytes.written()));
 }

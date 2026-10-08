@@ -31,8 +31,8 @@ const Rig = struct {
     }
 };
 
-fn saved(rig: *const Rig, cores: []const *const Cpu, list: *std.ArrayList(u8)) !void {
-    try run.save(list.writer(), &rig.store, cores, &rig.board);
+fn saved(rig: *const Rig, cores: []const *const Cpu, list: *std.Io.Writer.Allocating) !void {
+    try run.save(&list.writer, &rig.store, cores, &rig.board);
 }
 
 test "a whole run loaded into a fresh one saves the same bytes" {
@@ -46,7 +46,7 @@ test "a whole run loaded into a fresh one saves the same bytes" {
     var one = try fixture.boot(&ram);
     zero.regs.low[4] = 0x1234_5678;
     one.regs.low[4] = 0x0BAD_F00D;
-    var first = std.ArrayList(u8).init(std.testing.allocator);
+    var first = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer first.deinit();
     try saved(&rig, &.{ &zero, &one }, &first);
 
@@ -55,14 +55,14 @@ test "a whole run loaded into a fresh one saves the same bytes" {
     defer fresh.deinit();
     var fresh_zero = try fixture.boot(&ram);
     var fresh_one = try fixture.boot(&ram);
-    try run.load(first.items, &fresh.store, &.{ &fresh_zero, &fresh_one }, &fresh.board);
+    try run.load(first.written(), &fresh.store, &.{ &fresh_zero, &fresh_one }, &fresh.board);
     try std.testing.expectEqual(@as(u8, 0x7E), fresh.store.span(word_at, 4).?[0]);
     try std.testing.expectEqual(@as(u32, 0x1234_5678), fresh_zero.regs.low[4]);
     try std.testing.expectEqual(@as(u32, 0x0BAD_F00D), fresh_one.regs.low[4]);
-    var second = std.ArrayList(u8).init(std.testing.allocator);
+    var second = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer second.deinit();
     try saved(&fresh, &.{ &fresh_zero, &fresh_one }, &second);
-    try std.testing.expectEqualSlices(u8, first.items, second.items);
+    try std.testing.expectEqualSlices(u8, first.written(), second.written());
 }
 
 test "another part's file is refused before anything changes" {
@@ -72,7 +72,7 @@ test "another part's file is refused before anything changes" {
     defer rig.deinit();
     rig.store.span(word_at, 4).?[0] = 0x7E;
     var zero = try fixture.boot(&ram);
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&rig, &.{&zero}, &bytes);
 
@@ -82,7 +82,7 @@ test "another part's file is refused before anything changes" {
     other.board.part = .ra8p1;
     var other_zero = try fixture.boot(&ram);
     other_zero.regs.low[4] = 0x4444_4444;
-    try std.testing.expectError(error.WrongPart, run.load(bytes.items, &other.store, &.{&other_zero}, &other.board));
+    try std.testing.expectError(error.WrongPart, run.load(bytes.written(), &other.store, &.{&other_zero}, &other.board));
     try std.testing.expectEqual(@as(u8, 0), other.store.span(word_at, 4).?[0]);
     try std.testing.expectEqual(@as(u32, 0x4444_4444), other_zero.regs.low[4]);
 }
@@ -93,7 +93,7 @@ test "a file without a core it is asked for is refused" {
     try rig.build();
     defer rig.deinit();
     var zero = try fixture.boot(&ram);
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&rig, &.{&zero}, &bytes);
 
@@ -102,5 +102,5 @@ test "a file without a core it is asked for is refused" {
     defer fresh.deinit();
     var fresh_zero = try fixture.boot(&ram);
     var fresh_one = try fixture.boot(&ram);
-    try std.testing.expectError(error.Missing, run.load(bytes.items, &fresh.store, &.{ &fresh_zero, &fresh_one }, &fresh.board));
+    try std.testing.expectError(error.Missing, run.load(bytes.written(), &fresh.store, &.{ &fresh_zero, &fresh_one }, &fresh.board));
 }

@@ -20,9 +20,9 @@ const saved = .{ "regs", "fp", "retired", "vtor", "raised", "exclusive", "banked
 
 /// A cpu section for `core` (0 for CPU0, 1 for CPU1).
 pub fn save(cpu: *const Cpu, core: u8, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(cpu, core, counter.writer());
-    try file.writeSectionHeader(writer, .cpu, counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(cpu, core, &counter.writer);
+    try file.writeSectionHeader(writer, .cpu, counter.fullCount());
     try body(cpu, core, writer);
 }
 

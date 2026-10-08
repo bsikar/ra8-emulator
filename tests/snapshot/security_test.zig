@@ -88,29 +88,29 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try security.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try security.save(board, &list.writer);
 }
 
 test "every security unit round-trips" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = fresh(&first, false);
-    try security.load(&target, list.items);
+    try security.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
 }
 
 test "a load keeps the target's wiring" {
     const board = busy();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = fresh(&second, true);
     const banks = target.idau.banks;
-    try security.load(&target, list.items);
+    try security.load(&target, list.written());
     try std.testing.expectEqual(&second.sram, target.idau.sram.?);
     try std.testing.expectEqual(banks, target.idau.banks);
     try std.testing.expectEqual(&second.protection, target.chip_attribution.protection.?);
@@ -122,25 +122,25 @@ test "a load keeps the target's wiring" {
 test "a region select past the table is refused" {
     var board = busy();
     board.partitions.selected = @intCast(board.partitions.table.len);
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
     var target = fresh(&first, false);
-    try std.testing.expectError(error.BadValue, security.load(&target, list.items));
+    try std.testing.expectError(error.BadValue, security.load(&target, list.written()));
     try std.testing.expectEqual(@as(u8, 0), target.partitions.selected);
     try std.testing.expectEqual(@as(u32, 0), target.causes.requests);
 }
 
 test "a missing or short section changes nothing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target = fresh(&first, false);
-    try std.testing.expectError(error.Missing, security.load(&target, list.items));
+    try std.testing.expectError(error.Missing, security.load(&target, list.written()));
     list.clearRetainingCapacity();
     const board = busy();
     try saved(&board, &list);
-    try std.testing.expect(std.meta.isError(security.load(&target, list.items[0 .. list.items.len - 1])));
+    try std.testing.expect(std.meta.isError(security.load(&target, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 0), target.second_core.initvtor);
     try std.testing.expectEqual(@as(u64, 0), target.guard.latch.violations);
 }

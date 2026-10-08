@@ -26,23 +26,23 @@ fn busy() Stand {
     return board;
 }
 
-fn saved(board: *const Stand, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try section.save(board, list.writer());
+fn saved(board: *const Stand, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try section.save(board, &list.writer);
 }
 
 test "a busy NPU round-trips byte for byte" {
     const board = busy();
-    var first = std.ArrayList(u8).init(std.testing.allocator);
+    var first = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer first.deinit();
     try saved(&board, &first);
 
     var fresh: Stand = .{ .npu = npu.Npu.init() };
-    try section.load(&fresh, first.items);
-    var second = std.ArrayList(u8).init(std.testing.allocator);
+    try section.load(&fresh, first.written());
+    var second = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer second.deinit();
     try saved(&fresh, &second);
-    try std.testing.expectEqualSlices(u8, first.items, second.items);
+    try std.testing.expectEqualSlices(u8, first.written(), second.written());
     try std.testing.expectEqual(@as(u64, 1 << 33), fresh.npu.vela.moved);
     try std.testing.expectEqual(ra8.periph.npu_cmd.Op.add_constant, fresh.npu.last_op.?);
     try std.testing.expect(fresh.npu.due_irq);
@@ -50,7 +50,7 @@ test "a busy NPU round-trips byte for byte" {
 
 test "the target keeps its own memory handle" {
     const board = busy();
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&board, &bytes);
 
@@ -58,22 +58,22 @@ test "the target keeps its own memory handle" {
     const memory: Guest = .{ .store = &store };
     var target: Stand = .{ .npu = npu.Npu.init() };
     target.npu.memory = memory;
-    try section.load(&target, bytes.items);
+    try section.load(&target, bytes.written());
     try std.testing.expect(target.npu.memory != null);
     try std.testing.expectEqual(@as(u32, 5), target.npu.jobs);
 }
 
 test "a missing or short section leaves the NPU alone" {
-    var header = std.ArrayList(u8).init(std.testing.allocator);
+    var header = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer header.deinit();
-    try file.writeHeader(header.writer());
+    try file.writeHeader(&header.writer);
     var target: Stand = .{ .npu = npu.Npu.init() };
-    try std.testing.expectError(error.Missing, section.load(&target, header.items));
+    try std.testing.expectError(error.Missing, section.load(&target, header.written()));
 
     const board = busy();
-    var bytes = std.ArrayList(u8).init(std.testing.allocator);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&board, &bytes);
-    try std.testing.expect(std.meta.isError(section.load(&target, bytes.items[0 .. bytes.items.len - 3])));
+    try std.testing.expect(std.meta.isError(section.load(&target, bytes.written()[0 .. bytes.written().len - 3])));
     try std.testing.expectEqual(@as(u32, 0), target.npu.jobs);
 }

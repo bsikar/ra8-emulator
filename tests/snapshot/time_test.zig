@@ -18,9 +18,9 @@ fn running() !clocks.Time {
     return time;
 }
 
-fn snapshot(time: *const clocks.Time, list: *std.ArrayList(u8)) !void {
-    try file.writeHeader(list.writer());
-    try snap.save(time, list.writer());
+fn snapshot(time: *const clocks.Time, list: *std.Io.Writer.Allocating) !void {
+    try file.writeHeader(&list.writer);
+    try snap.save(time, &list.writer);
 }
 
 fn drain(time: *clocks.Time, out: *[8]u16) usize {
@@ -31,11 +31,11 @@ fn drain(time: *clocks.Time, out: *[8]u16) usize {
 
 test "time and pending events restore and fire in the same order" {
     var first = try running();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
     var second: clocks.Time = .{};
-    try snap.load(&second, list.items);
+    try snap.load(&second, list.written());
     try std.testing.expectEqual(first.base.now(), second.base.now());
     try std.testing.expectEqualDeep(first.base, second.base);
     // New events after the restore get the same sequence numbers too.
@@ -51,32 +51,32 @@ test "time and pending events restore and fire in the same order" {
 
 test "a count past capacity or an unsorted queue is refused and nothing changes" {
     var first = try running();
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
     var target: clocks.Time = .{};
     target.base.advance(5);
     // The count byte sits after the header, the time base and next_seq.
     const count_at = file.magic.len + 4 + 12 + 4 * 8 + 4;
-    try std.testing.expectEqual(@as(u8, 3), list.items[count_at]);
-    list.items[count_at] = 200;
-    try std.testing.expectError(error.BadValue, snap.load(&target, list.items));
-    list.items[count_at] = 3;
+    try std.testing.expectEqual(@as(u8, 3), list.written()[count_at]);
+    list.written()[count_at] = 200;
+    try std.testing.expectError(error.BadValue, snap.load(&target, list.written()));
+    list.written()[count_at] = 3;
     // Swap the first event's time with the last's.
     const first_event = count_at + 1;
     const last_event = first_event + 2 * 14;
-    var a: [8]u8 = list.items[first_event..][0..8].*;
-    @memcpy(list.items[first_event..][0..8], list.items[last_event..][0..8]);
-    @memcpy(list.items[last_event..][0..8], &a);
-    try std.testing.expectError(error.BadValue, snap.load(&target, list.items));
+    var a: [8]u8 = list.written()[first_event..][0..8].*;
+    @memcpy(list.written()[first_event..][0..8], list.written()[last_event..][0..8]);
+    @memcpy(list.written()[last_event..][0..8], &a);
+    try std.testing.expectError(error.BadValue, snap.load(&target, list.written()));
     try std.testing.expectEqual(@as(u64, 5), target.base.cycles);
     try std.testing.expectEqual(@as(usize, 0), target.queue.count);
 }
 
 test "a file without a time section is Missing" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
-    try file.writeHeader(list.writer());
+    try file.writeHeader(&list.writer);
     var target: clocks.Time = .{};
-    try std.testing.expectError(error.Missing, snap.load(&target, list.items));
+    try std.testing.expectError(error.Missing, snap.load(&target, list.written()));
 }

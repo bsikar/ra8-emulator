@@ -13,14 +13,14 @@ const Event = clocks.event_queue.Event;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-pub fn save(time: *const clocks.Time, writer: anytype) !void {
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try body(time, counter.writer());
-    try file.writeSectionHeader(writer, .time, counter.bytes_written);
+pub fn save(time: *const clocks.Time, writer: *std.Io.Writer) !void {
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try body(time, &counter.writer);
+    try file.writeSectionHeader(writer, .time, counter.fullCount());
     try body(time, writer);
 }
 
-fn body(time: *const clocks.Time, writer: anytype) !void {
+fn body(time: *const clocks.Time, writer: *std.Io.Writer) !void {
     try fields.write(writer, time.base);
     try fields.write(writer, time.queue.next_seq);
     // Only the live events: the rest of the array is undefined.

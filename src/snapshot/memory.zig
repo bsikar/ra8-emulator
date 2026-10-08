@@ -139,10 +139,10 @@ fn payloadLen(store: *const Store) u64 {
 }
 
 fn stateLen(store: *const Store) u64 {
-    var counter = std.io.countingWriter(std.io.null_writer);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
     const state: ?external.State = if (store.fabric) |fabric| fabric.state() else null;
-    fields.write(counter.writer(), state) catch unreachable;
-    return counter.bytes_written;
+    fields.write(&counter.writer, state) catch unreachable;
+    return counter.fullCount();
 }
 
 fn regionLen(bytes: []const u8) u64 {
