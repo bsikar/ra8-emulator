@@ -8,16 +8,16 @@ const json_watched = ra8.board.report.json_run.json_dumps.json_watched;
 const watchpoint = ra8.core.watchpoint;
 const Value = std.json.Value;
 
-fn render(found: ?*const watchpoint.Watched, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    var j = ra8.board.report.json.Json(@TypeOf(buf.writer())).init(buf.writer());
+fn render(found: ?*const watchpoint.Watched, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    var j = ra8.board.report.json.Json(@TypeOf(&buf.writer)).init(&buf.writer);
     try j.open(null, '{');
     try json_watched.log(&j, null, "0x20000000", found);
     try j.close('}');
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 test "nothing watched writes null" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(null, &buf);
     defer doc.deinit();
@@ -26,7 +26,7 @@ test "nothing watched writes null" {
 
 test "a quiet watch writes zero stores and empty lists" {
     const quiet = watchpoint.Watched{ .address = 0x2000_0000 };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&quiet, &buf);
     defer doc.deinit();
@@ -45,7 +45,7 @@ test "stores land in the opening, the spacing and the writers" {
     log.record(0x100, 0x201, 0x2000_0002, 2, 7);
     tick = 9;
     log.record(0x100, 0x201, 0x2000_0000, 4, 7);
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&log, &buf);
     defer doc.deinit();

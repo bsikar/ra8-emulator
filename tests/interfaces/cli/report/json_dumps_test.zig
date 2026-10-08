@@ -13,16 +13,16 @@ const Fixture = @import("json_board.zig").Fixture;
 
 const base: u32 = ra8.core.memmap.sram_base;
 
-fn render(board: *ra8.board.Board, dumps: ?*const json_dumps.Dumps, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1, .dumps = dumps });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn render(board: *ra8.board.Board, dumps: ?*const json_dumps.Dumps, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1, .dumps = dumps });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 test "a run with no core handed over writes null" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, null, &buf);
     defer doc.deinit();
@@ -36,7 +36,7 @@ test "nothing asked writes an empty list and nulls" {
     const regs: Regs = .{};
     const options = Options{ .path = "unused.elf" };
     const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = fix.memory(), .image = undefined, .options = &options, .io = std.testing.io };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();
@@ -61,7 +61,7 @@ test "registers and memory words read off the core" {
     var options = Options{ .path = "unused.elf", .dump_regs = true, .dump_mem_count = 1 };
     options.dump_mem[0] = .{ .spec = spec, .words = 2 };
     const of = json_dumps.Dumps{ .registers = .{ .zig = &file }, .memory = core, .image = undefined, .options = &options, .io = std.testing.io };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();
@@ -94,7 +94,7 @@ test "two --dump-mem places keep memory as the first and list both in order" {
     options.dump_mem[1] = .{ .spec = second, .words = 1 };
     options.dump_mem_count = 2;
     const of = json_dumps.Dumps{ .registers = .{ .zig = &regs }, .memory = core, .image = undefined, .options = &options, .io = std.testing.io };
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();

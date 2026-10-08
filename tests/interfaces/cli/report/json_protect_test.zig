@@ -7,9 +7,9 @@ const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn protection(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1 });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn protection(board: *ra8.board.Board, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1 });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn int(object: Value, key: []const u8) !i64 {
@@ -31,7 +31,7 @@ test "a quiet board has every protection key, all zero or false" {
     try fix.open();
     defer fix.close();
     const board = &fix.board;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try protection(board, &buf);
     defer doc.deinit();
@@ -62,7 +62,7 @@ test "MPU refusals split into stores, loads and fetches as the text does" {
     board.guard.latch.faults = 6;
     board.guard.latch.stood_down = true;
     board.mailbox.attrib.locked_writes = 3;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try protection(board, &buf);
     defer doc.deinit();
