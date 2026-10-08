@@ -23,7 +23,7 @@ test "a boundary is the chunk until SysTick is armed, then its period" {
     defer board.deinit();
     try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     try std.testing.expectEqual(@as(u32, 5000), clock.width());
     try core.writeWord(memmap.syst.rvr, 999);
     try core.writeWord(memmap.syst.csr, 0x7);
@@ -40,7 +40,7 @@ test "closing a boundary charges the clocks and wraps SysTick into ICSR" {
     defer board.deinit();
     try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     try clock.close(7);
     try std.testing.expectEqual(@as(u64, 7), timebase.elapsed);
     try core.writeWord(memmap.syst.rvr, 9);
@@ -62,7 +62,7 @@ test "closing a boundary charges cycles at the image core clock" {
     board.tree.selects = 1;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
     var timed: ra8.core.deadline.Deadline = .{ .periods = 1000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
     try core.writeWord(memmap.syst.rvr, 7999);
     try core.writeWord(memmap.syst.csr, 0x7);
     try std.testing.expectEqual(@as(u32, 50_000), clock.width());
@@ -107,7 +107,7 @@ test "--run-for ends after its duration of a reset-clock image's own time (RA8EM
     const options = try ra8.core.cli.parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "1s" });
     var timed = zig_run.stop_sym.deadline(options) orelse return error.TestExpectedDeadline;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 1_000_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
     try core.writeWord(memmap.syst.rvr, 7999);
     try core.writeWord(memmap.syst.csr, 0x7);
     var closes: usize = 0;
@@ -132,7 +132,7 @@ test "a SysTick rearm discards the current boundary rate" {
     board.tree.selects = 1;
     var timebase: ra8.periph.clocks.Clocks = .{};
     var timed: ra8.core.deadline.Deadline = .{ .periods = 1 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
     try core.writeWord(memmap.syst.rvr, 7999);
     try core.writeWord(memmap.syst.csr, 0x7);
     _ = clock.width();
@@ -221,7 +221,7 @@ test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-6
     try attach(&board, core);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5000 };
     var watch: ra8.core.stop.Stop = .{ .address = 0x2200_0100, .reaches = 3 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .stop = &watch };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .stop = &watch };
     try core.writeWord(0x2200_0100, 2);
     try std.testing.expect(!clock.done());
     try core.writeWord(0x2200_0100, 4);

@@ -161,7 +161,7 @@ test "no flag, no hook" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var timebase: ra8.periph.clocks.Clocks = .{};
-    var clock: zig_run.Clock = .{ .memory = .{ .store = &store }, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = .{ .store = &store }, .board = &board, .timebase = &timebase };
     try std.testing.expect(zig_run.zig_snapshot.hook(&clock) == null);
     clock.state = .{ .save = "x" };
     const hook = zig_run.zig_snapshot.hook(&clock).?;
