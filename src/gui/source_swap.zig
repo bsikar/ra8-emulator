@@ -8,13 +8,14 @@ const std = @import("std");
 const FrameSource = @import("camera_switch.zig").FrameSource;
 
 pub const SourceSwap = struct {
-    mutex: std.Thread.Mutex = .{},
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
     pending: ?FrameSource = null,
 
     /// Window side: hand `next` over, closing any pick still waiting.
     pub fn post(self: *SourceSwap, next: FrameSource) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.pending) |*waiting| waiting.close();
         self.pending = next;
     }
@@ -22,8 +23,8 @@ pub const SourceSwap = struct {
     /// Engine side: close what `source` points at and install the waiting
     /// pick there. False when nothing was waiting.
     pub fn take(self: *SourceSwap, source: *FrameSource) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const next = self.pending orelse return false;
         self.pending = null;
         source.close();

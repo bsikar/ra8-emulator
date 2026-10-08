@@ -70,7 +70,7 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     var devices: window_devices.Devices = undefined;
     devices.init(allocator, args.io, args.board, args.options.attaches[0..args.options.attach_count], args.options.click);
     defer devices.deinit();
-    const result = try window_run.show(allocator, shown, args.board, &pacer, live.engine(), args.options.camera, &devices);
+    const result = try window_run.show(allocator, args.io, shown, args.board, &pacer, live.engine(), args.options.camera, &devices);
     std.debug.print("window: {d} frames, board snapshot up to {d} bytes per frame\n", .{ result.frames, result.snapshot_bytes });
     return live.code;
 }

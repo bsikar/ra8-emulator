@@ -28,7 +28,8 @@ pub const Feed = struct {
     /// Engine side only.
     batch: std.ArrayListUnmanaged(Byte) = .empty,
     batch_lost: u64 = 0,
-    mutex: std.Thread.Mutex = .{},
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
     /// Under `mutex`.
     outbox: std.ArrayListUnmanaged(Byte) = .empty,
     lost: u64 = 0,
@@ -59,8 +60,8 @@ pub const Feed = struct {
 
     /// Engine side, at a park: hand the batch to the window.
     pub fn publish(self: *Feed) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const room = self.limit -| self.outbox.items.len;
         const kept = @min(room, self.batch.items.len);
         self.outbox.appendSlice(self.allocator, self.batch.items[0..kept]) catch {
@@ -83,8 +84,8 @@ pub const Feed = struct {
     pub fn drain(self: *Feed, logs: []console_log.Log) error{OutOfMemory}!u64 {
         self.inbox.clearRetainingCapacity();
         const lost = blk: {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lockUncancelable(self.io);
+            defer self.mutex.unlock(self.io);
             std.mem.swap(std.ArrayListUnmanaged(Byte), &self.inbox, &self.outbox);
             break :blk self.lost;
         };

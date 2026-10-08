@@ -31,7 +31,7 @@ test "control keys map to the bytes they type" {
 }
 
 test "queued bytes reach their channels oldest first" {
-    var typed = console_keys.Typed{};
+    var typed = console_keys.Typed{ .io = std.testing.io };
     typed.post(8, 'h');
     typed.post(8, 'i');
     typed.post(3, '\r');
@@ -43,7 +43,7 @@ test "queued bytes reach their channels oldest first" {
 }
 
 test "past capacity the newest bytes are dropped and counted" {
-    var typed = console_keys.Typed{};
+    var typed = console_keys.Typed{ .io = std.testing.io };
     for (0..console_keys.capacity + 2) |_| typed.post(0, 'x');
     try std.testing.expectEqual(@as(u64, 2), typed.lost);
     try std.testing.expectEqual(console_keys.capacity, typed.len);
