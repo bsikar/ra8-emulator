@@ -77,30 +77,33 @@ const max_line: usize = 256;
 
 /// Reads `name` from `dir` and shrinks it to `side`: a picture whole, a
 /// Y4M clip by its first frame.
-pub fn load(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Thumb {
-    const file = try dir.openFile(name, .{});
-    defer file.close();
+pub fn load(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, name: []const u8) !Thumb {
+    const file = try dir.openFile(io, name, .{});
+    defer file.close(io);
     var head: [max_line]u8 = undefined;
-    const got = try file.preadAll(&head, 0);
-    if (std.mem.startsWith(u8, head[0..got], y4m.magic)) return clip(allocator, file, head[0..got]);
-    const bytes = try file.readToEndAlloc(allocator, image_source.max_file_bytes);
+    const got = try file.readPositionalAll(io, &head, 0);
+    if (std.mem.startsWith(u8, head[0..got], y4m.magic)) return clip(allocator, io, file, head[0..got]);
+    const size = try file.length(io);
+    if (size > image_source.max_file_bytes) return error.FileTooBig;
+    const bytes = try allocator.alloc(u8, @intCast(size));
     defer allocator.free(bytes);
+    if (try file.readPositionalAll(io, bytes, 0) != bytes.len) return error.Truncated;
     const picture = try image_source.decodeAny(allocator, bytes);
     defer picture.deinit(allocator);
     return shrink(allocator, picture, side);
 }
 
 /// The clip's first frame: header line, FRAME line, then its planes.
-fn clip(allocator: std.mem.Allocator, file: std.fs.File, head: []const u8) !Thumb {
+fn clip(allocator: std.mem.Allocator, io: std.Io, file: std.Io.File, head: []const u8) !Thumb {
     const header_end = std.mem.indexOfScalar(u8, head, '\n') orelse return error.BadHeader;
     const header = try y4m.parse(head[0..header_end]);
     var line: [max_line]u8 = undefined;
-    const got = try file.preadAll(&line, header_end + 1);
+    const got = try file.readPositionalAll(io, &line, header_end + 1);
     const frame_end = std.mem.indexOfScalar(u8, line[0..got], '\n') orelse return error.Truncated;
     if (!std.mem.startsWith(u8, line[0..frame_end], "FRAME")) return error.BadHeader;
     const planes = try allocator.alloc(u8, @intCast(header.frameBytes()));
     defer allocator.free(planes);
-    const read = try file.preadAll(planes, header_end + 1 + frame_end + 1);
+    const read = try file.readPositionalAll(io, planes, header_end + 1 + frame_end + 1);
     if (read != planes.len) return error.Truncated;
     const picture = try decoded.Image.alloc(allocator, header.width, header.height);
     defer picture.deinit(allocator);
