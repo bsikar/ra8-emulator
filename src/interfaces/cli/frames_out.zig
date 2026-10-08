@@ -51,7 +51,7 @@ pub const Sequence = struct {
             }
             index = try directory.createFile(io, "frames.txt", .{});
         }
-        const video_writer = if (video_path) |path| try video_out.Writer.init(allocator, path) else null;
+        const video_writer = if (video_path) |path| try video_out.Writer.init(allocator, io, path) else null;
         return .{
             .allocator = allocator,
             .io = io,
