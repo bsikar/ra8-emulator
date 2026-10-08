@@ -210,7 +210,7 @@ pub const Loop = struct {
         self.thumb_of = wanted;
         const dir = self.media_dir orelse return;
         if (wanted.len == 0) return;
-        self.thumb = camera_thumb.load(self.allocator, dir, wanted) catch null;
+        self.thumb = camera_thumb.load(self.allocator, self.io, dir, wanted) catch null;
     }
 
     /// Lists `panel` under the media row; refusals come back through `post`.
