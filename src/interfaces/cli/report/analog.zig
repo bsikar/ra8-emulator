@@ -8,7 +8,7 @@ const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// One line per channel the firmware moved. The dark count is the loud case:
 /// a code stored with DACEN clear latches but converts nothing, so an image

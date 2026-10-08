@@ -7,7 +7,7 @@ const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// Quiet unless the run armed a capture. The declined arm and the refused
 /// store are the loud cases: CETCR.CPE is what the engine raised, so an
