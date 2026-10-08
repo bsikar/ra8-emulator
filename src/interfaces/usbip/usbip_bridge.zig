@@ -12,6 +12,7 @@ const listen = @import("usbip_listen.zig");
 const server = @import("usbip_server.zig");
 const session = @import("usbip_session.zig");
 const usbfs = @import("../../periph/usbfs/usbfs.zig");
+const sock_ready = @import("../sock_ready.zig");
 
 /// What one poll changed.
 pub const Event = enum { none, listening, attached, hung_up, unusable };
@@ -119,8 +120,8 @@ pub const Bridge = struct {
     }
 };
 
+/// A read will not block: bytes waiting or the peer hung up.
 fn readable(handle: std.posix.socket_t) bool {
-    var fds = [_]std.posix.pollfd{.{ .fd = handle, .events = std.posix.POLL.IN, .revents = 0 }};
-    const ready = std.posix.poll(&fds, 0) catch return false;
-    return ready > 0;
+    const ready = sock_ready.wait(handle, 0) catch return false;
+    return ready.any();
 }

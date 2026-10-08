@@ -6,7 +6,7 @@
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
 const debug_session = @import("session.zig");
-const socket_flags = @import("../interfaces/socket_flags.zig");
+const sock_ready = @import("../interfaces/sock_ready.zig");
 
 /// Instructions per run chunk under gdb: small enough that an interrupt
 /// lands promptly, large enough that polling costs nothing measurable.
@@ -21,21 +21,12 @@ pub const Socket = struct {
 
     fn check(context: *anyopaque) bool {
         const self: *Socket = @ptrCast(@alignCast(context));
-        var fds = [_]std.posix.pollfd{.{ .fd = self.handle, .events = std.posix.POLL.IN, .revents = 0 }};
-        const ready = std.posix.poll(&fds, 0) catch return false;
-        if (ready == 0) return false;
+        const ready = sock_ready.wait(self.handle, 0) catch return false;
+        if (!ready.any()) return false;
         var byte: [1]u8 = undefined;
-        const peeked = take(self.handle, &byte, socket_flags.peek) orelse return false;
+        const peeked = sock_ready.takeByte(self.handle, &byte, true) orelse return false;
         if (peeked == 0 or byte[0] != packet.interrupt) return false;
-        _ = take(self.handle, &byte, 0) orelse return false;
+        _ = sock_ready.takeByte(self.handle, &byte, false) orelse return false;
         return true;
     }
 };
-
-/// One byte off the socket through libc's recv (Zig 0.17 has no
-/// std.posix.recv); null when it fails.
-fn take(handle: std.posix.socket_t, byte: *[1]u8, flags: u32) ?usize {
-    const got = std.c.recv(handle, byte, byte.len, @intCast(flags));
-    if (got < 0) return null;
-    return @intCast(got);
-}

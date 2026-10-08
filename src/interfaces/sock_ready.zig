@@ -3,6 +3,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const win32 = @import("win32.zig");
+const socket_flags = @import("socket_flags.zig");
 
 pub const Handle = std.posix.fd_t;
 
@@ -31,4 +32,17 @@ fn waitWindows(handle: Handle, ms: i32) error{SystemResources}!Ready {
     if (win32.WSAPoll(&fds, fds.len, ms) < 0) return error.SystemResources;
     const got = fds[0].revents;
     return .{ .readable = got & win32.poll_in != 0, .hung_up = got & (win32.poll_hup | win32.poll_err) != 0 };
+}
+
+/// Reads (or with `peek`, looks at) one byte without consuming more; null
+/// when the receive fails, 0 when the peer hung up (RA8EMU-943).
+pub fn takeByte(handle: Handle, byte: *[1]u8, peek: bool) ?usize {
+    if (builtin.os.tag == .windows) {
+        const got = win32.recv(handle, byte, byte.len, if (peek) win32.msg_peek else 0);
+        if (got < 0) return null;
+        return @intCast(got);
+    }
+    const got = std.c.recv(handle, byte, byte.len, if (peek) @intCast(socket_flags.peek) else 0);
+    if (got < 0) return null;
+    return @intCast(got);
 }

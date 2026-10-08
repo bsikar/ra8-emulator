@@ -25,3 +25,26 @@ test "a socket whose peer closed reads as ready" {
     std.Io.Threaded.closeFd(fds[1]);
     try std.testing.expect((try sock_ready.wait(fds[0], 0)).any());
 }
+
+test "takeByte peeks without consuming, then takes" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const fds = try pair();
+    defer for (fds) |fd| std.Io.Threaded.closeFd(fd);
+    var byte: [1]u8 = undefined;
+    try std.testing.expectEqual(@as(isize, 2), std.c.write(fds[1], "\x03y", 2));
+    try std.testing.expectEqual(@as(?usize, 1), sock_ready.takeByte(fds[0], &byte, true));
+    try std.testing.expectEqual(@as(u8, 0x03), byte[0]);
+    try std.testing.expectEqual(@as(?usize, 1), sock_ready.takeByte(fds[0], &byte, false));
+    try std.testing.expectEqual(@as(u8, 0x03), byte[0]);
+    try std.testing.expectEqual(@as(?usize, 1), sock_ready.takeByte(fds[0], &byte, false));
+    try std.testing.expectEqual(@as(u8, 'y'), byte[0]);
+}
+
+test "takeByte reads 0 once the peer hung up" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const fds = try pair();
+    defer std.Io.Threaded.closeFd(fds[0]);
+    std.Io.Threaded.closeFd(fds[1]);
+    var byte: [1]u8 = undefined;
+    try std.testing.expectEqual(@as(?usize, 0), sock_ready.takeByte(fds[0], &byte, true));
+}
