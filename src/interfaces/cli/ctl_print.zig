@@ -105,10 +105,11 @@ pub fn map(w: anytype, json: bool, text: []const u8) !void {
 
 /// Report `err` (with the server's refusal `code` when it refused) and
 /// return ctl's failure exit code.
-pub fn failed(json: bool, err: anyerror, code: u16) u8 {
+pub fn failed(io: std.Io, json: bool, err: anyerror, code: u16) u8 {
     const why = explain(err);
     if (json) {
-        const w = std.io.getStdOut().writer();
+        var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
+        const w = &stdout.interface;
         w.print("{{\"error\":\"{s}\",\"code\":{d}", .{ @errorName(err), code }) catch {};
         if (why.len != 0) w.print(",\"message\":{}", .{std.json.fmt(why, .{})}) catch {};
         w.writeAll("}\n") catch {};

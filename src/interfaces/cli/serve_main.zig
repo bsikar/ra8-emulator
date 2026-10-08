@@ -78,13 +78,13 @@ fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]
     const owner: *harness.Harness = @ptrCast(@alignCast(context));
     const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
     const image = owner.loadedImage(which) orelse return error.NoImage;
-    var stream = std.io.fixedBufferStream(out);
+    var w: std.Io.Writer = .fixed(out);
     if (json) {
-        try region_map_json.write(stream.writer(), image, &region_map.ek_ra8d2);
+        try region_map_json.write(&w, image, &region_map.ek_ra8d2);
     } else {
-        try map_main.render(stream.writer(), image, &region_map.ek_ra8d2);
+        try map_main.render(&w, image, &region_map.ek_ra8d2);
     }
-    return stream.getWritten();
+    return w.buffered();
 }
 
 /// The board, allocator and io set_camera_source opens sources with.

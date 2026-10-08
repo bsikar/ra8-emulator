@@ -12,10 +12,9 @@ const elf = @import("../core/elf.zig");
 const sections = @import("sections.zig");
 const region_map = @import("region_map.zig");
 
-pub fn write(writer: anytype, image: elf.Image, regions: []const region_map.Region) !void {
+pub fn write(writer: *std.Io.Writer, image: elf.Image, regions: []const region_map.Region) !void {
     const map = try region_map.build(image, regions);
-    var ws = std.json.writeStream(writer, .{});
-    defer ws.deinit();
+    var ws: std.json.Stringify = .{ .writer = writer };
     try ws.beginObject();
     try ws.objectField("regions");
     try ws.beginArray();
