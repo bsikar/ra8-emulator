@@ -3,6 +3,9 @@
 //! `localhost` binds 127.0.0.1; any other host must be an IP literal. The
 //! bound address goes to stderr, and a Unix socket path is removed on exit.
 const std = @import("std");
+const builtin = @import("builtin");
+const sock_ready = @import("../sock_ready.zig");
+const win32 = @import("../win32.zig");
 const served = @import("../rpc/session_server.zig");
 const Connection = @import("../rpc/socket_transport.zig").Connection;
 const loop = @import("serve_loop.zig");
@@ -59,12 +62,16 @@ pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buf
 
 /// True when a client is waiting on the listening socket.
 fn ready(fd: std.posix.fd_t) !bool {
-    var fds = [_]std.posix.pollfd{.{ .fd = fd, .events = std.posix.POLL.IN, .revents = 0 }};
-    return try std.posix.poll(&fds, accept_wait_ms) != 0;
+    return (try sock_ready.wait(fd, accept_wait_ms)).any();
 }
 
-/// SIGINT and SIGTERM end the serve cleanly at the next idle check.
+/// SIGINT and SIGTERM end the serve cleanly at the next idle check. Windows
+/// has no POSIX signals, so Ctrl+C, Ctrl+Break and console close do it there.
 fn catchStops() void {
+    if (builtin.os.tag == .windows) {
+        _ = win32.SetConsoleCtrlHandler(onConsoleStop, .TRUE);
+        return;
+    }
     const action: std.posix.Sigaction = .{
         .handler = .{ .handler = onStop },
         .mask = std.posix.sigemptyset(),
@@ -76,4 +83,9 @@ fn catchStops() void {
 
 fn onStop(_: std.posix.SIG) callconv(.c) void {
     loop.stopping.store(true, .release);
+}
+
+fn onConsoleStop(_: win32.DWORD) callconv(.winapi) win32.BOOL {
+    loop.stopping.store(true, .release);
+    return .TRUE;
 }

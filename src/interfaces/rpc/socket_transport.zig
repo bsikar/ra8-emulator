@@ -1,6 +1,7 @@
 //! RPC byte transports over connected TCP and Unix domain sockets (RA8EMU-194).
 const std = @import("std");
 const rpc = @import("ra8_rpc");
+const sock_ready = @import("../sock_ready.zig");
 
 pub const Connection = struct {
     stream: std.Io.net.Stream,
@@ -32,17 +33,15 @@ pub const Connection = struct {
     }
     fn receive(ctx: *anyopaque, into: []u8) rpc.Transport.Error!usize {
         const self = from(ctx);
-        var fds = [_]std.posix.pollfd{.{ .fd = self.stream.socket.handle, .events = std.posix.POLL.IN, .revents = 0 }};
-        _ = std.posix.poll(&fds, 0) catch return error.LinkDown;
-        if (fds[0].revents & (std.posix.POLL.IN | std.posix.POLL.HUP) == 0) return 0;
+        const ready = sock_ready.wait(self.stream.socket.handle, 0) catch return error.LinkDown;
+        if (!ready.any()) return 0;
         var vec = [_][]u8{into};
         const got = self.stream.readWithControl(self.io, &vec, &.{}) catch return error.LinkDown;
         return got.data_len;
     }
     fn poll(ctx: *anyopaque) usize {
         const self = from(ctx);
-        var fds = [_]std.posix.pollfd{.{ .fd = self.stream.socket.handle, .events = std.posix.POLL.IN, .revents = 0 }};
-        _ = std.posix.poll(&fds, 0) catch return 0;
-        return if (fds[0].revents & (std.posix.POLL.IN | std.posix.POLL.HUP) != 0) 1 else 0;
+        const ready = sock_ready.wait(self.stream.socket.handle, 0) catch return 0;
+        return @intFromBool(ready.any());
     }
 };
