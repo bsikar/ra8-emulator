@@ -50,14 +50,14 @@ test "responses and other topics leave the log alone" {
 
 /// Pump `link` into the status bar and console until `done`, for ten seconds.
 fn pumpUntil(link: *session_link.Link, status: *status_bar.Status, console: *Console, comptime done: fn (*const session_link.Link, *const status_bar.Status, *const Console) bool) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (!done(link, status, console)) {
-        if (std.time.milliTimestamp() > deadline) return error.Timeout;
+        if (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() > deadline) return error.Timeout;
         console.attach(link);
         if (link.pump()) |arrival| {
             status.observe(link, arrival);
             try console.observe(arrival);
-        } else std.time.sleep(std.time.ns_per_ms);
+        } else try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
 }
 
