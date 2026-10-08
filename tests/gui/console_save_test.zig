@@ -41,11 +41,11 @@ test "only a click on the SAVE tab saves the shown channel" {
     defer for (&logs) |*log| log.deinit();
     try logs[1].feedAll("hi\n", 0);
     try std.testing.expect(!console_save.click(area, area.x + 1, area.y + 1, std.testing.io, tmp.dir, &logs, 1));
-    try std.testing.expectError(error.FileNotFound, tmp.dir.access("console-sci1.txt", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(std.testing.io, "console-sci1.txt", .{}));
     const tab = console_pick.saveTab(area);
     try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, std.testing.io, tmp.dir, &logs, 1));
-    try tmp.dir.access("console-sci1.txt", .{});
+    try tmp.dir.access(std.testing.io, "console-sci1.txt", .{});
     // Without a project directory the click is still taken, and nothing is written.
     try std.testing.expect(console_save.click(area, tab.x + 1, tab.y + 1, std.testing.io, null, &logs, 0));
-    try std.testing.expectError(error.FileNotFound, tmp.dir.access("console-sci0.txt", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(std.testing.io, "console-sci0.txt", .{}));
 }

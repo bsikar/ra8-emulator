@@ -77,9 +77,9 @@ test "--gdb runs on the Zig core; what its debugger does not take yet says so" {
 test "a --cpu zig --debug-script command line plays the script on the Zig core" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "s.gdb", .data = "break 0x22000008\nrun\nbt\nquit\n" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "s.gdb", .data = "break 0x22000008\nrun\nbt\nquit\n" });
     var buffer: [256]u8 = undefined;
-    try tmp.dir.writeFile(.{ .sub_path = "fw.elf", .data = build(&buffer) });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "fw.elf", .data = build(&buffer) });
     var script_buffer: [128]u8 = undefined;
     const script_path = try std.fmt.bufPrint(&script_buffer, ".zig-cache/tmp/{s}/s.gdb", .{tmp.sub_path});
     var image_buffer: [128]u8 = undefined;
@@ -87,7 +87,7 @@ test "a --cpu zig --debug-script command line plays the script on the Zig core" 
     const request = try debug_front.wanted(&.{ "ra8_emulator", image_path, "--cpu", "zig", "--debug-script", script_path }).?;
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try std.testing.expectEqual(@as(u8, 0), try zig_debug_front.run(std.testing.allocator, request, &out.writer));
+    try std.testing.expectEqual(@as(u8, 0), try zig_debug_front.run(std.testing.allocator, std.testing.io, request, &out.writer));
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "(ra8) run\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "Breakpoint 1, 0x22000008") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "(ra8) bt\n#0") != null);

@@ -20,7 +20,7 @@ test "a directory's nodes list lowest number first" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     for ([_][]const u8{ "video10", "video2", "vbi0", "video0", "tty1" }) |name| {
-        (try tmp.dir.createFile(name, .{})).close();
+        (try tmp.dir.createFile(std.testing.io, name, .{})).close(std.testing.io);
     }
     var found = try devices.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
