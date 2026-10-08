@@ -29,14 +29,15 @@ const lis = exp.listen;
 const devlist_len = wire.op_header_len + 4 + wire.device_len + 2 * wire.interface_len;
 
 /// One request header, then `busid` padded to 32 bytes when importing.
-fn send(stream: std.net.Stream, code: u16, busid: ?[]const u8) !void {
+fn send(stream: std.Io.net.Stream, code: u16, busid: ?[]const u8) !void {
+    var out = stream.writer(std.testing.io, &.{});
     var header: [wire.op_header_len]u8 = undefined;
     (wire.OpHeader{ .code = code }).encode(&header);
-    try stream.writeAll(&header);
+    try out.interface.writeAll(&header);
     const name = busid orelse return;
     var body = @as([wire.busid_len]u8, @splat(0));
     @memcpy(body[0..name.len], name);
-    try stream.writeAll(&body);
+    try out.interface.writeAll(&body);
 }
 
 /// What the scripted host saw.
@@ -53,18 +54,21 @@ const Host = struct {
     }
 
     fn script(self: *Host) !void {
-        const address = try std.net.Address.parseIp4("127.0.0.1", self.port);
-        const first = try std.net.tcpConnectToAddress(address);
+        const io = std.testing.io;
+        const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", self.port);
+        const first = try address.connect(io, .{ .mode = .stream });
         try send(first, wire.op.req_devlist, null);
         var reply: [devlist_len]u8 = undefined;
-        try first.reader().readNoEof(&reply);
+        var first_in = first.reader(io, &.{});
+        try first_in.interface.readSliceAll(&reply);
         self.listed_len = reply.len;
-        first.close();
-        const second = try std.net.tcpConnectToAddress(address);
-        defer second.close();
+        first.close(io);
+        const second = try address.connect(io, .{ .mode = .stream });
+        defer second.close(io);
         try send(second, wire.op.req_import, "1-1");
         var header: [wire.op_header_len]u8 = undefined;
-        try second.reader().readNoEof(&header);
+        var second_in = second.reader(io, &.{});
+        try second_in.interface.readSliceAll(&header);
         self.import_status = (try wire.OpHeader.decode(&header)).status;
     }
 };
