@@ -110,6 +110,15 @@ test "the editing field rasterises to its pinned golden frame" {
     try std.testing.expectEqual(@as(u64, 8807121409433156495), scene.digest());
 }
 
+test "the bar with an RTC date rasterises to its pinned golden frame, wide enough for the whole line" {
+    var scene = try Scene.init(640, bar.height);
+    defer scene.deinit();
+    var models = Models.sample();
+    models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
+    try scene.render(.{ .x = 0, .y = 0, .w = 640, .h = bar.height }, models.view(false));
+    try std.testing.expectEqual(@as(u64, 12718428090859206122), scene.digest());
+}
+
 test "a bar too narrow for its controls paints nothing past its area" {
     var scene = try Scene.init(200, 40);
     defer scene.deinit();

@@ -1,6 +1,7 @@
 //! Host tests for the time bar's clock readout (RA8EMU-806): the achieved
 //! speed and when it shows, the line it reads, and the readout following a
-//! spawned `serve --stdio` session's virtual time across a run.
+//! spawned `serve --stdio` session's virtual time and RTC date (RA8EMU-809)
+//! across a run.
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
@@ -32,6 +33,16 @@ test "the achieved speed shows only when short of the request, never for max" {
     try std.testing.expectEqualStrings("T+1:02:03.456", try readout.text(0, &buf));
 }
 
+test "the RTC date leads the line when the session has one" {
+    var buf: [96]u8 = undefined;
+    var readout: Readout = .{};
+    readout.virtual_ns = 3_723_456_000_000;
+    readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
+    try std.testing.expectEqualStrings("2026-10-08 09:47:05 | T+1:02:03.456", try readout.text(1000, &buf));
+    readout.date = null;
+    try std.testing.expectEqualStrings("T+1:02:03.456", try readout.text(1000, &buf));
+}
+
 fn connect(link: *Link) !void {
     const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (link.state == .connecting and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
@@ -42,7 +53,7 @@ fn connect(link: *Link) !void {
 }
 
 fn busy(readout: *const Readout, status: *const Status) bool {
-    return readout.now_id != null or status.load_id != null or status.pc_id != null or status.run == .running;
+    return readout.waiting() or status.load_id != null or status.pc_id != null or status.run == .running;
 }
 
 /// Pump the link into the readout and the status until nothing is
@@ -90,7 +101,11 @@ test "the readout follows a local session's virtual time across a run" {
     try std.testing.expect(readout.virtual_ns.? > before);
 
     var buf: [96]u8 = undefined;
-    try std.testing.expect(std.mem.startsWith(u8, try readout.text(1000, &buf), "T+"));
+    try std.testing.expect(!readout.no_rtc);
+    const date = readout.date orelse return error.NoDate;
+    var date_buf: [19]u8 = undefined;
+    try std.testing.expectEqualStrings("2000-01-01 00:00:00", date.format(&date_buf));
+    try std.testing.expect(std.mem.startsWith(u8, try readout.text(1000, &buf), "2000-01-01 00:00:00 | T+"));
 
     local.end();
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
