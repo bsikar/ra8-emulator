@@ -42,7 +42,7 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     try std.testing.expectEqualStrings(spec, started.bound);
     var connection = try Connection.unix(std.testing.io, path);
     try session(gpa, &started.child, &connection);
-    try std.testing.expectError(error.FileNotFound, tmp.dir.access("serve.sock", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(std.testing.io, "serve.sock", .{}));
 }
 
 test "serve --listen with a bad spec prints its usage and exits 2" {
