@@ -24,6 +24,7 @@ pub const speed_field = @import("gui/speed_field.zig");
 pub const time_readout = @import("gui/time_readout.zig");
 pub const time_bar = @import("gui/time_bar.zig");
 pub const board_pane = @import("gui/board_pane.zig");
+pub const board_input = @import("gui/board_input.zig");
 pub const shell_frame = @import("gui/shell_frame.zig");
 pub const shell_loop = @import("gui/shell_loop.zig");
 pub const shell_panes = @import("gui/shell_panes.zig");

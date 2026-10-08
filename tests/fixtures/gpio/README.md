@@ -17,3 +17,11 @@ The source is Zig, so the repository carries no C. Rebuild with Zig 0.17.0:
 zig build-obj -target thumb-freestanding-eabihf -mcpu=cortex_m85 -O ReleaseSmall -fno-stack-check -fstrip -fno-compiler-rt -ffunction-sections blink.zig -femit-bin=blink.o
 zig cc -target thumb-freestanding-eabihf -mcpu=cortex_m85 -nostdlib -Wl,--build-id=none -Wl,--gc-sections -Wl,-s -Wl,-e,Reset_Handler -Wl,-z,max-page-size=4 -Wl,-T,gpio.ld blink.o -o blink.elf
 ```
+
+`buttons.elf` is the RA8EMU-814 switch fixture, built the same way from
+`buttons.zig`. It mirrors SW1 (P009, active low, read through PORT0's PCNTR2
+at `0x40400004`) onto LED1, so a press on the board's input script shows up as
+`led_changed` 0x100 on the session topic and the script's release as 0x000.
+The word at SRAM `0x22000100` counts presses.
+`tests/gui/session_button_wire_test.zig` clicks SW1 through the board pane's
+input handler and checks the LED comes on.
