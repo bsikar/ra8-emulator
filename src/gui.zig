@@ -30,6 +30,7 @@ pub const shell_board = @import("gui/shell_board.zig");
 pub const shell_devices = @import("gui/shell_devices.zig");
 pub const shell_field = @import("gui/shell_field.zig");
 pub const shell_plug = @import("gui/shell_plug.zig");
+pub const shell_registers = @import("gui/shell_registers.zig");
 pub const shell_camera = @import("gui/shell_camera.zig");
 pub const shell_camera_file = @import("gui/shell_camera_file.zig");
 pub const shell_titles = @import("gui/shell_titles.zig");

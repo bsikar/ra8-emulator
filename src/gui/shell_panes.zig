@@ -8,6 +8,8 @@
 //! listed them (RA8EMU-792), and the camera leaf its source picker
 //! (RA8EMU-796); with a plug picker (RA8EMU-802) the devices leaf ends in
 //! its field, and with a file field (RA8EMU-799) so does the camera leaf.
+//! A registers leaf draws its bound core's registers once the session has
+//! answered a read of them (RA8EMU-821).
 //! An empty leaf stays blank.
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
@@ -20,6 +22,8 @@ const shell_devices = @import("shell_devices.zig");
 const shell_camera = @import("shell_camera.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
+const shell_registers = @import("shell_registers.zig");
+const registers_pane = @import("registers_pane.zig");
 
 const Rect = draw_list.Rect;
 
@@ -31,6 +35,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .camera => "waiting for the camera feed",
         .console => "waiting for console output",
         .devices => "waiting for the device list",
+        .registers => "waiting for the registers",
     };
 }
 
@@ -42,6 +47,7 @@ pub const Panes = struct {
     camera: ?*const shell_camera.Camera = null,
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
+    registers: ?*const shell_registers.Pair = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -70,18 +76,26 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
         if (self.camera_file) |file| return shell_camera_file.draw(list, body, camera, file);
         return shell_camera.draw(list, body, camera);
     };
+    if (pane.kind == .registers) if (self.registers) |pair| {
+        const model = pair.of(pane.core);
+        if (model.now) |now| return registers_pane.draw(list, body, now, model.before);
+    };
     if (pane.kind == .board) if (self.board) |board| {
         if (board.hasFrame()) return list.image(shell_board.fitIn(body, board.width, board.height), board.image());
     };
-    const note = noteFor(self, pane.kind) orelse return;
+    const note = noteFor(self, pane) orelse return;
     const at = noteAt(body) orelse return;
     try font.draw(list, at.x, at.y, font.fit(note, at.room), shell_frame.muted);
 }
 
-/// The note a leaf shows: the device list's own once it has answered.
-fn noteFor(self: *const Panes, kind: pane_layout.Kind) ?[]const u8 {
-    if (kind == .devices) if (self.devices) |devices| {
+/// The note a leaf shows: the device list's or the registers' own once
+/// they have answered.
+fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
+    if (pane.kind == .devices) if (self.devices) |devices| {
         if (devices.note()) |note| return note;
     };
-    return waitingFor(kind);
+    if (pane.kind == .registers) if (self.registers) |pair| {
+        if (pair.of(pane.core).note()) |note| return note;
+    };
+    return waitingFor(pane.kind);
 }
