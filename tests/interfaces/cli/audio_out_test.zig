@@ -74,7 +74,7 @@ test "a 16-bit I2S stream on SSIE0 is written as a stereo WAV at the asked rate"
     defer run.deinit();
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(1, 0, true));
     send(&board, &.{ 0x1111, 0x2222, 0x3333, 0x4444 });
-    try run.finish(output.said.writer());
+    try run.finish(output.said.writer(), std.testing.io);
     const bytes = try output.file();
     defer allocator.free(bytes);
     try std.testing.expectEqual(@as(u16, 2), std.mem.readInt(u16, bytes[22..24], .little));
@@ -111,7 +111,7 @@ test "a prohibited DWL is reported and no file is written" {
     defer run.deinit();
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(7, 0, false));
     send(&board, &.{0x1111});
-    try run.finish(output.said.writer());
+    try run.finish(output.said.writer(), std.testing.io);
     try std.testing.expect(std.mem.indexOf(u8, output.said.items, "prohibited 111b; ") != null);
     try std.testing.expectError(error.FileNotFound, output.file());
 }
@@ -128,7 +128,7 @@ test "a shape change mid-stream stops the recording and keeps what came before" 
     send(&board, &.{ 0x1111, 0x2222 });
     board.audio.write(ch0 + ssie.off_ssicr, 4, ssicr(5, 0, true));
     send(&board, &.{ 0x3333, 0x4444 });
-    try run.finish(output.said.writer());
+    try run.finish(output.said.writer(), std.testing.io);
     try std.testing.expectEqual(audio_out.Stop.shape_changed, run.stop);
     const bytes = try output.file();
     defer allocator.free(bytes);
@@ -145,6 +145,6 @@ test "with no path the board is left without a listener and nothing is said" {
     try std.testing.expect(board.audio.channels[0].listener == null);
     var said = std.ArrayList(u8).init(allocator);
     defer said.deinit();
-    try run.finish(said.writer());
+    try run.finish(said.writer(), std.testing.io);
     try std.testing.expectEqual(@as(usize, 0), said.items.len);
 }
