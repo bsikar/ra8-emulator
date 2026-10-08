@@ -36,7 +36,7 @@ pub const Sock = struct {
     /// True once a pending connect has finished; an error means it failed.
     pub fn ready(self: *Sock) !bool {
         if (self.reader != null) return true;
-        if (!try host.readyFor(self.fd, std.posix.POLL.OUT)) return false;
+        if (!try host.readyFor(self.fd, .writable)) return false;
         try host.finished(self.fd);
         return true;
     }

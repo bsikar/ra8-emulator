@@ -1,18 +1,22 @@
 //! Nonblocking host sockets for the C6 bridge (RA8EMU-850). Zig 0.17's
 //! std.Io.net connects and reads blocking, and the bridge is polled on every
 //! emulator tick, so these calls go to the OS through std.posix.system.
+//! Windows goes through ws2_32 in host_sock_windows.zig (RA8EMU-829).
 const std = @import("std");
 const builtin = @import("builtin");
 
 const posix = std.posix;
 const system = posix.system;
 const darwin = builtin.os.tag.isDarwin();
+const on_windows = builtin.os.tag == .windows;
+const win = @import("host_sock_windows.zig");
 
 pub const Fd = posix.socket_t;
-pub const invalid: Fd = -1;
+pub const invalid: Fd = if (on_windows) @import("win32.zig").invalid_handle else -1;
 pub const Address = std.Io.net.Ip4Address;
 pub const Kind = enum { stream, datagram };
 pub const Connect = enum { done, pending };
+pub const Want = enum { readable, writable };
 
 pub const Error = error{
     WouldBlock,
@@ -30,6 +34,7 @@ pub const Error = error{
 
 /// An IPv4 socket with no blocking calls and no SIGPIPE.
 pub fn open(kind: Kind) Error!Fd {
+    if (on_windows) return win.open(kind == .stream);
     const base: u32 = if (kind == .stream) posix.SOCK.STREAM else posix.SOCK.DGRAM;
     const extra: u32 = if (darwin) 0 else posix.SOCK.NONBLOCK | posix.SOCK.CLOEXEC;
     const fd: Fd = @intCast(try check(system.socket(posix.AF.INET, base | extra, 0)));
@@ -44,6 +49,13 @@ pub fn open(kind: Kind) Error!Fd {
 
 /// Starts a connect; `.pending` means poll for writable, then `finished`.
 pub fn connect(fd: Fd, address: Address) Error!Connect {
+    if (on_windows) {
+        win.connectTo(fd, address) catch |err| switch (err) {
+            error.WouldBlock => return .pending,
+            else => return err,
+        };
+        return .done;
+    }
     var in: posix.sockaddr.in = .{
         .port = std.mem.nativeToBig(u16, address.port),
         .addr = @bitCast(address.bytes),
@@ -57,6 +69,7 @@ pub fn connect(fd: Fd, address: Address) Error!Connect {
 
 /// The outcome of a pending connect once the socket polls writable.
 pub fn finished(fd: Fd) Error!void {
+    if (on_windows) return win.finished(fd);
     var code: c_int = 0;
     var len: posix.socklen_t = @sizeOf(c_int);
     _ = try check(system.getsockopt(fd, posix.SOL.SOCKET, posix.SO.ERROR, @ptrCast(&code), &len));
@@ -64,24 +77,30 @@ pub fn finished(fd: Fd) Error!void {
 }
 
 pub fn send(fd: Fd, bytes: []const u8, flags: u32) Error!usize {
+    if (on_windows) return win.sendBytes(fd, bytes);
     return check(system.sendto(fd, @ptrCast(bytes.ptr), bytes.len, flags, null, 0));
 }
 
 /// Bytes received; with MSG_TRUNC on a datagram it is the full size.
 pub fn recv(fd: Fd, out: []u8, flags: u32) Error!usize {
+    if (on_windows) return win.recvBytes(fd, out);
     return check(system.recvfrom(fd, @ptrCast(out.ptr), out.len, flags, null, null));
 }
 
 pub fn shutdownSend(fd: Fd) Error!void {
+    if (on_windows) return win.shutdownSend(fd);
     _ = try check(system.shutdown(fd, posix.SHUT.WR));
 }
 
 pub fn close(fd: Fd) void {
+    if (on_windows) return win.close(fd);
     _ = system.close(fd);
 }
 
-/// True when `fd` has one of `events` ready now.
-pub fn readyFor(fd: Fd, events: i16) Error!bool {
+/// True when `fd` is ready now for what `want` names.
+pub fn readyFor(fd: Fd, want: Want) Error!bool {
+    if (on_windows) return win.readyFor(fd, want == .writable);
+    const events: i16 = if (want == .writable) posix.POLL.OUT else posix.POLL.IN;
     var descriptors = [_]posix.pollfd{.{ .fd = fd, .events = events, .revents = 0 }};
     return (posix.poll(&descriptors, 0) catch return error.SystemResources) != 0;
 }
