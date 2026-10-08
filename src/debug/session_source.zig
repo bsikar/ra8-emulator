@@ -92,19 +92,20 @@ pub fn settle(sections: dwarf_line.Sections, found: u32, function: ?dwarf_info.F
 
 /// `list`: the ten source lines around the one `address` belongs to, read
 /// from `dir` when the table's path is relative.
-pub fn list(out: anytype, sections: dwarf_line.Sections, dir: std.fs.Dir, address: u32) !void {
+pub fn list(out: anytype, sections: dwarf_line.Sections, io: std.Io, dir: std.Io.Dir, address: u32) !void {
     const found = dwarf_line.lookup(sections, address) catch null;
     const place = found orelse {
         return out.print("No line number information available for address 0x{X:0>8}\n", .{address});
     };
     var name: [std.fs.max_path_bytes]u8 = undefined;
-    var spelled = std.io.fixedBufferStream(&name);
-    path(spelled.writer(), place.file) catch return missing(out, place);
-    const file = dir.openFile(spelled.getWritten(), .{}) catch return missing(out, place);
-    defer file.close();
-    var buffered = std.io.bufferedReader(file.reader());
+    var spelled: std.Io.Writer = .fixed(&name);
+    path(&spelled, place.file) catch return missing(out, place);
+    const file = dir.openFile(io, spelled.buffered(), .{}) catch return missing(out, place);
+    defer file.close(io);
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(io, &buffer);
     const first = if (place.line > limits.before) place.line - limits.before else 1;
-    try lines(out, buffered.reader(), first, first + limits.before + limits.after);
+    try lines(out, &reader.interface, first, first + limits.before + limits.after);
 }
 
 fn missing(out: anytype, place: dwarf_line.Place) !void {
@@ -115,19 +116,35 @@ fn missing(out: anytype, place: dwarf_line.Place) !void {
 
 /// Lines `first` through `last` of a source, numbered the way gdb numbers
 /// them, stopping early when the source does.
-pub fn lines(out: anytype, reader: anytype, first: u32, last: u32) !void {
+pub fn lines(out: anytype, reader: *std.Io.Reader, first: u32, last: u32) !void {
     var number: u32 = 1;
     while (number <= last) : (number += 1) {
         var text: [limits.line_bytes]u8 = undefined;
-        var held = std.io.fixedBufferStream(&text);
-        var ended = false;
-        reader.streamUntilDelimiter(held.writer(), '\n', null) catch |err| switch (err) {
-            error.EndOfStream => ended = true,
-            error.NoSpaceLeft => try reader.skipUntilDelimiterOrEof('\n'),
-            else => |other| return other,
-        };
-        if (ended and held.getWritten().len == 0) return;
-        if (number >= first) try out.print("{d}\t{s}\n", .{ number, held.getWritten() });
+        var held: std.Io.Writer = .fixed(&text);
+        const ended = try takeLine(reader, &held);
+        if (ended and held.buffered().len == 0) return;
+        if (number >= first) try out.print("{d}\t{s}\n", .{ number, held.buffered() });
         if (ended) return;
     }
+}
+
+/// One line of `reader` into `held`, without its newline. A line longer
+/// than `held` keeps its start and the rest is dropped. True once the
+/// source has ended.
+pub fn takeLine(reader: *std.Io.Reader, held: *std.Io.Writer) !bool {
+    _ = reader.streamDelimiterLimit(held, '\n', .limited(held.buffer.len)) catch |err| switch (err) {
+        error.StreamTooLong => {
+            _ = reader.discardDelimiterInclusive('\n') catch |e| switch (e) {
+                error.EndOfStream => return true,
+                else => |other| return other,
+            };
+            return false;
+        },
+        else => |other| return other,
+    };
+    _ = reader.takeByte() catch |err| switch (err) {
+        error.EndOfStream => return true,
+        else => |other| return other,
+    };
+    return false;
 }

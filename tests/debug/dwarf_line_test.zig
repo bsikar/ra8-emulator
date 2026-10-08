@@ -22,8 +22,8 @@ fn expectPlace(sections: dwarf_line.Sections, address: u32, directory: []const u
 }
 
 test "a version 4 unit maps each address to the row at or below it" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables_v4, &program_v4);
     const sections = dwarf_line.Sections{ .line = list.items };
     try expectPlace(sections, 0x1000, "src", "main.c", 1);
@@ -43,8 +43,8 @@ test "a version 5 unit reads its paths through .debug_line_str and numbers from 
     // set_address 0x2000; set_file 1; advance_line +9; copy (line 10);
     // advance_pc 6; end_sequence at 0x2006.
     const program = [_]u8{ 0x00, 0x05, 0x02, 0x00, 0x20, 0x00, 0x00, 0x04, 0x01, 0x03, 0x09, 0x01, 0x02, 0x06, 0x00, 0x01, 0x01 };
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 5, 1, tables, &program);
     const sections = dwarf_line.Sections{ .line = list.items, .strings = .{ .line_str = "/build\x00lib\x00" } };
     try expectPlace(sections, 0x2004, "lib", "b.zig", 10);
@@ -52,8 +52,8 @@ test "a version 5 unit reads its paths through .debug_line_str and numbers from 
 }
 
 test "a lookup walks past units that do not cover the address" {
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables_v4, &program_v4);
     var moved = program_v4;
     moved[4] = 0x30;
@@ -65,8 +65,8 @@ test "a lookup walks past units that do not cover the address" {
 test "64-bit DWARF is refused and a truncated unit is caught" {
     const wide = [_]u8{ 0xff, 0xff, 0xff, 0xff, 0x10, 0, 0, 0, 0, 0, 0, 0 };
     try std.testing.expectError(error.Unsupported, dwarf_line.lookup(.{ .line = &wide }, 0));
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
     try unit(&list, 4, 2, tables_v4, &program_v4);
     try std.testing.expectError(error.Truncated, dwarf_line.lookup(.{ .line = list.items[0 .. list.items.len - 3] }, 0x1000));
 }

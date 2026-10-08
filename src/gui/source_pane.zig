@@ -94,7 +94,7 @@ fn readRows(snapshot: *Snapshot, reader: *std.Io.Reader, first: u32, wanted: usi
     while (snapshot.count < wanted) : (number += 1) {
         var row: Row = .{ .number = number };
         var held: std.Io.Writer = .fixed(&row.buf);
-        const ended = try takeLine(reader, &held);
+        const ended = try session_source.takeLine(reader, &held);
         row.len = held.buffered().len;
         if (ended and row.len == 0) return;
         if (number >= first) {
@@ -108,24 +108,6 @@ fn readRows(snapshot: *Snapshot, reader: *std.Io.Reader, first: u32, wanted: usi
 
 /// Streams one line into `held`, at most its capacity, and drops the rest of
 /// the line and its newline. True when the stream ended on this line.
-fn takeLine(reader: *std.Io.Reader, held: *std.Io.Writer) !bool {
-    _ = reader.streamDelimiterLimit(held, '\n', .limited(held.buffer.len)) catch |err| switch (err) {
-        error.StreamTooLong => {
-            _ = reader.discardDelimiterInclusive('\n') catch |e| switch (e) {
-                error.EndOfStream => return true,
-                else => |other| return other,
-            };
-            return false;
-        },
-        else => |other| return other,
-    };
-    _ = reader.takeByte() catch |err| switch (err) {
-        error.EndOfStream => return true,
-        else => |other| return other,
-    };
-    return false;
-}
-
 pub const Mark = struct {
     file: u64,
     line: u32,
