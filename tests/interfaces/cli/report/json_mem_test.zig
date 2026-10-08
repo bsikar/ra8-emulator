@@ -7,9 +7,9 @@ const json_run = ra8.board.report.json_run;
 const Value = std.json.Value;
 const Fixture = @import("json_board.zig").Fixture;
 
-fn memory(board: *ra8.board.Board, buf: *std.ArrayList(u8)) !std.json.Parsed(Value) {
-    try json_run.document(buf.writer(), board, .{ .engine = "zig", .elapsed = 1 });
-    return std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+fn memory(board: *ra8.board.Board, buf: *std.Io.Writer.Allocating) !std.json.Parsed(Value) {
+    try json_run.document(&buf.writer, board, .{ .engine = "zig", .elapsed = 1 });
+    return std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
 }
 
 fn int(object: Value, key: []const u8) !i64 {
@@ -28,7 +28,7 @@ test "a quiet board has every memory key and empty lists" {
     try fix.open();
     defer fix.close();
     const board = &fix.board;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try memory(board, &buf);
     defer doc.deinit();
@@ -74,15 +74,15 @@ test "external region report exposes timed access counters" {
     const cpu = fix.memory().asInitiator(.cpu0);
     var bytes: [4]u8 = undefined;
     try cpu.read(0x6800_0010, &bytes);
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
-    try json_run.document(buf.writer(), &fix.board, .{
+    try json_run.document(&buf.writer, &fix.board, .{
         .engine = "zig",
         .elapsed = 1,
         .elapsed_cycles = 100,
         .external = cpu,
     });
-    const doc = try std.json.parseFromSlice(Value, std.testing.allocator, buf.items, .{});
+    const doc = try std.json.parseFromSlice(Value, std.testing.allocator, buf.written(), .{});
     defer doc.deinit();
     const regions = doc.value.object.get("memory").?.object.get("external_regions").?.array.items;
     const sdram = regions[1];
@@ -100,7 +100,7 @@ test "a busy DMAC channel is listed with its index, shape and counts" {
     board.dma.channels[3].units = 8;
     board.dma.channels[3].bytes = 32;
     board.dma.channels[3].dmsar = 0x2200_0000;
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try memory(board, &buf);
     defer doc.deinit();

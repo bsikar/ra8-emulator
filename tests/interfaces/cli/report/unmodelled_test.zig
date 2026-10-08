@@ -40,18 +40,18 @@ test "the section names each address and counts the rest" {
     defer bus.deinit();
     var index: u32 = 0;
     while (index < report_unmodelled.limit + 2) : (index += 1) bus.write(0x4000_1000 + index * 4, 4, 0);
-    var text = std.ArrayList(u8).init(std.testing.allocator);
+    var text: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer text.deinit();
-    try report_unmodelled.section(&bus, text.writer());
-    try std.testing.expect(std.mem.startsWith(u8, text.items, "unmodelled: 0x40001000 written\n"));
-    try std.testing.expect(std.mem.endsWith(u8, text.items, "unmodelled: 2 more not listed\n"));
+    try report_unmodelled.section(&bus, &text.writer);
+    try std.testing.expect(std.mem.startsWith(u8, text.written(), "unmodelled: 0x40001000 written\n"));
+    try std.testing.expect(std.mem.endsWith(u8, text.written(), "unmodelled: 2 more not listed\n"));
 }
 
 test "an empty bus reports nothing" {
     var bus = Bus.init(std.testing.allocator);
     defer bus.deinit();
-    var text = std.ArrayList(u8).init(std.testing.allocator);
+    var text: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer text.deinit();
-    try report_unmodelled.section(&bus, text.writer());
-    try std.testing.expectEqual(@as(usize, 0), text.items.len);
+    try report_unmodelled.section(&bus, &text.writer);
+    try std.testing.expectEqual(@as(usize, 0), text.written().len);
 }

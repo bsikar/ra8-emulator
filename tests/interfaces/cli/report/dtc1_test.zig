@@ -5,10 +5,10 @@ const ra8 = @import("ra8");
 const dtc = ra8.periph.dtc;
 const report_dtc1 = ra8.board.report.dtc1;
 
-fn render(unit: *const dtc.Dtc) !std.ArrayList(u8) {
-    var text = std.ArrayList(u8).init(std.testing.allocator);
+fn render(unit: *const dtc.Dtc) !std.Io.Writer.Allocating {
+    var text: std.Io.Writer.Allocating = .init(std.testing.allocator);
     errdefer text.deinit();
-    try report_dtc1.section(unit, text.writer());
+    try report_dtc1.section(unit, &text.writer);
     return text;
 }
 
@@ -16,7 +16,7 @@ test "an untouched DTC1 adds nothing to the report" {
     const unit = dtc.Dtc.init();
     var text = try render(&unit);
     defer text.deinit();
-    try std.testing.expectEqual(@as(usize, 0), text.items.len);
+    try std.testing.expectEqual(@as(usize, 0), text.written().len);
 }
 
 test "a DTC1 that moved data reports it as CPU1's" {
@@ -30,7 +30,7 @@ test "a DTC1 that moved data reports it as CPU1's" {
     defer text.deinit();
     try std.testing.expectEqualStrings(
         "DTC1 (CPU1): 3 activation(s), 3 unit(s) / 12 byte(s) moved, 1 descriptor(s) finished, DTCVBR 0x22000400\n",
-        text.items,
+        text.written(),
     );
 }
 
@@ -40,5 +40,5 @@ test "a refused DTC1 activation is called out" {
     unit.last_refusal = .stopped;
     var text = try render(&unit);
     defer text.deinit();
-    try std.testing.expect(std.mem.indexOf(u8, text.items, "REFUSED 2 activation(s)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text.written(), "REFUSED 2 activation(s)") != null);
 }
