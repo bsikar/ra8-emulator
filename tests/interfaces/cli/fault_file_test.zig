@@ -72,7 +72,7 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     run.applier.applied_ns = &applied;
 
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;
     var output: [256]u8 = undefined;
     var stream = std.io.fixedBufferStream(&output);

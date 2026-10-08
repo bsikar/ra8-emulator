@@ -38,7 +38,7 @@ fn runSoak(overflow: bool) !Ended {
     board.time.base.setRate(hz);
     board.time.soak.armed = true;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;

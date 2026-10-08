@@ -54,7 +54,7 @@ test "a fault schedule applies every event at its exact virtual time" {
     const subscription = try session.subscribe();
 
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
-    var clock: zig_run.Clock = .{ .memory = core, .board = &board, .timebase = &timebase };
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var applied: [5]u64 = .{ 0, 0, 0, 0, 0 };
     var applier: session_schedule.Applier = .{
         .events = plan.events,
