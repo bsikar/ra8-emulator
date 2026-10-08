@@ -123,7 +123,7 @@ pub const extras = [_]Extra{
 };
 
 /// A required input card path for image, when its harness supplied one.
-pub fn cardImage(image: []const u8, env: *const std.process.EnvMap) ?[]const u8 {
+pub fn cardImage(image: []const u8, env: *const std.process.Environ.Map) ?[]const u8 {
     for (card_images) |entry| {
         if (std.mem.eql(u8, entry.image, image)) return env.get(entry.environment);
     }
