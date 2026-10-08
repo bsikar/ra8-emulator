@@ -22,7 +22,7 @@ const periods = 10;
 
 /// Run the image with the recorder writing to `path`; the run's report
 /// goes to `said`.
-fn runTone(path: []const u8, said: *std.ArrayList(u8)) !void {
+fn runTone(path: []const u8, said: *std.Io.Writer.Allocating) !void {
     const image = try elf.Image.init(image_bytes);
     var store = try store_board.Store.init(null);
     defer store.deinit();
@@ -49,7 +49,7 @@ fn runTone(path: []const u8, said: *std.ArrayList(u8)) !void {
         .clears = &board.clears,
     });
     try std.testing.expectEqual(done_marker, try core.readWord(done_at));
-    try audio.finish(said.writer(), std.testing.io);
+    try audio.finish(&said.writer, std.testing.io);
 }
 
 /// Frames between each sign change of the left channel.
@@ -75,7 +75,7 @@ test "the tone image's WAV is 1 kHz for 10 ms at a 48 kHz audio rate" {
     defer allocator.free(root);
     const path = try std.fs.path.join(allocator, &.{ root, "tone.wav" });
     defer allocator.free(path);
-    var said = std.ArrayList(u8).init(allocator);
+    var said: std.Io.Writer.Allocating = .init(allocator);
     defer said.deinit();
     try runTone(path, &said);
     const bytes = try dir.dir.readFileAlloc(allocator, "tone.wav", 1 << 20);
@@ -97,5 +97,5 @@ test "the tone image's WAV is 1 kHz for 10 ms at a 48 kHz audio rate" {
     try std.testing.expectEqual(@as(u32, 1000), rate / (2 * @as(u32, @intCast(gaps[0]))));
     try std.testing.expectEqual(@as(i16, 0x4000), std.mem.readInt(i16, data[0..2], .little));
     try std.testing.expectEqual(@as(i16, -0x4000), std.mem.readInt(i16, data[24 * 4 ..][0..2], .little));
-    try std.testing.expect(std.mem.indexOf(u8, said.items, "960 sample(s), 48000 Hz, 16-bit, 2 channel(s), 0 silent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, said.written(), "960 sample(s), 48000 Hz, 16-bit, 2 channel(s), 0 silent") != null);
 }

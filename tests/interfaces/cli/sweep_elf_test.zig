@@ -40,16 +40,16 @@ test "a guest sweep without one way to end, or mixed with the synthetic flags, i
 }
 
 test "each child's profile is the EK profile with the row's memory" {
-    var text = std.ArrayList(u8).init(std.testing.allocator);
+    var text: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer text.deinit();
     const config = matrix.at(0);
-    try sweep_elf.profileText(text.writer(), config);
-    const parsed = try profile.parse(text.items);
+    try sweep_elf.profileText(&text.writer, config);
+    const parsed = try profile.parse(text.written());
     try std.testing.expectEqual(config.ospi.width, parsed.memory.ospi.width);
     try std.testing.expectEqual(config.ospi.clock_hz, parsed.memory.ospi.clock_hz);
     try std.testing.expectEqual(config.sdram.width, parsed.memory.sdram.width);
     try std.testing.expectEqual(config.sdram.latency_cycles, parsed.memory.sdram.latency_cycles);
-    try std.testing.expect(std.mem.indexOf(u8, text.items, "companion=c6@uart:sci2\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text.written(), "companion=c6@uart:sci2\n") != null);
 }
 
 test "a row comes from the child's report after its text lines" {

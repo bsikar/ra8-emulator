@@ -85,10 +85,10 @@ test "a --cpu zig --debug-script command line plays the script on the Zig core" 
     var image_buffer: [128]u8 = undefined;
     const image_path = try std.fmt.bufPrint(&image_buffer, ".zig-cache/tmp/{s}/fw.elf", .{tmp.sub_path});
     const request = try debug_front.wanted(&.{ "ra8_emulator", image_path, "--cpu", "zig", "--debug-script", script_path }).?;
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try std.testing.expectEqual(@as(u8, 0), try zig_debug_front.run(std.testing.allocator, request, out.writer()));
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "(ra8) run\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "Breakpoint 1, 0x22000008") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "(ra8) bt\n#0") != null);
+    try std.testing.expectEqual(@as(u8, 0), try zig_debug_front.run(std.testing.allocator, request, &out.writer));
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "(ra8) run\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Breakpoint 1, 0x22000008") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "(ra8) bt\n#0") != null);
 }

@@ -6,8 +6,8 @@ const lzw = ra8.board.report.gif.lzw;
 const lzw_decode = @import("gif_lzw_decode.zig");
 
 fn roundTrip(indices: []const u8) !usize {
-    var encoded = std.ArrayList(u8).init(std.testing.allocator);
-    defer encoded.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
     try lzw.encode(std.testing.allocator, indices, &encoded);
     const decoded = try lzw_decode.decode(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
@@ -42,10 +42,10 @@ test "a flat 1024x600 frame encodes to a few KB" {
 }
 
 test "the stream starts with clear and is deterministic" {
-    var a = std.ArrayList(u8).init(std.testing.allocator);
-    defer a.deinit();
-    var b = std.ArrayList(u8).init(std.testing.allocator);
-    defer b.deinit();
+    var a: std.ArrayList(u8) = .empty;
+    defer a.deinit(std.testing.allocator);
+    var b: std.ArrayList(u8) = .empty;
+    defer b.deinit(std.testing.allocator);
     try lzw.encode(std.testing.allocator, "abcabcabc", &a);
     try lzw.encode(std.testing.allocator, "abcabcabc", &b);
     try std.testing.expectEqualSlices(u8, a.items, b.items);

@@ -25,12 +25,12 @@ test "a save writes the stamped log the way console_log formats it" {
     var log = console_log.Log.init(std.testing.allocator, 4);
     defer log.deinit();
     try log.feedAll("boot\n", 1_500_000);
-    var want = std.ArrayList(u8).init(std.testing.allocator);
+    var want: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer want.deinit();
-    try log.save(want.writer(), true);
+    try log.save(&want.writer, true);
     try console_save.save(std.testing.io, tmp.dir, 3, &log);
     var buffer: [256]u8 = undefined;
-    try std.testing.expectEqualStrings(want.items, try read(tmp.dir, "console-sci3.txt", &buffer));
+    try std.testing.expectEqualStrings(want.written(), try read(tmp.dir, "console-sci3.txt", &buffer));
 }
 
 test "only a click on the SAVE tab saves the shown channel" {

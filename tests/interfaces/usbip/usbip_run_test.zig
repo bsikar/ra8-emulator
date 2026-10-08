@@ -59,14 +59,14 @@ test "the events read as plain lines" {
     defer link.deinit(std.testing.allocator);
     var board = usbfs.Device{};
     const script = enumerated();
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try run.report(out.writer(), try link.poll(&board, &script), &link);
-    try std.testing.expect(std.mem.startsWith(u8, out.items, "usbip: exporting 1-1 (045b:5310) on 127.0.0.1:"));
+    try run.report(&out.writer, try link.poll(&board, &script), &link);
+    try std.testing.expect(std.mem.startsWith(u8, out.written(), "usbip: exporting 1-1 (045b:5310) on 127.0.0.1:"));
     out.clearRetainingCapacity();
-    try run.report(out.writer(), .attached, &link);
-    try std.testing.expectEqualStrings("usbip: a host imported 1-1\n", out.items);
+    try run.report(&out.writer, .attached, &link);
+    try std.testing.expectEqualStrings("usbip: a host imported 1-1\n", out.written());
     out.clearRetainingCapacity();
-    try run.report(out.writer(), .none, &link);
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try run.report(&out.writer, .none, &link);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
