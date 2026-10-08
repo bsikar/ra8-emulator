@@ -9,7 +9,8 @@
 //! (RA8EMU-796); with a plug picker (RA8EMU-802) the devices leaf ends in
 //! its field, and with a file field (RA8EMU-799) so does the camera leaf.
 //! A registers leaf draws its bound core's registers once the session has
-//! answered a read of them (RA8EMU-821).
+//! answered a read of them (RA8EMU-821), and a memory leaf the rows from
+//! its core's SP once they have been read.
 //! An empty leaf stays blank.
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
@@ -24,6 +25,8 @@ const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
 const registers_pane = @import("registers_pane.zig");
+const shell_memory = @import("shell_memory.zig");
+const memory_pane = @import("memory_pane.zig");
 
 const Rect = draw_list.Rect;
 
@@ -36,6 +39,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .console => "waiting for console output",
         .devices => "waiting for the device list",
         .registers => "waiting for the registers",
+        .memory => "waiting for memory",
     };
 }
 
@@ -48,6 +52,7 @@ pub const Panes = struct {
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*const shell_registers.Pair = null,
+    memory: ?*const shell_memory.Pair = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -80,6 +85,9 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
         const model = pair.of(pane.core);
         if (model.now) |now| return registers_pane.draw(list, body, now, model.before);
     };
+    if (pane.kind == .memory) if (self.memory) |pair| {
+        if (pair.of(pane.core).now) |*now| return memory_pane.draw(list, body, now);
+    };
     if (pane.kind == .board) if (self.board) |board| {
         if (board.hasFrame()) return list.image(shell_board.fitIn(body, board.width, board.height), board.image());
     };
@@ -88,13 +96,16 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     try font.draw(list, at.x, at.y, font.fit(note, at.room), shell_frame.muted);
 }
 
-/// The note a leaf shows: the device list's or the registers' own once
-/// they have answered.
+/// The note a leaf shows: the device list's, the registers' or memory's
+/// own once they have answered.
 fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
     if (pane.kind == .devices) if (self.devices) |devices| {
         if (devices.note()) |note| return note;
     };
     if (pane.kind == .registers) if (self.registers) |pair| {
+        if (pair.of(pane.core).note()) |note| return note;
+    };
+    if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).note()) |note| return note;
     };
     return waitingFor(pane.kind);
