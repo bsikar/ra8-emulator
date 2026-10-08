@@ -57,9 +57,7 @@ test "scripted full and partial refreshes produce JSONL and totals by waveform" 
     const log_path = try std.fs.path.join(std.testing.allocator, &.{ path, "refresh.jsonl" });
     defer std.testing.allocator.free(log_path);
     try recorder.write(std.testing.io, log_path);
-    const file = try std.fs.cwd().openFile(log_path, .{});
-    defer file.close();
-    const contents = try file.readToEndAlloc(std.testing.allocator, 4096);
+    const contents = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, log_path, std.testing.allocator, .limited(4096));
     defer std.testing.allocator.free(contents);
     var lines = std.mem.splitScalar(u8, contents, '\n');
     try std.testing.expect(std.mem.indexOf(u8, lines.next().?, "\"virtual_time_ns\":") != null);

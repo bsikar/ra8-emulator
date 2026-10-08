@@ -105,7 +105,7 @@ test "a local session connects and loads a corpus image through the shell" {
     s.link = &link;
     try until(&s, &window, connected);
 
-    const bytes = try std.fs.cwd().readFileAlloc(gpa, elf_path, 1 << 20);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, elf_path, gpa, .limited(1 << 20));
     defer gpa.free(bytes);
     try s.status.load(&link, elf_path, bytes);
     try until(&s, &window, loaded);

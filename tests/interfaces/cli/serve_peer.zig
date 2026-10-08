@@ -56,7 +56,7 @@ pub const Peer = struct {
     pub fn drive(self: *Peer) !void {
         try self.client.greet(self.tx);
         try std.testing.expectEqual(proto.capabilities, (try self.next()).ready);
-        const image = try std.fs.cwd().readFileAlloc(self.gpa, image_path, 1 << 20);
+        const image = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, image_path, self.gpa, .limited(1 << 20));
         defer self.gpa.free(image);
         _ = try self.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });
         _ = try self.call(proto.Ack, proto.Run, .run, .{ .core = .cpu0, .mode = .cont, .budget = 1000 });

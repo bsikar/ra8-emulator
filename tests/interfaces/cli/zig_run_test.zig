@@ -189,12 +189,15 @@ test "a Zig core run profiles retired function instructions and writes folded ou
 
     const summary_path = ".ra8-profile-zig-run-test.out";
     const folded_path = ".ra8-profile-zig-run-test.folded";
-    defer std.fs.cwd().deleteFile(summary_path) catch {};
-    defer std.fs.cwd().deleteFile(folded_path) catch {};
-    var summary = try std.fs.cwd().createFile(summary_path, .{ .truncate = true });
-    defer summary.close();
-    try profile_report.write(summary.writer(), image, table, folded_path);
-    const folded = try std.fs.cwd().readFileAlloc(std.testing.allocator, folded_path, 128);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, summary_path) catch {};
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, folded_path) catch {};
+    var summary = try std.Io.Dir.cwd().createFile(std.testing.io, summary_path, .{ .truncate = true });
+    defer summary.close(std.testing.io);
+    var buffer: [4096]u8 = undefined;
+    var writer = summary.writer(std.testing.io, &buffer);
+    try profile_report.write(&writer.interface, image, table, folded_path);
+    try writer.interface.flush();
+    const folded = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, folded_path, std.testing.allocator, .limited(128));
     defer std.testing.allocator.free(folded);
     try std.testing.expectEqualStrings("profiled_function 3\n", folded);
 }

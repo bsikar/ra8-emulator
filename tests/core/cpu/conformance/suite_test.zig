@@ -53,10 +53,10 @@ test "docs/conformance.md matches the suite, or is rewritten when blessed" {
     const want = try expectedDocument(allocator);
     defer allocator.free(want);
     if (std.process.hasEnvVarConstant("RA8_BLESS_CONFORMANCE")) {
-        try std.fs.cwd().writeFile(.{ .sub_path = suite.table_path, .data = want });
+        try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = suite.table_path, .data = want });
         return;
     }
-    const have = try std.fs.cwd().readFileAlloc(allocator, suite.table_path, 1 << 20);
+    const have = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, suite.table_path, allocator, .limited(1 << 20));
     defer allocator.free(have);
     if (!std.mem.eql(u8, have, want)) {
         std.debug.print("conformance: {s} is stale; run RA8_BLESS_CONFORMANCE=1 zig build test\n", .{suite.table_path});

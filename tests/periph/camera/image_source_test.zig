@@ -35,8 +35,8 @@ fn bmpBytes() [70]u8 {
 /// RGB565 little-endian bytes of red, green / blue, white.
 const rgb565_rows = [2][4]u8{ .{ 0x00, 0xF8, 0xE0, 0x07 }, .{ 0x1F, 0x00, 0xFF, 0xFF } };
 
-fn writeFile(dir: std.fs.Dir, name: []const u8, bytes: []const u8) !void {
-    try dir.writeFile(.{ .sub_path = name, .data = bytes });
+fn writeFile(dir: std.Io.Dir, name: []const u8, bytes: []const u8) !void {
+    try dir.writeFile(std.testing.io, .{ .sub_path = name, .data = bytes });
 }
 
 fn loadFrom(dir: std.testing.TmpDir, name: []const u8, format_control: *const u8) !*still.ImageSource {
