@@ -7,6 +7,7 @@ const api = @import("../../debug/session_api.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
 const region_map = @import("../../debug/region_map.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const session_rtc = @import("../../debug/session_rtc.zig");
 
 /// Refusal codes this message set adds above the library's own.
 pub const app_codes = struct {
@@ -66,6 +67,8 @@ pub const Context = struct {
     camera: ?Camera = null,
     /// Writes the memory map for `map`; a server without one refuses it.
     mapping: ?Mapping = null,
+    /// Snapshots the RTC counters for `rtc`; a server without one refuses it.
+    clock: ?session_rtc.Clock = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@backingInt(of)] & bit(topic) != 0;

@@ -75,6 +75,7 @@ pub const core = struct {
     pub const region_map = @import("debug/region_map.zig");
     pub const region_map_json = @import("debug/region_map_json.zig");
     pub const stack_low = @import("debug/stack_low.zig");
+    pub const session_rtc = @import("debug/session_rtc.zig");
     pub const watch_table = @import("debug/watch_table.zig");
     pub const call_decode = @import("debug/call_decode.zig");
     pub const step_hook = @import("debug/step_hook.zig");
@@ -143,6 +144,7 @@ pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const profile = @import("board/profile.zig");
     pub const session_display = @import("board/session_display.zig");
+    pub const session_rtc = @import("board/session_rtc.zig");
     pub const boundary = @import("board/boundary.zig");
     pub const wiring = @import("board/wiring.zig");
     pub const option_memory = @import("board/option_memory.zig");
@@ -225,5 +227,6 @@ pub const interfaces = struct {
         pub const parts = @import("interfaces/rpc/session_parts.zig");
         pub const camera = @import("interfaces/rpc/session_camera.zig");
         pub const stack = @import("interfaces/rpc/session_stack.zig");
+        pub const rtc = @import("interfaces/rpc/session_rtc.zig");
     };
 };

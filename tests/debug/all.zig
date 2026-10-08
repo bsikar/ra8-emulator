@@ -38,6 +38,7 @@ test {
     _ = @import("sections_test.zig");
     _ = @import("region_map_test.zig");
     _ = @import("stack_low_test.zig");
+    _ = @import("session_rtc_test.zig");
     _ = @import("pc_hits_test.zig");
     _ = @import("watchpoint_test.zig");
     _ = @import("spacing_test.zig");
