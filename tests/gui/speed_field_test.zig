@@ -41,21 +41,21 @@ test "the field keeps digits, one dot and max, and reads the speed in use" {
 }
 
 fn connect(link: *Link) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
-    while (link.state == .connecting and std.time.milliTimestamp() < deadline) {
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while (link.state == .connecting and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
         _ = link.pump();
-        std.time.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
     try std.testing.expect(link.state == .connected);
 }
 
 /// Pump the link into the field until the session answers, for ten seconds.
 fn settle(link: *Link, field: *Field) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (field.ask_id != null) {
-        if (std.time.milliTimestamp() > deadline) return error.Timeout;
+        if (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() > deadline) return error.Timeout;
         if (link.state != .connected) return error.LinkLost;
-        if (link.pump()) |arrival| field.observe(arrival) else std.time.sleep(std.time.ns_per_ms);
+        if (link.pump()) |arrival| field.observe(arrival) else try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
 }
 
