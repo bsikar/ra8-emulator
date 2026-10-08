@@ -91,7 +91,19 @@ pub const Bus = struct {
         /// nothing, when such a read is not repeatable. Times 0 only asks
         /// (RA8EMU-595). Null repeats nothing.
         repeat: ?*const fn (ctx: *anyopaque, address: u32, len: usize, times: u64) bool = null,
+        /// Fills `into` from a peripheral register with none of a read's
+        /// side effects; false when nothing can (RA8EMU-948). Null peeks
+        /// nothing.
+        peek: ?*const fn (ctx: *anyopaque, address: u32, into: []u8) bool = null,
     };
+
+    /// A debugger's look at one register: true with `into` filled, or false
+    /// having changed nothing, when the bus behind keeps no peek there.
+    pub fn peek(self: Bus, address: u32, into: []u8) bool {
+        if (self.gate) |gate| if (gate.refuses(address, into.len)) return false;
+        const look = self.vtable.peek orelse return false;
+        return look(self.ctx, address, into);
+    }
 
     pub fn repeat(self: Bus, address: u32, len: usize, times: u64) bool {
         const answer = self.vtable.repeat orelse return false;

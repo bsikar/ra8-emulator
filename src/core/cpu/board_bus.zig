@@ -54,7 +54,7 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat }, .direct = memory.direct };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct };
     }
 
     /// Whether the whole access sits in either peripheral window.
@@ -99,6 +99,22 @@ pub const BoardBus = struct {
         const w = width(len) catch return false;
         self.periph.issuer = self.issuer;
         return self.periph.repeat(address, w, times);
+    }
+
+    /// Only a peripheral register peeks, and only when its block keeps one.
+    fn peekRegister(ctx: *anyopaque, given: u32, into: []u8) bool {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (scs_route.wired(self.security, given) != null) return false;
+        const address = self.landing(given) orelse return false;
+        if (!inWindow(address, into.len)) return false;
+        if (self.check) |c| if (!c.allows(given, .load)) return false;
+        const w = width(into.len) catch return false;
+        self.periph.issuer = self.issuer;
+        const value = self.periph.peek(address, w) orelse return false;
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, value, .little);
+        @memcpy(into, bytes[0..into.len]);
+        return true;
     }
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {

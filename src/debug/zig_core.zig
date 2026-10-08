@@ -6,6 +6,7 @@
 //! hands this a pointer to it, so the session can drive either core.
 const cpu_mod = @import("../core/cpu/cpu.zig");
 const bus = @import("../core/cpu/bus.zig");
+const debug_read = @import("debug_read.zig");
 const dispatch = @import("../core/cpu/exception/dispatch.zig");
 
 pub const Cortex = @import("../core/cpu/cortex.zig").Cortex;
@@ -74,7 +75,7 @@ pub const ZigCore = struct {
     }
 
     pub fn read(self: ZigCore, address: u32, into: []u8) bus.Error!void {
-        return self.cpu.bus.read(address, into);
+        return debug_read.read(self.cpu.bus, address, into);
     }
 
     pub fn readWord(self: ZigCore, address: u32) bus.Error!u32 {
