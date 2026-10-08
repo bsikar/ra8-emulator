@@ -7,6 +7,7 @@
 const std = @import("std");
 const harness = @import("../../harness.zig");
 const board_rtc = @import("../../board/session_rtc.zig");
+const board_periph = @import("../../board/session_periph.zig");
 const proto = @import("../rpc/session_rpc.zig");
 const served = @import("../rpc/session_server.zig");
 const loop = @import("serve_loop.zig");
@@ -59,6 +60,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     context.camera = .{ .context = &camera, .setFn = Camera.set };
     context.mapping = .{ .context = &owner, .mapFn = mapImage, .stackFn = stackOf };
     context.clock = board_rtc.clock(owner.board());
+    context.peripherals = .{ .context = owner.board(), .listFn = board_periph.listBoard };
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(&context, buffers),
         .listen => |spec| listen.serve(io, spec, &context, buffers),

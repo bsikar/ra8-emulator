@@ -35,6 +35,14 @@ pub const Mapping = struct {
     stackFn: ?*const fn (*anyopaque, usize) ?region_map.Stack = null,
 };
 
+/// Writes the peripheral blocks, or one block's registers (RA8EMU-818):
+/// the core index, the block name ("" for the list), JSON or text, and
+/// the buffer to write into.
+pub const Peripherals = struct {
+    context: *anyopaque,
+    listFn: *const fn (*anyopaque, usize, []const u8, bool, []u8) anyerror![]const u8,
+};
+
 pub const Listing = struct {
     context: *anyopaque,
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
@@ -72,6 +80,8 @@ pub const Context = struct {
     mapping: ?Mapping = null,
     /// Snapshots the RTC counters for `rtc`; a server without one refuses it.
     clock: ?session_rtc.Clock = null,
+    /// Lists peripheral blocks and registers for `periph`; a server without one refuses it.
+    peripherals: ?Peripherals = null,
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@backingInt(of)] & bit(topic) != 0;

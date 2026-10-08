@@ -146,6 +146,7 @@ pub const board = struct {
     pub const session_display = @import("board/session_display.zig");
     pub const session_rtc = @import("board/session_rtc.zig");
     pub const periph_layout = @import("board/periph_layout.zig");
+    pub const session_periph = @import("board/session_periph.zig");
     pub const boundary = @import("board/boundary.zig");
     pub const wiring = @import("board/wiring.zig");
     pub const option_memory = @import("board/option_memory.zig");
@@ -233,6 +234,7 @@ pub const interfaces = struct {
         pub const camera = @import("interfaces/rpc/session_camera.zig");
         pub const stack = @import("interfaces/rpc/session_stack.zig");
         pub const rtc = @import("interfaces/rpc/session_rtc.zig");
+        pub const periph = @import("interfaces/rpc/session_periph.zig");
         pub const input = @import("interfaces/rpc/session_input.zig");
     };
 };

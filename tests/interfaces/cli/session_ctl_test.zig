@@ -315,3 +315,46 @@ test "ctl parse: snapshot and restore take one path" {
     try std.testing.expectEqual(ra8.interfaces.rpc.session.Method.restore, back.command.files.method);
     try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "restore" }));
 }
+
+test "ctl --json periph lists cpu0's blocks and RTC's registers from a running serve" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/periph.sock", .{tmp.sub_path});
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var served = try serve_peer.listen(spec, &line);
+    defer served.child.kill(std.testing.io);
+
+    var blocks = try run(gpa, spec, &.{"periph"});
+    defer blocks.deinit();
+    try std.testing.expectEqual(Term{ .exited = 0 }, blocks.term);
+    var rtc_base: ?i64 = null;
+    for (blocks.field("periph").array.items) |block| {
+        if (std.mem.eql(u8, block.object.get("name").?.string, "RTC")) rtc_base = try expectInteger(block.object.get("base").?);
+    }
+    try std.testing.expectEqual(@as(?i64, 0x4020_2000), rtc_base);
+
+    var rtc = try run(gpa, spec, &.{ "periph", "RTC" });
+    defer rtc.deinit();
+    const registers = rtc.field("periph").object.get("registers").?.array.items;
+    const last = registers[registers.len - 1].object;
+    try std.testing.expectEqualStrings("rcr4", last.get("name").?.string);
+    try std.testing.expectEqual(@as(i64, 0x28), try expectInteger(last.get("offset").?));
+
+    var typo = try run(gpa, spec, &.{ "periph", "nosuch" });
+    defer typo.deinit();
+    try std.testing.expectEqual(Term{ .exited = 1 }, typo.term);
+}
+
+test "ctl parse: periph takes at most one block" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = [_][]const u8{ "ra8", "ctl", "--connect", "unix:/s" };
+    try std.testing.expectEqualStrings("", (try ctl.parse(a, &(base ++ [_][]const u8{"periph"}))).command.periph);
+    try std.testing.expectEqualStrings("RTC", (try ctl.parse(a, &(base ++ [_][]const u8{ "periph", "RTC" }))).command.periph);
+    try std.testing.expectError(error.BadArguments, ctl.parse(a, &(base ++ [_][]const u8{ "periph", "RTC", "AGT" })));
+}
