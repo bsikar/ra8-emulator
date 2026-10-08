@@ -317,7 +317,7 @@ pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
             return 0;
         },
         .unknown => |instr| try out.print(
-            "zig core: unknown encoding at {} after {d} instructions\n",
+            "zig core: unknown encoding at {f} after {d} instructions\n",
             .{ instr, cpu.retired },
         ),
         .invalid_state => |at| try out.print(
