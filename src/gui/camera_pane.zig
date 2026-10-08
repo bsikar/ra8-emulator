@@ -121,11 +121,12 @@ pub const Pane = struct {
     pub fn settle(
         self: *Pane,
         allocator: std.mem.Allocator,
+        io: std.Io,
         source: *FrameSource,
         format_control: *const u8,
     ) void {
         const changes = self.panel.changes;
-        const next = self.openPick(allocator, format_control) orelse return;
+        const next = self.openPick(allocator, io, format_control) orelse return;
         self.switcher.apply(source, next, changes);
     }
 
@@ -134,23 +135,24 @@ pub const Pane = struct {
     pub fn settleInto(
         self: *Pane,
         allocator: std.mem.Allocator,
+        io: std.Io,
         swap: *SourceSwap,
         format_control: *const u8,
     ) void {
         const changes = self.panel.changes;
-        const next = self.openPick(allocator, format_control) orelse return;
+        const next = self.openPick(allocator, io, format_control) orelse return;
         swap.post(next);
         self.switcher.posted(changes);
     }
 
     /// The panel's pick, opened, when it switched since the last one.
-    fn openPick(self: *Pane, allocator: std.mem.Allocator, format_control: *const u8) ?FrameSource {
+    fn openPick(self: *Pane, allocator: std.mem.Allocator, io: std.Io, format_control: *const u8) ?FrameSource {
         const changes = self.panel.changes;
         if (!self.switcher.due(changes)) return null;
         var args = self.args;
         var device_buf: [4]u8 = undefined;
         if (self.device) |device| args.webcam = camera_devices.argument(&device_buf, device) catch unreachable;
-        return camera_open.open(allocator, self.panel, args, format_control) catch {
+        return camera_open.open(allocator, io, self.panel, args, format_control) catch {
             self.switcher.skip(changes);
             return null;
         };
