@@ -82,10 +82,10 @@ test "the register dump reads the Zig core" {
     var machine = Machine{};
     const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 };
     var text: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&text);
-    try session_view.registers(stream.writer(), session.view());
-    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "pc  0x00000008") != null);
-    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "sp  0x00000040") != null);
+    var stream: std.Io.Writer = .fixed(&text);
+    try session_view.registers(&stream, session.view());
+    try std.testing.expect(std.mem.indexOf(u8, stream.buffered(), "pc  0x00000008") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stream.buffered(), "sp  0x00000040") != null);
 }
 
 test "switchTo with no second core is refused" {

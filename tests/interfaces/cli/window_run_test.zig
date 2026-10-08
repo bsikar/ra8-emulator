@@ -51,8 +51,8 @@ const Soak = struct {
         const self: *Soak = @ptrCast(@alignCast(ctx));
         var final: cpu_boot.Regs = .{};
         var output: [1024]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&output);
-        _ = cpu_boot.start(stream.writer(), .zig, self.guest(), &self.board.bus, soaker.base, self.budget, &self.ran, .{ .boundary = self.clock.boundary(), .final = &final }) catch {
+        var stream: std.Io.Writer = .fixed(&output);
+        _ = cpu_boot.start(&stream, .zig, self.guest(), &self.board.bus, soaker.base, self.budget, &self.ran, .{ .boundary = self.clock.boundary(), .final = &final }) catch {
             self.failed = true;
         };
     }

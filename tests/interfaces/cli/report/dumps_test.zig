@@ -12,9 +12,9 @@ fn dumped(core: store_board.Guest, image: elf.Image, names: []const []const u8, 
     var options: cli.Options = .{ .path = "probe.elf" };
     for (names, 0..) |name, index| options.dump[index] = name;
     options.dump_count = names.len;
-    var stream = std.io.fixedBufferStream(into);
-    try report_dumps.dumpSymbols(stream.writer(), core, image, options);
-    return stream.getWritten();
+    var stream: std.Io.Writer = .fixed(into);
+    try report_dumps.dumpSymbols(&stream, core, image, options);
+    return stream.buffered();
 }
 
 test "a dumped global prints its address and value, a missing one says so" {
@@ -47,9 +47,9 @@ const Regs = ra8.core.cpu.regs.Regs;
 
 fn registerLine(regs: *const Regs, core: store_board.Guest, into: []u8) ![]const u8 {
     const options: cli.Options = .{ .path = "probe.elf", .dump_regs = true };
-    var stream = std.io.fixedBufferStream(into);
-    try report_dumps.dumpRegisters(stream.writer(), .{ .zig = regs }, core, options);
-    return stream.getWritten();
+    var stream: std.Io.Writer = .fixed(into);
+    try report_dumps.dumpRegisters(&stream, .{ .zig = regs }, core, options);
+    return stream.buffered();
 }
 
 test "--dump-regs prints the engine run's register line and the words at sp" {
@@ -84,9 +84,9 @@ test "no --dump-regs prints nothing" {
     defer store.deinit();
     const regs: Regs = .{};
     var out: [64]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&out);
-    try report_dumps.dumpRegisters(stream.writer(), .{ .zig = &regs }, .{ .store = &store }, .{ .path = "probe.elf" });
-    try std.testing.expectEqualStrings("", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&out);
+    try report_dumps.dumpRegisters(&stream, .{ .zig = &regs }, .{ .store = &store }, .{ .path = "probe.elf" });
+    try std.testing.expectEqualStrings("", stream.buffered());
 }
 
 const Block = ra8.periph.sd_image.Block;
@@ -106,9 +106,9 @@ const OneBlockCard = struct {
 test "--dump-sd prints the block's non-zero rows and counts the rest" {
     var card: OneBlockCard = .{};
     var out: [512]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&out);
-    try report_dumps.dumpBlock(stream.writer(), &card, .{ .path = "probe.elf", .dump_sd = 2 });
-    const text = stream.getWritten();
+    var stream: std.Io.Writer = .fixed(&out);
+    try report_dumps.dumpBlock(&stream, &card, .{ .path = "probe.elf", .dump_sd = 2 });
+    const text = stream.buffered();
     try std.testing.expect(std.mem.startsWith(u8, text, "  dump-sd       : block 2 (0x2)\n  0010  46 41 54 33 "));
     try std.testing.expect(std.mem.endsWith(u8, text, "  dump-sd       : 31 zero row(s) not shown\n"));
 }
@@ -116,7 +116,7 @@ test "--dump-sd prints the block's non-zero rows and counts the rest" {
 test "--dump-sd on a block the card does not hold says so" {
     var card: OneBlockCard = .{};
     var out: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&out);
-    try report_dumps.dumpBlock(stream.writer(), &card, .{ .path = "probe.elf", .dump_sd = 9 });
-    try std.testing.expectEqualStrings("  dump-sd       : block 9 is not on this card\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&out);
+    try report_dumps.dumpBlock(&stream, &card, .{ .path = "probe.elf", .dump_sd = 9 });
+    try std.testing.expectEqualStrings("  dump-sd       : block 9 is not on this card\n", stream.buffered());
 }

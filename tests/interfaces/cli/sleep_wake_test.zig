@@ -37,9 +37,9 @@ fn sleepFor(seconds: u64) !Woke {
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     var timer = try std.time.Timer.start();
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, seconds * hz, &ran, .{ .boundary = clock.boundary() });
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, seconds * hz, &ran, .{ .boundary = clock.boundary() });
     const host_ns = timer.read();
     return .{ .wakes = try core.readWord(idler.counter_at), .virtual_ns = board.time.base.now(), .host_ns = host_ns };
 }

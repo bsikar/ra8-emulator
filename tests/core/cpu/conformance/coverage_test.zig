@@ -23,26 +23,26 @@ test "a vector for an encoding nobody claims is caught" {
 
 test "the table lists every claim in order and marks the gap" {
     var buf: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try coverage.writeTable(stream.writer(), &claimed, &covered);
+    var stream: std.Io.Writer = .fixed(&buf);
+    try coverage.writeTable(&stream, &claimed, &covered);
     try std.testing.expectEqualStrings(
         "| Encoding | Vectors |\n|---|---|\n" ++
             "| VADD (floating-point) | 2 |\n| VSUB (floating-point) | missing |\n| VMUL (floating-point) | 1 |\n",
-        stream.getWritten(),
+        stream.buffered(),
     );
 }
 
 test "the document says so when nothing is claimed yet" {
     var buf: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try coverage.writeDocument(stream.writer(), &.{}, &.{});
-    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "# Conformance coverage\n"));
-    try std.testing.expect(std.mem.endsWith(u8, stream.getWritten(), "No encodings claimed yet.\n"));
+    var stream: std.Io.Writer = .fixed(&buf);
+    try coverage.writeDocument(&stream, &.{}, &.{});
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "# Conformance coverage\n"));
+    try std.testing.expect(std.mem.endsWith(u8, stream.buffered(), "No encodings claimed yet.\n"));
 }
 
 test "the document ends with the table once something is claimed" {
     var buf: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    try coverage.writeDocument(stream.writer(), &claimed, &covered);
-    try std.testing.expect(std.mem.endsWith(u8, stream.getWritten(), "| VMUL (floating-point) | 1 |\n"));
+    var stream: std.Io.Writer = .fixed(&buf);
+    try coverage.writeDocument(&stream, &claimed, &covered);
+    try std.testing.expect(std.mem.endsWith(u8, stream.buffered(), "| VMUL (floating-point) | 1 |\n"));
 }

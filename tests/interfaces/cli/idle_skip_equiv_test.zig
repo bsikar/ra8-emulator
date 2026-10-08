@@ -62,8 +62,8 @@ fn runIdler(skip: bool, reload: ?u32, cycles: u64) !Ended {
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
-    const status = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, cycles, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
+    var stream: std.Io.Writer = .fixed(&output);
+    const status = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, cycles, &ran, .{ .boundary = counted.boundary(skip), .final = &final });
     return .{
         .status = status,
         .ran = ran,

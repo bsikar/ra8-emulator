@@ -55,8 +55,8 @@ test "a soak ends at the virtual minute the firmware overwrites its canary" {
     var ran: u64 = 0;
     var final: cpu_boot.Regs = .{};
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, idler.base, 3600 * hz, &ran, .{ .boundary = clock.boundary(), .final = &final });
+    var stream: std.Io.Writer = .fixed(&output);
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, 3600 * hz, &ran, .{ .boundary = clock.boundary(), .final = &final });
     clock.soakFaults();
     const event = board.time.soak.event orelse return error.NoEvent;
     try std.testing.expectEqual(soak.Kind.stack_canary, event.kind);

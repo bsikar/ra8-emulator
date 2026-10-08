@@ -260,9 +260,9 @@ test "the report names the site the run stopped on" {
     found.stopOnRun();
     found.sites[0].runs = 1;
 
-    var stream = std.io.fixedBufferStream(&buffer);
-    try undefined_ops.print(stream.writer(), image, found);
-    const out = stream.getWritten();
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try undefined_ops.print(&stream, image, found);
+    const out = stream.buffered();
     try std.testing.expect(std.mem.indexOf(u8, out, "run stopped at 0x02000000") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "before it executed") != null);
 }
@@ -277,7 +277,7 @@ test "a run that was not stopped says nothing about stopping" {
     found.count = 1;
     found.sites[0].runs = 1;
 
-    var stream = std.io.fixedBufferStream(&buffer);
-    try undefined_ops.print(stream.writer(), image, found);
-    try std.testing.expect(std.mem.indexOf(u8, stream.getWritten(), "run stopped at") == null);
+    var stream: std.Io.Writer = .fixed(&buffer);
+    try undefined_ops.print(&stream, image, found);
+    try std.testing.expect(std.mem.indexOf(u8, stream.buffered(), "run stopped at") == null);
 }

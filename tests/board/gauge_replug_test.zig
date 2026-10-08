@@ -96,9 +96,9 @@ test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     var cuts: Cuts = .{ .inner = clock.boundary(), .session = &session, .memory = core };
     var ran: u64 = 0;
     var output: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
-    _ = try boot.start(stream.writer(), .zig, core, &board.bus, vector_base, phase * 4, &ran, .{
+    _ = try boot.start(&stream, .zig, core, &board.bus, vector_base, phase * 4, &ran, .{
         .boundary = cuts.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,

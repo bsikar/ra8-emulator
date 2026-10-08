@@ -26,12 +26,12 @@ test "the Helium DSP corpus runs bit-exact on the Zig core" {
         try core.write(segment.paddr, segment.bytes);
     }
     var output: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     var retired: u64 = 0;
     const vector_base = image.vectorBase() orelse return error.MissingVectorTable;
     var periph = ra8.periph.registry.Bus.init(std.testing.allocator);
     defer periph.deinit();
-    const status = try boot.start(stream.writer(), .zig, core, &periph, vector_base, 1_000_000, &retired, .{});
+    const status = try boot.start(&stream, .zig, core, &periph, vector_base, 1_000_000, &retired, .{});
     try std.testing.expectEqual(@as(u8, 0), status);
     for (vectors.words, 0..) |want, index| {
         const got = try core.readWord(results + @as(u32, @intCast(index)) * 4);

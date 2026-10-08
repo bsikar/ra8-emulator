@@ -36,9 +36,9 @@ fn ram() Ram {
 
 test "an address with no image is eight hex digits" {
     var text: [64]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&text);
-    try session_report.where(null, 0x2200_0018, stream.writer());
-    try std.testing.expectEqualStrings("0x22000018", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&text);
+    try session_report.where(null, 0x2200_0018, &stream);
+    try std.testing.expectEqualStrings("0x22000018", stream.buffered());
 }
 
 test "a stop line names the address and the instruction there on the Zig core" {
@@ -46,9 +46,9 @@ test "a stop line names the address and the instruction there on the Zig core" {
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
     var text: [128]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&text);
-    try session_report.line(.{ .zig = .{ .cpu = &cpu } }, null, 0x08, stream.writer());
-    try std.testing.expect(std.mem.startsWith(u8, stream.getWritten(), "0x00000008: nop"));
+    var stream: std.Io.Writer = .fixed(&text);
+    try session_report.line(.{ .zig = .{ .cpu = &cpu } }, null, 0x08, &stream);
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "0x00000008: nop"));
 }
 
 test "a backtrace without unwind tables is the pc and lr" {
@@ -57,7 +57,7 @@ test "a backtrace without unwind tables is the pc and lr" {
     try cpu.reset(0);
     cpu.regs.lr = 0x0B;
     var text: [256]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&text);
-    try session_report.backtrace(.{ .zig = .{ .cpu = &cpu } }, null, stream.writer());
-    try std.testing.expectEqualStrings("#0 0x00000008\n#1 0x0000000A\n", stream.getWritten());
+    var stream: std.Io.Writer = .fixed(&text);
+    try session_report.backtrace(.{ .zig = .{ .cpu = &cpu } }, null, &stream);
+    try std.testing.expectEqualStrings("#0 0x00000008\n#1 0x0000000A\n", stream.buffered());
 }

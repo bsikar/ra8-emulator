@@ -38,9 +38,9 @@ test "the Non-secure image calls every NSC veneer and gets back" {
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
+    var stream: std.Io.Writer = .fixed(&output);
     const vector_base = secure.vectorBase() orelse return error.MissingVectorTable;
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, vector_base, budget, &ran, .{
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, vector_base, budget, &ran, .{
         .boundary = clock.boundary(),
         .partitions = &board.partitions,
         .idau = &board.idau,

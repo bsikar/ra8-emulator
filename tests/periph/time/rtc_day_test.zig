@@ -55,8 +55,8 @@ fn runDay(start: Calendar) !Day {
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
     var output: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&output);
-    _ = try cpu_boot.start(stream.writer(), .zig, core, &board.bus, soaker.base, day_s * hz, &ran, .{ .boundary = clock.boundary() });
+    var stream: std.Io.Writer = .fixed(&output);
+    _ = try cpu_boot.start(&stream, .zig, core, &board.bus, soaker.base, day_s * hz, &ran, .{ .boundary = clock.boundary() });
     return .{ .date = board.clock.now, .virtual_ns = board.time.base.now(), .wall_ns = wall.ns };
 }
 
