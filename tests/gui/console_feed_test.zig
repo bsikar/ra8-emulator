@@ -25,7 +25,7 @@ fn send(tap: anytype, channel: usize, text: []const u8) void {
 
 test "bytes land in their channel's log with the time they were sent" {
     var clock = Clock{};
-    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .now = clock.now() };
+    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .io = std.testing.io, .now = clock.now() };
     defer feed.deinit();
     var logs = [_]console_log.Log{ console_log.Log.init(std.testing.allocator, 4), console_log.Log.init(std.testing.allocator, 4) };
     defer for (&logs) |*log| log.deinit();
@@ -48,7 +48,7 @@ test "bytes land in their channel's log with the time they were sent" {
 
 test "an outbox past its limit keeps what fits and counts the rest" {
     var clock = Clock{};
-    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .now = clock.now(), .limit = 3 };
+    var feed = console_feed.Feed{ .allocator = std.testing.allocator, .io = std.testing.io, .now = clock.now(), .limit = 3 };
     defer feed.deinit();
     var logs = [_]console_log.Log{console_log.Log.init(std.testing.allocator, 4)};
     defer logs[0].deinit();

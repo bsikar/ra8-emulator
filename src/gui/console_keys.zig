@@ -23,15 +23,16 @@ pub fn byteOf(code: u32) ?u8 {
 pub const Key = struct { channel: u8, byte: u8 };
 
 pub const Typed = struct {
-    mutex: std.Thread.Mutex = .{},
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
     pending: [capacity]Key = undefined,
     len: usize = 0,
     lost: u64 = 0,
 
     /// Window side: queue `byte` for `channel`.
     pub fn post(self: *Typed, channel: u8, byte: u8) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.len == capacity) {
             self.lost += 1;
             return;
@@ -44,8 +45,8 @@ pub const Typed = struct {
     /// `sink.feed(channel, bytes)` (sci.Sci has that shape). Returns how
     /// many were fed.
     pub fn take(self: *Typed, sink: anytype) usize {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const count = self.len;
         for (self.pending[0..count]) |key| sink.feed(key.channel, &.{key.byte});
         self.len = 0;
