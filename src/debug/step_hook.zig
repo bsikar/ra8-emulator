@@ -18,6 +18,8 @@ pub const zig_boundary = @import("zig_boundary.zig");
 pub const core_view = @import("core_view.zig");
 /// A debugger read split over peripheral windows (RA8EMU-948).
 pub const debug_read = @import("debug_read.zig");
+/// Tagged call-stack samples and their fold (RA8EMU-952).
+pub const stack_samples = @import("stack_samples.zig");
 /// Re-exported for tests/debug/zig_session_test.zig, for the same reason.
 pub const zig_session = @import("zig_session.zig");
 /// Re-exported for tests/debug/session_report_test.zig, for the same reason.

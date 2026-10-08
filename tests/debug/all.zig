@@ -16,6 +16,7 @@ test {
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");
     _ = @import("debug_read_sci_test.zig");
+    _ = @import("stack_samples_test.zig");
     _ = @import("zig_session_test.zig");
     _ = @import("session_api_test.zig");
     _ = @import("session_tap_part_test.zig");
