@@ -27,7 +27,7 @@ fn word(harness: *ra8.harness.Harness) !u32 {
 test "restore puts pc, guest memory and virtual time back where snapshot left them" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const dir = try tmp.dir.realpathAlloc(std.testing.allocator, ".");
+    const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
     const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "run.ra8snap" });
     defer std.testing.allocator.free(path);

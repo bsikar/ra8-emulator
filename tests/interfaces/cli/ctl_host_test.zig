@@ -22,7 +22,7 @@ const Rig = struct {
     fn init(gpa: std.mem.Allocator) !Rig {
         var tmp = std.testing.tmpDir(.{});
         errdefer tmp.cleanup();
-        const root = try tmp.dir.realpathAlloc(gpa, ".");
+        const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
         errdefer gpa.free(root);
         const script = try tmp.dir.createFile("fake_ssh", .{ .mode = 0o755 });
         try script.writeAll(fake_ssh);

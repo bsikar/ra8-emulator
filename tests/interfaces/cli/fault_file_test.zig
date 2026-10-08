@@ -25,9 +25,9 @@ const good =
     \\420us     clear  i2c:riic@0x36
 ;
 
-fn writeFile(dir: std.fs.Dir, name: []const u8, text: []const u8, buffer: []u8) ![]const u8 {
-    try dir.writeFile(.{ .sub_path = name, .data = text });
-    return dir.realpath(name, buffer);
+fn writeFile(dir: std.Io.Dir, name: []const u8, text: []const u8, buffer: []u8) ![]const u8 {
+    try dir.writeFile(std.testing.io, .{ .sub_path = name, .data = text });
+    return buffer[0..try dir.realPathFile(std.testing.io, name, buffer)];
 }
 
 test "--faults takes a file" {
