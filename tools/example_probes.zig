@@ -106,10 +106,10 @@ pub fn dumped(report: []const u8, name: []const u8) ?u32 {
     if (isPlace(name)) return dumpedPlace(report, name);
     var lines = std.mem.splitScalar(u8, report, '\n');
     while (lines.next()) |raw| {
-        const line = std.mem.trimLeft(u8, raw, " ");
+        const line = std.mem.trimStart(u8, raw, " ");
         if (!std.mem.startsWith(u8, line, "dump-sym")) continue;
         const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
-        const rest = std.mem.trimLeft(u8, line[colon + 1 ..], " ");
+        const rest = std.mem.trimStart(u8, line[colon + 1 ..], " ");
         if (!std.mem.startsWith(u8, rest, name) or rest.len == name.len or rest[name.len] != ' ') continue;
         const equals = std.mem.indexOf(u8, rest, " = ") orelse return null;
         const digits = rest[equals + 3 ..];
@@ -122,12 +122,12 @@ pub fn dumped(report: []const u8, name: []const u8) ?u32 {
 fn dumpedPlace(report: []const u8, name: []const u8) ?u32 {
     var lines = std.mem.splitScalar(u8, report, '\n');
     while (lines.next()) |raw| {
-        const line = std.mem.trimLeft(u8, raw, " ");
+        const line = std.mem.trimStart(u8, raw, " ");
         if (!std.mem.startsWith(u8, line, "dump-mem")) continue;
         const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
-        const rest = std.mem.trimLeft(u8, line[colon + 1 ..], " ");
+        const rest = std.mem.trimStart(u8, line[colon + 1 ..], " ");
         if (!std.mem.startsWith(u8, rest, name) or rest.len == name.len or rest[name.len] != ' ') continue;
-        const words = std.mem.trimLeft(u8, lines.next() orelse return null, " ");
+        const words = std.mem.trimStart(u8, lines.next() orelse return null, " ");
         if (!std.mem.startsWith(u8, words, "+0x0000 0x")) return null;
         const digits = words["+0x0000 0x".len..];
         const end = std.mem.indexOfScalar(u8, digits, ' ') orelse digits.len;

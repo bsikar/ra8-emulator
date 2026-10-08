@@ -9,7 +9,7 @@ const image_path = "tests/fixtures/display/ra8_ui.elf";
 const input_path = "tests/fixtures/display/tap.input";
 
 test "public harness opens real display firmware, taps, settles, and frames" {
-    if (builtin.mode != .ReleaseFast) return error.SkipZigTest;
+    if (builtin.mode != .fast) return error.SkipZigTest;
     var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = image_path,
         .input_script = input_path,
@@ -32,7 +32,7 @@ test "public harness opens real display firmware, taps, settles, and frames" {
 }
 
 test "RA8EMU-768: restore returns the session to a saved screen, frame for frame" {
-    if (builtin.mode != .ReleaseFast) return error.SkipZigTest;
+    if (builtin.mode != .fast) return error.SkipZigTest;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);

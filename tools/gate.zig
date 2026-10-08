@@ -87,7 +87,7 @@ fn indentOf(line: []const u8) usize {
 /// A prototype with no body (`extern fn`, a `fn` type) ends in `;` and is not
 /// one.
 pub fn declaredName(line: []const u8) ?[]const u8 {
-    const trimmed = std.mem.trimRight(u8, line, " \r");
+    const trimmed = std.mem.trimEnd(u8, line, " \r");
     if (std.mem.endsWith(u8, trimmed, ";")) return null;
 
     var words = std.mem.tokenizeScalar(u8, trimmed, ' ');
