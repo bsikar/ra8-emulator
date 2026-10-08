@@ -229,5 +229,6 @@ pub const interfaces = struct {
         pub const camera = @import("interfaces/rpc/session_camera.zig");
         pub const stack = @import("interfaces/rpc/session_stack.zig");
         pub const rtc = @import("interfaces/rpc/session_rtc.zig");
+        pub const input = @import("interfaces/rpc/session_input.zig");
     };
 };
