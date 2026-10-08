@@ -27,9 +27,7 @@ pub const Instr = struct {
 
     /// `0x08001234: 0xf3af 0x8000`, the shape an unknown-encoding report and
     /// a lockstep divergence print an instruction in.
-    pub fn format(self: Instr, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
+    pub fn format(self: Instr, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.print("0x{x:0>8}: 0x{x:0>4}", .{ self.address, self.hw1 });
         if (self.size == 4) try writer.print(" 0x{x:0>4}", .{self.hw2});
     }
