@@ -30,7 +30,7 @@ test "--eink-log takes a path and is off by default" {
 test "no path means no line and no file" {
     var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
-    try frame_out.report(buffer.writer(), undefined, null, false);
+    try frame_out.report(buffer.writer(), std.testing.io, undefined, null, false);
     try std.testing.expectEqual(@as(usize, 0), buffer.items.len);
 }
 
@@ -45,7 +45,7 @@ test "a run with no panel frame still writes the board view with its LEDs" {
     defer std.testing.allocator.free(path);
     var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
-    try frame_out.report(buffer.writer(), &board, path, false);
+    try frame_out.report(buffer.writer(), std.testing.io, &board, path, false);
     try std.testing.expect(std.mem.startsWith(u8, buffer.items, "frame-out: no panel frame, the LEDs on a 1056x664 board view"));
     var magic: [8]u8 = undefined;
     _ = try (try dir.dir.openFile("view.png", .{})).readAll(&magic);
@@ -65,7 +65,7 @@ test "--panel-only writes the dark fallback panel at its own size" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "panel.png" });
     defer std.testing.allocator.free(path);
-    const saved = try frame_out.save(std.testing.allocator, &board, path, true);
+    const saved = try frame_out.save(std.testing.allocator, std.testing.io, &board, path, true);
     try std.testing.expect(!saved.frame);
     try std.testing.expectEqual(@as(u32, 1024), saved.view.width);
     try std.testing.expectEqual(@as(u32, 600), saved.view.height);
@@ -107,7 +107,7 @@ test "attached e-ink frame-out writes the refreshed glass as grey PNG pixels" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "eink.png" });
     defer std.testing.allocator.free(path);
-    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    const saved = try frame_out.save(std.testing.allocator, std.testing.io, &board, path, false);
     try std.testing.expect(saved.frame);
     try std.testing.expectEqual(@as(u32, 128), saved.width);
 
@@ -154,7 +154,7 @@ test "with no attach and no GLCDC frame, frame-out saves the board's refreshed e
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "board_eink.png" });
     defer std.testing.allocator.free(path);
-    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    const saved = try frame_out.save(std.testing.allocator, std.testing.io, &board, path, false);
     try std.testing.expect(saved.eink);
     try std.testing.expect(saved.frame);
     try std.testing.expectEqual(@as(u32, 16), saved.width);
@@ -170,7 +170,7 @@ test "an unrefreshed board panel leaves frame-out on the board view" {
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "view.png" });
     defer std.testing.allocator.free(path);
-    const saved = try frame_out.save(std.testing.allocator, &board, path, false);
+    const saved = try frame_out.save(std.testing.allocator, std.testing.io, &board, path, false);
     try std.testing.expect(!saved.eink);
     try std.testing.expect(!saved.frame);
 }
