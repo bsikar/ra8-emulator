@@ -71,7 +71,7 @@ test "a row comes from the child's report after its text lines" {
 test "the fixture moves the same bytes on every row and takes longer on slow memory" {
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const base = try dir.dir.realpathAlloc(std.testing.allocator, ".");
+    const base = try dir.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(base);
     const scratch = try std.fs.path.join(std.testing.allocator, &.{ base, "row.board" });
     defer std.testing.allocator.free(scratch);

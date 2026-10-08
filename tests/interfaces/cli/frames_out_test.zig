@@ -12,7 +12,7 @@ const prcr = ra8.periph.prcr;
 test "a small panel writes exact P6 bytes and skips an identical scan" {
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -36,7 +36,7 @@ test "a small panel writes exact P6 bytes and skips an identical scan" {
 test "every Nth scan gets a sequential filename" {
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -76,7 +76,7 @@ test "capture records the panel pixels from a completed GLCDC scan" {
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -115,7 +115,7 @@ test "an armed run keeps one frame per period with its emulated time" {
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -159,7 +159,7 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -195,7 +195,7 @@ test "with no attach, the board's own e-ink refreshes become the sequence" {
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "frames" });
     defer std.testing.allocator.free(path);
@@ -233,7 +233,7 @@ fn panelWord(panel: *ra8.periph.eink.Panel, value: u16) void {
 test "GIF output follows the sampled sequence when no PPM directory is requested" {
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
     defer std.testing.allocator.free(path);
@@ -262,7 +262,7 @@ test "an overlapping e-ink refresh burst produces one settled frame" {
 
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
     defer std.testing.allocator.free(path);
@@ -283,7 +283,7 @@ test "a GLCDC burst settles once the picture holds for the window, and only once
     defer board.deinit();
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const path = try std.fs.path.join(std.testing.allocator, &.{ root, "settled" });
     defer std.testing.allocator.free(path);
@@ -307,7 +307,7 @@ test "frame-on-settle can share a run with ordinary frames" {
     defer board.deinit();
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
-    const root = try temp.dir.realpathAlloc(std.testing.allocator, ".");
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(root);
     const settled = try std.fs.path.join(std.testing.allocator, &.{ root, "a" });
     defer std.testing.allocator.free(settled);

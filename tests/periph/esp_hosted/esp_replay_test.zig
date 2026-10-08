@@ -119,7 +119,7 @@ test "a recorded fetch replays offline byte for byte" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try tmp.dir.realpath(".", &buf);
+    const path = buf[0..try tmp.dir.realPathFile(std.testing.io, ".", &buf)];
     var live: [128]u8 = undefined;
     const recorded = try record(path, &live);
     try std.testing.expectEqualStrings(response, live[0..recorded.len]);
@@ -137,7 +137,7 @@ test "replay resets a connection it has no recording for and counts the miss" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try tmp.dir.realpath(".", &buf);
+    const path = buf[0..try tmp.dir.realPathFile(std.testing.io, ".", &buf)];
     var bridge: Bridge = .{ .tape = try tape.Tape.open(path, .replay) };
     defer bridge.deinit();
     var queue: Queue = .{};
@@ -150,7 +150,7 @@ test "replay refuses a request that differs from the recording" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try tmp.dir.realpath(".", &buf);
+    const path = buf[0..try tmp.dir.realPathFile(std.testing.io, ".", &buf)];
     var live: [128]u8 = undefined;
     const recorded = try record(path, &live);
 
