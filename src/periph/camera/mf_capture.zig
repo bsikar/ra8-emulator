@@ -83,7 +83,7 @@ pub const MfCapture = struct {
     fn close(ctx: *anyopaque) void {
         const self: *MfCapture = @ptrCast(@alignCast(ctx));
         self.reader.close();
-        if (self.name_len > 0) consent.logStop(std.io.getStdErr().writer(), self.named()) catch {};
+        if (self.name_len > 0) consent.logStopStderr(self.named());
         self.allocator.destroy(self);
     }
 };
