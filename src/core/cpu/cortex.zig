@@ -74,4 +74,7 @@ pub const Cortex = enum {
     s29,
     s30,
     s31,
+    // MVE's predicate register (VPR: P0 and the two VPT masks), the one
+    // piece of M85 vector state the FP bank does not already hold.
+    vpr,
 };

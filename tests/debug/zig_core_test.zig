@@ -76,6 +76,18 @@ test "the single-precision bank reads and writes raw bits, one S register at a t
     try std.testing.expectEqual(@as(u32, 0x3F80_0000), cpu.fp.bank.s[0]);
 }
 
+test "VPR reads and writes as its raw 32 bits: P0, then the two VPT masks" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    core.setRegister(.vpr, 0x0012_00FF);
+    try std.testing.expectEqual(@as(u32, 0x0012_00FF), core.register(.vpr));
+    try std.testing.expectEqual(@as(u16, 0x00FF), cpu.fp.vpr.p0);
+    try std.testing.expectEqual(@as(u4, 2), cpu.fp.vpr.mask01);
+    try std.testing.expectEqual(@as(u4, 1), cpu.fp.vpr.mask23);
+}
+
 test "memory goes through the core's bus" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };

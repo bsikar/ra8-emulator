@@ -48,7 +48,8 @@ pub const Registers = struct {
     /// Counts published batches, so the memory leaf can follow each one.
     serial: u32 = 0,
 
-    /// Send the due batch, one read per shown register, unless one is
+    /// Send the due batch, one read per shown register (VPR only on an MVE
+    /// core), unless one is
     /// already in flight or the session has not greeted.
     pub fn attach(self: *Registers, link: *session_link.Link) void {
         if (link.state != .connected) return;
@@ -59,6 +60,7 @@ pub const Registers = struct {
         }
         if (self.next == shown.len) return;
         while (self.next < shown.len) : (self.next += 1) {
+            if (wire[self.next] == .vpr and !registers_pane.hasMve(self.core)) continue;
             const args: proto.ReadRegister = .{ .core = self.core, .register = wire[self.next] };
             const asked = link.send(proto.ReadRegister, .read_register, args) catch |err| switch (err) {
                 error.TableFull => return,
@@ -83,7 +85,7 @@ pub const Registers = struct {
     /// drawn in `body`. Returns whether a header was hit.
     pub fn toggle(self: *Registers, body: draw_list.Rect, x: i32, y: i32) bool {
         if (self.now == null) return false;
-        const which = registers_pane.headerAt(body, self.fold, x, y) orelse return false;
+        const which = registers_pane.headerAt(body, self.fold, self.now.?.mve, x, y) orelse return false;
         self.fold[which] = !self.fold[which];
         return true;
     }
@@ -148,6 +150,7 @@ pub const Registers = struct {
         }
         self.refused = self.batch_refused;
         if (self.refused) return;
+        self.gathered.mve = registers_pane.hasMve(self.core);
         self.before = self.now;
         self.now = self.gathered;
         self.serial +%= 1;

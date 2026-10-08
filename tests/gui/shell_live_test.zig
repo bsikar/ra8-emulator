@@ -2,7 +2,9 @@
 //! (RA8EMU-821): a spawned `serve --stdio` steps cpu0 twice, and the
 //! registers, memory and disassembly leaves each draw its live values, with
 //! the registers the step changed marked; and the FPU group shows the bits
-//! fp_basic computes, marked on the step that wrote them (RA8EMU-944).
+//! fp_basic computes, marked on the step that wrote them (RA8EMU-944); and
+//! on the Helium DSP corpus the MVE group draws, with the q lane a step
+//! wrote marked (RA8EMU-947).
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
@@ -24,6 +26,7 @@ const Link = session_link.Link;
 const Env = proto.Client.Env;
 
 const image_path = "tests/fixtures/fpu/fp_basic.elf";
+const dsp_path = "tests/fixtures/fpu/dsp.elf";
 const width = 2000;
 const height = 320;
 
@@ -206,6 +209,48 @@ test "the fpu group shows the sum fp_basic computes, marked on the step that wro
     } else return error.SumNeverShown;
     const registers = &leaves.registers.cores[0];
     try std.testing.expect(registers.now.?.changedAt(registers.before.?, at));
+
+    local.end();
+    while (link.state == .connected) {
+        if (link.pump() == null) try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+    }
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}
+
+/// The first q lane `registers` marks changed, if any.
+fn laneChanged(registers: *const shell_registers.Registers) ?usize {
+    const now = registers.now orelse return null;
+    const before = registers.before orelse return null;
+    for (registers_pane.shown.len..registers_pane.cells) |cell| {
+        if (now.changedAt(before, registers_pane.valueIndex(cell))) return cell;
+    }
+    return null;
+}
+
+test "the MVE group draws on cpu0 and marks the q lane a Helium step wrote" {
+    const gpa = std.testing.allocator;
+    var local: session_link.Local = undefined;
+    try local.spawn(std.testing.io, test_paths.emulator, dsp_path);
+    errdefer local.child.kill(std.testing.io);
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: Link = undefined;
+    link.open(local.transport(), rx, tx);
+    var leaves: Leaves = .{};
+    try pumpUntil(&link, &leaves, null);
+    _ = try link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
+
+    var steps: usize = 0;
+    const cell = while (steps < 3000) : (steps += 1) {
+        try step(&link, &leaves);
+        if (laneChanged(&leaves.registers.cores[0])) |hit| break hit;
+    } else return error.LaneNeverChanged;
+    const registers = &leaves.registers.cores[0];
+    try std.testing.expect(registers.now.?.mve);
+    try std.testing.expect(cell >= registers_pane.shown.len and cell < registers_pane.cells);
+    try expectFrame(gpa, &leaves, link.state, .registers, registers_pane.changed);
 
     local.end();
     while (link.state == .connected) {
