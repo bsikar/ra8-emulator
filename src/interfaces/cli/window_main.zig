@@ -91,6 +91,6 @@ pub const Live = struct {
         const a = self.args;
         var ends = a.ends;
         ends.pace = self.pacer;
-        self.code = zig_run.run(a.out, a.memory, a.board, a.timebase, a.image, a.options, a.vector_base, a.profile_table, a.until, ends) catch 1;
+        self.code = zig_run.run(a.out, a.io, a.memory, a.board, a.timebase, a.image, a.options, a.vector_base, a.profile_table, a.until, ends) catch 1;
     }
 };

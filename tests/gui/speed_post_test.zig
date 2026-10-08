@@ -51,7 +51,7 @@ fn ask(post: *SpeedPost, milli: ?u64) !void {
 test "a park with nothing waiting leaves the time alone" {
     var fake = Fake{};
     var time = nanoTime();
-    var post = SpeedPost{};
+    var post = SpeedPost{ .io = std.testing.io };
     try std.testing.expectEqual(@as(?SpeedPost.Asked, null), post.apply(&time, fake.clock()));
     try std.testing.expect(time.pacing == null);
 }
@@ -59,7 +59,7 @@ test "a park with nothing waiting leaves the time alone" {
 test "a change waiting for an unpaced run starts pacing at that factor" {
     var fake = Fake{};
     var time = nanoTime();
-    var post = SpeedPost{};
+    var post = SpeedPost{ .io = std.testing.io };
     runFor(&time, 1 * s);
     try ask(&post, 5000);
     try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = 5000 }), post.apply(&time, fake.clock()));
@@ -73,7 +73,7 @@ test "1x to 5x mid-run keeps virtual time and pays only the new rate" {
     var fake = Fake{};
     var time = nanoTime();
     time.pacing = clocks.pacing.Pacing.start(fake.clock(), 0, 1000);
-    var post = SpeedPost{};
+    var post = SpeedPost{ .io = std.testing.io };
     runFor(&time, 1 * s);
     try std.testing.expectEqual(@as(u64, 1 * s), fake.at);
     try ask(&post, 2000);
@@ -91,7 +91,7 @@ test "max waiting for a paced run drops the pacer" {
     var fake = Fake{};
     var time = nanoTime();
     time.pacing = clocks.pacing.Pacing.start(fake.clock(), 0, 1000);
-    var post = SpeedPost{};
+    var post = SpeedPost{ .io = std.testing.io };
     try ask(&post, null);
     try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = null }), post.apply(&time, fake.clock()));
     try std.testing.expect(time.pacing == null);

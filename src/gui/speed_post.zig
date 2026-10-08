@@ -12,7 +12,9 @@ const session_api = @import("../debug/session_api.zig");
 const clocks = @import("../periph/clocks.zig");
 
 pub const SpeedPost = struct {
-    mutex: std.Thread.Mutex = .{},
+    /// Window and engine threads lock through it; neither cancels.
+    io: std.Io,
+    mutex: std.Io.Mutex = .init,
     /// The latest factor asked for; an older one waiting is dropped, since
     /// only where the slider ended up matters.
     pending: ?Asked = null,
@@ -27,8 +29,8 @@ pub const SpeedPost = struct {
 
     fn post(context: *anyopaque, milli: ?u64) anyerror!void {
         const self: *SpeedPost = @ptrCast(@alignCast(context));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         self.pending = .{ .milli = milli };
     }
 
@@ -50,8 +52,8 @@ pub const SpeedPost = struct {
     }
 
     fn take(self: *SpeedPost) ?Asked {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const asked = self.pending;
         self.pending = null;
         return asked;
