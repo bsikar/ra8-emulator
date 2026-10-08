@@ -194,19 +194,20 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         std.debug.print("ctl: {s}\n{s}", .{ @errorName(err), usage });
         return 2;
     };
-    const reach = target(allocator, io, env, request.where) catch |err| return out.failed(request.json, err, 0);
-    const client = Client.open(allocator, io, reach) catch |err| return out.failed(request.json, err, 0);
+    const reach = target(allocator, io, env, request.where) catch |err| return out.failed(io, request.json, err, 0);
+    const client = Client.open(allocator, io, reach) catch |err| return out.failed(io, request.json, err, 0);
     defer client.close();
-    return perform(allocator, client, request) catch |err| return out.failed(request.json, err, client.refused);
+    return perform(allocator, io, client, request) catch |err| return out.failed(io, request.json, err, client.refused);
 }
 
-fn perform(allocator: std.mem.Allocator, client: *Client, request: Request) !u8 {
-    const w = std.io.getStdOut().writer();
+fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: Request) !u8 {
+    var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
+    const w = &stdout.interface;
     const json = request.json;
     switch (request.command) {
         .events => |options| return events.watch(client, w, json, options),
         .load => |path| {
-            const image = try std.fs.cwd().readFileAlloc(allocator, path, proto.max_payload);
+            const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(proto.max_payload));
             _ = try client.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });
             try out.loaded(w, json, path, image.len);
         },
