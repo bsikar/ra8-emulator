@@ -3,7 +3,8 @@
 //! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
 //! picker (RA8EMU-796), whose leaf also takes clicks, and the plug picker
 //! (RA8EMU-802), a device row's fault cell (RA8EMU-817), and the camera leaf's file field (RA8EMU-799), which take
-//! typing, and the registers leaves (RA8EMU-821), read again after a load
+//! typing, and the registers leaves (RA8EMU-821), whose values a press
+//! edits (RA8EMU-946), read again after a load
 //! or a stop, with the memory leaves following each core's SP and the
 //! disassembly leaves its PC; a press on a leaf's
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
@@ -27,6 +28,7 @@ const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
 const shell_memory = @import("shell_memory.zig");
+const shell_register_edit = @import("shell_register_edit.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -47,6 +49,8 @@ pub const Shell = struct {
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*shell_registers.Pair = null,
+    /// Register edits from the registers leaves (RA8EMU-946).
+    edit: ?*shell_register_edit.Editor = null,
     memory: ?*shell_memory.Pair = null,
     code: ?*shell_memory.Pair = null,
     /// The splitter being dragged, from its button press to its release.
@@ -109,6 +113,7 @@ pub const Shell = struct {
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down or self.held != null) return;
                 if (self.pressFields(press.x, press.y)) return;
+                if (self.pressValue(press.x, press.y, solved)) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.devices) |devices| {
                     if (self.faults) |faults| if (faults.clickIn(link, devices, &self.layout, solved, press.x, press.y)) return;
@@ -124,11 +129,20 @@ pub const Shell = struct {
                 self.layout.drag(found, if (axis == .across) at.x else at.y);
             },
             .text, .key => {
+                if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.plug) |plug| _ = plug.handle(event);
                 if (self.camera_file) |file| _ = file.handle(event);
             },
             else => {},
         }
+    }
+
+    /// Offer a press to the register editor, which opens a field on a
+    /// value it lands on and lets an open one go otherwise.
+    fn pressValue(self: *Shell, x: i32, y: i32, solved: *const pane_layout.Solved) bool {
+        const edit = self.edit orelse return false;
+        const registers = self.registers orelse return false;
+        return edit.press(registers, &self.layout, solved, x, y);
     }
 
     /// Offer a press to both text fields, so the one it misses lets go.
@@ -178,6 +192,7 @@ pub const Shell = struct {
         const registers = self.registers orelse return;
         if (loaded) registers.reload();
         registers.observe(arrival);
+        if (self.edit) |edit| _ = edit.observe(registers, arrival);
         for ([_]?*shell_memory.Pair{ self.memory, self.code }) |leaf| if (leaf) |memory| {
             if (loaded) memory.reload();
             memory.observe(arrival);

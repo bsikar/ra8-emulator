@@ -36,6 +36,7 @@ pub const shell_fault = @import("gui/shell_fault.zig");
 pub const shell_field = @import("gui/shell_field.zig");
 pub const shell_plug = @import("gui/shell_plug.zig");
 pub const shell_registers = @import("gui/shell_registers.zig");
+pub const shell_register_edit = @import("gui/shell_register_edit.zig");
 pub const shell_memory = @import("gui/shell_memory.zig");
 pub const shell_camera = @import("gui/shell_camera.zig");
 pub const shell_camera_file = @import("gui/shell_camera_file.zig");

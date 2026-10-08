@@ -27,6 +27,7 @@ const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
 const registers_pane = @import("registers_pane.zig");
+const shell_register_edit = @import("shell_register_edit.zig");
 const shell_memory = @import("shell_memory.zig");
 const memory_pane = @import("memory_pane.zig");
 const disasm_pane = @import("disasm_pane.zig");
@@ -58,6 +59,8 @@ pub const Panes = struct {
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
     registers: ?*const shell_registers.Pair = null,
+    /// The open register field and a refused write's note (RA8EMU-946).
+    edit: ?*const shell_register_edit.Editor = null,
     memory: ?*const shell_memory.Pair = null,
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
@@ -97,7 +100,11 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
     };
     if (pane.kind == .registers) if (self.registers) |pair| {
         const model = pair.of(pane.core);
-        if (model.now) |now| return registers_pane.draw(list, body, now, model.before, model.fold);
+        if (model.now) |now| {
+            try registers_pane.draw(list, body, now, model.before, model.fold);
+            if (self.edit) |edit| try edit.draw(list, body, model.fold, model.core);
+            return;
+        }
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| return memory_pane.draw(list, body, now);
