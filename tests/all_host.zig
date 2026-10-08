@@ -46,6 +46,7 @@ test {
     _ = @import("snapshot/stretch_test.zig");
     _ = @import("snapshot/c6_test.zig");
     _ = @import("snapshot/board_test.zig");
+    _ = @import("board/periph_layout_test.zig");
     _ = @import("snapshot/run_test.zig");
     _ = @import("gui/draw_list_test.zig");
     _ = @import("gui/geometry_test.zig");
