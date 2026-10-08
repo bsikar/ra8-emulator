@@ -8,7 +8,7 @@ const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// Quiet on a run that never touched the PHY, which is most of them. The
 /// loud cases are a status read that found nothing latched, which is the

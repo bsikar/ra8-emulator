@@ -8,7 +8,7 @@ const std = @import("std");
 const Board = @import("../../../board/board.zig").Board;
 const lvd = @import("../../../periph/lvd/lvd.zig");
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 /// One line per voltage monitor the firmware programmed. A monitor whose
 /// threshold sits over the rail is reported as below, which is the reading

@@ -8,7 +8,7 @@ const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;
 
-const Writer = std.fs.File.Writer;
+const Writer = *std.Io.Writer;
 
 pub fn sections(board: *Board, out: Writer) !void {
     if (!board.protection.quiet()) {

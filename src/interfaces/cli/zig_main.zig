@@ -37,7 +37,9 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     if (options.ns_path) |path| loadNonSecure(allocator, io, &cpu0, path) catch return 1;
     const vector_base = vectorBase(image) catch return 1;
     const memory = cpu0.own();
-    const out = try announce(memory, written, vector_base, options.ctl_cpu_load);
+    var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
+    const out = &stdout.interface;
+    try announce(out, memory, written, vector_base, options.ctl_cpu_load);
     var reboot = Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     const table = if (parts.profile) |*one| one else null;
@@ -98,11 +100,10 @@ fn loadNonSecure(allocator: std.mem.Allocator, io: std.Io, cpu0: *Cpu0, path: []
 
 /// The opening line, read off the store the way the engine's reset read it:
 /// SP from the vector table, PC from the reset vector with its Thumb bit off.
-pub fn announce(memory: Guest, written: u32, vector_base: u32, quiet: bool) !std.fs.File.Writer {
-    const out = std.io.getStdOut().writer();
-    if (quiet) return out;
+/// Unbuffered, so it interleaves in order with the `--console` echo.
+pub fn announce(out: *std.Io.Writer, memory: Guest, written: u32, vector_base: u32, quiet: bool) !void {
+    if (quiet) return;
     const sp = try memory.readWord(vector_base);
     const pc = (try memory.readWord(vector_base + 4)) & ~@as(u32, 1);
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, sp, pc });
-    return out;
 }
