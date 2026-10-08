@@ -72,15 +72,15 @@ const Sram = struct {
     }
 };
 
-fn play(target: anytype, into: *std.ArrayList(u8)) !void {
+fn play(target: anytype, into: *std.Io.Writer) !void {
     var lines = std.mem.splitScalar(u8, script, '\n');
     while (lines.next()) |line| {
         const command = (try commands.parse(line)) orelse continue;
-        if (try target.apply(command, into.writer()) == .quit) return;
+        if (try target.apply(command, into) == .quit) return;
     }
 }
 
-fn zig(into: *std.ArrayList(u8)) !void {
+fn zig(into: *std.Io.Writer) !void {
     var memory: Sram = .{};
     @memcpy(memory.bytes[0..image.bytes.len], &image.bytes);
     var cpu: Cpu = .{ .bus = memory.view() };
@@ -118,11 +118,11 @@ const transcript =
 ;
 
 test "a script prints its recorded transcript on the Zig core" {
-    var got = std.ArrayList(u8).init(std.testing.allocator);
+    var got: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer got.deinit();
-    try zig(&got);
-    try std.testing.expect(std.mem.indexOf(u8, got.items, "Breakpoint 1, 0x22000008") != null);
-    try std.testing.expectEqualStrings(transcript, got.items);
+    try zig(&got.writer);
+    try std.testing.expect(std.mem.indexOf(u8, got.written(), "Breakpoint 1, 0x22000008") != null);
+    try std.testing.expectEqualStrings(transcript, got.written());
 }
 
 test "a command the Zig core does not carry out yet says so" {
@@ -131,10 +131,10 @@ test "a command the Zig core does not carry out yet says so" {
     var machine: stop_machine.Machine = .{};
     var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
     var target: zig_script.ZigScript = .{ .session = &live };
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    _ = try target.apply(.{ .halting = true }, out.writer());
-    try std.testing.expectEqualStrings("error: Unsupported\n", out.items);
+    _ = try target.apply(.{ .halting = true }, &out.writer);
+    try std.testing.expectEqualStrings("error: Unsupported\n", out.written());
 }
 
 test "core 1 with no second core says so and the session carries on" {
@@ -143,10 +143,10 @@ test "core 1 with no second core says so and the session carries on" {
     var machine: stop_machine.Machine = .{};
     var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
     var target: zig_script.ZigScript = .{ .session = &live };
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, out.writer()));
-    try std.testing.expectEqualStrings("error: CoreNotAttached\n", out.items);
+    try std.testing.expectEqual(.more, try target.apply(.{ .core = 1 }, &out.writer));
+    try std.testing.expectEqualStrings("error: CoreNotAttached\n", out.written());
 }
 
 test "plug and unplug wire a part in and out through the board mid-script" {
@@ -161,15 +161,15 @@ test "plug and unplug wire a part in and out through the board mid-script" {
     defer arena.deinit();
     var plugs = ra8.board.session_plug.Plugs.init(&board, arena.allocator());
     target.session.attachPlugs(plugs.hook());
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const registry = &board.wire.controller.devices;
-    _ = try target.apply((try commands.parse("plug max17048@i2c:riic@0x36")).?, out.writer());
+    _ = try target.apply((try commands.parse("plug max17048@i2c:riic@0x36")).?, &out.writer);
     try std.testing.expect(registry.answering(0x36) != null);
-    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, out.writer());
+    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, &out.writer);
     try std.testing.expect(registry.answering(0x36) == null);
-    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, out.writer());
-    _ = try target.apply((try commands.parse("plug @uart:sci3")).?, out.writer());
+    _ = try target.apply((try commands.parse("unplug i2c:riic@0x36")).?, &out.writer);
+    _ = try target.apply((try commands.parse("plug @uart:sci3")).?, &out.writer);
     const want =
         \\Plugged max17048 into i2c:riic@0x36
         \\Unplugged i2c:riic@0x36
@@ -177,7 +177,7 @@ test "plug and unplug wire a part in and out through the board mid-script" {
         \\error: MissingPart
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }
 
 const FakeWall = struct {
@@ -209,16 +209,16 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
     var wall = FakeWall{};
     var speed: ra8.board.board_speed.BoardSpeed = .{ .time = &time, .clock = wall.clock() };
     target.session.speed = speed.hook();
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const before = time.base.now();
-    _ = try target.apply((try commands.parse("speed 0.25")).?, out.writer());
+    _ = try target.apply((try commands.parse("speed 0.25")).?, &out.writer);
     try std.testing.expectEqual(@as(u64, 250), time.pacing.?.pacer.speed_milli);
-    _ = try target.apply((try commands.parse("speed 5")).?, out.writer());
+    _ = try target.apply((try commands.parse("speed 5")).?, &out.writer);
     try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
-    _ = try target.apply((try commands.parse("speed 0")).?, out.writer());
+    _ = try target.apply((try commands.parse("speed 0")).?, &out.writer);
     try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
-    _ = try target.apply((try commands.parse("speed max")).?, out.writer());
+    _ = try target.apply((try commands.parse("speed max")).?, &out.writer);
     try std.testing.expect(time.pacing == null);
     try std.testing.expectEqual(before, time.base.now());
     const want =
@@ -228,5 +228,5 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
         \\Speed max
         \\
     ;
-    try std.testing.expectEqualStrings(want, out.items);
+    try std.testing.expectEqualStrings(want, out.written());
 }

@@ -17,7 +17,7 @@ const Echo = struct {
 
 test "a script echoes each command, reports a bad line and stops at quit" {
     var target: Echo = .{};
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const text =
         \\# walk the nops
@@ -28,7 +28,7 @@ test "a script echoes each command, reports a bad line and stops at quit" {
         \\quit
         \\step
     ;
-    try std.testing.expectEqual(session.Outcome.quit, try script.play(&target, text, out.writer(), true));
+    try std.testing.expectEqual(session.Outcome.quit, try script.play(&target, text, &out.writer, true));
     try std.testing.expectEqualStrings(
         \\(ra8) step
         \\did step
@@ -39,13 +39,13 @@ test "a script echoes each command, reports a bad line and stops at quit" {
         \\(ra8) quit
         \\did quit
         \\
-    , out.items);
+    , out.written());
 }
 
 test "without echo only the answers are printed, and a script may end without quit" {
     var target: Echo = .{};
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try std.testing.expectEqual(session.Outcome.more, try script.play(&target, "step\nstep\n", out.writer(), false));
-    try std.testing.expectEqualStrings("did step\ndid step\n", out.items);
+    try std.testing.expectEqual(session.Outcome.more, try script.play(&target, "step\nstep\n", &out.writer, false));
+    try std.testing.expectEqualStrings("did step\ndid step\n", out.written());
 }

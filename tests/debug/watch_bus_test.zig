@@ -86,15 +86,15 @@ const Rig = struct {
     }
 };
 
-fn play(target: anytype, into: *std.ArrayList(u8)) !void {
+fn play(target: anytype, into: *std.Io.Writer) !void {
     var lines = std.mem.splitScalar(u8, script, '\n');
     while (lines.next()) |line| {
         const command = (try commands.parse(line)) orelse continue;
-        if (try target.apply(command, into.writer()) == .quit) return;
+        if (try target.apply(command, into) == .quit) return;
     }
 }
 
-fn zig(into: *std.ArrayList(u8)) !void {
+fn zig(into: *std.Io.Writer) !void {
     var rig: Rig = .{};
     rig.wire();
     @memcpy(rig.memory.sram[0..image.bytes.len], &image.bytes);
@@ -119,12 +119,12 @@ const transcript =
 ;
 
 test "a write and a read watchpoint stop on the recorded instruction" {
-    var got = std.ArrayList(u8).init(std.testing.allocator);
+    var got: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer got.deinit();
-    try zig(&got);
-    try std.testing.expect(std.mem.indexOf(u8, got.items, "Watchpoint 1: write") != null);
-    try std.testing.expect(std.mem.indexOf(u8, got.items, "Watchpoint 2: read") != null);
-    try std.testing.expectEqualStrings(transcript, got.items);
+    try zig(&got.writer);
+    try std.testing.expect(std.mem.indexOf(u8, got.written(), "Watchpoint 1: write") != null);
+    try std.testing.expect(std.mem.indexOf(u8, got.written(), "Watchpoint 2: read") != null);
+    try std.testing.expectEqualStrings(transcript, got.written());
 }
 
 test "firmware that arms a DWT write comparator halts after the store on the Zig core" {
