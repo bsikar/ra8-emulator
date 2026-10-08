@@ -73,9 +73,9 @@ test "flush writes complete lines and keeps the unfinished one" {
 test "flush says how much was dropped and writes a full line out" {
     var unit = enabled();
     for (0..itm.limits.capacity + 2) |_| _ = unit.write(itm.offsets.stim0, 'a', 1);
-    var counter = std.io.countingWriter(std.io.null_writer);
-    try unit.flush(counter.writer(), false);
-    try std.testing.expectEqual(@as(u64, itm.limits.capacity + 6 + "itm: (2 characters dropped)\n".len), counter.bytes_written);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try unit.flush(&counter.writer, false);
+    try std.testing.expectEqual(@as(u64, itm.limits.capacity + 6 + "itm: (2 characters dropped)\n".len), counter.fullCount());
     try std.testing.expectEqual(@as(usize, 0), unit.output().len);
     try std.testing.expectEqual(@as(usize, 0), unit.dropped);
 }
