@@ -49,51 +49,38 @@ fn waitFrame(bridge: *Bridge, queue: *Queue, out: *[frame.max_payload]u8) ![]con
     return error.Timeout;
 }
 
+/// A loopback HTTP server that answers one request; cancelable while it waits.
 const TcpHost = struct {
-    server: *std.net.Server,
+    server: *std.Io.net.Server,
     request: [64]u8 = undefined,
     request_len: usize = 0,
-    failed: bool = false,
-    stop: std.atomic.Value(bool) = .init(false),
-
-    fn run(self: *TcpHost) void {
-        self.serve() catch {
-            self.failed = true;
-        };
-    }
 
     fn serve(self: *TcpHost) !void {
-        const connection = while (!self.stop.load(.acquire)) {
-            break self.server.accept() catch |err| switch (err) {
-                error.WouldBlock => {
-                    try std.testing.io.sleep(.fromMilliseconds(1), .awake);
-                    continue;
-                },
-                else => return err,
-            };
-        } else return;
-        defer connection.stream.close();
+        const io = std.testing.io;
+        const stream = try self.server.accept(io);
+        defer stream.close(io);
         const expected = "GET / HTTP/1.0\r\n\r\n";
-        try connection.stream.reader().readNoEof(self.request[0..expected.len]);
+        var in = stream.reader(io, &.{});
+        try in.interface.readSliceAll(self.request[0..expected.len]);
         self.request_len = expected.len;
-        try connection.stream.writeAll("HTTP/1.0 200 OK\r\nContent-Length: 8\r\n\r\nra8-loop");
+        var out = stream.writer(io, &.{});
+        try out.interface.writeAll("HTTP/1.0 200 OK\r\nContent-Length: 8\r\n\r\nra8-loop");
     }
 };
 
 test "firmware TCP frames fetch an exact page from a real loopback server" {
-    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, 0);
-    var server = try address.listen(.{ .reuse_address = true, .force_nonblocking = true });
-    defer server.deinit();
+    const io = std.testing.io;
+    const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
     var host = TcpHost{ .server = &server };
-    const thread = try std.Thread.spawn(.{}, TcpHost.run, .{&host});
-    var joined = false;
-    defer if (!joined) thread.join();
-    defer host.stop.store(true, .release);
+    var serving = try io.concurrent(TcpHost.serve, .{&host});
+    defer serving.cancel(io) catch {};
 
     var bridge: Bridge = .{};
     defer bridge.deinit();
     var queue: Queue = .{};
-    const port = server.listen_address.getPort();
+    const port = server.socket.address.getPort();
     try sendTcp(&bridge, &queue, port, 100, 0, eth.TcpFlag.syn, &.{});
     var bytes: [frame.max_payload]u8 = undefined;
     const syn_reply = try waitFrame(&bridge, &queue, &bytes);
@@ -122,68 +109,44 @@ test "firmware TCP frames fetch an exact page from a real loopback server" {
         next_server +%= @intCast(segment.data.len);
         try sendTcp(&bridge, &queue, port, 101 + request.len, next_server, eth.TcpFlag.ack, &.{});
     }
-    thread.join();
-    joined = true;
+    try serving.await(io);
     try std.testing.expectEqualSlices(u8, expected_response, &response);
-    try std.testing.expect(!host.failed);
     try std.testing.expectEqualSlices(u8, request, host.request[0..host.request_len]);
 
     try sendTcp(&bridge, &queue, port, 101 + request.len, next_server, eth.TcpFlag.fin | eth.TcpFlag.ack, &.{});
     _ = try waitFrame(&bridge, &queue, &bytes);
 }
 
+/// A loopback UDP socket that echoes one datagram; cancelable while it waits.
 const UdpHost = struct {
-    fd: std.posix.socket_t,
+    socket: *const std.Io.net.Socket,
     got: [32]u8 = undefined,
     got_len: usize = 0,
-    failed: bool = false,
-    stop: std.atomic.Value(bool) = .init(false),
-
-    fn run(self: *UdpHost) void {
-        self.echo() catch {
-            self.failed = true;
-        };
-    }
 
     fn echo(self: *UdpHost) !void {
-        var source: std.net.Address = undefined;
-        var source_len: std.posix.socklen_t = @sizeOf(std.posix.sockaddr);
-        while (!self.stop.load(.acquire)) {
-            self.got_len = std.posix.recvfrom(self.fd, &self.got, 0, &source.any, &source_len) catch |err| switch (err) {
-                error.WouldBlock => {
-                    try std.testing.io.sleep(.fromMilliseconds(1), .awake);
-                    continue;
-                },
-                else => return err,
-            };
-            _ = try std.posix.sendto(self.fd, self.got[0..self.got_len], 0, &source.any, source_len);
-            return;
-        }
+        const io = std.testing.io;
+        const message = try self.socket.receive(io, &self.got);
+        self.got_len = message.data.len;
+        try self.socket.send(io, &message.from, message.data);
     }
 };
 
 test "firmware UDP frames exchange a datagram with a real loopback socket" {
-    const fd = try std.posix.socket(std.posix.AF.INET, std.posix.SOCK.DGRAM | std.posix.SOCK.NONBLOCK | std.posix.SOCK.CLOEXEC, 0);
-    defer std.posix.close(fd);
-    var address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, 0);
-    try std.posix.bind(fd, &address.any, address.getOsSockLen());
-    var address_len = address.getOsSockLen();
-    try std.posix.getsockname(fd, &address.any, &address_len);
-    var host = UdpHost{ .fd = fd };
-    const thread = try std.Thread.spawn(.{}, UdpHost.run, .{&host});
-    var joined = false;
-    defer if (!joined) thread.join();
-    defer host.stop.store(true, .release);
+    const io = std.testing.io;
+    const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    const socket = try address.bind(io, .{ .mode = .dgram });
+    defer socket.close(io);
+    var host = UdpHost{ .socket = &socket };
+    var echoing = try io.concurrent(UdpHost.echo, .{&host});
+    defer echoing.cancel(io) catch {};
 
     var bridge: Bridge = .{};
     defer bridge.deinit();
     var queue: Queue = .{};
-    try sendUdp(&bridge, &queue, address.getPort(), "ra8-udp");
+    try sendUdp(&bridge, &queue, socket.address.getPort(), "ra8-udp");
     var bytes: [frame.max_payload]u8 = undefined;
     const incoming = try waitFrame(&bridge, &queue, &bytes);
-    thread.join();
-    joined = true;
+    try echoing.await(io);
     try std.testing.expectEqualSlices(u8, "ra8-udp", eth.udp(incoming).?.data);
     try std.testing.expectEqualSlices(u8, "ra8-udp", host.got[0..host.got_len]);
-    try std.testing.expect(!host.failed);
 }
