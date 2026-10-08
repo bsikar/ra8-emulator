@@ -16,7 +16,7 @@ const fake_ssh =
 
 const Rig = struct {
     tmp: std.testing.TmpDir,
-    root: []const u8,
+    root: [:0]const u8,
     hosts: []const u8,
 
     fn init(gpa: std.mem.Allocator) !Rig {
