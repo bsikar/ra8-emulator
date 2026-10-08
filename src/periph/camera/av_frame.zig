@@ -78,43 +78,54 @@ fn toRgb(row: []const u8, dst: []u8) void {
     }
 }
 
-/// The newest converted frame, shared between the delegate's queue and
-/// the emulator's read. A buffer whose size isn't the agreed one is dropped.
+/// The newest converted frame, handed from the delegate's queue to the
+/// emulator's read through a triple buffer: the delegate fills `back`, the
+/// read copies from `front`, and the third slot sits in `middle` with a
+/// fresh bit. One writer and one reader, no lock. A buffer whose size isn't
+/// the agreed one is dropped, and a failed copy never reaches the reader.
 pub const Mailbox = struct {
     allocator: std.mem.Allocator,
-    mutex: std.Thread.Mutex = .{},
     pixel: Pixel,
     width: usize,
     height: usize,
-    frame: []u8,
-    fresh: bool = false,
+    slots: [3][]u8,
+    back: u8 = 0,
+    front: u8 = 1,
+    middle: std.atomic.Value(u8) = .init(2),
+
+    const fresh: u8 = 0x4;
+    const index: u8 = 0x3;
 
     pub fn init(allocator: std.mem.Allocator, pixel: Pixel, width: usize, height: usize) error{OutOfMemory}!Mailbox {
-        const frame = try allocator.alloc(u8, outBytes(pixel, width) * height);
-        return .{ .allocator = allocator, .pixel = pixel, .width = width, .height = height, .frame = frame };
+        const bytes = outBytes(pixel, width) * height;
+        const block = try allocator.alloc(u8, bytes * 3);
+        return .{
+            .allocator = allocator,
+            .pixel = pixel,
+            .width = width,
+            .height = height,
+            .slots = .{ block[0..bytes], block[bytes..][0..bytes], block[2 * bytes ..][0..bytes] },
+        };
     }
 
     pub fn deinit(self: *Mailbox) void {
-        self.allocator.free(self.frame);
+        self.allocator.free(self.slots[0].ptr[0 .. self.slots[0].len * 3]);
     }
 
     /// From the delegate: keep this buffer as the newest frame.
     pub fn put(self: *Mailbox, src: []const u8, stride: usize, width: usize, height: usize) bool {
         if (width != self.width or height != self.height) return false;
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        if (!copy(self.pixel, src, stride, width, height, self.frame)) return false;
-        self.fresh = true;
+        if (!copy(self.pixel, src, stride, width, height, self.slots[self.back])) return false;
+        self.back = self.middle.swap(self.back | fresh, .acq_rel) & index;
         return true;
     }
 
     /// From the read: the newest frame once; false until another arrives.
     pub fn take(self: *Mailbox, out: []u8) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        if (!self.fresh or out.len < self.frame.len) return false;
-        @memcpy(out[0..self.frame.len], self.frame);
-        self.fresh = false;
+        if (out.len < self.slots[0].len) return false;
+        if (self.middle.load(.acquire) & fresh == 0) return false;
+        self.front = self.middle.swap(self.front, .acq_rel) & index;
+        @memcpy(out[0..self.slots[0].len], self.slots[self.front]);
         return true;
     }
 };
