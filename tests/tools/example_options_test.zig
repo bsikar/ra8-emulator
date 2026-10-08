@@ -38,7 +38,7 @@ test "the example that formats its own FAT32 volume gets a 4 GB card" {
 }
 
 test "import_reader receives its fixture card from the emulator harness" {
-    var env = std.process.EnvMap.init(std.testing.allocator);
+    var env = std.process.Environ.Map.init(std.testing.allocator);
     defer env.deinit();
     try env.put("RA8_EMU_IMPORT_READER_IMG", "/tmp/import_reader.img");
     try std.testing.expectEqualStrings(
