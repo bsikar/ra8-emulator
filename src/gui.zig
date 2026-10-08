@@ -32,6 +32,7 @@ pub const shell_panes = @import("gui/shell_panes.zig");
 pub const shell_console = @import("gui/shell_console.zig");
 pub const shell_board = @import("gui/shell_board.zig");
 pub const shell_devices = @import("gui/shell_devices.zig");
+pub const shell_fault = @import("gui/shell_fault.zig");
 pub const shell_field = @import("gui/shell_field.zig");
 pub const shell_plug = @import("gui/shell_plug.zig");
 pub const shell_registers = @import("gui/shell_registers.zig");
