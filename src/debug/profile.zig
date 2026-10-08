@@ -22,6 +22,9 @@ pub const Table = struct {
     /// Call stacks sampled on the retire path, when --profile-folded asked
     /// for them (RA8EMU-971); the folded file writes these when it has any.
     samples: ?*stack_samples.Store = null,
+    /// CPU1's image when its stacks are sampled too, naming the cpu1 rows
+    /// (RA8EMU-972); CPU0's image names them otherwise.
+    second: ?elf.Image = null,
 
     /// Build the function lookup once before execution.
     pub fn prepare(self: *Table) void {

@@ -289,7 +289,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         .blocks = options.blocks,
         .wrap = wrap,
         .retire_listener = stacks.listener(watcher.listener(retire.listener())),
-        .core = stacks.lend(),
+        .core = stacks.lend(if (clock.cpu1) |second| &second.core.cpu else null),
         .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
         .until = if (options.cpu == .zig) until else null,
         .final = &final,

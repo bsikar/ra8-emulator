@@ -35,7 +35,7 @@ pub fn print(out: Writer, image: elf.Image, table: profile.Table) !void {
 /// With sampled call stacks it writes those instead, each row rooted at its
 /// core (`cpu0;outer;...;inner n`, RA8EMU-971).
 pub fn folded(out: anytype, image: elf.Image, table: profile.Table) !void {
-    if (table.samples) |store| if (store.count != 0) return sampled(out, &image, store);
+    if (table.samples) |store| if (store.count != 0) return sampled(out, .{ &image, if (table.second) |*found| found else &image }, store);
     var rows: [profile.limits.functions]profile.Site = undefined;
     for (table.ranked(&rows)) |site| {
         const found = symbols.inside(image, site.address) orelse continue;
@@ -43,14 +43,15 @@ pub fn folded(out: anytype, image: elf.Image, table: profile.Table) !void {
     }
 }
 
-fn sampled(out: anytype, image: *const elf.Image, store: *const stack_samples.Store) !void {
+/// `images` name each core's rows: CPU0's, then CPU1's (RA8EMU-972).
+fn sampled(out: anytype, images: [2]*const elf.Image, store: *const stack_samples.Store) !void {
     const allocator = std.heap.page_allocator;
     const scratch = try allocator.alloc(usize, store.count);
     defer allocator.free(scratch);
     for (0..2) |core| {
         var rows: std.Io.Writer.Allocating = .init(allocator);
         defer rows.deinit();
-        try stack_samples.fold(store, .{ .core = @intCast(core) }, stack_profile.names(image), &rows.writer, scratch);
+        try stack_samples.fold(store, .{ .core = @intCast(core) }, stack_profile.names(images[core]), &rows.writer, scratch);
         try named(out, allocator, @intCast(core), rows.written());
     }
 }

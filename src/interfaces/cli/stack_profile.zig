@@ -7,6 +7,10 @@
 //! core retires, once that pointer is there. Frames are named and their
 //! functions found from the image's symbols; the walk uses its .debug_frame
 //! where that covers the pc, else the r7 frame records (RA8EMU-956).
+//!
+//! CPU1 (RA8EMU-972) is built before the run starts, so its sampler is
+//! armed when the run lends CPU0, in front of whatever listened on CPU1,
+//! and names its frames from CPU1's own image.
 const std = @import("std");
 const elf = @import("../../core/elf.zig");
 const cpu_mod = @import("../../core/cpu/cpu.zig");
@@ -20,6 +24,7 @@ const symbols = @import("../../debug/symbols.zig");
 
 pub const Run = struct {
     image: elf.Image,
+    second_image: ?elf.Image = null,
     /// Null when nothing asked for samples: the run is wired as before.
     store: ?*stack_samples.Store,
     every: u32,
@@ -29,12 +34,14 @@ pub const Run = struct {
     /// The core, lent by the run before reset and taken back after.
     core: ?*cpu_mod.Cpu = null,
     sampler: ?stack_sampler.Sampler = null,
+    second: ?stack_sampler.Sampler = null,
 
     /// Sample when `table` carries a store, every `period(budget)`th
     /// instruction, stamped from `clock` and tagged from `trace`.
     pub fn of(table: ?*profile.Table, image: elf.Image, budget: u64, clock: *const u64, trace: ?*const rtos_trace.Trace) Run {
         const store = if (table) |found| found.samples else null;
-        return .{ .image = image, .store = store, .every = period(budget), .clock = clock, .trace = trace };
+        const second = if (table) |found| found.second else null;
+        return .{ .image = image, .second_image = second, .store = store, .every = period(budget), .clock = clock, .trace = trace };
     }
 
     /// The listener the core gets: this in front of `next`, or `next`
@@ -45,9 +52,16 @@ pub const Run = struct {
         return .{ .context = self, .instructionFn = instruction };
     }
 
-    /// Where the run lends its core, or null when nothing samples.
-    pub fn lend(self: *Run) ?*?*cpu_mod.Cpu {
-        return if (self.store != null) &self.core else null;
+    /// Where the run lends CPU0, or null when nothing samples. `cpu1`, when
+    /// the run has one, gets its sampler here, the run being in place.
+    pub fn lend(self: *Run, cpu1: ?*cpu_mod.Cpu) ?*?*cpu_mod.Cpu {
+        if (self.store == null) return null;
+        if (cpu1) |core| {
+            const image = if (self.second_image) |*found| found else &self.image;
+            self.second = self.samplerOn(core, 1, image, core.retire_listener);
+            core.retire_listener = self.second.?.listener();
+        }
+        return &self.core;
     }
 
     fn instruction(context: *anyopaque, address: u32) void {
@@ -56,21 +70,21 @@ pub const Run = struct {
             if (self.next) |chained| chained.instruction(address);
             return;
         };
-        if (self.sampler == null or self.sampler.?.view.zig.cpu != core) self.sampler = self.samplerOn(core);
+        if (self.sampler == null or self.sampler.?.view.zig.cpu != core) self.sampler = self.samplerOn(core, 0, &self.image, self.next);
         self.sampler.?.listener().instruction(address);
     }
 
-    fn samplerOn(self: *const Run, core: *cpu_mod.Cpu) stack_sampler.Sampler {
+    fn samplerOn(self: *const Run, core: *cpu_mod.Cpu, index: u1, image: *const elf.Image, next: ?cpu_mod.RetireListener) stack_sampler.Sampler {
         return .{
             .view = .{ .zig = .{ .cpu = core } },
-            .core = 0,
+            .core = index,
             .every = self.every,
-            .frame = dwarf_line.section(self.image, ".debug_frame"),
-            .starts = starts(&self.image),
+            .frame = dwarf_line.section(image.*, ".debug_frame"),
+            .starts = starts(image),
             .store = self.store.?,
             .trace = self.trace,
             .clock = self.clock,
-            .next = self.next,
+            .next = next,
         };
     }
 };
