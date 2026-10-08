@@ -49,9 +49,8 @@ pub fn registers(w: anytype, json: bool, regs: []const Reg) !void {
 }
 
 pub fn memory(w: anytype, json: bool, address: u32, bytes: []const u8) !void {
-    const hex = std.fmt.fmtSliceHexLower(bytes);
-    if (json) return w.print("{{\"address\":{d},\"length\":{d},\"hex\":\"{}\"}}\n", .{ address, bytes.len, hex });
-    try w.print("0x{x:0>8}: {}\n", .{ address, hex });
+    if (json) return w.print("{{\"address\":{d},\"length\":{d},\"hex\":\"{x}\"}}\n", .{ address, bytes.len, bytes });
+    try w.print("0x{x:0>8}: {x}\n", .{ address, bytes });
 }
 
 /// `milli` is thousandths of the default rate; zero is `max`.

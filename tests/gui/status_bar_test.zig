@@ -87,7 +87,7 @@ test "a corpus ELF loads, steps and runs through a local session, and the status
     var buf: [256]u8 = undefined;
     var name_buf: [64]u8 = undefined;
     const image = status_bar.Image.of(elf_path, bytes);
-    const named = try std.fmt.bufPrint(&name_buf, "fp_basic.elf {s}", .{std.fmt.fmtSliceHexLower(&image.hash)});
+    const named = try std.fmt.bufPrint(&name_buf, "fp_basic.elf {x}", .{&image.hash});
     var line = try status.text(link.state, &buf);
     try std.testing.expect(std.mem.startsWith(u8, line, "connected (protocol v"));
     try std.testing.expect(std.mem.indexOf(u8, line, named) != null);
