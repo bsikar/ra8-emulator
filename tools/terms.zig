@@ -53,7 +53,7 @@ pub fn isScanned(name: []const u8) bool {
 fn isOutput(path: []const u8) bool {
     var parts = std.mem.tokenizeAny(u8, path, "/\\");
     while (parts.next()) |part| {
-        if (part[0] == '.' or std.mem.eql(u8, part, "zig-out")) return true;
+        if (part[0] == '.' or std.mem.eql(u8, part, "zig-out") or std.mem.eql(u8, part, "zig-pkg")) return true;
     }
     return false;
 }
@@ -62,42 +62,45 @@ fn isOutput(path: []const u8) bool {
 ///
 /// A path is a file or a directory to walk. Every finding is printed; the
 /// exit status is 1 when there was at least one.
-pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-    var run: Run = .{ .alloc = alloc, .out = std.io.getStdErr().writer() };
-    const argv = try std.process.argsAlloc(alloc);
+pub fn main(init: std.process.Init) !void {
+    const alloc = init.arena.allocator();
+    var buf: [4096]u8 = undefined;
+    var err = std.Io.File.stderr().writer(init.io, &buf);
+    var run: Run = .{ .alloc = alloc, .io = init.io, .out = &err.interface };
+    const argv = try init.minimal.args.toSlice(alloc);
     for (argv[1..]) |path| try run.walk(path);
     if (run.scanned == 0) return error.NothingToCheck;
     if (run.findings > 0) {
         try run.out.print("terms: {d} lines with a banned word in {d} files\n", .{ run.findings, run.scanned });
+        try run.out.flush();
         std.process.exit(1);
     }
     try run.out.print("terms: {d} files clean\n", .{run.scanned});
+    try run.out.flush();
 }
 
 const Run = struct {
     alloc: std.mem.Allocator,
-    out: std.fs.File.Writer,
+    io: std.Io,
+    out: *std.Io.Writer,
     scanned: usize = 0,
     findings: usize = 0,
 
     fn walk(self: *Run, path: []const u8) !void {
-        var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| switch (err) {
+        var dir = std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true }) catch |err| switch (err) {
             error.NotDir => return self.check(path),
             else => return err,
         };
-        defer dir.close();
+        defer dir.close(self.io);
         var it = try dir.walk(self.alloc);
-        while (try it.next()) |entry| {
+        while (try it.next(self.io)) |entry| {
             if (entry.kind != .file or !isScanned(entry.basename) or isOutput(entry.path)) continue;
             try self.check(try std.fs.path.join(self.alloc, &.{ path, entry.path }));
         }
     }
 
     fn check(self: *Run, path: []const u8) !void {
-        const text = try std.fs.cwd().readFileAlloc(self.alloc, path, 16 << 20);
+        const text = try std.Io.Dir.cwd().readFileAlloc(self.io, path, self.alloc, .limited(16 << 20));
         self.scanned += 1;
         var lines = std.mem.splitScalar(u8, text, '\n');
         var number: usize = 0;
