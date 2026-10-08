@@ -70,7 +70,7 @@ test "a frame shows the board view with the camera pane beside it" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{};
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     try std.testing.expect(try loop.tick(window.platform(), fake.run()));
     const shown = &window.last.?;
@@ -87,7 +87,7 @@ test "the loop runs until the run ends, presenting only frames that changed" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{};
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = fake.run();
     while (try loop.tick(window.platform(), run)) {}
@@ -100,7 +100,7 @@ test "an idle window presents nothing until it is resized or exposed" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 100 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = fake.run();
     for (0..10) |_| _ = try loop.tick(window.platform(), run);
@@ -120,7 +120,7 @@ test "a board that changes presents again" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 100 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = fake.run();
     _ = try loop.tick(window.platform(), run);
@@ -133,7 +133,7 @@ test "closing the window stops before the next slice runs" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{};
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     try window.feed(.quit);
     try std.testing.expect(!try loop.tick(window.platform(), fake.run()));
@@ -145,7 +145,7 @@ test "a click on the camera pane swaps the CEU's source before the next slice" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = fake.run();
     try window.feed(press(layout().source(.video)));
@@ -163,7 +163,7 @@ test "a resized window gets a frame of its new size" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     const run = fake.run();
     _ = try loop.tick(window.platform(), run);
@@ -177,11 +177,11 @@ test "the pane offers the webcams the loop adopted, and the loop frees them" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     for ([_][]const u8{ "video4", "video1" }) |name| (try tmp.dir.createFile(name, .{})).close();
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
-    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, tmp.dir));
+    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, std.testing.io, tmp.dir));
     try std.testing.expectEqualSlices(u32, &.{ 1, 4 }, loop.pane.devices);
-    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, tmp.dir));
+    loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, std.testing.io, tmp.dir));
     try std.testing.expectEqual(@as(usize, 2), loop.pane.devices.len);
 }
 
@@ -192,7 +192,7 @@ test "the webcams are listed again when the webcam dialog opens" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useDeviceDir(tmp.dir);
     try std.testing.expectEqualSlices(u32, &.{1}, loop.pane.devices);
@@ -212,7 +212,7 @@ test "the project's pictures are listed again when the image source comes up" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useMediaDir(tmp.dir);
     try std.testing.expectEqual(@as(usize, 1), loop.pane.pictures.len);
@@ -236,17 +236,17 @@ test "Always answered in the window is kept for the project's next run" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useProject(tmp.dir);
     try std.testing.expect(!loop.pane.panel.always);
     try window.feed(press(layout().source(.webcam)));
     _ = try loop.tick(window.platform(), fake.run());
-    try std.testing.expect(!ra8.gui.camera_consent_store.load(tmp.dir));
+    try std.testing.expect(!ra8.gui.camera_consent_store.load(std.testing.io, tmp.dir));
     try window.feed(press(layout().dialog(.always)));
     _ = try loop.tick(window.platform(), fake.run());
-    try std.testing.expect(ra8.gui.camera_consent_store.load(tmp.dir));
-    var next = host_loop.Loop{ .allocator = std.testing.allocator };
+    try std.testing.expect(ra8.gui.camera_consent_store.load(std.testing.io, tmp.dir));
+    var next = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer next.deinit();
     next.useProject(tmp.dir);
     try std.testing.expect(next.pane.panel.always);
@@ -260,7 +260,7 @@ test "the chosen picture's preview follows the pick and goes with the image sour
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useMediaDir(tmp.dir);
     try window.feed(press(layout().source(.image)));
@@ -287,7 +287,7 @@ test "the chosen clip's preview shows while the video source is up" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.useMediaDir(tmp.dir);
     try window.feed(press(layout().source(.video)));
@@ -304,7 +304,7 @@ test "a click on a console tab shows that channel's log" {
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     var logs: [3]ra8.gui.console_log.Log = undefined;
     for (&logs) |*log| log.* = .init(std.testing.allocator, 4);
@@ -323,7 +323,7 @@ test "text and Enter typed with the pointer over the console go to the shown cha
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
-    var loop = host_loop.Loop{ .allocator = std.testing.allocator };
+    var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     var logs: [3]ra8.gui.console_log.Log = undefined;
     for (&logs) |*log| log.* = .init(std.testing.allocator, 4);

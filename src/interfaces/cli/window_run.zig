@@ -65,18 +65,18 @@ pub fn show(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform,
     feed.next = prior;
     board.serial.tap = feed.tap();
     defer board.serial.tap = prior;
-    var loop = host_loop.Loop{ .allocator = allocator };
+    var loop = host_loop.Loop{ .allocator = allocator, .io = io };
     defer loop.deinit();
     loop.pane.seed(camera);
     loop.useConsoles(&logs, sci.console_channel);
     loop.typed = &typed;
     if (devices) |d| loop.useDevices(&d.panel, &d.post);
-    var host_devices: ?std.fs.Dir = std.fs.openDirAbsolute(camera_devices.host_dir, .{ .iterate = true }) catch null;
-    defer if (host_devices) |*dir| dir.close();
+    const host_devices: ?std.Io.Dir = std.Io.Dir.openDirAbsolute(io, camera_devices.host_dir, .{ .iterate = true }) catch null;
+    defer if (host_devices) |dir| dir.close(io);
     if (host_devices) |dir| loop.useDeviceDir(dir);
-    loop.useProject(std.fs.cwd());
-    var project_media: ?std.fs.Dir = std.fs.cwd().openDir(".", .{ .iterate = true }) catch null;
-    defer if (project_media) |*dir| dir.close();
+    loop.useProject(std.Io.Dir.cwd());
+    const project_media: ?std.Io.Dir = std.Io.Dir.cwd().openDir(io, ".", .{ .iterate = true }) catch null;
+    defer if (project_media) |dir| dir.close(io);
     if (project_media) |dir| loop.useMediaDir(dir);
     const thread = try std.Thread.spawn(.{}, runThenFinish, .{ engine, pacer });
     defer {

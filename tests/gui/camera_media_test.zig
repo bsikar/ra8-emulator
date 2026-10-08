@@ -26,7 +26,7 @@ test "pictures and clips are listed by name and the rest left out" {
     try write(tmp.dir, "notes.png", "not a picture");
     try write(tmp.dir, "empty", "");
     try tmp.dir.makeDir("dir.png");
-    var found = try media.list(std.testing.allocator, tmp.dir);
+    var found = try media.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
     try std.testing.expectEqual(@as(usize, 2), found.images.len);
     try std.testing.expectEqualStrings("a.dat", found.images[0]);
@@ -38,7 +38,7 @@ test "pictures and clips are listed by name and the rest left out" {
 test "an empty directory offers nothing" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    var found = try media.list(std.testing.allocator, tmp.dir);
+    var found = try media.list(std.testing.allocator, std.testing.io, tmp.dir);
     defer found.deinit();
     try std.testing.expectEqual(@as(usize, 0), found.images.len);
     try std.testing.expectEqual(@as(usize, 0), found.videos.len);

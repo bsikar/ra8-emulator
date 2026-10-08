@@ -42,7 +42,7 @@ pub const Media = struct {
 };
 
 /// The pictures and clips directly in `dir`, which must be iterable.
-pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Media {
+pub fn list(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !Media {
     var images: std.ArrayList([]u8) = .empty;
     defer images.deinit(allocator);
     errdefer for (images.items) |name| allocator.free(name);
@@ -50,9 +50,9 @@ pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Media {
     defer videos.deinit(allocator);
     errdefer for (videos.items) |name| allocator.free(name);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
-        const kind = sniff(dir, entry.name) orelse continue;
+        const kind = sniff(io, dir, entry.name) orelse continue;
         const name = try allocator.dupe(u8, entry.name);
         errdefer allocator.free(name);
         try (if (kind == .image) &images else &videos).append(allocator, name);
@@ -65,11 +65,11 @@ pub fn list(allocator: std.mem.Allocator, dir: std.fs.Dir) !Media {
     return .{ .allocator = allocator, .images = found_images, .videos = found_videos };
 }
 
-fn sniff(dir: std.fs.Dir, name: []const u8) ?Kind {
-    const file = dir.openFile(name, .{}) catch return null;
-    defer file.close();
+fn sniff(io: std.Io, dir: std.Io.Dir, name: []const u8) ?Kind {
+    const file = dir.openFile(io, name, .{}) catch return null;
+    defer file.close(io);
     var head: [sniff_len]u8 = undefined;
-    const got = file.readAll(&head) catch return null;
+    const got = file.readPositionalAll(io, &head, 0) catch return null;
     return classify(head[0..got]);
 }
 

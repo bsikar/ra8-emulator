@@ -13,16 +13,16 @@ pub const file_name = "webcam-always";
 pub const contents = "always\n";
 
 /// Whether this project answered Always in an earlier run.
-pub fn load(project: std.fs.Dir) bool {
+pub fn load(io: std.Io, project: std.Io.Dir) bool {
     // One byte spare, so a longer marker reads past `contents` and fails.
     var buf: [contents.len + 1]u8 = undefined;
     const path = dir_name ++ "/" ++ file_name;
-    const read = project.readFile(path, &buf) catch return false;
+    const read = project.readFile(io, path, &buf) catch return false;
     return std.mem.eql(u8, read, contents);
 }
 
 /// Records Always for this project.
-pub fn save(project: std.fs.Dir) !void {
-    try project.makePath(dir_name);
-    try project.writeFile(.{ .sub_path = dir_name ++ "/" ++ file_name, .data = contents });
+pub fn save(io: std.Io, project: std.Io.Dir) !void {
+    try project.createDirPath(io, dir_name);
+    try project.writeFile(io, .{ .sub_path = dir_name ++ "/" ++ file_name, .data = contents });
 }
