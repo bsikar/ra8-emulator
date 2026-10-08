@@ -37,8 +37,7 @@ pub fn blank(bytes: []const u8) bool {
 /// text with anything unprintable shown as a dot. A short final row prints
 /// the bytes it has and pads the hex column so the text column still lines up.
 pub fn row(buf: *Buffer, offset: usize, bytes: []const u8) []const u8 {
-    var stream = std.io.fixedBufferStream(buf);
-    const out = stream.writer();
+    var out: std.Io.Writer = .fixed(buf);
     out.print("  {X:0>4}  ", .{offset}) catch return buf[0..0];
     for (0..row_bytes) |index| {
         if (index < bytes.len) {
@@ -53,5 +52,5 @@ pub fn row(buf: *Buffer, offset: usize, bytes: []const u8) []const u8 {
         out.writeByte(shown) catch return buf[0..0];
     }
     out.writeByte('|') catch return buf[0..0];
-    return stream.getWritten();
+    return out.buffered();
 }
