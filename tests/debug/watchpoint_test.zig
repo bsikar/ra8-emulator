@@ -173,12 +173,12 @@ test "a watch nothing wrote to still prints its place" {
     head.data = 1;
     head.e_machine = ra8.core.elf.em_arm;
     const image = try ra8.core.elf.Image.init(&buffer);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const watched = watchpoint.Watched{ .address = 0x2204_00A0 };
-    try watchpoint.print(out.writer(), image, "g_eoh_err", watched);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "0 store(s)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "g_eoh_err @0x220400A0") != null);
+    try watchpoint.print(&out.writer, image, "g_eoh_err", watched);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0 store(s)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "g_eoh_err @0x220400A0") != null);
 }
 
 test "no watch prints nothing at all" {
@@ -191,10 +191,10 @@ test "no watch prints nothing at all" {
     head.data = 1;
     head.e_machine = ra8.core.elf.em_arm;
     const image = try ra8.core.elf.Image.init(&buffer);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try watchpoint.print(out.writer(), image, null, null);
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try watchpoint.print(&out.writer, image, null, null);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
 test "a place written in a loop reports its last store, not just its first" {
@@ -207,18 +207,18 @@ test "a place written in a loop reports its last store, not just its first" {
     head.data = 1;
     head.e_machine = ra8.core.elf.em_arm;
     const image = try ra8.core.elf.Image.init(&buffer);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     var watched = watchpoint.Watched{ .address = 0x2204_00A0 };
     for (0..900) |index| {
         watched.record(0x0200_1000, 0x0200_1235, 0x2204_00A0, 4, @intCast(index));
     }
-    try watchpoint.print(out.writer(), image, "g_latched", watched);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "900 store(s)") != null);
+    try watchpoint.print(&out.writer, image, "g_latched", watched);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "900 store(s)") != null);
     // The first store, the gap, and the last store all have to be there.
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x00000000") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "more, ending with") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x00000383") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0x00000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "more, ending with") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0x00000383") != null);
 }
 
 test "a store stamps the modelled period it landed in" {

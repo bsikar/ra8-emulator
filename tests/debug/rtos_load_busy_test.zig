@@ -119,12 +119,12 @@ test "the load table names the core and adds up to 100.0%" {
     try rig.open(&tracer, 50, 50);
     defer rig.close();
     try rig.run(10 * 205);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try rtos_hook.report.load(out.writer(), &tracer, NoNames{});
-    try std.testing.expect(std.mem.startsWith(u8, out.items, "  cpu load cpu1 : 2050 instruction(s)\n"));
+    try rtos_hook.report.load(&out.writer, &tracer, NoNames{});
+    try std.testing.expect(std.mem.startsWith(u8, out.written(), "  cpu load cpu1 : 2050 instruction(s)\n"));
     var tenths: u64 = 0;
-    var lines = std.mem.splitScalar(u8, out.items, '\n');
+    var lines = std.mem.splitScalar(u8, out.written(), '\n');
     while (lines.next()) |line| {
         const percent = std.mem.indexOfScalar(u8, line, '%') orelse continue;
         const text = std.mem.trim(u8, line[0..percent], " ");
