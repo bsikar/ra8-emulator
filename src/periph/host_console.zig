@@ -33,13 +33,14 @@ comptime {
     std.debug.assert(@sizeOf(InputRecord) == 20);
 }
 
+extern "kernel32" fn GetConsoleMode(console: windows.HANDLE, mode: *windows.DWORD) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn GetNumberOfConsoleInputEvents(console: windows.HANDLE, count: *windows.DWORD) callconv(.winapi) windows.BOOL;
 extern "kernel32" fn ReadConsoleInputW(console: windows.HANDLE, records: [*]InputRecord, length: windows.DWORD, read: *windows.DWORD) callconv(.winapi) windows.BOOL;
 
 /// True when `handle` is an interactive console rather than a pipe or file.
 pub fn isConsole(handle: windows.HANDLE) bool {
     var mode: windows.DWORD = 0;
-    return windows.kernel32.GetConsoleMode(handle, &mode) != 0;
+    return GetConsoleMode(handle, &mode).toBool();
 }
 
 /// Append the bytes one record types to `out` from `at`, and return the new
@@ -62,11 +63,11 @@ pub fn keyBytes(record: InputRecord, out: []u8, at: usize) usize {
 /// are waiting, so the run goes on; a console never reads as the end.
 pub fn read(handle: windows.HANDLE, into: []u8) ?usize {
     var waiting: windows.DWORD = 0;
-    if (GetNumberOfConsoleInputEvents(handle, &waiting) == 0 or waiting == 0) return null;
+    if (!GetNumberOfConsoleInputEvents(handle, &waiting).toBool() or waiting == 0) return null;
     var records: [32]InputRecord = undefined;
     const want: windows.DWORD = @intCast(@min(waiting, records.len, into.len));
     var got: windows.DWORD = 0;
-    if (ReadConsoleInputW(handle, &records, want, &got) == 0) return null;
+    if (!ReadConsoleInputW(handle, &records, want, &got).toBool()) return null;
     var end: usize = 0;
     for (records[0..got]) |record| end = keyBytes(record, into, end);
     return if (end == 0) null else end;
