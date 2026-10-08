@@ -41,10 +41,10 @@ test "the JSON report parses and carries the requirements" {
     var options = try sweep_cli.parse(&[_][]const u8{ "--weights-mib", "1", "--activations-kib", "64", "--target-ms", "10", "--report", "json" });
     options.job.weights_bytes = 256 * sizing.workload.kib;
     const table = try rows(options.job, options.target_ns);
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buffer.deinit();
-    try sweep_cli.emit(buffer.writer(), options, &table);
-    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, buffer.items, .{});
+    try sweep_cli.emit(&buffer.writer, options, &table);
+    const parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, buffer.written(), .{});
     defer parsed.deinit();
     const root = parsed.value.object;
     try std.testing.expectEqualStrings("memory_sizing", root.get("report").?.string);
@@ -62,10 +62,10 @@ test "the table names the minimums and one line per configuration" {
     var options = try sweep_cli.parse(&[_][]const u8{ "--activations-kib", "64" });
     options.job.weights_bytes = 256 * sizing.workload.kib;
     const table = try rows(options.job, null);
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buffer.deinit();
-    try sweep_cli.emit(buffer.writer(), options, &table);
-    const text = buffer.items;
+    try sweep_cli.emit(&buffer.writer, options, &table);
+    const text = buffer.written();
     try std.testing.expect(std.mem.indexOf(u8, text, "flash: high water 262144 bytes, minimum with 25% headroom 1 MiB\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "  x1  41.66 MHz  x8   66.50 MHz CL2") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "slowest that meets the target: no target given\n") != null);

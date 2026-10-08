@@ -111,10 +111,10 @@ test "a non executable segment is not swept" {
 test "nothing found prints nothing" {
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), image, .{});
-    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try undefined_ops.print(&out.writer, image, .{});
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
 test "a site prints its address and its encoding" {
@@ -123,11 +123,11 @@ test "a site prints its address and its encoding" {
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "1 site(s)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "0x02007498 EA02038F") != null);
+    try undefined_ops.print(&out.writer, image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "1 site(s)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0x02007498 EA02038F") != null);
 }
 
 test "an image with no symbol table prints the address alone" {
@@ -136,10 +136,10 @@ test "an image with no symbol table prints the address alone" {
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "+0x") == null);
+    try undefined_ops.print(&out.writer, image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "+0x") == null);
 }
 
 test "a site starts with no arrivals" {
@@ -178,11 +178,11 @@ test "an executed site is marked and counted in the summary" {
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "EXECUTED 2x") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "1 of them EXECUTED, 2 arrival(s)") != null);
+    try undefined_ops.print(&out.writer, image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "EXECUTED 2x") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "1 of them EXECUTED, 2 arrival(s)") != null);
 }
 
 test "a swept but unexecuted site reports none executed" {
@@ -191,11 +191,11 @@ test "a swept but unexecuted site reports none executed" {
     found.count = 1;
     var buffer: [256]u8 = undefined;
     const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out = std.ArrayList(u8).init(std.testing.allocator);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try undefined_ops.print(out.writer(), image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "none executed") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.items, "EXECUTED") == null);
+    try undefined_ops.print(&out.writer, image, found);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "none executed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "EXECUTED") == null);
 }
 
 test "a kept site does not stop the run by default" {

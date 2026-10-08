@@ -40,11 +40,11 @@ fn groupNames(into: [][]const u8) []const []const u8 {
 
 /// The coverage document as it should read for the suite as it stands.
 fn expectedDocument(allocator: std.mem.Allocator) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
+    var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
-    try coverage.writeDocument(out.writer(), suite.claimed, suite.covered);
+    try coverage.writeDocument(&out.writer, suite.claimed, suite.covered);
     var names: [256][]const u8 = undefined;
-    try coverage.writeDecoded(out.writer(), groupNames(&names), suite.decoded_covered);
+    try coverage.writeDecoded(&out.writer, groupNames(&names), suite.decoded_covered);
     return out.toOwnedSlice();
 }
 
