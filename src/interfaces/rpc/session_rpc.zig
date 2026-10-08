@@ -4,7 +4,8 @@ const rpc = @import("ra8_rpc");
 pub const protocol_version: u16 = 1;
 /// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
 /// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack. Bit 7: rtc.
-pub const capabilities: u32 = 0x0000_00FF;
+/// Bit 8: input.
+pub const capabilities: u32 = 0x0000_01FF;
 pub const max_payload = 1_048_576;
 
 pub const Method = enum(u16) {
@@ -39,6 +40,7 @@ pub const Method = enum(u16) {
     map = 0x011c,
     stack = 0x011d,
     rtc = 0x011e,
+    input = 0x011f,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -159,6 +161,22 @@ pub const RtcReport = struct {
     hour: u8,
     minute: u8,
     second: u8,
+};
+/// One host input event for the board's input script (RA8EMU-810). A tap
+/// uses x and y; a swipe goes from x, y to to_x, to_y over duration_ns; a
+/// long press holds x, y for duration_ns; a button presses `button` (0 is
+/// SW1, 1 is SW2) and the script releases it.
+pub const InputKind = enum(u8) { tap, swipe, longpress, button };
+pub const ScheduleInput = struct {
+    core: Core,
+    at_ns: u64,
+    kind: InputKind,
+    x: u16 = 0,
+    y: u16 = 0,
+    to_x: u16 = 0,
+    to_y: u16 = 0,
+    duration_ns: u64 = 0,
+    button: u8 = 0,
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const Trace = struct {
