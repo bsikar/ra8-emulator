@@ -1,8 +1,10 @@
-//! Covers src/gui/registers_pane.zig (RA8EMU-741): cells run down a column
-//! and then across, the pane rasterises to a pinned golden frame, a changed
-//! register is the only text drawn in the changed colour, a pane too small
-//! for one cell draws nothing, and capture reads CPU0 and CPU1 separately
-//! through a real session.
+//! Covers src/gui/registers_pane.zig (RA8EMU-741, groups RA8EMU-945):
+//! headers and cells run down a column and then across, a folded group
+//! keeps only its header, the pane rasterises to pinned golden frames open
+//! and with the system group folded, a changed register is the only text
+//! drawn in the changed colour, a pane too small for one cell draws
+//! nothing, and capture reads CPU0 and CPU1 separately through a real
+//! session.
 const std = @import("std");
 const ra8 = @import("ra8");
 
@@ -17,8 +19,10 @@ const font = ra8.gui.font;
 const pane = ra8.gui.registers_pane;
 
 const Rect = draw_list.Rect;
-/// Eight rows down, three columns across: room for all 24 registers.
-const area = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 3 * 120, .h = 2 * pane.pad + 8 * pane.row_h };
+/// Eight rows down, four columns across: room for both headers and all 26
+/// registers.
+const area = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 4 * 120, .h = 2 * pane.pad + 8 * pane.row_h };
+const system_folded: pane.Fold = .{ false, true };
 
 fn sample() pane.Snapshot {
     var snapshot: pane.Snapshot = .{};
@@ -41,8 +45,8 @@ const Scene = struct {
         self.frame.deinit(std.testing.allocator);
     }
 
-    fn render(self: *Scene, now: pane.Snapshot, before: ?pane.Snapshot) !void {
-        try pane.draw(&self.list, area, now, before);
+    fn render(self: *Scene, now: pane.Snapshot, before: ?pane.Snapshot, fold: pane.Fold) !void {
+        try pane.draw(&self.list, area, now, before, fold);
         raster.draw(&self.frame, &self.list, font.atlas);
     }
 
@@ -51,24 +55,55 @@ const Scene = struct {
     }
 };
 
-test "cells run down a column and then across" {
+test "headers and cells run down a column and then across" {
     try std.testing.expectEqual(@as(usize, 8), pane.rows(area));
-    try std.testing.expectEqual(@as(usize, 3), pane.columns(area));
-    const first = pane.cellRect(area, 0).?;
+    try std.testing.expectEqual(@as(usize, 4), pane.columns(area));
+    const core = pane.headerRect(area, pane.open, 0).?;
+    try std.testing.expectEqual(pane.pad, core.x);
+    try std.testing.expectEqual(pane.pad, core.y);
+    const first = pane.cellRect(area, pane.open, 0).?;
     try std.testing.expectEqual(pane.pad, first.x);
-    try std.testing.expectEqual(pane.pad, first.y);
-    const ninth = pane.cellRect(area, 8).?;
-    try std.testing.expectEqual(pane.pad + 120, ninth.x);
-    try std.testing.expectEqual(pane.pad, ninth.y);
-    try std.testing.expectEqual(pane.pad + 7 * pane.row_h, pane.cellRect(area, 23).?.y);
-    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, 24));
+    try std.testing.expectEqual(pane.pad + pane.row_h, first.y);
+    const eighth = pane.cellRect(area, pane.open, 7).?;
+    try std.testing.expectEqual(pane.pad + 120, eighth.x);
+    try std.testing.expectEqual(pane.pad, eighth.y);
+    const system = pane.headerRect(area, pane.open, 1).?;
+    try std.testing.expectEqual(pane.pad + 2 * 120, system.x);
+    try std.testing.expectEqual(pane.pad + 3 * pane.row_h, system.y);
+    const last = pane.cellRect(area, pane.open, 25).?;
+    try std.testing.expectEqual(pane.pad + 3 * 120, last.x);
+    try std.testing.expectEqual(pane.pad + 3 * pane.row_h, last.y);
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, pane.open, 26));
 }
 
-test "the pane rasterises to the pinned golden frame" {
+test "a folded group keeps only its header, and the next group moves up" {
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, system_folded, 18));
+    try std.testing.expectEqual(pane.headerRect(area, pane.open, 1), pane.headerRect(area, system_folded, 1));
+    const core_folded: pane.Fold = .{ true, false };
+    try std.testing.expectEqual(@as(?Rect, null), pane.cellRect(area, core_folded, 0));
+    try std.testing.expectEqual(pane.pad + pane.row_h, pane.headerRect(area, core_folded, 1).?.y);
+    try std.testing.expectEqual(pane.pad + 2 * pane.row_h, pane.cellRect(area, core_folded, 18).?.y);
+}
+
+test "a press finds a group header and nothing on a cell" {
+    const header = pane.headerRect(area, pane.open, 1).?;
+    try std.testing.expectEqual(@as(?usize, 1), pane.headerAt(area, pane.open, header.x + 1, header.y + 1));
+    const cell = pane.cellRect(area, pane.open, 0).?;
+    try std.testing.expectEqual(@as(?usize, null), pane.headerAt(area, pane.open, cell.x + 1, cell.y + 1));
+}
+
+test "the pane rasterises to the pinned golden frame with every group open" {
     var scene = try Scene.init();
     defer scene.deinit();
-    try scene.render(sample(), sample());
-    try std.testing.expectEqual(@as(u64, 10087351228908507533), scene.digest());
+    try scene.render(sample(), sample(), pane.open);
+    try std.testing.expectEqual(@as(u64, 7508780865518467467), scene.digest());
+}
+
+test "the pane rasterises to the pinned golden frame with the system group folded" {
+    var scene = try Scene.init();
+    defer scene.deinit();
+    try scene.render(sample(), sample(), system_folded);
+    try std.testing.expectEqual(@as(u64, 5341974659234707467), scene.digest());
 }
 
 test "a changed register is the only text in the changed colour" {
@@ -76,8 +111,8 @@ test "a changed register is the only text in the changed colour" {
     defer scene.deinit();
     var now = sample();
     now.values[1] +%= 1;
-    now.values[15] +%= 2;
-    try scene.render(now, sample());
+    now.values[19] +%= 2;
+    try scene.render(now, sample(), pane.open);
     var moved: usize = 0;
     for (scene.list.commands.items) |command| {
         if (command.shape == .glyph and std.meta.eql(command.shape.glyph.color, pane.changed)) moved += 1;
@@ -86,13 +121,13 @@ test "a changed register is the only text in the changed colour" {
     for (0..scene.frame.height) |y| {
         for (0..scene.frame.width) |x| {
             if (!std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), pane.changed)) continue;
-            try std.testing.expect(inValue(1, x, y) or inValue(15, x, y));
+            try std.testing.expect(inValue(1, x, y) or inValue(19, x, y));
         }
     }
 }
 
 fn inValue(index: usize, x: usize, y: usize) bool {
-    const at = pane.valueOrigin(pane.cellRect(area, index).?);
+    const at = pane.valueOrigin(pane.cellRect(area, pane.open, index).?);
     const span = Rect{ .x = at.x, .y = at.y, .w = @intCast(font.textWidth(8)), .h = font.glyph_h };
     return span.contains(@intCast(x), @intCast(y));
 }
@@ -100,10 +135,10 @@ fn inValue(index: usize, x: usize, y: usize) bool {
 test "no earlier snapshot marks nothing, and a pane too small draws nothing" {
     var scene = try Scene.init();
     defer scene.deinit();
-    try scene.render(sample(), null);
+    try scene.render(sample(), null, pane.open);
     for (scene.frame.pixels) |pixel| try std.testing.expect(!std.meta.eql(pixel, pane.changed));
     scene.list.clear();
-    try pane.draw(&scene.list, .{ .x = 0, .y = 0, .w = 60, .h = 200 }, sample(), null);
+    try pane.draw(&scene.list, .{ .x = 0, .y = 0, .w = 60, .h = 200 }, sample(), null, pane.open);
     try std.testing.expectEqual(@as(usize, 0), scene.list.commands.items.len);
 }
 

@@ -44,7 +44,7 @@ pub const Method = enum(u16) {
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
-pub const Register = enum(u8) { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp, r4, r5, r6, r7, r8, r9, r10, r11, msp, basepri, faultmask, control, fpscr };
+pub const Register = enum(u8) { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp, r4, r5, r6, r7, r8, r9, r10, r11, msp, basepri, faultmask, control, fpscr, msplim, psplim };
 pub const RunMode = enum(u8) { run, cont, step, next, finish };
 pub const StopReason = enum(u8) { stepped, breakpoint, watchpoint, halt_requested, unit_break, unit_watch, count, core_fault };
 pub const Access = enum(u8) { read, write, access };

@@ -19,6 +19,7 @@ pub const background = Color.rgb(0x21, 0x25, 0x2B);
 pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
 pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
 pub const changed = Color.rgb(0xE5, 0xC0, 0x7B);
+pub const heading = Color.rgb(0x61, 0xAF, 0xEF);
 pub const pad: i32 = 4;
 /// A row is one text line with a pixel of air above and below.
 pub const row_h: i32 = @as(i32, @intCast(font.cell_h)) + 4;
@@ -27,14 +28,37 @@ pub const name_len: usize = 10;
 /// Characters one column takes: the name, eight hex digits and a gap.
 pub const column_len: usize = name_len + 8 + 2;
 
-/// The order the pane shows: the general registers, the three that say
-/// where execution is, status, both stack pointers, the masks, CONTROL and
-/// FPSCR.
+/// The order the pane shows, group by group: the core group (the general
+/// registers, the three that say where execution is, status, and FPSCR
+/// until the FPU group lands), then the system group (both stack pointers
+/// and their limits, the masks, CONTROL).
 pub const shown = [_]Register{
-    .r0,   .r1,  .r2,  .r3,      .r4,      .r5,        .r6,      .r7,
-    .r8,   .r9,  .r10, .r11,     .r12,     .sp,        .lr,      .pc,
-    .xpsr, .msp, .psp, .primask, .basepri, .faultmask, .control, .fpscr,
+    .r0,        .r1,      .r2,  .r3,  .r4,     .r5,     .r6,      .r7,
+    .r8,        .r9,      .r10, .r11, .r12,    .sp,     .lr,      .pc,
+    .xpsr,      .fpscr,   .msp, .psp, .msplim, .psplim, .primask, .basepri,
+    .faultmask, .control,
 };
+
+/// A run of `shown` under one header that folds it away.
+pub const Group = struct { name: []const u8, first: usize, len: usize };
+
+pub const groups = [_]Group{
+    .{ .name = "core", .first = 0, .len = 18 },
+    .{ .name = "system", .first = 18, .len = 8 },
+};
+
+comptime {
+    var next: usize = 0;
+    for (groups) |group| {
+        std.debug.assert(group.first == next);
+        next += group.len;
+    }
+    std.debug.assert(next == shown.len);
+}
+
+/// Which groups are folded down to their header.
+pub const Fold = [groups.len]bool;
+pub const open: Fold = @splat(false);
 
 pub const Snapshot = struct {
     values: [shown.len]u32 = @splat(0),
@@ -69,19 +93,59 @@ pub fn columns(area: Rect) usize {
     return @intCast(@divTrunc(inner, width));
 }
 
-/// Register `index`'s cell, or null when it does not fit.
-pub fn cellRect(area: Rect, index: usize) ?Rect {
+/// Register `index`'s cell, or null when its group is folded or it does
+/// not fit.
+pub fn cellRect(area: Rect, fold: Fold, index: usize) ?Rect {
+    return slotRect(area, slotOf(fold, index) orelse return null);
+}
+
+/// Group `which`'s header, or null when it does not fit.
+pub fn headerRect(area: Rect, fold: Fold, which: usize) ?Rect {
+    return slotRect(area, headerSlot(fold, which));
+}
+
+/// The group whose header holds (`x`, `y`), or null.
+pub fn headerAt(area: Rect, fold: Fold, x: i32, y: i32) ?usize {
+    for (0..groups.len) |which| {
+        const header = headerRect(area, fold, which) orelse return null;
+        if (header.contains(x, y)) return which;
+    }
+    return null;
+}
+
+/// Headers and cells share one run of slots, down a column and then
+/// across; a folded group keeps only its header slot.
+fn slotRect(area: Rect, slot: usize) ?Rect {
     const down = rows(area);
     if (down == 0) return null;
-    const column = index / down;
+    const column = slot / down;
     if (column >= columns(area)) return null;
     const width: i32 = @intCast(font.textWidth(column_len));
     return .{
         .x = area.x + pad + @as(i32, @intCast(column)) * width,
-        .y = area.y + pad + @as(i32, @intCast(index % down)) * row_h,
+        .y = area.y + pad + @as(i32, @intCast(slot % down)) * row_h,
         .w = width,
         .h = row_h,
     };
+}
+
+fn slotOf(fold: Fold, index: usize) ?usize {
+    var slot: usize = 0;
+    for (groups, fold) |group, folded| {
+        if (index < group.first + group.len) return if (folded) null else slot + 1 + (index - group.first);
+        slot += slots(group, folded);
+    }
+    return null;
+}
+
+fn headerSlot(fold: Fold, which: usize) usize {
+    var slot: usize = 0;
+    for (groups[0..which], fold[0..which]) |group, folded| slot += slots(group, folded);
+    return slot;
+}
+
+fn slots(group: Group, folded: bool) usize {
+    return if (folded) 1 else 1 + group.len;
 }
 
 /// Where register `index`'s value text starts inside its cell.
@@ -89,15 +153,25 @@ pub fn valueOrigin(cell: Rect) struct { x: i32, y: i32 } {
     return .{ .x = cell.x + 2 + @as(i32, @intCast(font.textWidth(name_len))), .y = cell.y + 2 };
 }
 
-pub fn draw(list: *draw_list.DrawList, area: Rect, now: Snapshot, before: ?Snapshot) !void {
-    if (cellRect(area, 0) == null) return;
+pub fn draw(list: *draw_list.DrawList, area: Rect, now: Snapshot, before: ?Snapshot, fold: Fold) !void {
+    if (slotRect(area, 0) == null) return;
     try list.fill(area, background);
     try list.pushClip(area);
     defer list.popClip();
-    for (shown, 0..) |which, index| {
-        const cell = cellRect(area, index) orelse break;
-        try drawCell(list, cell, which, now.values[index], now.changedAt(before, index));
+    for (groups, fold, 0..) |group, folded, which| {
+        const header = headerRect(area, fold, which) orelse break;
+        try drawHeader(list, header, group.name, folded);
+        if (folded) continue;
+        for (group.first..group.first + group.len) |index| {
+            const cell = cellRect(area, fold, index) orelse break;
+            try drawCell(list, cell, shown[index], now.values[index], now.changedAt(before, index));
+        }
     }
+}
+
+fn drawHeader(list: *draw_list.DrawList, cell: Rect, name: []const u8, folded: bool) !void {
+    try font.draw(list, cell.x + 2, cell.y + 2, if (folded) "+" else "-", heading);
+    try font.draw(list, cell.x + 2 + @as(i32, @intCast(font.textWidth(2))), cell.y + 2, name, heading);
 }
 
 fn drawCell(list: *draw_list.DrawList, cell: Rect, which: Register, value: u32, moved: bool) !void {

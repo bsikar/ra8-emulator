@@ -5,7 +5,9 @@ const ra8 = @import("ra8");
 const Cortex = ra8.core.cpu.cortex.Cortex;
 
 test "the register enum names every register the debugger and report read" {
-    try std.testing.expectEqual(@as(usize, 24), @typeInfo(Cortex).@"enum".field_names.len);
+    try std.testing.expectEqual(@as(usize, 26), @typeInfo(Cortex).@"enum".field_names.len);
     try std.testing.expect(@hasField(Cortex, "fpscr"));
+    try std.testing.expect(@hasField(Cortex, "msplim"));
+    try std.testing.expect(@hasField(Cortex, "psplim"));
     try std.testing.expect(@hasField(Cortex, "psp"));
 }

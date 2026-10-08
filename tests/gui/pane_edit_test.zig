@@ -71,7 +71,7 @@ test "escape leaves the register alone" {
 }
 
 test "clicks off a value pick nothing" {
-    const cell = registers_pane.cellRect(registers_area, r4).?;
+    const cell = registers_pane.cellRect(registers_area, registers_pane.open, r4).?;
     try std.testing.expectEqual(@as(?usize, null), edit.registerAt(registers_area, cell.x + 2, cell.y + 2));
     var snapshot: memory_pane.Snapshot = .{ .base = spare, .count = 1 };
     const row = memory_pane.rowOrigin(memory_area, 0);

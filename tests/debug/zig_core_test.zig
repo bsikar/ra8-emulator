@@ -51,6 +51,18 @@ test "registers read and write by the engine's names" {
     try std.testing.expectEqual(@as(u32, 0x5678), cpu.regs.low[12]);
 }
 
+test "the stack limits read back with bits 2:0 cleared, as MSR writes them" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    core.setRegister(.msplim, 0x2000_0107);
+    core.setRegister(.psplim, 0x2000_0FFF);
+    try std.testing.expectEqual(@as(u32, 0x2000_0100), core.register(.msplim));
+    try std.testing.expectEqual(@as(u32, 0x2000_0FF8), core.register(.psplim));
+    try std.testing.expectEqual(@as(u32, 0x2000_0100), cpu.regs.msplim);
+}
+
 test "memory goes through the core's bus" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
