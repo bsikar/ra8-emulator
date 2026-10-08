@@ -22,7 +22,7 @@ pub const scanned = [_][]const u8{ ".zig", ".zon", ".md", ".sh", ".py", ".txt", 
 /// The first banned word on `line`, or null when the line is clean.
 pub fn firstBanned(line: []const u8) ?[]const u8 {
     for (banned.anywhere) |word| {
-        if (std.ascii.indexOfIgnoreCase(line, word) != null) return word;
+        if (std.ascii.findIgnoreCase(line, word) != null) return word;
     }
     for (banned.words) |word| {
         if (hasWord(line, word)) return word;

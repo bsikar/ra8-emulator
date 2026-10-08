@@ -87,9 +87,9 @@ test "advance sleeps ten virtual minutes, wakes on time, in under a host second"
     try std.testing.expectEqual(proto.StopReason.count, first.reason);
     const baseline = try rig.wakes();
 
-    var timer = try std.time.Timer.start();
+    const started = std.Io.Timestamp.now(std.testing.io, .awake);
     const short = try rig.advanceBy(598 * ns_per_s);
-    try std.testing.expect(timer.read() < ns_per_s);
+    try std.testing.expect(started.durationTo(std.Io.Timestamp.now(std.testing.io, .awake)).toNanoseconds() < ns_per_s);
     try std.testing.expectEqual(599 * ns_per_s, short.to_ns);
     try std.testing.expectEqual(baseline, try rig.wakes());
 
