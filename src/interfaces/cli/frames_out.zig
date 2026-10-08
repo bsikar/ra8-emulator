@@ -12,9 +12,10 @@ const display_settled = @import("../../board/display_settled.zig");
 
 pub const Sequence = struct {
     allocator: std.mem.Allocator,
-    directory: std.fs.Dir,
+    io: std.Io,
+    directory: std.Io.Dir,
     owns_directory: bool,
-    index: ?std.fs.File,
+    index: ?std.Io.File,
     gif_path: ?[]const u8,
     gif_writer: ?gif.Writer = null,
     video_writer: ?video_out.Writer = null,
@@ -25,34 +26,35 @@ pub const Sequence = struct {
     previous_width: u32 = 0,
     previous_height: u32 = 0,
 
-    pub fn init(allocator: std.mem.Allocator, path: []const u8, every: usize) !Sequence {
-        return initOutputs(allocator, path, null, every);
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, path: []const u8, every: usize) !Sequence {
+        return initOutputs(allocator, io, path, null, every);
     }
 
-    pub fn initOutputs(allocator: std.mem.Allocator, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !Sequence {
-        return initAll(allocator, frames_path, gif_path, null, every);
+    pub fn initOutputs(allocator: std.mem.Allocator, io: std.Io, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !Sequence {
+        return initAll(allocator, io, frames_path, gif_path, null, every);
     }
 
-    pub fn initAll(allocator: std.mem.Allocator, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !Sequence {
+    pub fn initAll(allocator: std.mem.Allocator, io: std.Io, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !Sequence {
         if (every == 0) return error.BadInterval;
         if (frames_path == null and gif_path == null and video_path == null) return error.NoOutput;
-        var directory = std.fs.cwd();
+        var directory = std.Io.Dir.cwd();
         var owns_directory = false;
-        var index: ?std.fs.File = null;
-        errdefer if (owns_directory) directory.close();
+        var index: ?std.Io.File = null;
+        errdefer if (owns_directory) directory.close(io);
         if (frames_path) |path| {
-            try std.fs.cwd().makePath(path);
-            directory = try std.fs.cwd().openDir(path, .{ .iterate = true });
+            try std.Io.Dir.cwd().createDirPath(io, path);
+            directory = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
             owns_directory = true;
             var entries = directory.iterate();
-            while (try entries.next()) |entry| {
-                if (isFrameName(entry.name)) try directory.deleteFile(entry.name);
+            while (try entries.next(io)) |entry| {
+                if (isFrameName(entry.name)) try directory.deleteFile(io, entry.name);
             }
-            index = try directory.createFile("frames.txt", .{});
+            index = try directory.createFile(io, "frames.txt", .{});
         }
         const video_writer = if (video_path) |path| try video_out.Writer.init(allocator, path) else null;
         return .{
             .allocator = allocator,
+            .io = io,
             .directory = directory,
             .owns_directory = owns_directory,
             .index = index,
@@ -72,8 +74,8 @@ pub const Sequence = struct {
         if (self.previous) |pixels| self.allocator.free(pixels);
         if (self.gif_writer) |*writer| writer.deinit();
         if (self.video_writer) |*writer| writer.deinit();
-        if (self.index) |file| file.close();
-        if (self.owns_directory) self.directory.close();
+        if (self.index) |file| file.close(self.io);
+        if (self.owns_directory) self.directory.close(self.io);
     }
 
     /// Record one complete ARGB8888 panel. Every Nth scan is considered,
@@ -110,12 +112,14 @@ pub const Sequence = struct {
         self.scanned += 1;
         if (same or index % self.every != 0) return;
         if (self.gif_path) |path| {
-            if (self.gif_writer == null) self.gif_writer = try gif.Writer.init(self.allocator, path, width, height);
+            if (self.gif_writer == null) self.gif_writer = try gif.Writer.init(self.allocator, self.io, path, width, height);
             try self.gif_writer.?.record(width, height, pixels, when);
         }
         if (self.index != null) {
             try self.write(width, height, pixels);
-            try self.index.?.writer().print("frame_{d:0>5}.ppm {d}\n", .{ self.written, when });
+            var line: [64]u8 = undefined;
+            const text = try std.fmt.bufPrint(&line, "frame_{d:0>5}.ppm {d}\n", .{ self.written, when });
+            try self.index.?.writeStreamingAll(self.io, text);
         }
         self.written += 1;
     }
@@ -136,17 +140,18 @@ pub const Sequence = struct {
     fn write(self: *Sequence, width: u32, height: u32, pixels: []const u32) !void {
         const name = try std.fmt.allocPrint(self.allocator, "frame_{d:0>5}.ppm", .{self.written});
         defer self.allocator.free(name);
-        var file = try self.directory.createFile(name, .{});
-        defer file.close();
-        var buffered = std.io.bufferedWriter(file.writer());
-        const out = buffered.writer();
+        var file = try self.directory.createFile(self.io, name, .{});
+        defer file.close(self.io);
+        var buffer: [4096]u8 = undefined;
+        var buffered = file.writerStreaming(self.io, &buffer);
+        const out = &buffered.interface;
         try out.print("P6\n{d} {d}\n255\n", .{ width, height });
         for (pixels) |pixel| {
             try out.writeByte(@truncate(pixel >> 16));
             try out.writeByte(@truncate(pixel >> 8));
             try out.writeByte(@truncate(pixel));
         }
-        try buffered.flush();
+        try out.flush();
     }
 };
 
@@ -176,22 +181,22 @@ pub const Armed = struct {
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
-    pub fn arm(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !?*Armed {
-        return armOutputs(allocator, board, path, null, every);
+    pub fn arm(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8, every: usize) !?*Armed {
+        return armOutputs(allocator, io, board, path, null, every);
     }
 
-    pub fn armOutputs(allocator: std.mem.Allocator, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !?*Armed {
-        return armAll(allocator, board, frames_path, gif_path, null, every);
+    pub fn armOutputs(allocator: std.mem.Allocator, io: std.Io, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, every: usize) !?*Armed {
+        return armAll(allocator, io, board, frames_path, gif_path, null, every);
     }
 
-    fn armAll(allocator: std.mem.Allocator, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !?*Armed {
+    fn armAll(allocator: std.mem.Allocator, io: std.Io, board: *Board, frames_path: ?[]const u8, gif_path: ?[]const u8, video_path: ?[]const u8, every: usize) !?*Armed {
         if (frames_path == null and gif_path == null and video_path == null) return null;
         const self = try allocator.create(Armed);
         errdefer allocator.destroy(self);
         self.* = .{
             .allocator = allocator,
             .board = board,
-            .sequence = try Sequence.initAll(allocator, frames_path, gif_path, video_path, every),
+            .sequence = try Sequence.initAll(allocator, io, frames_path, gif_path, video_path, every),
             .settled = .{ .allocator = allocator },
         };
         errdefer self.sequence.deinit();
@@ -206,11 +211,11 @@ pub const Armed = struct {
         return self;
     }
 
-    pub fn armForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !?*Armed {
+    pub fn armForCli(allocator: std.mem.Allocator, io: std.Io, board: *Board, options: frame_args.Options) !?*Armed {
         const path = options.frames_out orelse if (options.frame_on_settle != null and options.gif_out == null) options.frame_on_settle else null;
-        const armed = try armAll(allocator, board, path, options.gif_out, options.video_out, options.frames_every) orelse return null;
+        const armed = try armAll(allocator, io, board, path, options.gif_out, options.video_out, options.frames_every) orelse return null;
         if (options.frame_on_settle != null and (options.frames_out != null or options.gif_out != null))
-            armed.settle_sequence = try Sequence.init(allocator, options.frame_on_settle.?, options.frames_every);
+            armed.settle_sequence = try Sequence.init(allocator, io, options.frame_on_settle.?, options.frames_every);
         if (options.frame_on_settle != null or options.video_out != null) {
             armed.settle_only = options.frames_out == null and options.gif_out == null;
             armed.settled.window_ns = options.settle_window_ns;
@@ -344,14 +349,14 @@ pub const Armed = struct {
 pub const Run = struct {
     armed: ?*Armed,
 
-    pub fn init(allocator: std.mem.Allocator, board: *Board, path: ?[]const u8, every: usize) !Run {
-        const armed = Armed.of(board) orelse try Armed.arm(allocator, board, path, every) orelse return .{ .armed = null };
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8, every: usize) !Run {
+        const armed = Armed.of(board) orelse try Armed.arm(allocator, io, board, path, every) orelse return .{ .armed = null };
         _ = try armed.fit();
         return .{ .armed = armed };
     }
 
-    pub fn initForCli(allocator: std.mem.Allocator, board: *Board, options: frame_args.Options) !Run {
-        const armed = Armed.of(board) orelse try Armed.armForCli(allocator, board, options) orelse return .{ .armed = null };
+    pub fn initForCli(allocator: std.mem.Allocator, io: std.Io, board: *Board, options: frame_args.Options) !Run {
+        const armed = Armed.of(board) orelse try Armed.armForCli(allocator, io, board, options) orelse return .{ .armed = null };
         _ = try armed.fit();
         return .{ .armed = armed };
     }

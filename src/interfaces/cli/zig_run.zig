@@ -303,7 +303,7 @@ pub fn run(out: std.fs.File.Writer, io: std.Io, memory: Guest, board: *Board, ti
         // The core lent its retired count; `ran` holds the final count.
         if (tracer) |*found| found.trace.fine = &ran;
         if (options.ctl_cpu_load) return ctlLoad(out, loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1), status);
-        var frames = try frames_out.Run.initForCli(std.heap.page_allocator, board, options.frames);
+        var frames = try frames_out.Run.initForCli(std.heap.page_allocator, io, board, options.frames);
         defer frames.deinit(board);
         if (options.report_json) {
             const load = loadOf(clock.memory, if (tracer) |*found| found else null, clock.cpu1);
@@ -317,7 +317,7 @@ pub fn run(out: std.fs.File.Writer, io: std.Io, memory: Guest, board: *Board, ti
         try finishFrames(out, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
-    } else try captureFrames(board, options);
+    } else try captureFrames(board, io, options);
     try finishEinkLog(out, options, &eink_recorder);
     return status;
 }
@@ -373,8 +373,8 @@ fn finishFrames(out: std.fs.File.Writer, board: *Board, options: cli.Options, fr
     try frame_out.report(out, board, options.frame_out, options.panel_only);
 }
 
-fn captureFrames(board: *Board, options: cli.Options) !void {
-    var frames = try frames_out.Run.initForCli(std.heap.page_allocator, board, options.frames);
+fn captureFrames(board: *Board, io: std.Io, options: cli.Options) !void {
+    var frames = try frames_out.Run.initForCli(std.heap.page_allocator, io, board, options.frames);
     defer frames.deinit(board);
     try frames.finish(board);
 }
