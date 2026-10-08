@@ -7,7 +7,7 @@ const bench = @import("handoff_bench");
 const tiny = bench.Config{ .frames = 40, .work_per_frame = 1_000, .width = 16, .height = 8, .reader_hz = 10_000, .trials = 2 };
 
 test "a writer alone publishes every frame and nobody reads" {
-    const run = try bench.best(std.testing.allocator, tiny, false);
+    const run = try bench.best(std.testing.allocator, std.testing.io, tiny, false);
     try std.testing.expectEqual(@as(u32, 40), run.publishes);
     try std.testing.expectEqual(@as(u32, 0), run.reads);
 }
@@ -15,7 +15,7 @@ test "a writer alone publishes every frame and nobody reads" {
 test "a reader alongside sees published frames" {
     var config = tiny;
     config.frames = 400;
-    const run = try bench.once(std.testing.allocator, config, true);
+    const run = try bench.once(std.testing.allocator, std.testing.io, config, true);
     try std.testing.expectEqual(@as(u32, 400), run.publishes);
     try std.testing.expect(run.reads <= run.publishes);
 }

@@ -71,11 +71,11 @@ test "dragging the root gutter moves its split and lets go on release" {
 
 /// Step the shell until `done` holds, for ten seconds.
 fn until(s: *shell_loop.Shell, window: *Headless, comptime done: fn (*const shell_loop.Shell) bool) !void {
-    const deadline = std.time.milliTimestamp() + 10_000;
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (!done(s)) {
-        if (std.time.milliTimestamp() > deadline) return error.Timeout;
+        if (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() > deadline) return error.Timeout;
         _ = try s.step(window.platform());
-        std.time.sleep(std.time.ns_per_ms);
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
     }
 }
 
