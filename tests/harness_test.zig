@@ -74,7 +74,7 @@ test "public harness rejects a zero settle window before opening the image" {
 test "public harness cleans up an invalid ELF" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "bad.elf", .data = "not an elf" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bad.elf", .data = "not an elf" });
     var path_buffer: [128]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/bad.elf", .{tmp.sub_path});
     const result = ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = path });

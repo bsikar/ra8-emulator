@@ -78,7 +78,7 @@ test "the tone image's WAV is 1 kHz for 10 ms at a 48 kHz audio rate" {
     var said: std.Io.Writer.Allocating = .init(allocator);
     defer said.deinit();
     try runTone(path, &said);
-    const bytes = try dir.dir.readFileAlloc(allocator, "tone.wav", 1 << 20);
+    const bytes = try dir.dir.readFileAlloc(std.testing.io, "tone.wav", allocator, .limited(1 << 20));
     defer allocator.free(bytes);
     try std.testing.expectEqual(@as(u16, 2), std.mem.readInt(u16, bytes[22..24], .little));
     try std.testing.expectEqual(rate, std.mem.readInt(u32, bytes[24..28], .little));

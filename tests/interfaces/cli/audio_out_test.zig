@@ -38,7 +38,7 @@ const Output = struct {
     }
 
     fn file(self: *Output) ![]u8 {
-        return self.dir.dir.readFileAlloc(allocator, "out.wav", 1 << 20);
+        return self.dir.dir.readFileAlloc(std.testing.io, "out.wav", allocator, .limited(1 << 20));
     }
 };
 

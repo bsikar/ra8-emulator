@@ -176,7 +176,7 @@ test "a resized window gets a frame of its new size" {
 test "the pane offers the webcams the loop adopted, and the loop frees them" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    for ([_][]const u8{ "video4", "video1" }) |name| (try tmp.dir.createFile(name, .{})).close();
+    for ([_][]const u8{ "video4", "video1" }) |name| (try tmp.dir.createFile(std.testing.io, name, .{})).close(std.testing.io);
     var loop = host_loop.Loop{ .allocator = std.testing.allocator, .io = std.testing.io };
     defer loop.deinit();
     loop.adoptDevices(try ra8.gui.camera_devices.list(std.testing.allocator, std.testing.io, tmp.dir));
@@ -188,7 +188,7 @@ test "the pane offers the webcams the loop adopted, and the loop frees them" {
 test "the webcams are listed again when the webcam dialog opens" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    (try tmp.dir.createFile("video1", .{})).close();
+    (try tmp.dir.createFile(std.testing.io, "video1", .{})).close(std.testing.io);
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
@@ -196,7 +196,7 @@ test "the webcams are listed again when the webcam dialog opens" {
     defer loop.deinit();
     loop.useDeviceDir(tmp.dir);
     try std.testing.expectEqualSlices(u32, &.{1}, loop.pane.devices);
-    (try tmp.dir.createFile("video3", .{})).close();
+    (try tmp.dir.createFile(std.testing.io, "video3", .{})).close(std.testing.io);
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expectEqualSlices(u32, &.{1}, loop.pane.devices);
     try window.feed(press(layout().source(.webcam)));
@@ -208,7 +208,7 @@ test "the webcams are listed again when the webcam dialog opens" {
 test "the project's pictures are listed again when the image source comes up" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "a.png", .data = "\x89PNG\r\n\x1a\nrest" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "a.png", .data = "\x89PNG\r\n\x1a\nrest" });
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
@@ -217,8 +217,8 @@ test "the project's pictures are listed again when the image source comes up" {
     loop.useMediaDir(tmp.dir);
     try std.testing.expectEqual(@as(usize, 1), loop.pane.pictures.len);
     loop.pane.args.image = loop.pane.pictures[0];
-    try tmp.dir.writeFile(.{ .sub_path = "b.bmp", .data = "BMrest" });
-    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H2\n" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "b.bmp", .data = "BMrest" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H2\n" });
     _ = try loop.tick(window.platform(), fake.run());
     try std.testing.expectEqual(@as(usize, 1), loop.pane.pictures.len);
     try window.feed(press(layout().source(.image)));
@@ -255,8 +255,8 @@ test "Always answered in the window is kept for the project's next run" {
 test "the chosen picture's preview follows the pick and goes with the image source" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "p.ppm", .data = "P6\n2 1\n255\n" ++ "\x0a\x14\x1e\xc8\x00\x64" });
-    try tmp.dir.writeFile(.{ .sub_path = "q.png", .data = "\x89PNG\r\n\x1a\nbroken" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "p.ppm", .data = "P6\n2 1\n255\n" ++ "\x0a\x14\x1e\xc8\x00\x64" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "q.png", .data = "\x89PNG\r\n\x1a\nbroken" });
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
@@ -283,7 +283,7 @@ test "the chosen picture's preview follows the pick and goes with the image sour
 test "the chosen clip's preview shows while the video source is up" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
-    try tmp.dir.writeFile(.{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H1 F25:1 Cmono\nFRAME\n\x10\xeb" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "c.y4m", .data = "YUV4MPEG2 W2 H1 F25:1 Cmono\nFRAME\n\x10\xeb" });
     var window = Headless.init(std.testing.allocator, 256, 128);
     defer window.deinit();
     var fake = Fake{ .steps_left = 10 };
