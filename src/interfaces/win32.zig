@@ -28,3 +28,18 @@ pub fn pipeWaiting(pipe: HANDLE) ?DWORD {
     if (!PeekNamedPipe(pipe, null, 0, null, &available, null).toBool()) return null;
     return available;
 }
+
+/// WSAPOLLFD, and the WSAPoll bits the serve front asks for (RA8EMU-828).
+pub const PollFd = extern struct { fd: HANDLE, events: i16, revents: i16 };
+pub const poll_in: i16 = 0x0300;
+pub const poll_hup: i16 = 0x0002;
+pub const poll_err: i16 = 0x0001;
+pub const msg_peek: c_int = 0x2;
+pub const wsa_would_block: c_int = 10035;
+
+pub extern "ws2_32" fn WSAPoll(fds: [*]PollFd, count: c_ulong, timeout_ms: c_int) callconv(.winapi) c_int;
+pub extern "ws2_32" fn recv(socket: HANDLE, into: [*]u8, len: c_int, flags: c_int) callconv(.winapi) c_int;
+pub extern "ws2_32" fn WSAGetLastError() callconv(.winapi) c_int;
+pub const CtrlHandler = *const fn (event: DWORD) callconv(.winapi) BOOL;
+pub extern "kernel32" fn SetConsoleCtrlHandler(handler: ?CtrlHandler, add: BOOL) callconv(.winapi) BOOL;
+pub extern "kernel32" fn Sleep(ms: DWORD) callconv(.winapi) void;

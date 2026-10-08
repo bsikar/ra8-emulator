@@ -215,6 +215,7 @@ pub const snapshot = struct {
 
 pub const interfaces = struct {
     pub const socket_flags = @import("interfaces/socket_flags.zig");
+    pub const sock_ready = @import("interfaces/sock_ready.zig");
     pub const win32 = @import("interfaces/win32.zig");
     pub const rpc = struct {
         pub const session = @import("interfaces/rpc/session_rpc.zig");

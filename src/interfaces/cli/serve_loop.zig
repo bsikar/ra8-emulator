@@ -1,8 +1,11 @@
 //! The answer loop the serve front runs on one connected peer (RA8EMU-736).
 const std = @import("std");
+const builtin = @import("builtin");
 const served = @import("../rpc/session_server.zig");
 const Stdio = @import("../rpc/stdio_transport.zig").Stdio;
 const socket_flags = @import("../socket_flags.zig");
+const sock_ready = @import("../sock_ready.zig");
+const win32 = @import("../win32.zig");
 
 /// How long an idle server waits on its peer before checking again.
 const idle_wait_ms = 20;
@@ -34,12 +37,30 @@ pub fn answer(context: *served.Context, wire: served.rpc_lib.Transport, fd: std.
 /// A pipe reports that as HUP. A socket reports it as readable with zero
 /// bytes behind it, so the socket is peeked.
 fn closed(fd: std.posix.fd_t, link: Link) !bool {
-    var fds = [_]std.posix.pollfd{.{ .fd = fd, .events = std.posix.POLL.IN, .revents = 0 }};
-    _ = try std.posix.poll(&fds, idle_wait_ms);
-    const revents = fds[0].revents;
-    if (revents & std.posix.POLL.IN == 0) return revents & std.posix.POLL.HUP != 0;
+    if (on_windows and link == .pipe) return pipeClosed(fd);
+    const ready = try sock_ready.wait(fd, idle_wait_ms);
+    if (!ready.readable) return ready.hung_up;
     if (link == .pipe) return false;
+    return peerGone(fd);
+}
+
+const on_windows = builtin.os.tag == .windows;
+
+/// Windows pipes have no wait; an empty pipe sleeps the idle wait instead.
+fn pipeClosed(pipe: std.posix.fd_t) bool {
+    const waiting = win32.pipeWaiting(pipe) orelse return true;
+    if (waiting == 0) win32.Sleep(idle_wait_ms);
+    return false;
+}
+
+/// Peek one byte: zero bytes means the peer closed its end.
+fn peerGone(fd: std.posix.fd_t) bool {
     var byte: [1]u8 = undefined;
+    if (on_windows) {
+        const got = win32.recv(fd, &byte, byte.len, win32.msg_peek);
+        if (got < 0) return win32.WSAGetLastError() != win32.wsa_would_block;
+        return got == 0;
+    }
     const flags = socket_flags.peek | socket_flags.dontwait;
     const got = std.c.recv(fd, &byte, byte.len, @intCast(flags));
     if (got < 0) return std.c.errno(got) != .AGAIN;
