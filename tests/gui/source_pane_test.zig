@@ -93,9 +93,9 @@ const Rig = struct {
 
     fn snapshot(self: *Rig) !pane.Snapshot {
         try self.session.setRegister(.cpu0, .pc, main_pc);
-        var dir = try std.fs.cwd().openDir(source_dir, .{});
-        defer dir.close();
-        return pane.capture(&self.session, .cpu0, sections(), dir, 12);
+        var dir = try std.Io.Dir.cwd().openDir(std.testing.io, source_dir, .{});
+        defer dir.close(std.testing.io);
+        return pane.capture(&self.session, .cpu0, sections(), std.testing.io, dir, 12);
     }
 };
 
@@ -158,12 +158,12 @@ test "an address with no line and a missing source each say so" {
     var rig: Rig = undefined;
     try rig.init();
     try rig.session.setRegister(.cpu0, .pc, 0x40);
-    const none = try pane.capture(&rig.session, .cpu0, sections(), std.fs.cwd(), 12);
+    const none = try pane.capture(&rig.session, .cpu0, sections(), std.testing.io, std.Io.Dir.cwd(), 12);
     try std.testing.expectEqual(pane.State.no_line, none.state);
     try rig.session.setRegister(.cpu0, .pc, main_pc);
-    var elsewhere = try std.fs.cwd().openDir("tests/fixtures", .{});
-    defer elsewhere.close();
-    const missing = try pane.capture(&rig.session, .cpu0, sections(), elsewhere, 12);
+    var elsewhere = try std.Io.Dir.cwd().openDir(std.testing.io, "tests/fixtures", .{});
+    defer elsewhere.close(std.testing.io);
+    const missing = try pane.capture(&rig.session, .cpu0, sections(), std.testing.io, elsewhere, 12);
     try std.testing.expectEqual(pane.State.no_file, missing.state);
     try std.testing.expectEqual(@as(u32, 18), missing.current);
 }
