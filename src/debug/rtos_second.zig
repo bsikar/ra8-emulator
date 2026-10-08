@@ -20,14 +20,14 @@ var zig_listener: rtos_hook.zig.Listener = undefined;
 
 /// CPU1's trace and load, names read through CPU1's memory. Nothing when
 /// there is no CPU1 or it was not traced.
-pub fn print(out: anytype, options: anytype, second: ?Guest) !void {
-    try printOn(out, options, second orelse return);
+pub fn print(out: anytype, io: std.Io, options: anytype, second: ?Guest) !void {
+    try printOn(out, io, options, second orelse return);
 }
 
 /// `print` for a CPU1 whose memory is `memory`, engine or store (RA8EMU-588).
-pub fn printOn(out: anytype, options: anytype, memory: Guest) !void {
+pub fn printOn(out: anytype, io: std.Io, options: anytype, memory: Guest) !void {
     const tracer = traced orelse return;
-    try rtos_hook.report.all(out, options, tracer, rtos_hook.Memory{ .guest = memory });
+    try rtos_hook.report.all(out, io, options, tracer, rtos_hook.Memory{ .guest = memory });
 }
 
 /// CPU1's tracer and the memory its names are read through, for
@@ -41,10 +41,10 @@ pub fn sideOn(memory: Guest) ?rtos_hook.report.Side {
 /// The listener sits in front of CPU1's bus and exception source, as
 /// rtos_zig.zig does for CPU0; stamps come from CPU1's own SysTick count
 /// and load from its retired count. `print` then reports it as cpu1.
-pub fn armZig(pair: *second_core.zig_run.Driver, wanted: ?rtos_hook.load.Window, path: ?[]const u8) void {
+pub fn armZig(pair: *second_core.zig_run.Driver, io: std.Io, wanted: ?rtos_hook.load.Window, path: ?[]const u8) void {
     const named = path orelse return;
     if (wanted == null) return;
-    const bytes = std.fs.cwd().readFileAlloc(std.heap.page_allocator, named, second_core.limits.image_bytes) catch return;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, named, std.heap.page_allocator, .limited(second_core.limits.image_bytes)) catch return;
     const image = elf.Image.init(bytes) catch return;
     zig_tracer = rtos_hook.resolveOn(image, wanted, 1) orelse return;
     listenZig(pair, &zig_tracer);
