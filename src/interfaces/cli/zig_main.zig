@@ -70,7 +70,7 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
     cli.console_output.configure(&board.serial.line, &parts.tap);
     if (options.profile) parts.prepareProfile(image);
     option_memory.apply(board, cpu0.own());
-    if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armForCli(std.heap.page_allocator, board, options.frames);
+    if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armForCli(std.heap.page_allocator, io, board, options.frames);
     return written;
 }
 
