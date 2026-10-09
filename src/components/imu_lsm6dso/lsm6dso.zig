@@ -13,7 +13,7 @@
 //! and nothing at all on the bench. It also carried a flat 256-byte file
 //! that took a write anywhere, so a driver could store over WHO_AM_I and
 //! have the part identify as whatever it had just written.
-const bus = @import("../riic/riic_bus.zig");
+const bus = @import("../../periph/riic/riic_bus.zig");
 
 pub const address: u7 = 0x6B;
 

@@ -6,8 +6,8 @@ const model = ra8.periph.registry.model;
 const parts = model.parts;
 const endpoint = model.endpoint;
 const catalog = model.catalog;
-const lsm6dso = ra8.periph.i3c_lsm6dso;
-const max17048 = ra8.periph.i3c_max17048;
+const lsm6dso = ra8.components.lsm6dso;
+const max17048 = ra8.components.max17048;
 
 test "the catalog knows the IMU and the fuel gauge as I2C models" {
     const imu = parts.all.find(parts.imu_name) orelse return error.Missing;

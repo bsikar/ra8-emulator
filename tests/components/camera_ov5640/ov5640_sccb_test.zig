@@ -2,7 +2,7 @@
 //! a firmware verifier reads back.
 const std = @import("std");
 const ra8 = @import("ra8");
-const ov5640 = ra8.periph.riic_ov5640;
+const ov5640 = ra8.components.ov5640;
 
 fn point(sensor: *ov5640.Sensor, register: u16) void {
     sensor.write(@truncate(register >> 8));

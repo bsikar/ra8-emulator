@@ -2,7 +2,7 @@
 //! and the output blocks it refuses while it has not been started.
 const std = @import("std");
 const ra8 = @import("ra8");
-const lsm6dso = ra8.periph.i3c_lsm6dso;
+const lsm6dso = ra8.components.lsm6dso;
 
 fn start(imu: *lsm6dso.Imu) void {
     imu.write(lsm6dso.reg.ctrl1_xl);

@@ -1,8 +1,8 @@
 const std = @import("std");
-const script = @import("ra8").periph.i3c_input_script;
-const gt911 = @import("ra8").periph.i3c_gt911;
+const script = @import("ra8").components.input_script;
+const gt911 = @import("ra8").components.gt911;
 const gpio = @import("ra8").periph.gpio;
-const host = @import("ra8").periph.i3c_touch_input;
+const host = @import("ra8").components.touch_input;
 
 test "timed tap dispatches when virtual time reaches it" {
     var events = script.Script{};

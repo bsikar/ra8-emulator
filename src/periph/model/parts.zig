@@ -10,8 +10,8 @@ const catalog = @import("catalog.zig");
 const endpoint = @import("endpoint.zig");
 const eink = @import("../eink/eink.zig");
 const gpio_parts = @import("../gpio/gpio_parts.zig");
-const lsm6dso = @import("../i3c/i3c_lsm6dso.zig");
-const max17048 = @import("../i3c/i3c_max17048.zig");
+const lsm6dso = @import("../../components/imu_lsm6dso/lsm6dso.zig");
+const max17048 = @import("../../components/gauge_max17048/max17048.zig");
 const modem = @import("../modem/modem.zig");
 const esp_hosted = @import("../esp_hosted.zig");
 

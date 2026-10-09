@@ -129,6 +129,15 @@ pub const core = struct {
 };
 pub const harness = @import("harness.zig");
 pub const periph = @import("periph.zig");
+pub const components = struct {
+    pub const ov5640 = @import("components/camera_ov5640/ov5640_sccb.zig");
+    pub const pi4ioe = @import("components/expander_pi4ioe/pi4ioe.zig");
+    pub const gt911 = @import("components/touch_gt911/gt911.zig");
+    pub const touch_input = @import("components/touch_gt911/touch_input.zig");
+    pub const input_script = @import("components/touch_gt911/input_script.zig");
+    pub const lsm6dso = @import("components/imu_lsm6dso/lsm6dso.zig");
+    pub const max17048 = @import("components/gauge_max17048/max17048.zig");
+};
 pub const gui = @import("gui.zig");
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;

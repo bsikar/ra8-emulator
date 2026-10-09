@@ -5,9 +5,9 @@ const ra8 = @import("ra8");
 
 const i2c = ra8.board.i2c;
 const periph = ra8.periph.registry;
-const gt911 = ra8.periph.i3c_gt911;
-const lsm6dso = ra8.periph.i3c_lsm6dso;
-const max17048 = ra8.periph.i3c_max17048;
+const gt911 = ra8.components.gt911;
+const lsm6dso = ra8.components.lsm6dso;
+const max17048 = ra8.components.max17048;
 
 test "a default board answers nothing at the IMU or fuel gauge address" {
     var bus = periph.Bus.init(std.testing.allocator);

@@ -111,10 +111,6 @@ test {
     _ = @import("gptp/gptp_timer_test.zig");
     _ = @import("host_console_test.zig");
     _ = @import("host_read_test.zig");
-    _ = @import("i3c/i3c_gt911_test.zig");
-    _ = @import("i3c/i3c_input_script_test.zig");
-    _ = @import("i3c/i3c_lsm6dso_test.zig");
-    _ = @import("i3c/i3c_max17048_test.zig");
     _ = @import("i3c/i3c_regs_test.zig");
     _ = @import("i3c/i3c_target_test.zig");
     _ = @import("i3c/i3c_held_test.zig");
@@ -191,8 +187,6 @@ test {
     _ = @import("riic/riic_ack_test.zig");
     _ = @import("riic/riic_reset_test.zig");
     _ = @import("riic/riic_bus_test.zig");
-    _ = @import("riic/riic_ov5640_test.zig");
-    _ = @import("riic/riic_pi4ioe_test.zig");
     _ = @import("riic/riic_restart_test.zig");
     _ = @import("riic/riic_rx_test.zig");
     _ = @import("riic/riic_stop_test.zig");

@@ -9,7 +9,7 @@ const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const Machine = ra8.core.stop_machine.Machine;
 const zig_session = ra8.core.step_hook.zig_session;
-const gt911 = ra8.periph.i3c_gt911;
+const gt911 = ra8.components.gt911;
 const eink = ra8.periph.eink;
 const eink_wire = ra8.periph.eink_wire;
 

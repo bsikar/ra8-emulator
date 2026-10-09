@@ -7,7 +7,7 @@ const icu = ra8.periph.icu;
 const pin_irq = icu.pin_irq;
 const pfs = ra8.periph.pfs;
 const gpio = ra8.periph.gpio;
-const gt911 = ra8.periph.i3c_gt911;
+const gt911 = ra8.components.gt911;
 const memmap = ra8.core.memmap;
 
 /// The ICU only reaches the NVIC pending words, so a word map is enough.
