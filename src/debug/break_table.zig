@@ -85,7 +85,7 @@ pub const Table = struct {
     /// here. A disabled break neither counts nor stops. A counted break
     /// stops on its wanted arrival and on every one after it, as a break
     /// a debugger continues past has to; `--break-sym`, which stops once,
-    /// keeps that rule in src/interfaces/cli/zig_break.zig.
+    /// keeps that rule in the frontend that offers it.
     pub fn hit(self: *Table, pc: u32) ?Id {
         const want = pc & ~breakpoint.limits.thumb_bit;
         for (self.slots[0..self.len]) |*slot| {
