@@ -6,12 +6,12 @@
 //! to stderr.
 const std = @import("std");
 const harness = @import("../../harness.zig");
-const board_rtc = @import("../../board/session_rtc.zig");
+const board_rtc = @import("../../session/board_rtc.zig");
 const proto = @import("../rpc/session_rpc.zig");
 const served = @import("../rpc/session_server.zig");
 const loop = @import("serve_loop.zig");
 const listen = @import("serve_listen.zig");
-const session_plug = @import("../../board/session_plug.zig");
+const session_plug = @import("../../session/board_plug.zig");
 const camera_install = @import("../../board/camera_install.zig");
 const source_spec = @import("../../host/camera/source_spec.zig");
 const camera_source = @import("camera_source.zig");

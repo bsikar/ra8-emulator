@@ -1,4 +1,4 @@
-//! Covers src/board/board_boundary.zig with src/session/zig_boundary.zig: a
+//! Covers src/session/board_boundary.zig with src/session/zig_boundary.zig: a
 //! debugger run on a real Board moves board time by exactly what retired
 //! and reaches the pacer, before and after a mid-run speed change
 //! (RA8EMU-709).

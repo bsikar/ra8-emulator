@@ -13,7 +13,7 @@
 //! so it has no run budget to scale.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
-const session_plug = @import("../../board/session_plug.zig");
+const session_plug = @import("../../session/board_plug.zig");
 const session_api = @import("../../session/session_api.zig");
 const devices_panel = @import("../../gui/devices_panel.zig");
 const plug_post = @import("../../gui/plug_post.zig");

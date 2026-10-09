@@ -1,10 +1,10 @@
 //! Session access to the board's raw panel frame and settled state.
 const std = @import("std");
-const Board = @import("board.zig").Board;
-const display_settled = @import("display_settled.zig");
-const FrameCapture = @import("frame_capture.zig").FrameCapture;
+const Board = @import("../board/board.zig").Board;
+const display_settled = @import("../board/display_settled.zig");
+const FrameCapture = @import("../board/frame_capture.zig").FrameCapture;
 const eink = @import("../components/eink_it8951/panel.zig");
-const session_display = @import("../session/session_display.zig");
+const session_display = @import("session_display.zig");
 
 pub const Error = error{ Timeout, NoVirtualProgress, NoFrame };
 

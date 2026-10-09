@@ -4,17 +4,17 @@
 //! lines are re-pended by the boundary itself (events.rependOn).
 //! A sleeping CPU0 may reach to the board's next edge (RA8EMU-767), as a
 //! plain run's idle skip does (src/interfaces/cli/zig_run.zig asleepWidth).
-const Board = @import("board.zig").Board;
+const Board = @import("../board/board.zig").Board;
 const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 const Reboot = @import("../chip/core/reboot.zig").Reboot;
 const systick_bank = @import("../chip/core/systick_bank.zig");
 const clocks = @import("../chip/periph/clocks.zig");
-const zig_boundary = @import("../session/zig_boundary.zig");
+const zig_boundary = @import("zig_boundary.zig");
 const second_core = @import("../chip/core/second_core.zig");
 const registry = @import("../chip/periph/registry.zig");
-const quiet_due = @import("quiet_due.zig");
-const board_edge = @import("boundary.zig");
+const quiet_due = @import("../board/quiet_due.zig");
+const board_edge = @import("../board/boundary.zig");
 const sleep_pace = @import("../chip/core/sleep_pace.zig");
 
 pub const BoardBoundary = struct {

@@ -56,7 +56,7 @@ pub const Context = struct {
     /// without a display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.
-    state: ?@import("../../board/session_state.zig").Hook = null,
+    state: ?@import("../../session/board_state.zig").Hook = null,
     /// Writes the fitted parts for list_parts; a server without one refuses it.
     listing: ?Listing = null,
     /// Changes the camera source; a server without one refuses it.
