@@ -15,10 +15,10 @@ const scs_route = @import("../../chip/core/cpu/scs_route.zig");
 const sleep_pace = @import("../../chip/core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
 const core_clock = @import("../../board/core_clock.zig");
-const fault_file = @import("fault_file.zig");
+const fault_file = @import("../../session/fault_file.zig");
 const quiet_due = @import("../../board/quiet_due.zig");
 const cli = @import("cli.zig");
-const clock_rate = @import("zig_clock_rate.zig");
+const clock_rate = @import("../../session/zig_clock_rate.zig");
 const wall = @import("zig_wall.zig");
 const Board = @import("../../board/board.zig").Board;
 const board_wiring = @import("../../board/wiring.zig");
@@ -32,11 +32,11 @@ const audio_out = @import("audio_out.zig");
 const rtos_hook = @import("../../session/rtos_hook.zig");
 const second_core = @import("../../chip/core/second_core.zig");
 const profile = @import("../../session/profile.zig");
-pub const stack_profile = @import("stack_profile.zig");
+pub const stack_profile = @import("../../session/stack_profile.zig");
 const mem_dump = @import("../../session/mem_dump.zig");
 const watchpoint = @import("../../session/watchpoint.zig");
-/// `--watch` on a Zig run: src/interfaces/cli/zig_watch.zig.
-pub const zig_watch = @import("zig_watch.zig");
+/// `--watch` on a Zig run: src/session/zig_watch.zig.
+pub const zig_watch = @import("../../session/zig_watch.zig");
 const cpu = @import("../../chip/core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
 const Until = @import("../../chip/core/until.zig").Until;
@@ -44,9 +44,9 @@ const Stop = @import("../../chip/core/stop.zig").Stop;
 const Deadline = @import("../../chip/core/deadline.zig").Deadline;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
-const soak_symbols = @import("soak_symbols.zig");
-/// Re-exported for tests/interfaces/cli/itm_console_test.zig: cli.zig is full.
-pub const itm_console = @import("itm_console.zig");
+const soak_symbols = @import("../../session/soak_symbols.zig");
+/// Re-exported for tests/session/itm_console_test.zig: cli.zig is full.
+pub const itm_console = @import("../../session/itm_console.zig");
 /// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
 pub const break_sym = @import("zig_break.zig");
 const window_pace = @import("window_pace.zig");

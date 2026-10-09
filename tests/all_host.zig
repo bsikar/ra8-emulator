@@ -136,8 +136,8 @@ test {
     _ = @import("interfaces/cli/report/cores_test.zig");
     _ = @import("interfaces/cli/report/dumps_test.zig");
     _ = @import("interfaces/cli/zig_run_test.zig");
-    _ = @import("interfaces/cli/zig_watch_test.zig");
-    _ = @import("interfaces/cli/itm_console_test.zig");
+    _ = @import("session/zig_watch_test.zig");
+    _ = @import("session/itm_console_test.zig");
     _ = @import("interfaces/cli/zig_stop_test.zig");
     _ = @import("interfaces/cli/zig_break_test.zig");
     _ = @import("interfaces/cli/zig_undefined_test.zig");

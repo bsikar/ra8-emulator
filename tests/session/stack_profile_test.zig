@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/stack_profile.zig (RA8EMU-971): a run wired as
+//! Covers src/session/stack_profile.zig (RA8EMU-971): a run wired as
 //! the CLI wires `--profile-folded` samples CPU0's call stacks, and the
 //! folded file writes them as cpu0-rooted rows; CPU1's go out as cpu1 rows
 //! named from its own image (RA8EMU-972).
@@ -12,8 +12,8 @@ const profile_report = ra8.board.report.profile;
 const stack_samples = ra8.core.step_hook.stack_samples;
 const cpu_boot = ra8.core.cpu.boot;
 const symbols = ra8.core.symbols;
-const Builder = @import("../../session/symbol_image.zig").Builder;
-const store_board = @import("store_board.zig");
+const Builder = @import("symbol_image.zig").Builder;
+const store_board = @import("../interfaces/cli/store_board.zig");
 const Store = store_board.Store;
 const Guest = store_board.Guest;
 const attach = store_board.attach;

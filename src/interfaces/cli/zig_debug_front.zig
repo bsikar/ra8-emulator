@@ -21,7 +21,7 @@ const rsp_poll = @import("../gdb/rsp_poll.zig");
 const second_core = @import("../../chip/core/second_core.zig");
 const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
 const exclusive_peer = @import("../../chip/core/cpu/exclusive_peer.zig");
-const harness = @import("../../harness.zig");
+const harness = @import("../../session/harness.zig");
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {

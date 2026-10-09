@@ -5,7 +5,7 @@
 //! (--listen). Frames are the only thing written to stdout; complaints go
 //! to stderr.
 const std = @import("std");
-const harness = @import("../../harness.zig");
+const harness = @import("../../session/harness.zig");
 const board_rtc = @import("../../session/board_rtc.zig");
 const proto = @import("../rpc/session_rpc.zig");
 const served = @import("../rpc/session_server.zig");

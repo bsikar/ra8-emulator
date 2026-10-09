@@ -1,4 +1,4 @@
-//! Tests for src/interfaces/cli/touch_spec.zig, through the flag that uses it.
+//! Tests for src/session/touch_spec.zig, through the flag that uses it.
 const std = @import("std");
 const parse = @import("ra8").core.cli.parse;
 

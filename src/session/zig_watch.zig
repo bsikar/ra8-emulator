@@ -9,12 +9,12 @@
 //! is stamped by the next instruction to retire, and one still held when
 //! the run ends is stamped with the pc the run stopped at.
 const std = @import("std");
-const bus = @import("../../chip/core/cpu/bus.zig");
-const boot = @import("../../chip/core/cpu/boot.zig");
-const cpu = @import("../../chip/core/cpu/cpu.zig");
-const elf = @import("../../board/loader/elf.zig");
-const Source = @import("../../chip/core/cpu/exception/source.zig").Source;
-const watchpoint = @import("../../session/watchpoint.zig");
+const bus = @import("../chip/core/cpu/bus.zig");
+const boot = @import("../chip/core/cpu/boot.zig");
+const cpu = @import("../chip/core/cpu/cpu.zig");
+const elf = @import("../board/loader/elf.zig");
+const Source = @import("../chip/core/cpu/exception/source.zig").Source;
+const watchpoint = @import("watchpoint.zig");
 
 pub const limits = struct {
     /// Stores one instruction can land in a four-byte word: four byte

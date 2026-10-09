@@ -6,7 +6,7 @@ pub const core = struct {
     pub const cadence = @import("chip/core/cadence.zig");
     pub const cli = @import("interfaces/cli/cli.zig");
     pub const eink_log = @import("interfaces/cli/eink_log.zig");
-    pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
+    pub const cli_fault_file = @import("session/fault_file.zig");
     pub const probe_ctl = @import("interfaces/cli/probe_ctl.zig");
     pub const serve_main = @import("interfaces/cli/serve_main.zig");
     pub const cli_camera_source = @import("interfaces/cli/camera_source.zig");
@@ -125,7 +125,7 @@ pub const core = struct {
         pub const exception = @import("chip/core/cpu/exception/all.zig");
     };
 };
-pub const harness = @import("harness.zig");
+pub const harness = @import("session/harness.zig");
 pub const periph = @import("chip/periph.zig");
 pub const components = @import("components/components.zig");
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).

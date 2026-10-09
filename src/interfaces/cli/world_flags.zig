@@ -5,12 +5,12 @@
 //! same way the rest do.
 const std = @import("std");
 const cli = @import("cli.zig");
-const touch_spec = @import("touch_spec.zig");
+const touch_spec = @import("../../session/touch_spec.zig");
 const request = @import("../../components/request.zig");
 const fault_spec = @import("../../components/fault_spec.zig");
 const source_spec = @import("../../host/camera/source_spec.zig");
 const sci_reply = @import("../../chip/periph/sci/sci_reply.zig");
-const rtc_start = @import("rtc_start.zig");
+const rtc_start = @import("../../session/rtc_start.zig");
 const speed = @import("../../periph/time/speed.zig");
 const duration = @import("duration.zig");
 const timebase = @import("../../chip/periph/time/timebase.zig");
