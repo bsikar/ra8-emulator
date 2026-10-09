@@ -15,8 +15,8 @@ const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../core/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");
-const sd_dump = @import("../../../periph/sd/sd_dump.zig");
-const sd_image = @import("../../../periph/sd/sd_image.zig");
+const sd_dump = @import("../../../components/sd_card/dump.zig");
+const sd_image = @import("../../../components/sd_card/image.zig");
 const registers = @import("../../../debug/registers.zig");
 const json_regs = @import("json_regs.zig");
 

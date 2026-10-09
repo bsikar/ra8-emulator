@@ -13,7 +13,7 @@
 //! are nobody's but this model's (the serial-number seed and the OEM string)
 //! say so where they are declared.
 const std = @import("std");
-const image = @import("sd_image.zig");
+const image = @import("image.zig");
 
 /// One sector, which on every card this tree models is one block.
 pub const Sector = image.Block;

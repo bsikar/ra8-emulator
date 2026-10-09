@@ -228,17 +228,6 @@ test {
     _ = @import("rtt/rtt_block_test.zig");
     _ = @import("rtt/rtt_line_test.zig");
     _ = @import("rtt/rtt_test.zig");
-    _ = @import("sd/sd_card_test.zig");
-    _ = @import("sd/sd_card_line_test.zig");
-    _ = @import("sd/sd_crc_test.zig");
-    _ = @import("sd/sd_dump_test.zig");
-    _ = @import("sd/sd_fat_test.zig");
-    _ = @import("sd/sd_format_test.zig");
-    _ = @import("sd/sd_image_test.zig");
-    _ = @import("sd/sd_dirent_test.zig");
-    _ = @import("sd/sd_mkimage_test.zig");
-    _ = @import("sd/sd_trace_test.zig");
-    _ = @import("sd/sd_write_test.zig");
     _ = @import("sdhi/sdhi_card_test.zig");
     _ = @import("sdhi/sdhi_card_image_test.zig");
     _ = @import("sdhi/sdhi_fifo_test.zig");

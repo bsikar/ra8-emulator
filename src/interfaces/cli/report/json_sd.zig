@@ -3,8 +3,8 @@
 //! are counted rather than listed, as the text does; each kept row is its
 //! byte offset and its bytes as one lowercase hex string.
 const std = @import("std");
-const sd_dump = @import("../../../periph/sd/sd_dump.zig");
-const sd_image = @import("../../../periph/sd/sd_image.zig");
+const sd_dump = @import("../../../components/sd_card/dump.zig");
+const sd_image = @import("../../../components/sd_card/image.zig");
 const Board = @import("../../../board/board.zig").Board;
 
 /// The card shape, for tests that build a card to read back.

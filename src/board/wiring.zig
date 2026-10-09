@@ -44,8 +44,8 @@ const cpscu = @import("../periph/cpscu.zig");
 const dtc = @import("../periph/dtc/dtc.zig");
 const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
-const sd_card = @import("../periph/sd/sd_card.zig");
-const sd_card_line = @import("../periph/sd/sd_card_line.zig");
+const sd_card = @import("../components/sd_card/card.zig");
+const sd_card_line = @import("../components/sd_card/card_line.zig");
 
 /// The module-stop shadow, the attribution words that decide which of its
 /// bits a Secure store may move, and the gate the rest of the bus hangs off.
@@ -110,7 +110,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.serial.block());
     try self.bus.add(self.spi.block());
     // The card is on Pmod2, which is SCI0 in Simple-SPI mode, not on a
-    // SPI_B channel (src/periph/sd_card_line.zig).
+    // SPI_B channel (src/components/sd_card/card_line.zig).
     self.sd_line = sd_card_line.Line.init(&self.sd);
     self.serial.attachDevice(sd_card_line.line_channel, self.sd_line.device());
     self.spi.attachDevice(eink.line_channel, self.panel.device());

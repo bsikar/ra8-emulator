@@ -1,6 +1,6 @@
 //! Covers src/periph/sd_crc.zig.
 const std = @import("std");
-const sd_crc = @import("ra8").periph.sd_crc;
+const sd_crc = @import("ra8").components.sd_crc;
 
 test "an empty block checksums to zero" {
     try std.testing.expectEqual(@as(u16, 0), sd_crc.crc16(&.{}));
