@@ -7,12 +7,12 @@
 //! did not collect it (the Zig core feeds no step or sample hooks, and the
 //! profile exists only under --profile).
 const elf = @import("../../../board/loader/elf.zig");
-const symbols = @import("../../../debug/symbols.zig");
-const hotspots = @import("../../../debug/hotspots.zig");
+const symbols = @import("../../../session/symbols.zig");
+const hotspots = @import("../../../session/hotspots.zig");
 
 /// The sampled-pc table type, so tests can build one.
 pub const Pcs = hotspots.Table;
-const functions = @import("../../../debug/functions.zig");
+const functions = @import("../../../session/functions.zig");
 const profile = functions.profile;
 const lob = @import("../../../chip/core/lob.zig");
 const csel = @import("../../../chip/core/csel.zig");

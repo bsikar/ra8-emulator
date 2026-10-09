@@ -39,7 +39,7 @@ stay in the tree or the build.
 
 The tree moves to this layout in the order ADR 0004 gives (epic RA8EMU-985),
 so during the migration some files still sit at their old paths (`src/periph/time`,
-`src/debug`, `src/gui`). New code goes where the ADR puts it.
+`src/session`, `src/gui`). New code goes where the ADR puts it.
 A directory is renamed only after everything leaving it has left, so no file
 moves twice.
 

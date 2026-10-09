@@ -1,9 +1,9 @@
 //! Sorted per-function instruction and cycle counts.
 const std = @import("std");
 const elf = @import("../../../board/loader/elf.zig");
-const profile = @import("../../../debug/profile.zig");
-const symbols = @import("../../../debug/symbols.zig");
-const stack_samples = @import("../../../debug/stack_samples.zig");
+const profile = @import("../../../session/profile.zig");
+const symbols = @import("../../../session/symbols.zig");
+const stack_samples = @import("../../../session/stack_samples.zig");
 const stack_profile = @import("../stack_profile.zig");
 const Writer = @import("../report.zig").Writer;
 

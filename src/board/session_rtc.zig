@@ -2,7 +2,7 @@
 //! of the BCD registers the guest reads, taken without a bus access.
 const Board = @import("board.zig").Board;
 const rtc = @import("../chip/periph/rtc/rtc.zig");
-const session_rtc = @import("../debug/session_rtc.zig");
+const session_rtc = @import("../session/session_rtc.zig");
 
 /// The Clock hook over `board`'s RTC.
 pub fn clock(board: *Board) session_rtc.Clock {

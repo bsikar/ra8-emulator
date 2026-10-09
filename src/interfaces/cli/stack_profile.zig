@@ -14,13 +14,13 @@
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
 const cpu_mod = @import("../../chip/core/cpu/cpu.zig");
-const dwarf_line = @import("../../debug/dwarf_line.zig");
-const profile = @import("../../debug/profile.zig");
-const rtos_trace = @import("../../debug/rtos_trace.zig");
-const stack_samples = @import("../../debug/stack_samples.zig");
-const stack_sampler = @import("../../debug/stack_sampler.zig");
-const stack_walk = @import("../../debug/stack_walk.zig");
-const symbols = @import("../../debug/symbols.zig");
+const dwarf_line = @import("../../session/dwarf_line.zig");
+const profile = @import("../../session/profile.zig");
+const rtos_trace = @import("../../session/rtos_trace.zig");
+const stack_samples = @import("../../session/stack_samples.zig");
+const stack_sampler = @import("../../session/stack_sampler.zig");
+const stack_walk = @import("../../session/stack_walk.zig");
+const symbols = @import("../../session/symbols.zig");
 
 pub const Run = struct {
     image: elf.Image,

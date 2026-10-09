@@ -8,11 +8,11 @@
 //! unit sync writes the model's stale view back over it.
 //!
 //! The units are read back through the core the debugger has selected
-//! (src/debug/core_view.zig), so a Zig session hands its stores on
+//! (src/session/core_view.zig), so a Zig session hands its stores on
 //! the same way (RA8EMU-483).
 const std = @import("std");
-const core_view = @import("../../debug/core_view.zig");
-const stop_machine = @import("../../debug/stop_machine.zig");
+const core_view = @import("../../session/core_view.zig");
+const stop_machine = @import("../../session/stop_machine.zig");
 const dwt = @import("../../chip/periph/dwt.zig");
 const dcb = @import("../../chip/periph/dcb.zig");
 

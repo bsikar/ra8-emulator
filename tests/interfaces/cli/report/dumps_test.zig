@@ -6,7 +6,7 @@ const store_board = @import("../store_board.zig");
 const elf = ra8.board.elf;
 const cli = ra8.core.cli;
 const report_dumps = ra8.board.report_dumps;
-const Builder = @import("../../../debug/symbol_image.zig").Builder;
+const Builder = @import("../../../session/symbol_image.zig").Builder;
 
 fn dumped(core: store_board.Guest, image: elf.Image, names: []const []const u8, into: []u8) ![]const u8 {
     var options: cli.Options = .{ .path = "probe.elf" };

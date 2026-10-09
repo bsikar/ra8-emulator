@@ -1,4 +1,4 @@
-//! Covers the debugger run's sleep reach (RA8EMU-767): src/debug/zig_boundary.zig
+//! Covers the debugger run's sleep reach (RA8EMU-767): src/session/zig_boundary.zig
 //! widens a chunk while the core sleeps with nothing to wake it, and
 //! src/board/board_boundary.zig names how far, to the board's next edge.
 const std = @import("std");

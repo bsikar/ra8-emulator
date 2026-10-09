@@ -4,7 +4,7 @@
 //! range check is session_speed's, not a copy of it.
 const std = @import("std");
 const proto = @import("../interfaces/rpc/session_rpc.zig");
-const session_speed = @import("../debug/session_speed.zig");
+const session_speed = @import("../session/session_speed.zig");
 const session_link = @import("session_link.zig");
 const hex_entry = @import("hex_entry.zig");
 const Link = session_link.Link;

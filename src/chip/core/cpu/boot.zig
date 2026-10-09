@@ -64,7 +64,7 @@ pub const Boundary = struct {
 
 /// A debugger listening to a `--cpu zig` run: handed the bus and the
 /// exception source the core would use, it returns the ones the core uses
-/// instead (src/debug/rtos_zig.zig, RA8EMU-261).
+/// instead (src/session/rtos_zig.zig, RA8EMU-261).
 pub const Wrap = struct {
     context: *anyopaque,
     busFn: *const fn (context: *anyopaque, inner: Bus) Bus,

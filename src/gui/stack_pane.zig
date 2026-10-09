@@ -11,10 +11,10 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
 const elf = @import("../board/loader/elf.zig");
-const dwarf_line = @import("../debug/dwarf_line.zig");
-const session_api = @import("../debug/session_api.zig");
-const symbols = @import("../debug/symbols.zig");
-const unwind = @import("../debug/unwind.zig");
+const dwarf_line = @import("../session/dwarf_line.zig");
+const session_api = @import("../session/session_api.zig");
+const symbols = @import("../session/symbols.zig");
+const unwind = @import("../session/unwind.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;

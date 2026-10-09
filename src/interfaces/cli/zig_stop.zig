@@ -4,7 +4,7 @@
 //! counter is read at each boundary by zig_run.Clock.done.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const symbols = @import("../../debug/symbols.zig");
+const symbols = @import("../../session/symbols.zig");
 const Stop = @import("../../chip/core/stop.zig").Stop;
 const Deadline = @import("../../chip/core/deadline.zig").Deadline;
 const cli = @import("cli.zig");

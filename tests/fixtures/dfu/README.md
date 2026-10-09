@@ -2,7 +2,7 @@
 (MinSizeRel, Arm GNU 13.3.rel1) with a throwaway root public key in place of the
 provisioned one, then stripped of debug sections. It is the RA8EMU-776 fixture:
 the real bootloader has to pick between staged slots the way
-`src/debug/boot_slots.zig` says it will.
+`src/session/boot_slots.zig` says it will.
 
 `signed_a.bin` and `signed_b.bin` are the same 32-byte payload, each followed by
 a 116-byte ROT1 trailer signed with the throwaway key: sequence 1 for Slot A and

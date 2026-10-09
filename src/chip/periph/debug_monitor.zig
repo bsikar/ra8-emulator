@@ -1,7 +1,7 @@
 //! DebugMonitor, exception 12, as the interrupt controller takes it.
 //!
 //! With halting debug off and DEMCR.MON_EN set, the debug core turns an FPB
-//! or DWT event into DEMCR.MON_PEND and latches DFSR (src/debug/step_hook.zig).
+//! or DWT event into DEMCR.MON_PEND and latches DFSR (src/session/step_hook.zig).
 //! This file is the controller's half: MON_PEND with MON_EN is a pending
 //! exception 12 at SHPR3 PRI_12, entry clears MON_PEND, and SHCSR.MONITORACT
 //! is set while the handler runs (DDI0553 B3.6, D1.2.42).

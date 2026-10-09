@@ -9,7 +9,7 @@ const zig_debug_front = ra8.core.zig_debug_front;
 const elf = ra8.board.elf;
 const memmap = ra8.core.memmap;
 
-/// The program tests/debug/zig_script_test.zig uses: a vector table at
+/// The program tests/session/zig_script_test.zig uses: a vector table at
 /// sram_base, reset at +0x18, a loop calling a helper at +0x8.
 const program = struct {
     const base: u32 = memmap.sram_base;

@@ -4,7 +4,7 @@ const Board = @import("board.zig").Board;
 const display_settled = @import("display_settled.zig");
 const FrameCapture = @import("frame_capture.zig").FrameCapture;
 const eink = @import("../components/eink_it8951/panel.zig");
-const session_display = @import("../debug/session_display.zig");
+const session_display = @import("../session/session_display.zig");
 
 pub const Error = error{ Timeout, NoVirtualProgress, NoFrame };
 

@@ -10,8 +10,8 @@
 //! them out.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const sections = @import("../../debug/sections.zig");
-const region_map = @import("../../debug/region_map.zig");
+const sections = @import("../../session/sections.zig");
+const region_map = @import("../../session/region_map.zig");
 
 const usage = "usage: ra8_emulator --map <firmware.elf>\n";
 

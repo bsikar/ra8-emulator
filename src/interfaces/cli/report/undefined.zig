@@ -6,7 +6,7 @@
 //! them from the symbol table is the frontend's job, so it lives here.
 const elf = @import("../../../board/loader/elf.zig");
 const undefined_ops = @import("../../../chip/core/undefined_ops.zig");
-const symbols = @import("../../../debug/symbols.zig");
+const symbols = @import("../../../session/symbols.zig");
 
 const Found = undefined_ops.Found;
 const limits = undefined_ops.limits;

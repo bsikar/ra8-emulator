@@ -1,15 +1,15 @@
 //! The `cpu_load` object of `--report json` (RA8EMU-266): the table
 //! `--cpu-load` prints, per core, from the same tracer and the same split
-//! (src/debug/rtos_report.zig). Null when `--cpu-load` was not given; a
+//! (src/session/rtos_report.zig). Null when `--cpu-load` was not given; a
 //! core with no ThreadX to trace is null inside it.
 //!
 //! Each owner carries its kind (`before`, `idle`, `thread`, `exception`),
 //! its id (the thread's control block or the exception number; null for
 //! `before` and `idle`), its name where one can be read, its instructions
 //! and its share in permille, so a core's shares add up to exactly 1000.
-const rtos_report = @import("../../../debug/rtos_report.zig");
-const rtos_load = @import("../../../debug/rtos_load.zig");
-const names = @import("../../../debug/rtos_names.zig");
+const rtos_report = @import("../../../session/rtos_report.zig");
+const rtos_load = @import("../../../session/rtos_load.zig");
+const names = @import("../../../session/rtos_names.zig");
 const json = @import("json.zig");
 
 /// The traced cores the load is read from.

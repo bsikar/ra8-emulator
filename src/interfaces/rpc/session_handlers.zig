@@ -3,11 +3,11 @@
 const std = @import("std");
 const rpc = @import("ra8_rpc");
 const proto = @import("session_rpc.zig");
-const api = @import("../../debug/session_api.zig");
-const stop_machine = @import("../../debug/stop_machine.zig");
-const region_map = @import("../../debug/region_map.zig");
+const api = @import("../../session/session_api.zig");
+const stop_machine = @import("../../session/stop_machine.zig");
+const region_map = @import("../../session/region_map.zig");
 const source_spec = @import("../../host/camera/source_spec.zig");
-const session_rtc = @import("../../debug/session_rtc.zig");
+const session_rtc = @import("../../session/session_rtc.zig");
 
 /// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
 pub const app_codes = proto.app_codes;
@@ -171,7 +171,7 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
 
 pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32) {
     if (args.last < args.first) return .{ .err = .bad_args };
-    const kind = std.meta.stringToEnum(@FieldType(@import("../../debug/watch_table.zig").Watch, "kind"), @tagName(args.access)) orelse
+    const kind = std.meta.stringToEnum(@FieldType(@import("../../session/watch_table.zig").Watch, "kind"), @tagName(args.access)) orelse
         return .{ .err = .bad_args };
     const id = context.session.setWatchpoint(core(args.core), .{ .first = args.first, .last = args.last, .kind = kind }) catch |err|
         return refuse(proto.U32, err);

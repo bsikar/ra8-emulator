@@ -14,9 +14,9 @@
 //! Quiet when the run spread itself out. A working image touches too many
 //! addresses for any one of them to reach the floor, so it prints nothing
 //! and the reader learns that by the absence.
-const hotspots = @import("../../../debug/hotspots.zig");
-const functions = @import("../../../debug/functions.zig");
-const symbols = @import("../../../debug/symbols.zig");
+const hotspots = @import("../../../session/hotspots.zig");
+const functions = @import("../../../session/functions.zig");
+const symbols = @import("../../../session/symbols.zig");
 const elf = @import("../../../board/loader/elf.zig");
 const Writer = @import("../report.zig").Writer;
 

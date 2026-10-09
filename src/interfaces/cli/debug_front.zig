@@ -28,7 +28,7 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const cpu_choice = @import("../../chip/core/cpu/choice.zig");
 const zig_debug_front = @import("zig_debug_front.zig");
-const script = @import("../../debug/script.zig");
+const script = @import("../../session/script.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug-script FILE

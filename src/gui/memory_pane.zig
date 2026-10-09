@@ -8,7 +8,7 @@
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
-const session_api = @import("../debug/session_api.zig");
+const session_api = @import("../session/session_api.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;

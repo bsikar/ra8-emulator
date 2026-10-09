@@ -16,11 +16,11 @@
 //! sites behind the run's counters: counted pcs and where exceptions
 //! were taken.
 const clocks = @import("../../../chip/periph/clocks.zig");
-const tally_mod = @import("../../../debug/tally.zig");
-const taken_in_mod = @import("../../../debug/taken_in.zig");
+const tally_mod = @import("../../../session/tally.zig");
+const taken_in_mod = @import("../../../session/taken_in.zig");
 const elf = @import("../../../board/loader/elf.zig");
-const symbols = @import("../../../debug/symbols.zig");
-const pc_hits = @import("../../../debug/pc_hits.zig");
+const symbols = @import("../../../session/symbols.zig");
+const pc_hits = @import("../../../session/pc_hits.zig");
 
 const Writer = @import("../report.zig").Writer;
 
