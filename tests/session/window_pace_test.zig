@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/window_pace.zig: an engine on its own thread
+//! Covers src/session/window_pace.zig: an engine on its own thread
 //! runs one frame per window step and parks between them.
 const std = @import("std");
 const ra8 = @import("ra8");

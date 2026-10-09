@@ -49,7 +49,7 @@ const soak_symbols = @import("../../session/soak_symbols.zig");
 pub const itm_console = @import("../../session/itm_console.zig");
 /// The `--break-sym` arrival a Zig run counts: src/session/zig_break.zig.
 pub const break_sym = @import("../../session/zig_break.zig");
-const window_pace = @import("window_pace.zig");
+const window_pace = @import("../../session/window_pace.zig");
 /// `--stop-on-undefined` on a Zig run: src/session/zig_undefined.zig.
 pub const undefined_sites = @import("../../session/zig_undefined.zig");
 /// `--save-state` / `--load-state` (RA8EMU-696).

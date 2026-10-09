@@ -11,7 +11,7 @@ const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const frame_out = @import("frame_out.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const board_snapshot = @import("../../gui/board_snapshot.zig");
-const window_pace = @import("window_pace.zig");
+const window_pace = @import("../../session/window_pace.zig");
 const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
 const console_feed = @import("../../gui/console_feed.zig");
 const console_keys = @import("../../gui/console_keys.zig");
@@ -19,10 +19,7 @@ const window_devices = @import("window_devices.zig");
 const board_view = @import("../../render/board_view.zig");
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
-pub const Stepper = struct {
-    ctx: *anyopaque,
-    step: *const fn (ctx: *anyopaque) bool,
-};
+pub const Stepper = window_pace.Stepper;
 
 pub const Screen = struct {
     allocator: std.mem.Allocator,

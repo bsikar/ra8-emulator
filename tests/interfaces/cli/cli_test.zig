@@ -115,7 +115,6 @@ test {
     _ = @import("state_args_test.zig");
     _ = @import("frames_out_test.zig");
     _ = @import("window_board_test.zig");
-    _ = @import("window_pace_test.zig");
     _ = @import("paced_clock_test.zig");
     _ = @import("window_run_test.zig");
     _ = @import("window_main_test.zig");
