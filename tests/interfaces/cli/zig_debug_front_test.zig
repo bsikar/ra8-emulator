@@ -5,7 +5,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const debug_front = ra8.core.debug_front;
-const zig_debug_front = ra8.core.step_hook.zig_debug_front;
+const zig_debug_front = ra8.core.zig_debug_front;
 const elf = ra8.core.elf;
 const memmap = ra8.core.memmap;
 
