@@ -29,7 +29,7 @@ pub const Cpu0 = struct {
     pub fn attachStore(self: *Cpu0, board: *Board, image: elf.Image) !u32 {
         self.store = try Store.init(null);
         const layout = try external.Layout.init(board.external_memory);
-        try self.store.?.configureExternal(layout, &board.flash.flash);
+        try self.store.?.configureExternal(layout, board.nor.window());
         const memory = self.own();
         try wiring.attachBlocks(board, memory);
         try wiring.primeWindows(board, memory, wiring.cpu0Windows(board));

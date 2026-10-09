@@ -43,7 +43,7 @@ fn flash(j: anytype, board: *Board) !void {
     try j.field("reads", unit.reads);
     try j.field("programs", unit.programs);
     try j.field("erases", unit.erases);
-    try j.field("sectors_held", unit.flash.live());
+    try j.field("sectors_held", board.nor.live());
     try j.field("refused_unarmed", unit.unarmed);
     try j.field("refused_oversized", unit.oversized);
     try j.field("refused_out_of_part", unit.out_of_part);

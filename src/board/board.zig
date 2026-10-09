@@ -94,6 +94,7 @@ const usb = @import("usb.zig");
 const iwdt = @import("../periph/iwdt/iwdt.zig");
 const wdt = @import("../periph/wdt/wdt.zig");
 const xspi = @import("../periph/xspi/xspi.zig");
+const nor_flash = @import("../components/nor_flash/flash.zig");
 
 pub const Board = struct {
     /// Where a catalog model's device goes on this board (RA8EMU-490).
@@ -256,10 +257,9 @@ pub const Board = struct {
     /// the cells are sparse and need the board's allocator, and a program
     /// that lands is written through to the engine's memory.
     options: mram.Mram,
-    /// The octal NOR flash behind XSPI0, and the manual-command engine in
-    /// front of it. Built in attach(): the part is sparse and needs the
-    /// board's allocator to hold the sectors something actually wrote to.
+    /// XSPI0's command engine and the sparse octal NOR part behind it.
     flash: xspi.Xspi,
+    nor: nor_flash.Flash,
     /// Whether the OSPI was uncovered on a stable OCTACLK. Built in attach():
     /// it reads the clock-select model live, so it cannot exist before it.
     octa: octaclk.Octa,
@@ -358,7 +358,7 @@ pub const Board = struct {
         self.sd.deinit();
         self.card.deinit();
         self.options.deinit();
-        self.flash.deinit();
+        self.nor.deinit();
         self.bus.deinit();
         self.panel.deinit();
     }

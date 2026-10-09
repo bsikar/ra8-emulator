@@ -7,7 +7,7 @@
 //! in CDBUF (CDT, address, then two data words), set CDCTL0.TRREQ, poll
 //! INTS.CMDCMP, clear it through INTC, and read the data words back. This
 //! model decodes the descriptor, runs the opcode against the NOR array in
-//! xspi_flash.zig, raises CMDCMP and drops TRREQ.
+//! the part (xspi_nor.zig), raises CMDCMP and drops TRREQ.
 //!
 //! Ported from board_periph_xspi.c on dev, with four things that model does
 //! not do.
@@ -62,11 +62,9 @@
 const std = @import("std");
 const octaclk = @import("../octaclk.zig");
 const periph = @import("../registry.zig");
-const flash = @import("xspi_flash.zig");
+const xspi_nor = @import("xspi_nor.zig");
 pub const reset = @import("xspi_reset.zig");
 const lanes = @import("../lanes.zig");
-
-pub const part = flash.part;
 
 /// XSPI0 geometry.
 pub const win_base: u32 = 0x4026_8000;
@@ -146,7 +144,9 @@ pub const status = struct {
 const shadow_words: usize = win_span / 4;
 
 pub const Xspi = struct {
-    flash: flash.Flash,
+    /// The NOR part, plugged in by the board. With none, every command that
+    /// reaches for the part runs off it.
+    part: ?xspi_nor.Nor = null,
     /// The OCTACLK watch, or null on a board without one, in which case the
     /// engine works the way it always did here.
     octa: ?*const octaclk.Octa = null,
@@ -175,14 +175,6 @@ pub const Xspi = struct {
     /// Kicks that went nowhere because the OSPI came out of module stop
     /// before OCTACLK was declared stable.
     stalled: u32 = 0,
-
-    pub fn init(allocator: std.mem.Allocator) Xspi {
-        return .{ .flash = flash.Flash.init(allocator) };
-    }
-
-    pub fn deinit(self: *Xspi) void {
-        self.flash.deinit();
-    }
 
     pub fn quiet(self: *const Xspi) bool {
         return self.reads == 0 and self.programs == 0 and self.erases == 0 and
@@ -261,7 +253,7 @@ pub const Xspi = struct {
         const size = descriptor.dataSize(cdt);
         if (self.resetting.step(descriptor.opcode(cdt))) self.write_enabled = false;
         switch (@as(Opcode, @fromBackingInt(@intCast(descriptor.opcode(cdt))))) {
-            .read_id => self.buffer(slot.data0).* = self.flash.jedecWord(),
+            .read_id => self.buffer(slot.data0).* = if (self.part) |nor| nor.jedecWord() else 0,
             .read_status => self.buffer(slot.data0).* = if (self.write_enabled) status.wel else 0,
             .write_enable => self.write_enabled = true,
             .read => self.doRead(address, size),
@@ -277,7 +269,7 @@ pub const Xspi = struct {
         if (!self.fits(address, size)) return;
         var words = [2]u32{ 0, 0 };
         for (0..size) |index| {
-            const value: u32 = self.flash.byte(address + @as(u32, @intCast(index)));
+            const value: u32 = self.part.?.byte(address + @as(u32, @intCast(index)));
             const shift: u5 = @intCast((index % 4) * 8);
             words[index / 4] |= value << shift;
         }
@@ -293,16 +285,16 @@ pub const Xspi = struct {
     fn doProgram(self: *Xspi, address: u32, size: u32) void {
         if (!self.armed()) return;
         if (!self.fitsProgram(address, size)) return;
-        if (part.crossesPage(address, size)) self.wrapped +%= 1;
+        if (self.part.?.crossesPage(address, size)) self.wrapped +%= 1;
         const words = [2]u32{ self.buffer(slot.data0).*, self.buffer(slot.data1).* };
         for (0..size) |index| {
             const shift: u5 = @intCast((index % 4) * 8);
             const value: u8 = @truncate(words[index / 4] >> shift);
-            const at = part.programStep(address, @intCast(index));
-            self.flash.program(at, value) catch {
+            const at = self.part.?.programStep(address, @intCast(index));
+            if (!self.part.?.program(at, value)) {
                 self.lost +%= 1;
                 return;
-            };
+            }
         }
         self.programs +%= 1;
         self.write_enabled = false;
@@ -311,11 +303,15 @@ pub const Xspi = struct {
     /// Erase the 4 KiB sector the address falls in.
     fn doErase(self: *Xspi, address: u32) void {
         if (!self.armed()) return;
-        if (address >= self.flash.capacity) {
+        const nor = self.part orelse {
+            self.out_of_part +%= 1;
+            return;
+        };
+        if (address >= nor.capacity()) {
             self.out_of_part +%= 1;
             return;
         }
-        self.flash.erase(address);
+        nor.erase(address);
         self.erases +%= 1;
         self.write_enabled = false;
     }
@@ -335,7 +331,11 @@ pub const Xspi = struct {
             self.oversized +%= 1;
             return false;
         }
-        if (address >= self.flash.capacity) {
+        const nor = self.part orelse {
+            self.out_of_part +%= 1;
+            return false;
+        };
+        if (address >= nor.capacity()) {
             self.out_of_part +%= 1;
             return false;
         }
@@ -349,7 +349,11 @@ pub const Xspi = struct {
             self.oversized +%= 1;
             return false;
         }
-        if (!self.flash.holds(address, size)) {
+        const nor = self.part orelse {
+            self.out_of_part +%= 1;
+            return false;
+        };
+        if (!nor.holds(address, size)) {
             self.out_of_part +%= 1;
             return false;
         }

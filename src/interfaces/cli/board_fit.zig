@@ -34,7 +34,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     board.run.soak.armed = options.run_for;
     const profile_fits = try loadProfile(allocator, io, options.board_profile);
     board.external_memory = profile_fits.memory;
-    try board.flash.flash.resize(profile_fits.memory.ospi.size);
+    try board.nor.resize(profile_fits.memory.ospi.size);
     var asks: [profile.max_fits + request.max]request.Request = undefined;
     var count: usize = 0;
     for (profile_fits.fits[0..profile_fits.count]) |fitted| {

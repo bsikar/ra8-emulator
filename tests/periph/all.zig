@@ -276,7 +276,6 @@ test {
     _ = @import("wdt/wdt_test.zig");
     _ = @import("wdt/wdt_clock_test.zig");
     _ = @import("wdt/wdt_write_once_test.zig");
-    _ = @import("xspi/xspi_flash_test.zig");
     _ = @import("xspi/xspi_test.zig");
     _ = @import("xspi/xspi_reset_test.zig");
 }

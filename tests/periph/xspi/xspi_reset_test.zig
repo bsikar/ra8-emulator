@@ -4,6 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const xspi = ra8.periph.xspi;
+const nor_flash = ra8.components.nor_flash;
 const reset = xspi.reset;
 
 /// A one-byte 1S opcode, left-justified in CMD, no data.
@@ -62,8 +63,9 @@ test "a taken RST spends the enable" {
 }
 
 test "a 1S reset drops the write-enable latch" {
-    var unit = xspi.Xspi.init(std.testing.allocator);
-    defer unit.deinit();
+    var part = nor_flash.Flash.init(std.testing.allocator);
+    defer part.deinit();
+    var unit = xspi.Xspi{ .part = part.nor() };
 
     kick(&unit, single(0x06));
     try std.testing.expectEqual(xspi.status.wel, status(&unit));
@@ -74,8 +76,9 @@ test "a 1S reset drops the write-enable latch" {
 }
 
 test "an 8D reset drops the latch too" {
-    var unit = xspi.Xspi.init(std.testing.allocator);
-    defer unit.deinit();
+    var part = nor_flash.Flash.init(std.testing.allocator);
+    defer part.deinit();
+    var unit = xspi.Xspi{ .part = part.nor() };
 
     kick(&unit, single(0x06));
     kick(&unit, octal(reset.opcode.enable));
@@ -84,8 +87,9 @@ test "an 8D reset drops the latch too" {
 }
 
 test "a bare RST leaves the latch set" {
-    var unit = xspi.Xspi.init(std.testing.allocator);
-    defer unit.deinit();
+    var part = nor_flash.Flash.init(std.testing.allocator);
+    defer part.deinit();
+    var unit = xspi.Xspi{ .part = part.nor() };
 
     kick(&unit, single(0x06));
     kick(&unit, single(reset.opcode.reset));
@@ -94,8 +98,9 @@ test "a bare RST leaves the latch set" {
 }
 
 test "a reset completes like any other command" {
-    var unit = xspi.Xspi.init(std.testing.allocator);
-    defer unit.deinit();
+    var part = nor_flash.Flash.init(std.testing.allocator);
+    defer part.deinit();
+    var unit = xspi.Xspi{ .part = part.nor() };
 
     kick(&unit, single(reset.opcode.enable));
     try std.testing.expectEqual(xspi.field.cmdcmp, unit.read(xspi.win_base + xspi.off_ints, 4));

@@ -144,7 +144,7 @@ fn flash(board: *Board, out: Writer) !void {
     if (unit.quiet()) return;
     try out.print(
         "XSPI flash: {d} read(s), {d} program(s), {d} erase(s), {d} sector(s) holding data\n",
-        .{ unit.reads, unit.programs, unit.erases, unit.flash.live() },
+        .{ unit.reads, unit.programs, unit.erases, board.nor.live() },
     );
     if (unit.unarmed != 0) {
         try out.print(

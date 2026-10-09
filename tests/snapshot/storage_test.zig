@@ -11,19 +11,21 @@ const allocator = std.testing.allocator;
 
 const Options = @FieldType(Board, "options");
 const Flash = @FieldType(Board, "flash");
+const Nor = @FieldType(Board, "nor");
 
 /// The Board's sparse memories, under the Board's names.
 const Stand = struct {
     options: Options,
     flash: Flash,
+    nor: Nor,
 
     fn init() Stand {
-        return .{ .options = Options.init(allocator), .flash = Flash.init(allocator) };
+        return .{ .options = Options.init(allocator), .flash = .{}, .nor = Nor.init(allocator) };
     }
 
     fn deinit(self: *Stand) void {
         self.options.deinit();
-        self.flash.deinit();
+        self.nor.deinit();
     }
 };
 
@@ -37,8 +39,8 @@ fn busy() !Stand {
     board.options.stream.len = 4;
     board.options.locked = true;
     board.options.programs = 3;
-    try board.flash.flash.program(0x2000, 0x0F);
-    try board.flash.flash.program(0x10_0004, 0xA5);
+    try board.nor.program(0x2000, 0x0F);
+    try board.nor.program(0x10_0004, 0xA5);
     board.flash.shadow[1] = 0x55;
     board.flash.write_enabled = true;
     board.flash.erases = 2;
@@ -64,8 +66,8 @@ test "both memories round-trip with their contents" {
     try saved(&target, &again);
     try std.testing.expectEqualSlices(u8, list.written(), again.written());
     try std.testing.expectEqual(@as(u8, 0x34), target.options.otp.byte(cell + 1));
-    try std.testing.expectEqual(@as(u8, 0xA5), target.flash.flash.byte(0x10_0004));
-    try std.testing.expectEqual(@as(u32, 2), target.flash.flash.live());
+    try std.testing.expectEqual(@as(u8, 0xA5), target.nor.byte(0x10_0004));
+    try std.testing.expectEqual(@as(u32, 2), target.nor.live());
     try std.testing.expect(target.options.locked);
 }
 
@@ -77,9 +79,9 @@ test "a different configured flash capacity is refused" {
     try saved(&board, &list);
     var target = Stand.init();
     defer target.deinit();
-    try target.flash.flash.resize(32 * 1024 * 1024);
+    try target.nor.resize(32 * 1024 * 1024);
     try std.testing.expectError(error.BadValue, storage.load(&target, list.written()));
-    try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
+    try std.testing.expectEqual(@as(u32, 0), target.nor.live());
 }
 
 test "a sector past the part is refused" {
@@ -94,7 +96,7 @@ test "a sector past the part is refused" {
     var target = Stand.init();
     defer target.deinit();
     try std.testing.expectError(error.BadValue, storage.load(&target, list.written()));
-    try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
+    try std.testing.expectEqual(@as(u32, 0), target.nor.live());
     try std.testing.expect(!target.options.locked);
 }
 
@@ -112,5 +114,5 @@ test "a missing or short section changes nothing" {
     const cut = list.written()[0 .. list.written().len - 1];
     try std.testing.expect(std.meta.isError(storage.load(&target, cut)));
     try std.testing.expectEqual(@as(u32, 0), target.options.otp.live());
-    try std.testing.expectEqual(@as(u32, 0), target.flash.flash.live());
+    try std.testing.expectEqual(@as(u32, 0), target.nor.live());
 }
