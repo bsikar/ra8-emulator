@@ -11,9 +11,9 @@
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
-const Cortex = @import("../chip/core/cpu/cortex.zig").Cortex;
+const Cortex = @import("../../chip/core/cpu/cortex.zig").Cortex;
 const features = @import("rsp_features.zig");
-const stop_machine = @import("stop_machine.zig");
+const stop_machine = @import("../../debug/stop_machine.zig");
 
 pub const Error = error{NoSpace};
 
@@ -28,7 +28,7 @@ pub const server = @import("rsp_server.zig");
 pub const poll = @import("rsp_poll.zig");
 /// ITM text sent to gdb as `O` packets.
 pub const console = @import("rsp_console.zig");
-const core_view = @import("core_view.zig");
+const core_view = @import("../../debug/core_view.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]Cortex{

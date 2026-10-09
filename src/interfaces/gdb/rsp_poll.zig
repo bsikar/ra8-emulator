@@ -5,8 +5,8 @@
 //! taken; anything else is left for the packet reader once the run stops.
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
-const debug_session = @import("session.zig");
-const sock_ready = @import("../interfaces/sock_ready.zig");
+const debug_session = @import("../../debug/session.zig");
+const sock_ready = @import("../sock_ready.zig");
 
 /// Instructions per run chunk under gdb: small enough that an interrupt
 /// lands promptly, large enough that polling costs nothing measurable.
