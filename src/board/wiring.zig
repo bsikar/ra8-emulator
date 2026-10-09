@@ -14,7 +14,7 @@ const sau = @import("../chip/periph/sau.zig");
 const mpu = @import("../chip/periph/mpu/mpu.zig");
 const mpu_guard = @import("../chip/core/mpu_guard.zig");
 const cpuid = @import("../chip/periph/cpuid.zig");
-const dwt = @import("../debug/dwt.zig");
+const dwt = @import("../chip/periph/dwt.zig");
 const scb = @import("../chip/periph/scb.zig");
 const fault_clear = @import("../chip/periph/fault_clear.zig");
 

@@ -137,7 +137,7 @@ pub const Wiring = struct {
     /// the run returns, for a retire listener that reads it (RA8EMU-971).
     core: ?*?*cpu_mod.Cpu = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
-    itm: ?*@import("../../../debug/itm.zig").Itm = null,
+    itm: ?*@import("../../periph/itm.zig").Itm = null,
     /// `--bus-errors`: a refused data and fetch accesses raise BusFaults,
     /// counted here (RA8EMU-641); null ends the run on them instead.
     bus_errors: ?*bus_fault.Tally = null,

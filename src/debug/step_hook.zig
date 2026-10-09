@@ -40,9 +40,9 @@ pub const rtos_stream = @import("rtos_stream.zig");
 pub const rtos_publish = @import("rtos_publish.zig");
 /// `--trace-rtos`: the tracer and its report (RA8EMU-221).
 pub const rtos_hook = @import("rtos_hook.zig");
-const dwt = @import("dwt.zig");
-const itm = @import("itm.zig");
-const dcb = @import("dcb.zig");
+const dwt = @import("../chip/periph/dwt.zig");
+const itm = @import("../chip/periph/itm.zig");
+const dcb = @import("../chip/periph/dcb.zig");
 
 /// The machine a run is driven by, and how the last run ended.
 pub const Driver = struct {

@@ -38,10 +38,10 @@
 //! comparators past NUMCOMP read as zero and ignore writes.
 //!
 //! Not modelled yet: the Cycle Counter match itself.
-const watch_table = @import("watch_table.zig");
-const cpuid = @import("../chip/periph/cpuid.zig");
+const cpuid = @import("cpuid.zig");
 
-pub const Access = watch_table.Access;
+/// Which side of an access a comparator or a watch matches.
+pub const Access = enum { read, write };
 
 pub const base: u32 = 0xE000_1000;
 

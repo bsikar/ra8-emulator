@@ -5,9 +5,9 @@
 //! firmware load read instead.
 const stop_machine = @import("stop_machine.zig");
 const fpb = @import("fpb.zig");
-const dwt = @import("dwt.zig");
-const itm = @import("itm.zig");
-const dcb = @import("dcb.zig");
+const dwt = @import("../chip/periph/dwt.zig");
+const itm = @import("../chip/periph/itm.zig");
+const dcb = @import("../chip/periph/dcb.zig");
 
 /// The word at the word-aligned `address` as a load sees it, or null when
 /// no debug unit owns it. `stored` is what memory holds there.
