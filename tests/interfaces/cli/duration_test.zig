@@ -1,7 +1,7 @@
-//! Tests for src/periph/time/duration.zig.
+//! Tests for src/interfaces/cli/duration.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const duration = ra8.periph.time_policy.duration;
+const duration = ra8.board.duration;
 
 const s: u64 = 1_000_000_000;
 
