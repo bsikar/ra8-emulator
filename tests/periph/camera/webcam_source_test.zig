@@ -38,7 +38,7 @@ test "a padded RGB565 frame decodes row by row and reaches the firmware as RGB56
     // Two rows of two pixels, 6 bytes a row: 4 of pixels, 2 of padding.
     const bytes = [_]u8{ 0x00, 0xF8, 0xE0, 0x07, 0xEE, 0xEE, 0x1F, 0x00, 0xFF, 0xFF, 0xEE, 0xEE };
     var fake: Fake = .{ .frame = &bytes };
-    const control: u8 = 0; // whatever image_source maps 0 to
+    const control: u8 = 0; // whatever hosted.formatFor maps 0 to
     const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 6), "/dev/video0", &control);
     const source = self.source();
     try std.testing.expectEqualStrings("webcam", source.label);

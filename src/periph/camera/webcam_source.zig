@@ -11,7 +11,7 @@ const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
 const decoded = @import("../../host/camera/decoded_image.zig");
-const still = @import("image_source.zig");
+const hosted = @import("hosted.zig");
 const raw = @import("../../host/camera/pipe_frame.zig");
 const abi = @import("../../host/camera/v4l2_abi.zig");
 const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
@@ -99,7 +99,7 @@ pub const WebcamSource = struct {
     fn frame(context: *anyopaque, when: u64, shape: frame_source.Shape) void {
         const self: *WebcamSource = @ptrCast(@alignCast(context));
         self.pull();
-        self.converted.format = still.formatFor(self.format_control.*);
+        self.converted.format = hosted.formatFor(self.format_control.*);
         self.converted.source().frame(when, shape);
     }
 
