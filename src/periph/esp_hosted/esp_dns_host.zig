@@ -1,10 +1,13 @@
-//! Asynchronous host DNS resolution for the C6 station bridge.
+//! Asynchronous host DNS resolution for the C6 station bridge. Lookups run
+//! on the Worker the application hands over (RA8EMU-1020), or inline
+//! without one.
 const std = @import("std");
 const dns = @import("esp_dns.zig");
 const eth = @import("esp_eth.zig");
 const frame = @import("esp_frame.zig");
 const Queue = @import("esp_queue.zig").Queue;
 const tape = @import("esp_tape.zig");
+const worker = @import("esp_worker.zig");
 
 const State = enum(u8) { running, ready };
 
@@ -28,19 +31,22 @@ const Job = struct {
 
 pub const Host = struct {
     job: ?*Job = null,
-    thread: ?std.Thread = null,
+    thread: ?worker.Handle = null,
+    worker: ?worker.Worker = null,
 
-    pub fn start(self: *Host, request: []const u8, route: eth.Route, resolver: dns.Resolver) void {
+    pub fn start(self: *Host, request: []const u8, route: eth.Route, resolver: dns.Resolver, on: ?worker.Worker) void {
         if (self.job != null or request.len > eth.udp_payload_max) return;
         const job = std.heap.page_allocator.create(Job) catch return;
         job.* = .{ .resolver = resolver, .route = route, .request_len = request.len };
         @memcpy(job.request[0..request.len], request);
-        const thread = std.Thread.spawn(.{}, run, .{job}) catch {
+        self.job = job;
+        const background = on orelse return run(job);
+        self.thread = background.spawn(runJob, job) catch {
+            self.job = null;
             std.heap.page_allocator.destroy(job);
             return;
         };
-        self.job = job;
-        self.thread = thread;
+        self.worker = background;
     }
 
     /// Hands a finished answer to the guest; a recording run also keeps it.
@@ -48,7 +54,7 @@ pub const Host = struct {
         const job = self.job orelse return;
         if (job.state.load(.acquire) != .ready) return;
         if (job.valid and queue.len >= limit) return;
-        self.thread.?.join();
+        if (self.thread) |thread| self.worker.?.join(thread);
         self.thread = null;
         self.job = null;
         if (job.valid) _ = queue.push(&job.response);
@@ -59,10 +65,14 @@ pub const Host = struct {
     pub fn deinit(self: *Host) void {
         const job = self.job orelse return;
         job.canceled.store(true, .release);
-        self.thread.?.detach();
+        if (self.thread) |thread| self.worker.?.detach(thread);
         self.thread = null;
         self.job = null;
         job.release();
+    }
+
+    fn runJob(arg: *anyopaque) void {
+        run(@ptrCast(@alignCast(arg)));
     }
 
     fn run(job: *Job) void {
