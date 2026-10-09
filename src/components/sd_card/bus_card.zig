@@ -13,8 +13,9 @@
 //! front each hold an `image.Image` and keep only their own protocol state.
 //! `--sd-image PATH` loads a raw host image into it (RA8EMU-568), so the
 //! store is the copy-on-write overlay: firmware writes land here and the
-//! file is only rewritten by `saveTo`, which `--sd-writable` asks for. With
-//! no image the capacity is the model's own choice, stated below.
+//! file is only rewritten by the application (host disk_file.replace),
+//! which `--sd-writable` asks for. With no image the capacity is the
+//! model's own choice, stated below.
 const std = @import("std");
 const image = @import("image.zig");
 const sd_line = @import("../../periph/sdhi/sdhi_line.zig");
@@ -96,9 +97,9 @@ pub const Card = struct {
         };
     }
 
-    /// Write every block of the card over `path` (temp file, fsync, rename).
-    pub fn saveTo(self: *const Card, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
-        try self.img.saveTo(io, dir, path);
+    /// Every block of the card in order, for the host to write back.
+    pub fn writeTo(self: *const Card, out: *std.Io.Writer) !void {
+        try self.img.writeTo(out);
     }
 
     /// A block command is only legal from the transfer state, which is

@@ -153,25 +153,15 @@ pub const Image = struct {
         return self.capacity_blocks / geometry.csize_unit - 1;
     }
 
-    /// Write every block of this card over `path` (RA8EMU-334). The bytes go
-    /// to a sibling temp file, which is fsynced and then renamed over the
-    /// image, so a write that fails anywhere leaves the old file as it was.
-    /// The image keeps its permissions.
-    pub fn saveTo(self: *const Image, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
-        const kept = if (dir.statFile(io, path, .{})) |stat| stat.permissions else |_| std.Io.File.Permissions.default_file;
-        var atomic = try dir.createFileAtomic(io, path, .{ .permissions = kept, .replace = true });
-        defer atomic.deinit(io);
-        var buffer: [4096]u8 = undefined;
-        var out = atomic.file.writer(io, &buffer);
+    /// Every block of this card in order, for the host to write over an
+    /// image file (host/disk_file.zig replace, RA8EMU-334 and RA8EMU-1020).
+    pub fn writeTo(self: *const Image, out: *std.Io.Writer) !void {
         var block: Block = undefined;
         var index: u32 = 0;
         while (index < self.capacity_blocks) : (index += 1) {
             _ = self.read(index, &block);
-            try out.interface.writeAll(&block);
+            try out.writeAll(&block);
         }
-        try out.interface.flush();
-        try atomic.file.sync(io);
-        try atomic.replace(io);
     }
 };
 

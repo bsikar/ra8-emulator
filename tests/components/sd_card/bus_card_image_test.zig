@@ -1,11 +1,12 @@
 //! RA8EMU-568: `--sd-image` backs the SDHI card with a raw host image. The
 //! card's sparse store is the copy-on-write overlay: reads come from the
-//! image, writes stay in memory, and only saveTo rewrites the file.
+//! image, writes stay in memory, and only host disk_file.replace rewrites the file.
 const std = @import("std");
 const io = std.testing.io;
 const ra8 = @import("ra8");
 const card = ra8.components.sd_bus_card;
 const sd_image = ra8.components.sd_image;
+const disk_file = ra8.host.disk_file;
 const sd_format = ra8.components.sd_format;
 
 const Block = [card.geometry.block_bytes]u8;
@@ -23,7 +24,7 @@ fn fatImage(allocator: std.mem.Allocator, dir: std.Io.Dir) ![]u8 {
     @memcpy(entry[0..11], "BOOK    EPB");
     entry[11] = 0x20;
     _ = img.write(root, &entry);
-    try img.saveTo(io, dir, "card.img");
+    try disk_file.replace(io, dir, "card.img", &img);
     return dir.readFileAlloc(io, "card.img", allocator, .unlimited);
 }
 
@@ -62,7 +63,7 @@ test "writes stay in the overlay until the card is saved back" {
     const before = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(before);
     try std.testing.expectEqualSlices(u8, bytes, before);
-    try unit.saveTo(io, tmp.dir, "card.img");
+    try disk_file.replace(io, tmp.dir, "card.img", &unit);
     const after = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(after);
     try std.testing.expectEqual(bytes.len, after.len);

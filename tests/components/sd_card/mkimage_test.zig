@@ -5,6 +5,7 @@ const io = std.testing.io;
 const ra8 = @import("ra8");
 const mk = ra8.components.sd_mkimage;
 const sd_image = ra8.components.sd_image;
+const disk_file = ra8.host.disk_file;
 const card = ra8.components.sd_bus_card;
 const fat32 = @import("fat32_reader.zig");
 
@@ -40,7 +41,7 @@ fn buildBytes(dir: std.Io.Dir, out: std.Io.Dir, name: []const u8) ![]u8 {
     var img = sd_image.Image.init(A);
     defer img.deinit();
     _ = try mk.build(A, io, &img, dir, "BOOKS");
-    try img.saveTo(io, out, name);
+    try disk_file.replace(io, out, name, &img);
     return out.readFileAlloc(io, name, A, .unlimited);
 }
 

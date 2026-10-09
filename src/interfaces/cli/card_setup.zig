@@ -5,6 +5,7 @@ const sd_format = @import("../../components/sd_card/format.zig");
 const sd_advice = @import("../../components/sd_card/format_advice.zig");
 const sd_image = @import("../../components/sd_card/image.zig");
 const sd_mkimage = @import("../../components/sd_card/mkimage.zig");
+const disk_file = @import("../../host/disk_file.zig");
 
 /// The label a `--sd-new` format gives the card when the spec names none.
 pub const default_label = "RA8";
@@ -74,7 +75,7 @@ fn fromDir(board: *Board, io: std.Io, path: []const u8) !void {
 pub fn saveSdhi(board: *Board, io: std.Io, sdhi: Sdhi) void {
     if (!sdhi.writable) return;
     const path = sdhi.image orelse return;
-    board.host_card.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
+    disk_file.replace(io, std.Io.Dir.cwd(), path, &board.host_card) catch |err| {
         std.debug.print("--sd-image {s}: not saved: {s}\n", .{ path, @errorName(err) });
     };
 }
@@ -84,7 +85,7 @@ pub fn saveSdhi(board: *Board, io: std.Io, sdhi: Sdhi) void {
 pub fn saveBack(board: *const Board, io: std.Io, sd_path: ?[]const u8, save: bool) void {
     if (!save) return;
     const path = sd_path orelse return;
-    board.sd.img.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
+    disk_file.replace(io, std.Io.Dir.cwd(), path, &board.sd.img) catch |err| {
         std.debug.print("SD image {s}: not saved: {s}\n", .{ path, @errorName(err) });
     };
 }
