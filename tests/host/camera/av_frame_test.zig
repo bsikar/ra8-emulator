@@ -1,9 +1,9 @@
-//! Covers src/periph/camera/av_frame.zig: CoreVideo formats, the 2vuy
+//! Covers src/host/camera/av_frame.zig: CoreVideo formats, the 2vuy
 //! swizzle and BGRA to RGB24 with row padding, short buffers, and the
 //! newest-frame mailbox.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const frame = webcam.av_frame;
 const v4l2 = webcam.v4l2;
 

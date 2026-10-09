@@ -145,6 +145,25 @@ pub const host = struct {
     pub const host_console = @import("host/host_console.zig");
     pub const host_read = @import("host/host_read.zig");
     pub const pipe_windows = @import("host/camera/pipe_windows.zig");
+    /// Host camera capture backends and file formats (RA8EMU-1011).
+    pub const camera = struct {
+        pub const consent = @import("host/camera/webcam_consent.zig");
+        pub const privacy = @import("host/camera/webcam_privacy.zig");
+        pub const av_permission = @import("host/camera/av_permission.zig");
+        pub const av_info_plist = @import("host/camera/av_info_plist.zig");
+        pub const av_frame = @import("host/camera/av_frame.zig");
+        pub const av_delegate = @import("host/camera/av_delegate.zig");
+        pub const av_objc = @import("host/camera/av_objc.zig");
+        pub const av_session = @import("host/camera/av_session.zig");
+        pub const v4l2 = @import("host/camera/v4l2_abi.zig");
+        pub const negotiate = @import("host/camera/v4l2_negotiate.zig");
+        pub const device = @import("host/camera/v4l2_device.zig");
+        pub const stream = @import("host/camera/v4l2_stream.zig");
+        pub const mf = @import("host/camera/mf_abi.zig");
+        pub const mf_com = @import("host/camera/mf_com.zig");
+        pub const mf_open = @import("host/camera/mf_open.zig");
+        pub const y4m = @import("host/camera/y4m_header.zig");
+    };
 };
 pub const gui = @import("gui.zig");
 pub const render = struct {

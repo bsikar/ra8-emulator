@@ -7,7 +7,7 @@ const std = @import("std");
 const png = @import("../periph/camera/png_decode.zig");
 const bmp = @import("../periph/camera/bmp_decode.zig");
 const ppm = @import("../periph/camera/ppm_decode.zig");
-const y4m = @import("../periph/camera/y4m_header.zig");
+const y4m = @import("../host/camera/y4m_header.zig");
 
 /// How many leading bytes it takes to tell the kinds apart.
 pub const sniff_len = 16;

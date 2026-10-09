@@ -7,7 +7,7 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const decoded = @import("../periph/camera/decoded_image.zig");
 const image_source = @import("../periph/camera/image_source.zig");
-const y4m = @import("../periph/camera/y4m_header.zig");
+const y4m = @import("../host/camera/y4m_header.zig");
 const yuv = @import("../periph/camera/y4m_frame.zig");
 const Color = draw_list.Color;
 

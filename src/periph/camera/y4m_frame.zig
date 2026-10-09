@@ -5,7 +5,7 @@
 //! inverse of the YUV422 the converter hands the firmware. Chroma is
 //! sampled at the pixel's own position, so 4:2:0 and 4:2:2 repeat each
 //! chroma sample over the luma it covers.
-const header = @import("y4m_header.zig");
+const header = @import("../../host/camera/y4m_header.zig");
 const convert = @import("pixel_convert.zig");
 
 /// Fill `out` (width * height pixels) from `planes` (header.frameBytes()).

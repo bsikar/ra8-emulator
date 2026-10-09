@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/av_permission.zig with a fake Objective-C
+//! Covers src/host/camera/av_permission.zig with a fake Objective-C
 //! runtime: the status read, the verdict mapping, and the gate's messages.
 const std = @import("std");
 const ra8 = @import("ra8");
-const av = ra8.periph.ceu.camera.webcam.av_permission;
+const av = ra8.host.camera.av_permission;
 
 var device_class: u8 = 0;
 var status_selector: u8 = 0;
@@ -47,9 +47,9 @@ test "a missing class or media type reads as not asked" {
 }
 
 test "denied and restricted block; authorized and not asked pass" {
-    try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.denied, av.verdict(.restricted));
-    try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.allowed, av.verdict(.authorized));
-    try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.privacy.Verdict.unset, av.verdict(.not_determined));
+    try std.testing.expectEqual(ra8.host.camera.privacy.Verdict.denied, av.verdict(.restricted));
+    try std.testing.expectEqual(ra8.host.camera.privacy.Verdict.allowed, av.verdict(.authorized));
+    try std.testing.expectEqual(ra8.host.camera.privacy.Verdict.unset, av.verdict(.not_determined));
     var said: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer said.deinit();
     try av.gate(.authorized, &said.writer);

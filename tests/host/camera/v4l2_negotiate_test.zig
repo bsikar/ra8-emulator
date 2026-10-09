@@ -1,9 +1,9 @@
-//! Covers src/periph/camera/v4l2_abi.zig and v4l2_negotiate.zig against a
+//! Covers src/host/camera/v4l2_abi.zig and v4l2_negotiate.zig against a
 //! mock V4L2 device.
 const std = @import("std");
 const builtin = @import("builtin");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const abi = webcam.v4l2;
 const negotiate = webcam.negotiate;
 

@@ -1,10 +1,10 @@
-//! Covers src/periph/camera/av_session.zig against a fake Objective-C
+//! Covers src/host/camera/av_session.zig against a fake Objective-C
 //! runtime that logs every message: the open sequence, the preset and
 //! video settings, the sink attached for the delegate, a missing device
 //! index, and a refused output releasing everything it made.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const session = webcam.av_session;
 const objc = webcam.av_objc;
 const delegate = webcam.av_delegate;

@@ -12,7 +12,7 @@ const cli = ra8.core.cli;
 
 // A macOS build carries the Info.plist the camera permission needs.
 comptime {
-    _ = ra8.periph.ceu.camera.webcam.av_info_plist;
+    _ = ra8.host.camera.av_info_plist;
 }
 const elf = ra8.core.elf;
 

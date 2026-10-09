@@ -7,13 +7,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const frame_source = @import("frame_source.zig");
-const consent = @import("webcam_consent.zig");
-const permission = @import("av_permission.zig");
-const objc = @import("av_objc.zig");
-const delegate = @import("av_delegate.zig");
-const frame = @import("av_frame.zig");
-const session = @import("av_session.zig");
-const negotiate = @import("v4l2_negotiate.zig");
+const consent = @import("../../host/camera/webcam_consent.zig");
+const permission = @import("../../host/camera/av_permission.zig");
+const objc = @import("../../host/camera/av_objc.zig");
+const delegate = @import("../../host/camera/av_delegate.zig");
+const frame = @import("../../host/camera/av_frame.zig");
+const session = @import("../../host/camera/av_session.zig");
+const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
 const source = @import("webcam_source.zig");
 
 /// Everything the open needs from the Mac, gathered up front.

@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/v4l2_device.zig with ordinary device nodes:
+//! Covers src/host/camera/v4l2_device.zig with ordinary device nodes:
 //! nothing here needs or opens a camera.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const v4l2 = webcam.device;
 
 test "a missing node is refused" {

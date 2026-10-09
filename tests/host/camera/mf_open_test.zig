@@ -1,10 +1,10 @@
-//! Covers src/periph/camera/mf_open.zig against fake Media Foundation
+//! Covers src/host/camera/mf_open.zig against fake Media Foundation
 //! calls and COM objects: device pick, YUY2 then RGB32, the size read
 //! back, and every object released and MF stopped on each path.
 const std = @import("std");
 const ra8 = @import("ra8");
-const mf = ra8.periph.ceu.camera.webcam.mf;
-const mf_open = ra8.periph.ceu.camera.webcam.mf_open;
+const mf = ra8.host.camera.mf;
+const mf_open = ra8.host.camera.mf_open;
 
 const Fake = extern struct { vtable: [*]const ?*const anyopaque };
 
