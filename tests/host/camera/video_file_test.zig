@@ -33,7 +33,7 @@ fn open(dir: std.testing.TmpDir, bytes: []const u8, suffix: []const u8) !*video.
 }
 
 fn capture(loaded: *video.Clip) !camera.frame_source.FrameSource {
-    return camera.hosted.Hosted(video.Clip).open(allocator, loaded, &rgb565, "video", "clip.y4m");
+    return ra8.components.camera.hosted.Hosted(video.Clip).open(allocator, loaded, &rgb565, "video", "clip.y4m");
 }
 
 fn expectLine(source: camera.frame_source.FrameSource, when: u64, expected: []const u8) !void {

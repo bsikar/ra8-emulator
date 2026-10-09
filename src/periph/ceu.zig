@@ -65,9 +65,6 @@ const periph = @import("registry.zig");
 pub const camera = struct {
     pub const frame_source = @import("camera/frame_source.zig");
     pub const gradient = @import("camera/gradient_source.zig");
-    pub const convert = @import("camera/pixel_convert.zig");
-    pub const converted = @import("camera/converted_source.zig");
-    pub const hosted = @import("camera/hosted.zig");
 };
 
 pub const win_base: u32 = 0x4034_8000;

@@ -3,6 +3,9 @@
 
 test {
     _ = @import("camera_ov5640/ov5640_sccb_test.zig");
+    _ = @import("camera_ov5640/pixel_convert_test.zig");
+    _ = @import("camera_ov5640/converted_source_test.zig");
+    _ = @import("camera_ov5640/hosted_test.zig");
     _ = @import("expander_pi4ioe/pi4ioe_test.zig");
     _ = @import("touch_gt911/gt911_test.zig");
     _ = @import("touch_gt911/input_script_test.zig");

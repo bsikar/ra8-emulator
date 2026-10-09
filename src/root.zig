@@ -129,6 +129,13 @@ pub const harness = @import("harness.zig");
 pub const periph = @import("periph.zig");
 pub const components = struct {
     pub const ov5640 = @import("components/camera_ov5640/ov5640_sccb.zig");
+    /// The camera part's frame production: host inputs wrapped and converted
+    /// to what the CEU programmed (RA8EMU-1059).
+    pub const camera = struct {
+        pub const hosted = @import("components/camera_ov5640/hosted.zig");
+        pub const converted = @import("components/camera_ov5640/converted_source.zig");
+        pub const convert = @import("components/camera_ov5640/pixel_convert.zig");
+    };
     pub const pi4ioe = @import("components/expander_pi4ioe/pi4ioe.zig");
     pub const gt911 = @import("components/touch_gt911/gt911.zig");
     pub const touch_input = @import("components/touch_gt911/touch_input.zig");

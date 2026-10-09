@@ -2,7 +2,7 @@
 //! to the firmware's pixel format and scaled to the size it programmed.
 //! Decoding sources hold one of these and swap `input` as their input
 //! moves; the CEU only ever sees destination bytes.
-const frame_source = @import("frame_source.zig");
+const frame_source = @import("../../periph/camera/frame_source.zig");
 const convert = @import("pixel_convert.zig");
 
 pub const Converted = struct {
