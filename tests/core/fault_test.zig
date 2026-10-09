@@ -24,8 +24,7 @@ test "a watch keeps every part of the access the hook saw" {
     try std.testing.expect(seen.kind == .fetch);
 }
 
-test "a fault carries no access and no instruction until one is found" {
+test "a fault carries no access until one is found" {
     const taken = fault.Fault{ .pc = 0x0200_0910, .detail = "unmapped" };
     try std.testing.expect(taken.access == null);
-    try std.testing.expect(taken.instruction == null);
 }

@@ -3,6 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const undefined_ops = ra8.core.undefined_ops;
 const elf = ra8.core.elf;
+const imageWith = @import("undefined_image.zig").imageWith;
 
 /// The program counter shifted into an AND: and.w r3, r2, pc, lsl #2.
 const orrs_pc = [2]u16{ 0xEA02, 0x038F };
@@ -56,30 +57,6 @@ test "the list stops but the count does not" {
     try std.testing.expectEqual(undefined_ops.limits.listed, found.listed().len);
 }
 
-/// An ELF32 ARM image carrying one executable segment of the given bytes.
-fn imageWith(buffer: []u8, code: []const u8, vaddr: u32) elf.Image {
-    @memset(buffer, 0);
-    const head = std.mem.bytesAsValue(elf.Header, buffer[0..@sizeOf(elf.Header)]);
-    @memcpy(&head.magic, "\x7fELF");
-    head.class = 1;
-    head.data = 1;
-    head.e_machine = elf.em_arm;
-    head.e_phoff = @sizeOf(elf.Header);
-    head.e_phentsize = @sizeOf(elf.ProgramHeader);
-    head.e_phnum = 1;
-    const at = @as(usize, head.e_phoff);
-    const ph = std.mem.bytesAsValue(elf.ProgramHeader, buffer[at..][0..@sizeOf(elf.ProgramHeader)]);
-    ph.p_type = elf.pt_load;
-    ph.p_flags = elf.pf_x;
-    ph.p_offset = @intCast(at + @sizeOf(elf.ProgramHeader));
-    ph.p_vaddr = vaddr;
-    ph.p_paddr = vaddr;
-    ph.p_filesz = @intCast(code.len);
-    ph.p_memsz = @intCast(code.len);
-    @memcpy(buffer[ph.p_offset..][0..code.len], code);
-    return elf.Image.init(buffer) catch unreachable;
-}
-
 test "a sweep names the site at its own address" {
     // mov r0, r2 ; and.w r3, r2, pc, lsl #2 ; mov r1, r3
     const code = [_]u8{ 0x10, 0x46, 0x02, 0xEA, 0x8F, 0x03, 0x19, 0x46 };
@@ -106,40 +83,6 @@ test "a non executable segment is not swept" {
     ph.p_flags = 4;
     image = elf.Image.init(&buffer) catch unreachable;
     try std.testing.expectEqual(@as(usize, 0), undefined_ops.sweep(image).count);
-}
-
-test "nothing found prints nothing" {
-    var buffer: [256]u8 = undefined;
-    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try undefined_ops.print(&out.writer, image, .{});
-    try std.testing.expectEqual(@as(usize, 0), out.written().len);
-}
-
-test "a site prints its address and its encoding" {
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F };
-    found.count = 1;
-    var buffer: [256]u8 = undefined;
-    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try undefined_ops.print(&out.writer, image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "1 site(s)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0x02007498 EA02038F") != null);
-}
-
-test "an image with no symbol table prints the address alone" {
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007002, .encoding = 0xEA02038F };
-    found.count = 1;
-    var buffer: [256]u8 = undefined;
-    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try undefined_ops.print(&out.writer, image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "+0x") == null);
 }
 
 test "a site starts with no arrivals" {
@@ -170,32 +113,6 @@ test "kept holds every site the report does not list" {
     found.count = 10;
     try std.testing.expectEqual(@as(usize, 10), found.kept().len);
     try std.testing.expectEqual(@as(usize, undefined_ops.limits.listed), found.listed().len);
-}
-
-test "an executed site is marked and counted in the summary" {
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F, .runs = 2 };
-    found.count = 1;
-    var buffer: [256]u8 = undefined;
-    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try undefined_ops.print(&out.writer, image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "EXECUTED 2x") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "1 of them EXECUTED, 2 arrival(s)") != null);
-}
-
-test "a swept but unexecuted site reports none executed" {
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x02007498, .encoding = 0xEA02038F };
-    found.count = 1;
-    var buffer: [256]u8 = undefined;
-    const image = imageWith(&buffer, &[_]u8{ 0x10, 0x46 }, 0x02007000);
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try undefined_ops.print(&out.writer, image, found);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "none executed") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "EXECUTED") == null);
 }
 
 test "a kept site does not stop the run by default" {
@@ -247,37 +164,4 @@ test "a site past the watch limit can neither be armed nor stop anything" {
     found.stopOnRun();
     try std.testing.expectEqual(undefined_ops.limits.watched, found.kept().len);
     try std.testing.expect(found.stoppedAt() == null);
-}
-
-test "the report names the site the run stopped on" {
-    var buffer: [4096]u8 = undefined;
-    var image_bytes: [512]u8 = undefined;
-    const image = imageWith(&image_bytes, &[_]u8{ 0x02, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
-
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA02_038F };
-    found.count = 1;
-    found.stopOnRun();
-    found.sites[0].runs = 1;
-
-    var stream: std.Io.Writer = .fixed(&buffer);
-    try undefined_ops.print(&stream, image, found);
-    const out = stream.buffered();
-    try std.testing.expect(std.mem.indexOf(u8, out, "run stopped at 0x02000000") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "before it executed") != null);
-}
-
-test "a run that was not stopped says nothing about stopping" {
-    var buffer: [4096]u8 = undefined;
-    var image_bytes: [512]u8 = undefined;
-    const image = imageWith(&image_bytes, &[_]u8{ 0x02, 0xEA, 0x8F, 0x03 }, 0x0200_0000);
-
-    var found = undefined_ops.Found{};
-    found.sites[0] = .{ .address = 0x0200_0000, .encoding = 0xEA02_038F };
-    found.count = 1;
-    found.sites[0].runs = 1;
-
-    var stream: std.Io.Writer = .fixed(&buffer);
-    try undefined_ops.print(&stream, image, found);
-    try std.testing.expect(std.mem.indexOf(u8, stream.buffered(), "run stopped at") == null);
 }

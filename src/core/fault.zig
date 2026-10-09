@@ -11,15 +11,12 @@
 //! need them and the engine needs the hooks: with the pair in their own file
 //! that is a line, not a loop.
 const std = @import("std");
-const disasm = @import("../debug/disasm.zig");
 
 pub const Fault = struct {
     pc: u32,
     detail: []const u8,
     /// The access that took the fault, when one was reported.
     access: ?Access = null,
-    /// The instruction at the PC, when it decoded.
-    instruction: ?disasm.Text = null,
 
     pub const Access = struct {
         kind: enum { read, write, fetch },
