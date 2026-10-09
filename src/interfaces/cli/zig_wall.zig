@@ -6,7 +6,6 @@
 const std = @import("std");
 const backing = @import("../../board/external_backing.zig");
 const clocks = @import("../../chip/periph/clocks.zig");
-const frames_out = @import("report.zig").frames_out;
 const Clock = @import("zig_run.zig").Clock;
 
 /// Charge `instructions` retired by CPU0 to both cores and the board.
@@ -41,7 +40,7 @@ pub fn close(clock: *Clock, instructions: u32) !void {
     clock.accounted += instructions;
     clock.resume_boundary = false;
     clock.resume_unscaled = false;
-    if (frames_out.Armed.of(clock.board)) |armed| try armed.pollSettle(clock.board.time.base.now());
+    if (clock.board.display.output.vsync) |*vsync| try vsync.settle(clock.board.time.base.now());
     if (clock.pace) |pace| clock.paced_out = !pace.charge(duration);
     clock.boundary_hz = null;
 }

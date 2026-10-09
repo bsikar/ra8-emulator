@@ -207,7 +207,7 @@ pub const Armed = struct {
         } else if (board.panel.refresh_hook == null) {
             board.panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
         }
-        board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame } };
+        board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame, .settle = onSettle } };
         return self;
     }
 
@@ -229,6 +229,11 @@ pub const Armed = struct {
         const vsync = board.display.output.vsync orelse return null;
         if (vsync.sink.frame != onFrame) return null;
         return @ptrCast(@alignCast(vsync.sink.context));
+    }
+
+    fn onSettle(context: *anyopaque, now: u64) anyerror!void {
+        const self: *Armed = @ptrCast(@alignCast(context));
+        try self.pollSettle(now);
     }
 
     fn onFrame(context: *anyopaque, when: u64) void {

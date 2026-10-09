@@ -22,6 +22,9 @@ pub const default_period_ns: u64 = 16_666_667;
 pub const Sink = struct {
     context: *anyopaque,
     frame: *const fn (context: *anyopaque, when_ns: u64) void,
+    /// Polled after every chunk, frame boundary or not, for a viewer that
+    /// waits on the picture holding still (the e-ink LUT status).
+    settle: ?*const fn (context: *anyopaque, now_ns: u64) anyerror!void = null,
 };
 
 pub const Vsync = struct {
@@ -43,6 +46,11 @@ pub const Vsync = struct {
         self.boundaries += ended;
         self.swallowed += ended - 1;
         return true;
+    }
+
+    /// The sink's settle poll, when it has one.
+    pub fn settle(self: *Vsync, now_ns: u64) !void {
+        if (self.sink.settle) |poll| try poll(self.sink.context, now_ns);
     }
 
     /// Called by the board after each chunk.

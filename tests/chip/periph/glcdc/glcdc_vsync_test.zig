@@ -43,3 +43,30 @@ test "a long chunk scans once and counts the periods it swallowed" {
     try std.testing.expectEqual(@as(u64, 3), boundary.swallowed);
     try std.testing.expectEqual(5 * vsync.default_period_ns, boundary.next_ns);
 }
+
+const Settles = struct {
+    polls: u32 = 0,
+    last: u64 = 0,
+    fn frame(_: *anyopaque, _: u64) void {}
+    fn settle(context: *anyopaque, now_ns: u64) anyerror!void {
+        const self: *Settles = @ptrCast(@alignCast(context));
+        self.polls += 1;
+        self.last = now_ns;
+    }
+};
+
+test "settle polls the sink on every chunk, frame boundary or not" {
+    var seen = Settles{};
+    var boundary = vsync.Vsync{ .sink = .{ .context = &seen, .frame = Settles.frame, .settle = Settles.settle } };
+    try boundary.settle(5);
+    try boundary.settle(7);
+    try std.testing.expectEqual(@as(u32, 2), seen.polls);
+    try std.testing.expectEqual(@as(u64, 7), seen.last);
+}
+
+test "settle without a poll does nothing" {
+    var seen = Settles{};
+    var boundary = vsync.Vsync{ .sink = .{ .context = &seen, .frame = Settles.frame } };
+    try boundary.settle(5);
+    try std.testing.expectEqual(@as(u32, 0), seen.polls);
+}
