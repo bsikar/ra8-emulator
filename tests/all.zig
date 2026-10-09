@@ -92,7 +92,7 @@ test {
     _ = @import("core/long_shift_test.zig");
     _ = @import("core/memmap_test.zig");
     _ = @import("core/external_memory_test.zig");
-    _ = @import("sizing/sweep_test.zig");
+    _ = @import("board/sizing/sweep_test.zig");
     _ = @import("core/pages_test.zig");
     _ = @import("core/part_test.zig");
     _ = @import("core/part_map_test.zig");

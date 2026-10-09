@@ -4,9 +4,9 @@
 //! `--report json`. `--elf PATH` runs a guest image across the same matrix
 //! instead (sweep_elf.zig).
 const std = @import("std");
-const workload = @import("../../sizing/workload.zig");
-const matrix = @import("../../sizing/matrix.zig");
-const sweep = @import("../../sizing/sweep.zig");
+const workload = @import("../../board/sizing/workload.zig");
+const matrix = @import("../../board/sizing/matrix.zig");
+const sweep = @import("../../board/sizing/sweep.zig");
 const sweep_report = @import("sweep_report.zig");
 const sweep_table = @import("sweep_table.zig");
 const sweep_elf = @import("sweep_elf.zig");
