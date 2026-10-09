@@ -155,7 +155,7 @@ pub const Sequence = struct {
     }
 };
 
-pub const FrameCapture = @import("frame_capture.zig").FrameCapture;
+pub const FrameCapture = @import("../../board/frame_capture.zig").FrameCapture;
 
 /// --frames-out armed before the run (RA8EMU-573). It installs a Vsync on
 /// the GLCDC output stage, so each frame period the board boundary scans the

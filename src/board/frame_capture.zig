@@ -1,6 +1,7 @@
-//! Capture buffer for the report-side panel scan.
+//! Capture buffer for a scan of the board's panel: the end-of-run report
+//! and `--frames-out` read it, and so does the session's display wait.
 const std = @import("std");
-const Board = @import("../../board/board.zig").Board;
+const Board = @import("board.zig").Board;
 
 pub const FrameCapture = struct {
     allocator: std.mem.Allocator,
