@@ -2,7 +2,7 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
-    _ = @import("interfaces/socket_flags_test.zig");
+    _ = @import("host/socket_flags_test.zig");
     _ = @import("interfaces/host_sock_windows_test.zig");
     _ = @import("interfaces/sock_ready_test.zig");
     _ = @import("interfaces/win32_test.zig");

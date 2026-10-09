@@ -3,7 +3,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const win32 = @import("win32.zig");
-const socket_flags = @import("socket_flags.zig");
 
 pub const Handle = std.posix.fd_t;
 
@@ -42,7 +41,7 @@ pub fn takeByte(handle: Handle, byte: *[1]u8, peek: bool) ?usize {
         if (got < 0) return null;
         return @intCast(got);
     }
-    const got = std.c.recv(handle, byte, byte.len, if (peek) @intCast(socket_flags.peek) else 0);
+    const got = std.c.recv(handle, byte, byte.len, if (peek) @intCast(std.posix.MSG.PEEK) else 0);
     if (got < 0) return null;
     return @intCast(got);
 }

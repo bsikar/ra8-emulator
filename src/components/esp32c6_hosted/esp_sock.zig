@@ -2,7 +2,7 @@
 //! replayed from a tape with no host socket at all (RA8EMU-560).
 const std = @import("std");
 const tape = @import("esp_tape.zig");
-const socket_flags = @import("../../interfaces/socket_flags.zig");
+const socket_flags = @import("../../host/socket_flags.zig");
 const host_net = @import("esp_host_net.zig");
 
 pub const Address = host_net.Address;
