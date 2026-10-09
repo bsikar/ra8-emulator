@@ -14,7 +14,7 @@ const usb_disk_option = @import("usb_disk_option.zig");
 const pacing = @import("../../periph/time/pacing.zig");
 const profile = @import("../../board/profile.zig");
 const request = @import("../../components/request.zig");
-const tape = @import("../../periph/esp_hosted/esp_tape.zig");
+const tape = @import("../../components/esp32c6_hosted/esp_tape.zig");
 const tape_dir = @import("../../host/tape_dir.zig");
 
 /// A replay that met a request it has no recording for fails the run.

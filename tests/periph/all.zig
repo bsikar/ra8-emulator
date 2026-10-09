@@ -3,7 +3,6 @@
 //! from here, directly or through a file listed here.
 test {
     _ = @import("standing_test.zig");
-    _ = @import("esp_hosted_test.zig");
     _ = @import("adc/adc_intr_test.zig");
     _ = @import("adc/adc_scan_test.zig");
     _ = @import("adc/adc_tsn_cal_test.zig");

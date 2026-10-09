@@ -2,7 +2,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const host_worker = ra8.host.worker;
-const Worker = ra8.periph.esp_hosted.worker.Worker;
+const Worker = ra8.components.esp_hosted.worker.Worker;
 
 fn bump(arg: *anyopaque) void {
     const count: *std.atomic.Value(u32) = @ptrCast(@alignCast(arg));

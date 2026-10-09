@@ -103,7 +103,7 @@ pub const Options = struct {
     board_profile: ?[]const u8 = null,
     detach_c6: bool = false,
     /// `--net-record DIR` / `--net-replay DIR`: the C6's host traffic (RA8EMU-560).
-    net_tape: ?@import("../../periph/esp_hosted/esp_tape.zig").Spec = null,
+    net_tape: ?@import("../../components/esp32c6_hosted/esp_tape.zig").Spec = null,
     /// `--attach NAME@ENDPOINT`: extra catalog models, in the order asked.
     attaches: [request.max]request.Request = undefined,
     attach_count: usize = 0,

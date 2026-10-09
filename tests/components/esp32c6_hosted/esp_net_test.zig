@@ -1,7 +1,7 @@
 //! Real loopback proof for the C6 TCP and UDP host bridge.
 const std = @import("std");
 const ra8 = @import("ra8");
-const hosted = ra8.periph.esp_hosted;
+const hosted = ra8.components.esp_hosted;
 const eth = hosted.eth;
 const frame = hosted.frame;
 const Bridge = hosted.net.Bridge;

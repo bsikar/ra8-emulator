@@ -1,7 +1,7 @@
 //! Tests for host-backed DNS response framing.
 const std = @import("std");
 const ra8 = @import("ra8");
-const dns = ra8.periph.esp_hosted.dns;
+const dns = ra8.components.esp_hosted.dns;
 
 fn query(out: []u8, qtype: u16) []const u8 {
     @memset(out, 0);

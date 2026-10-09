@@ -1,10 +1,10 @@
-//! Covers src/periph/esp_hosted/esp_host_net.zig and the socket on it in
+//! Covers src/components/esp32c6_hosted/esp_host_net.zig and the socket on it in
 //! esp_sock.zig: the C6 reaches the host network only through the Net the
 //! application hands over, and with none a live run opens no socket.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const esp = ra8.periph.esp_hosted;
+const esp = ra8.components.esp_hosted;
 const Net = esp.host_net.Net;
 const Sock = esp.sock.Sock;
 

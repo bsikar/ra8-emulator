@@ -2,7 +2,7 @@
 //! matches byte for byte and keeps the fresh one's own pins.
 const std = @import("std");
 const ra8 = @import("ra8");
-const esp_hosted = ra8.periph.esp_hosted;
+const esp_hosted = ra8.components.esp_hosted;
 const gpio = ra8.periph.gpio;
 const file = ra8.snapshot.file;
 const section = ra8.snapshot.c6;

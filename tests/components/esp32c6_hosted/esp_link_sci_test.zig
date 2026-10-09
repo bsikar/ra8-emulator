@@ -1,7 +1,7 @@
 //! Drives the ESP32-C6 link through SCI2 Simple-SPI, the way firmware does.
 const std = @import("std");
 const ra8 = @import("ra8");
-const c6 = ra8.periph.esp_hosted;
+const c6 = ra8.components.esp_hosted;
 const frame = c6.frame;
 const gpio = ra8.periph.gpio;
 const sci = ra8.periph.sci;

@@ -210,7 +210,6 @@ pub const sci_peek = @import("periph/sci/sci_peek.zig");
 pub const sci_lin = @import("periph/sci/sci_lin.zig");
 pub const sci_device = @import("periph/sci/sci_device.zig");
 pub const sci_spi = @import("periph/sci/sci_spi.zig");
-pub const esp_hosted = @import("periph/esp_hosted.zig");
 pub const sci_status = @import("periph/sci/sci_status.zig");
 pub const sdhi = @import("periph/sdhi/sdhi.zig");
 pub const sdhi_line = @import("periph/sdhi/sdhi_line.zig");
