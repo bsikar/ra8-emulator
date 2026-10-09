@@ -4,7 +4,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.add_sub_wide_vectors;
+const vectors = ra8.core.conformance_base.add_sub_wide_vectors;
 const cpu_ns = ra8.core.cpu;
 const nzcv: u32 = 0xF000_0000;
 

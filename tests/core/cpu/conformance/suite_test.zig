@@ -3,8 +3,8 @@
 //! group nobody claims, fails `zig build test`.
 const std = @import("std");
 const ra8 = @import("ra8");
-const coverage = ra8.core.conformance_coverage;
-const suite = ra8.core.conformance_suite;
+const coverage = @import("coverage.zig");
+const suite = @import("suite.zig");
 
 test "every claimed encoding has at least one vector" {
     if (coverage.firstMissing(suite.claimed, suite.covered)) |gap| {

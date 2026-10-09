@@ -4,7 +4,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.special_data_vectors;
+const vectors = ra8.core.conformance_base.special_data_vectors;
 const cpu_ns = ra8.core.cpu;
 const special_data = cpu_ns.ops.special_data;
 

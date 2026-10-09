@@ -53,7 +53,7 @@ pub fn writeDocument(writer: anytype, claimed: []const []const u8, covered: []co
         \\
         \\Every encoding the Zig core's semantics claim, and how many vectors from
         \\the Arm ARM (DDI0553) pseudocode cover it. Generated from
-        \\src/core/cpu/conformance/suite.zig; `zig build test` fails when this file
+        \\tests/core/cpu/conformance/suite.zig; `zig build test` fails when this file
         \\is stale or a semantics encoding is missing. Regenerate with
         \\`RA8_BLESS_CONFORMANCE=1 zig build test`.
         \\

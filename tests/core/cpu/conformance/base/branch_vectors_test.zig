@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.branch_vectors;
+const vectors = ra8.core.conformance_base.branch_vectors;
 const cpu_ns = ra8.core.cpu;
 const branch = cpu_ns.ops.branch;
 

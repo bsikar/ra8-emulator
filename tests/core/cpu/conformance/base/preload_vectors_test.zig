@@ -4,7 +4,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.preload_vectors;
+const vectors = ra8.core.conformance_base.preload_vectors;
 const cpu_ns = ra8.core.cpu;
 const fixture = @import("../../exception/ram.zig");
 const nzcvq: u32 = 0xF800_0000;
