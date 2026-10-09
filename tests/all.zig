@@ -75,7 +75,7 @@ test {
     _ = @import("core/second_zig_exceptions_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("debug/all.zig");
-    _ = @import("core/elf_test.zig");
+    _ = @import("board/loader/elf_test.zig");
     _ = @import("core/idle_test.zig");
     _ = @import("core/pend_clear_test.zig");
     _ = @import("core/sleep_pace_test.zig");
@@ -94,12 +94,12 @@ test {
     _ = @import("core/memmap_test.zig");
     _ = @import("core/external_memory_test.zig");
     _ = @import("board/sizing/sweep_test.zig");
-    _ = @import("core/pages_test.zig");
+    _ = @import("board/loader/pages_test.zig");
     _ = @import("core/part_test.zig");
     _ = @import("core/part_map_test.zig");
     _ = @import("core/part_clock_test.zig");
     _ = @import("core/core_rate_test.zig");
-    _ = @import("core/appimg_test.zig");
+    _ = @import("board/loader/appimg_test.zig");
     _ = @import("core/module_place_test.zig");
     _ = @import("core/core_event_test.zig");
     _ = @import("core/second_wait_test.zig");

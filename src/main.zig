@@ -14,7 +14,7 @@ const cli = ra8.core.cli;
 comptime {
     _ = ra8.host.camera.av_info_plist;
 }
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 
 /// Read the image off disk and parse it, saying which of the two failed.
 fn openImage(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !elf.Image {

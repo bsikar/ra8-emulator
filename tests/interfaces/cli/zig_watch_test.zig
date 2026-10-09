@@ -40,19 +40,19 @@ const Floor = struct {
 };
 
 /// An ELF header with no sections: enough for a literal place.
-fn blankImage(buffer: *[@sizeOf(ra8.core.elf.Header)]u8) !ra8.core.elf.Image {
+fn blankImage(buffer: *[@sizeOf(ra8.board.elf.Header)]u8) !ra8.board.elf.Image {
     @memset(buffer, 0);
-    const head: *align(1) ra8.core.elf.Header = std.mem.bytesAsValue(ra8.core.elf.Header, buffer);
+    const head: *align(1) ra8.board.elf.Header = std.mem.bytesAsValue(ra8.board.elf.Header, buffer);
     head.magic = .{ 0x7F, 'E', 'L', 'F' };
     head.class = 1;
     head.data = 1;
-    head.e_machine = ra8.core.elf.em_arm;
-    return ra8.core.elf.Image.init(buffer);
+    head.e_machine = ra8.board.elf.em_arm;
+    return ra8.board.elf.Image.init(buffer);
 }
 
 /// A recorder armed on `place`, its bus over `floor`, with `regs` lent.
 fn armed(recorder: *Recorder, floor: *Floor, regs: *const boot.Regs, ticks: *const u64) !bus.Bus {
-    var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
+    var buffer: [@sizeOf(ra8.board.elf.Header)]u8 = undefined;
     const image = try blankImage(&buffer);
     const wrap = recorder.arm(image, "0x220400A0", null, ticks) orelse return error.NotArmed;
     if (wrap.regsFn) |lend| lend(wrap.context, regs);
@@ -122,7 +122,7 @@ test "a status latch passes straight through and is no store" {
 
 test "nothing watched leaves the run's wrap and retire listener as they were" {
     var recorder: Recorder = .{};
-    var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
+    var buffer: [@sizeOf(ra8.board.elf.Header)]u8 = undefined;
     const image = try blankImage(&buffer);
     const ticks: u64 = 0;
     try std.testing.expect(recorder.arm(image, null, null, &ticks) == null);
@@ -166,7 +166,7 @@ test "the recorder chains over the listener behind it and the retire listener af
     var behind: Behind = .{};
     var floor: Floor = .{};
     var regs: boot.Regs = .{};
-    var buffer: [@sizeOf(ra8.core.elf.Header)]u8 = undefined;
+    var buffer: [@sizeOf(ra8.board.elf.Header)]u8 = undefined;
     const image = try blankImage(&buffer);
     const ticks: u64 = 0;
     const wrap = recorder.arm(image, "0x220400A0", behind.wrap(), &ticks) orelse return error.NotArmed;

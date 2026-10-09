@@ -20,7 +20,7 @@
 //! a narrower window, not a longer list.
 
 const std = @import("std");
-const elf = @import("../core/elf.zig");
+const elf = @import("../board/loader/elf.zig");
 const symbols = @import("symbols.zig");
 
 /// What the window costs.

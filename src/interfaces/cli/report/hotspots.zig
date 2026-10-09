@@ -17,7 +17,7 @@
 const hotspots = @import("../../../debug/hotspots.zig");
 const functions = @import("../../../debug/functions.zig");
 const symbols = @import("../../../debug/symbols.zig");
-const elf = @import("../../../core/elf.zig");
+const elf = @import("../../../board/loader/elf.zig");
 const Writer = @import("../report.zig").Writer;
 
 /// Print the addresses the run kept coming back to, most sampled first.

@@ -2,7 +2,7 @@
 //! paced one 60 Hz frame of core time per window tick, and the window shows
 //! the board until the run ends or the window closes.
 const std = @import("std");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const Board = @import("../../board/board.zig").Board;
 const clocks = @import("../../periph/clocks.zig");

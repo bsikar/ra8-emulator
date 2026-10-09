@@ -4,7 +4,7 @@
 //!
 //! The chip only records the sites: address, encoding, arrivals. Naming
 //! them from the symbol table is the frontend's job, so it lives here.
-const elf = @import("../../../core/elf.zig");
+const elf = @import("../../../board/loader/elf.zig");
 const undefined_ops = @import("../../../core/undefined_ops.zig");
 const symbols = @import("../../../debug/symbols.zig");
 

@@ -10,6 +10,7 @@
 //! ranges are handed over to be mapped.
 const std = @import("std");
 const elf = @import("elf.zig");
+const loaded_image = @import("../../core/loaded_image.zig");
 
 /// Bytes in a page. The CPU model maps at this granularity, so a range that
 /// is not a whole number of these cannot be asked for.
@@ -25,14 +26,7 @@ pub const Error = error{TooManyRanges};
 /// A whole number of pages, from `base` up to but not including `end`.
 /// `end` is 64-bit so a range reaching the top of the address space is still
 /// expressible; `base` is where a map starts and stays 32-bit.
-pub const Range = struct {
-    base: u32,
-    end: u64,
-
-    pub fn size(self: Range) u32 {
-        return @intCast(self.end - self.base);
-    }
-};
+pub const Range = loaded_image.Range;
 
 /// The merged set of page ranges an image needs.
 pub const Set = struct {

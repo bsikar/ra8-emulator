@@ -10,7 +10,7 @@
 //! counter that made it. The recording knows nothing about the engine
 //! that runs the code, so it can be tested without one.
 const std = @import("std");
-const elf = @import("../core/elf.zig");
+const elf = @import("../board/loader/elf.zig");
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 const spacing_mod = @import("spacing.zig");

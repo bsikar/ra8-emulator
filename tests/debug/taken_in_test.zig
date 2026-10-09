@@ -45,6 +45,6 @@ test "a busy window keeps the first entries and counts the rest" {
 
 test "a window nobody asked for resolves to nothing" {
     const headless: [64]u8 = @splat(0);
-    const image = ra8.core.elf.Image{ .bytes = &headless };
+    const image = ra8.board.elf.Image{ .bytes = &headless };
     try std.testing.expectEqual(@as(?taken_in.Window, null), taken_in.resolve(image, null));
 }

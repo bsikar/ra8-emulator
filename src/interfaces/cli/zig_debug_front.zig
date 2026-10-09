@@ -2,7 +2,8 @@
 //! `--debug-script` or `--debug`. The public harness owns CPU0 and its board;
 //! this front adds the requested debugger mode and optional CPU1.
 const std = @import("std");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
+const cpu1_image = @import("cpu1_image.zig");
 const cpu_mod = @import("../../core/cpu/cpu.zig");
 const Board = @import("../../board/board.zig").Board;
 const board_wiring = @import("../../board/wiring.zig");
@@ -70,7 +71,7 @@ const Other = struct {
     fn open(self: *Other, allocator: std.mem.Allocator, io: std.Io, pair: *second_core.zig_run.Driver, opened: *harness.Harness, path: []const u8, target: *zig_script.ZigScript) !void {
         self.bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
         errdefer allocator.free(self.bytes);
-        try pair.open(allocator, io, board_wiring.cpu1(opened.board()), path, opened.guest());
+        try cpu1_image.open(pair, allocator, io, board_wiring.cpu1(opened.board()), path, opened.guest());
         target.other_image = try elf.Image.init(self.bytes);
         self.driver = .{ .machine = &self.machine };
         self.watching = .{ .inner = pair.core.cpu.bus, .driver = &self.driver };

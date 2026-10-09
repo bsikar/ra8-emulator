@@ -12,7 +12,7 @@ const std = @import("std");
 const bus = @import("../../core/cpu/bus.zig");
 const boot = @import("../../core/cpu/boot.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const Source = @import("../../core/cpu/exception/source.zig").Source;
 const watchpoint = @import("../../debug/watchpoint.zig");
 

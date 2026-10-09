@@ -1,8 +1,8 @@
-//! Tests for src/core/elf.zig.
+//! Tests for src/board/loader/elf.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const memmap = ra8.core.memmap;
-const mod = ra8.core.elf;
+const mod = ra8.board.elf;
 
 const Error = mod.Error;
 const Header = mod.Header;

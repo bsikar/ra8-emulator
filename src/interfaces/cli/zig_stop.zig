@@ -3,7 +3,7 @@
 //! Resolved against the image's symbol table. The
 //! counter is read at each boundary by zig_run.Clock.done.
 const std = @import("std");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const symbols = @import("../../debug/symbols.zig");
 const Stop = @import("../../core/stop.zig").Stop;
 const Deadline = @import("../../core/deadline.zig").Deadline;

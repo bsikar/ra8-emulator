@@ -5,7 +5,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
 
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
 const loader = ra8.core.cpu.memory.load;
@@ -30,7 +30,8 @@ fn runTone(path: []const u8, said: *std.Io.Writer.Allocating) !void {
     var board = ra8.board.Board.init(allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
-    _ = try loader.image(core, image);
+    const loaded = try ra8.board.loader.read(image);
+    _ = try loader.image(core, loaded.image());
     var audio: audio_out.Run = .{};
     audio.arm(&board, .{ .path = path, .rate = rate });
     defer audio.deinit();

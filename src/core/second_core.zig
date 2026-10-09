@@ -49,7 +49,7 @@
 //! forever without the other getting a turn, so a handshake completes.
 const std = @import("std");
 const fault = @import("fault.zig");
-const elf = @import("elf.zig");
+const loaded_image = @import("loaded_image.zig");
 const memmap = @import("memmap.zig");
 const cadence = @import("cadence.zig");
 const sau = @import("../periph/sau.zig");
@@ -85,9 +85,9 @@ pub const Seeded = struct { written: u32, vector_base: u32 };
 
 /// CPU1's image and VTOR, written into `memory` whichever backend holds it
 /// (RA8EMU-571). The engine's own hooks for the image are the caller's.
-pub fn seedImage(memory: Guest, image: elf.Image) !Seeded {
+pub fn seedImage(memory: Guest, image: loaded_image.Image) !Seeded {
     const written = try guest_load.image(memory, image);
-    const vector_base = image.vectorBase() orelse return error.NoVectorTable;
+    const vector_base = image.vector_base orelse return error.NoVectorTable;
     try primeVectorTable(memory, vector_base);
     return .{ .written = written, .vector_base = vector_base };
 }

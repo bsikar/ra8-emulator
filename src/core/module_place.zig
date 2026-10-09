@@ -10,7 +10,15 @@
 //! engine backends. The entry address carries the Thumb bit, ready for a
 //! branch or an exception return.
 const std = @import("std");
-const appimg = @import("appimg.zig");
+
+/// A module as the chip places it. The board's `.ra8app` reader fills it;
+/// the chip never parses the app format.
+pub const Module = struct {
+    code: []const u8,
+    data: []const u8,
+    /// Offset of the entry point from the start of the code.
+    entry_offset: u32,
+};
 
 /// The Armv8-M MPU region granule.
 pub const granule: u32 = 32;
@@ -41,24 +49,23 @@ fn roundUp(value: u64) u64 {
 }
 
 /// The addresses a module would take in `region`, or why it cannot go there.
-pub fn plan(header: appimg.Header, region: Region) Error!Placement {
+pub fn plan(module: Module, region: Region) Error!Placement {
     if (region.base % granule != 0) return Error.Misaligned;
     const base: u64 = region.base;
-    const data_base = roundUp(base + header.code_size);
-    const end = roundUp(data_base + header.data_size);
+    const data_base = roundUp(base + module.code.len);
+    const end = roundUp(data_base + module.data.len);
     if (end - base > region.size) return Error.TooBig;
     if (end > std.math.maxInt(u32)) return Error.TooBig;
     return .{
         .code_base = region.base,
         .data_base = @intCast(data_base),
         .end = @intCast(end),
-        .entry = (region.base + header.entry_offset) | 1,
+        .entry = (region.base + module.entry_offset) | 1,
     };
 }
 
 /// Copy the module's code and data to where `placement` says.
-pub fn load(memory: anytype, header: appimg.Header, bytes: []const u8, placement: Placement) !void {
-    try memory.write(placement.code_base, appimg.code(header, bytes));
-    const data = appimg.data(header, bytes);
-    if (data.len != 0) try memory.write(placement.data_base, data);
+pub fn load(memory: anytype, module: Module, placement: Placement) !void {
+    try memory.write(placement.code_base, module.code);
+    if (module.data.len != 0) try memory.write(placement.data_base, module.data);
 }

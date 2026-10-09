@@ -23,7 +23,7 @@
 //! No heap: the firmware has none (no .heap region, and sbrk traps), so
 //! there are no heap symbols to read.
 const std = @import("std");
-const elf = @import("../core/elf.zig");
+const elf = @import("../board/loader/elf.zig");
 const memmap = @import("../core/memmap.zig");
 const sections = @import("sections.zig");
 const symbols = @import("symbols.zig");

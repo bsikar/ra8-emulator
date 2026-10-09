@@ -22,7 +22,7 @@
 //! Deliberately uncached: the image carries a few hundred functions and a
 //! boundary already costs tens of thousands of instructions, so a cache
 //! would buy nothing worth the state it would have to keep correct.
-const elf = @import("../core/elf.zig");
+const elf = @import("../board/loader/elf.zig");
 const hotspots = @import("hotspots.zig");
 const symbols = @import("symbols.zig");
 pub const profile = @import("profile.zig");
