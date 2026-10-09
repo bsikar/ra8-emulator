@@ -4,6 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const clocks = ra8.periph.clocks;
+const time_policy = ra8.periph.time_policy;
 const SpeedPost = ra8.gui.speed_post.SpeedPost;
 const us = std.time.ns_per_us;
 const ms = std.time.ns_per_ms;
@@ -12,7 +13,7 @@ const s = std.time.ns_per_s;
 const Fake = struct {
     at: u64 = 0,
 
-    fn clock(self: *Fake) clocks.pacer.Clock {
+    fn clock(self: *Fake) time_policy.pacer.Clock {
         return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
     }
 
@@ -27,15 +28,25 @@ const Fake = struct {
     }
 };
 
-/// A board time whose cycles are nanoseconds.
-fn nanoTime() clocks.Time {
-    var time = clocks.Time{};
+/// A board time whose cycles are nanoseconds, with the pacing a run
+/// attaches beside it.
+const Run = struct {
+    base: clocks.timebase.TimeBase = .{},
+    pacing: ?time_policy.pacing.Pacing = null,
+
+    fn park(self: *Run, post: *SpeedPost, clock: time_policy.pacer.Clock) ?SpeedPost.Asked {
+        return post.apply(&self.pacing, self.base.now(), clock);
+    }
+};
+
+fn nanoTime() Run {
+    var time = Run{};
     time.base.setRate(std.time.ns_per_s);
     return time;
 }
 
 /// Run `span` of virtual time in 50 us chunks, pacing at each boundary.
-fn runFor(time: *clocks.Time, span: u64) void {
+fn runFor(time: *Run, span: u64) void {
     var done: u64 = 0;
     while (done < span) : (done += 50 * us) {
         time.base.advance(50 * us);
@@ -52,7 +63,7 @@ test "a park with nothing waiting leaves the time alone" {
     var fake = Fake{};
     var time = nanoTime();
     var post = SpeedPost{ .io = std.testing.io };
-    try std.testing.expectEqual(@as(?SpeedPost.Asked, null), post.apply(&time, fake.clock()));
+    try std.testing.expectEqual(@as(?SpeedPost.Asked, null), time.park(&post, fake.clock()));
     try std.testing.expect(time.pacing == null);
 }
 
@@ -62,23 +73,23 @@ test "a change waiting for an unpaced run starts pacing at that factor" {
     var post = SpeedPost{ .io = std.testing.io };
     runFor(&time, 1 * s);
     try ask(&post, 5000);
-    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = 5000 }), post.apply(&time, fake.clock()));
+    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = 5000 }), time.park(&post, fake.clock()));
     try std.testing.expectEqual(@as(u64, 1 * s), time.base.now());
     runFor(&time, 1 * s);
     try std.testing.expectEqual(@as(u64, 200 * ms), fake.at);
-    try std.testing.expectEqual(@as(?SpeedPost.Asked, null), post.apply(&time, fake.clock()));
+    try std.testing.expectEqual(@as(?SpeedPost.Asked, null), time.park(&post, fake.clock()));
 }
 
 test "1x to 5x mid-run keeps virtual time and pays only the new rate" {
     var fake = Fake{};
     var time = nanoTime();
-    time.pacing = clocks.pacing.Pacing.start(fake.clock(), 0, 1000);
+    time.pacing = time_policy.pacing.Pacing.start(fake.clock(), 0, 1000);
     var post = SpeedPost{ .io = std.testing.io };
     runFor(&time, 1 * s);
     try std.testing.expectEqual(@as(u64, 1 * s), fake.at);
     try ask(&post, 2000);
     try ask(&post, 5000);
-    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = 5000 }), post.apply(&time, fake.clock()));
+    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = 5000 }), time.park(&post, fake.clock()));
     try std.testing.expectEqual(@as(u64, 1 * s), time.base.now());
     runFor(&time, 1 * s);
     try std.testing.expectEqual(@as(u64, 1200 * ms), fake.at);
@@ -90,9 +101,9 @@ test "1x to 5x mid-run keeps virtual time and pays only the new rate" {
 test "max waiting for a paced run drops the pacer" {
     var fake = Fake{};
     var time = nanoTime();
-    time.pacing = clocks.pacing.Pacing.start(fake.clock(), 0, 1000);
+    time.pacing = time_policy.pacing.Pacing.start(fake.clock(), 0, 1000);
     var post = SpeedPost{ .io = std.testing.io };
     try ask(&post, null);
-    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = null }), post.apply(&time, fake.clock()));
+    try std.testing.expectEqual(@as(?SpeedPost.Asked, .{ .milli = null }), time.park(&post, fake.clock()));
     try std.testing.expect(time.pacing == null);
 }

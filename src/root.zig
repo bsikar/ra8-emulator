@@ -190,6 +190,7 @@ pub const board = struct {
     pub const session_plug = @import("board/session_plug.zig");
     pub const camera_install = @import("board/camera_install.zig");
     pub const board_speed = @import("board/board_speed.zig");
+    pub const run_policy = @import("board/run_policy.zig");
     pub const session_events = @import("board/session_events.zig");
     pub const board_boundary = @import("board/board_boundary.zig");
     pub const session_schedule = @import("board/session_schedule.zig");

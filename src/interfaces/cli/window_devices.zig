@@ -77,7 +77,7 @@ pub const Devices = struct {
     pub fn park(self: *Devices) void {
         self.event_ns.store(self.board.time.base.now(), .release);
         _ = self.post.apply(self.plugs.hook());
-        _ = self.speed.apply(&self.board.time, pacing.hostClock(self.io));
+        _ = self.speed.apply(&self.board.run.pacing, self.board.time.base.now(), pacing.hostClock(self.io));
     }
 
     fn eventNow(context: *anyopaque) u64 {

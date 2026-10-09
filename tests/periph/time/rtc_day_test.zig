@@ -10,8 +10,8 @@ const store_board = @import("../../interfaces/cli/store_board.zig");
 
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
-const pacing = ra8.periph.clocks.pacing;
-const pacer = ra8.periph.clocks.pacer;
+const pacing = ra8.periph.time_policy.pacing;
+const pacer = ra8.periph.time_policy.pacer;
 const Calendar = ra8.periph.rtc_clock.Calendar;
 
 const hz: u64 = 1_000_000;
@@ -50,7 +50,7 @@ fn runDay(start: Calendar) !Day {
     board.time.base.setRate(hz);
     board.clock.seed(start);
     var wall: FakeWall = .{};
-    board.time.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), hundred_x);
+    board.run.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), hundred_x);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;

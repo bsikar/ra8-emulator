@@ -183,7 +183,7 @@ test "plug and unplug wire a part in and out through the board mid-script" {
 const FakeWall = struct {
     at: u64 = 0,
 
-    fn clock(self: *FakeWall) ra8.periph.clocks.pacer.Clock {
+    fn clock(self: *FakeWall) ra8.periph.time_policy.pacer.Clock {
         return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
     }
 
@@ -207,19 +207,20 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
     var time = ra8.periph.clocks.Time{};
     time.base.advance(1000);
     var wall = FakeWall{};
-    var speed: ra8.board.board_speed.BoardSpeed = .{ .time = &time, .clock = wall.clock() };
+    var paced: ?ra8.periph.time_policy.pacing.Pacing = null;
+    var speed: ra8.board.board_speed.BoardSpeed = .{ .time = &time, .paced = &paced, .clock = wall.clock() };
     target.session.speed = speed.hook();
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     const before = time.base.now();
     _ = try target.apply((try commands.parse("speed 0.25")).?, &out.writer);
-    try std.testing.expectEqual(@as(u64, 250), time.pacing.?.pacer.speed_milli);
+    try std.testing.expectEqual(@as(u64, 250), paced.?.pacer.speed_milli);
     _ = try target.apply((try commands.parse("speed 5")).?, &out.writer);
-    try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
+    try std.testing.expectEqual(@as(u64, 5000), paced.?.pacer.speed_milli);
     _ = try target.apply((try commands.parse("speed 0")).?, &out.writer);
-    try std.testing.expectEqual(@as(u64, 5000), time.pacing.?.pacer.speed_milli);
+    try std.testing.expectEqual(@as(u64, 5000), paced.?.pacer.speed_milli);
     _ = try target.apply((try commands.parse("speed max")).?, &out.writer);
-    try std.testing.expect(time.pacing == null);
+    try std.testing.expect(paced == null);
     try std.testing.expectEqual(before, time.base.now());
     const want =
         \\Speed 0.25x

@@ -4,10 +4,13 @@
 //! whose engine has a thread of its own, goes through gui/speed_post.zig.
 const session_api = @import("../debug/session_api.zig");
 const clocks = @import("../periph/clocks.zig");
+const pacer = @import("../periph/time/pacer.zig");
+const pacing = @import("../periph/time/pacing.zig");
 
 pub const BoardSpeed = struct {
     time: *clocks.Time,
-    clock: clocks.pacer.Clock,
+    paced: *?pacing.Pacing,
+    clock: pacer.Clock,
 
     pub fn hook(self: *BoardSpeed) session_api.SpeedHook {
         return .{ .context = self, .setFn = set };
@@ -19,14 +22,14 @@ pub const BoardSpeed = struct {
     fn set(context: *anyopaque, wanted: ?u64) anyerror!void {
         const self: *BoardSpeed = @ptrCast(@alignCast(context));
         const milli = wanted orelse {
-            self.time.pacing = null;
+            self.paced.* = null;
             return;
         };
         const now_ns = self.time.base.now();
-        if (self.time.pacing) |*pacing| {
-            pacing.setSpeed(now_ns, milli);
+        if (self.paced.*) |*running| {
+            running.setSpeed(now_ns, milli);
         } else {
-            self.time.pacing = clocks.pacing.Pacing.start(self.clock, now_ns, milli);
+            self.paced.* = pacing.Pacing.start(self.clock, now_ns, milli);
         }
     }
 };

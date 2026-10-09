@@ -2,8 +2,9 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const clocks = ra8.periph.clocks;
+const time_policy = ra8.periph.time_policy;
 
-const Pacing = clocks.pacing.Pacing;
+const Pacing = time_policy.pacing.Pacing;
 const us = std.time.ns_per_us;
 const ms = std.time.ns_per_ms;
 
@@ -11,7 +12,7 @@ const Fake = struct {
     at: u64 = 0,
     sleeps: u64 = 0,
 
-    fn clock(self: *Fake) clocks.pacer.Clock {
+    fn clock(self: *Fake) time_policy.pacer.Clock {
         return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
     }
 
@@ -27,9 +28,9 @@ const Fake = struct {
     }
 };
 
-test "the board's time holds no pacing unless a run attaches it" {
-    const time = clocks.Time{};
-    try std.testing.expect(time.pacing == null);
+test "the board's run policy holds no pacing unless a run attaches it" {
+    const run: ra8.board.run_policy.RunPolicy = .{};
+    try std.testing.expect(run.pacing == null);
 }
 
 test "boundaries closer than a step leave the wall clock alone" {
@@ -65,8 +66,8 @@ test "a second of 50 us boundaries at 1x takes a second in a thousand looks" {
 test "pacing a board's time follows its virtual clock" {
     var fake = Fake{};
     var time = clocks.Time{};
-    time.pacing = Pacing.start(fake.clock(), time.base.now(), 1000);
+    var paced = Pacing.start(fake.clock(), time.base.now(), 1000);
     time.base.advance(5_000_000); // 5 ms at the default 1 GHz
-    if (time.pacing) |*paced| paced.after(time.base.now());
+    paced.after(time.base.now());
     try std.testing.expectEqual(@as(u64, 5 * ms), fake.at);
 }

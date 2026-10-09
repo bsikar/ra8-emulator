@@ -13,7 +13,7 @@ const idler = @import("idler.zig");
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
 const memmap = ra8.core.memmap;
-const soak = ra8.periph.clocks.soak;
+const soak = ra8.periph.time_policy.soak;
 
 const hz: u64 = 1_000_000;
 const ns_per_s: u64 = 1_000_000_000;
@@ -48,8 +48,8 @@ test "a soak ends at the virtual minute the firmware overwrites its canary" {
     defer board.deinit();
     try store_board.attach(&board, core);
     board.time.base.setRate(hz);
-    board.time.soak.armed = true;
-    try board.time.soak.watch.add(.{ .address = canary_at, .expected = fill, .kind = .stack_canary });
+    board.run.soak.armed = true;
+    try board.run.soak.watch.add(.{ .address = canary_at, .expected = fill, .kind = .stack_canary });
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .idle_skip = true };
     var ran: u64 = 0;
@@ -58,7 +58,7 @@ test "a soak ends at the virtual minute the firmware overwrites its canary" {
     var stream: std.Io.Writer = .fixed(&output);
     _ = try cpu_boot.start(&stream, .zig, core, &board.bus, idler.base, 3600 * hz, &ran, .{ .boundary = clock.boundary(), .final = &final });
     clock.soakFaults();
-    const event = board.time.soak.event orelse return error.NoEvent;
+    const event = board.run.soak.event orelse return error.NoEvent;
     try std.testing.expectEqual(soak.Kind.stack_canary, event.kind);
     try std.testing.expectEqual(@as(?u32, canary_at), event.word);
     try std.testing.expectEqual(@as(u32, wraps), try core.readWord(idler.counter_at));

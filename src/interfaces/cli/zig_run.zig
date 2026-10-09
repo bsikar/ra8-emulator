@@ -7,6 +7,7 @@ const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
 const elf = @import("../../core/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
+const soak_fault = @import("../../periph/time/soak_fault.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
 const sysclk = @import("../../periph/sysclk/sysclk.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
@@ -162,7 +163,7 @@ pub const Clock = struct {
     pub fn done(self: *Clock) bool {
         self.soakFaults();
         if (self.paced_out) return true;
-        if (self.board.time.soak.ended()) return true;
+        if (self.board.run.soak.ended()) return true;
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
         if (self.undefined_sites) |found| if (found.stoppedAt() != null) return true;
@@ -175,10 +176,10 @@ pub const Clock = struct {
     /// none yet. Also asked once after the run, for a core that stopped
     /// inside a stretch and never reached its boundary.
     pub fn soakFaults(self: *Clock) void {
-        const soak = &self.board.time.soak;
+        const soak = &self.board.run.soak;
         if (!soak.armed or soak.ended()) return;
-        const latched = clocks.soak_fault.words(self.memory, &landScs);
-        if (clocks.soak_fault.kind(latched)) |fault| soak.note(fault, self.board.time.base.now());
+        const latched = soak_fault.words(self.memory, &landScs);
+        if (soak_fault.kind(latched)) |fault| soak.note(fault, self.board.time.base.now());
         soak.check(self.memory, self.board.time.base.now());
     }
     /// The chunk, cut down so a stretch never swallows a SysTick wrap.
@@ -254,7 +255,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         rtos_hook.second.armZig(&pair, io, options.rtosWanted(), named);
     }
     defer if (clock.cpu1) |second| second.close();
-    if (board.time.soak.armed) soak_symbols.resolve(image, &board.time.soak.threads);
+    if (board.run.soak.armed) soak_symbols.resolve(image, &board.run.soak.threads);
     // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
@@ -326,7 +327,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
 fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Recorder, final: *const boot.Regs, image: elf.Image, options: cli.Options, ends: Ends, retire_at: u32, budget: usize) !?watchpoint.Watched {
     clock.soakFaults();
     const watched = watcher.result(final.pc);
-    clock.board.time.soak.place(final.pc, if (clock.board.clock.running()) clock.board.clock.now else null);
+    clock.board.run.soak.place(final.pc, if (clock.board.clock.running()) clock.board.clock.now else null);
     const said = BootWriter{ .output = out, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire_at, final.pc, budget);
