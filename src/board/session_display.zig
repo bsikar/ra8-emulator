@@ -2,7 +2,7 @@
 const std = @import("std");
 const Board = @import("board.zig").Board;
 const display_settled = @import("display_settled.zig");
-const frames_out = @import("../interfaces/cli/frames_out.zig");
+const FrameCapture = @import("frame_capture.zig").FrameCapture;
 const eink = @import("../periph/eink/eink.zig");
 const session_display = @import("../debug/session_display.zig");
 
@@ -61,7 +61,7 @@ pub const Host = struct {
         self.settled.resetWait();
         while (true) {
             if (einkPanel(self.board)) |panel| return self.waitEink(panel, started, timeout_ns);
-            if (try frames_out.FrameCapture.init(self.allocator, self.board)) |capture_value| {
+            if (try FrameCapture.init(self.allocator, self.board)) |capture_value| {
                 var capture = capture_value;
                 capture.deinit(self.board);
                 return self.waitGlcdc(started, timeout_ns);
@@ -84,7 +84,7 @@ pub const Host = struct {
     }
 
     fn waitGlcdc(self: *Host, started: u64, timeout_ns: u64) !void {
-        var capture = (try frames_out.FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
+        var capture = (try FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
         defer capture.deinit(self.board);
         while (true) {
             const now = self.board.time.base.now();
@@ -113,7 +113,7 @@ pub const Host = struct {
                 .virtual_ns = self.board.time.base.now(),
             };
         }
-        var capture = (try frames_out.FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
+        var capture = (try FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
         defer capture.deinit(self.board);
         if (self.board.display.scanOut() == null) return Error.NoFrame;
         const pixels = try allocator.alloc(u8, capture.pixels.len);
