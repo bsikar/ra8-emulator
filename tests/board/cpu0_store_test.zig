@@ -1,12 +1,11 @@
-//! Covers src/interfaces/cli/zig_memory.zig: CPU0 on its own store for a
+//! Covers src/board/cpu0_store.zig: CPU0 on its own store for a
 //! single-core `--cpu zig` run (RA8EMU-580).
 const std = @import("std");
 const ra8 = @import("ra8");
 
 const memmap = ra8.core.memmap;
 const elf = ra8.core.elf;
-const Cpu0 = ra8.board.zig_run.cpu0_memory.Cpu0;
-const Options = ra8.core.cli.Options;
+const Cpu0 = ra8.board.cpu0_store.Cpu0;
 
 const page: usize = 0x1000;
 const vectors: u32 = memmap.mram_base;

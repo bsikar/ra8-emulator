@@ -31,7 +31,7 @@ test "the Non-secure image calls every NSC veneer and gets back" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
-    // As zig_memory.Cpu0: the Secure image after the board, then the `--ns` half.
+    // As cpu0_store.Cpu0: the Secure image after the board, then the `--ns` half.
     _ = try loader.image(core, secure);
     _ = try loader.image(core, ns);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };

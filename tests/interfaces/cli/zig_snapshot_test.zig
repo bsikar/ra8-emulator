@@ -9,7 +9,7 @@ const memmap = ra8.core.memmap;
 const elf = ra8.core.elf;
 const zig_run = ra8.board.zig_run;
 const main_path = zig_run.main_path;
-const Cpu0 = zig_run.cpu0_memory.Cpu0;
+const Cpu0 = ra8.board.cpu0_store.Cpu0;
 const Parts = ra8.board.parts.Parts;
 const Options = ra8.core.cli.Options;
 

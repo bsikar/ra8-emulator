@@ -1,7 +1,7 @@
 //! Every run from main, on the Zig core
 //! (RA8EMU-592, slice 4e-2 of RA8EMU-481).
 //!
-//! CPU0 goes on its own store (src/interfaces/cli/zig_memory.zig), the
+//! CPU0 goes on its own store (src/board/cpu0_store.zig), the
 //! opening line reads SP and the reset vector off that store, option memory
 //! is read from it, and src/interfaces/cli/zig_run.zig gets no engine.
 const std = @import("std");
@@ -16,7 +16,7 @@ const report = @import("report.zig");
 const zig_run = @import("zig_run.zig");
 const fault_file = @import("fault_file.zig");
 const window_main = @import("window_main.zig");
-const Cpu0 = @import("zig_memory.zig").Cpu0;
+const Cpu0 = @import("../../board/cpu0_store.zig").Cpu0;
 
 /// Fitting the board is shared with main's engine path.
 pub const fit = @import("board_fit.zig").fit;
