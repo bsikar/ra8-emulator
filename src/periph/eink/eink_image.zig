@@ -31,21 +31,6 @@ pub const Buffer = struct {
         self.pixels[@as(usize, y) * self.width + x] = value;
     }
 
-    pub fn copyRectFrom(self: *Buffer, source: *const Buffer, x: u16, y: u16, width: u16, height: u16) void {
-        if (x >= self.width or y >= self.height) return;
-        const copy_width = @min(width, self.width - x);
-        const copy_height = @min(height, self.height - y);
-        var row: u32 = 0;
-        while (row < copy_height) : (row += 1) {
-            var column: u32 = 0;
-            while (column < copy_width) : (column += 1) {
-                const target_x = @as(u32, x) + column;
-                const target_y = @as(u32, y) + row;
-                self.set(target_x, target_y, source.pixel(@intCast(target_x), @intCast(target_y)));
-            }
-        }
-    }
-
     /// Apply the selected waveform to a rectangle copied from the image plane.
     pub fn refreshFrom(self: *Buffer, source: *const Buffer, x: u16, y: u16, width: u16, height: u16, mode: u16) void {
         if (x >= self.width or y >= self.height) return;

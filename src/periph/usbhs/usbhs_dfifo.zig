@@ -165,10 +165,6 @@ pub fn isData(offset: u32) bool {
         offset == regs.reg.d1fifo or offset == regs.reg.d1fifo + regs.window.word;
 }
 
-pub fn isSelect(offset: u32) bool {
-    return offset == regs.reg.d0fifosel or offset == regs.reg.d1fifosel;
-}
-
 pub fn isControl(offset: u32) bool {
     return offset == regs.reg.d0fifoctr or offset == regs.reg.d1fifoctr;
 }
