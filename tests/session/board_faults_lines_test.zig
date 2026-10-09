@@ -40,7 +40,7 @@ const Rig = struct {
         self.uart_at = ask.at;
         self.board.spi.attachDevice(0, Echo.device());
         self.faults = session_faults.Faults.init(&self.board, self.arena.allocator());
-        self.session.attachFaults(self.faults.hook());
+        self.session.attachFaults(&self.faults);
     }
 
     fn tearDown(self: *Rig) void {

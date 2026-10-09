@@ -28,7 +28,7 @@ const Rig = struct {
         try plug.one(&self.board, made.device, ask.at);
         self.at = ask.at;
         self.faults = session_faults.Faults.init(&self.board, self.arena.allocator());
-        self.session.attachFaults(self.faults.hook());
+        self.session.attachFaults(&self.faults);
         self.subscription = try self.session.subscribe();
     }
 
