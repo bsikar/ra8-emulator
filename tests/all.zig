@@ -7,6 +7,7 @@ const std = @import("std");
 test {
     _ = @import("core/systick_bank_test.zig");
     _ = @import("harness_test.zig");
+    _ = @import("harness_files_test.zig");
     _ = @import("board/profile_test.zig");
     _ = @import("board/external_memory_test.zig");
     _ = @import("board/external_backing_test.zig");

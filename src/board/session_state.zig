@@ -2,6 +2,9 @@
 //! `--save-state` writes (src/snapshot/run.zig, the two SysTick bases and
 //! a stretch section), written from and read back into a live harness.
 //!
+//! This file encodes and decodes it; the harness opens the file on the
+//! serving host (harness_files.zig, RA8EMU-1020).
+//!
 //! A session's boundary charges whole chunks, so nothing is owed and the
 //! stretch section says so; `--load-state` reads the file as its own, and
 //! a session restores one `--save-state` wrote. A second core is refused,
@@ -14,9 +17,6 @@ const Store = @import("../core/cpu/memory/store.zig").Store;
 const run_file = @import("../snapshot/run.zig");
 const systick = @import("../snapshot/systick.zig");
 const stretch = @import("../snapshot/stretch.zig");
-
-/// The largest file a restore reads.
-const max_bytes = 1 << 30;
 
 pub const Error = error{SecondCoreNotSaved};
 
@@ -37,45 +37,32 @@ pub const Hook = struct {
 
 /// The parts of a harness the file holds.
 pub const Files = struct {
-    allocator: std.mem.Allocator,
-    io: std.Io,
     store: *Store,
     cpu: *Cpu,
     board: *Board,
     edge: *BoardBoundary,
 
-    pub fn hook(self: *Files) Hook {
-        return .{ .context = self, .saveFn = save, .restoreFn = restore };
-    }
-
-    fn save(context: *anyopaque, path: []const u8) anyerror!void {
-        const self: *Files = @ptrCast(@alignCast(context));
+    /// Writes the run file to `writer`; the caller flushes it.
+    pub fn writeTo(self: *Files, writer: *std.Io.Writer) !void {
         try self.single();
-        var out = try std.Io.Dir.cwd().createFile(self.io, path, .{});
-        defer out.close(self.io);
-        var buffer: [4096]u8 = undefined;
-        var file_writer = out.writer(self.io, &buffer);
-        const writer = &file_writer.interface;
         try run_file.save(writer, self.store, &.{self.cpu}, self.board);
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{}, writer);
-        try writer.flush();
     }
 
-    /// The store is wiped first: a page the file leaves out was zero when
-    /// it was saved, whatever the run wrote there since.
-    fn restore(context: *anyopaque, path: []const u8) anyerror!void {
-        const self: *Files = @ptrCast(@alignCast(context));
+    /// Puts the run back as `bytes` hold it. The store is wiped first: a
+    /// page the file leaves out was zero when it was saved, whatever the
+    /// run wrote there since.
+    pub fn readFrom(self: *Files, bytes: []const u8) !void {
         try self.single();
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(self.io, path, self.allocator, .limited(max_bytes));
-        defer self.allocator.free(bytes);
         try run_file.check(bytes, self.board);
         self.store.wipe();
         try run_file.load(bytes, self.store, &.{self.cpu}, self.board);
         try systick.load(.{ &self.edge.timebase, &self.edge.ns_timebase }, bytes);
     }
 
-    fn single(self: *const Files) Error!void {
+    /// Refuses a run with CPU1 attached: its state is not in the file yet.
+    pub fn single(self: *const Files) Error!void {
         if (self.edge.second != null) return Error.SecondCoreNotSaved;
     }
 };
