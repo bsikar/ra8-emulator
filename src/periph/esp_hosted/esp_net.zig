@@ -2,6 +2,7 @@
 const std = @import("std");
 const dns = @import("esp_dns.zig");
 const dns_host = @import("esp_dns_host.zig");
+const worker = @import("esp_worker.zig");
 const eth = @import("esp_eth.zig");
 const frame = @import("esp_frame.zig");
 const dhcp = @import("esp_dhcp.zig");
@@ -66,6 +67,8 @@ pub const Bridge = struct {
     tape: tape.Tape = .{},
     /// The host network the application handed over; none opens no socket.
     net: ?host_net.Net = null,
+    /// The background worker DNS lookups run on; none resolves inline.
+    worker: ?worker.Worker = null,
 
     pub fn deinit(self: *Bridge) void {
         for (&self.tcp_flows) |*flow| flow.close();
@@ -112,7 +115,7 @@ pub const Bridge = struct {
 
     fn forwardDns(self: *Bridge, queue: *Queue, ip: eth.Ipv4, datagram: eth.Udp) void {
         const route = replyRoute(ip, datagram.src_port, datagram.dst_port);
-        if (self.tape.mode != .replay) return self.dns_bridge.start(datagram.data, route, self.resolver);
+        if (self.tape.mode != .replay) return self.dns_bridge.start(datagram.data, route, self.resolver, self.worker);
         var answer: [eth.udp_payload_max]u8 = undefined;
         const recorded = self.tape.loadDns(datagram.data, &answer) orelse return;
         var ethernet: [frame.max_payload]u8 = undefined;

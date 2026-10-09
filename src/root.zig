@@ -175,6 +175,7 @@ pub const host = struct {
     pub const host_console = @import("host/host_console.zig");
     pub const host_read = @import("host/host_read.zig");
     pub const tape_dir = @import("host/tape_dir.zig");
+    pub const worker = @import("host/worker.zig");
     pub const disk_file = @import("host/disk_file.zig");
     pub const folder = @import("host/folder.zig");
     pub const pipe_windows = @import("host/camera/pipe_windows.zig");

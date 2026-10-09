@@ -18,6 +18,7 @@ pub const net = @import("esp_hosted/esp_net.zig");
 pub const tape = @import("esp_hosted/esp_tape.zig");
 pub const sock = @import("esp_hosted/esp_sock.zig");
 pub const host_net = @import("esp_hosted/esp_host_net.zig");
+pub const worker = @import("esp_hosted/esp_worker.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
@@ -60,6 +61,11 @@ pub const C6 = struct {
     /// (RA8EMU-1010), filled by the application from its socket layer.
     pub fn useNet(self: *C6, host: host_net.Net) void {
         self.wire.bridge.net = host;
+    }
+    /// Hands the C6's DNS bridge the background worker it resolves names
+    /// on (RA8EMU-1020), filled by the application from its host threads.
+    pub fn useWorker(self: *C6, background: worker.Worker) void {
+        self.wire.bridge.worker = background;
     }
     /// Records or replays the C6's host traffic (RA8EMU-560).
     pub fn useTape(self: *C6, run: tape.Tape) void {
