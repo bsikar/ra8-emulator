@@ -5,11 +5,12 @@
 //! inverse of the YUV422 the converter hands the firmware. Chroma is
 //! sampled at the pixel's own position, so 4:2:0 and 4:2:2 repeat each
 //! chroma sample over the luma it covers.
-const header = @import("../../host/camera/y4m_header.zig");
-const convert = @import("pixel_convert.zig");
+const decoded = @import("decoded_image.zig");
+const header = @import("y4m_header.zig");
 
-/// Fill `out` (width * height pixels) from `planes` (header.frameBytes()).
-pub fn toRgb(h: header.Header, planes: []const u8, out: []convert.Rgb) void {
+/// Fill `out` (width * height pixels, three bytes each) from `planes`
+/// (header.frameBytes()).
+pub fn toRgb(h: header.Header, planes: []const u8, out: []u8) void {
     const chroma = h.chromaSize();
     const luma_bytes = @as(usize, h.width) * h.height;
     const chroma_bytes = @as(usize, chroma.width) * chroma.height;
@@ -27,20 +28,21 @@ pub fn toRgb(h: header.Header, planes: []const u8, out: []convert.Rgb) void {
                 u = planes[luma_bytes + at];
                 v = planes[luma_bytes + chroma_bytes + at];
             }
-            out[@as(usize, y) * h.width + x] = rgb(luma, u, v);
+            const pixel = @as(usize, y) * h.width + x;
+            out[pixel * 3 ..][0..3].* = rgb(luma, u, v);
         }
     }
 }
 
 /// BT.601 studio-range YUV to RGB, in fixed point.
-pub fn rgb(luma: u8, u: u8, v: u8) convert.Rgb {
+pub fn rgb(luma: u8, u: u8, v: u8) decoded.Rgb {
     const c: i32 = @as(i32, luma) - 16;
     const d: i32 = @as(i32, u) - 128;
     const e: i32 = @as(i32, v) - 128;
     return .{
-        .r = clamp((298 * c + 409 * e + 128) >> 8),
-        .g = clamp((298 * c - 100 * d - 208 * e + 128) >> 8),
-        .b = clamp((298 * c + 516 * d + 128) >> 8),
+        clamp((298 * c + 409 * e + 128) >> 8),
+        clamp((298 * c - 100 * d - 208 * e + 128) >> 8),
+        clamp((298 * c + 516 * d + 128) >> 8),
     };
 }
 

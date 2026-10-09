@@ -27,14 +27,10 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) decoded.DecodeErr
         const raster = @as(usize, width) * height * 3;
         if (cursor.at > bytes.len or bytes.len - cursor.at < raster) return error.Truncated;
         const samples = bytes[cursor.at..][0..raster];
-        for (image.pixels, 0..) |*pixel, index| {
-            const at = index * 3;
-            pixel.* = .{ .r = scale(samples[at], maxval), .g = scale(samples[at + 1], maxval), .b = scale(samples[at + 2], maxval) };
-        }
+        // The raster is R, G, B per pixel, the image's own byte order.
+        for (image.pixels, samples) |*byte, sample| byte.* = scale(sample, maxval);
     } else {
-        for (image.pixels) |*pixel| {
-            pixel.* = .{ .r = try cursor.sample(maxval), .g = try cursor.sample(maxval), .b = try cursor.sample(maxval) };
-        }
+        for (image.pixels) |*byte| byte.* = try cursor.sample(maxval);
     }
     return image;
 }

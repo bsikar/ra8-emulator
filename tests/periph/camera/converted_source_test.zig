@@ -4,13 +4,9 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const camera = ra8.periph.ceu.camera;
-const Rgb = camera.convert.Rgb;
-
-const red = Rgb{ .r = 255, .g = 0, .b = 0 };
-const blue = Rgb{ .r = 0, .g = 0, .b = 255 };
 
 test "a converted source fills lines in RGB565, scaled to the shape" {
-    const pixels = [_]Rgb{ red, blue };
+    const pixels = [_]u8{ 255, 0, 0, 0, 0, 255 };
     var converted = camera.converted.Converted{
         .input = .{ .width = 2, .height = 1, .pixels = &pixels },
         .format = .rgb565,
@@ -27,7 +23,7 @@ test "a converted source fills lines in RGB565, scaled to the shape" {
 }
 
 test "a converted source fills lines in YUYV" {
-    const pixels = [_]Rgb{red};
+    const pixels = [_]u8{ 255, 0, 0 };
     var converted = camera.converted.Converted{
         .input = .{ .width = 1, .height = 1, .pixels = &pixels },
         .format = .yuv422,

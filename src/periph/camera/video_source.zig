@@ -10,10 +10,10 @@
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
-const decoded = @import("decoded_image.zig");
+const decoded = @import("../../host/camera/decoded_image.zig");
 const still = @import("image_source.zig");
 pub const y4m = @import("../../host/camera/y4m_header.zig");
-pub const yuv = @import("y4m_frame.zig");
+pub const yuv = @import("../../host/camera/y4m_frame.zig");
 
 /// The longest header or FRAME line read before the line is refused.
 const max_line: usize = 256;
@@ -82,10 +82,10 @@ pub const VideoSource = struct {
             .image = image,
             // frame() reads the sensor register before each capture, on the
             // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = image.frame(), .format = .yuv422 },
+            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
             .format_control = format_control,
         };
-        @memset(image.pixels, .{ .r = 0, .g = 0, .b = 0 });
+        @memset(image.pixels, 0);
         return self;
     }
 

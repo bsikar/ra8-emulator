@@ -5,11 +5,7 @@ const ra8 = @import("ra8");
 const thumb = ra8.gui.camera_thumb;
 const DrawList = ra8.gui.draw_list.DrawList;
 const Color = ra8.gui.draw_list.Color;
-const decoded = ra8.periph.ceu.camera.image;
-const Rgb = ra8.periph.ceu.camera.convert.Rgb;
-
-const red = Rgb{ .r = 200, .g = 0, .b = 0 };
-const blue = Rgb{ .r = 0, .g = 0, .b = 100 };
+const decoded = ra8.host.camera.decoded;
 
 test "the longer edge fits the limit and the shape is kept" {
     try std.testing.expectEqual(.{ @as(u32, 24), @as(u32, 12) }, thumb.fit(48, 24, 24));
@@ -19,7 +15,8 @@ test "the longer edge fits the limit and the shape is kept" {
 }
 
 test "each preview cell averages the pixels under it" {
-    var pixels = [_]Rgb{ red, red, blue, blue, red, blue, blue, blue };
+    // Red is 200, 0, 0 and blue is 0, 0, 100.
+    var pixels = [_]u8{ 200, 0, 0, 200, 0, 0, 0, 0, 100, 0, 0, 100, 200, 0, 0, 0, 0, 100, 0, 0, 100, 0, 0, 100 };
     const picture = decoded.Image{ .width = 4, .height = 2, .pixels = &pixels };
     const t = try thumb.shrink(std.testing.allocator, picture, 2);
     defer t.deinit(std.testing.allocator);

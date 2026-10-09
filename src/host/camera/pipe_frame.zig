@@ -7,7 +7,6 @@
 //! rgb24 (R, G, B), yuyv422 written as `yuyv` (Y0 U Y1 V, BT.601 studio
 //! range) and rgb565 (little-endian, ffmpeg's rgb565le).
 const std = @import("std");
-const convert = @import("pixel_convert.zig");
 const decoded = @import("decoded_image.zig");
 const yuv = @import("y4m_frame.zig");
 
@@ -49,33 +48,32 @@ pub fn parseArg(text: []const u8) error{BadValue}!Arg {
     return .{ .path = head[0..middle], .width = width, .height = height, .format = format };
 }
 
-/// Fill `out` (width * lines pixels) from one whole frame's `bytes`.
-pub fn toRgb(format: Format, bytes: []const u8, out: []convert.Rgb) void {
+/// Fill `out` (width * lines pixels, three bytes each) from one whole
+/// frame's `bytes`.
+pub fn toRgb(format: Format, bytes: []const u8, out: []u8) void {
     switch (format) {
-        .rgb24 => for (out, 0..) |*pixel, at| {
-            pixel.* = .{ .r = bytes[at * 3], .g = bytes[at * 3 + 1], .b = bytes[at * 3 + 2] };
-        },
-        .rgb565 => for (out, 0..) |*pixel, at| {
-            pixel.* = fromRgb565(std.mem.readInt(u16, bytes[at * 2 ..][0..2], .little));
+        .rgb24 => @memcpy(out, bytes[0..out.len]),
+        .rgb565 => for (0..out.len / 3) |at| {
+            out[at * 3 ..][0..3].* = fromRgb565(std.mem.readInt(u16, bytes[at * 2 ..][0..2], .little));
         },
         .yuyv => yuyvToRgb(bytes, out),
     }
 }
 
 /// Y0 U Y1 V: each pair of pixels shares one chroma sample.
-fn yuyvToRgb(bytes: []const u8, out: []convert.Rgb) void {
+fn yuyvToRgb(bytes: []const u8, out: []u8) void {
     var pair: usize = 0;
-    while (pair * 2 < out.len) : (pair += 1) {
+    while (pair * 6 < out.len) : (pair += 1) {
         const quad = bytes[pair * 4 ..][0..4];
-        out[pair * 2] = yuv.rgb(quad[0], quad[1], quad[3]);
-        out[pair * 2 + 1] = yuv.rgb(quad[2], quad[1], quad[3]);
+        out[pair * 6 ..][0..3].* = yuv.rgb(quad[0], quad[1], quad[3]);
+        out[pair * 6 + 3 ..][0..3].* = yuv.rgb(quad[2], quad[1], quad[3]);
     }
 }
 
 /// Widen 5:6:5 to 8 bits a channel, repeating the top bits into the bottom.
-fn fromRgb565(value: u16) convert.Rgb {
+fn fromRgb565(value: u16) decoded.Rgb {
     const r: u8 = @intCast(value >> 11);
     const g: u8 = @intCast((value >> 5) & 0x3F);
     const b: u8 = @intCast(value & 0x1F);
-    return .{ .r = r << 3 | r >> 2, .g = g << 2 | g >> 4, .b = b << 3 | b >> 2 };
+    return .{ r << 3 | r >> 2, g << 2 | g >> 4, b << 3 | b >> 2 };
 }

@@ -166,6 +166,12 @@ pub const host = struct {
         pub const mf_com = @import("host/camera/mf_com.zig");
         pub const mf_open = @import("host/camera/mf_open.zig");
         pub const y4m = @import("host/camera/y4m_header.zig");
+        pub const y4m_frame = @import("host/camera/y4m_frame.zig");
+        pub const pipe_frame = @import("host/camera/pipe_frame.zig");
+        pub const decoded = @import("host/camera/decoded_image.zig");
+        pub const ppm = @import("host/camera/ppm_decode.zig");
+        pub const bmp = @import("host/camera/bmp_decode.zig");
+        pub const png = @import("host/camera/png_decode.zig");
     };
 };
 pub const gui = @import("gui.zig");

@@ -4,6 +4,11 @@ test {
     _ = @import("host_read_test.zig");
     _ = @import("camera/pipe_windows_test.zig");
     _ = @import("camera/av_delegate_test.zig");
+    _ = @import("camera/ppm_decode_test.zig");
+    _ = @import("camera/bmp_decode_test.zig");
+    _ = @import("camera/png_decode_test.zig");
+    _ = @import("camera/y4m_frame_test.zig");
+    _ = @import("camera/pipe_frame_test.zig");
     _ = @import("camera/av_frame_test.zig");
     _ = @import("camera/av_info_plist_test.zig");
     _ = @import("camera/av_objc_test.zig");

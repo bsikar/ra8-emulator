@@ -33,7 +33,7 @@ test "YUYV averages chroma over the pair and keeps each luma" {
     try std.testing.expectEqual(@as(u8, @intCast(u)), pair[1]);
 }
 
-const quad = [_]Rgb{ red, white, black, blue };
+const quad = [_]u8{ 255, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0, 255 };
 const two_by_two = convert.Frame{ .width = 2, .height = 2, .pixels = &quad };
 
 test "scaling up repeats each source pixel" {
@@ -46,7 +46,7 @@ test "scaling up repeats each source pixel" {
 
 test "scaling down picks the nearest source pixel" {
     try std.testing.expectEqual(red, convert.sample(two_by_two, 0, 0, 1, 1));
-    const wide = [_]Rgb{ red, red, white, white, black, black, blue, blue };
+    const wide = [_]u8{ 255, 0, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 255 };
     const strip = convert.Frame{ .width = 8, .height = 1, .pixels = &wide };
     try std.testing.expectEqual(red, convert.sample(strip, 0, 0, 4, 1));
     try std.testing.expectEqual(white, convert.sample(strip, 1, 0, 4, 1));

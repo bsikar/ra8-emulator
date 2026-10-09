@@ -5,10 +5,10 @@
 //! of `side` pixels, keeping its shape, and drawn as one image quad.
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
-const decoded = @import("../periph/camera/decoded_image.zig");
+const decoded = @import("../host/camera/decoded_image.zig");
 const image_source = @import("../periph/camera/image_source.zig");
 const y4m = @import("../host/camera/y4m_header.zig");
-const yuv = @import("../periph/camera/y4m_frame.zig");
+const yuv = @import("../host/camera/y4m_frame.zig");
 const Color = draw_list.Color;
 
 /// The preview's longest edge, matching a panel button.
@@ -62,10 +62,11 @@ fn span(cell: usize, total: u32, cells: u32) usize {
 fn average(picture: decoded.Image, x0: usize, x1: usize, y0: usize, y1: usize) Color {
     var sum = [3]u64{ 0, 0, 0 };
     for (y0..y1) |y| {
-        for (picture.pixels[y * picture.width + x0 .. y * picture.width + x1]) |p| {
-            sum[0] += p.r;
-            sum[1] += p.g;
-            sum[2] += p.b;
+        for (x0..x1) |x| {
+            const p = picture.get(y * picture.width + x);
+            sum[0] += p[0];
+            sum[1] += p[1];
+            sum[2] += p[2];
         }
     }
     const count = (x1 - x0) * (y1 - y0);

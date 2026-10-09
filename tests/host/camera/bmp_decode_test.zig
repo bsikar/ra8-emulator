@@ -1,15 +1,14 @@
-//! Covers src/periph/camera/bmp_decode.zig: 24-bit bottom-up and 32-bit
+//! Covers src/host/camera/bmp_decode.zig: 24-bit bottom-up and 32-bit
 //! top-down pixel for pixel, row padding, and each refusal.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const camera = ra8.periph.ceu.camera;
-const Rgb = camera.convert.Rgb;
+const camera = ra8.host.camera;
 const allocator = std.testing.allocator;
 
-const expected = [_]Rgb{
-    .{ .r = 255, .g = 0, .b = 0 }, .{ .r = 0, .g = 255, .b = 0 },
-    .{ .r = 0, .g = 0, .b = 255 }, .{ .r = 255, .g = 255, .b = 255 },
+const expected = [_]u8{
+    255, 0, 0,   0,   255, 0,
+    0,   0, 255, 255, 255, 255,
 };
 
 /// A 54-byte header for a width x height picture at `bits` per pixel.
@@ -34,7 +33,7 @@ test "24-bit bottom-up stores the last row first, padded to four bytes" {
     @memcpy(file[62..70], "\x00\x00\xff\x00\xff\x00\x00\x00");
     const image = try camera.bmp.decode(allocator, &file);
     defer image.deinit(allocator);
-    try std.testing.expectEqualSlices(Rgb, &expected, image.pixels);
+    try std.testing.expectEqualSlices(u8, &expected, image.pixels);
 }
 
 test "32-bit top-down reads rows in order and ignores the fourth byte" {
@@ -44,7 +43,7 @@ test "32-bit top-down reads rows in order and ignores the fourth byte" {
     @memcpy(file[62..70], "\xff\x00\x00\x7f\xff\xff\xff\x7f");
     const image = try camera.bmp.decode(allocator, &file);
     defer image.deinit(allocator);
-    try std.testing.expectEqualSlices(Rgb, &expected, image.pixels);
+    try std.testing.expectEqualSlices(u8, &expected, image.pixels);
 }
 
 test "compressed, paletted, truncated and malformed files are refused" {

@@ -25,14 +25,16 @@ pub const Rgb = struct {
     b: u8,
 };
 
-/// One native frame, row-major, `width * height` pixels.
+/// One native frame, row-major, `width * height` pixels of three bytes
+/// each (R, G, B): the bytes a host decoder or capture hands over.
 pub const Frame = struct {
     width: u32,
     height: u32,
-    pixels: []const Rgb,
+    pixels: []const u8,
 
     pub fn at(self: Frame, x: u32, y: u32) Rgb {
-        return self.pixels[@as(usize, y) * self.width + x];
+        const p = self.pixels[(@as(usize, y) * self.width + x) * 3 ..][0..3];
+        return .{ .r = p[0], .g = p[1], .b = p[2] };
     }
 };
 
