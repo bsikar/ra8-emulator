@@ -3,7 +3,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const served = @import("../rpc/session_server.zig");
 const Stdio = @import("../rpc/stdio_transport.zig").Stdio;
-const socket_flags = @import("../socket_flags.zig");
 const sock_ready = @import("../sock_ready.zig");
 const win32 = @import("../win32.zig");
 
@@ -61,7 +60,7 @@ fn peerGone(fd: std.posix.fd_t) bool {
         if (got < 0) return win32.WSAGetLastError() != win32.wsa_would_block;
         return got == 0;
     }
-    const flags = socket_flags.peek | socket_flags.dontwait;
+    const flags = std.posix.MSG.PEEK | std.posix.MSG.DONTWAIT;
     const got = std.c.recv(fd, &byte, byte.len, @intCast(flags));
     if (got < 0) return std.c.errno(got) != .AGAIN;
     return got == 0;

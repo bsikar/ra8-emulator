@@ -135,6 +135,7 @@ pub const host = struct {
     pub const tape_dir = @import("host/tape_dir.zig");
     pub const worker = @import("host/worker.zig");
     pub const disk_file = @import("host/disk_file.zig");
+    pub const socket_flags = @import("host/socket_flags.zig");
     pub const folder = @import("host/folder.zig");
     pub const pipe_windows = @import("host/camera/pipe_windows.zig");
     /// Host camera capture backends and file formats (RA8EMU-1011).
@@ -250,7 +251,6 @@ pub const snapshot = struct {
 };
 
 pub const interfaces = struct {
-    pub const socket_flags = @import("interfaces/socket_flags.zig");
     pub const host_sock = @import("interfaces/host_sock.zig");
     pub const host_sock_windows = @import("interfaces/host_sock_windows.zig");
     pub const sock_ready = @import("interfaces/sock_ready.zig");
