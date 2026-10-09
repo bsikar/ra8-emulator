@@ -11,6 +11,7 @@ const periph = @import("../periph/registry.zig");
 const usbfs = @import("../periph/usbfs/usbfs.zig");
 const usbhs = @import("../periph/usbhs/usbhs.zig");
 const usb_loop_cable = @import("../components/usb_loop_cable/cable.zig");
+const usb_stick = @import("../components/usb_stick/stick.zig");
 
 pub const Due = Bounded(u16, 1);
 
@@ -38,6 +39,9 @@ pub const Usb = struct {
     /// A usbip bridge (`--usbip`, RA8EMU-75), polled after the scripted
     /// host so it sees the device as the firmware has just left it.
     bridge: ?Hook = null,
+    /// The USB stick, behind the HS host's stand-in device once a disk is
+    /// plugged in (usb_plug.zig).
+    stick: usb_stick.Target = .{},
 
     pub fn attach(self: *Usb, bus: *periph.Bus) periph.Error!void {
         self.host.attachDevice();

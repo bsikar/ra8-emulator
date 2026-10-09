@@ -265,7 +265,6 @@ test {
     _ = @import("usbhs/usbhs_pll_test.zig");
     _ = @import("usbhs/usbhs_setup_test.zig");
     _ = @import("usbhs/usbhs_regs_test.zig");
-    _ = @import("usbhs/usbhs_msc_test.zig");
     _ = @import("usbhs/usbhs_hold_test.zig");
     _ = @import("usbhs/usbhs_storage_test.zig");
     _ = @import("usbhs/usbhs_tail_test.zig");

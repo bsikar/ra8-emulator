@@ -1,4 +1,4 @@
-//! The far end's mass-storage function: a Bulk-Only Transport target (USB
+//! The USB stick's mass-storage function: a Bulk-Only Transport target (USB
 //! MSC BOT 1.0) answering the handful of SCSI commands a host needs to mount
 //! a disk and read and write its sectors, over an image the board hands it.
 //!
@@ -8,6 +8,7 @@
 //! command it does not implement fails in the CSW with ILLEGAL REQUEST, the
 //! way a real stick answers, rather than stalling the pipe.
 const std = @import("std");
+const usbhs_function = @import("../../periph/usbhs/usbhs_function.zig");
 
 pub const block_len: u32 = 512;
 pub const cbw_len: usize = 31;
@@ -130,6 +131,40 @@ pub const Target = struct {
     }
 
     /// A bus reset: whatever command was in flight is gone with it.
+    /// The contract the chip's stand-in device calls. The board plugs this
+    /// in once the stick is at its final address.
+    pub fn function(self: *Target) usbhs_function.Function {
+        return .{ .context = self, .vtable = &vtable };
+    }
+
+    const vtable: usbhs_function.Function.VTable = .{
+        .resetFn = resetFn,
+        .commandFn = commandFn,
+        .pendingFn = pendingFn,
+        .replyFn = replyFn,
+    };
+
+    fn resetFn(context: *anyopaque) void {
+        target(context).reset();
+    }
+
+    fn commandFn(context: *anyopaque, packet: []const u8) bool {
+        return target(context).command(packet);
+    }
+
+    fn pendingFn(context: *const anyopaque) bool {
+        const self: *const Target = @ptrCast(@alignCast(context));
+        return self.phase != .command;
+    }
+
+    fn replyFn(context: *anyopaque, into: []u8) usize {
+        return target(context).reply(into);
+    }
+
+    fn target(context: *anyopaque) *Target {
+        return @ptrCast(@alignCast(context));
+    }
+
     pub fn reset(self: *Target) void {
         self.phase = .command;
         self.data = &.{};

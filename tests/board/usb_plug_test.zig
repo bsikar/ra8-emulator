@@ -14,7 +14,7 @@ test "blank is a formatted FAT12 volume the device then serves" {
     try std.testing.expect(!board_usb.host.xfer.device.hasDisk());
     usb_plug.plug(&board_usb, disk);
     try std.testing.expect(board_usb.host.xfer.device.hasDisk());
-    try std.testing.expectEqual(@as(u32, 512), board_usb.host.xfer.device.storage.blocks());
+    try std.testing.expectEqual(@as(u32, 512), board_usb.stick.blocks());
 }
 
 test "an image file is read whole" {

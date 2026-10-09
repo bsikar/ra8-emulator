@@ -142,6 +142,8 @@ pub const components = struct {
     pub const button = @import("components/button/button.zig");
     pub const led = @import("components/led/led.zig");
     pub const usb_loop_cable = @import("components/usb_loop_cable/cable.zig");
+    pub const usb_stick = @import("components/usb_stick/stick.zig");
+    pub const usb_stick_disk = @import("components/usb_stick/disk.zig");
 };
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {
@@ -184,7 +186,6 @@ pub const board = struct {
     pub const i2c = @import("board/i2c.zig");
     pub const net = @import("board/net.zig");
     pub const usb = @import("board/usb.zig");
-    pub const usb_disk = @import("board/usb_disk.zig");
     pub const usb_plug = @import("board/usb_plug.zig");
     pub const session_faults = @import("board/session_faults.zig");
     pub const session_plug = @import("board/session_plug.zig");

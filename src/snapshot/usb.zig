@@ -4,7 +4,8 @@
 //!
 //! Not saved, because it is wiring: the cable between the jacks (laid by
 //! `loopBack`; it holds a device pointer), the usbip bridge hook, the HS
-//! transfer's loop pointer and the MSC disk, a host attachment like an SD
+//! transfer's loop pointer, the device's pointer to the stick and the MSC
+//! disk, a host attachment like an SD
 //! image. A load keeps the target's.
 //!
 //! The MSC target's data and sink cursors point into the disk, its scratch
@@ -13,11 +14,11 @@
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
-const msc = @import("../periph/usbhs/usbhs_msc.zig");
+const msc = @import("../components/usb_stick/stick.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-const skip: []const []const u8 = &.{ "host.xfer.loop", "host.xfer.device.storage", "cable", "bridge" };
+const skip: []const []const u8 = &.{ "host.xfer.loop", "host.xfer.device.storage", "cable", "bridge", "stick" };
 const storage_skip: []const []const u8 = &.{ "disk", "data", "sink" };
 
 const Where = enum(u8) { none, disk, scratch, inquiry };
@@ -33,7 +34,7 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, board: anytype) !void {
-    const storage = &board.usb.host.xfer.device.storage;
+    const storage = &board.usb.stick;
     try fields.writeExcept(writer, board.usb, skip);
     try fields.writeExcept(writer, storage.*, storage_skip);
     try fields.write(writer, try locate(storage, storage.data));
@@ -47,7 +48,7 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     var cursor: fields.Cursor = .{ .bytes = section.payload };
     var usb = board.usb;
     try fields.readOver(&cursor, &usb, skip);
-    var storage = board.usb.host.xfer.device.storage;
+    var storage = board.usb.stick;
     try fields.readOver(&cursor, &storage, storage_skip);
     const data = try fields.read(Span, &cursor);
     const sink = try fields.read(Span, &cursor);
@@ -56,7 +57,7 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     if (sink.where != .none and sink.where != .disk) return Error.BadValue;
     try check(&storage, sink);
     board.usb = usb;
-    const live = &board.usb.host.xfer.device.storage;
+    const live = &board.usb.stick;
     live.* = storage;
     live.data = slice(live, data);
     live.sink = if (sink.where == .disk) live.disk[sink.offset..][0..sink.len] else &.{};

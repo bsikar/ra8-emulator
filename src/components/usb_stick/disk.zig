@@ -1,4 +1,4 @@
-//! A blank disk for the modelled USB stick: a FAT12 superfloppy (the boot
+//! A blank disk for the USB stick (stick.zig): a FAT12 superfloppy (the boot
 //! sector and BPB at LBA 0, no partition table) written into a buffer the
 //! caller owns. The host examples mount whatever is in the jack, write a
 //! file and read it back, so the disk starts empty and writable.

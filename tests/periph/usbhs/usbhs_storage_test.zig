@@ -3,21 +3,22 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const device = ra8.periph.usbhs_device;
-const msc = ra8.periph.usbhs_msc;
+const msc = ra8.components.usb_stick;
 const regs = ra8.periph.usbhs_regs;
 const setup = ra8.periph.usbhs_setup;
 const usbhs_pipe = ra8.periph.usbhs_pipe;
 const xfer = ra8.periph.usbhs_xfer;
 
 var disk = @as([2 * msc.block_len]u8, @splat(0x5A));
+var stick: msc.Target = .{};
 
 fn set(code: u8, value: u16) setup.Packet {
     return .{ .request_type = 0x00, .code = code, .value = value };
 }
 
 fn configured() device.Device {
-    var part = device.Device{};
-    part.storage.disk = &disk;
+    stick = .{ .disk = &disk };
+    var part = device.Device{ .storage = stick.function() };
     _ = part.handle(set(setup.request.set_address, 1));
     _ = part.handle(set(setup.request.set_configuration, 1));
     return part;
@@ -71,7 +72,8 @@ test "a bus reset drops the command the disk was answering" {
 
 test "the transfer engine hands the disk's answer to an armed IN pipe" {
     var transfer = xfer.Transfer{};
-    transfer.device.storage.disk = &disk;
+    stick = .{ .disk = &disk };
+    transfer.device.storage = stick.function();
     var pipes = usbhs_pipe.Table{};
     transfer.usbreq = 0x0500;
     transfer.usbval = 1;
