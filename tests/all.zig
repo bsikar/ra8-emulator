@@ -44,6 +44,7 @@ test {
     _ = @import("core/cpu/exception/all_test.zig");
     _ = @import("core/cpu/thumb_imm_test.zig");
     _ = @import("board/board_test.zig");
+    _ = @import("board/switches_test.zig");
     _ = @import("board/cpu0_store_test.zig");
     _ = @import("board/debug_boundary_test.zig");
     _ = @import("board/debug_boundary_sleep_test.zig");

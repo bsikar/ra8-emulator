@@ -29,6 +29,7 @@ const dotf = @import("../periph/dotf/dotf.zig");
 const dtc = @import("../periph/dtc/dtc.zig");
 const elc = @import("../periph/elc/elc.zig");
 const gpio = @import("../periph/gpio/gpio.zig");
+const switches = @import("switches.zig");
 const gpt = @import("../periph/gpt/gpt.zig");
 const gptp = @import("../periph/gptp/gptp.zig");
 const icu = @import("../periph/icu/icu.zig");
@@ -71,7 +72,8 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .transfers1 = dtc.Dtc.init(),
         .transfer_attribution = undefined,
         .dma = undefined,
-        .pins = gpio.Gpio.init(),
+        .pins = switches.pulled(),
+        .touch_input = .{ .switches = &switches.user },
         .pinfunc = pfs.Pfs.init(),
         .checksum = crc.Crc.init(),
         .dataops = doc.Doc.init(),

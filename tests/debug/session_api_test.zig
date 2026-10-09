@@ -13,6 +13,7 @@ const input_script = ra8.components.input_script;
 const gt911 = ra8.components.gt911;
 const gpio = ra8.periph.gpio;
 const touch_input = ra8.components.touch_input;
+const switches = ra8.board.switches;
 const timebase = ra8.periph.clocks.timebase;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.
@@ -191,8 +192,8 @@ test "session input calls advance the board and expose firmware touch reports" {
     var session: api.Session = .{ .live = live };
     var events = input_script.Script{};
     var panel = gt911.Panel{};
-    var pins = gpio.Gpio.init();
-    var input = touch_input.Input{};
+    var pins = switches.pulled();
+    var input = touch_input.Input{ .switches = &switches.user };
     var board = InputBoard{ .events = &events, .panel = &panel, .pins = &pins, .input = &input };
     var store = try Store.init(null);
     defer store.deinit();
@@ -220,10 +221,10 @@ test "session input calls advance the board and expose firmware touch reports" {
     try std.testing.expectEqual(gt911.Contact{ .x = 500, .y = 500 }, firmwareReport(&panel).?);
     _ = try session.step(.cpu0);
     _ = try session.step(.cpu0);
-    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(!pins.pinLevel(switches.user[0].port, switches.user[0].pin));
     _ = try session.step(.cpu0);
     _ = try session.step(.cpu0);
-    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(pins.pinLevel(switches.user[0].port, switches.user[0].pin));
 }
 
 test "session lists widgets and taps the named widget center" {

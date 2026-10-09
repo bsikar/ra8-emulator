@@ -4,6 +4,9 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const gt911 = ra8.components.gt911;
 const gpio = ra8.periph.gpio;
+const switches = ra8.board.switches;
+const sw1 = switches.user[0];
+const sw2 = switches.user[1];
 const host_bytes = ra8.core.cli.host_bytes;
 
 /// Writes all of `bytes` to a pipe end, as the host side of the test.
@@ -264,19 +267,29 @@ test "the end of a host touch file stops the polling" {
 }
 
 test "host switch lines press and release SW1 and SW2 on their active-low pins" {
-    var input = gt911.host.Input{};
+    var input = gt911.host.Input{ .switches = &switches.user };
     var panel = gt911.Panel{};
-    var pins = gpio.Gpio.init();
-    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    var pins = switches.pulled();
+    try std.testing.expect(pins.pinLevel(sw1.port, sw1.pin));
     input.feedLine(&panel, &pins, "sw1 down");
-    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
-    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw2_pin));
+    try std.testing.expect(!pins.pinLevel(sw1.port, sw1.pin));
+    try std.testing.expect(pins.pinLevel(sw2.port, sw2.pin));
     input.feedLine(&panel, &pins, "sw2 down");
     input.feedLine(&panel, &pins, "sw1 up");
-    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
-    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw2_pin));
+    try std.testing.expect(pins.pinLevel(sw1.port, sw1.pin));
+    try std.testing.expect(!pins.pinLevel(sw2.port, sw2.pin));
     input.feedLine(&panel, &pins, "sw2 sideways");
     try std.testing.expectEqual(@as(u32, 3), input.switched);
     try std.testing.expectEqual(@as(u32, 1), input.refused);
     try std.testing.expectEqual(@as(u32, 0), panel.queued_len);
+}
+
+test "a stream with no switches from the board refuses switch lines" {
+    var input = gt911.host.Input{};
+    var panel = gt911.Panel{};
+    var pins = switches.pulled();
+    input.feedLine(&panel, &pins, "sw1 down");
+    try std.testing.expect(pins.pinLevel(sw1.port, sw1.pin));
+    try std.testing.expectEqual(@as(u32, 0), input.switched);
+    try std.testing.expectEqual(@as(u32, 1), input.refused);
 }

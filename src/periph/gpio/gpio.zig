@@ -20,11 +20,10 @@
 //! PIDR here is the C tree's rule, ported from board_periph_gpio.c on dev: an
 //! output pin reads back the latch it drives, an input pin reads whatever is
 //! externally driven onto it, and anything else reads zero. The three EK-RA8D2
-//! user LEDs and the two user switches are the externally-driven pins that
-//! exist, so they live here too: the LEDs as observability (level and edge
-//! count, reported at the end of a run) and the switches seeded high, because
-//! they are active-low with pull-ups and a released button must not read as
-//! pressed.
+//! user LEDs live here too, as observability (level and edge count, reported
+//! at the end of a run). Pins the board pulls high (the user switches,
+//! src/board/switches.zig) are the board's to name through pullUp(); a pulled
+//! pin reads high with nothing driving it.
 const std = @import("std");
 const periph = @import("../registry.zig");
 const regs = @import("gpio_regs.zig");
@@ -87,11 +86,6 @@ pub const leds = [led_count]Led{
     .{ .port = 10, .pin = 7, .rgb565 = 0xF800, .name = "LED3 RED   PA07" },
 };
 
-/// The two user switches, both on PORT0 (UM Tbl 25): SW1 = P009, SW2 = P008.
-pub const sw_port: u8 = 0;
-pub const sw1_pin: u4 = 9;
-pub const sw2_pin: u4 = 8;
-
 pub const Gpio = struct {
     pub const EventOrigin = enum { firmware, external };
     /// A listener for a live port level changing.
@@ -115,6 +109,9 @@ pub const Gpio = struct {
     event_tap: ?EventTap = null,
     /// Device models wired to single pins with --attach.
     wired: pins.Pins = .{},
+    /// Pins the board pulls high, per port. Wiring, set once by the board;
+    /// reset and release fall back to it.
+    pull_ups: [port_count]u16 = @splat(0),
 
     pub fn init() Gpio {
         var self = Gpio{};
@@ -122,18 +119,28 @@ pub const Gpio = struct {
         return self;
     }
 
-    /// Reset is not just zeroing: the user switches are active-low with
-    /// pull-ups, so a released button has to read high or a firmware poll sees
-    /// a press that never happened.
+    /// Reset is not just zeroing: a pin the board pulls high has to read
+    /// high, or a firmware poll of a released switch sees a press that never
+    /// happened.
     pub fn reset(self: *Gpio) void {
         self.ports = @splat(.{});
         self.led_level = @splat(0);
         self.led_edges = @splat(0);
         self.refused = 0;
-        const switches = (@as(u16, 1) << sw1_pin) | (@as(u16, 1) << sw2_pin);
-        self.ports[sw_port].in_ovr = switches;
-        self.ports[sw_port].in_lvl = switches;
+        for (&self.ports, self.pull_ups) |*port, high| {
+            port.in_ovr = high;
+            port.in_lvl = high;
+        }
         self.wired.reconnect(self);
+    }
+
+    /// The board pulls `pin` high: it reads high whenever nothing drives it.
+    pub fn pullUp(self: *Gpio, port: u8, pin: u4) void {
+        if (port >= port_count) return;
+        const bit = @as(u16, 1) << pin;
+        self.pull_ups[port] |= bit;
+        self.ports[port].in_ovr |= bit;
+        self.ports[port].in_lvl |= bit;
     }
 
     /// Drive a pin from outside the firmware: a button press, or a peripheral
@@ -167,17 +174,16 @@ pub const Gpio = struct {
     }
 
     /// Stop driving a pin from outside (a part unplugged, RA8EMU-212): it
-    /// falls back to its pull state. The user switches carry board pull-ups
-    /// and read high; this model has no pin pull register, so every other
-    /// input reads low with nothing driving it.
+    /// falls back to its pull state. A pin the board pulls high reads high;
+    /// this model has no pin pull register, so every other input reads low
+    /// with nothing driving it.
     pub fn release(self: *Gpio, port: u8, pin: u4) void {
         if (port >= port_count) return;
         const before = self.ports[port].level();
         const bit = @as(u16, 1) << pin;
         self.ports[port].in_ovr &= ~bit;
         self.ports[port].in_lvl &= ~bit;
-        const switch_pin = pin == sw1_pin or pin == sw2_pin;
-        if (port == sw_port and switch_pin) {
+        if (self.pull_ups[port] & bit != 0) {
             self.ports[port].in_ovr |= bit;
             self.ports[port].in_lvl |= bit;
         }
