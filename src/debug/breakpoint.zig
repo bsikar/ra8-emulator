@@ -12,7 +12,7 @@
 //! is not "was the reader entered" but "what was different about the tenth
 //! time", and only a count can ask that.
 //!
-//! The counting is done by src/interfaces/cli/zig_break.zig, which the Zig
+//! The counting is done by the frontend's break hook, which the Zig
 //! core's run hands each retired instruction. An earlier cut handed the
 //! address to the emulator as the point to run until, which stops on the
 //! first arrival and cannot be resumed past: restarting a run AT the
