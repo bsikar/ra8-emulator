@@ -3,7 +3,7 @@
 //! refresh hook, and leaks nothing.
 const std = @import("std");
 const ra8 = @import("ra8");
-const eink = ra8.periph.eink;
+const eink = ra8.components.eink;
 const file = ra8.snapshot.file;
 const panel = ra8.snapshot.panel;
 

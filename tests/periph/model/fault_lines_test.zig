@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const lines = ra8.periph.registry.model.fault_lines;
-const eink = ra8.periph.eink;
+const eink = ra8.components.eink;
 const modem = ra8.components.modem_at;
 
 /// Clock "AT\r" through a UART device and return the reply to the CR.

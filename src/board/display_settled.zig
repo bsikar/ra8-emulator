@@ -1,6 +1,6 @@
 //! Shared settled detection for GLCDC scans and e-ink LUT completion.
 const std = @import("std");
-const Panel = @import("../periph/eink/eink.zig").Panel;
+const Panel = @import("../components/eink_it8951/panel.zig").Panel;
 
 pub const Detector = struct {
     allocator: std.mem.Allocator,
