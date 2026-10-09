@@ -1,15 +1,14 @@
-//! Covers src/periph/camera/mf_webcam.zig with fake Media Foundation calls:
+//! Covers src/host/camera/mf_webcam.zig with fake Media Foundation calls:
 //! device indexes, the consent question naming "webcam N", a refusal that
 //! never starts MF, and a failed start that leaves MF stopped.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera.webcam;
 const mf = webcam.mf;
 const mf_open = webcam.mf_open;
 const mf_webcam = webcam.mf_webcam;
 
 const allocator = std.testing.allocator;
-var format_control: u8 = 0;
 var starts: u32 = 0;
 var running: i32 = 0;
 var start_result: mf.HRESULT = -1;
@@ -40,9 +39,9 @@ fn free(_: ?*anyopaque) void {}
 
 const calls = mf_open.Calls{ .startup = startup, .shutdown = stop, .create_attributes = none, .create_media_type = none, .enum_devices = noDevices, .create_reader = noReader, .free = free };
 
-fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.Io.Writer.Allocating) !ra8.periph.ceu.camera.frame_source.FrameSource {
+fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u8, said: *std.Io.Writer.Allocating) !*webcam.source.Webcam {
     var in = std.Io.Reader.fixed(answer);
-    return mf_webcam.openWith(allocator, calls, arg, grant, &in, &said.writer, &format_control);
+    return mf_webcam.openWith(allocator, calls, arg, grant, &in, &said.writer);
 }
 
 test "webcam args name a device index; paths are not Windows devices" {

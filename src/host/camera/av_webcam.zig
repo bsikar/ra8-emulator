@@ -1,20 +1,19 @@
 //! `--camera-source webcam[:N]` on macOS (RA8EMU-502): the same consent
 //! question as Linux and Windows, then the camera permission, then
 //! AVFoundation device N at 640x480 2vuy into a Mailbox that the shared
-//! WebcamSource reads as YUYV. macOS has no device paths, so `webcam:PATH`
+//! Webcam reads as YUYV. macOS has no device paths, so `webcam:PATH`
 //! is refused; a bare `webcam` is device 0. A read with no new frame since
 //! the last one is a failed read, so the source holds the last picture.
 const std = @import("std");
 const builtin = @import("builtin");
-const frame_source = @import("frame_source.zig");
-const consent = @import("../../host/camera/webcam_consent.zig");
-const permission = @import("../../host/camera/av_permission.zig");
-const objc = @import("../../host/camera/av_objc.zig");
-const delegate = @import("../../host/camera/av_delegate.zig");
-const frame = @import("../../host/camera/av_frame.zig");
-const session = @import("../../host/camera/av_session.zig");
-const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
-const source = @import("webcam_source.zig");
+const consent = @import("webcam_consent.zig");
+const permission = @import("av_permission.zig");
+const objc = @import("av_objc.zig");
+const delegate = @import("av_delegate.zig");
+const frame = @import("av_frame.zig");
+const session = @import("av_session.zig");
+const negotiate = @import("v4l2_negotiate.zig");
+const source = @import("webcam_input.zig");
 
 /// Everything the open needs from the Mac, gathered up front.
 pub const Host = struct {
@@ -30,7 +29,7 @@ pub fn index(arg: []const u8) ?u32 {
     return std.fmt.parseUnsigned(u8, arg, 10) catch null;
 }
 
-/// The layout the Mailbox hands WebcamSource.
+/// The layout the Mailbox hands Webcam.
 pub fn agreed() negotiate.Agreed {
     const row = session.width * 2;
     return .{ .width = session.width, .height = session.height, .pixelformat = frame.pixelformat(.uyvy), .bytesperline = row, .sizeimage = row * session.height, .streaming = true };
@@ -63,9 +62,9 @@ const AvCapture = struct {
 };
 
 /// Asks (unless allowed), checks the permission and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
     const n = try preflight(arg, grant, reader, writer);
-    return openPrepared(allocator, host, n, writer, format_control);
+    return openPrepared(allocator, host, n, writer);
 }
 
 /// Validates the device and gets consent before opening host camera libraries.
@@ -78,7 +77,7 @@ pub fn preflight(arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, 
 }
 
 /// Opens a device after `preflight` has validated its index and consent.
-pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
+pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: *std.Io.Writer) !*source.Webcam {
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
     try permission.gate(host.permission, writer);
@@ -94,12 +93,12 @@ pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: *s
         return err;
     };
     errdefer AvCapture.close(cap);
-    const webcam = try source.WebcamSource.open(allocator, cap.capture(), agreed(), named, format_control);
+    const webcam = try source.Webcam.open(allocator, cap.capture(), agreed(), named);
     @memcpy(cap.name[0..named.len], named);
     cap.name_len = named.len;
     webcam.device_path = cap.name[0..cap.name_len];
     consent.logStart(writer, webcam.device_path) catch {};
-    return webcam.source();
+    return webcam;
 }
 
 pub const system_path = "/usr/lib/libSystem.B.dylib";

@@ -199,6 +199,7 @@ pub const host = struct {
         pub const image_file = @import("host/camera/image_file.zig");
         pub const video_file = @import("host/camera/video_file.zig");
         pub const pipe_input = @import("host/camera/pipe_input.zig");
+        pub const webcam = @import("host/camera/webcam.zig");
     };
 };
 pub const gui = @import("gui.zig");

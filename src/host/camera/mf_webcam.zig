@@ -1,14 +1,13 @@
 //! `--camera-source webcam[:N]` on Windows (RA8EMU-501): the same consent
 //! question and privacy check as Linux, then Media Foundation device N
-//! through the source reader into the shared WebcamSource. Windows has no
+//! through the source reader into the shared Webcam. Windows has no
 //! device paths, so `webcam:PATH` is refused; a bare `webcam` is device 0.
 const std = @import("std");
-const frame_source = @import("frame_source.zig");
-const consent = @import("../../host/camera/webcam_consent.zig");
-const privacy = @import("../../host/camera/webcam_privacy.zig");
-const mf_open = @import("../../host/camera/mf_open.zig");
+const consent = @import("webcam_consent.zig");
+const privacy = @import("webcam_privacy.zig");
+const mf_open = @import("mf_open.zig");
 const mf_capture = @import("mf_capture.zig");
-const source = @import("webcam_source.zig");
+const source = @import("webcam_input.zig");
 
 pub const request_width: u32 = 640;
 pub const request_height: u32 = 480;
@@ -20,7 +19,7 @@ pub fn index(arg: []const u8) ?u32 {
 }
 
 /// Asks (unless allowed), checks the privacy setting and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
     const n = index(arg) orelse return error.BadDevice;
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
@@ -32,9 +31,9 @@ pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const
         return err;
     };
     errdefer cap.capture().closeFn(cap);
-    const webcam = try source.WebcamSource.open(allocator, cap.capture(), cap.agreed(), named, format_control);
+    const webcam = try source.Webcam.open(allocator, cap.capture(), cap.agreed(), named);
     cap.setName(named);
     webcam.device_path = cap.named();
     consent.logStart(writer, cap.named()) catch {};
-    return webcam.source();
+    return webcam;
 }

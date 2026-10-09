@@ -14,7 +14,8 @@ const image_file = @import("../../host/camera/image_file.zig");
 const video_file = @import("../../host/camera/video_file.zig");
 const pipe_input = @import("../../host/camera/pipe_input.zig");
 const raw = @import("../../host/camera/pipe_frame.zig");
-const webcam = @import("webcam_open.zig");
+const webcam = @import("../../host/camera/webcam_open.zig");
+const webcam_input = @import("../../host/camera/webcam_input.zig");
 
 pub const Kind = enum {
     gradient,
@@ -62,9 +63,13 @@ pub const Spec = struct {
                 errdefer input.close();
                 break :blk try hosted.Hosted(pipe_input.Pipe).open(allocator, input, format_control, "pipe", self.arg);
             },
-            .webcam => webcam.open(allocator, io, self.arg, self.allow_webcam, format_control) catch |err| {
-                std.debug.print("--camera-source webcam:{s}: {s}\n", .{ self.arg, @errorName(err) });
-                return err;
+            .webcam => blk: {
+                const input = webcam.open(allocator, io, self.arg, self.allow_webcam) catch |err| {
+                    std.debug.print("--camera-source webcam:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                    return err;
+                };
+                errdefer input.close();
+                break :blk try hosted.Hosted(webcam_input.Webcam).open(allocator, input, format_control, "webcam", input.device_path);
             },
         };
     }

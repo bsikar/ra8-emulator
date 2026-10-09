@@ -1,7 +1,8 @@
-//! Covers src/periph/camera/webcam_source.zig with a fake capture.
+//! Covers src/host/camera/webcam_input.zig with a fake capture, and the
+//! label and detail the camera's hosted source gives it.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera.webcam;
 const abi = webcam.v4l2;
 const ws = webcam.source;
 
@@ -39,8 +40,8 @@ test "a padded RGB565 frame decodes row by row and reaches the firmware as RGB56
     const bytes = [_]u8{ 0x00, 0xF8, 0xE0, 0x07, 0xEE, 0xEE, 0x1F, 0x00, 0xFF, 0xFF, 0xEE, 0xEE };
     var fake: Fake = .{ .frame = &bytes };
     const control: u8 = 0; // whatever hosted.formatFor maps 0 to
-    const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 6), "/dev/video0", &control);
-    const source = self.source();
+    const self = try ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 6), "/dev/video0");
+    const source = try ra8.periph.ceu.camera.hosted.Hosted(ws.Webcam).open(std.testing.allocator, self, &control, "webcam", self.device_path);
     try std.testing.expectEqualStrings("webcam", source.label);
     try std.testing.expectEqualStrings("/dev/video0", source.detail);
     source.frame(0, .{ .width = 4, .lines = 2 });
@@ -57,9 +58,8 @@ test "a YUYV frame decodes through the shared chroma pair" {
     // Mid-grey: Y 126, U and V neutral.
     const bytes = [_]u8{ 126, 128, 126, 128, 126, 128, 126, 128 };
     var fake: Fake = .{ .frame = &bytes };
-    const control: u8 = 0;
-    const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_yuyv, 4), "/dev/video0", &control);
-    defer self.source().close();
+    const self = try ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.pix_yuyv, 4), "/dev/video0");
+    defer self.close();
     self.pull();
     for (0..self.image.pixels.len / 3) |index| {
         const pixel = self.image.get(index);
@@ -71,9 +71,8 @@ test "a YUYV frame decodes through the shared chroma pair" {
 test "the capture is black before a frame and keeps the last frame after a failed read" {
     const bytes = [_]u8{ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
     var fake: Fake = .{ .frame = &bytes, .fail = true };
-    const control: u8 = 0;
-    const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 4), "/dev/video0", &control);
-    defer self.source().close();
+    const self = try ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 4), "/dev/video0");
+    defer self.close();
     self.pull();
     try std.testing.expectEqual(@as(u8, 0), self.image.get(0)[0]);
     fake.fail = false;
@@ -87,8 +86,7 @@ test "the capture is black before a frame and keeps the last frame after a faile
 
 test "formats it cannot decode and rows narrower than the width are refused" {
     var fake: Fake = .{ .frame = &.{} };
-    const control: u8 = 0;
-    try std.testing.expectError(error.UnsupportedFormat, ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.fourcc("MJPG"), 4), "/dev/video0", &control));
-    try std.testing.expectError(error.BadGeometry, ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_yuyv, 2), "/dev/video0", &control));
-    try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.source.rawFormat(abi.pix_yuyv).?, .yuyv);
+    try std.testing.expectError(error.UnsupportedFormat, ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.fourcc("MJPG"), 4), "/dev/video0"));
+    try std.testing.expectError(error.BadGeometry, ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.pix_yuyv, 2), "/dev/video0"));
+    try std.testing.expectEqual(ra8.host.camera.webcam.source.rawFormat(abi.pix_yuyv).?, .yuyv);
 }

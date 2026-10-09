@@ -2,7 +2,7 @@
 //! the delegate a CVPixelBuffer on its own dispatch queue; the delegate
 //! locks it and puts the bytes here, and the emulator's read takes the
 //! newest one. 2vuy (U, Y0, V, Y1) is swizzled to YUYV and BGRA turned into
-//! RGB24, so the WebcamSource that decodes V4L2 and Media Foundation frames
+//! RGB24, so the webcam input that decodes V4L2 and Media Foundation frames
 //! decodes these too. Rows honour the buffer's bytes-per-row padding.
 const std = @import("std");
 const v4l2 = @import("v4l2_abi.zig");
@@ -19,7 +19,7 @@ pub fn pixelOf(os_type: u32) ?Pixel {
     return null;
 }
 
-/// The FourCC WebcamSource decodes for what this pixel becomes.
+/// The FourCC the webcam input decodes for what this pixel becomes.
 pub fn pixelformat(pixel: Pixel) u32 {
     return switch (pixel) {
         .uyvy => v4l2.pix_yuyv,

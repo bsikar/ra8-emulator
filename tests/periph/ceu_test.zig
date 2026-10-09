@@ -310,11 +310,6 @@ test {
     _ = @import("camera/converted_source_test.zig");
     _ = @import("camera/camera_registry_test.zig");
     _ = @import("camera/hosted_test.zig");
-    _ = @import("camera/mf_capture_test.zig");
-    _ = @import("camera/mf_webcam_test.zig");
-    _ = @import("camera/av_webcam_test.zig");
-    _ = @import("camera/webcam_source_test.zig");
-    _ = @import("camera/webcam_open_test.zig");
 }
 
 /// A source that records the emulated instant each capture asked for.
