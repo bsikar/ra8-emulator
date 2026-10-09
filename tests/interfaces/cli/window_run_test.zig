@@ -71,7 +71,7 @@ test "the window draws a frame per slice until the run ends" {
     // Every tick draws, but only a changed list presents (RA8EMU-732): the
     // first frame always does, and none presents more than once per tick.
     try std.testing.expect(window.presents >= 1 and window.presents <= shown.frames + 1);
-    const board_view = ra8.board.report.frame_out.board_view;
+    const board_view = ra8.render.board_view;
     const panel_bytes = @as(usize, board_view.panel_width) * board_view.panel_height * @sizeOf(u32);
     try std.testing.expect(shown.snapshot_bytes >= panel_bytes);
     try std.testing.expectEqual(@as(u64, 0), shown.console_lost);
@@ -130,7 +130,7 @@ test "a click on the camera pane swaps the CEU's source while the run goes on" {
     soak.board.capture.source = held.source();
     var window = Headless.init(std.testing.allocator, 1600, 700);
     defer window.deinit();
-    const board_view = ra8.board.report.frame_out.board_view;
+    const board_view = ra8.render.board_view;
     const pane = ra8.gui.host_loop.paneLayout(board_view.size(board_view.panel_width, board_view.panel_height));
     // The pane starts on the gradient, so a pick away and back is a switch.
     try window.feed(press(pane.source(.video)));

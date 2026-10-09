@@ -10,7 +10,7 @@ const gpio = @import("../../periph/gpio/gpio.zig");
 const eink = @import("../../periph/eink/eink.zig");
 const eink_wire = @import("../../periph/eink/eink_wire.zig");
 const png = @import("png.zig");
-pub const board_view = @import("board_view.zig");
+const board_view = @import("../../render/board_view.zig");
 
 /// The panel's size, the size of the view that was written, and whether
 /// the GLCDC gave a frame (when it did not, the panel is drawn dark).

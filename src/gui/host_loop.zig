@@ -32,7 +32,7 @@ const SourceSwap = @import("source_swap.zig").SourceSwap;
 const devices_panel = @import("devices_panel.zig");
 const devices_pane = @import("devices_pane.zig");
 const plug_post = @import("plug_post.zig");
-pub const board_view = @import("../interfaces/cli/board_view.zig");
+pub const board_view = @import("../render/board_view.zig");
 const Color = draw_list.Color;
 
 /// What the board shows right now: the panel's ARGB pixels and the LEDs.

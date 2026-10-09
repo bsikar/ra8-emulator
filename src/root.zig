@@ -139,6 +139,9 @@ pub const components = struct {
     pub const max17048 = @import("components/gauge_max17048/max17048.zig");
 };
 pub const gui = @import("gui.zig");
+pub const render = struct {
+    pub const board_view = @import("render/board_view.zig");
+};
 pub const board = struct {
     pub const Board = @import("board/board.zig").Board;
     pub const profile = @import("board/profile.zig");
