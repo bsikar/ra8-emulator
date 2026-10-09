@@ -7,7 +7,7 @@
 //! black. A FIFO with no writer yet reads 0 bytes, so a 0-byte read only
 //! counts as the writer closing once data has arrived; after that the last
 //! frame is held and one line says so. The run never waits on the writer.
-//! On Windows the emulator serves `\\.\pipe\NAME` itself (pipe_windows.zig,
+//! On Windows the emulator serves `\\.\pipe\NAME` itself (src/host/camera/pipe_windows.zig,
 //! RA8EMU-585).
 const std = @import("std");
 const builtin = @import("builtin");
@@ -16,9 +16,9 @@ const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
 const decoded = @import("decoded_image.zig");
 const still = @import("image_source.zig");
-const host_read = @import("../host_read.zig");
+const host_read = @import("../../host/host_read.zig");
 pub const raw = @import("pipe_frame.zig");
-pub const pipe_windows = @import("pipe_windows.zig");
+pub const pipe_windows = @import("../../host/camera/pipe_windows.zig");
 const win = pipe_windows;
 const is_windows = builtin.os.tag == .windows;
 

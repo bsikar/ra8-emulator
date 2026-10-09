@@ -1,7 +1,8 @@
 //! Host touches fed to the GT911 while the firmware runs (RA8EMU-343).
 //!
-//! `--touch @PATH` opens PATH (a file or a FIFO) without blocking, and each
-//! board boundary moves the complete lines waiting on it onto the panel's
+//! `--touch @PATH` has the application open PATH (a file or a FIFO) without
+//! blocking and hand it over as a byte source; each board boundary moves the
+//! complete lines waiting on it onto the panel's
 //! queue, the way host stdin reaches SCI8 under `--console`. A line is
 //! "X,Y", optionally led by "down " or "move "; a drag is a run of lines,
 //! one contact per frame. "up" and blank lines are accepted and add
@@ -19,7 +20,7 @@ const std = @import("std");
 const gt911 = @import("gt911.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const pin_irq = @import("../../periph/icu/icu_pin_irq.zig");
-const host_read = @import("../../periph/host_read.zig");
+const ByteSource = @import("../../periph/byte_source.zig").ByteSource;
 
 /// The host-side name of each user switch, the pin it drives and the IRQ
 /// channel that pin feeds.
@@ -32,8 +33,8 @@ pub const switches = [_]struct { name: []const u8, pin: u4, irq: u8 }{
 pub const line_bytes: usize = 32;
 
 pub const Input = struct {
-    enabled: bool = false,
-    fd: ?host_read.Handle = null,
+    /// The host touch stream, filled by the application. Null reads nothing.
+    source: ?ByteSource = null,
     line: [line_bytes]u8 = undefined,
     len: usize = 0,
     /// The current line ran past line_bytes and is being skipped.
@@ -49,28 +50,17 @@ pub const Input = struct {
     /// Lines that were not a contact, or a contact the full queue refused.
     refused: u32 = 0,
 
-    /// Open PATH for reading without blocking, so a FIFO with no writer yet
-    /// does not hold up the run.
-    pub fn open(self: *Input, io: std.Io, path: []const u8) !void {
-        self.fd = host_read.open(io, path) catch |err| {
-            std.debug.print("--touch @{s}: {s}\n", .{ path, @errorName(err) });
-            return err;
-        };
-        self.enabled = true;
-    }
-
     /// Move every complete line waiting on the handle onto the panel.
     /// A partial line waits for its newline. End of file stops the polling
     /// once anything has arrived; before that it is a FIFO whose writer has
     /// not opened yet, so it is asked again next boundary.
     pub fn poll(self: *Input, panel: *gt911.Panel, pins: *gpio.Gpio) void {
-        if (!self.enabled) return;
-        const fd = self.fd orelse return;
+        const source = self.source orelse return;
         var bytes: [256]u8 = undefined;
         while (true) {
-            const count = host_read.read(fd, &bytes) orelse return;
+            const count = source.read(&bytes) orelse return;
             if (count == 0) {
-                if (self.seen) self.enabled = false;
+                if (self.seen) self.source = null;
                 return;
             }
             self.seen = true;

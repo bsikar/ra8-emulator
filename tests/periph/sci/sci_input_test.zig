@@ -3,6 +3,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const sci = ra8.periph.sci;
 const input = ra8.core.cli.console_input;
+const host_bytes = ra8.core.cli.host_bytes;
 
 /// Writes all of `bytes` to a pipe end, as the host side of the test.
 fn send(fd: std.posix.fd_t, bytes: []const u8) !void {
@@ -18,7 +19,7 @@ test "host input waiting on stdin reaches console SCI receive" {
     try send(fds[1], "hi");
     var unit = sci.Sci.init();
     unit.write(sci.regAddress(sci.console_channel, sci.off_ccr0), 4, sci.ccr0.te | sci.ccr0.re);
-    var reader: input.Input = .{ .enabled = true, .fd = fds[0] };
+    var reader: input.Input = .{ .source = host_bytes.of(fds[0]) };
     reader.poll(&unit);
 
     const rdr = sci.regAddress(sci.console_channel, sci.off_rdr);

@@ -7,6 +7,7 @@ test {
     _ = @import("interfaces/sock_ready_test.zig");
     _ = @import("interfaces/win32_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
+    _ = @import("interfaces/cli/host_bytes_test.zig");
     _ = @import("interfaces/cli/probe_ctl_test.zig");
     _ = @import("interfaces/cli/serve_listen_test.zig");
     _ = @import("interfaces/cli/session_ctl_test.zig");

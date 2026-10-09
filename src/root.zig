@@ -139,6 +139,12 @@ pub const components = struct {
     pub const button = @import("components/button/button.zig");
     pub const led = @import("components/led/led.zig");
 };
+/// Host OS adapters the applications fill model interfaces from (ADR 0004).
+pub const host = struct {
+    pub const host_console = @import("host/host_console.zig");
+    pub const host_read = @import("host/host_read.zig");
+    pub const pipe_windows = @import("host/camera/pipe_windows.zig");
+};
 pub const gui = @import("gui.zig");
 pub const render = struct {
     pub const board_view = @import("render/board_view.zig");

@@ -19,6 +19,7 @@ pub const usbip_wire = @import("../usbip/usbip_wire.zig");
 pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
 pub const console_input = @import("../../periph/sci/sci_input.zig");
+pub const host_bytes = @import("host_bytes.zig");
 /// How many `--dump-sym` names one run will carry: the suite asks for at most
 /// two (progress and failure counters), so this is a little room above that.
 pub const dump_limit: usize = 8;

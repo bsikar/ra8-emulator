@@ -337,7 +337,6 @@ test {
     _ = @import("camera/webcam_source_test.zig");
     _ = @import("camera/webcam_open_test.zig");
     _ = @import("camera/v4l2_stream_test.zig");
-    _ = @import("camera/pipe_windows_test.zig");
 }
 
 /// A source that records the emulated instant each capture asked for.
