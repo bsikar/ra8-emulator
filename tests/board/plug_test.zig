@@ -90,7 +90,7 @@ test "a button on a GPIO pin drives what the firmware reads there" {
     defer board.deinit();
     const made, const at = try make(arena.allocator(), "button@gpio:P106");
     try plug.one(&board, made.device, at);
-    const button: *ra8.periph.gpio.parts.Button = @ptrCast(@alignCast(made.state));
+    const button: *ra8.components.button.Button = @ptrCast(@alignCast(made.state));
     try std.testing.expect(board.pins.pinLevel(1, 6));
     button.press();
     try std.testing.expect(!board.pins.pinLevel(1, 6));

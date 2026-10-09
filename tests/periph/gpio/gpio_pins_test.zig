@@ -1,4 +1,5 @@
-//! Covers src/periph/gpio/gpio_pins.zig and gpio_parts.zig: a model on a
+//! Covers src/periph/gpio/gpio_pins.zig with the button and LED parts
+//! (src/components/button, src/components/led): a model on a
 //! pin drives what PIDR reads, hears what the port drives, and keeps its
 //! level across a port reset.
 const std = @import("std");
@@ -6,8 +7,8 @@ const ra8 = @import("ra8");
 const mod = ra8.periph.gpio;
 
 const Gpio = mod.Gpio;
-const Button = mod.parts.Button;
-const Led = mod.parts.Led;
+const Button = ra8.components.button.Button;
+const Led = ra8.components.led.Led;
 const regAddress = mod.regAddress;
 
 fn pidr(gpio: *const Gpio, port: u32) u32 {
