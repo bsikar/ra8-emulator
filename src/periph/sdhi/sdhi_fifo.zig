@@ -4,7 +4,7 @@
 //! owns whether a word moves at all and what the card does with a finished
 //! block.
 //!
-//! THE CARD CAN REFUSE A BLOCK. `sdhi_card.Card` answers false for a block
+//! THE CARD CAN REFUSE A BLOCK. The card behind `sdhi_line.Line` answers false for a block
 //! off the end of it, and both sides of the FIFO used to throw that answer
 //! away: a read staged zeros and raised BRE over them, and a write dropped
 //! the block, walked the address on and cleared BWE at the end of the count.
@@ -17,7 +17,7 @@
 //! itself answered; nothing invents an error code the rest of the model does
 //! not carry, so the only sign of a lost block is the flag that never comes
 //! up and the report line at the end of the run.
-const card_mod = @import("sdhi_card.zig");
+const sd_line = @import("sdhi_line.zig");
 const xfer = @import("sdhi_xfer.zig");
 
 /// What an access did, in the window's terms.
@@ -44,13 +44,13 @@ pub const Read = struct {
 
 /// Stage the block at the transfer's current address. A card that refuses it
 /// stops the phase, so nothing is left armed over a block that never came.
-pub fn load(transfer: *xfer.Transfer, disk: *card_mod.Card) bool {
+pub fn load(transfer: *xfer.Transfer, disk: sd_line.Line) bool {
     if (disk.read(transfer.lba, &transfer.stage)) return true;
     transfer.stop();
     return false;
 }
 
-pub fn read(transfer: *xfer.Transfer, disk: *card_mod.Card, width: u3) Read {
+pub fn read(transfer: *xfer.Transfer, disk: sd_line.Line, width: u3) Read {
     if (width < 4) return .{ .outcome = .narrow };
     if (transfer.phase != .read) return .{ .outcome = .starved };
     const taken = transfer.pop();
@@ -60,7 +60,7 @@ pub fn read(transfer: *xfer.Transfer, disk: *card_mod.Card, width: u3) Read {
     return .{ .value = taken.value, .outcome = .block };
 }
 
-pub fn write(transfer: *xfer.Transfer, disk: *card_mod.Card, width: u3, value: u32) Outcome {
+pub fn write(transfer: *xfer.Transfer, disk: sd_line.Line, width: u3, value: u32) Outcome {
     if (width < 4) return .narrow;
     if (transfer.phase != .write) return .starved;
     if (!transfer.push(value)) return .word;

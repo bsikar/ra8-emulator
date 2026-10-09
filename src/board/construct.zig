@@ -54,6 +54,7 @@ const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 const sci = @import("../periph/sci/sci.zig");
 const sd_card = @import("../components/sd_card/card.zig");
+const bus_card = @import("../components/sd_card/bus_card.zig");
 const sdhi = @import("../periph/sdhi/sdhi.zig");
 const spi = @import("../periph/spi/spi.zig");
 const sram = @import("../periph/sram/sram.zig");
@@ -111,7 +112,8 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .nor = nor_flash.Flash.init(allocator),
         .octa = undefined,
         .cipher = dotf.Dotf.init(),
-        .card = sdhi.Sdhi.init(allocator),
+        .card = sdhi.Sdhi.init(),
+        .host_card = bus_card.Card.init(allocator),
         .options = mram.Mram.init(allocator),
         .ecc = sram.Sram.init(),
         .audio = ssie.Ssie.init(),

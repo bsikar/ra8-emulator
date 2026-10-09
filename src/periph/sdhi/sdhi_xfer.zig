@@ -6,9 +6,9 @@
 //! this owns the block being served or filled and where the transfer has
 //! got to. Neither has to carry the other.
 const std = @import("std");
-const card = @import("sdhi_card.zig");
+const sd_line = @import("sdhi_line.zig");
 
-pub const words_per_block = card.geometry.block_bytes / 4;
+pub const words_per_block = sd_line.block_bytes / 4;
 
 /// Which direction the phase runs in, if one is in flight at all.
 pub const Phase = enum { none, read, write };
@@ -21,7 +21,7 @@ pub const Word = struct {
 
 pub const Transfer = struct {
     phase: Phase = .none,
-    stage: [card.geometry.block_bytes]u8 = @splat(0),
+    stage: [sd_line.block_bytes]u8 = @splat(0),
     word_idx: u32 = 0,
     lba: u32 = 0,
     blocks_left: u32 = 0,

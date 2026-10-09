@@ -1,7 +1,7 @@
 //! The card behind the SPI line: 512-byte blocks, held only where something
 //! actually wrote one.
 //!
-//! Sparse, the shape xspi_flash.zig and sdhi_card.zig already take: a block
+//! Sparse, the shape nor_flash/flash.zig and bus_card.zig already take: a block
 //! nobody has written reads back as zeros, which is what a freshly formatted
 //! card gives, and a run that only reads holds nothing at all. dev backs its
 //! card with a real host file through a sparse `--sd` image; there is no

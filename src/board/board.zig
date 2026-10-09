@@ -85,6 +85,7 @@ const gt911 = @import("../components/touch_gt911/gt911.zig");
 const sd_card = @import("../components/sd_card/card.zig");
 const sd_card_line = @import("../components/sd_card/card_line.zig");
 const sd_format = @import("../components/sd_card/format.zig");
+const bus_card = @import("../components/sd_card/bus_card.zig");
 const sdhi = @import("../periph/sdhi/sdhi.zig");
 const spi = @import("../periph/spi/spi.zig");
 const sram = @import("../periph/sram/sram.zig");
@@ -267,10 +268,9 @@ pub const Board = struct {
     /// No AES core here, so what it answers for is the control word the
     /// driver polls and the conversion area it programmes.
     cipher: dotf.Dotf,
-    /// The SD host controller, and the card behind it. Built in attach():
-    /// the card holds only the blocks something wrote, so it needs the
-    /// board's allocator.
+    /// The SD host controller, and the card in its slot (plugged in attach()).
     card: sdhi.Sdhi,
+    host_card: bus_card.Card,
     /// The SRAM controller's ECC side: what the decoder self-test latched.
     /// The banks themselves are host memory, so this is the whole window.
     ecc: sram.Sram,
@@ -356,7 +356,7 @@ pub const Board = struct {
     pub fn deinit(self: *Board) void {
         self.c6.deinit();
         self.sd.deinit();
-        self.card.deinit();
+        self.host_card.deinit();
         self.options.deinit();
         self.nor.deinit();
         self.bus.deinit();

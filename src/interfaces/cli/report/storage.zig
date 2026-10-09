@@ -228,10 +228,10 @@ fn card(board: *Board, out: Writer) !void {
             .{host.narrow},
         );
     }
-    if (host.card.past_end != 0) {
+    if (board.host_card.past_end != 0) {
         try out.print(
             "SDHI card: REFUSED {d} block(s) addressed past the end of the card\n",
-            .{host.card.past_end},
+            .{board.host_card.past_end},
         );
     }
     if (host.lost != 0) {

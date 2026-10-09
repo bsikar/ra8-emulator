@@ -9,8 +9,8 @@
 //! and CMD24/25 arm a write, and each SD_BUF0 access moves one 32-bit word
 //! of a 512-byte block.
 //!
-//! The card itself, its blocks and the state it is in, lives next door in
-//! sdhi_card.zig. This file owns the window, the command engine and the
+//! The card itself, its blocks and the state it is in, is a part outside
+//! the MCU behind the line sdhi_line.zig declares. This file owns the window, the command engine and the
 //! FIFO.
 //!
 //! Ported from board_periph_sdhi.c on dev, with five things that model does
@@ -53,7 +53,7 @@
 //! CMD6. They are shadowed so a read-modify-write survives, never read.
 const std = @import("std");
 const periph = @import("../registry.zig");
-const card = @import("sdhi_card.zig");
+const sd_line = @import("sdhi_line.zig");
 const fifo = @import("sdhi_fifo.zig");
 const bus_lanes = @import("../lanes.zig");
 const xfer = @import("sdhi_xfer.zig");
@@ -124,7 +124,7 @@ const words = win_span / 4;
 
 pub const Sdhi = struct {
     regs: [words]u32 = @splat(0),
-    card: card.Card,
+    card: sd_line.Line = sd_line.absent,
     /// The block in flight, if a data phase is armed.
     data: xfer.Transfer = .{},
     /// CMD55 arrived and the next command is an ACMD.
@@ -146,14 +146,10 @@ pub const Sdhi = struct {
     /// Blocks the card refused, each of which ended its data phase.
     lost: u32 = 0,
 
-    pub fn init(allocator: std.mem.Allocator) Sdhi {
-        var self = Sdhi{ .card = card.Card.init(allocator) };
+    pub fn init() Sdhi {
+        var self = Sdhi{};
         self.regs[soft_rst_word] = soft_rst.release;
         return self;
-    }
-
-    pub fn deinit(self: *Sdhi) void {
-        self.card.deinit();
     }
 
     /// A run that never touched the controller says nothing.
@@ -225,7 +221,7 @@ pub const Sdhi = struct {
         const arg = self.regs[word(off.sd_arg)];
         const was_app = self.app_pending;
         self.app_pending = index == cmd.app_cmd;
-        var rsp = [4]u32{ card.response.r1_ready, 0, 0, 0 };
+        var rsp = [4]u32{ sd_line.response.r1_ready, 0, 0, 0 };
         switch (index) {
             cmd.read_single, cmd.read_multi => self.beginRead(index == cmd.read_multi, arg, &rsp),
             cmd.write_single, cmd.write_multi => self.beginWrite(index == cmd.write_multi, arg, &rsp),
@@ -248,20 +244,20 @@ pub const Sdhi = struct {
     fn identify(self: *Sdhi, index: u32, arg: u32, was_app: bool, rsp: *[4]u32) void {
         if (index == cmd.op_cond and was_app) {
             self.card.powerUp();
-            rsp[0] = card.response.ocr_ready;
+            rsp[0] = sd_line.response.ocr_ready;
             return;
         }
         switch (index) {
             cmd.go_idle => self.card.goIdle(),
-            cmd.if_cond => rsp[0] = card.response.r7_if_cond,
-            cmd.app_cmd => rsp[0] = card.response.r1_ready | card.response.r1_app_cmd,
+            cmd.if_cond => rsp[0] = sd_line.response.r7_if_cond,
+            cmd.app_cmd => rsp[0] = sd_line.response.r1_ready | sd_line.response.r1_app_cmd,
             cmd.send_cid => {
                 if (!self.card.publishCid()) return illegal(rsp);
-                rsp.* = @splat(card.response.cid_word);
+                rsp.* = @splat(sd_line.response.cid_word);
             },
             cmd.send_rca => {
                 if (!self.card.takeAddress()) return illegal(rsp);
-                rsp[0] = card.response.rca_value;
+                rsp[0] = sd_line.response.rca_value;
             },
             cmd.select => self.card.select(@intCast(arg >> 16)),
             cmd.send_csd => rsp.* = self.card.csd(),
@@ -277,7 +273,7 @@ pub const Sdhi = struct {
         self.data.arm(.read, arg, self.transferCount(multi));
         // A card that refuses the first block arms nothing, so BRE never
         // comes up and the driver is not served a block of zeros.
-        if (!fifo.load(&self.data, &self.card)) {
+        if (!fifo.load(&self.data, self.card)) {
             self.lost += 1;
             return;
         }
@@ -307,7 +303,7 @@ pub const Sdhi = struct {
     }
 
     fn fifoRead(self: *Sdhi, width: u3) u32 {
-        const served = fifo.read(&self.data, &self.card, width);
+        const served = fifo.read(&self.data, self.card, width);
         switch (served.outcome) {
             .narrow => self.narrow += 1,
             .starved => self.starved += 1,
@@ -328,7 +324,7 @@ pub const Sdhi = struct {
     }
 
     fn fifoWrite(self: *Sdhi, width: u3, value: u32) void {
-        switch (fifo.write(&self.data, &self.card, width, value)) {
+        switch (fifo.write(&self.data, self.card, width, value)) {
             .narrow => self.narrow += 1,
             .starved => self.starved += 1,
             .word => {},
@@ -376,7 +372,7 @@ fn isResponse(aligned: u32) bool {
 
 /// The card understood the command and refused it in this state.
 fn illegal(rsp: *[4]u32) void {
-    rsp[0] = card.response.r1_ready | card.response.r1_illegal;
+    rsp[0] = sd_line.response.r1_ready | sd_line.response.r1_illegal;
 }
 
 fn readThunk(context: *anyopaque, at: u32, width: u3) u32 {
