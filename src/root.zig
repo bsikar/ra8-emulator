@@ -203,6 +203,7 @@ pub const board = struct {
     pub const session_schedule = @import("board/session_schedule.zig");
     pub const report = @import("interfaces/cli/report.zig");
     pub const window_board = @import("interfaces/cli/window_board.zig");
+    pub const duration = @import("interfaces/cli/duration.zig");
     pub const window_pace = @import("interfaces/cli/window_pace.zig");
     pub const window_run = @import("interfaces/cli/window_run.zig");
     pub const window_devices = @import("interfaces/cli/window_devices.zig");

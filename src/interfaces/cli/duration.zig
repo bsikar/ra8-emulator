@@ -6,7 +6,7 @@
 //! longest is ten years of virtual time, past which a soak says nothing a
 //! shorter one does not.
 const std = @import("std");
-const timebase = @import("timebase.zig");
+const timebase = @import("../../periph/time/timebase.zig");
 
 pub const Error = error{ NotANumber, NoUnit, NotPositive, TooLong };
 
