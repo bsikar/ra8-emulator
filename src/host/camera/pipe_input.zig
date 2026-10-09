@@ -1,5 +1,6 @@
-//! Raw frames from a pipe as the camera (RA8EMU-584):
-//! `--camera-source pipe:<path|->,<w>x<h>,<rgb24|yuyv|rgb565>`.
+//! Raw frames from a pipe for the camera (RA8EMU-584):
+//! `--camera-source pipe:<path|->,<w>x<h>,<rgb24|yuyv|rgb565>`, read here in
+//! ra8_host so the camera model never opens a handle (RA8EMU-1011).
 //!
 //! The pipe is read without blocking. Each capture drains what the writer
 //! has sent so far, keeps the newest whole frame and shows it; a frame cut
@@ -7,18 +8,15 @@
 //! black. A FIFO with no writer yet reads 0 bytes, so a 0-byte read only
 //! counts as the writer closing once data has arrived; after that the last
 //! frame is held and one line says so. The run never waits on the writer.
-//! On Windows the emulator serves `\\.\pipe\NAME` itself (src/host/camera/pipe_windows.zig,
+//! On Windows the emulator serves `\\.\pipe\NAME` itself (pipe_windows.zig,
 //! RA8EMU-585).
 const std = @import("std");
 const builtin = @import("builtin");
 const posix = std.posix;
-const frame_source = @import("frame_source.zig");
-const converted = @import("converted_source.zig");
-const decoded = @import("../../host/camera/decoded_image.zig");
-const hosted = @import("hosted.zig");
-const host_read = @import("../../host/host_read.zig");
-pub const raw = @import("../../host/camera/pipe_frame.zig");
-pub const pipe_windows = @import("../../host/camera/pipe_windows.zig");
+const decoded = @import("decoded_image.zig");
+const host_read = @import("../host_read.zig");
+pub const raw = @import("pipe_frame.zig");
+pub const pipe_windows = @import("pipe_windows.zig");
 const win = pipe_windows;
 const is_windows = builtin.os.tag == .windows;
 
@@ -26,15 +24,7 @@ const is_windows = builtin.os.tag == .windows;
 /// run (`cat /dev/zero`) cannot hold a capture forever.
 pub const max_frames_per_capture: usize = 64;
 
-/// Name a pipe source after its argument for the end-of-run report.
-pub fn labelled(source: frame_source.FrameSource, arg: []const u8) frame_source.FrameSource {
-    var named = source;
-    named.label = "pipe";
-    named.detail = arg;
-    return named;
-}
-
-pub const PipeSource = struct {
+pub const Pipe = struct {
     allocator: std.mem.Allocator,
     fd: posix.fd_t,
     owns_fd: bool,
@@ -51,43 +41,41 @@ pub const PipeSource = struct {
     /// Whole frames received over the run.
     frames: u64 = 0,
     image: decoded.Image,
-    converted: converted.Converted,
-    format_control: *const u8,
 
     /// Open the named pipe, or standard input for "-", without blocking.
-    pub fn load(allocator: std.mem.Allocator, io: std.Io, text: []const u8, format_control: *const u8) !*PipeSource {
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, text: []const u8) !*Pipe {
         const arg = try raw.parseArg(text);
         const stdin = std.mem.eql(u8, arg.path, "-");
         if (is_windows) {
             const handle = if (stdin) host_read.stdin() else try win.serve(arg.path, arg.frameBytes());
             errdefer if (!stdin) host_read.close(handle);
-            const self = try make(allocator, handle, !stdin, arg, format_control);
+            const self = try make(allocator, handle, !stdin, arg);
             self.stdin = stdin;
             return self;
         }
         const fd = if (stdin) host_read.stdin() else try host_read.open(io, arg.path);
         errdefer if (!stdin) host_read.close(fd);
-        return fromFd(allocator, fd, !stdin, arg, format_control);
+        return fromFd(allocator, fd, !stdin, arg);
     }
 
     /// Read frames from `fd`, which is made non-blocking; closed at the end
     /// only when `owns_fd`.
-    pub fn fromFd(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg, format_control: *const u8) !*PipeSource {
+    pub fn fromFd(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg) !*Pipe {
         const flags = std.c.fcntl(fd, std.c.F.GETFL);
         if (flags < 0) return error.FcntlFailed;
         const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
         if (std.c.fcntl(fd, std.c.F.SETFL, flags | nonblock) < 0) return error.FcntlFailed;
-        return make(allocator, fd, owns_fd, arg, format_control);
+        return make(allocator, fd, owns_fd, arg);
     }
 
-    fn make(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg, format_control: *const u8) !*PipeSource {
+    fn make(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg) !*Pipe {
         const image = try decoded.Image.alloc(allocator, arg.width, arg.height);
         errdefer image.deinit(allocator);
         const pending = try allocator.alloc(u8, arg.frameBytes());
         errdefer allocator.free(pending);
         const latest = try allocator.alloc(u8, arg.frameBytes());
         errdefer allocator.free(latest);
-        const self = try allocator.create(PipeSource);
+        const self = try allocator.create(Pipe);
         self.* = .{
             .allocator = allocator,
             .fd = fd,
@@ -96,21 +84,13 @@ pub const PipeSource = struct {
             .pending = pending,
             .latest = latest,
             .image = image,
-            // frame() reads the sensor register before each capture, on the
-            // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
-            .format_control = format_control,
         };
         @memset(image.pixels, 0);
         return self;
     }
 
-    pub fn source(self: *PipeSource) frame_source.FrameSource {
-        return .{ .context = self, .vtable = &vtable };
-    }
-
     /// Take whatever the writer has sent, never waiting for more.
-    pub fn drain(self: *PipeSource) void {
+    pub fn drain(self: *Pipe) void {
         var whole: usize = 0;
         while (!self.closed and whole < max_frames_per_capture) {
             const got = self.readNow() catch |err| switch (err) {
@@ -129,35 +109,27 @@ pub const PipeSource = struct {
         }
     }
 
-    fn readNow(self: *PipeSource) !usize {
+    fn readNow(self: *Pipe) !usize {
         const into = self.pending[self.filled..];
         if (is_windows) return win.readNow(self.fd, self.stdin, into);
         return posix.read(self.fd, into);
     }
 
-    fn hangUp(self: *PipeSource) void {
+    fn hangUp(self: *Pipe) void {
         self.closed = true;
         std.debug.print("--camera-source pipe:{s}: the writer closed after {d} frames; holding the last one\n", .{ self.arg.path, self.frames });
     }
 
-    const vtable = frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
-
-    fn frame(context: *anyopaque, when: u64, shape: frame_source.Shape) void {
-        const self: *PipeSource = @ptrCast(@alignCast(context));
+    /// The newest whole frame at a capture: drain what the writer sent and
+    /// show it, or keep showing the last one.
+    pub fn picture(self: *Pipe, _: u64) decoded.Image {
         self.drain();
         if (self.fresh) raw.toRgb(self.arg.format, self.latest, self.image.pixels);
         self.fresh = false;
-        self.converted.format = hosted.formatFor(self.format_control.*);
-        self.converted.source().frame(when, shape);
+        return self.image;
     }
 
-    fn fill(context: *anyopaque, row: u32, column: u32, out: []u8) void {
-        const self: *PipeSource = @ptrCast(@alignCast(context));
-        self.converted.source().fill(row, column, out);
-    }
-
-    fn close(context: *anyopaque) void {
-        const self: *PipeSource = @ptrCast(@alignCast(context));
+    pub fn close(self: *Pipe) void {
         const allocator = self.allocator;
         if (self.owns_fd) host_read.close(self.fd);
         allocator.free(self.pending);

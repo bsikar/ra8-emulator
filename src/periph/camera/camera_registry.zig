@@ -12,7 +12,8 @@ const gradient = @import("gradient_source.zig");
 const hosted = @import("hosted.zig");
 const image_file = @import("../../host/camera/image_file.zig");
 const video_file = @import("../../host/camera/video_file.zig");
-const pipe = @import("pipe_source.zig");
+const pipe_input = @import("../../host/camera/pipe_input.zig");
+const raw = @import("../../host/camera/pipe_frame.zig");
 const webcam = @import("webcam_open.zig");
 
 pub const Kind = enum {
@@ -53,10 +54,14 @@ pub const Spec = struct {
                 errdefer clip.close();
                 break :blk try hosted.Hosted(video_file.Clip).open(allocator, clip, format_control, "video", self.arg);
             },
-            .pipe => pipe.labelled((pipe.PipeSource.load(allocator, io, self.arg, format_control) catch |err| {
-                std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
-                return err;
-            }).source(), self.arg),
+            .pipe => blk: {
+                const input = pipe_input.Pipe.load(allocator, io, self.arg) catch |err| {
+                    std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                    return err;
+                };
+                errdefer input.close();
+                break :blk try hosted.Hosted(pipe_input.Pipe).open(allocator, input, format_control, "pipe", self.arg);
+            },
             .webcam => webcam.open(allocator, io, self.arg, self.allow_webcam, format_control) catch |err| {
                 std.debug.print("--camera-source webcam:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
@@ -78,7 +83,7 @@ pub fn parse(text: []const u8) ParseError!Spec {
     switch (kind) {
         .gradient => if (arg.len != 0) return error.BadValue,
         .image, .video => if (arg.len == 0) return error.BadValue,
-        .pipe => _ = pipe.raw.parseArg(arg) catch return error.BadValue,
+        .pipe => _ = raw.parseArg(arg) catch return error.BadValue,
         .webcam => _ = webcam.device(arg) catch return error.BadValue,
     }
     return .{ .kind = kind, .arg = arg };

@@ -1,5 +1,5 @@
-//! Covers src/periph/camera/pipe_source.zig: frames streamed through a real
-//! pipe come back out of the FrameSource, the newest whole frame wins, half
+//! Covers src/host/camera/pipe_input.zig: frames streamed through a real
+//! pipe come back out of the camera's hosted source, the newest whole frame wins, half
 //! a frame is never shown, and an empty pipe or a closed writer returns at
 //! once with the last frame held. Unix only; the Windows server is covered in
 //! pipe_windows_test.zig.
@@ -8,7 +8,7 @@ const builtin = @import("builtin");
 const ra8 = @import("ra8");
 
 const camera = ra8.periph.ceu.camera;
-const pipe = camera.pipe;
+const pipe = ra8.host.camera.pipe_input;
 const allocator = std.testing.allocator;
 const ceu = ra8.periph.ceu;
 const Store = ra8.core.cpu.memory.store.Store;
@@ -75,13 +75,17 @@ fn closeFd(fd: std.posix.fd_t) void {
     _ = std.c.close(fd);
 }
 
-const Ends = struct { source: *pipe.PipeSource, writer: std.posix.fd_t };
+const Ends = struct { source: *pipe.Pipe, writer: std.posix.fd_t };
 
 fn open() !Ends {
     if (builtin.os.tag == .windows) return error.SkipZigTest;
     const fds = try pipeFds();
-    const source = try pipe.PipeSource.fromFd(allocator, fds[0], true, arg, &rgb565);
+    const source = try pipe.Pipe.fromFd(allocator, fds[0], true, arg);
     return .{ .source = source, .writer = fds[1] };
+}
+
+fn capture(input: *pipe.Pipe) !camera.frame_source.FrameSource {
+    return camera.hosted.Hosted(pipe.Pipe).open(allocator, input, &rgb565, "pipe", "-,2x1,rgb24");
 }
 
 fn expectLine(source: camera.frame_source.FrameSource, expected: [4]u8) !void {
@@ -99,7 +103,7 @@ const white_565 = [4]u8{ 0xFF, 0xFF, 0xFF, 0xFF };
 test "an empty pipe returns at once and the capture is black" {
     const ends = try open();
     defer closeFd(ends.writer);
-    const source = ends.source.source();
+    const source = try capture(ends.source);
     defer source.close();
     try expectLine(source, black_565);
     try std.testing.expect(!ends.source.closed);
@@ -108,7 +112,7 @@ test "an empty pipe returns at once and the capture is black" {
 test "the newest whole frame wins and half a frame waits for the rest" {
     const ends = try open();
     defer closeFd(ends.writer);
-    const source = ends.source.source();
+    const source = try capture(ends.source);
     defer source.close();
     _ = try writeFd(ends.writer, &red);
     _ = try writeFd(ends.writer, &blue);
@@ -122,7 +126,7 @@ test "the newest whole frame wins and half a frame waits for the rest" {
 
 test "a closed writer holds the last frame and never stalls the run" {
     const ends = try open();
-    const source = ends.source.source();
+    const source = try capture(ends.source);
     defer source.close();
     _ = try writeFd(ends.writer, &red);
     closeFd(ends.writer);
@@ -134,7 +138,7 @@ test "a closed writer holds the last frame and never stalls the run" {
 test "a writer faster than the run cannot hold one capture forever" {
     const ends = try open();
     defer closeFd(ends.writer);
-    const source = ends.source.source();
+    const source = try capture(ends.source);
     defer source.close();
     var burst: [6 * (pipe.max_frames_per_capture + 1)]u8 = undefined;
     for (0..pipe.max_frames_per_capture + 1) |at| @memcpy(burst[at * 6 ..][0..6], &red);
@@ -160,9 +164,9 @@ test "pipe frames reach the CEU destination" {
     var writer: ?std.posix.fd_t = fds[1];
     defer if (writer) |fd| closeFd(fd);
 
-    const pipe_source = try pipe.PipeSource.fromFd(allocator, reader.?, true, arg, &rgb565);
+    const pipe_source = try pipe.Pipe.fromFd(allocator, reader.?, true, arg);
     reader = null;
-    const source = pipe_source.source();
+    const source = try capture(pipe_source);
     defer source.close();
     bench.unit.source = source;
 
@@ -192,7 +196,16 @@ test "pipe is a registered kind named after its argument" {
     try std.testing.expectEqual(camera.registry.Kind.pipe, spec.kind);
     try std.testing.expectError(error.BadValue, camera.registry.parse("pipe:-"));
     try std.testing.expectError(error.BadValue, camera.registry.parse("pipe"));
-    const named = pipe.labelled(camera.gradient.source(), "-,2x1,rgb24");
+    if (builtin.os.tag == .windows) return;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "frames", .data = "" });
+    const path = try tmp.dir.realPathFileAlloc(std.testing.io, "frames", allocator);
+    defer allocator.free(path);
+    const text = try std.mem.concat(allocator, u8, &.{ path, ",2x1,rgb24" });
+    defer allocator.free(text);
+    const named = try (camera.registry.Spec{ .kind = .pipe, .arg = text }).open(allocator, std.testing.io, &rgb565);
+    defer named.close();
     try std.testing.expectEqualStrings("pipe", named.label);
-    try std.testing.expectEqualStrings("-,2x1,rgb24", named.detail);
+    try std.testing.expectEqualStrings(text, named.detail);
 }

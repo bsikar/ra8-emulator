@@ -5,7 +5,7 @@
 //! output file, and a read with nothing waiting returns at once instead of
 //! holding the run. A bare NAME means `\\.\pipe\NAME`. Standard input ("-")
 //! is checked with PeekNamedPipe first, so an idle anonymous pipe never
-//! blocks either. A read that ends in Closed returns 0, which pipe_source
+//! blocks either. A read that ends in Closed returns 0, which pipe_input
 //! treats as the writer hanging up.
 const std = @import("std");
 const windows = std.os.windows;

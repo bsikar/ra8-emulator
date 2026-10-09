@@ -5,7 +5,7 @@ const builtin = @import("builtin");
 const ra8 = @import("ra8");
 
 const camera = ra8.periph.ceu.camera;
-const pipe = camera.pipe;
+const pipe = ra8.host.camera.pipe_input;
 const win = ra8.host.pipe_windows;
 const Win32Error = std.os.windows.Win32Error;
 
@@ -75,8 +75,8 @@ test "real Windows named pipe streams frames without administrator rights" {
     var arg_buf: [128]u8 = undefined;
     const arg = try std.fmt.bufPrint(&arg_buf, "{s},2x1,rgb24", .{name});
     var format_control: u8 = 0x6F;
-    const loaded = try pipe.PipeSource.load(std.testing.allocator, arg, &format_control);
-    const capture = loaded.source();
+    const loaded = try pipe.Pipe.load(std.testing.allocator, std.testing.io, arg);
+    const capture = try camera.hosted.Hosted(pipe.Pipe).open(std.testing.allocator, loaded, &format_control, "pipe", arg);
     defer capture.close();
 
     try expectLine(capture, .{ 0x00, 0x00, 0x00, 0x00 });
