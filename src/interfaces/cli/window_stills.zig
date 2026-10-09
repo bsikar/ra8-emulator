@@ -5,8 +5,8 @@
 //! run on a machine with no display still leaves the camera panel's
 //! states on disk to view or diff.
 const std = @import("std");
-const raster = @import("../../gui/raster.zig");
-const platform_mod = @import("../../gui/platform.zig");
+const raster = @import("../gui/raster.zig");
+const platform_mod = @import("../gui/platform.zig");
 const window_still = @import("window_still.zig");
 
 /// The directory `--window-stills` named, made if missing; null when the

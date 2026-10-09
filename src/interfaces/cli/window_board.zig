@@ -9,12 +9,12 @@ const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const frame_out = @import("frame_out.zig");
-const host_loop = @import("../../gui/host_loop.zig");
-const board_snapshot = @import("../../gui/board_snapshot.zig");
+const host_loop = @import("../gui/host_loop.zig");
+const board_snapshot = @import("../gui/board_snapshot.zig");
 const window_pace = @import("../../session/window_pace.zig");
-const SourceSwap = @import("../../gui/source_swap.zig").SourceSwap;
-const console_feed = @import("../../gui/console_feed.zig");
-const console_keys = @import("../../gui/console_keys.zig");
+const SourceSwap = @import("../gui/source_swap.zig").SourceSwap;
+const console_feed = @import("../gui/console_feed.zig");
+const console_keys = @import("../gui/console_keys.zig");
 const window_devices = @import("window_devices.zig");
 const board_view = @import("../../render/board_view.zig");
 

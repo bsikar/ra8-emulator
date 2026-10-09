@@ -1,0 +1,57 @@
+//! Covers src/interfaces/gui/camera_open.zig: the panel's pick and its argument make
+//! the same spec `--camera-source` would, and open the source it names.
+const std = @import("std");
+const ra8 = @import("ra8");
+const camera_open = ra8.gui.camera_open;
+const Panel = ra8.gui.camera_panel.Panel;
+
+test "the gradient needs no argument and opens" {
+    const panel = Panel{};
+    const spec = try camera_open.spec(panel, .{});
+    try std.testing.expectEqual(.gradient, spec.kind);
+    try std.testing.expectEqualStrings("", spec.arg);
+    const format: u8 = 0;
+    const source = try camera_open.open(std.testing.allocator, std.testing.io, panel, .{}, &format);
+    defer source.close();
+    try std.testing.expectEqualStrings("synthetic gradient", source.label);
+}
+
+test "each kind takes its own argument" {
+    const args = camera_open.Args{ .image = "a.png", .video = "b.y4m", .pipe = "-,64x48,rgb565", .webcam = "2" };
+    var panel = Panel{};
+    panel.pick(.image);
+    try std.testing.expectEqualStrings("a.png", (try camera_open.spec(panel, args)).arg);
+    panel.pick(.video);
+    try std.testing.expectEqualStrings("b.y4m", (try camera_open.spec(panel, args)).arg);
+    panel.pick(.pipe);
+    try std.testing.expectEqualStrings("-,64x48,rgb565", (try camera_open.spec(panel, args)).arg);
+}
+
+test "a file source with nothing chosen has no spec" {
+    var panel = Panel{};
+    panel.pick(.image);
+    try std.testing.expectError(error.NeedsArgument, camera_open.spec(panel, .{}));
+    panel.pick(.pipe);
+    try std.testing.expectError(error.NeedsArgument, camera_open.spec(panel, .{}));
+}
+
+test "only an accepted webcam yields a webcam spec, carrying the consent" {
+    var panel = Panel{};
+    panel.pick(.webcam);
+    try std.testing.expectEqual(.gradient, (try camera_open.spec(panel, .{ .webcam = "1" })).kind);
+    panel.answer(.allow_once);
+    const spec = try camera_open.spec(panel, .{ .webcam = "1" });
+    try std.testing.expectEqual(.webcam, spec.kind);
+    try std.testing.expectEqualStrings("1", spec.arg);
+    try std.testing.expect(spec.allow_webcam);
+}
+
+test "a picture that cannot be read refuses to open" {
+    var panel = Panel{};
+    panel.pick(.image);
+    const format: u8 = 0;
+    try std.testing.expectError(
+        error.FileNotFound,
+        camera_open.open(std.testing.allocator, std.testing.io, panel, .{ .image = "/nonexistent/ra8-panel.png" }, &format),
+    );
+}
