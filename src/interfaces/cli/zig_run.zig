@@ -42,16 +42,16 @@ const systick_cut = cpu.systick_cut;
 const Until = @import("../../chip/core/until.zig").Until;
 const Stop = @import("../../chip/core/stop.zig").Stop;
 const Deadline = @import("../../chip/core/deadline.zig").Deadline;
-/// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
-pub const stop_sym = @import("zig_stop.zig");
+/// The `--stop-sym` counter a Zig run watches: src/session/zig_stop.zig.
+pub const stop_sym = @import("../../session/zig_stop.zig");
 const soak_symbols = @import("../../session/soak_symbols.zig");
 /// Re-exported for tests/session/itm_console_test.zig: cli.zig is full.
 pub const itm_console = @import("../../session/itm_console.zig");
-/// The `--break-sym` arrival a Zig run counts: src/interfaces/cli/zig_break.zig.
-pub const break_sym = @import("zig_break.zig");
+/// The `--break-sym` arrival a Zig run counts: src/session/zig_break.zig.
+pub const break_sym = @import("../../session/zig_break.zig");
 const window_pace = @import("window_pace.zig");
-/// `--stop-on-undefined` on a Zig run: src/interfaces/cli/zig_undefined.zig.
-pub const undefined_sites = @import("zig_undefined.zig");
+/// `--stop-on-undefined` on a Zig run: src/session/zig_undefined.zig.
+pub const undefined_sites = @import("../../session/zig_undefined.zig");
 /// `--save-state` / `--load-state` (RA8EMU-696).
 pub const state_args = @import("state_args.zig");
 pub const zig_snapshot = @import("zig_snapshot.zig");
@@ -331,8 +331,8 @@ fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Record
     const said = BootWriter{ .output = out, .quiet = options.ctl_cpu_load };
     if (ends.point) |point| {
         try break_sym.verdict(said, options.break_place.?, point.*, retire_at, final.pc, budget);
-    } else try stop_sym.verdict(said, options, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
-    if (ends.undefined_sites) |found| try undefined_sites.print(said, image, found.*);
+    } else try stop_sym.verdict(said, options.stop_symbol, if (ends.stop) |watch| watch.* else null, if (ends.timed) |due| due.* else null, final.pc, budget);
+    if (ends.undefined_sites) |found| try @import("report/undefined.zig").print(said, image, found.*);
     return watched;
 }
 

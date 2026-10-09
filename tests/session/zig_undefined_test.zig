@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/zig_undefined.zig: `--stop-on-undefined` on a
+//! Covers src/session/zig_undefined.zig: `--stop-on-undefined` on a
 //! Zig run (RA8EMU-603).
 const std = @import("std");
 const ra8 = @import("ra8");

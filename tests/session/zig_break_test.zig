@@ -1,16 +1,15 @@
-//! Covers src/interfaces/cli/zig_break.zig: the `--break-sym` arrival a Zig
+//! Covers src/session/zig_break.zig: the `--break-sym` arrival a Zig
 //! run counts and the verdict it prints (RA8EMU-603).
 const std = @import("std");
 const ra8 = @import("ra8");
 
 const zig_break = ra8.board.zig_run.break_sym;
-const Builder = @import("../../session/symbol_image.zig").Builder;
+const Builder = @import("symbol_image.zig").Builder;
 
 test "a --break-sym name resolves to its address and arrival" {
     var bytes: [4096]u8 align(4) = undefined;
     const image = try ra8.board.elf.Image.init(Builder.build(&bytes, &.{"blink_tick"}, &.{0x0200_9071}));
-    const options: ra8.core.cli.Options = .{ .path = "x.elf", .break_place = "blink_tick", .break_arrival = 2 };
-    const point = zig_break.resolve(image, options) orelse return error.TestExpectedBreak;
+    const point = zig_break.resolve(image, "blink_tick", 2) orelse return error.TestExpectedBreak;
     try std.testing.expectEqual(@as(u64, 0x0200_9070), point.watchedAddress());
     try std.testing.expectEqual(@as(u32, 2), point.arrival);
 }
@@ -18,7 +17,7 @@ test "a --break-sym name resolves to its address and arrival" {
 test "no --break-sym means no break" {
     var bytes: [4096]u8 align(4) = undefined;
     const image = try ra8.board.elf.Image.init(Builder.build(&bytes, &.{"blink_tick"}, &.{0x0200_9071}));
-    try std.testing.expect(zig_break.resolve(image, .{ .path = "x.elf" }) == null);
+    try std.testing.expect(zig_break.resolve(image, null, 1) == null);
 }
 
 test "arrivals stop counting at the wanted one and keep its address" {

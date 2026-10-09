@@ -5,19 +5,18 @@
 //! boundary after the wanted one, and the verdict names that arrival's own
 //! address.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
-const breakpoint = @import("../../session/breakpoint.zig");
-const profile = @import("../../session/profile.zig");
-const cpu = @import("../../chip/core/cpu/cpu.zig");
-const cli = @import("cli.zig");
+const elf = @import("../board/loader/elf.zig");
+const breakpoint = @import("breakpoint.zig");
+const profile = @import("profile.zig");
+const cpu = @import("../chip/core/cpu/cpu.zig");
 
 pub const Break = breakpoint.Break;
 
 /// The break, or null. A place the image does not carry is reported and the
 /// run goes to its instruction budget, as `--stop-sym` does.
-pub fn resolve(image: elf.Image, options: cli.Options) ?Break {
-    const spec = options.break_place orelse return null;
-    return breakpoint.resolve(image, spec, options.break_arrival) catch |err| {
+pub fn resolve(image: elf.Image, place: ?[]const u8, arrival: u32) ?Break {
+    const spec = place orelse return null;
+    return breakpoint.resolve(image, spec, arrival) catch |err| {
         std.debug.print("--break-sym {s}: {s}\n", .{ spec, @errorName(err) });
         return null;
     };

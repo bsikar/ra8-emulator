@@ -105,7 +105,7 @@ test "--run-for ends after its duration of a reset-clock image's own time (RA8EM
     board.tree.cksel = @backingInt(ra8.periph.sysclk.Source.moco);
     board.tree.selects = 1;
     const options = try ra8.core.cli.parse(&[_][]const u8{ "emu", "a.elf", "--run-for", "1s" });
-    var timed = zig_run.stop_sym.deadline(options) orelse return error.TestExpectedDeadline;
+    var timed = zig_run.stop_sym.deadline(options.ms) orelse return error.TestExpectedDeadline;
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 1_000_000 };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase, .timed = &timed };
     try core.writeWord(memmap.syst.rvr, 7999);
@@ -212,7 +212,6 @@ test {
     _ = @import("soak_canary_test.zig");
     _ = @import("threadx_stkof_test.zig");
     _ = @import("tz_pair_test.zig");
-    _ = @import("zig_stop_ns_test.zig");
 }
 
 test "a boundary is done once the --stop-sym counter reaches its floor (RA8EMU-603)" {
