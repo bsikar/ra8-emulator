@@ -43,3 +43,6 @@ pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64
     try report.blocks(board, out, .{ .elapsed = retired });
     try busErrors(out, bus_errors);
 }
+
+/// What CPU1 did, printed under CPU0's own account of the run.
+pub const cpu1 = @import("cores.zig").cpu1;
