@@ -26,15 +26,15 @@ pub fn section(j: anytype, board: *Board) !void {
     try j.field("stalls", host.xfer.stalls);
     try j.field("refused_out", host.xfer.refused_out);
     try j.field("refused_out_bytes", host.xfer.refused_bytes);
-    try cable(j, host);
+    try cable(j, board);
     try refusals(j, host);
     try j.close('}');
     try json_usbfs.section(j, &board.usb.script);
     try j.close('}');
 }
 
-fn cable(j: anytype, host: *const Host) !void {
-    const loop = host.xfer.loop orelse return j.field("cable", null);
+fn cable(j: anytype, board: *const Board) !void {
+    const loop = if (board.usb.cable) |*plugged| plugged else return j.field("cable", null);
     try j.open("cable", '{');
     try j.field("device_state", usb_cable.stateName(loop.deviceState()));
     try j.field("setups", loop.setups);

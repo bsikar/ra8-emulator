@@ -4,15 +4,17 @@
 //!
 //! usb_selftest_cdc runs a device stack on USBFS and a host stack on USBHS,
 //! cabled together. This is the far end the USBHS host sees in that case, in
-//! place of the stand-in device in usbhs_device.zig. It answers nothing on
+//! place of the stand-in device in usbhs_device.zig, through the chip's
+//! far-end contract (usbhs_far.zig). It answers nothing on
 //! its own: every reply is a packet the firmware's own USBFS driver wrote.
 //! A control transfer is asynchronous here, because the device side answers
 //! only when its driver runs, so the host side polls `answer`.
-const usbfs = @import("../usbfs/usbfs.zig");
-const regs = @import("usbhs_regs.zig");
+const usbfs = @import("../../periph/usbfs/usbfs.zig");
+const regs = @import("../../periph/usbhs/usbhs_regs.zig");
+const usbhs_far = @import("../../periph/usbhs/usbhs_far.zig");
 
 /// How the device side has ended the control transfer so far.
-pub const Answer = enum { pending, ack, stall };
+pub const Answer = usbhs_far.Answer;
 
 pub const Loop = struct {
     device: *usbfs.Device,
@@ -91,4 +93,46 @@ pub const Loop = struct {
     pub fn deviceState(self: *const Loop) u16 {
         return self.device.interruptStatus() & usbfs.intsts0.dvsq_mask;
     }
+
+    /// The cable as the HS host's far end.
+    pub fn far(self: *Loop) usbhs_far.Far {
+        return .{ .context = self, .vtable = &vtable };
+    }
 };
+
+const vtable: usbhs_far.Far.VTable = .{
+    .setupFn = setupOf,
+    .statusStageFn = statusStageOf,
+    .answerFn = answerOf,
+    .takeInFn = takeInOf,
+    .bulkInFn = bulkInOf,
+    .bulkOutFn = bulkOutOf,
+};
+
+fn cast(context: *anyopaque) *Loop {
+    return @ptrCast(@alignCast(context));
+}
+
+fn setupOf(context: *anyopaque, packet: [8]u8) void {
+    cast(context).setup(packet);
+}
+
+fn statusStageOf(context: *anyopaque) void {
+    cast(context).statusStage();
+}
+
+fn answerOf(context: *anyopaque) Answer {
+    return cast(context).answer();
+}
+
+fn takeInOf(context: *anyopaque, into: []u8) ?u16 {
+    return cast(context).takeIn(into);
+}
+
+fn bulkInOf(context: *anyopaque, endpoint: u4, into: []u8) ?u16 {
+    return cast(context).bulkIn(endpoint, into);
+}
+
+fn bulkOutOf(context: *anyopaque, endpoint: u4, bytes: []const u8) bool {
+    return cast(context).bulkOut(endpoint, bytes);
+}

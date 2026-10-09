@@ -6,7 +6,7 @@ const usbfs = ra8.periph.usbfs;
 const regs = ra8.periph.usbhs_regs;
 const usbhs_pipe = ra8.periph.usbhs_pipe;
 const xfer = ra8.periph.usbhs_xfer;
-const Loop = ra8.periph.usbhs.loop.Loop;
+const Loop = ra8.components.usb_loop_cable.Loop;
 
 fn at(offset: u32) u32 {
     return usbfs.window.base + offset;
@@ -46,7 +46,7 @@ fn open(device: *usbfs.Device, n: u16, endpoint: u16, in: bool) void {
 test "the SETUP crosses at once and the reply waits for the device driver" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     getDescriptor(&transfer);
     try std.testing.expectEqual(@as(u32, 1), loop.setups);
@@ -63,7 +63,7 @@ test "the SETUP crosses at once and the reply waits for the device driver" {
 test "a STALL the device driver sets reaches the host's DCPCTR" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     getDescriptor(&transfer);
     device.write(at(regs.reg.dcpctr), 2, regs.dcpctr.pid_stall);
@@ -78,7 +78,7 @@ test "a STALL the device driver sets reaches the host's DCPCTR" {
 test "a bulk IN packet the driver commits lands on the host pipe for its endpoint" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     pipes.pipes[1] = .{ .endpoint = 1, .in = true, .pid = regs.pipe.pid_buf };
     open(&device, 2, 1, true);
@@ -91,7 +91,7 @@ test "a bulk IN packet the driver commits lands on the host pipe for its endpoin
 test "a bulk OUT packet the host commits reaches the driver's pipe" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     pipes.pipes[2] = .{ .endpoint = 2, .in = false, .pid = regs.pipe.pid_buf };
     open(&device, 1, 2, false);
@@ -106,7 +106,7 @@ test "a bulk OUT packet the host commits reaches the driver's pipe" {
 test "a bulk OUT packet with no pipe opened on the device stays staged" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     pipes.pipes[2] = .{ .endpoint = 2, .in = false, .pid = regs.pipe.pid_buf };
     transfer.port.select(2);
@@ -119,7 +119,7 @@ test "a bulk OUT packet with no pipe opened on the device stays staged" {
 test "a NAKed bulk OUT packet goes again on BEMPSTS once the driver opens its pipe" {
     var device = attached();
     var loop = Loop{ .device = &device };
-    var transfer = xfer.Transfer{ .loop = &loop };
+    var transfer = xfer.Transfer{ .loop = loop.far() };
     var pipes = usbhs_pipe.Table{};
     pipes.pipes[2] = .{ .endpoint = 2, .in = false, .pid = regs.pipe.pid_buf };
     transfer.port.select(2);

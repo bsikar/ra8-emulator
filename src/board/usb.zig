@@ -10,6 +10,7 @@ const Bounded = @import("../core/bounded.zig").Bounded;
 const periph = @import("../periph/registry.zig");
 const usbfs = @import("../periph/usbfs/usbfs.zig");
 const usbhs = @import("../periph/usbhs/usbhs.zig");
+const usb_loop_cable = @import("../components/usb_loop_cable/cable.zig");
 
 pub const Due = Bounded(u16, 1);
 
@@ -33,7 +34,7 @@ pub const Usb = struct {
     /// The cable between the two jacks, once `loopBack` laid it. With it in,
     /// the HS host talks to the firmware's own USBFS device, and the
     /// scripted host is unplugged: one jack carries one host.
-    cable: ?usbhs.loop.Loop = null,
+    cable: ?usb_loop_cable.Loop = null,
     /// A usbip bridge (`--usbip`, RA8EMU-75), polled after the scripted
     /// host so it sees the device as the firmware has just left it.
     bridge: ?Hook = null,
@@ -49,7 +50,7 @@ pub const Usb = struct {
     /// has to be at its final address: both ends keep pointers into it.
     pub fn loopBack(self: *Usb) void {
         self.cable = .{ .device = &self.device };
-        self.host.xfer.loop = &self.cable.?;
+        self.host.xfer.loop = self.cable.?.far();
     }
 
     pub fn tick(self: *Usb) void {

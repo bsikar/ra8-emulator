@@ -63,7 +63,7 @@ const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
 const usbhs_int = @import("usbhs_int.zig");
-const usbhs_loop = @import("usbhs_loop.zig");
+const usbhs_far = @import("usbhs_far.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_setup = @import("usbhs_setup.zig");
 const xfer_loop = @import("usbhs_xfer_loop.zig");
@@ -72,8 +72,9 @@ pub const Transfer = struct {
     port: usbhs_fifo.Port = .{},
     data: usbhs_dfifo.Ports = .{},
     device: usbhs_device.Device = .{},
-    /// The self-loop cable. When set it is the far end instead of `device`.
-    loop: ?*usbhs_loop.Loop = null,
+    /// The self-loop cable the board plugged in. When set it is the far end
+    /// instead of `device`.
+    loop: ?usbhs_far.Far = null,
 
     /// The SETUP staging registers, as the host wrote them.
     usbreq: u16 = 0,

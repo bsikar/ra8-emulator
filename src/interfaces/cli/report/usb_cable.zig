@@ -2,11 +2,11 @@
 //! device jack: what crossed it, and where the device's state got to. A
 //! host with no cable in says nothing here; the stand-in device's lines
 //! cover it.
-const Host = @import("../../../periph/usbhs/usbhs.zig").Host;
+pub const Loop = @import("../../../components/usb_loop_cable/cable.zig").Loop;
 const usbfs = @import("../../../periph/usbfs/usbfs.zig");
 
-pub fn section(host: *const Host, out: anytype) !void {
-    const cable = host.xfer.loop orelse return;
+pub fn section(plugged: ?*const Loop, out: anytype) !void {
+    const cable = plugged orelse return;
     try out.print(
         "  cabled to the board's FS device, which is {s}: {d} SETUP(s), " ++
             "{d} control IN, {d} control OUT, {d} bulk OUT, {d} bulk IN\n",

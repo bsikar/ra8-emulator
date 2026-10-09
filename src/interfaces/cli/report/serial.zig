@@ -233,14 +233,14 @@ pub fn usb(board: *Board, out: Writer) !void {
             .{ host.xfer.refused_out, host.xfer.refused_bytes },
         );
     }
-    try usbRefused(host, out);
+    try usbRefused(host, if (board.usb.cable) |*plugged| plugged else null, out);
 }
 
 /// What the controller turned away, in the order the driver would meet it:
 /// the window's own refusals, then the two data ports, then the transfers.
 /// Split out of usb() above, which was at the function-length limit.
-fn usbRefused(host: *const Host, out: Writer) !void {
-    try usb_cable.section(host, out);
+fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, out: Writer) !void {
+    try usb_cable.section(cable, out);
     if (host.refusals() == 0) return;
     try out.print(
         "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++

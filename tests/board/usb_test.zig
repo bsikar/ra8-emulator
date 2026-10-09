@@ -58,9 +58,9 @@ test "loopBack cables the HS host to the board's own FS device" {
     var board = pulledUp();
     try std.testing.expect(board.host.xfer.loop == null);
     board.loopBack();
-    const cable = board.host.xfer.loop orelse return error.NoCable;
-    try std.testing.expectEqual(&board.device, cable.device);
-    try std.testing.expectEqual(&board.cable.?, cable);
+    const far = board.host.xfer.loop orelse return error.NoCable;
+    try std.testing.expectEqual(&board.device, board.cable.?.device);
+    try std.testing.expectEqual(@as(*anyopaque, &board.cable.?), far.context);
 }
 
 test "with the cable in, the scripted host stays off the device jack" {

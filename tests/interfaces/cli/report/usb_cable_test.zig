@@ -4,8 +4,7 @@ const ra8 = @import("ra8");
 
 const usb_cable = ra8.board.report.usb_cable;
 const usbfs = ra8.periph.usbfs;
-const Host = ra8.periph.usbhs.Host;
-const Loop = ra8.periph.usbhs.loop.Loop;
+const Loop = ra8.components.usb_loop_cable.Loop;
 
 /// The rendered section: up to 512 bytes, kept by value.
 const Text = struct {
@@ -17,26 +16,23 @@ const Text = struct {
     }
 };
 
-fn render(host: *const Host) !Text {
+fn render(cable: ?*const Loop) !Text {
     var text: Text = .{};
     var out: std.Io.Writer = .fixed(&text.buffer);
-    try usb_cable.section(host, &out);
+    try usb_cable.section(cable, &out);
     text.len = out.end;
     return text;
 }
 
 test "nothing while no cable is in" {
-    const host = Host{};
-    const text = try render(&host);
+    const text = try render(null);
     try std.testing.expectEqual(@as(usize, 0), text.len);
 }
 
 test "a cable names the device's state and what crossed it" {
     var device = usbfs.Device{};
     var cable = Loop{ .device = &device, .setups = 3, .ins = 2, .bulk_outs = 1 };
-    var host = Host{};
-    host.xfer.loop = &cable;
-    const text = try render(&host);
+    const text = try render(&cable);
     try std.testing.expectEqualStrings(
         "  cabled to the board's FS device, which is powered: 3 SETUP(s), " ++
             "2 control IN, 0 control OUT, 1 bulk OUT, 0 bulk IN\n",
@@ -47,9 +43,7 @@ test "a cable names the device's state and what crossed it" {
 test "bulk tokens with no pipe open get their own line" {
     var device = usbfs.Device{};
     var cable = Loop{ .device = &device, .unopened = 4 };
-    var host = Host{};
-    host.xfer.loop = &cable;
-    const text = try render(&host);
+    const text = try render(&cable);
     try std.testing.expect(std.mem.indexOf(u8, text.constSlice(), "4 bulk token(s) for an endpoint") != null);
 }
 
