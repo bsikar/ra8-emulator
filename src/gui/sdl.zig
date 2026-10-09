@@ -4,7 +4,7 @@
 //! CPU-rasterized framebuffer, shown as a streaming texture, is the
 //! fallback: RA8_GUI_CPU forces it and a geometry failure falls back to it.
 //!
-//! This file is its own module, built only by `zig build gui-hello -Dgui`.
+//! This file is its own module, built only under -Dgui (the emulator and gui-test).
 //! It reaches the rest of the GUI through "ra8", never by relative import,
 //! and `zig build test` never compiles it, so the tests need no SDL.
 const std = @import("std");

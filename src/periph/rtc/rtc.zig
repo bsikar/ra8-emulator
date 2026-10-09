@@ -60,13 +60,13 @@ const frequency = @import("rtc_frequency.zig");
 const rtc_source = @import("rtc_source.zig");
 const rtc_pace = @import("rtc_pace.zig");
 
-/// RTC geometry (ra8_rtc_regs.h); the bus folds the Non-secure alias onto this base.
+/// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
+/// this base before it arrives.
 pub const win_base: u32 = 0x4020_2000;
 pub const win_span: u32 = 0x80;
-/// Every register in `off` is one byte wide (RA8EMU-818 reads this).
-pub const off_width: u8 = 1;
 
-/// The registers this model interprets; the gaps are the FSP's 16-bit counter union.
+/// The registers this model interprets. The gaps between them are the
+/// 16-bit counter union the FSP type declares.
 pub const off = struct {
     pub const r64cnt: u32 = 0x00;
     pub const seccnt: u32 = 0x02;
