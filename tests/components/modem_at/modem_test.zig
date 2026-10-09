@@ -1,7 +1,7 @@
-//! Covers src/periph/modem.zig: the AT line state machine on SCI7.
+//! Covers src/components/modem_at/modem.zig: the AT line state machine on SCI7.
 const std = @import("std");
 const ra8 = @import("ra8");
-const modem = ra8.periph.modem;
+const modem = ra8.components.modem_at;
 
 /// Clock a whole line out, terminator included, and return what came back.
 fn line(unit: *modem.Modem, text: []const u8) []const u8 {

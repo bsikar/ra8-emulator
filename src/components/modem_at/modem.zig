@@ -15,7 +15,7 @@
 //! answer is the CME error, and the run is told a line was too long: a
 //! command that never fit is a driver bug the bench would show.
 //!
-//! THE MATCH IS V.250's, NOT A BYTE COMPARE: see modem_script.zig.
+//! THE MATCH IS V.250's, NOT A BYTE COMPARE: see script.zig.
 //!
 //! The seam also carries a rule this model gets for free and dev did not
 //! have: a byte only reaches the line when CCR0.TE is set, and a reply only
@@ -26,8 +26,8 @@
 //! how the driver treats an echoed line, so dev's echo-free wire is kept),
 //! the DTR and RI pins, and any timing between the command and its answer.
 const std = @import("std");
-const sci = @import("../sci/sci.zig");
-const script = @import("modem_script.zig");
+const sci = @import("../../periph/sci/sci.zig");
+const script = @import("script.zig");
 
 /// RXD7/TXD7: SCI7 is the MikroBUS UART, dev's k_modem_channel.
 pub const line_channel: usize = 7;

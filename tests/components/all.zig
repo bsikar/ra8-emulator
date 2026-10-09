@@ -29,4 +29,6 @@ test {
     _ = @import("sd_card/write_test.zig");
     _ = @import("sd_card/bus_card_test.zig");
     _ = @import("sd_card/bus_card_image_test.zig");
+    _ = @import("modem_at/modem_test.zig");
+    _ = @import("modem_at/script_test.zig");
 }

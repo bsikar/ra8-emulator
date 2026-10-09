@@ -13,7 +13,7 @@ const button = @import("../../components/button/button.zig");
 const led = @import("../../components/led/led.zig");
 const lsm6dso = @import("../../components/imu_lsm6dso/lsm6dso.zig");
 const max17048 = @import("../../components/gauge_max17048/max17048.zig");
-const modem = @import("../modem/modem.zig");
+const modem = @import("../../components/modem_at/modem.zig");
 const esp_hosted = @import("../esp_hosted.zig");
 
 pub const imu_name = "lsm6dso";

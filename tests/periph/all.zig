@@ -134,8 +134,6 @@ test {
     _ = @import("mipi/mipi_phy_pll_lock_test.zig");
     _ = @import("mipi/mipi_phy_status_test.zig");
     _ = @import("mipi/mipi_phy_test.zig");
-    _ = @import("modem/modem_script_test.zig");
-    _ = @import("modem/modem_test.zig");
     _ = @import("mram/mram_init_test.zig");
     _ = @import("mram/mram_test.zig");
     _ = @import("mram/mram_window_test.zig");
