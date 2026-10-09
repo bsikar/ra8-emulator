@@ -9,8 +9,8 @@
 //! `decodeRead` builds the same snapshot from bytes the shell read over the
 //! session link (RA8EMU-821).
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const disasm = @import("../../session/disasm.zig");
 const session_api = @import("../../session/session_api.zig");
 const session_view = @import("../../session/session_view.zig");

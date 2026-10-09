@@ -6,7 +6,7 @@
 //! wire carries whole gestures (RA8EMU-810), so the pane sends one `input`
 //! request per release.
 const proto = @import("../rpc/session_rpc.zig");
-const draw_list = @import("draw_list.zig");
+const draw_list = @import("../../render/draw_list.zig");
 const board_pane = @import("board_pane.zig");
 const shell_board = @import("shell_board.zig");
 const session_link = @import("session_link.zig");

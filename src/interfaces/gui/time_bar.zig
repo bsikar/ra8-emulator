@@ -6,8 +6,8 @@
 //! this file only lays it out, paints it and answers clicks.
 const std = @import("std");
 const proto = @import("../rpc/session_rpc.zig");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const status_bar = @import("status_bar.zig");
 const speed_field = @import("speed_field.zig");
 const time_readout = @import("time_readout.zig");

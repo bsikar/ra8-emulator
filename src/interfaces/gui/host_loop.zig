@@ -9,10 +9,10 @@
 //! the same composition `--frame-out` writes (board_view.zig), drawn at its
 //! own size in the top-left corner with the camera pane to its right.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const raster = @import("raster.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const raster = @import("../../render/raster.zig");
 const present_gate = @import("present_gate.zig");
-const font = @import("font.zig");
+const font = @import("../../render/font.zig");
 const platform = @import("platform.zig");
 const camera_pane = @import("camera_pane.zig");
 const console_pane = @import("console_pane.zig");
