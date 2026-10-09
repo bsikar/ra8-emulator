@@ -5,8 +5,8 @@
 //! The card owns commands and responses; this owns the bytes in between, and
 //! it decides nothing about the image: a finished block is handed back as an
 //! outcome and the card commits it, so the store and the protocol stay apart.
-const image = @import("sd_image.zig");
-const sd_crc = @import("sd_crc.zig");
+const image = @import("image.zig");
+const sd_crc = @import("crc.zig");
 
 /// Where a write is between the command and the card's data response.
 pub const Phase = enum {

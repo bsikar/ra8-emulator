@@ -12,7 +12,7 @@
 //! CSD counts in, so a size named here is always one the card can be
 //! resized to.
 const std = @import("std");
-const sd_format = @import("sd_format.zig");
+const sd_format = @import("format.zig");
 
 /// Print the remedy for a refusal the geometry made. A refusal that is not
 /// about size (a bad label, a card that would not take the writes) says

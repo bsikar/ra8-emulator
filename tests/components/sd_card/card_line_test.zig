@@ -1,7 +1,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const sd_card = ra8.periph.sd_card;
-const sd_card_line = ra8.periph.sd_card_line;
+const sd_card = ra8.components.sd_card;
+const sd_card_line = ra8.components.sd_card_line;
 const sci = ra8.periph.sci;
 const sci_spi = ra8.periph.sci_spi;
 

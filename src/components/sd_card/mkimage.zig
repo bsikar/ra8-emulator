@@ -5,10 +5,10 @@
 //! folder fits on. Dotfiles are skipped; links and other kinds are refused,
 //! so the image never quietly differs from the folder.
 const std = @import("std");
-const image = @import("sd_image.zig");
-const fat = @import("sd_fat.zig");
-const format = @import("sd_format.zig");
-const dirent = @import("sd_dirent.zig");
+const image = @import("image.zig");
+const fat = @import("fat.zig");
+const format = @import("format.zig");
+const dirent = @import("dirent.zig");
 
 pub const Error = error{ UnsupportedEntry, FileTooLarge, TooManyNames, NoCardFits, WriteRefused };
 

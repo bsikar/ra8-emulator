@@ -145,6 +145,20 @@ pub const components = struct {
     pub const usb_stick = @import("components/usb_stick/stick.zig");
     pub const usb_stick_disk = @import("components/usb_stick/disk.zig");
     pub const nor_flash = @import("components/nor_flash/flash.zig");
+    pub const sd_card = @import("components/sd_card/card.zig");
+    pub const sd_card_line = @import("components/sd_card/card_line.zig");
+    pub const sd_command = @import("components/sd_card/command.zig");
+    pub const sd_crc = @import("components/sd_card/crc.zig");
+    pub const sd_dump = @import("components/sd_card/dump.zig");
+    pub const sd_fat = @import("components/sd_card/fat.zig");
+    pub const sd_format = @import("components/sd_card/format.zig");
+    pub const sd_format_advice = @import("components/sd_card/format_advice.zig");
+    pub const sd_image = @import("components/sd_card/image.zig");
+    pub const sd_dirent = @import("components/sd_card/dirent.zig");
+    pub const sd_mkimage = @import("components/sd_card/mkimage.zig");
+    pub const sd_reply = @import("components/sd_card/reply.zig");
+    pub const sd_trace = @import("components/sd_card/trace.zig");
+    pub const sd_write = @import("components/sd_card/write.zig");
 };
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {

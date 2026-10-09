@@ -89,7 +89,7 @@ test "no --dump-regs prints nothing" {
     try std.testing.expectEqualStrings("", stream.buffered());
 }
 
-const Block = ra8.periph.sd_image.Block;
+const Block = ra8.components.sd_image.Block;
 
 const OneBlockCard = struct {
     sd: struct { img: Img } = .{ .img = .{} },

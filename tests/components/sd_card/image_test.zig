@@ -1,7 +1,7 @@
 //! Covers src/periph/sd_image.zig.
 const std = @import("std");
 const io = std.testing.io;
-const image = @import("ra8").periph.sd_image;
+const image = @import("ra8").components.sd_image;
 
 fn unit() image.Image {
     return image.Image.init(std.testing.allocator);

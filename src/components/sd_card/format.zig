@@ -37,8 +37,8 @@
 //! sector 6 and leaves the FSInfo that belongs with it unwritten, so a repair
 //! falling back to the backup finds half a pair. Both are written here.
 const std = @import("std");
-const image = @import("sd_image.zig");
-const fat = @import("sd_fat.zig");
+const image = @import("image.zig");
+const fat = @import("fat.zig");
 
 /// The FAT widths this model formats. FAT12 is not one of them: nothing in
 /// this tree reads a card small enough to need it.

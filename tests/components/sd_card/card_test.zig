@@ -1,10 +1,10 @@
 //! Covers src/periph/sd_card.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const sd_card = ra8.periph.sd_card;
-const sd_crc = ra8.periph.sd_crc;
-const sd_write = ra8.periph.sd_write;
-const image = ra8.periph.sd_image;
+const sd_card = ra8.components.sd_card;
+const sd_crc = ra8.components.sd_crc;
+const sd_write = ra8.components.sd_write;
+const image = ra8.components.sd_image;
 
 const block_bytes = image.geometry.block_bytes;
 

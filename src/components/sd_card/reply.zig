@@ -5,8 +5,8 @@
 //! is protocol decisions: sd_card.zig decides what to answer, this holds the
 //! answer and hands it over one byte per exchange, which is the only rate the
 //! wire has.
-const image = @import("sd_image.zig");
-const sd_crc = @import("sd_crc.zig");
+const image = @import("image.zig");
+const sd_crc = @import("crc.zig");
 
 /// The bytes the card drives. Idle is a line nobody is holding low.
 pub const token = struct {

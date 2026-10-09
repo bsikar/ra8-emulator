@@ -1,7 +1,7 @@
 //! Covers src/periph/sd_fat.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const fat = ra8.periph.sd_fat;
+const fat = ra8.components.sd_fat;
 
 const small = fat.Layout{
     .total_sectors = 65536,

@@ -63,12 +63,12 @@
 //! which are pins rather than protocol. The capacity is the image's own,
 //! declared there.
 const std = @import("std");
-const image = @import("sd_image.zig");
-const sd_reply = @import("sd_reply.zig");
-const sd_write = @import("sd_write.zig");
-const sd_trace = @import("sd_trace.zig");
-const sd_command = @import("sd_command.zig");
-const spi = @import("../spi/spi.zig");
+const image = @import("image.zig");
+const sd_reply = @import("reply.zig");
+const sd_write = @import("write.zig");
+const sd_trace = @import("trace.zig");
+const sd_command = @import("command.zig");
+const spi = @import("../../periph/spi/spi.zig");
 
 /// Which SPI_B channel the card is wired to. The model's own rule; see the
 /// header.
