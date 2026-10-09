@@ -40,8 +40,6 @@ pub const rtos_stream = @import("rtos_stream.zig");
 pub const rtos_publish = @import("rtos_publish.zig");
 /// `--trace-rtos`: the tracer and its report (RA8EMU-221).
 pub const rtos_hook = @import("rtos_hook.zig");
-/// Re-exported for tests/interfaces/cli/zig_debug_front_test.zig: src/root.zig is full.
-pub const zig_debug_front = @import("../interfaces/cli/zig_debug_front.zig");
 const dwt = @import("dwt.zig");
 const itm = @import("itm.zig");
 const dcb = @import("dcb.zig");

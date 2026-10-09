@@ -18,6 +18,7 @@ pub const core = struct {
     pub const host_spawn = @import("interfaces/cli/host_spawn.zig");
     pub const video_out = @import("interfaces/cli/video_out.zig");
     pub const debug_front = @import("interfaces/cli/debug_front.zig");
+    pub const zig_debug_front = @import("interfaces/cli/zig_debug_front.zig");
     pub const csel = @import("core/csel.zig");
     pub const disasm = @import("debug/disasm.zig");
     pub const elf = @import("core/elf.zig");
