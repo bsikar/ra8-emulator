@@ -15,7 +15,7 @@ const window_pace = @import("../../session/window_pace.zig");
 const window_run = @import("window_run.zig");
 const window_devices = @import("window_devices.zig");
 const window_stills = @import("window_stills.zig");
-const platform = @import("../../gui/platform.zig");
+const platform = @import("../gui/platform.zig");
 
 /// One 60 Hz frame, in ns of core time.
 pub const frame_ns: u64 = 16_666_667;
@@ -36,7 +36,7 @@ pub const Args = struct {
 };
 
 /// How the executable opens and closes its window. src/main.zig sets it
-/// in a -Dgui build (src/gui_window.zig, SDL); otherwise there is none.
+/// in a -Dgui build (src/interfaces/gui/gui_window.zig, SDL); otherwise there is none.
 pub const Opener = struct {
     open: *const fn () ?platform.Platform,
     close: *const fn () void,

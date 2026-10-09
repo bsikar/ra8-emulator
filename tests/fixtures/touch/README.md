@@ -8,7 +8,7 @@ reads the eight-byte point record at `0x814F`, stores x at SRAM `0x22000100`
 and y at `0x22000102` (u16 each), adds one to the count at `0x22000104`, then
 writes a zero back to status to acknowledge the frame.
 
-`tests/gui/session_touch_wire_test.zig` serves it with `serve --stdio`, taps
+`tests/interfaces/gui/session_touch_wire_test.zig` serves it with `serve --stdio`, taps
 the board pane's shown panel through `board_touch` and reads the stored
 contact back with `read_memory`.
 

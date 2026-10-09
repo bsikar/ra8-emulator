@@ -232,14 +232,14 @@ fn handoffBench(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     return bench_mod;
 }
 
-/// The SDL3 backend module (src/gui/sdl.zig, RA8EMU-616, ADR 0001 in the
+/// The SDL3 backend module (src/interfaces/gui/sdl.zig, RA8EMU-616, ADR 0001 in the
 /// knowledge base, RA8EMU-A-8) that the emulator and gui-test take under
 /// -Dgui. SDL is a lazy dependency asked for only under -Dgui, so test and
 /// gate never fetch or compile it.
 fn sdlModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, enabled: bool) ?*std.Build.Module {
     if (!enabled) return null;
     const sdl_dep = b.lazyDependency("sdl", .{ .target = target, .optimize = optimize }) orelse return null;
-    const sdl_mod = b.createModule(.{ .root_source_file = b.path("src/gui/sdl.zig"), .target = target, .optimize = optimize });
+    const sdl_mod = b.createModule(.{ .root_source_file = b.path("src/interfaces/gui/sdl.zig"), .target = target, .optimize = optimize });
     sdl_mod.addImport("ra8", emu);
     sdl_mod.linkLibrary(sdl_dep.artifact("SDL3"));
     sdl_mod.addImport("sdl3", sdlTranslation(b, target, optimize, sdl_dep.artifact("SDL3")));
@@ -265,7 +265,7 @@ fn guiTest(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
         return;
     }
     const sdl = sdl_mod orelse return;
-    const mod = b.createModule(.{ .root_source_file = b.path("tests/gui/sdl_geometry_test.zig"), .target = target, .optimize = optimize });
+    const mod = b.createModule(.{ .root_source_file = b.path("tests/interfaces/gui/sdl_geometry_test.zig"), .target = target, .optimize = optimize });
     mod.addImport("ra8", emu);
     mod.addImport("gui_sdl", sdl);
     step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);

@@ -170,7 +170,7 @@ pub const host = struct {
         pub const source_open = @import("host/camera/source_open.zig");
     };
 };
-pub const gui = @import("gui.zig");
+pub const gui = @import("interfaces/gui.zig");
 pub const render = struct {
     pub const board_view = @import("render/board_view.zig");
 };

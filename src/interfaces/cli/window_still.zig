@@ -4,8 +4,8 @@
 //! display: numbered stills, one per state, that can be diffed or viewed.
 const std = @import("std");
 const png = @import("png.zig");
-const raster = @import("../../gui/raster.zig");
-const Color = @import("../../gui/draw_list.zig").Color;
+const raster = @import("../gui/raster.zig");
+const Color = @import("../gui/draw_list.zig").Color;
 
 /// Copies `pixels` into `rgba` as opaque 8-bit RGBA; a window frame left
 /// transparent anywhere is shown as it would be on screen, solid.
