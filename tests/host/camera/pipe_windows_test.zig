@@ -1,4 +1,4 @@
-//! Covers src/periph/camera/pipe_windows.zig: Win32 error and name handling,
+//! Covers src/host/camera/pipe_windows.zig: Win32 error and name handling,
 //! plus a Windows-host stream through a real named pipe.
 const std = @import("std");
 const builtin = @import("builtin");
@@ -6,7 +6,7 @@ const ra8 = @import("ra8");
 
 const camera = ra8.periph.ceu.camera;
 const pipe = camera.pipe;
-const win = pipe.pipe_windows;
+const win = ra8.host.pipe_windows;
 const Win32Error = std.os.windows.Win32Error;
 
 const Live = if (builtin.os.tag == .windows) struct {

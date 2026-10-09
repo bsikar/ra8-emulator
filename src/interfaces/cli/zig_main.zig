@@ -66,7 +66,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
 /// main's `loadAll` sets up that a Zig run reads. Returns the bytes loaded.
 pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: *Parts, options: cli.Options) !u32 {
     const written = try cpu0.attachStore(board, image);
-    if (options.console) board.console_input.enabled = true;
+    if (options.console) board.console_input.source = cli.host_bytes.stdin();
     board.console_input.reply = options.console_reply;
     parts.tap = .{ .echo = if (options.console) io else null, .wait = if (options.until) |text| .{ .needle = text } else null };
     if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;

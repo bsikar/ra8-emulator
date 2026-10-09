@@ -45,6 +45,18 @@ fn openNonBlocking(path: []const u8) !Handle {
     }
 }
 
+/// A handle as the one word a model's byte source carries (ADR 0004): the
+/// application pairs it with readWord, so no model holds a host type.
+pub fn word(handle: Handle) usize {
+    return if (is_windows) @intFromPtr(handle) else @as(u32, @bitCast(handle));
+}
+
+/// read() for a handle given as word(): a byte source's read function.
+pub fn readWord(context: usize, into: []u8) ?usize {
+    const handle: Handle = if (is_windows) @ptrFromInt(context) else @bitCast(@as(u32, @truncate(context)));
+    return read(handle, into);
+}
+
 /// Close a handle from open() or a pipe. 0.17 has no std.posix.close;
 /// libc is always linked, so POSIX calls close(2) directly.
 pub fn close(handle: Handle) void {
