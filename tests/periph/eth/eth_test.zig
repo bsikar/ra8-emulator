@@ -6,7 +6,7 @@ const Store = ra8.core.cpu.memory.store.Store;
 const periph = ra8.periph.registry;
 const regs = ra8.periph.eth_regs;
 const eth = ra8.periph.eth;
-const eth_phy = ra8.periph.eth_phy;
+const eth_phy = ra8.components.eth_phy;
 const eth_mac = ra8.periph.eth_mac;
 const eth_mode = ra8.periph.eth_mode;
 const net = ra8.board.net;
@@ -62,38 +62,56 @@ test "a mode command from reset that skips a rung leaves status at reset" {
 }
 
 test "an MPSM read answers in the data field and clears PSME" {
+    var phy = eth_phy.Phy.init();
     var port = portZero();
+    port.mdio = phy.mdio();
     port.rmacWrite(regs.cluster.rmac0, 4, mdio(eth_phy.reg.bmsr, .read, 0));
     const out = port.rmacRead(regs.cluster.rmac0, 4);
     try std.testing.expectEqual(eth_phy.seed.bmsr, regs.dataOf(out));
     try std.testing.expectEqual(@as(u32, 0), out & regs.rmac.psme);
 }
 
-test "MPSM without PSME is a register, not a frame" {
+test "a port with nothing on its MDIO bus reads the idle level" {
     var port = portZero();
+    port.rmacWrite(regs.cluster.rmac0, 4, mdio(eth_phy.reg.bmsr, .read, 0));
+    const out = port.rmacRead(regs.cluster.rmac0, 4);
+    try std.testing.expectEqual(eth_phy.idle_data, regs.dataOf(out));
+    try std.testing.expectEqual(@as(u32, 0), out & regs.rmac.psme);
+}
+
+test "MPSM without PSME is a register, not a frame" {
+    var phy = eth_phy.Phy.init();
+    var port = portZero();
+    port.mdio = phy.mdio();
     port.rmacWrite(regs.cluster.rmac0, 4, 0x1234_0000);
     try std.testing.expectEqual(@as(u32, 0x1234_0000), port.rmacRead(regs.cluster.rmac0, 4));
-    try std.testing.expect(port.phy.quiet());
+    try std.testing.expect(phy.quiet());
 }
 
 test "the two ports keep their own PHY" {
+    var phy_one = eth_phy.Phy.init();
+    var phy_two = eth_phy.Phy.init();
     var one = portZero();
+    one.mdio = phy_one.mdio();
     var two = eth.Port.init(regs.cluster.etha1, regs.cluster.rmac1);
+    two.mdio = phy_two.mdio();
     one.rmacWrite(regs.cluster.rmac0, 4, mdio(eth_phy.reg.anar, .write, 0x0041));
     two.rmacWrite(regs.cluster.rmac1, 4, mdio(eth_phy.reg.anar, .read, 0));
     try std.testing.expectEqual(eth_phy.seed.anar, regs.dataOf(two.rmacRead(regs.cluster.rmac1, 4)));
 }
 
 test "a frame built in two halfword stores goes out whole" {
+    var phy = eth_phy.Phy.init();
     var port = portZero();
+    port.mdio = phy.mdio();
     const at = regs.cluster.rmac0;
     const frame = mdio(eth_phy.reg.anar, .write, 0x0041);
     // Data half first, control half second: the order a driver that lays the
     // value down before arming the frame would use.
     port.rmacWrite(at + 2, 2, frame >> 16);
     port.rmacWrite(at, 2, frame & 0xFFFF);
-    try std.testing.expectEqual(@as(u32, 1), port.phy.writes);
-    try std.testing.expectEqual(@as(u16, 0x0041), port.phy.value(eth_phy.reg.anar));
+    try std.testing.expectEqual(@as(u32, 1), phy.writes);
+    try std.testing.expectEqual(@as(u16, 0x0041), phy.value(eth_phy.reg.anar));
 }
 
 test "the control half of MPSM leaves the data half alone" {
@@ -105,7 +123,9 @@ test "the control half of MPSM leaves the data half alone" {
 }
 
 test "a halfword read of MPSM answers the half it names" {
+    var phy = eth_phy.Phy.init();
     var port = portZero();
+    port.mdio = phy.mdio();
     port.rmacWrite(regs.cluster.rmac0, 4, mdio(eth_phy.reg.bmsr, .read, 0));
     const high = port.rmacRead(regs.cluster.rmac0 + 2, 2);
     try std.testing.expectEqual(@as(u32, eth_phy.seed.bmsr), high);
@@ -179,11 +199,13 @@ test "a gated ESWM domain reads every port window back as zero" {
 test "a gated domain drops an MDIO frame instead of clocking it" {
     const guard = prcr.Prcr.init();
     const domain = pdctr.Pdctr.init(&guard, .eswm);
+    var phy = eth_phy.Phy.init();
     var port = portZero();
+    port.mdio = phy.mdio();
     port.domain = &domain;
     port.rmacWrite(regs.cluster.rmac0 + regs.rmac.mpsm, 4, mdio(1, .read, 0));
     try std.testing.expectEqual(@as(u32, 0), port.rmacRead(regs.cluster.rmac0 + regs.rmac.mpsm, 4));
-    try std.testing.expect(port.phy.quiet());
+    try std.testing.expect(phy.quiet());
     try std.testing.expectEqual(@as(u32, 1), port.dropped_unpowered);
 }
 

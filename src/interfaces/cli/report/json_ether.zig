@@ -38,7 +38,7 @@ fn steps(j: anytype, machine: anytype) !void {
 fn ports(j: anytype, cluster: *const net.Rswitch) !void {
     try j.open("ports", '[');
     for (&cluster.ports, 0..) |*port, index| {
-        if (port.quiet()) continue;
+        if (port.quiet() and cluster.phys[index].quiet()) continue;
         try j.open(null, '{');
         try j.field("index", index);
         try j.field("mode", @tagName(port.mode.mode));
@@ -55,7 +55,7 @@ fn ports(j: anytype, cluster: *const net.Rswitch) !void {
         try j.field("stores", port.mac.stores);
         try j.field("refused_not_config", port.mac.ignored);
         try j.close('}');
-        const phy = &port.phy;
+        const phy = &cluster.phys[index];
         try j.open("mdio", '{');
         try j.field("reads", phy.reads);
         try j.field("writes", phy.writes);

@@ -31,7 +31,7 @@ const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const regs = @import("eth_regs.zig");
 const eth_mode = @import("eth_mode.zig");
-const eth_phy = @import("eth_phy.zig");
+const eth_line = @import("eth_line.zig");
 const eth_mac = @import("eth_mac.zig");
 const eth_tas = @import("eth_tas.zig");
 const eth_cbs = @import("eth_cbs.zig");
@@ -48,6 +48,8 @@ pub const forward = @import("eth_forward.zig");
 pub const open_regs = @import("eth_open_regs.zig");
 /// COMA RIC, RRC and RCEC: eth_coma.zig.
 pub const coma = @import("eth_coma.zig");
+/// The MDIO bus and the wire the board connects: eth_line.zig.
+pub const line = eth_line;
 /// TAS gate-list RAM and indirect access registers.
 pub const tas = eth_tas;
 /// CBS admin and operational registers.
@@ -59,7 +61,9 @@ pub const Port = struct {
     etha_base: u32,
     rmac_base: u32,
     mode: eth_mode.Machine = .{},
-    phy: eth_phy.Phy = eth_phy.Phy.init(),
+    /// The MDIO bus to this port's PHY, a board part the board wires in.
+    /// Null for a port with nothing on its bus.
+    mdio: ?eth_line.Mdio = null,
     /// The last management frame, as MPSM reads back.
     mpsm: u32 = 0,
     /// MRMAC0/MRMAC1, which only take a store while this port is in CONFIG.
@@ -175,7 +179,7 @@ pub const Port = struct {
             self.mpsm = asked;
             return;
         }
-        self.mpsm = self.phy.transact(asked);
+        self.mpsm = if (self.mdio) |bus| bus.transact(asked) else eth_line.unanswered(asked);
     }
 
     /// MRMAC0/MRMAC1. The port's own mode decides whether the store lands,
@@ -195,7 +199,7 @@ pub const Port = struct {
     }
 
     pub fn quiet(self: *const Port) bool {
-        return self.mode.quiet() and self.phy.quiet() and self.mac.quiet() and
+        return self.mode.quiet() and self.mac.quiet() and
             self.tas_ram.quiet() and self.cbs_regs.quiet() and
             self.dropped_unpowered == 0 and self.dark_reads == 0;
     }

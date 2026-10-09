@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const regs = ra8.periph.eth_regs;
-const eth_phy = ra8.periph.eth_phy;
+const eth_phy = ra8.components.eth_phy;
 
 fn frame(target: u32, index: u32, op: regs.Op, data: u16) u32 {
     return regs.rmac.psme |
@@ -106,4 +106,12 @@ test "the identity registers are read-only and unmodelled, so they read zero" {
     _ = phy.transact(frame(eth_phy.address, eth_phy.reg.id_high, .write, 0x0022));
     try std.testing.expectEqual(@as(u16, 0), readBack(&phy, eth_phy.reg.id_high));
     try std.testing.expectEqual(@as(u32, 1), phy.read_only);
+}
+
+test "as a port's MDIO bus it carries the frame to its own file" {
+    var phy = eth_phy.Phy.init();
+    const bus = phy.mdio();
+    const out = bus.transact(frame(eth_phy.address, eth_phy.reg.bmsr, .read, 0));
+    try std.testing.expectEqual(eth_phy.seed.bmsr, regs.dataOf(out));
+    try std.testing.expectEqual(@as(u32, 1), phy.reads);
 }

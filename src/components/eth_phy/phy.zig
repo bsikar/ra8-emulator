@@ -1,5 +1,6 @@
 //! The Ethernet PHY on the MDIO bus, and the management frame RMAC.MPSM
-//! carries to it.
+//! carries to it. A board part (RA8EMU-1042): the port reaches it through
+//! the MDIO line in src/periph/eth/eth_line.zig.
 //!
 //! The PHY is a part on a two-wire bus like any other: it answers at its own
 //! address and nowhere else, and the registers it measures are its to write.
@@ -9,7 +10,8 @@
 //! into BMSR and read back a link that never negotiated. Both are refused
 //! here and counted.
 const std = @import("std");
-const regs = @import("eth_regs.zig");
+const regs = @import("../../periph/eth/eth_regs.zig");
+const line = @import("../../periph/eth/eth_line.zig");
 
 /// Where the board's PHY answers. One PHY, at the bottom of the address
 /// space, which is what the bring-up code reads.
@@ -43,7 +45,7 @@ pub const bmcr = struct {
 };
 
 /// What an idle MDIO bus reads as: nobody drives it low, so it floats high.
-pub const idle_data: u16 = 0xFFFF;
+pub const idle_data = line.idle_data;
 
 /// The registers the PHY measures or identifies itself with. A management
 /// write to one of these moves nothing on real silicon.
@@ -138,6 +140,17 @@ pub const Phy = struct {
                 return regs.withData(done, 0);
             },
         }
+    }
+
+    /// This PHY as a port's MDIO bus. The port keeps the pointer, so the
+    /// PHY must not move afterwards.
+    pub fn mdio(self: *Phy) line.Mdio {
+        return .{ .context = self, .transactFn = transactOn };
+    }
+
+    fn transactOn(context: *anyopaque, mpsm: u32) u32 {
+        const self: *Phy = @ptrCast(@alignCast(context));
+        return self.transact(mpsm);
     }
 
     pub fn refused(self: *const Phy) u32 {

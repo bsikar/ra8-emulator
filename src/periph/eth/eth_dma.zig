@@ -42,7 +42,7 @@ const std = @import("std");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const memmap = @import("../../core/memmap.zig");
 const desc = @import("eth_desc.zig");
-const peer = @import("eth_peer.zig");
+const eth_line = @import("eth_line.zig");
 
 /// What the engine would not do, and why. Every one of these is a case dev
 /// carries out silently or not at all.
@@ -67,7 +67,10 @@ pub const Dma = struct {
     /// The machine the rings live in. A board built by a test without one
     /// moves nothing, which is the only way this is ever null.
     memory: ?Guest = null,
-    link: peer.Link = .{},
+    /// The wire to the far end, a board part the board wires in. Null for a
+    /// test with nothing on the other end: a frame out then has nowhere to
+    /// go and nothing comes in.
+    link: ?eth_line.Wire = null,
     /// GWDCBAC: where the LINKFIX table is.
     linkfix: u32 = 0,
     /// Queues GWDCC marked for reception, one bit each. dev keeps only the
@@ -124,7 +127,11 @@ pub const Dma = struct {
             return;
         }
         const frame = self.frameOf(head) orelse return;
-        if (!self.link.send(frame)) {
+        const wire = self.link orelse {
+            self.refused.blocked += 1;
+            return;
+        };
+        if (!wire.send(frame)) {
             self.refused.blocked += 1;
             return;
         }
@@ -157,10 +164,11 @@ pub const Dma = struct {
         while (staged < desc.limits.inject) : (staged += 1) {
             // Ask before claiming a slot, so a frame is never dequeued and
             // then dropped for want of somewhere to put it.
-            const len = self.link.inbound.waiting() orelse return;
+            const wire = self.link orelse return;
+            const len = wire.waiting() orelse return;
             const slot = self.freeSlot(chain) orelse return;
             if (!self.stageInto(slot, len)) return;
-            self.link.inbound.drop();
+            wire.drop();
             self.setDs(slot, len);
             self.setDt(slot, .fsingle);
             self.rx_frames += 1;
@@ -180,7 +188,8 @@ pub const Dma = struct {
             self.refused.too_big += 1;
             return false;
         }
-        const frame = self.link.inbound.peek() orelse return false;
+        const wire = self.link orelse return false;
+        const frame = wire.peek() orelse return false;
         const memory = self.memory orelse return false;
         memory.write(at.ptr, frame) catch return false;
         return true;
