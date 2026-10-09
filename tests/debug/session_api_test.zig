@@ -9,10 +9,10 @@ const api = ra8.core.session_api;
 const breakpoint = ra8.core.breakpoint;
 const Machine = ra8.core.stop_machine.Machine;
 const zig_session = ra8.core.step_hook.zig_session;
-const input_script = ra8.periph.i3c_input_script;
-const gt911 = ra8.periph.i3c_gt911;
+const input_script = ra8.components.input_script;
+const gt911 = ra8.components.gt911;
 const gpio = ra8.periph.gpio;
-const touch_input = ra8.periph.i3c_touch_input;
+const touch_input = ra8.components.touch_input;
 const timebase = ra8.periph.clocks.timebase;
 
 /// A small RAM image with an initial vector table and three Thumb instructions.

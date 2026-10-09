@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const riic = ra8.periph.riic;
 const flag = ra8.periph.riic_flags;
-const pi4ioe = ra8.periph.riic_pi4ioe;
+const pi4ioe = ra8.components.pi4ioe;
 
 const ch1 = flag.win_base + flag.channel_stride;
 

@@ -2,7 +2,7 @@
 //! registers the gauge owns, and what it refuses.
 const std = @import("std");
 const ra8 = @import("ra8");
-const max17048 = ra8.periph.i3c_max17048;
+const max17048 = ra8.components.max17048;
 
 fn gaugeAt(soc: u8, charging: bool) !max17048.Gauge {
     return max17048.Gauge.init(.{ .soc_pct = soc, .charging = charging });

@@ -2,7 +2,7 @@
 //! refuses to invent.
 const std = @import("std");
 const ra8 = @import("ra8");
-const gt911 = ra8.periph.i3c_gt911;
+const gt911 = ra8.components.gt911;
 const gpio = ra8.periph.gpio;
 
 /// Writes all of `bytes` to a pipe end, as the host side of the test.

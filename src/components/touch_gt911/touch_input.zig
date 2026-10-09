@@ -16,10 +16,10 @@
 //! the board code wires them), and the boundary raises it when PFS ISEL and
 //! IRQCR say the part would (RA8EMU-375).
 const std = @import("std");
-const gt911 = @import("i3c_gt911.zig");
-const gpio = @import("../gpio/gpio.zig");
-const pin_irq = @import("../icu/icu_pin_irq.zig");
-const host_read = @import("../host_read.zig");
+const gt911 = @import("gt911.zig");
+const gpio = @import("../../periph/gpio/gpio.zig");
+const pin_irq = @import("../../periph/icu/icu_pin_irq.zig");
+const host_read = @import("../../periph/host_read.zig");
 
 /// The host-side name of each user switch, the pin it drives and the IRQ
 /// channel that pin feeds.

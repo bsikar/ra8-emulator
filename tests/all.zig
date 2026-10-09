@@ -63,6 +63,7 @@ test {
     _ = @import("board/session_schedule_test.zig");
     _ = @import("board/wiring_test.zig");
     _ = @import("periph/all.zig");
+    _ = @import("components/all.zig");
     _ = @import("core/banked_test.zig");
     _ = @import("core/session_test.zig");
     _ = @import("core/second_core_test.zig");

@@ -6,7 +6,7 @@
 //! wherever the pointer stands, and a STOP ends the transfer so the next one
 //! names its own register.
 const std = @import("std");
-const bus = @import("riic_bus.zig");
+const bus = @import("../../periph/riic/riic_bus.zig");
 
 pub const address: u7 = 0x43;
 

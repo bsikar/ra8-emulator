@@ -81,7 +81,7 @@ const fault_clear = @import("../periph/fault_clear.zig");
 const sci = @import("../periph/sci/sci.zig");
 const esp_hosted = @import("../periph/esp_hosted.zig");
 const sci_input = @import("../periph/sci/sci_input.zig");
-const gt911 = @import("../periph/i3c/i3c_gt911.zig");
+const gt911 = @import("../components/touch_gt911/gt911.zig");
 const sd_card = @import("../periph/sd/sd_card.zig");
 const sd_card_line = @import("../periph/sd/sd_card_line.zig");
 const sd_format = @import("../periph/sd/sd_format.zig");
@@ -215,7 +215,7 @@ pub const Board = struct {
     console_input: sci_input.Input = .{},
     /// Host touches sampled at each board boundary under `--touch @PATH`.
     touch_input: gt911.host.Input = .{},
-    input_script: @import("../periph/i3c/i3c_input_script.zig").Script = .{},
+    input_script: @import("../components/touch_gt911/input_script.zig").Script = .{},
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},

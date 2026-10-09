@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.periph.riic_bus;
 const fault = ra8.periph.registry.model.fault;
-const gauge_mod = ra8.periph.i3c_max17048;
+const gauge_mod = ra8.components.max17048;
 
 const Rig = struct {
     gauge: gauge_mod.Gauge = .{},

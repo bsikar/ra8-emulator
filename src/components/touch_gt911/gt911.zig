@@ -11,10 +11,10 @@
 //! point read filled the record from whatever coordinates were left over and
 //! counted a touch, so an image that read the record without looking at the
 //! status byte first was handed a tap that never happened.
-const bus = @import("../riic/riic_bus.zig");
+const bus = @import("../../periph/riic/riic_bus.zig");
 
-/// Live host touches for this panel: src/periph/i3c/i3c_touch_input.zig.
-pub const host = @import("i3c_touch_input.zig");
+/// Live host touches for this panel: src/components/touch_gt911/touch_input.zig.
+pub const host = @import("touch_input.zig");
 
 pub const address: u7 = 0x5D;
 

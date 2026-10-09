@@ -1,8 +1,8 @@
 //! Timed host input events, dispatched on the board's virtual clock.
 const std = @import("std");
-const host = @import("i3c_touch_input.zig");
-const gt911 = @import("i3c_gt911.zig");
-const gpio = @import("../gpio/gpio.zig");
+const host = @import("touch_input.zig");
+const gt911 = @import("gt911.zig");
+const gpio = @import("../../periph/gpio/gpio.zig");
 pub const Event = union(enum) {
     tap: gt911.Contact,
     swipe: struct { from: gt911.Contact, to: gt911.Contact, duration_ns: u64 },

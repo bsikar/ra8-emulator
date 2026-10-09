@@ -1,7 +1,7 @@
 //! The PI4IOE5V6408 expander: the register pointer and what it refuses.
 const std = @import("std");
 const ra8 = @import("ra8");
-const pi4ioe = ra8.periph.riic_pi4ioe;
+const pi4ioe = ra8.components.pi4ioe;
 
 test "the device id reads its reset default" {
     var expander = pi4ioe.Expander{};

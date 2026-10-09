@@ -7,11 +7,11 @@ const Writer = @import("../report.zig").Writer;
 const ether = @import("ether.zig");
 const riic_report = @import("riic.zig");
 const modem_line = @import("../../../periph/modem/modem.zig");
-const pi4ioe = @import("../../../periph/riic/riic_pi4ioe.zig");
-const ov5640 = @import("../../../periph/riic/riic_ov5640.zig");
-const gt911 = @import("../../../periph/i3c/i3c_gt911.zig");
-const lsm6dso = @import("../../../periph/i3c/i3c_lsm6dso.zig");
-const max17048 = @import("../../../periph/i3c/i3c_max17048.zig");
+const pi4ioe = @import("../../../components/expander_pi4ioe/pi4ioe.zig");
+const ov5640 = @import("../../../components/camera_ov5640/ov5640_sccb.zig");
+const gt911 = @import("../../../components/touch_gt911/gt911.zig");
+const lsm6dso = @import("../../../components/imu_lsm6dso/lsm6dso.zig");
+const max17048 = @import("../../../components/gauge_max17048/max17048.zig");
 
 /// One block per controller that saw traffic. A transmit made out of
 /// operation mode moves nothing on silicon, and a delivery with no receive

@@ -3,8 +3,8 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.periph.riic_bus;
 const flags = ra8.periph.riic_flags;
-const ov5640 = ra8.periph.riic_ov5640;
-const expander = ra8.periph.riic_pi4ioe;
+const ov5640 = ra8.components.ov5640;
+const expander = ra8.components.pi4ioe;
 const riic = ra8.periph.riic;
 
 const ch1 = flags.win_base + flags.channel_stride;
