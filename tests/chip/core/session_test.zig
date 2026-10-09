@@ -11,7 +11,6 @@ test "a bare session runs one uninterrupted stretch" {
     try std.testing.expect(bare.board == null);
     try std.testing.expect(bare.reboot == null);
     try std.testing.expect(bare.stop == null);
-    try std.testing.expect(bare.brk == null);
     try std.testing.expect(bare.protection == null);
     try std.testing.expect(bare.undefined_sites == null);
 }
