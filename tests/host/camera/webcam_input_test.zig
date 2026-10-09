@@ -41,7 +41,7 @@ test "a padded RGB565 frame decodes row by row and reaches the firmware as RGB56
     var fake: Fake = .{ .frame = &bytes };
     const control: u8 = 0; // whatever hosted.formatFor maps 0 to
     const self = try ws.Webcam.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 6), "/dev/video0");
-    const source = try ra8.periph.ceu.camera.hosted.Hosted(ws.Webcam).open(std.testing.allocator, self, &control, "webcam", self.device_path);
+    const source = try ra8.components.camera.hosted.Hosted(ws.Webcam).open(std.testing.allocator, self, &control, "webcam", self.device_path);
     try std.testing.expectEqualStrings("webcam", source.label);
     try std.testing.expectEqualStrings("/dev/video0", source.detail);
     source.frame(0, .{ .width = 4, .lines = 2 });

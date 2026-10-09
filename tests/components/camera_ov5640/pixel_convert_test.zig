@@ -1,9 +1,9 @@
-//! Covers src/periph/camera/pixel_convert.zig: known colours to known
+//! Covers src/components/camera_ov5640/pixel_convert.zig: known colours to known
 //! RGB565 and YUYV bytes, and nearest-neighbour scaling up and down.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const convert = ra8.periph.ceu.camera.convert;
+const convert = ra8.components.camera.convert;
 const Rgb = convert.Rgb;
 
 const red = Rgb{ .r = 255, .g = 0, .b = 0 };

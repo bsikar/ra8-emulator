@@ -76,7 +76,7 @@ test "real Windows named pipe streams frames without administrator rights" {
     const arg = try std.fmt.bufPrint(&arg_buf, "{s},2x1,rgb24", .{name});
     var format_control: u8 = 0x6F;
     const loaded = try pipe.Pipe.load(std.testing.allocator, std.testing.io, arg);
-    const capture = try camera.hosted.Hosted(pipe.Pipe).open(std.testing.allocator, loaded, &format_control, "pipe", arg);
+    const capture = try ra8.components.camera.hosted.Hosted(pipe.Pipe).open(std.testing.allocator, loaded, &format_control, "pipe", arg);
     defer capture.close();
 
     try expectLine(capture, .{ 0x00, 0x00, 0x00, 0x00 });

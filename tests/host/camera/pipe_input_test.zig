@@ -85,7 +85,7 @@ fn open() !Ends {
 }
 
 fn capture(input: *pipe.Pipe) !camera.frame_source.FrameSource {
-    return camera.hosted.Hosted(pipe.Pipe).open(allocator, input, &rgb565, "pipe", "-,2x1,rgb24");
+    return ra8.components.camera.hosted.Hosted(pipe.Pipe).open(allocator, input, &rgb565, "pipe", "-,2x1,rgb24");
 }
 
 fn expectLine(source: camera.frame_source.FrameSource, expected: [4]u8) !void {

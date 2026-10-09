@@ -1,4 +1,4 @@
-//! Covers src/periph/camera/converted_source.zig: a CEU on a converted
+//! Covers src/components/camera_ov5640/converted_source.zig: a CEU on a converted
 //! source captures the programmed format and size, not the gradient.
 const std = @import("std");
 const ra8 = @import("ra8");
@@ -7,7 +7,7 @@ const camera = ra8.periph.ceu.camera;
 
 test "a converted source fills lines in RGB565, scaled to the shape" {
     const pixels = [_]u8{ 255, 0, 0, 0, 0, 255 };
-    var converted = camera.converted.Converted{
+    var converted = ra8.components.camera.converted.Converted{
         .input = .{ .width = 2, .height = 1, .pixels = &pixels },
         .format = .rgb565,
     };
@@ -24,7 +24,7 @@ test "a converted source fills lines in RGB565, scaled to the shape" {
 
 test "a converted source fills lines in YUYV" {
     const pixels = [_]u8{ 255, 0, 0 };
-    var converted = camera.converted.Converted{
+    var converted = ra8.components.camera.converted.Converted{
         .input = .{ .width = 1, .height = 1, .pixels = &pixels },
         .format = .yuv422,
     };
