@@ -9,6 +9,7 @@
 //! A run with `--cpu1` is refused: the second core lives in its own driver
 //! and its state is not in the file yet.
 const std = @import("std");
+const backing = @import("../../board/external_backing.zig");
 const boot = @import("../../core/cpu/boot.zig");
 const Cpu = @import("../../core/cpu/cpu.zig").Cpu;
 const Store = @import("../../core/cpu/memory/store.zig").Store;
@@ -44,7 +45,7 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     try systick.load(.{ clock.timebase, &clock.ns_timebase }, bytes);
     const saved = try stretch.load(bytes);
     clock.accounted = core.retired -| saved.owed;
-    clock.wall_cycles = if (store.fabric) |fabric| fabric.wall else 0;
+    clock.wall_cycles = if (backing.fabricOf(store)) |fabric| fabric.wall else 0;
     clock.cycle_remainder = saved.cycle_remainder;
     if (saved.owed != 0) {
         if (saved.rate_known) {

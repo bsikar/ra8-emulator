@@ -5,7 +5,8 @@
 //! lists carry only the channels or operations that saw anything.
 const Board = @import("../../../board/board.zig").Board;
 const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
-const external = @import("../../../core/external_memory.zig");
+const external = @import("../../../board/external_memory.zig");
+const backing = @import("../../../board/external_backing.zig");
 const cache = @import("../../../periph/cache/cache.zig");
 const dmac = @import("../../../periph/dmac/dmac.zig");
 const dtc = @import("../../../periph/dtc/dtc.zig");
@@ -128,7 +129,7 @@ fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !voi
     try j.open("external_regions", '[');
     inline for (.{ external.Kind.ospi, external.Kind.sdram }) |kind| {
         const config = board.external_memory.region(kind);
-        const counters = if (memory) |guest| if (guest.store.fabric) |fabric| fabric.counters(kind, elapsed) else external.Counters{} else external.Counters{};
+        const counters = if (memory) |guest| if (backing.fabricOf(guest.store)) |fabric| fabric.counters(kind, elapsed) else external.Counters{} else external.Counters{};
         try j.open(null, '{');
         try j.field("name", kind.label());
         try j.field("base", kind.base());

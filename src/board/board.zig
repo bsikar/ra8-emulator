@@ -162,7 +162,7 @@ pub const Board = struct {
     /// An unset CMS keeps the IDAU's bit-28 answer for code (RA8EMU-389/420).
     memory_monitors: pscu.samon.Unit = .{},
     /// OSPI/SDRAM geometry and timing from the board profile (RA8EMU-643).
-    external_memory: @import("../core/external_memory.zig").Config = .{},
+    external_memory: @import("external_memory.zig").Config = .{},
     /// The IDAU over those words and address bit 28 (RA8EMU-277). Pointed
     /// at sram_attribution in attach(), where the board's address is final.
     idau: sau.idau.Map = .{},

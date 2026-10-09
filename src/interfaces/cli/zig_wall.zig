@@ -4,6 +4,7 @@
 //! each initiator. The longest of them is what the board, both SysTick banks
 //! and the window pacer see.
 const std = @import("std");
+const backing = @import("../../board/external_backing.zig");
 const clocks = @import("../../periph/clocks.zig");
 const frames_out = @import("report.zig").frames_out;
 const Clock = @import("zig_run.zig").Clock;
@@ -16,7 +17,7 @@ pub fn close(clock: *Clock, instructions: u32) !void {
         clock.cycle_remainder = value % clocks.timebase.default_hz;
         break :scaled value / clocks.timebase.default_hz;
     } else instructions;
-    const fabric = clock.memory.store.fabric;
+    const fabric = backing.fabricOf(clock.memory.store);
     const cpu0_stall = if (fabric) |unit| unit.takePending(.cpu0) else 0;
     if (clock.cpu1) |second| if (rate_scaled)
         second.roundAt(instructions, clock.boundary_hz.?)

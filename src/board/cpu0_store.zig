@@ -15,7 +15,8 @@
 const elf = @import("loader/elf.zig");
 const read_image = @import("loader/image.zig");
 const Store = @import("../core/cpu/memory/store.zig").Store;
-const external = @import("../core/external_memory.zig");
+const external = @import("external_memory.zig");
+const backing = @import("external_backing.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const loader = @import("../core/cpu/memory/load.zig");
 const wiring = @import("wiring.zig");
@@ -24,13 +25,16 @@ const Board = @import("board.zig").Board;
 pub const Cpu0 = struct {
     /// Null until `attachStore` makes it.
     store: ?Store = null,
+    /// The board's SDRAM and fabric behind the store's external port.
+    external: ?backing.Backing = null,
 
     /// Put CPU0 on a store of its own: the board's blocks, its windows, then
     /// the image. Returns the bytes the image wrote, for the opening line.
     pub fn attachStore(self: *Cpu0, board: *Board, image: elf.Image) !u32 {
         self.store = try Store.init(null);
         const layout = try external.Layout.init(board.external_memory);
-        try self.store.?.configureExternal(layout, board.nor.window());
+        self.external = try backing.Backing.init(layout, board.nor.window());
+        self.store.?.attachExternal(self.external.?.port());
         const memory = self.own();
         try wiring.attachBlocks(board, memory);
         try wiring.primeWindows(board, memory, wiring.cpu0Windows(board));
@@ -53,5 +57,7 @@ pub const Cpu0 = struct {
     pub fn close(self: *Cpu0) void {
         if (self.store) |*held| held.deinit();
         self.store = null;
+        if (self.external) |*held| held.deinit();
+        self.external = null;
     }
 };

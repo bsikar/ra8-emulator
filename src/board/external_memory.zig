@@ -1,6 +1,9 @@
 //! Profile-selected external memory geometry, timing and usage accounting.
+//! The board side of the chip's external port (RA8EMU-1041): the chip decodes
+//! the apertures, and this fabric meters every access behind them.
 const std = @import("std");
-const initiator_mod = @import("cpu/memory/initiator.zig");
+const initiator_mod = @import("../core/cpu/memory/initiator.zig");
+const port = @import("../core/cpu/memory/external_port.zig");
 
 pub const Initiator = initiator_mod.Initiator;
 
@@ -18,21 +21,7 @@ pub const Burst = enum {
     }
 };
 
-pub const Kind = enum(u1) {
-    ospi,
-    sdram,
-
-    pub fn label(self: Kind) []const u8 {
-        return @tagName(self);
-    }
-
-    pub fn base(self: Kind) u32 {
-        return switch (self) {
-            .ospi => 0x8000_0000,
-            .sdram => 0x6800_0000,
-        };
-    }
-};
+pub const Kind = port.Kind;
 
 pub const RegionConfig = struct {
     size: u32,
@@ -105,10 +94,7 @@ fn validateRegion(kind: Kind, one: RegionConfig) Error!void {
     if (!latency_ok) return Error.BadLatency;
 }
 
-pub const Hit = struct {
-    kind: Kind,
-    offset: u32,
-};
+pub const Hit = port.Hit;
 
 pub const Layout = struct {
     config: Config,
@@ -122,15 +108,12 @@ pub const Layout = struct {
         return .{ .config = .{} };
     }
 
+    pub fn geometry(self: Layout) port.Geometry {
+        return .{ .ospi = self.config.ospi.size, .sdram = self.config.sdram.size };
+    }
+
     pub fn locate(self: Layout, address: u32, len: usize) ?Hit {
-        inline for (.{ Kind.ospi, Kind.sdram }) |kind| {
-            const one = self.config.region(kind);
-            if (holds(kind.base(), one.size, address, len)) return .{ .kind = kind, .offset = address - kind.base() };
-            if (kind == .sdram and holds(sdram_alias_base, one.size, address, len)) {
-                return .{ .kind = kind, .offset = address - sdram_alias_base };
-            }
-        }
-        return null;
+        return self.geometry().locate(address, len);
     }
 
     pub fn base(self: Layout, kind: Kind) u32 {
@@ -145,41 +128,14 @@ pub const Layout = struct {
     /// Whether any byte of a non-empty span intersects a configured external
     /// aperture, including SDRAM's Non-secure alias.
     pub fn overlaps(self: Layout, address: u32, len: usize) bool {
-        if (len == 0) return false;
-        inline for (.{ Kind.ospi, Kind.sdram }) |kind| {
-            const span_size = self.size(kind);
-            if (overlap(kind.base(), span_size, address, len)) return true;
-            if (kind == .sdram and overlap(sdram_alias_base, span_size, address, len)) return true;
-        }
-        return false;
+        return self.geometry().overlaps(address, len);
     }
 };
 
-pub const sdram_alias_base: u32 = 0x7800_0000;
+pub const sdram_alias_base = port.sdram_alias_base;
+pub const supportedOverlap = port.supportedOverlap;
 
-fn holds(base: u32, size: u32, address: u32, len: usize) bool {
-    if (address < base) return false;
-    const offset = @as(u64, address) - base;
-    return offset + len <= size;
-}
-
-fn overlap(base: u32, size: u32, address: u32, len: usize) bool {
-    const first = @as(u64, address);
-    const last = first + len;
-    const region_first = @as(u64, base);
-    const region_last = region_first + size;
-    return first < region_last and last > region_first;
-}
-
-/// Whether a span intersects any controller-supported external aperture,
-/// including a disabled tail beyond the selected capacity.
-pub fn supportedOverlap(address: u32, len: usize) bool {
-    return overlap(Kind.ospi.base(), 256 * 1024 * 1024, address, len) or
-        overlap(Kind.sdram.base(), 128 * 1024 * 1024, address, len) or
-        overlap(sdram_alias_base, 128 * 1024 * 1024, address, len);
-}
-
-pub const Direction = enum { read, write };
+pub const Direction = port.Direction;
 
 pub const Counters = struct {
     read_high_water_bytes: u64 = 0,

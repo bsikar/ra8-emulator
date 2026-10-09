@@ -1,6 +1,6 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const memory = ra8.core.external_memory;
+const memory = ra8.board.external_memory;
 
 test "layout accepts capacities and aliases only inside configured regions" {
     var config: memory.Config = .{};
