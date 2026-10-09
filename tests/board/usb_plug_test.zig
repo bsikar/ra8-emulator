@@ -11,9 +11,9 @@ test "blank is a formatted FAT12 volume the device then serves" {
     try std.testing.expectEqual(usb_plug.blank_len, disk.len);
     try std.testing.expectEqualStrings("FAT12   ", disk[54..62]);
     var board_usb = usb.Usb{};
-    try std.testing.expect(!board_usb.host.xfer.device.hasDisk());
+    try std.testing.expect(!board_usb.echo.hasDisk());
     usb_plug.plug(&board_usb, disk);
-    try std.testing.expect(board_usb.host.xfer.device.hasDisk());
+    try std.testing.expect(board_usb.echo.hasDisk());
     try std.testing.expectEqual(@as(u32, 512), board_usb.stick.blocks());
 }
 

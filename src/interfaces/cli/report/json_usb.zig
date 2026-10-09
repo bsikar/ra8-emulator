@@ -5,6 +5,7 @@
 //! refusal counts are the same sums the human report prints.
 const Board = @import("../../../board/board.zig").Board;
 const Host = @import("../../../periph/usbhs/usbhs.zig").Host;
+const Echo = @import("../../../components/usb_echo/device.zig").Device;
 const usb_cable = @import("usb_cable.zig");
 const json_usbfs = @import("json_usbfs.zig");
 
@@ -21,13 +22,13 @@ pub fn section(j: anytype, board: *Board) !void {
     try j.field("pll_locks", host.pll.locks);
     try j.field("pll_unlocked_reads", host.pll.stalled);
     try j.field("setups", host.xfer.setups);
-    try j.field("device_state", @tagName(host.xfer.device.state));
-    try j.field("device_address", host.xfer.device.address);
+    try j.field("device_state", @tagName(board.usb.echo.state));
+    try j.field("device_address", board.usb.echo.address);
     try j.field("stalls", host.xfer.stalls);
     try j.field("refused_out", host.xfer.refused_out);
     try j.field("refused_out_bytes", host.xfer.refused_bytes);
     try cable(j, board);
-    try refusals(j, host);
+    try refusals(j, host, &board.usb.echo);
     try j.close('}');
     try json_usbfs.section(j, &board.usb.script);
     try j.close('}');
@@ -46,7 +47,7 @@ fn cable(j: anytype, board: *const Board) !void {
     try j.close('}');
 }
 
-fn refusals(j: anytype, host: *const Host) !void {
+fn refusals(j: anytype, host: *const Host, echo: *const Echo) !void {
     const data = &host.xfer.data;
     try j.open("refused", '{');
     try j.field("odd_offset", host.misaligned);
@@ -63,6 +64,6 @@ fn refusals(j: anytype, host: *const Host) !void {
     try j.field("stray_ccpl", host.xfer.stray_ccpl);
     try j.field("fifo_not_ready", host.xfer.port.not_ready);
     try j.field("overdrain", host.xfer.port.overdrain);
-    try j.field("out_of_order", host.xfer.device.out_of_order);
+    try j.field("out_of_order", echo.out_of_order);
     try j.close('}');
 }

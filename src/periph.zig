@@ -227,7 +227,6 @@ pub const ulpt = @import("periph/ulpt/ulpt.zig");
 pub const ulpt_compare = @import("periph/ulpt/ulpt_compare.zig");
 pub const ulpt_regs = @import("periph/ulpt/ulpt_regs.zig");
 pub const usbhs = @import("periph/usbhs/usbhs.zig");
-pub const usbhs_device = @import("periph/usbhs/usbhs_device.zig");
 pub const usbhs_dfifo = @import("periph/usbhs/usbhs_dfifo.zig");
 pub const usbhs_fifo = @import("periph/usbhs/usbhs_fifo.zig");
 pub const usbhs_function = @import("periph/usbhs/usbhs_function.zig");

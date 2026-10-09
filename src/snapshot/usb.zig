@@ -4,7 +4,7 @@
 //!
 //! Not saved, because it is wiring: the cable between the jacks (laid by
 //! `loopBack`; it holds a device pointer), the usbip bridge hook, the HS
-//! transfer's loop pointer, the device's pointer to the stick and the MSC
+//! transfer's far-end pointer, the echo device's pointer to the stick and the MSC
 //! disk, a host attachment like an SD
 //! image. A load keeps the target's.
 //!
@@ -18,7 +18,7 @@ const msc = @import("../components/usb_stick/stick.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-const skip: []const []const u8 = &.{ "host.xfer.loop", "host.xfer.device.storage", "cable", "bridge", "stick" };
+const skip: []const []const u8 = &.{ "host.xfer.far", "echo.storage", "cable", "bridge", "stick" };
 const storage_skip: []const []const u8 = &.{ "disk", "data", "sink" };
 
 const Where = enum(u8) { none, disk, scratch, inquiry };

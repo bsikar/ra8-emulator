@@ -11,6 +11,7 @@ test {
     _ = @import("touch_gt911/input_script_test.zig");
     _ = @import("imu_lsm6dso/lsm6dso_test.zig");
     _ = @import("gauge_max17048/max17048_test.zig");
+    _ = @import("usb_echo/device_test.zig");
     _ = @import("usb_loop_cable/cable_test.zig");
     _ = @import("usb_loop_cable/cable_bulk_test.zig");
     _ = @import("user_switch/user_switch_test.zig");

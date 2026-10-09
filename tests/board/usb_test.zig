@@ -56,9 +56,9 @@ test "a disabled status bit raises nothing" {
 
 test "loopBack cables the HS host to the board's own FS device" {
     var board = pulledUp();
-    try std.testing.expect(board.host.xfer.loop == null);
+    try std.testing.expect(board.cable == null);
     board.loopBack();
-    const far = board.host.xfer.loop orelse return error.NoCable;
+    const far = board.host.xfer.far orelse return error.NoCable;
     try std.testing.expectEqual(&board.device, board.cable.?.device);
     try std.testing.expectEqual(@as(*anyopaque, &board.cable.?), far.context);
 }

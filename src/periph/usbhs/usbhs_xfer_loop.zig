@@ -1,8 +1,8 @@
-//! The USBHS transfer engine with the self-loop cable as its far end: the
-//! answers the polled host sees come from the USBFS driver on the other
-//! jack, not from the stand-in device.
+//! The USBHS transfer engine against whatever the board plugged into the far
+//! end: the echo device, or the self-loop cable, where the answers the polled
+//! host sees come from the USBFS driver on the other jack.
 //!
-//! A control transfer is asynchronous on the cable. The SETUP goes across
+//! A control transfer is asynchronous on the far. The SETUP goes across
 //! at once, and every later answer appears only when the device driver has
 //! run: a control-read packet once it commits one, a STALL once it sets
 //! its DCP PID, a bulk-IN packet once it commits one on the endpoint's
@@ -25,51 +25,47 @@ pub fn bytes(packet: usbhs_setup.Packet) [8]u8 {
     };
 }
 
-/// BRDYSTS on the cable: the control reply, a device STALL, and a bulk-IN
+/// BRDYSTS: the control reply, a device STALL, and a bulk-IN
 /// packet on every armed IN pipe, each moved once the driver committed it.
-pub fn ready(t: *usbhs_xfer.Transfer, cable: usbhs_far.Far, pipes: *usbhs_pipe.Table) u16 {
-    if (t.in_flight and cable.answer() == .stall) {
-        t.stalls += 1;
-        t.in_flight = false;
-        t.dcpctr = (t.dcpctr & ~regs.dcpctr.pid_mask) | regs.dcpctr.pid_stall;
-    }
-    if (t.in_flight and t.control_read and fill(&t.port.in[0], cable, null)) {
+pub fn ready(t: *usbhs_xfer.Transfer, far: usbhs_far.Far, pipes: *usbhs_pipe.Table) u16 {
+    if (t.in_flight and far.answer() == .stall) t.stall();
+    if (t.in_flight and t.control_read and fill(&t.port.in[0], far, null)) {
         t.raiseReady(regs.status.dcp);
     }
     var index: u32 = 1;
     while (index < regs.pipe.count) : (index += 1) {
         const pipe = pipes.pipes[index];
         if (!pipe.armed() or !pipe.in) continue;
-        if (!fill(&t.port.in[index], cable, @truncate(pipe.endpoint))) continue;
+        if (!fill(&t.port.in[index], far, @truncate(pipe.endpoint))) continue;
         t.raiseReady(@as(u16, 1) << @intCast(index));
     }
     return t.brdy;
 }
 
-/// Move one packet off the cable into an empty host buffer: the DCP's when
+/// Move one packet off the far end into an empty host buffer: the DCP's when
 /// endpoint is null, otherwise that endpoint's pipe.
-fn fill(staging: *usbhs_fifo.Staging, cable: usbhs_far.Far, endpoint: ?u4) bool {
+fn fill(staging: *usbhs_fifo.Staging, far: usbhs_far.Far, endpoint: ?u4) bool {
     if (staging.ready) return false;
     const len = if (endpoint) |ep|
-        cable.bulkIn(ep, &staging.data)
+        far.bulkIn(ep, &staging.data)
     else
-        cable.takeIn(&staging.data);
+        far.takeIn(&staging.data);
     staging.len = len orelse return false;
     staging.cursor = 0;
     staging.ready = true;
     return true;
 }
 
-/// BEMPSTS on the cable: every armed OUT pipe still holding a packet the
+/// BEMPSTS: every armed OUT pipe still holding a packet the
 /// device NAKed tries it again. Taken, the buffer empties and BEMP rises;
 /// NAKed again, the bytes stay where the host put them.
-pub fn empty(t: *usbhs_xfer.Transfer, cable: usbhs_far.Far, pipes: *usbhs_pipe.Table) void {
+pub fn empty(t: *usbhs_xfer.Transfer, far: usbhs_far.Far, pipes: *usbhs_pipe.Table) void {
     var index: u32 = 1;
     while (index < regs.pipe.count) : (index += 1) {
         const pipe = pipes.pipes[index];
         const staging = &t.port.out[index];
         if (pipe.in or !pipe.armed() or staging.len == 0) continue;
-        if (!cable.bulkOut(@truncate(pipe.endpoint), staging.staged())) continue;
+        if (!far.bulkOut(@truncate(pipe.endpoint), staging.staged())) continue;
         t.refused_bytes -|= staging.len;
         staging.clear();
         t.raiseEmpty(@as(u16, 1) << @intCast(index));

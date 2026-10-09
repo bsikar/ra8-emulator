@@ -1,6 +1,6 @@
 //! The self-loop cable between the HS host jack and the board's own FS
 //! device jack: what crossed it, and where the device's state got to. A
-//! host with no cable in says nothing here; the stand-in device's lines
+//! host with no cable in says nothing here; the echo device's lines
 //! cover it.
 pub const Loop = @import("../../../components/usb_loop_cable/cable.zig").Loop;
 const usbfs = @import("../../../periph/usbfs/usbfs.zig");

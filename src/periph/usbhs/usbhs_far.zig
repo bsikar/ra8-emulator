@@ -1,7 +1,7 @@
-//! What the HS host jack talks to when a cable is plugged in instead of the
-//! stand-in device (usbhs_device.zig). The chip owns this contract: the part
-//! on the far end (src/components/usb_loop_cable) implements it and the
-//! board plugs it in, so this block never imports a part.
+//! What the HS host jack talks to. The chip owns this contract: the part on
+//! the far end (src/components/usb_echo, or the self-loop cable in
+//! src/components/usb_loop_cable) implements it and the board plugs it in,
+//! so this block never imports a part.
 
 /// How the far end has ended the control transfer so far.
 pub const Answer = enum { pending, ack, stall };
@@ -18,6 +18,7 @@ pub const Far = struct {
         takeInFn: *const fn (*anyopaque, []u8) ?u16,
         bulkInFn: *const fn (*anyopaque, u4, []u8) ?u16,
         bulkOutFn: *const fn (*anyopaque, u4, []const u8) bool,
+        busResetFn: *const fn (*anyopaque) void,
     };
 
     /// A SETUP from the host.
@@ -48,5 +49,10 @@ pub const Far = struct {
     /// A bulk or interrupt OUT packet. False is a NAK.
     pub fn bulkOut(self: Far, endpoint: u4, bytes: []const u8) bool {
         return self.vtable.bulkOutFn(self.context, endpoint, bytes);
+    }
+
+    /// USBRST released on the host jack.
+    pub fn busReset(self: Far) void {
+        self.vtable.busResetFn(self.context);
     }
 };

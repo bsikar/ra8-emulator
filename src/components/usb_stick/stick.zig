@@ -131,7 +131,7 @@ pub const Target = struct {
     }
 
     /// A bus reset: whatever command was in flight is gone with it.
-    /// The contract the chip's stand-in device calls. The board plugs this
+    /// The contract the echo device (src/components/usb_echo) calls. The board plugs this
     /// in once the stick is at its final address.
     pub fn function(self: *Target) usbhs_function.Function {
         return .{ .context = self, .vtable = &vtable };

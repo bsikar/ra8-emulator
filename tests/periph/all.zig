@@ -233,7 +233,6 @@ test {
     _ = @import("ulpt/ulpt_compare_test.zig");
     _ = @import("ulpt/ulpt_test.zig");
     _ = @import("ulpt/ulpt_regs_test.zig");
-    _ = @import("usbhs/usbhs_device_test.zig");
     _ = @import("usbhs/usbhs_dfifo_test.zig");
     _ = @import("usbhs/usbhs_fifo_test.zig");
     _ = @import("usbhs/usbhs_phy_test.zig");
@@ -247,6 +246,7 @@ test {
     _ = @import("usbhs/usbhs_tail_test.zig");
     _ = @import("usbhs/usbhs_test.zig");
     _ = @import("usbhs/usbhs_xfer_test.zig");
+    _ = @import("usbhs/usbhs_xfer_summary_test.zig");
     _ = @import("usbfs/usbfs_test.zig");
     _ = @import("usbfs/usbfs_dcp_test.zig");
     _ = @import("usbfs/usbfs_host_test.zig");

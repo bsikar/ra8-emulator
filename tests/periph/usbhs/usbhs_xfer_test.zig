@@ -2,7 +2,8 @@
 //! stage completed, and the steps that are refused.
 const std = @import("std");
 const ra8 = @import("ra8");
-const device = ra8.periph.usbhs_device;
+const device = ra8.components.usb_echo;
+const echo_far = ra8.components.usb_echo_far;
 const regs = ra8.periph.usbhs_regs;
 const usbhs_pipe = ra8.periph.usbhs_pipe;
 const xfer = ra8.periph.usbhs_xfer;
@@ -16,7 +17,8 @@ fn getDescriptor(transfer: *xfer.Transfer, kind: u16, length: u16) void {
 }
 
 test "a SETUP needs something on the bus that has been reset" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0680;
     transfer.usbleng = 18;
     // dev delivered the token whatever the port said.
@@ -27,7 +29,8 @@ test "a SETUP needs something on the bus that has been reset" {
 }
 
 test "a SETUP nothing answered latches SIGN, not silence" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0680;
     transfer.usbleng = 18;
     transfer.launch(false);
@@ -36,7 +39,8 @@ test "a SETUP nothing answered latches SIGN, not silence" {
 }
 
 test "the driver W0C-clears the latch and the next launch sets it again" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0680;
     transfer.usbleng = 18;
     transfer.launch(false);
@@ -49,20 +53,23 @@ test "the driver W0C-clears the latch and the next launch sets it again" {
 }
 
 test "exactly one of SACK and SIGN comes back from a launch" {
-    var dead = xfer.Transfer{};
+    var dead_echo: device.Device = .{};
+    var dead = xfer.Transfer{ .far = echo_far.far(&dead_echo) };
     dead.usbreq = 0x0680;
     dead.usbval = 0x0100;
     dead.usbleng = 18;
     dead.launch(false);
     try std.testing.expectEqual(regs.int1.sign, dead.intsts1);
 
-    var live = xfer.Transfer{};
+    var live_echo: device.Device = .{};
+    var live = xfer.Transfer{ .far = echo_far.far(&live_echo) };
     getDescriptor(&live, 0x0100, 18);
     try std.testing.expectEqual(regs.int1.sack, live.intsts1);
 }
 
 test "an acked SETUP latches SACK" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     getDescriptor(&transfer, 0x0100, 18);
     try std.testing.expectEqual(@as(u32, 1), transfer.setups);
     try std.testing.expect(transfer.intsts1 & regs.int1.sack != 0);
@@ -70,7 +77,8 @@ test "an acked SETUP latches SACK" {
 }
 
 test "a refused request still ACKs the token it arrived on" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     getDescriptor(&transfer, 0x0300, 4);
     try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
     // The token reached a device, so SACK. What the device would not do
@@ -81,7 +89,8 @@ test "a refused request still ACKs the token it arrived on" {
 }
 
 test "a refused request parks the DCP at PID=STALL" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     getDescriptor(&transfer, 0x0300, 4);
     try std.testing.expectEqual(@as(u32, 1), transfer.stalls);
     try std.testing.expectEqual(
@@ -91,7 +100,8 @@ test "a refused request parks the DCP at PID=STALL" {
 }
 
 test "a request the device honours leaves the PID field alone" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.dcpctr = regs.dcpctr.pid_buf;
     getDescriptor(&transfer, 0x0100, 18);
     try std.testing.expectEqual(@as(u32, 0), transfer.stalls);
@@ -102,7 +112,8 @@ test "a request the device honours leaves the PID field alone" {
 }
 
 test "the stall lands in the PID field and disturbs nothing else" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.dcpctr = regs.dcpctr.ccpl | regs.dcpctr.bsts;
     getDescriptor(&transfer, 0x0300, 4);
     try std.testing.expect(transfer.dcpctr & regs.dcpctr.ccpl != 0);
@@ -114,7 +125,8 @@ test "the stall lands in the PID field and disturbs nothing else" {
 }
 
 test "a dead-bus launch stalls nothing: there was no device to refuse it" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0680;
     transfer.usbval = 0x0300;
     transfer.usbleng = 4;
@@ -124,7 +136,8 @@ test "a dead-bus launch stalls nothing: there was no device to refuse it" {
 }
 
 test "an unsupported request code ACKs too" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     // bRequest is USBREQ's HIGH byte; 0xFF is no chapter-9 request.
     transfer.usbreq = 0xFF00;
     transfer.usbleng = 0;
@@ -134,7 +147,8 @@ test "an unsupported request code ACKs too" {
 }
 
 test "a SET_CONFIGURATION out of order ACKs and stalls" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0900;
     transfer.usbval = 1;
     transfer.usbleng = 0;
@@ -144,7 +158,8 @@ test "a SET_CONFIGURATION out of order ACKs and stalls" {
 }
 
 test "the device's answer shows up on the ready register the host polls" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     getDescriptor(&transfer, 0x0100, 18);
     const ready = transfer.readyStatus(&pipes);
@@ -156,7 +171,8 @@ test "the device's answer shows up on the ready register the host polls" {
 }
 
 test "the answer is latched once, not on every poll" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     getDescriptor(&transfer, 0x0100, 18);
     _ = transfer.readyStatus(&pipes);
@@ -167,7 +183,8 @@ test "the answer is latched once, not on every poll" {
 }
 
 test "a CCPL with nothing in flight is refused" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     // dev ran the status stage on any store with the bit set.
     transfer.complete();
     try std.testing.expectEqual(@as(u32, 1), transfer.stray_ccpl);
@@ -175,7 +192,8 @@ test "a CCPL with nothing in flight is refused" {
 }
 
 test "a control write's status stage is a zero-length IN packet" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.usbreq = 0x0500; // SET_ADDRESS
     transfer.usbval = 5;
     transfer.usbleng = 0;
@@ -183,25 +201,28 @@ test "a control write's status stage is a zero-length IN packet" {
     transfer.complete();
     try std.testing.expect(transfer.brdy & regs.status.dcp != 0);
     try std.testing.expectEqual(@as(u16, 0), transfer.port.in[0].remaining());
-    try std.testing.expectEqual(@as(u8, 5), transfer.device.address);
+    try std.testing.expectEqual(@as(u8, 5), transfer_echo.address);
 }
 
 test "a control read's status stage reports the buffer empty" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     getDescriptor(&transfer, 0x0100, 18);
     transfer.complete();
     try std.testing.expect(transfer.bemp & regs.status.dcp != 0);
 }
 
 test "a ready bit clears by writing zero to it" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     transfer.brdy = 0x0005;
     transfer.clearReady(0x0004);
     try std.testing.expectEqual(@as(u16, 0x0004), transfer.brdy);
 }
 
 test "a bulk packet on a pipe the host never armed moves nothing" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     transfer.port.select(regs.fifo.isel | 2);
     transfer.port.writeData(0x42, 1, 64);
@@ -210,11 +231,12 @@ test "a bulk packet on a pipe the host never armed moves nothing" {
     // and held for the pipe, not sent and not refused.
     try std.testing.expectEqual(@as(u16, 1 << 2), transfer.held);
     try std.testing.expectEqual(@as(u32, 0), transfer.refusals());
-    try std.testing.expect(!transfer.device.echo_ready);
+    try std.testing.expect(!transfer_echo.echo_ready);
 }
 
 test "an armed bulk pipe delivers to a configured device and raises BEMP" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     transfer.usbreq = 0x0500;
     transfer.usbval = 3;
@@ -227,11 +249,12 @@ test "an armed bulk pipe delivers to a configured device and raises BEMP" {
     transfer.port.writeData(0x33221100, 4, 64);
     transfer.commit(&pipes);
     try std.testing.expect(transfer.bemp & (@as(u16, 1) << 2) != 0);
-    try std.testing.expect(transfer.device.echo_ready);
+    try std.testing.expect(transfer_echo.echo_ready);
 }
 
 test "the echo comes back on an armed IN pipe" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     transfer.usbreq = 0x0500;
     transfer.usbval = 3;
@@ -251,14 +274,15 @@ test "the echo comes back on an armed IN pipe" {
 }
 
 test "a bus reset clears the flags and the staging with the device" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     getDescriptor(&transfer, 0x0100, 18);
     _ = transfer.readyStatus(&pipes);
     transfer.busReset();
     try std.testing.expectEqual(@as(u16, 0), transfer.brdy);
     try std.testing.expectEqual(@as(u16, 0), transfer.port.in[0].len);
-    try std.testing.expectEqual(device.State.default, transfer.device.state);
+    try std.testing.expectEqual(device.State.default, transfer_echo.state);
     try std.testing.expect(!transfer.in_flight);
 }
 
@@ -269,7 +293,8 @@ test "a fresh transfer is quiet" {
 }
 
 test "a packet the device refuses stays staged instead of vanishing" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     // Armed pipe, but the device is still in Default: no bulk endpoint yet.
     _ = pipes.setControl(2, regs.pipe.pid_buf);
@@ -288,7 +313,8 @@ test "a packet the device refuses stays staged instead of vanishing" {
 }
 
 test "the refused packet goes out on the next BVAL, once the device is configured" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     _ = pipes.setControl(2, regs.pipe.pid_buf);
     transfer.port.select(regs.fifo.isel | 2);
@@ -304,13 +330,14 @@ test "the refused packet goes out on the next BVAL, once the device is configure
     transfer.launch(true);
     transfer.commit(&pipes);
     try std.testing.expect(transfer.bemp & (@as(u16, 1) << 2) != 0);
-    try std.testing.expect(transfer.device.echo_ready);
+    try std.testing.expect(transfer_echo.echo_ready);
     try std.testing.expectEqual(@as(u16, 0), transfer.port.out[2].len);
     try std.testing.expectEqual(@as(u32, 1), transfer.refused_out);
 }
 
 test "a taken packet empties the buffer" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     transfer.usbreq = 0x0500;
     transfer.usbval = 3;
@@ -327,7 +354,8 @@ test "a taken packet empties the buffer" {
 }
 
 test "a refused packet counts as a refusal the run can report" {
-    var transfer = xfer.Transfer{};
+    var transfer_echo: device.Device = .{};
+    var transfer = xfer.Transfer{ .far = echo_far.far(&transfer_echo) };
     var pipes = usbhs_pipe.Table{};
     _ = pipes.setControl(1, regs.pipe.pid_buf);
     transfer.port.select(regs.fifo.isel | 1);
@@ -335,44 +363,4 @@ test "a refused packet counts as a refusal the run can report" {
     transfer.commit(&pipes);
     try std.testing.expect(!transfer.quiet());
     try std.testing.expect(transfer.refusals() >= 1);
-}
-
-test "a control reply raises the INTSTS0 summary, not just BRDYSTS" {
-    var transfer = xfer.Transfer{};
-    var pipes = usbhs_pipe.Table{};
-    try std.testing.expectEqual(@as(u16, 0), transfer.interruptStatus(&pipes));
-    getDescriptor(&transfer, 0x0100, 18);
-    // The dispatcher reads the mask and never touches BRDYSTS itself.
-    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy != 0);
-    try std.testing.expect(transfer.brdy & regs.status.dcp != 0);
-}
-
-test "a staged packet going out raises the INTSTS0 empty summary" {
-    var transfer = xfer.Transfer{};
-    var pipes = usbhs_pipe.Table{};
-    transfer.port.select(regs.fifo.isel);
-    transfer.port.writeData(0xAA, 1, 64);
-    transfer.commit(&pipes);
-    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.bemp != 0);
-    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy == 0);
-}
-
-test "a new packet re-raises the summary after it was acked" {
-    var transfer = xfer.Transfer{};
-    var pipes = usbhs_pipe.Table{};
-    getDescriptor(&transfer, 0x0100, 18);
-    _ = transfer.interruptStatus(&pipes);
-    transfer.clearInterrupt(~regs.int0.brdy);
-    transfer.clearReady(~regs.status.dcp);
-    getDescriptor(&transfer, 0x0100, 18);
-    try std.testing.expect(transfer.interruptStatus(&pipes) & regs.int0.brdy != 0);
-}
-
-test "nothing on the bus raises no summary at all" {
-    var transfer = xfer.Transfer{};
-    var pipes = usbhs_pipe.Table{};
-    transfer.usbreq = 0x0680;
-    transfer.usbleng = 18;
-    transfer.launch(false);
-    try std.testing.expectEqual(@as(u16, 0), transfer.interruptStatus(&pipes));
 }
