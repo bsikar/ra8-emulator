@@ -2,6 +2,10 @@
 //! One file per host connection or DNS question. Each file is a run of
 //! records: a direction byte, a u32 little-endian length, then the bytes.
 const std = @import("std");
+const store_file = @import("esp_tape_store.zig");
+
+pub const Store = store_file.Store;
+pub const Handle = store_file.Handle;
 
 pub const Mode = enum { live, record, replay };
 pub const Proto = enum { tcp, udp };
@@ -19,9 +23,6 @@ const file_max: usize = 64 * 1024 * 1024;
 
 pub const Record = struct { dir: Dir, bytes: []const u8 };
 
-/// The open tape directory and the Io that reaches it.
-const Store = struct { io: std.Io, dir: std.Io.Dir };
-
 /// Where a run's tapes live and which way they go. `misses` counts every
 /// replay request with no recording; a run with misses must fail.
 pub const Tape = struct {
@@ -32,14 +33,14 @@ pub const Tape = struct {
     key_len: usize = 0,
     misses: std.atomic.Value(u32) = .init(0),
 
-    pub fn open(io: std.Io, path: []const u8, mode: Mode) !Tape {
-        const cwd = std.Io.Dir.cwd();
-        if (mode == .record) try cwd.createDirPath(io, path);
-        return .{ .mode = mode, .store = .{ .io = io, .dir = try cwd.openDir(io, path, .{}) } };
+    /// A recording or replay over `store`, which the application fills
+    /// from its host files (RA8EMU-1020).
+    pub fn init(mode: Mode, store: Store) Tape {
+        return .{ .mode = mode, .store = store };
     }
 
     pub fn deinit(self: *Tape) void {
-        if (self.store) |store| store.dir.close(store.io);
+        if (self.store) |store| store.release(store.root);
         self.store = null;
     }
 
@@ -52,7 +53,7 @@ pub const Tape = struct {
         var buf: [64]u8 = undefined;
         const name = try self.nextName(&buf, key);
         const store = self.store.?;
-        return .{ .io = store.io, .file = try store.dir.createFile(store.io, name, .{}) };
+        return .{ .store = store, .file = try store.create(store.root, name) };
     }
 
     /// Loads the next recording for `key`; a missing one is a miss.
@@ -60,7 +61,7 @@ pub const Tape = struct {
         var buf: [64]u8 = undefined;
         const name = try self.nextName(&buf, key);
         const store = self.store.?;
-        const data = store.dir.readFileAlloc(store.io, name, std.heap.page_allocator, .limited(file_max)) catch |err| {
+        const data = store.readAlloc(store.root, name, std.heap.page_allocator, file_max) catch |err| {
             self.miss("no recording for {s}", .{name});
             return err;
         };
@@ -72,9 +73,9 @@ pub const Tape = struct {
         if (request.len < 2) return;
         var buf: [64]u8 = undefined;
         const store = self.store.?;
-        const file = store.dir.createFile(store.io, dnsName(&buf, request), .{}) catch |err| return warnWrite(err);
-        defer file.close(store.io);
-        file.writeStreamingAll(store.io, answer) catch |err| warnWrite(err);
+        const file = store.create(store.root, dnsName(&buf, request)) catch |err| return warnWrite(err);
+        defer store.close(file);
+        store.append(file, answer) catch |err| warnWrite(err);
     }
 
     /// The recorded answer to `request`, its id patched to match; null is a miss.
@@ -83,7 +84,7 @@ pub const Tape = struct {
         var buf: [64]u8 = undefined;
         const name = dnsName(&buf, request);
         const store = self.store.?;
-        const answer = store.dir.readFile(store.io, name, out) catch {
+        const answer = store.readInto(store.root, name, out) catch {
             self.miss("no recording for {s}", .{name});
             return null;
         };
@@ -129,20 +130,20 @@ fn warnWrite(err: anyerror) void {
 
 /// Appends records to one connection's tape.
 pub const Writer = struct {
-    io: std.Io,
-    file: std.Io.File,
+    store: Store,
+    file: Handle,
 
     pub fn put(self: *Writer, dir: Dir, bytes: []const u8) void {
         if (bytes.len == 0 and dir != .closed) return;
         var head: [header_len]u8 = undefined;
         head[0] = @backingInt(dir);
         std.mem.writeInt(u32, head[1..5], @intCast(bytes.len), .little);
-        self.file.writeStreamingAll(self.io, &head) catch |err| return warnWrite(err);
-        self.file.writeStreamingAll(self.io, bytes) catch |err| warnWrite(err);
+        self.store.append(self.file, &head) catch |err| return warnWrite(err);
+        self.store.append(self.file, bytes) catch |err| warnWrite(err);
     }
 
     pub fn close(self: *Writer) void {
-        self.file.close(self.io);
+        self.store.close(self.file);
     }
 };
 

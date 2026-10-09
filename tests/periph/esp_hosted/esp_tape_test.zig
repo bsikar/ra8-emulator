@@ -2,6 +2,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const tape = ra8.periph.esp_hosted.tape;
+const tape_dir = ra8.host.tape_dir;
 
 const web = tape.Key{ .proto = .tcp, .ip = .{ 93, 184, 216, 34 }, .port = 80 };
 
@@ -10,12 +11,16 @@ fn scratch(tmp: *std.testing.TmpDir, buf: []u8) ![]const u8 {
     return buf[0..len];
 }
 
+fn openTape(path: []const u8, mode: tape.Mode) !tape.Tape {
+    return .init(mode, .of(tape_dir, try tape_dir.open(std.testing.io, path, mode == .record)));
+}
+
 test "a recorded connection reads back record by record" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try scratch(&tmp, &buf);
-    var recorder = try tape.Tape.open(std.testing.io, path, .record);
+    var recorder = try openTape(path, .record);
     defer recorder.deinit();
     var writer = try recorder.create(web);
     writer.put(.guest, "GET / HTTP/1.0\r\n\r\n");
@@ -24,7 +29,7 @@ test "a recorded connection reads back record by record" {
     writer.put(.closed, "");
     writer.close();
 
-    var player = try tape.Tape.open(std.testing.io, path, .replay);
+    var player = try openTape(path, .replay);
     defer player.deinit();
     var reader = try player.load(web);
     defer reader.deinit();
@@ -45,13 +50,13 @@ test "a guest byte that differs from the recording is refused" {
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try scratch(&tmp, &buf);
-    var recorder = try tape.Tape.open(std.testing.io, path, .record);
+    var recorder = try openTape(path, .record);
     defer recorder.deinit();
     var writer = try recorder.create(web);
     writer.put(.guest, "GET /a");
     writer.close();
 
-    var player = try tape.Tape.open(std.testing.io, path, .replay);
+    var player = try openTape(path, .replay);
     defer player.deinit();
     var reader = try player.load(web);
     defer reader.deinit();
@@ -63,7 +68,7 @@ test "the second connection to an endpoint gets its own tape, a third is a miss"
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try scratch(&tmp, &buf);
-    var recorder = try tape.Tape.open(std.testing.io, path, .record);
+    var recorder = try openTape(path, .record);
     defer recorder.deinit();
     for ([_][]const u8{ "one", "two" }) |body| {
         var writer = try recorder.create(web);
@@ -72,7 +77,7 @@ test "the second connection to an endpoint gets its own tape, a third is a miss"
     }
     try tmp.dir.access(std.testing.io, "tcp-93.184.216.34-80-1.tape", .{});
 
-    var player = try tape.Tape.open(std.testing.io, path, .replay);
+    var player = try openTape(path, .replay);
     defer player.deinit();
     var out: [8]u8 = undefined;
     for ([_][]const u8{ "one", "two" }) |body| {
@@ -89,11 +94,11 @@ test "a DNS answer replays under a new query id; an unknown question is a miss" 
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try scratch(&tmp, &buf);
-    var recorder = try tape.Tape.open(std.testing.io, path, .record);
+    var recorder = try openTape(path, .record);
     defer recorder.deinit();
     recorder.storeDns(&.{ 0x12, 0x34, 'q' }, &.{ 0x12, 0x34, 'a', 'n' });
 
-    var player = try tape.Tape.open(std.testing.io, path, .replay);
+    var player = try openTape(path, .replay);
     defer player.deinit();
     var out: [16]u8 = undefined;
     const answer = player.loadDns(&.{ 0xAB, 0xCD, 'q' }, &out).?;

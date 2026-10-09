@@ -6,6 +6,7 @@ const hosted = ra8.periph.esp_hosted;
 const eth = hosted.eth;
 const frame = hosted.frame;
 const tape = hosted.tape;
+const tape_dir = ra8.host.tape_dir;
 const Bridge = hosted.net.Bridge;
 const Queue = hosted.queue.Queue;
 
@@ -96,13 +97,17 @@ fn record(path: []const u8, reply: []u8) !struct { port: u16, len: usize } {
     var host = Server{ .server = &server };
     var serving = try io.concurrent(Server.serve, .{&host});
     defer serving.cancel(io) catch {};
-    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .record), .net = .of(ra8.interfaces.host_sock) };
+    var bridge: Bridge = .{ .tape = try openTape(path, .record), .net = .of(ra8.interfaces.host_sock) };
     defer bridge.deinit();
     var queue: Queue = .{};
     const port = server.socket.address.getPort();
     const len = (try fetch(&bridge, &queue, port, request, reply)).?;
     try serving.await(io);
     return .{ .port = port, .len = len };
+}
+
+fn openTape(path: []const u8, mode: tape.Mode) !tape.Tape {
+    return .init(mode, .of(tape_dir, try tape_dir.open(std.testing.io, path, mode == .record)));
 }
 
 test "a recorded fetch replays offline byte for byte" {
@@ -114,7 +119,7 @@ test "a recorded fetch replays offline byte for byte" {
     const recorded = try record(path, &live);
     try std.testing.expectEqualStrings(response, live[0..recorded.len]);
 
-    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .replay) };
+    var bridge: Bridge = .{ .tape = try openTape(path, .replay) };
     defer bridge.deinit();
     var queue: Queue = .{};
     var replayed: [128]u8 = undefined;
@@ -128,7 +133,7 @@ test "replay resets a connection it has no recording for and counts the miss" {
     defer tmp.cleanup();
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = buf[0..try tmp.dir.realPathFile(std.testing.io, ".", &buf)];
-    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .replay) };
+    var bridge: Bridge = .{ .tape = try openTape(path, .replay) };
     defer bridge.deinit();
     var queue: Queue = .{};
     var reply: [128]u8 = undefined;
@@ -144,7 +149,7 @@ test "replay refuses a request that differs from the recording" {
     var live: [128]u8 = undefined;
     const recorded = try record(path, &live);
 
-    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .replay) };
+    var bridge: Bridge = .{ .tape = try openTape(path, .replay) };
     defer bridge.deinit();
     var queue: Queue = .{};
     var reply: [128]u8 = undefined;
