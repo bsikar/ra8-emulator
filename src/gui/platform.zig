@@ -1,4 +1,4 @@
-//! The window the GUI draws into (RA8EMU-617, docs/adr/0001-gui-stack.md):
+//! The window the GUI draws into (RA8EMU-617, ADR 0001 in the knowledge base, RA8EMU-A-8):
 //! input events in, an RGBA framebuffer out. SDL3 is one backend
 //! (RA8EMU-616); headless.zig is another, for tests and the board's
 //! golden images. Nothing above this seam knows which one it has.

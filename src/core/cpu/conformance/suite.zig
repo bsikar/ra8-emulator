@@ -5,7 +5,7 @@
 //! table and the missing-vector check see the whole core at once.
 
 /// Where the generated coverage table lives, relative to the build root.
-pub const table_path = "docs/conformance.md";
+pub const table_path = "tests/core/cpu/conformance/coverage.md";
 
 const fpu_sign = @import("../fpu/sign_vectors.zig");
 const fpu_add = @import("../fpu/add_vectors.zig");

@@ -1,4 +1,4 @@
-//! The SDL3 backend behind platform.zig (RA8EMU-616, docs/adr/0001-gui-stack.md).
+//! The SDL3 backend behind platform.zig (RA8EMU-616, ADR 0001 in the knowledge base, RA8EMU-A-8).
 //! It owns one window, one renderer and one streaming texture, and
 //! draws each frame's list through SDL geometry (sdl_geometry.zig). The
 //! CPU-rasterized framebuffer, shown as a streaming texture, is the

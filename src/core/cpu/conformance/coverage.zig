@@ -45,7 +45,7 @@ pub fn writeTable(writer: anytype, claimed: []const []const u8, covered: []const
     }
 }
 
-/// The whole coverage document, docs/conformance.md: a short header saying
+/// The whole coverage document, tests/core/cpu/conformance/coverage.md: a short header saying
 /// what the table is and how to regenerate it, then the table.
 pub fn writeDocument(writer: anytype, claimed: []const []const u8, covered: []const []const u8) !void {
     try writer.writeAll(

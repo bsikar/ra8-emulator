@@ -1,4 +1,4 @@
-//! What widgets draw (RA8EMU-617, docs/adr/0001-gui-stack.md). A widget
+//! What widgets draw (RA8EMU-617, ADR 0001 in the knowledge base, RA8EMU-A-8). A widget
 //! appends shapes to a DrawList; a backend draws the list. The CPU
 //! rasterizer (raster.zig) draws it on the board and in golden-image tests,
 //! and the host backend presents the same pixels, so a pane looks the same

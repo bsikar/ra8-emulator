@@ -188,9 +188,9 @@ fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     return &run.step;
 }
 
-/// tools/terms.zig over everything we write, docs included.
+/// tools/terms.zig over everything we write.
 fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "docs", "panels", "README.md", "AGENTS.md" };
+    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "panels", "README.md", "AGENTS.md" };
     const checker = b.addExecutable(.{
         .name = "terms",
         .root_module = b.createModule(.{
@@ -234,7 +234,7 @@ fn handoffBench(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     return bench_mod;
 }
 
-/// The SDL3 hello window (RA8EMU-616, docs/adr/0001-gui-stack.md). SDL is
+/// The SDL3 hello window (RA8EMU-616, ADR 0001 in the knowledge base, RA8EMU-A-8). SDL is
 /// a lazy dependency asked for only under -Dgui, so test and gate never
 /// fetch or compile it. Without -Dgui the step says how. Returns the SDL
 /// module, which the emulator also takes under -Dgui for `--gui`
