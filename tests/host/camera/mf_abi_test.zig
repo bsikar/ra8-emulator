@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/mf_abi.zig: the Media Foundation GUIDs,
+//! Covers src/host/camera/mf_abi.zig: the Media Foundation GUIDs,
 //! frame-size packing and vtable slots the Windows webcam reader uses.
 const std = @import("std");
 const ra8 = @import("ra8");
-const mf = ra8.periph.ceu.camera.webcam.mf;
+const mf = ra8.host.camera.mf;
 
 test "the video subtypes share the FourCC base GUID" {
     try std.testing.expectEqual(@as(u32, 0x32595559), mf.format_yuy2.Data1);

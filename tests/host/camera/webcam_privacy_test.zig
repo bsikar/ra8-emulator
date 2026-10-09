@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/webcam_privacy.zig: the Windows camera
+//! Covers src/host/camera/webcam_privacy.zig: the Windows camera
 //! privacy setting blocks the webcam with the fix, other hosts pass.
 const std = @import("std");
 const ra8 = @import("ra8");
-const privacy = ra8.periph.ceu.camera.webcam.privacy;
+const privacy = ra8.host.camera.privacy;
 
 test "Allow and Deny are read, anything else is unset" {
     try std.testing.expectEqual(privacy.Verdict.allowed, privacy.parse("Allow"));

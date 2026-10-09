@@ -13,8 +13,8 @@ const converted = @import("converted_source.zig");
 const decoded = @import("decoded_image.zig");
 const still = @import("image_source.zig");
 const raw = @import("pipe_frame.zig");
-const abi = @import("v4l2_abi.zig");
-const negotiate = @import("v4l2_negotiate.zig");
+const abi = @import("../../host/camera/v4l2_abi.zig");
+const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
 
 /// One frame's bytes from the device: true when `out` was filled.
 pub const Capture = struct {

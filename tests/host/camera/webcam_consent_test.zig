@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/webcam_consent.zig: the webcam opens only on
+//! Covers src/host/camera/webcam_consent.zig: the webcam opens only on
 //! an explicit yes or --allow-webcam.
 const std = @import("std");
 const ra8 = @import("ra8");
-const consent = ra8.periph.ceu.camera.webcam.consent;
+const consent = ra8.host.camera.consent;
 
 fn ask(answer: []const u8, out: []u8) consent.Decision {
     var in = std.Io.Reader.fixed(answer);

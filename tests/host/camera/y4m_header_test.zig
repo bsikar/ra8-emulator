@@ -1,9 +1,9 @@
-//! Covers src/periph/camera/y4m_header.zig: the stream header's tags, the
+//! Covers src/host/camera/y4m_header.zig: the stream header's tags, the
 //! Y4M defaults, what is refused, and the bytes one frame takes.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const y4m = ra8.periph.ceu.camera.video.y4m;
+const y4m = ra8.host.camera.y4m;
 
 test "the size, rate and chroma tags are read" {
     const header = try y4m.parse("YUV4MPEG2 W640 H480 F30000:1001 Ip A1:1 C420jpeg XYSCSS=420JPEG");

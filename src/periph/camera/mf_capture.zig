@@ -5,13 +5,13 @@
 //! the end of the stream, a failed call or a short buffer is a failed read,
 //! which the source answers by holding the last frame.
 const std = @import("std");
-const abi = @import("mf_abi.zig");
-const com = @import("mf_com.zig");
-const mf_open = @import("mf_open.zig");
-const v4l2 = @import("v4l2_abi.zig");
-const negotiate = @import("v4l2_negotiate.zig");
+const abi = @import("../../host/camera/mf_abi.zig");
+const com = @import("../../host/camera/mf_com.zig");
+const mf_open = @import("../../host/camera/mf_open.zig");
+const v4l2 = @import("../../host/camera/v4l2_abi.zig");
+const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
 const source = @import("webcam_source.zig");
-const consent = @import("webcam_consent.zig");
+const consent = @import("../../host/camera/webcam_consent.zig");
 
 /// How many empty samples (stream ticks) one read waits through.
 pub const gap_tries = 4;

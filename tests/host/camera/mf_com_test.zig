@@ -1,9 +1,9 @@
-//! Covers src/periph/camera/mf_com.zig: each wrapper calls its own
+//! Covers src/host/camera/mf_com.zig: each wrapper calls its own
 //! vtable slot with the object first, checked against a fake COM object.
 const std = @import("std");
 const ra8 = @import("ra8");
-const mf = ra8.periph.ceu.camera.webcam.mf;
-const com = ra8.periph.ceu.camera.webcam.mf_com;
+const mf = ra8.host.camera.mf;
+const com = ra8.host.camera.mf_com;
 
 const Fake = extern struct {
     vtable: [*]const ?*const anyopaque,

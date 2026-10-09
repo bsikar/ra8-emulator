@@ -12,7 +12,7 @@ const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
 const decoded = @import("decoded_image.zig");
 const still = @import("image_source.zig");
-pub const y4m = @import("y4m_header.zig");
+pub const y4m = @import("../../host/camera/y4m_header.zig");
 pub const yuv = @import("y4m_frame.zig");
 
 /// The longest header or FRAME line read before the line is refused.

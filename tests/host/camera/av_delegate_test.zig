@@ -1,10 +1,10 @@
-//! Covers src/periph/camera/av_delegate.zig against fake CoreMedia and
+//! Covers src/host/camera/av_delegate.zig against fake CoreMedia and
 //! CoreVideo calls: a good sample lands in the mailbox and is unlocked,
 //! other formats, lock failures, missing buffers and base addresses are
 //! dropped, and the IMP only feeds an attached sink.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const delegate = webcam.av_delegate;
 const frame = webcam.av_frame;
 

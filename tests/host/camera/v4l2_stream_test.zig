@@ -1,8 +1,8 @@
-//! Covers src/periph/camera/v4l2_stream.zig against a mock streaming
+//! Covers src/host/camera/v4l2_stream.zig against a mock streaming
 //! driver, and the streaming ABI sizes on a 64-bit host.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const abi = webcam.v4l2;
 const vs = webcam.stream;
 

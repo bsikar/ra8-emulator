@@ -1,10 +1,10 @@
-//! Covers src/periph/camera/av_objc.zig against a fake runtime: typed
+//! Covers src/host/camera/av_objc.zig against a fake runtime: typed
 //! sends reach objc_msgSend with the right selector and arguments, `new`
 //! is alloc then init, and the delegate class is registered once with
 //! didOutput, reused later, and disposed when the method won't attach.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera;
 const objc = webcam.av_objc;
 const Id = objc.Id;
 

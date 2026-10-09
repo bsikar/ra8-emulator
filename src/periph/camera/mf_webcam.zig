@@ -4,9 +4,9 @@
 //! device paths, so `webcam:PATH` is refused; a bare `webcam` is device 0.
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
-const consent = @import("webcam_consent.zig");
-const privacy = @import("webcam_privacy.zig");
-const mf_open = @import("mf_open.zig");
+const consent = @import("../../host/camera/webcam_consent.zig");
+const privacy = @import("../../host/camera/webcam_privacy.zig");
+const mf_open = @import("../../host/camera/mf_open.zig");
 const mf_capture = @import("mf_capture.zig");
 const source = @import("webcam_source.zig");
 
