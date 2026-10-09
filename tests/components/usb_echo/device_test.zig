@@ -1,7 +1,7 @@
 //! The device on the far end: what it answers, and what it refuses.
 const std = @import("std");
 const ra8 = @import("ra8");
-const device = ra8.periph.usbhs_device;
+const device = ra8.components.usb_echo;
 const setup = ra8.periph.usbhs_setup;
 
 fn get(code: u8, value: u16, length: u16) setup.Packet {

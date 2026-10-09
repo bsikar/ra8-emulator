@@ -2,7 +2,8 @@
 //! an OUT pipe comes back as data and a CSW on the IN pipe.
 const std = @import("std");
 const ra8 = @import("ra8");
-const device = ra8.periph.usbhs_device;
+const device = ra8.components.usb_echo;
+const echo_far = ra8.components.usb_echo_far;
 const msc = ra8.components.usb_stick;
 const regs = ra8.periph.usbhs_regs;
 const setup = ra8.periph.usbhs_setup;
@@ -71,9 +72,9 @@ test "a bus reset drops the command the disk was answering" {
 }
 
 test "the transfer engine hands the disk's answer to an armed IN pipe" {
-    var transfer = xfer.Transfer{};
     stick = .{ .disk = &disk };
-    transfer.device.storage = stick.function();
+    var echo = device.Device{ .storage = stick.function() };
+    var transfer = xfer.Transfer{ .far = echo_far.far(&echo) };
     var pipes = usbhs_pipe.Table{};
     transfer.usbreq = 0x0500;
     transfer.usbval = 1;
@@ -81,7 +82,7 @@ test "the transfer engine hands the disk's answer to an armed IN pipe" {
     transfer.usbreq = 0x0900;
     transfer.usbval = 1;
     transfer.launch(true);
-    try std.testing.expect(transfer.device.bulkOut(&cbw(4, 512, &.{ msc.op.read10, 0, 0, 0, 0, 1, 0, 0, 1, 0 })));
+    try std.testing.expect(echo.bulkOut(&cbw(4, 512, &.{ msc.op.read10, 0, 0, 0, 0, 1, 0, 0, 1, 0 })));
     _ = pipes.setControl(1, regs.pipe.pid_buf);
     pipes.pipes[1].in = true;
     const ready = transfer.readyStatus(&pipes);

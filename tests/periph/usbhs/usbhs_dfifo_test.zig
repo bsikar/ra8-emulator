@@ -6,6 +6,8 @@ const ra8 = @import("ra8");
 const dfifo = ra8.periph.usbhs_dfifo;
 const regs = ra8.periph.usbhs_regs;
 const usbhs = ra8.periph.usbhs;
+const echo_device = ra8.components.usb_echo;
+const echo_far = ra8.components.usb_echo_far;
 
 /// MBW programmed for a 16-bit access, aimed at `pipe`.
 fn sel16(pipe: u16) u16 {
@@ -131,9 +133,14 @@ test "a fresh pair is quiet" {
     try std.testing.expect(ports.quiet());
 }
 
+/// The device liveHost plugs into the far end.
+var echo: echo_device.Device = .{};
+
 /// A host brought far enough up to move bulk payload: powered, in host role,
 /// a device on the bus that has been through a reset.
 fn liveHost(host: *usbhs.Host) void {
+    echo = .{};
+    host.xfer.far = echo_far.far(&echo);
     host.attachDevice();
     host.write(regs.window.base + regs.reg.syscfg, 2, regs.syscfg.usbe | regs.syscfg.scke |
         regs.syscfg.dcfm | regs.syscfg.cnen);
@@ -153,12 +160,12 @@ test "a bulk OUT packet goes out through the data port" {
     var host: usbhs.Host = .{};
     liveHost(&host);
     bulkOut(&host);
-    host.xfer.device.state = .configured;
+    echo.state = .configured;
     host.write(regs.window.base + regs.reg.d0fifosel, 2, sel16(1));
     host.write(regs.window.base + regs.reg.d0fifo, 2, 0xBEEF);
     host.write(regs.window.base + regs.reg.d0fifoctr, 2, regs.fifo.bval);
-    try std.testing.expect(host.xfer.device.echo_ready);
-    try std.testing.expectEqual(@as(u16, 2), host.xfer.device.echo_len);
+    try std.testing.expect(echo.echo_ready);
+    try std.testing.expectEqual(@as(u16, 2), echo.echo_len);
 }
 
 test "the payload a data port stages is not read back from a shadow" {

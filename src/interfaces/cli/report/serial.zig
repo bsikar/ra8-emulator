@@ -4,6 +4,7 @@
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
 const Host = @import("../../../periph/usbhs/usbhs.zig").Host;
+const Echo = @import("../../../components/usb_echo/device.zig").Device;
 const usb_cable = @import("usb_cable.zig");
 
 /// One line per SCI channel that moved bytes, plus the last console line the
@@ -216,13 +217,13 @@ pub fn usb(board: *Board, out: Writer) !void {
             .{ host.pll.locks, host.pll.stalled },
         );
     }
-    if (host.xfer.setups != 0 and host.xfer.loop == null) {
+    if (host.xfer.setups != 0 and board.usb.cable == null) {
         try out.print(
             "  {d} SETUP(s), device {s} at address {d}, {d} stalled\n",
             .{
                 host.xfer.setups,
-                @tagName(host.xfer.device.state),
-                host.xfer.device.address,
+                @tagName(board.usb.echo.state),
+                board.usb.echo.address,
                 host.xfer.stalls,
             },
         );
@@ -233,13 +234,13 @@ pub fn usb(board: *Board, out: Writer) !void {
             .{ host.xfer.refused_out, host.xfer.refused_bytes },
         );
     }
-    try usbRefused(host, if (board.usb.cable) |*plugged| plugged else null, out);
+    try usbRefused(host, if (board.usb.cable) |*plugged| plugged else null, &board.usb.echo, out);
 }
 
 /// What the controller turned away, in the order the driver would meet it:
 /// the window's own refusals, then the two data ports, then the transfers.
 /// Split out of usb() above, which was at the function-length limit.
-fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, out: Writer) !void {
+fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, echo: *const Echo, out: Writer) !void {
     try usb_cable.section(cable, out);
     if (host.refusals() == 0) return;
     try out.print(
@@ -267,7 +268,7 @@ fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, out: Writer) !vo
             },
         );
     }
-    if (host.xfer.refusals() == host.xfer.stalls + data.refusals()) return;
+    if (host.xfer.refusals() + echo.refusals() == host.xfer.stalls + data.refusals()) return;
     try out.print(
         "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, " ++
             "{d} FIFO not ready, {d} drained past the packet, " ++
@@ -277,7 +278,7 @@ fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, out: Writer) !vo
             host.xfer.stray_ccpl,
             host.xfer.port.not_ready,
             host.xfer.port.overdrain,
-            host.xfer.device.out_of_order,
+            echo.out_of_order,
         },
     );
 }

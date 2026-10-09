@@ -4,7 +4,7 @@
 //!
 //! usb_selftest_cdc runs a device stack on USBFS and a host stack on USBHS,
 //! cabled together. This is the far end the USBHS host sees in that case, in
-//! place of the stand-in device in usbhs_device.zig, through the chip's
+//! place of the echo device in src/components/usb_echo, through the chip's
 //! far-end contract (usbhs_far.zig). It answers nothing on
 //! its own: every reply is a packet the firmware's own USBFS driver wrote.
 //! A control transfer is asynchronous here, because the device side answers
@@ -107,6 +107,7 @@ const vtable: usbhs_far.Far.VTable = .{
     .takeInFn = takeInOf,
     .bulkInFn = bulkInOf,
     .bulkOutFn = bulkOutOf,
+    .busResetFn = busResetOf,
 };
 
 fn cast(context: *anyopaque) *Loop {
@@ -135,4 +136,10 @@ fn bulkInOf(context: *anyopaque, endpoint: u4, into: []u8) ?u16 {
 
 fn bulkOutOf(context: *anyopaque, endpoint: u4, bytes: []const u8) bool {
     return cast(context).bulkOut(endpoint, bytes);
+}
+
+/// The FS device on the other jack is not told: a host-side reset never
+/// reached it through the cable, and does not now.
+fn busResetOf(context: *anyopaque) void {
+    _ = context;
 }

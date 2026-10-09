@@ -39,5 +39,5 @@ test "a missing image file is refused" {
 test "no --usb-disk leaves the echo device in the jack" {
     var board_usb = usb.Usb{};
     try option.apply(&board_usb, std.testing.allocator, io, null);
-    try std.testing.expect(!board_usb.host.xfer.device.hasDisk());
+    try std.testing.expect(!board_usb.echo.hasDisk());
 }

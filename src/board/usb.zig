@@ -10,6 +10,8 @@ const Bounded = @import("../core/bounded.zig").Bounded;
 const periph = @import("../periph/registry.zig");
 const usbfs = @import("../periph/usbfs/usbfs.zig");
 const usbhs = @import("../periph/usbhs/usbhs.zig");
+const usb_echo = @import("../components/usb_echo/device.zig");
+const usb_echo_far = @import("../components/usb_echo/far.zig");
 const usb_loop_cable = @import("../components/usb_loop_cable/cable.zig");
 const usb_stick = @import("../components/usb_stick/stick.zig");
 
@@ -39,11 +41,17 @@ pub const Usb = struct {
     /// A usbip bridge (`--usbip`, RA8EMU-75), polled after the scripted
     /// host so it sees the device as the firmware has just left it.
     bridge: ?Hook = null,
-    /// The USB stick, behind the HS host's stand-in device once a disk is
-    /// plugged in (usb_plug.zig).
+    /// The device on the HS host jack while no cable is laid: it enumerates
+    /// and echoes its bulk endpoint.
+    echo: usb_echo.Device = .{},
+    /// The USB stick, behind the echo device once a disk is plugged in
+    /// (usb_plug.zig).
     stick: usb_stick.Target = .{},
 
+    /// The board has to be at its final address: the host keeps a pointer to
+    /// the echo device.
     pub fn attach(self: *Usb, bus: *periph.Bus) periph.Error!void {
+        self.host.xfer.far = usb_echo_far.far(&self.echo);
         self.host.attachDevice();
         try bus.add(self.host.block());
         self.device.connectVbus();
@@ -54,7 +62,7 @@ pub const Usb = struct {
     /// has to be at its final address: both ends keep pointers into it.
     pub fn loopBack(self: *Usb) void {
         self.cable = .{ .device = &self.device };
-        self.host.xfer.loop = self.cable.?.far();
+        self.host.xfer.far = self.cable.?.far();
     }
 
     pub fn tick(self: *Usb) void {

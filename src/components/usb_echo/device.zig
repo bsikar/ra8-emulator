@@ -6,9 +6,9 @@
 //! still be handed bytes. A real device stalls what it does not implement and
 //! refuses what its state does not allow, which is what the host driver has
 //! to cope with on a bench.
-const regs = @import("usbhs_regs.zig");
-const setup = @import("usbhs_setup.zig");
-const usbhs_function = @import("usbhs_function.zig");
+const regs = @import("../../periph/usbhs/usbhs_regs.zig");
+const setup = @import("../../periph/usbhs/usbhs_setup.zig");
+const usbhs_function = @import("../../periph/usbhs/usbhs_function.zig");
 
 /// Where enumeration has got to, per USB 2.0 chapter 9.
 pub const State = enum { default, address, configured };
@@ -54,6 +54,8 @@ pub const Device = struct {
     /// Requests answered with a stall, each for its own reason.
     unsupported: u32 = 0,
     out_of_order: u32 = 0,
+    /// The last SETUP was refused: what the host sees as its answer.
+    stalled: bool = false,
 
     /// USBRST released: the device drops back to Default and forgets its
     /// address, the way silicon does.

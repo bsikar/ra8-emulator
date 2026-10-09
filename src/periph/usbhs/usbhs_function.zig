@@ -1,4 +1,4 @@
-//! The function behind the stand-in device's bulk endpoints when a part is
+//! The function behind the far-end device's bulk endpoints when a part is
 //! plugged in there (a USB stick's mass-storage target, for one). The chip
 //! owns this contract: the part (src/components/usb_stick) implements it and
 //! the board plugs it in, so this block never imports a part.

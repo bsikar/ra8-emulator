@@ -33,10 +33,10 @@ pub fn check(disk: []const u8) Error!void {
     if (disk.len % usb_disk.sector_len != 0) return error.NotWholeSectors;
 }
 
-/// Put `disk` in the stick and the stick behind the far-end device's bulk
+/// Put `disk` in the stick and the stick behind the echo device's bulk
 /// endpoints. The board has to be at its final address: the device keeps a
 /// pointer to the stick.
 pub fn plug(board_usb: *usb.Usb, disk: []u8) void {
     board_usb.stick.disk = disk;
-    board_usb.host.xfer.device.storage = board_usb.stick.function();
+    board_usb.echo.storage = board_usb.stick.function();
 }

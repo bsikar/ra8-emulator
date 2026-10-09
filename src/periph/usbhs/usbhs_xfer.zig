@@ -59,7 +59,6 @@
 //! now latch alongside their per-pipe bit; usbhs_int.zig holds the latch and
 //! says what the rest of the register is and is not.
 const regs = @import("usbhs_regs.zig");
-const usbhs_device = @import("usbhs_device.zig");
 const usbhs_dfifo = @import("usbhs_dfifo.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
 const usbhs_int = @import("usbhs_int.zig");
@@ -71,10 +70,9 @@ const xfer_loop = @import("usbhs_xfer_loop.zig");
 pub const Transfer = struct {
     port: usbhs_fifo.Port = .{},
     data: usbhs_dfifo.Ports = .{},
-    device: usbhs_device.Device = .{},
-    /// The self-loop cable the board plugged in. When set it is the far end
-    /// instead of `device`.
-    loop: ?usbhs_far.Far = null,
+    /// The part on the far end, which the board plugs in: the echo device,
+    /// or the self-loop cable. With none, nothing answers a token.
+    far: ?usbhs_far.Far = null,
 
     /// The SETUP staging registers, as the host wrote them.
     usbreq: u16 = 0,
@@ -111,11 +109,8 @@ pub const Transfer = struct {
     /// said, so an image that never reset the port enumerated in the
     /// emulator and found nothing on a bench.
     pub fn launch(self: *Transfer, live: bool) void {
-        if (!live) {
-            self.no_device += 1;
-            self.intsts1 |= regs.int1.sign;
-            return;
-        }
+        const far = self.far orelse return self.unanswered();
+        if (!live) return self.unanswered();
         self.packet = usbhs_setup.Packet.fromRegisters(
             self.usbreq,
             self.usbval,
@@ -130,14 +125,26 @@ pub const Transfer = struct {
         // the bus does at the token level. Whether the request itself can be
         // honoured is a later question and a later stage.
         self.intsts1 |= regs.int1.sack;
-        if (self.loop) |cable| return cable.setup(xfer_loop.bytes(self.packet));
-        if (!self.device.handle(self.packet)) {
-            self.stalls += 1;
-            self.in_flight = false;
-            // The refusal has to be readable, or the driver's data-stage
-            // wait has nothing to break out on but the clock.
-            self.dcpctr = (self.dcpctr & ~regs.dcpctr.pid_mask) | regs.dcpctr.pid_stall;
-        }
+        far.setup(xfer_loop.bytes(self.packet));
+        // A far end that refuses at once is seen at once. The cable answers
+        // only once its driver has run, so it is pending here and BRDYSTS
+        // picks the answer up.
+        if (far.answer() == .stall) self.stall();
+    }
+
+    /// Nothing on the bus handshook the token.
+    fn unanswered(self: *Transfer) void {
+        self.no_device += 1;
+        self.intsts1 |= regs.int1.sign;
+    }
+
+    /// The far end refused the request: park the DCP at PID=STALL. The
+    /// refusal has to be readable, or the driver's data-stage wait has
+    /// nothing to break out on but the clock.
+    pub fn stall(self: *Transfer) void {
+        self.stalls += 1;
+        self.in_flight = false;
+        self.dcpctr = (self.dcpctr & ~regs.dcpctr.pid_mask) | regs.dcpctr.pid_stall;
     }
 
     /// A pipe has an answer standing: raise its BRDYSTS bit and the INTSTS0
@@ -176,7 +183,7 @@ pub const Transfer = struct {
             return;
         }
         self.in_flight = false;
-        if (self.loop) |cable| cable.statusStage();
+        if (self.far) |far| far.statusStage();
         if (self.control_read) {
             self.raiseEmpty(regs.status.dcp);
             return;
@@ -190,7 +197,7 @@ pub const Transfer = struct {
     /// the cable a packet the device NAKed is sent again here, as the SIE
     /// retries the token until the device takes it.
     pub fn emptyStatus(self: *Transfer, pipes: *usbhs_pipe.Table) u16 {
-        if (self.loop) |cable| xfer_loop.empty(self, cable, pipes);
+        if (self.far) |far| xfer_loop.empty(self, far, pipes);
         return self.bemp;
     }
 
@@ -198,25 +205,8 @@ pub const Transfer = struct {
     /// device's answers become visible: a control-read reply, and a bulk-IN
     /// packet on any pipe the host has armed.
     pub fn readyStatus(self: *Transfer, pipes: *usbhs_pipe.Table) u16 {
-        if (self.loop) |cable| return xfer_loop.ready(self, cable, pipes);
-        if (self.device.reply_ready and !self.port.in[0].ready) {
-            const len = self.device.takeReply(&self.port.in[0].data);
-            self.port.in[0].len = len;
-            self.port.in[0].cursor = 0;
-            self.port.in[0].ready = true;
-            self.raiseReady(regs.status.dcp);
-        }
-        var index: u32 = 1;
-        while (index < regs.pipe.count) : (index += 1) {
-            if (!pipes.pipes[index].armed() or !pipes.pipes[index].in) continue;
-            if (!self.device.bulkPending() or self.port.in[index].ready) continue;
-            const len = self.device.takeIn(&self.port.in[index].data);
-            self.port.in[index].len = len;
-            self.port.in[index].cursor = 0;
-            self.port.in[index].ready = true;
-            self.raiseReady(@as(u16, 1) << @intCast(index));
-        }
-        return self.brdy;
+        const far = self.far orelse return self.brdy;
+        return xfer_loop.ready(self, far, pipes);
     }
 
     /// W0C, and a cleared bit re-arms that pipe for the next packet.
@@ -258,10 +248,10 @@ pub const Transfer = struct {
             self.raiseEmpty(regs.status.dcp);
             return;
         }
-        const sent = if (self.loop) |cable|
-            cable.bulkOut(@truncate(pipes.pipes[index].endpoint), staging.staged())
+        const sent = if (self.far) |far|
+            far.bulkOut(@truncate(pipes.pipes[index].endpoint), staging.staged())
         else
-            self.device.bulkOut(staging.staged());
+            false;
         if (!sent) {
             self.refused_out += 1;
             self.refused_bytes +%= staging.len;
@@ -356,7 +346,7 @@ pub const Transfer = struct {
     /// USBRST released: the device drops back to Default and every staged
     /// packet on the bus goes with it.
     pub fn busReset(self: *Transfer) void {
-        self.device.busReset();
+        if (self.far) |far| far.busReset();
         self.in_flight = false;
         self.brdy = 0;
         self.bemp = 0;
@@ -369,8 +359,7 @@ pub const Transfer = struct {
 
     pub fn refusals(self: *const Transfer) u32 {
         return self.no_device + self.stray_ccpl + self.stalls +
-            self.refused_out + self.port.refusals() + self.data.refusals() +
-            self.device.refusals();
+            self.refused_out + self.port.refusals() + self.data.refusals();
     }
 
     pub fn quiet(self: *const Transfer) bool {
