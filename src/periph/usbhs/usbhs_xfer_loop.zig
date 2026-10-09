@@ -9,8 +9,8 @@
 //! pipe. BRDYSTS is the register the host spins on, so `ready` is called
 //! from there and moves whatever the driver has committed since.
 const regs = @import("usbhs_regs.zig");
+const usbhs_far = @import("usbhs_far.zig");
 const usbhs_fifo = @import("usbhs_fifo.zig");
-const usbhs_loop = @import("usbhs_loop.zig");
 const usbhs_pipe = @import("usbhs_pipe.zig");
 const usbhs_setup = @import("usbhs_setup.zig");
 const usbhs_xfer = @import("usbhs_xfer.zig");
@@ -27,7 +27,7 @@ pub fn bytes(packet: usbhs_setup.Packet) [8]u8 {
 
 /// BRDYSTS on the cable: the control reply, a device STALL, and a bulk-IN
 /// packet on every armed IN pipe, each moved once the driver committed it.
-pub fn ready(t: *usbhs_xfer.Transfer, cable: *usbhs_loop.Loop, pipes: *usbhs_pipe.Table) u16 {
+pub fn ready(t: *usbhs_xfer.Transfer, cable: usbhs_far.Far, pipes: *usbhs_pipe.Table) u16 {
     if (t.in_flight and cable.answer() == .stall) {
         t.stalls += 1;
         t.in_flight = false;
@@ -48,7 +48,7 @@ pub fn ready(t: *usbhs_xfer.Transfer, cable: *usbhs_loop.Loop, pipes: *usbhs_pip
 
 /// Move one packet off the cable into an empty host buffer: the DCP's when
 /// endpoint is null, otherwise that endpoint's pipe.
-fn fill(staging: *usbhs_fifo.Staging, cable: *usbhs_loop.Loop, endpoint: ?u4) bool {
+fn fill(staging: *usbhs_fifo.Staging, cable: usbhs_far.Far, endpoint: ?u4) bool {
     if (staging.ready) return false;
     const len = if (endpoint) |ep|
         cable.bulkIn(ep, &staging.data)
@@ -63,7 +63,7 @@ fn fill(staging: *usbhs_fifo.Staging, cable: *usbhs_loop.Loop, endpoint: ?u4) bo
 /// BEMPSTS on the cable: every armed OUT pipe still holding a packet the
 /// device NAKed tries it again. Taken, the buffer empties and BEMP rises;
 /// NAKed again, the bytes stay where the host put them.
-pub fn empty(t: *usbhs_xfer.Transfer, cable: *usbhs_loop.Loop, pipes: *usbhs_pipe.Table) void {
+pub fn empty(t: *usbhs_xfer.Transfer, cable: usbhs_far.Far, pipes: *usbhs_pipe.Table) void {
     var index: u32 = 1;
     while (index < regs.pipe.count) : (index += 1) {
         const pipe = pipes.pipes[index];

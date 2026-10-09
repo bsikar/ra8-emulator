@@ -138,6 +138,7 @@ pub const components = struct {
     pub const max17048 = @import("components/gauge_max17048/max17048.zig");
     pub const button = @import("components/button/button.zig");
     pub const led = @import("components/led/led.zig");
+    pub const usb_loop_cable = @import("components/usb_loop_cable/cable.zig");
 };
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {
