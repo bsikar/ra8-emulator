@@ -5,7 +5,7 @@
 //! debugger does before the firmware runs. Without a debugger the PPB reads zero and those
 //! images print nothing, so a `--console` run opens the ITM the way a probe
 //! leaves it and shows port 0's lines as `itm: <line>`, the debugger's form.
-const itm = @import("../../debug/itm.zig");
+const itm = @import("../../chip/periph/itm.zig");
 const memmap = @import("../../chip/core/memmap.zig");
 const clocks = @import("../../chip/periph/clocks.zig");
 

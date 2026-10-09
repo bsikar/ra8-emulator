@@ -25,7 +25,7 @@ const exc_return = @import("exc_return.zig");
 const nvic_clear = @import("nvic_clear.zig");
 pub const nvic_banked = @import("nvic_banked.zig");
 pub const debug_monitor = @import("debug_monitor.zig");
-const dcb = @import("../../debug/dcb.zig");
+const dcb = @import("dcb.zig");
 const standing_pends = @import("standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the

@@ -25,7 +25,7 @@ const fault_status = @import("../../periph/fault_status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
 const systick_cut = @import("systick_cut.zig");
-const itm_port = @import("../../../debug/itm.zig");
+const itm_port = @import("../../periph/itm.zig");
 
 /// CFSR's banked bits, UFSR and MMFSR (src/chip/periph/scb_bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;

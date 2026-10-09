@@ -14,7 +14,7 @@
 //! Each core has its own ITM. The PPB is plain memory, so after a store the
 //! debug core writes these registers back the way a read should see them.
 const std = @import("std");
-const Bounded = @import("../chip/core/bounded.zig").Bounded;
+const Bounded = @import("../core/bounded.zig").Bounded;
 
 pub const base: u32 = 0xE000_0000;
 

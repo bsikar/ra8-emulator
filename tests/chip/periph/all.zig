@@ -147,6 +147,9 @@ test {
     _ = @import("iwdt/iwdt_refresh_test.zig");
     _ = @import("iwdt/iwdt_status_test.zig");
     _ = @import("iwdt/iwdt_option_memory_test.zig");
+    _ = @import("itm_test.zig");
+    _ = @import("dcb_test.zig");
+    _ = @import("dwt_test.zig");
     _ = @import("ipc/ipc_test.zig");
     _ = @import("ipc/ipc_sync_test.zig");
     _ = @import("ipc/ipc_attr_test.zig");

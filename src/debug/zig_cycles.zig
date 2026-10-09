@@ -10,8 +10,8 @@ const std = @import("std");
 const zig_core = @import("zig_core.zig");
 const stop_machine = @import("stop_machine.zig");
 const cycle_count = @import("cycle_count.zig");
-const dwt = @import("dwt.zig");
-const dcb = @import("dcb.zig");
+const dwt = @import("../chip/periph/dwt.zig");
+const dcb = @import("../chip/periph/dcb.zig");
 
 const cyccnt_address: u32 = dwt.base + dwt.offsets.cyccnt;
 

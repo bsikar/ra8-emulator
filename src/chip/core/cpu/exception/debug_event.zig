@@ -9,7 +9,7 @@
 //!   HardFault that cannot preempt is lockup.
 //!
 //! When an exception is taken, the BKPT itself is the stacked return
-//! address. The register addresses match src/debug/dcb.zig; the core does
+//! address. The register addresses match src/chip/periph/dcb.zig; the core does
 //! not import the debug layer.
 const memmap = @import("../../memmap.zig");
 const status = @import("../../../periph/fault_status.zig");

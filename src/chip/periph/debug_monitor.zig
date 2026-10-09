@@ -7,7 +7,7 @@
 //! is set while the handler runs (DDI0553 B3.6, D1.2.42).
 
 const memmap = @import("../core/memmap.zig");
-const dcb = @import("../../debug/dcb.zig");
+const dcb = @import("dcb.zig");
 const Candidate = @import("candidate.zig").Candidate;
 
 /// The DebugMonitor exception number.
