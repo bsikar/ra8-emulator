@@ -54,10 +54,6 @@ test "a run with no panel frame still writes the board view with its LEDs" {
     try std.testing.expectEqualSlices(u8, "\x89PNG\r\n\x1a\n", &magic);
 }
 
-test {
-    _ = @import("board_view_test.zig");
-}
-
 test "--panel-only writes the dark fallback panel at its own size" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();

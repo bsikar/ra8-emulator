@@ -1,7 +1,7 @@
-//! Tests for src/interfaces/cli/board_view.zig.
+//! Tests for src/render/board_view.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const view = ra8.board.report.frame_out.board_view;
+const view = ra8.render.board_view;
 
 test "the view adds the margin on every side and the LED strip below" {
     const got = view.size(4, 2);

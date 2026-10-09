@@ -5,7 +5,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const window_board = ra8.board.window_board;
 const frame_out = ra8.board.report.frame_out;
-const board_view = frame_out.board_view;
+const board_view = ra8.render.board_view;
 const host_loop = ra8.gui.host_loop;
 const Headless = ra8.gui.headless.Headless;
 
