@@ -9,15 +9,8 @@ const region_map = @import("../../debug/region_map.zig");
 const camera_registry = @import("../../periph/camera/camera_registry.zig");
 const session_rtc = @import("../../debug/session_rtc.zig");
 
-/// Refusal codes this message set adds above the library's own.
-pub const app_codes = struct {
-    /// The Session refused the call; the error name went to stderr.
-    pub const refused: u16 = 0x0100;
-    /// The call named a core this session has no image for.
-    pub const no_core: u16 = 0x0101;
-    /// A read asked for more bytes than one reply carries.
-    pub const too_long: u16 = 0x0102;
-};
+/// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
+pub const app_codes = proto.app_codes;
 
 /// Writes the fitted parts as `MODEL@ENDPOINT` lines into the buffer given.
 /// Installs a camera source for set_camera_source (RA8EMU-795).
