@@ -10,6 +10,7 @@ pub const core = struct {
     pub const probe_ctl = @import("interfaces/cli/probe_ctl.zig");
     pub const serve_main = @import("interfaces/cli/serve_main.zig");
     pub const cli_camera_source = @import("interfaces/cli/camera_source.zig");
+    pub const cli_usb_disk_option = @import("interfaces/cli/usb_disk_option.zig");
     pub const map_main = @import("interfaces/cli/map_main.zig");
     pub const serve_listen = @import("interfaces/cli/serve_listen.zig");
     pub const session_ctl = @import("interfaces/cli/session_ctl.zig");
@@ -173,6 +174,7 @@ pub const components = struct {
 pub const host = struct {
     pub const host_console = @import("host/host_console.zig");
     pub const host_read = @import("host/host_read.zig");
+    pub const disk_file = @import("host/disk_file.zig");
     pub const pipe_windows = @import("host/camera/pipe_windows.zig");
     /// Host camera capture backends and file formats (RA8EMU-1011).
     pub const camera = struct {
