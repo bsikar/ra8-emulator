@@ -8,7 +8,7 @@
 //! the PHY measures itself, are the other two.
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
-const eth_phy = @import("../../../periph/eth/eth_phy.zig");
+const eth_phy = @import("../../../components/eth_phy/phy.zig");
 const eth_mac = @import("../../../periph/eth/eth_mac.zig");
 const eth = @import("../../../periph/eth/eth.zig");
 const net = @import("../../../board/net.zig");
@@ -19,7 +19,7 @@ pub fn sections(board: *Board, out: Writer) !void {
     const cluster = &board.rswitch;
     if (cluster.quiet()) return;
     for (&cluster.ports, 0..) |*port, index| {
-        if (port.quiet()) continue;
+        if (port.quiet() and cluster.phys[index].quiet()) continue;
         try out.print(
             "ETHA{d}: mode {s}, {d} command(s), {d} change(s)",
             .{ index, @tagName(port.mode.mode), port.mode.commands, port.mode.changes },
@@ -28,7 +28,7 @@ pub fn sections(board: *Board, out: Writer) !void {
         try out.print("\n", .{});
         try unpowered(index, port, out);
         try macAddress(index, &port.mac, out);
-        try mdio(index, &port.phy, out);
+        try mdio(index, &cluster.phys[index], out);
     }
     try gateway(cluster, out);
     try rings(cluster, out);

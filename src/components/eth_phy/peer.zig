@@ -1,5 +1,6 @@
 //! The far end of the wire: what the firmware has sent, and what is waiting
-//! to be delivered to it.
+//! to be delivered to it. A board part (RA8EMU-1042): the DMA reaches it
+//! through the wire line in src/periph/eth/eth_line.zig.
 //!
 //! dev's peer is a state machine that answers ARP, pings back, and runs a TCP
 //! echo (board_net.c, 849 lines). None of that is here yet. What the
@@ -11,7 +12,8 @@
 //! pushes back. dev's TX sink swallows every frame, so a descriptor is
 //! completed whatever happened to it.
 const std = @import("std");
-const desc = @import("eth_desc.zig");
+const desc = @import("../../periph/eth/eth_desc.zig");
+const line = @import("../../periph/eth/eth_line.zig");
 
 /// Frames held in one direction. Enough for a request and its reply with
 /// room to spare, and it bounds what the board carries.
@@ -89,5 +91,37 @@ pub const Link = struct {
 
     pub fn quiet(self: *const Link) bool {
         return self.sent.taken == 0 and self.inbound.taken == 0;
+    }
+
+    /// This link as the DMA's wire. The DMA keeps the pointer, so the link
+    /// must not move afterwards.
+    pub fn wire(self: *Link) line.Wire {
+        return .{
+            .context = self,
+            .sendFn = sendOn,
+            .waitingFn = waitingOn,
+            .peekFn = peekOn,
+            .dropFn = dropOn,
+        };
+    }
+
+    fn of(context: *anyopaque) *Link {
+        return @ptrCast(@alignCast(context));
+    }
+
+    fn sendOn(context: *anyopaque, frame: []const u8) bool {
+        return of(context).send(frame);
+    }
+
+    fn waitingOn(context: *anyopaque) ?u32 {
+        return of(context).inbound.waiting();
+    }
+
+    fn peekOn(context: *anyopaque) ?[]const u8 {
+        return of(context).inbound.peek();
+    }
+
+    fn dropOn(context: *anyopaque) void {
+        of(context).inbound.drop();
     }
 };

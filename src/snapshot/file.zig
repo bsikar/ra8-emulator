@@ -9,7 +9,10 @@ const std = @import("std");
 
 pub const magic = "RA8SNAP\x00".*;
 /// Version 3 adds external-memory fabric configuration and timing state.
-pub const version: u32 = 3;
+/// Version 4 moves the Ethernet PHYs and the wire peer out of the ports and
+/// the DMA into the rswitch section's own fields (RA8EMU-1042), so a version 3
+/// rswitch section would read in the wrong order and is refused.
+pub const version: u32 = 4;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated };
 

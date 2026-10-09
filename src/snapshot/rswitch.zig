@@ -1,11 +1,13 @@
 //! The board's Ethernet switch in a snapshot (RA8EMU-683): both ports, their
-//! agents, the forwarding engine, the setup words, COMA, the gateway and
-//! pool, and the descriptor queues with their DMA state and peer link, as
-//! one `rswitch` section.
+//! PHYs, the wire peer, their agents, the forwarding engine, the setup
+//! words, COMA, the gateway and pool, and the descriptor queues with their
+//! DMA state, as one `rswitch` section.
 //!
 //! Not saved, because it is wiring that `attach` lays into the board itself:
 //! each port's ESWM power domain, the gateway's view of the forwarding
-//! words, the queues' view of the gateway mode and the DMA's guest memory.
+//! words, the queues' view of the gateway mode, the DMA's guest memory, and
+//! the MDIO and wire lines to the PHYs and the peer (RA8EMU-1042), which are
+//! saved as board parts in their own right.
 //! A load keeps the target's.
 const std = @import("std");
 const file = @import("file.zig");
@@ -13,7 +15,14 @@ const fields = @import("fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
-const skip: []const []const u8 = &.{ "ports.domain", "gateway.fwpc", "queues.mode", "queues.rings.memory" };
+const skip: []const []const u8 = &.{
+    "ports.domain",
+    "ports.mdio",
+    "gateway.fwpc",
+    "queues.mode",
+    "queues.rings.memory",
+    "queues.rings.link",
+};
 
 pub fn save(board: anytype, writer: anytype) !void {
     var counter: std.Io.Writer.Discarding = .init(&.{});

@@ -1,7 +1,7 @@
 //! The far end's queues: bounded, in order, and pushing back.
 const std = @import("std");
 const ra8 = @import("ra8");
-const peer = ra8.periph.eth_peer;
+const peer = ra8.components.eth_peer;
 const desc = ra8.periph.eth_desc;
 
 test "a frame comes back out the way it went in" {
@@ -71,4 +71,18 @@ test "a link with nothing on it is quiet" {
     try std.testing.expect(link.quiet());
     _ = link.offer(&[_]u8{7});
     try std.testing.expect(!link.quiet());
+}
+
+test "as the DMA's wire it sends out and hands inbound frames over in order" {
+    var link = peer.Link{};
+    const wire = link.wire();
+    try std.testing.expect(wire.send(&[_]u8{ 7, 8 }));
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 7, 8 }, link.sent.peek().?);
+    try std.testing.expect(wire.waiting() == null);
+    _ = link.offer(&[_]u8{ 1, 2, 3 });
+    _ = link.offer(&[_]u8{4});
+    try std.testing.expectEqual(@as(?u32, 3), wire.waiting());
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 1, 2, 3 }, wire.peek().?);
+    wire.drop();
+    try std.testing.expectEqualSlices(u8, &[_]u8{4}, wire.peek().?);
 }

@@ -11,4 +11,6 @@ test {
     _ = @import("usb_loop_cable/cable_test.zig");
     _ = @import("usb_loop_cable/cable_bulk_test.zig");
     _ = @import("user_switch/user_switch_test.zig");
+    _ = @import("eth_phy/phy_test.zig");
+    _ = @import("eth_phy/peer_test.zig");
 }

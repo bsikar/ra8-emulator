@@ -6,29 +6,37 @@ const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const desc = ra8.periph.eth_desc;
 const eth_dma = ra8.periph.eth_dma;
+const eth_peer = ra8.components.eth_peer;
 
 const linkfix_at: u32 = 0x2200_1000;
 const chain_at: u32 = 0x2200_1100;
 const buffer_at: u32 = 0x2200_2000;
 
 /// A machine with RAM, and a descriptor engine pointed at a LINKFIX table in
-/// it. The store lives on the heap so the rings' handle outlives a move.
+/// it, wired to a far end. The store and the far end live on the heap so the
+/// rings' handles outlive a move.
 const Fixture = struct {
     store: *Store,
     core: Guest,
+    far: *eth_peer.Link,
     rings: eth_dma.Dma,
 
     fn open() !Fixture {
         const store = try std.testing.allocator.create(Store);
         errdefer std.testing.allocator.destroy(store);
         store.* = try Store.init(null);
+        errdefer store.deinit();
+        const far = try std.testing.allocator.create(eth_peer.Link);
+        far.* = .{};
         const core: Guest = .{ .store = store };
-        return .{ .store = store, .core = core, .rings = .{ .memory = core, .linkfix = linkfix_at } };
+        const rings: eth_dma.Dma = .{ .memory = core, .linkfix = linkfix_at, .link = far.wire() };
+        return .{ .store = store, .core = core, .far = far, .rings = rings };
     }
 
     fn close(self: *Fixture) void {
         self.store.deinit();
         std.testing.allocator.destroy(self.store);
+        std.testing.allocator.destroy(self.far);
     }
 
     /// Write an eight-byte descriptor at `at`.
@@ -72,7 +80,7 @@ test "a kicked queue moves its frame and frees the slot" {
     fix.rings.kick(1, 0, true);
 
     try std.testing.expectEqual(@as(u32, 1), fix.rings.tx_frames);
-    try std.testing.expectEqualSlices(u8, &frame, fix.rings.link.sent.peek().?);
+    try std.testing.expectEqualSlices(u8, &frame, fix.far.sent.peek().?);
     try std.testing.expectEqual(desc.Dt.fempty, try fix.typeAt(chain_at));
 }
 
@@ -95,7 +103,7 @@ test "a far end with no room leaves the descriptor owned by the gateway" {
     try fix.point(0, chain_at);
     try fix.plant(chain_at, .fsingle, frame.len, buffer_at);
     var n: usize = 0;
-    while (n < ra8.periph.eth_peer.depth) : (n += 1) _ = fix.rings.link.send(&frame);
+    while (n < eth_peer.depth) : (n += 1) _ = fix.far.send(&frame);
 
     fix.rings.kick(1, 0, true);
 
@@ -170,7 +178,7 @@ test "a waiting frame lands in the first free slot" {
     fix.rings.receiving = 1 << 1;
     try fix.plant(chain_at, .fsingle, 8, buffer_at);
     try fix.plant(chain_at + desc.size, .fempty, 128, buffer_at + 256);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
@@ -189,12 +197,12 @@ test "a stopped gateway receives nothing" {
     try fix.point(0, chain_at);
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .fempty, 128, buffer_at);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(false);
 
     try std.testing.expectEqual(@as(u32, 0), fix.rings.rx_frames);
-    try std.testing.expectEqual(@as(usize, 1), fix.rings.link.inbound.count);
+    try std.testing.expectEqual(@as(usize, 1), fix.far.inbound.count);
 }
 
 test "a frame bigger than the slot stays queued instead of being cut" {
@@ -203,13 +211,13 @@ test "a frame bigger than the slot stays queued instead of being cut" {
     try fix.point(0, chain_at);
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .fempty, 16, buffer_at);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
     try std.testing.expectEqual(@as(u32, 1), fix.rings.refused.too_big);
     try std.testing.expectEqual(@as(u32, 0), fix.rings.rx_frames);
-    try std.testing.expectEqual(@as(usize, 1), fix.rings.link.inbound.count);
+    try std.testing.expectEqual(@as(usize, 1), fix.far.inbound.count);
 }
 
 test "a ring with no free slot is backpressure, and the frame stays" {
@@ -218,12 +226,12 @@ test "a ring with no free slot is backpressure, and the frame stays" {
     try fix.point(0, chain_at);
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .link, 0, chain_at);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
     try std.testing.expectEqual(@as(u32, 1), fix.rings.refused.looped);
-    try std.testing.expectEqual(@as(usize, 1), fix.rings.link.inbound.count);
+    try std.testing.expectEqual(@as(usize, 1), fix.far.inbound.count);
 }
 
 test "a ring that cycles two links long ends the walk" {
@@ -233,7 +241,7 @@ test "a ring that cycles two links long ends the walk" {
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .link, 0, chain_at + desc.size);
     try fix.plant(chain_at + desc.size, .link, 0, chain_at);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
@@ -248,7 +256,7 @@ test "a chain of links is followed to the free slot behind them" {
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .link, 0, chain_at + 0x40);
     try fix.plant(chain_at + 0x40, .fempty, 128, buffer_at);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
@@ -264,8 +272,8 @@ test "every configured reception queue is drained, not only the last" {
     fix.rings.receiving = 0b101;
     try fix.plant(chain_at, .fempty, 128, buffer_at);
     try fix.plant(chain_at + 0x40, .fempty, 128, buffer_at + 256);
-    _ = fix.rings.link.offer(&frame);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 
@@ -278,7 +286,7 @@ test "a slot pointing outside RAM is not written into" {
     try fix.point(0, chain_at);
     fix.rings.receiving = 1;
     try fix.plant(chain_at, .fempty, 128, 0x4000_0000);
-    _ = fix.rings.link.offer(&frame);
+    _ = fix.far.offer(&frame);
 
     fix.rings.tick(true);
 

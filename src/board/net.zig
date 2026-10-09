@@ -2,10 +2,13 @@
 //! it, two ports and the two shared agents.
 //!
 //! Which ports exist and where their PHYs answer is a board fact, so the
-//! wiring lives here rather than in the port model.
+//! wiring lives here rather than in the port model: the PHYs and the far end
+//! of the wire are board parts (src/components/eth_phy) this connects.
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
 const eth = @import("../periph/eth/eth.zig");
 const eth_queue = @import("../periph/eth/eth_queue.zig");
+const eth_phy = @import("../components/eth_phy/phy.zig");
+const eth_peer = @import("../components/eth_phy/peer.zig");
 const gateway = @import("../periph/eth/eth_gateway.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const periph = @import("../periph/registry.zig");
@@ -16,6 +19,10 @@ pub const Rswitch = struct {
         eth.Port.init(regs.cluster.etha0, regs.cluster.rmac0),
         eth.Port.init(regs.cluster.etha1, regs.cluster.rmac1),
     },
+    /// Each port's PHY, on that port's MDIO bus.
+    phys: [regs.cluster.port_count]eth_phy.Phy = @splat(eth_phy.Phy.init()),
+    /// The far end of the wire the gateway's DMA sends on and takes from.
+    peer: eth_peer.Link = .{},
     /// Each port's queue depth and error-interrupt words.
     agents: [regs.cluster.port_count]eth.agent.Agent = .{
         eth.agent.Agent.init(regs.cluster.etha0),
@@ -43,7 +50,8 @@ pub const Rswitch = struct {
         memory: Guest,
         domain: *const pdctr.Pdctr,
     ) periph.Error!void {
-        for (&self.ports) |*port| {
+        for (&self.ports, &self.phys) |*port, *phy| {
+            port.mdio = phy.mdio();
             // The whole cluster sits in the ESWM power domain, so every port
             // asks the same one before it answers.
             port.domain = domain;
@@ -65,6 +73,7 @@ pub const Rswitch = struct {
         self.gateway.fwpc = &self.forward.fwpc;
         self.queues.mode = &self.gateway.mode;
         self.queues.rings.memory = memory;
+        self.queues.rings.link = self.peer.wire();
         try bus.add(self.queues.baseBlock());
         try bus.add(self.queues.requestBlock());
         try bus.add(self.queues.configBlock());
@@ -79,6 +88,9 @@ pub const Rswitch = struct {
     pub fn quiet(self: *const Rswitch) bool {
         for (&self.ports) |*port| {
             if (!port.quiet()) return false;
+        }
+        for (&self.phys) |*phy| {
+            if (!phy.quiet()) return false;
         }
         for (&self.agents) |*agent| {
             if (!agent.quiet()) return false;
