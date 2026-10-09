@@ -7,7 +7,7 @@ const webcam = ra8.host.camera;
 const frame = webcam.av_frame;
 const v4l2 = webcam.v4l2;
 
-test "CoreVideo formats map to what WebcamSource decodes" {
+test "CoreVideo formats map to what the webcam input decodes" {
     try std.testing.expectEqual(frame.Pixel.uyvy, frame.pixelOf(frame.cv_2vuy).?);
     try std.testing.expectEqual(frame.Pixel.bgra, frame.pixelOf(frame.cv_bgra).?);
     try std.testing.expect(frame.pixelOf(0x3432_3076) == null);

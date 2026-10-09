@@ -1,5 +1,5 @@
 //! Opens `--camera-source webcam[:N|PATH]` (RA8EMU-506): the consent gate
-//! first, then the V4L2 node, the format negotiation and the frame source.
+//! first, then the V4L2 node, the format negotiation and the webcam input.
 //! On Windows the whole open goes to Media Foundation (mf_webcam.zig),
 //! on macOS to AVFoundation (av_webcam.zig).
 //! The device is asked for 640x480; the converter scales whatever it
@@ -8,14 +8,13 @@
 //! what most UVC webcams offer.
 const std = @import("std");
 const builtin = @import("builtin");
-const frame_source = @import("frame_source.zig");
-const consent = @import("../../host/camera/webcam_consent.zig");
-const privacy = @import("../../host/camera/webcam_privacy.zig");
-const v4l2 = @import("../../host/camera/v4l2_device.zig");
-const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
-const v4l2_stream = @import("../../host/camera/v4l2_stream.zig");
-const source = @import("webcam_source.zig");
-const mf_open = @import("../../host/camera/mf_open.zig");
+const consent = @import("webcam_consent.zig");
+const privacy = @import("webcam_privacy.zig");
+const v4l2 = @import("v4l2_device.zig");
+const negotiate = @import("v4l2_negotiate.zig");
+const v4l2_stream = @import("v4l2_stream.zig");
+const source = @import("webcam_input.zig");
+const mf_open = @import("mf_open.zig");
 const mf_webcam = @import("mf_webcam.zig");
 const av_webcam = @import("av_webcam.zig");
 
@@ -33,7 +32,7 @@ pub fn device(arg: []const u8) consent.DeviceError![]const u8 {
     return consent.device(&name, arg);
 }
 
-/// The open node behind a WebcamSource's capture seam; owns its path.
+/// The open node behind a Webcam's capture seam; owns its path.
 const Node = struct {
     allocator: std.mem.Allocator,
     fd: v4l2.Fd,
@@ -63,29 +62,29 @@ const Node = struct {
 };
 
 /// Opens the webcam, asking on the terminal unless `allow` is set.
-pub fn open(allocator: std.mem.Allocator, io: std.Io, arg: []const u8, allow: bool, format_control: *const u8) !frame_source.FrameSource {
+pub fn open(allocator: std.mem.Allocator, io: std.Io, arg: []const u8, allow: bool) !*source.Webcam {
     const grant: consent.Grant = if (allow) .allowed else .ask;
     var answer: [64]u8 = undefined;
     var in = std.Io.File.stdin().readerStreaming(io, &answer);
     var out = std.Io.File.stderr().writerStreaming(io, &.{});
-    return openWith(allocator, arg, grant, &in.interface, &out.interface, format_control);
+    return openWith(allocator, arg, grant, &in.interface, &out.interface);
 }
 
 /// `open` with the consent question's reader and writer passed in.
-pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
+pub fn openWith(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
     if (builtin.os.tag == .windows) {
         const calls = mf_open.system() orelse return error.NoCaptureIo;
-        return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer, format_control);
+        return mf_webcam.openWith(allocator, calls, arg, grant, reader, writer);
     }
     if (builtin.os.tag == .macos) {
         const n = try av_webcam.preflight(arg, grant, reader, writer);
         const host = av_webcam.system() orelse return error.NoCaptureIo;
-        return av_webcam.openPrepared(allocator, host, n, writer, format_control);
+        return av_webcam.openPrepared(allocator, host, n, writer);
     }
-    return openV4l2(allocator, arg, grant, reader, writer, format_control);
+    return openV4l2(allocator, arg, grant, reader, writer);
 }
 
-fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer, format_control: *const u8) !frame_source.FrameSource {
+fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
     var name: Name = undefined;
     const named = try consent.device(&name, arg);
     if (consent.decide(grant, named, reader, writer) == .refused) return error.WebcamRefused;
@@ -102,7 +101,7 @@ fn openV4l2(allocator: std.mem.Allocator, arg: []const u8, grant: consent.Grant,
         node.stream = try v4l2_stream.Stream.start(node.fd.device(), node.fd.mapper());
     }
     errdefer if (node.stream) |*stream| stream.stop();
-    const webcam = try source.WebcamSource.open(allocator, node.capture(), agreed, path, format_control);
+    const webcam = try source.Webcam.open(allocator, node.capture(), agreed, path);
     consent.logStart(writer, path) catch {};
-    return webcam.source();
+    return webcam;
 }

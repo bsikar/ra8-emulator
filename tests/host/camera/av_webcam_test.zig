@@ -1,16 +1,15 @@
-//! Covers src/periph/camera/av_webcam.zig against a fake Objective-C
+//! Covers src/host/camera/av_webcam.zig against a fake Objective-C
 //! runtime: device indexes, a refusal that never touches AVFoundation, a
 //! denied permission reported plainly, and an open that runs the session,
 //! reads as YUYV 640x480, and stops and releases it on close.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera.webcam;
 const av_webcam = webcam.av_webcam;
 const objc = webcam.av_objc;
 const Id = objc.Id;
 
 const allocator = std.testing.allocator;
-var format_control: u8 = 0;
 var objects: [4]u8 = undefined;
 var queue: u8 = 0;
 var sends: usize = 0;
@@ -60,9 +59,9 @@ fn host(answer: webcam.av_permission.Status) av_webcam.Host {
     };
 }
 
-fn openAnswering(answer: webcam.av_permission.Status, arg: []const u8, grant: webcam.consent.Grant, typed: []const u8, said: *std.Io.Writer.Allocating) !ra8.periph.ceu.camera.frame_source.FrameSource {
+fn openAnswering(answer: webcam.av_permission.Status, arg: []const u8, grant: webcam.consent.Grant, typed: []const u8, said: *std.Io.Writer.Allocating) !*webcam.source.Webcam {
     var in = std.Io.Reader.fixed(typed);
-    return av_webcam.openWith(allocator, host(answer), arg, grant, &in, &said.writer, &format_control);
+    return av_webcam.openWith(allocator, host(answer), arg, grant, &in, &said.writer);
 }
 
 test "webcam args name a device index; paths are not macOS devices" {

@@ -1,10 +1,10 @@
-//! Covers src/periph/camera/mf_capture.zig against fake reader, sample and
+//! Covers src/host/camera/mf_capture.zig against fake reader, sample and
 //! buffer objects: YUY2 copied through, RGB32 turned into RGB24, gaps
 //! waited through, the end of the stream and short frames as failed reads,
 //! and every sample and buffer released.
 const std = @import("std");
 const ra8 = @import("ra8");
-const webcam = ra8.periph.ceu.camera.webcam;
+const webcam = ra8.host.camera.webcam;
 const mf = webcam.mf;
 const mf_open = webcam.mf_open;
 const mf_capture = webcam.mf_capture;
@@ -132,7 +132,7 @@ test "RGB32 frames become RGB24 after waiting through gaps" {
     gaps = mf_capture.gap_tries - 1;
     const self = try open(.rgb32);
     try std.testing.expectEqual(webcam.v4l2.pix_rgb24, self.agreed().pixelformat);
-    try std.testing.expectEqual(ra8.periph.ceu.camera.webcam.source.rawFormat(webcam.v4l2.pix_rgb24).?, .rgb24);
+    try std.testing.expectEqual(ra8.host.camera.webcam.source.rawFormat(webcam.v4l2.pix_rgb24).?, .rgb24);
     var out: [6]u8 = undefined;
     const cap = self.capture();
     try std.testing.expect(cap.readFn(cap.ctx, &out));

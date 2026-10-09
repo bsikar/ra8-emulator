@@ -69,7 +69,6 @@ pub const camera = struct {
     pub const converted = @import("camera/converted_source.zig");
     pub const registry = @import("camera/camera_registry.zig");
     pub const hosted = @import("camera/hosted.zig");
-    pub const webcam = @import("camera/webcam.zig");
 };
 
 pub const win_base: u32 = 0x4034_8000;

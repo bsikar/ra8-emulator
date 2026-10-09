@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const devices = ra8.gui.camera_devices;
-const consent = ra8.periph.ceu.camera.webcam.consent;
+const consent = ra8.host.camera.consent;
 
 test "only videoN names are webcams" {
     try std.testing.expectEqual(@as(?u32, 0), devices.number("video0"));

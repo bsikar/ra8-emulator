@@ -1,20 +1,17 @@
 //! The host webcam as the camera (RA8EMU-506): each armed capture reads
 //! one frame from the negotiated V4L2 node, decodes YUYV or RGB565 to RGB
-//! and hands it to the shared converter, so the firmware gets the format
-//! and size it programmed.
+//! and returns it from picture(), which the camera's hosted source turns
+//! into the format and size the firmware programmed (RA8EMU-1011).
 //!
 //! Frames arrive through a capture seam: the V4L2 fd at run time, a fake
 //! in host tests. Rows are read at the driver's bytesperline, which may be
 //! padded past width * 2. A failed read keeps the last frame, says so once
 //! and never stops the run; before the first frame the capture is black.
 const std = @import("std");
-const frame_source = @import("frame_source.zig");
-const converted = @import("converted_source.zig");
-const decoded = @import("../../host/camera/decoded_image.zig");
-const hosted = @import("hosted.zig");
-const raw = @import("../../host/camera/pipe_frame.zig");
-const abi = @import("../../host/camera/v4l2_abi.zig");
-const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
+const decoded = @import("decoded_image.zig");
+const raw = @import("pipe_frame.zig");
+const abi = @import("v4l2_abi.zig");
+const negotiate = @import("v4l2_negotiate.zig");
 
 /// One frame's bytes from the device: true when `out` was filled.
 pub const Capture = struct {
@@ -33,7 +30,7 @@ pub fn rawFormat(pixelformat: u32) ?raw.Format {
     return null;
 }
 
-pub const WebcamSource = struct {
+pub const Webcam = struct {
     allocator: std.mem.Allocator,
     capture: Capture,
     agreed: negotiate.Agreed,
@@ -41,12 +38,10 @@ pub const WebcamSource = struct {
     device_path: []const u8,
     bytes: []u8,
     image: decoded.Image,
-    converted: converted.Converted,
-    format_control: *const u8,
     frames: u64 = 0,
     failed: bool = false,
 
-    pub fn open(allocator: std.mem.Allocator, capture: Capture, agreed: negotiate.Agreed, device_path: []const u8, format_control: *const u8) OpenError!*WebcamSource {
+    pub fn open(allocator: std.mem.Allocator, capture: Capture, agreed: negotiate.Agreed, device_path: []const u8) OpenError!*Webcam {
         const format = rawFormat(agreed.pixelformat) orelse return error.UnsupportedFormat;
         const row = @as(usize, agreed.width) * format.bytesPerPixel();
         if (agreed.bytesperline < row or agreed.width % 2 != 0) return error.BadGeometry;
@@ -54,7 +49,7 @@ pub const WebcamSource = struct {
         errdefer image.deinit(allocator);
         const bytes = try allocator.alloc(u8, @as(usize, agreed.bytesperline) * agreed.height);
         errdefer allocator.free(bytes);
-        const self = try allocator.create(WebcamSource);
+        const self = try allocator.create(Webcam);
         self.* = .{
             .allocator = allocator,
             .capture = capture,
@@ -63,21 +58,13 @@ pub const WebcamSource = struct {
             .device_path = device_path,
             .bytes = bytes,
             .image = image,
-            // frame() reads the sensor register before each capture, on the
-            // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
-            .format_control = format_control,
         };
         @memset(image.pixels, 0);
         return self;
     }
 
-    pub fn source(self: *WebcamSource) frame_source.FrameSource {
-        return .{ .context = self, .vtable = &vtable, .label = "webcam", .detail = self.device_path };
-    }
-
     /// Read and decode one frame, keeping the last one on a failed read.
-    pub fn pull(self: *WebcamSource) void {
+    pub fn pull(self: *Webcam) void {
         if (!self.capture.readFn(self.capture.ctx, self.bytes)) {
             if (!self.failed) std.debug.print("camera: webcam read failed on {s}; holding the last frame\n", .{self.device_path});
             self.failed = true;
@@ -94,22 +81,13 @@ pub const WebcamSource = struct {
         self.frames += 1;
     }
 
-    const vtable = frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
-
-    fn frame(context: *anyopaque, when: u64, shape: frame_source.Shape) void {
-        const self: *WebcamSource = @ptrCast(@alignCast(context));
+    /// The frame at a capture: read one from the device, or keep the last.
+    pub fn picture(self: *Webcam, _: u64) decoded.Image {
         self.pull();
-        self.converted.format = hosted.formatFor(self.format_control.*);
-        self.converted.source().frame(when, shape);
+        return self.image;
     }
 
-    fn fill(context: *anyopaque, row: u32, column: u32, out: []u8) void {
-        const self: *WebcamSource = @ptrCast(@alignCast(context));
-        self.converted.source().fill(row, column, out);
-    }
-
-    fn close(context: *anyopaque) void {
-        const self: *WebcamSource = @ptrCast(@alignCast(context));
+    pub fn close(self: *Webcam) void {
         const allocator = self.allocator;
         self.capture.closeFn(self.capture.ctx);
         allocator.free(self.bytes);
