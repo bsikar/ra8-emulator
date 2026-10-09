@@ -68,13 +68,15 @@ test "an address past 32 bits is refused before any access" {
 test "Ethos-U55 DMA is charged to shared external SDRAM" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
-    var config = ra8.core.external_memory.Config{};
+    var config = ra8.board.external_memory.Config{};
     config.ospi.size = 1024 * 1024;
     config.sdram = .{ .size = 1024 * 1024, .width = 32, .clock_hz = 100_000_000, .latency_cycles = 1, .burst = .incrementing16 };
     var store = try ra8.core.cpu.memory.store.Store.init(null);
     defer store.deinit();
-    const layout = try ra8.core.external_memory.Layout.init(config);
-    try store.configureExternal(layout, board.nor.window());
+    const layout = try ra8.board.external_memory.Layout.init(config);
+    var external = try ra8.board.external_backing.Backing.init(layout, board.nor.window());
+    defer external.deinit();
+    store.attachExternal(external.port());
     const plain = ra8.core.cpu.memory.guest.Guest{ .store = &store };
     var source: [256]u8 = undefined;
     for (&source, 0..) |*byte_value, index| byte_value.* = @truncate(index);
@@ -85,9 +87,9 @@ test "Ethos-U55 DMA is charged to shared external SDRAM" {
     const cpu = plain.asInitiator(.cpu0);
     var word: [4]u8 = undefined;
     try cpu.read(0x6800_0000, &word);
-    const counters = store.fabric.?.counters(.sdram, 0);
+    const counters = external.fabric.counters(.sdram, 0);
     try std.testing.expectEqual(@as(u64, 260), counters.bytes_read);
     try std.testing.expectEqual(@as(u64, 256), counters.bytes_written);
     try std.testing.expect(counters.ethos_u55_stall_cycles != 0);
-    try std.testing.expect(counters.cpu_stall_cycles > ra8.core.external_memory.serviceCycles(config.sdram, 4));
+    try std.testing.expect(counters.cpu_stall_cycles > ra8.board.external_memory.serviceCycles(config.sdram, 4));
 }

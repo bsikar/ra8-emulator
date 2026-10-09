@@ -8,6 +8,9 @@ test {
     _ = @import("core/systick_bank_test.zig");
     _ = @import("harness_test.zig");
     _ = @import("board/profile_test.zig");
+    _ = @import("board/external_memory_test.zig");
+    _ = @import("board/external_backing_test.zig");
+    _ = @import("core/cpu/memory/external_port_test.zig");
     _ = @import("core/cpu/conformance/vector_test.zig");
     _ = @import("core/cpu/conformance/coverage_test.zig");
     _ = @import("core/cpu/conformance/suite_test.zig");
@@ -92,7 +95,6 @@ test {
     _ = @import("core/lob_test.zig");
     _ = @import("core/long_shift_test.zig");
     _ = @import("core/memmap_test.zig");
-    _ = @import("core/external_memory_test.zig");
     _ = @import("board/sizing/sweep_test.zig");
     _ = @import("board/loader/pages_test.zig");
     _ = @import("core/part_test.zig");

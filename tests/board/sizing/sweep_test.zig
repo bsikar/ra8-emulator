@@ -7,7 +7,7 @@ const sizing = ra8.core.sizing;
 const workload = sizing.workload;
 const matrix = sizing.matrix;
 const sweep = sizing.sweep;
-const external = ra8.core.external_memory;
+const external = ra8.board.external_memory;
 
 fn small() workload.Synthetic {
     return .{ .weights_bytes = workload.mib, .activations_bytes = 64 * workload.kib };

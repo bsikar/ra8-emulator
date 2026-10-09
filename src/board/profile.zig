@@ -1,7 +1,7 @@
 //! Versioned board composition files: fitted devices and external memory.
 const std = @import("std");
 const request = @import("../components/request.zig");
-const external = @import("../core/external_memory.zig");
+const external = @import("external_memory.zig");
 
 pub const max_fits: usize = 4;
 pub const Profile = struct {

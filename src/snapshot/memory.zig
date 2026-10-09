@@ -13,7 +13,8 @@
 const std = @import("std");
 const memmap = @import("../core/memmap.zig");
 const store_mod = @import("../core/cpu/memory/store.zig");
-const external = @import("../core/external_memory.zig");
+const external = @import("../board/external_memory.zig");
+const external_backing = @import("../board/external_backing.zig");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
 
@@ -30,12 +31,12 @@ pub fn save(store: *const Store, writer: anytype) !void {
         if (!store.owned[index]) continue;
         try saveRegion(entry.base, store.pages[index].?, writer);
     }
-    if (store.owns_external) try saveRegion(memmap.sdram_base, store.region(memmap.sdram_base).?, writer);
+    if (store.owns_port) try saveRegion(memmap.sdram_base, store.region(memmap.sdram_base).?, writer);
     for (store.extra.windows) |held| {
         const window = held orelse continue;
         try saveRegion(window.base, window.bytes, writer);
     }
-    const state: ?external.State = if (store.fabric) |fabric| fabric.state() else null;
+    const state: ?external.State = if (external_backing.fabricOf(store)) |fabric| fabric.state() else null;
     try fields.write(writer, state);
 }
 
@@ -59,7 +60,7 @@ pub fn load(store: *Store, payload: []const u8) Error!void {
     }
     var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
     const state = try fields.read(?external.State, &cursor);
-    if (state) |saved| store.fabric.?.restore(saved);
+    if (state) |saved| external_backing.fabricOf(store).?.restore(saved);
 }
 
 fn validate(store: *const Store, payload: []const u8) Error!void {
@@ -82,9 +83,9 @@ fn validate(store: *const Store, payload: []const u8) Error!void {
     }
     var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
     const state = try fields.read(?external.State, &cursor);
-    if ((state != null) != (store.fabric != null)) return Error.LayoutMismatch;
+    if ((state != null) != (external_backing.fabricOf(store) != null)) return Error.LayoutMismatch;
     if (state) |saved| {
-        if (!std.meta.eql(saved.config, store.fabric.?.layout.config)) return Error.LayoutMismatch;
+        if (!std.meta.eql(saved.config, external_backing.fabricOf(store).?.layout.config)) return Error.LayoutMismatch;
     }
     if (!cursor.done()) return Error.Truncated;
 }
@@ -130,7 +131,7 @@ fn payloadLen(store: *const Store) u64 {
     for (memmap.ram, 0..) |_, index| {
         if (store.owned[index]) len += regionLen(store.pages[index].?);
     }
-    if (store.owns_external) len += regionLen(store.region(memmap.sdram_base).?);
+    if (store.owns_port) len += regionLen(store.region(memmap.sdram_base).?);
     for (store.extra.windows) |held| {
         if (held) |window| len += regionLen(window.bytes);
     }
@@ -140,7 +141,7 @@ fn payloadLen(store: *const Store) u64 {
 
 fn stateLen(store: *const Store) u64 {
     var counter: std.Io.Writer.Discarding = .init(&.{});
-    const state: ?external.State = if (store.fabric) |fabric| fabric.state() else null;
+    const state: ?external.State = if (external_backing.fabricOf(store)) |fabric| fabric.state() else null;
     fields.write(&counter.writer, state) catch unreachable;
     return counter.fullCount();
 }
@@ -158,7 +159,7 @@ fn regionLen(bytes: []const u8) u64 {
 fn regionCount(store: *const Store) u32 {
     var count: u32 = 0;
     for (store.owned) |mine| count += @intFromBool(mine);
-    count += @intFromBool(store.owns_external);
+    count += @intFromBool(store.owns_port);
     for (store.extra.windows) |held| count += @intFromBool(held != null);
     return count;
 }
