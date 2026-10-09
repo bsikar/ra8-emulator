@@ -1,5 +1,5 @@
-//! The pin models a run can attach: a push button and an LED.
-const gpio_pins = @import("gpio_pins.zig");
+//! A push button on a GPIO pin, the part a run attaches with `button`.
+const gpio_pins = @import("../../periph/gpio/gpio_pins.zig");
 
 /// A push button to ground with a pull-up: released reads high, pressed
 /// reads low, the same as SW1 and SW2 on the board.
@@ -32,27 +32,4 @@ pub const Button = struct {
     }
 
     fn ignore(_: *anyopaque, _: bool) void {}
-};
-
-/// An LED on a pin the firmware drives: whether it is lit, and how many
-/// times that changed.
-pub const Led = struct {
-    lit: bool = false,
-    edges: u32 = 0,
-
-    pub fn device(self: *Led) gpio_pins.Device {
-        return .{ .context = self, .connectFn = connect, .heardFn = heard };
-    }
-
-    fn connect(context: *anyopaque, link: gpio_pins.Link) void {
-        const self: *Led = @ptrCast(@alignCast(context));
-        self.lit = link.level();
-    }
-
-    fn heard(context: *anyopaque, high: bool) void {
-        const self: *Led = @ptrCast(@alignCast(context));
-        if (self.lit == high) return;
-        self.lit = high;
-        self.edges += 1;
-    }
 };

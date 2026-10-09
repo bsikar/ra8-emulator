@@ -137,6 +137,8 @@ pub const components = struct {
     pub const input_script = @import("components/touch_gt911/input_script.zig");
     pub const lsm6dso = @import("components/imu_lsm6dso/lsm6dso.zig");
     pub const max17048 = @import("components/gauge_max17048/max17048.zig");
+    pub const button = @import("components/button/button.zig");
+    pub const led = @import("components/led/led.zig");
 };
 pub const gui = @import("gui.zig");
 pub const render = struct {

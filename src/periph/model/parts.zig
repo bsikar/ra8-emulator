@@ -9,7 +9,8 @@ const std = @import("std");
 const catalog = @import("catalog.zig");
 const endpoint = @import("endpoint.zig");
 const eink = @import("../eink/eink.zig");
-const gpio_parts = @import("../gpio/gpio_parts.zig");
+const button = @import("../../components/button/button.zig");
+const led = @import("../../components/led/led.zig");
 const lsm6dso = @import("../../components/imu_lsm6dso/lsm6dso.zig");
 const max17048 = @import("../../components/gauge_max17048/max17048.zig");
 const modem = @import("../modem/modem.zig");
@@ -32,8 +33,8 @@ const models = [_]catalog.Model{
     ChannelPart(eink.Panel, .spi).model(panel_name),
     ChannelPart(modem.Modem, .uart).model(modem_name),
     ChannelPart(esp_hosted.C6, .uart).model(c6_name),
-    ChannelPart(gpio_parts.Button, .gpio).model(button_name),
-    ChannelPart(gpio_parts.Led, .gpio).model(led_name),
+    ChannelPart(button.Button, .gpio).model(button_name),
+    ChannelPart(led.Led, .gpio).model(led_name),
 };
 
 /// A part with a default state and a `device()` on the SPI, SCI or pin seam.
