@@ -1,8 +1,8 @@
-//! Covers src/periph/model/endpoint.zig: the text form a run names a model's
+//! Covers src/components/endpoint.zig: the text form a run names a model's
 //! endpoint with, and what it refuses.
 const std = @import("std");
 const ra8 = @import("ra8");
-const endpoint = ra8.periph.registry.model.endpoint;
+const endpoint = ra8.components.model.endpoint;
 
 test "an I2C endpoint names its line and a 7-bit address" {
     const at = try endpoint.parse("i2c:touch@0x36");

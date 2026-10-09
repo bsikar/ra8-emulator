@@ -10,7 +10,7 @@ const Board = @import("../../board/board.zig").Board;
 const usb_plug = @import("../../board/usb_plug.zig");
 const pacing = @import("../../periph/time/pacing.zig");
 const profile = @import("../../board/profile.zig");
-const request = @import("../../periph/model/request.zig");
+const request = @import("../../components/request.zig");
 const tape = @import("../../periph/esp_hosted/esp_tape.zig");
 
 /// A replay that met a request it has no recording for fails the run.

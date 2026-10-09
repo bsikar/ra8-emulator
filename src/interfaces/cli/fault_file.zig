@@ -12,7 +12,7 @@ const Board = @import("../../board/board.zig").Board;
 const session_plug = @import("../../board/session_plug.zig");
 const session_faults = @import("../../board/session_faults.zig");
 const session_schedule = @import("../../board/session_schedule.zig");
-const fault_schedule = @import("../../periph/model/fault_schedule.zig");
+const fault_schedule = @import("../../components/fault_schedule.zig");
 
 pub const Applier = session_schedule.Applier;
 

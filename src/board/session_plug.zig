@@ -12,10 +12,10 @@
 //! then each plug the session made and each unplug, so a client can list
 //! the parts without reaching into a bus.
 const std = @import("std");
-const endpoint = @import("../periph/model/endpoint.zig");
-const catalog = @import("../periph/model/catalog.zig");
-const parts = @import("../periph/model/parts.zig");
-const fault_lines = @import("../periph/model/fault_lines.zig");
+const endpoint = @import("../components/endpoint.zig");
+const catalog = @import("../components/catalog.zig");
+const parts = @import("../components/parts.zig");
+const fault_lines = @import("../components/fault_lines.zig");
 const riic_bus = @import("../periph/riic/riic_bus.zig");
 const spi = @import("../periph/spi/spi.zig");
 const session_api = @import("../debug/session_api.zig");

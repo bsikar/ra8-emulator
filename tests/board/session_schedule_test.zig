@@ -15,7 +15,7 @@ const zig_run = ra8.board.zig_run;
 const session_plug = ra8.board.session_plug;
 const session_faults = ra8.board.session_faults;
 const session_schedule = ra8.board.session_schedule;
-const fault_schedule = ra8.periph.registry.model.fault_schedule;
+const fault_schedule = ra8.components.model.fault_schedule;
 
 const image_bytes = @embedFile("../fixtures/plug/gauge_poll.elf");
 const counts_at: u32 = 0x2200_0100;

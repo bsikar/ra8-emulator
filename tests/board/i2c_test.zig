@@ -41,7 +41,7 @@ test "plug puts a catalog model on the line its endpoint names" {
     defer bus.deinit();
     var wire = i2c.Wire{};
     try wire.attach(&bus);
-    const model = ra8.periph.registry.model;
+    const model = ra8.components.model;
     const at = try model.endpoint.parse("i2c:riic@0x37");
     const made = try model.parts.all.make(std.testing.allocator, model.parts.gauge_name, at);
     defer model.catalog.Catalog.destroy(std.testing.allocator, made);

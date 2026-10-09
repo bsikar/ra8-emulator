@@ -9,10 +9,10 @@
 //! model exists.
 const std = @import("std");
 const endpoint = @import("endpoint.zig");
-const riic_bus = @import("../riic/riic_bus.zig");
-const sci_device = @import("../sci/sci_device.zig");
-const spi = @import("../spi/spi.zig");
-const gpio_pins = @import("../gpio/gpio_pins.zig");
+const riic_bus = @import("../periph/riic/riic_bus.zig");
+const sci_device = @import("../periph/sci/sci_device.zig");
+const spi = @import("../periph/spi/spi.zig");
+const gpio_pins = @import("../periph/gpio/gpio_pins.zig");
 
 /// What an instance offers its bus or pin.
 pub const Device = union(enum) {

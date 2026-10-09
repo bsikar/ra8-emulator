@@ -10,7 +10,7 @@
 const std = @import("std");
 const boot = @import("../core/cpu/boot.zig");
 const api = @import("../debug/session_api.zig");
-const fault_schedule = @import("../periph/model/fault_schedule.zig");
+const fault_schedule = @import("../components/fault_schedule.zig");
 const timebase = @import("../periph/time/timebase.zig");
 
 pub const Applier = struct {

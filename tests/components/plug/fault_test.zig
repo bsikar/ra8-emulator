@@ -1,9 +1,9 @@
-//! Covers src/periph/model/fault.zig on the MAX17048 fuel gauge: each mode,
+//! Covers src/components/fault.zig on the MAX17048 fuel gauge: each mode,
 //! seen through the I2C registry and the RIIC address phase.
 const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.periph.riic_bus;
-const fault = ra8.periph.registry.model.fault;
+const fault = ra8.components.model.fault;
 const gauge_mod = ra8.components.max17048;
 
 const Rig = struct {

@@ -6,7 +6,7 @@ const ra8 = @import("ra8");
 
 const Board = ra8.board.Board;
 const plug = Board.plug;
-const model = ra8.periph.registry.model;
+const model = ra8.components.model;
 const api = ra8.core.session_api;
 const session_faults = ra8.board.session_faults;
 

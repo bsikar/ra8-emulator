@@ -1,8 +1,8 @@
-//! Covers src/periph/model/fault_schedule.zig: the `--faults FILE`
+//! Covers src/components/fault_schedule.zig: the `--faults FILE`
 //! grammar, its virtual times, and refusing a bad file at the right line.
 const std = @import("std");
 const ra8 = @import("ra8");
-const model = ra8.periph.registry.model;
+const model = ra8.components.model;
 const schedule = model.fault_schedule;
 const Error = schedule.Error;
 

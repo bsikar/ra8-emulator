@@ -14,7 +14,7 @@ const elf = ra8.board.elf;
 const loader = ra8.core.cpu.memory.load;
 const zig_run = ra8.board.zig_run;
 const session_plug = ra8.board.session_plug;
-const Endpoint = ra8.periph.registry.model.endpoint.Endpoint;
+const Endpoint = ra8.components.model.endpoint.Endpoint;
 
 const image_bytes = @embedFile("../fixtures/plug/gauge_poll.elf");
 const gauge_at: Endpoint = .{ .i2c = .{ .line = .riic, .address = 0x36 } };

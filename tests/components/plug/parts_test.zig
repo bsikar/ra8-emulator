@@ -1,8 +1,8 @@
-//! Covers src/periph/model/parts.zig: the Click parts as catalog models,
+//! Covers src/components/parts.zig: the Click parts as catalog models,
 //! each instance its own part at its own address.
 const std = @import("std");
 const ra8 = @import("ra8");
-const model = ra8.periph.registry.model;
+const model = ra8.components.model;
 const parts = model.parts;
 const endpoint = model.endpoint;
 const catalog = model.catalog;

@@ -1,8 +1,8 @@
-//! Covers src/periph/model/fault_spec.zig: the `--fault` grammar, the fit
+//! Covers src/components/fault_spec.zig: the `--fault` grammar, the fit
 //! rules, and wrapping a made device in its fault.
 const std = @import("std");
 const ra8 = @import("ra8");
-const model = ra8.periph.registry.model;
+const model = ra8.components.model;
 const spec = model.fault_spec;
 const endpoint = model.endpoint;
 const parts = model.parts;

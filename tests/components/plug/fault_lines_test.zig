@@ -1,8 +1,8 @@
-//! Covers src/periph/model/fault_lines.zig on the e-ink panel (SPI) and the
+//! Covers src/components/fault_lines.zig on the e-ink panel (SPI) and the
 //! AT modem (UART).
 const std = @import("std");
 const ra8 = @import("ra8");
-const lines = ra8.periph.registry.model.fault_lines;
+const lines = ra8.components.model.fault_lines;
 const eink = ra8.components.eink;
 const modem = ra8.components.modem_at;
 

@@ -7,8 +7,8 @@
 //! a read hands back. Everything else goes straight through.
 //!
 //! Garbage is seeded, so a run with a fault on it repeats exactly.
-const riic_bus = @import("../riic/riic_bus.zig");
-const timebase = @import("../time/timebase.zig");
+const riic_bus = @import("../periph/riic/riic_bus.zig");
+const timebase = @import("../periph/time/timebase.zig");
 
 pub const Mode = union(enum) {
     /// Behave like the part.

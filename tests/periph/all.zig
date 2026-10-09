@@ -174,7 +174,6 @@ test {
     _ = @import("prcr_test.zig");
     _ = @import("registry_test.zig");
     _ = @import("reset_test.zig");
-    _ = @import("model/all.zig");
     _ = @import("riic/riic_ack_test.zig");
     _ = @import("riic/riic_reset_test.zig");
     _ = @import("riic/riic_bus_test.zig");

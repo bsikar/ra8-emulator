@@ -11,12 +11,12 @@
 //! which device answers. GPIO goes to the port block's pin table, one model
 //! per pin.
 const std = @import("std");
-const catalog = @import("../periph/model/catalog.zig");
-const endpoint = @import("../periph/model/endpoint.zig");
-const parts = @import("../periph/model/parts.zig");
-const request = @import("../periph/model/request.zig");
+const catalog = @import("../components/catalog.zig");
+const endpoint = @import("../components/endpoint.zig");
+const parts = @import("../components/parts.zig");
+const request = @import("../components/request.zig");
 const profile = @import("profile.zig");
-const fault_spec = @import("../periph/model/fault_spec.zig");
+const fault_spec = @import("../components/fault_spec.zig");
 const eink = @import("../components/eink_it8951/panel.zig");
 const Board = @import("board.zig").Board;
 

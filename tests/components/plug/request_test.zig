@@ -1,7 +1,7 @@
-//! Covers src/periph/model/request.zig: reading `--attach NAME@ENDPOINT`.
+//! Covers src/components/request.zig: reading `--attach NAME@ENDPOINT`.
 const std = @import("std");
 const ra8 = @import("ra8");
-const request = ra8.periph.registry.model.request;
+const request = ra8.components.model.request;
 
 test "the first '@' splits the model name from its endpoint" {
     const ask = try request.parse("max17048@i2c:touch@0x37");
