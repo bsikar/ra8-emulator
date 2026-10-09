@@ -32,8 +32,7 @@ const scb = @import("../periph/scb.zig");
 const cpuid = @import("../periph/cpuid.zig");
 const elf = @import("elf.zig");
 const Store = @import("cpu/memory/store.zig").Store;
-const Board = @import("../board/board.zig").Board;
-const wiring = @import("../board/wiring.zig");
+const Wiring = @import("second_wiring.zig").Wiring;
 const second_core = @import("second_core.zig");
 
 /// What CPU1's Zig core reads from outside its memory: its own SAU, MPU
@@ -126,10 +125,10 @@ pub const Own = struct {
 
     /// Prime CPU1's PPB windows as an M33, load `image`, and reset the core
     /// from the image's vector table.
-    pub fn open(self: *Own, lender: *const Store, board: *Board, image: elf.Image) !void {
+    pub fn open(self: *Own, lender: *const Store, wiring: Wiring, image: elf.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
-        _ = try bringUp(&self.core, .{ .store = &self.store, .initiator = .cpu1 }, board, .{
+        _ = try bringUp(&self.core, .{ .store = &self.store, .initiator = .cpu1 }, wiring, .{
             .partitions = &self.partitions,
             .regions = &self.regions,
             .guard = &self.guard,
@@ -156,9 +155,9 @@ pub const Parts = struct {
 /// Prime CPU1's PPB windows into `memory` as an M33, load `image` there,
 /// and open `core` over it reset from the image's vector table
 /// (RA8EMU-574, shared with the run path by RA8EMU-588).
-pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, image: elf.Image) !second_core.Seeded {
+pub fn bringUp(core: *SecondZig, memory: Guest, wiring: Wiring, parts: Parts, image: elf.Image) !second_core.Seeded {
     const setup = memory.asInitiator(.none);
-    try wiring.primeWindows(board, setup, .{
+    try wiring.prime(setup, .{
         .partitions = parts.partitions,
         .regions = parts.regions,
         .guard = parts.guard,
@@ -168,6 +167,6 @@ pub fn bringUp(core: *SecondZig, memory: Guest, board: *Board, parts: Parts, ima
     });
     const seeded = try second_core.seedImage(setup, image);
     const units: Units = .{ .partitions = parts.partitions, .regions = parts.regions, .clears = parts.clears, .vector_base = seeded.vector_base };
-    try core.openOn(memory, units, &board.bus);
+    try core.openOn(memory, units, wiring.bus);
     return seeded;
 }

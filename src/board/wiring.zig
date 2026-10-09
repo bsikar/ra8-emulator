@@ -19,6 +19,7 @@ const scb = @import("../periph/scb.zig");
 const fault_clear = @import("../periph/fault_clear.zig");
 
 const Board = @import("board.zig").Board;
+const second_wiring = @import("../core/second_wiring.zig");
 const plug = @import("plug.zig");
 
 const bkup = @import("../periph/bkup/bkup.zig");
@@ -186,26 +187,34 @@ pub fn cpu0Windows(self: *Board) CoreWindows {
     };
 }
 
-/// The state that lives inside one core rather than on the bus: its SAU,
-/// its MPU table and the guard that enforces that table. CPU0's are the
-/// board's own; CPU1 brings its own set.
-pub const CoreWindows = struct {
-    partitions: *sau.Sau,
-    regions: *mpu.Mpu,
-    guard: *mpu_guard.Guard,
-    /// The Non-secure MPU table the MPU_NS alias files into, when this core
-    /// has one wired (RA8EMU-445).
-    regions_ns: ?*mpu.Mpu = null,
-    /// The CPUID word this core answers with: a Cortex-M85 on CPU0, a
-    /// Cortex-M33 on CPU1.
-    identity: u32,
-    /// The AIRCR model this core's writes are judged by. CPU0's is the
-    /// board's own; CPU1 brings its own, so a PRIGROUP one core programs is
-    /// never the split the other reports.
-    control: *scb.Scb,
-    /// The CFSR/HFSR clears this core's stores owe, applied at its boundary.
-    clears: *fault_clear.Clears,
-};
+/// The windows a core keeps to itself, declared by the chip (RA8EMU-1012).
+pub const CoreWindows = @import("../core/core_windows.zig").CoreWindows;
+
+/// The wiring CPU1's bring-up takes from this board (RA8EMU-1012). The chip
+/// owns bring-up; the board supplies its bus, divider, reboot latch,
+/// release page and event slot, and primes and resets on CPU1's behalf.
+pub fn cpu1(self: *Board) second_wiring.Wiring {
+    return .{
+        .bus = &self.bus,
+        .dividers = &self.tree.divcr2,
+        .reboot = &self.reboot,
+        .release = &self.second_core,
+        .cpu1 = &self.cpu1,
+        .context = self,
+        .primeFn = primeThunk,
+        .resetFn = resetThunk,
+    };
+}
+
+fn primeThunk(context: *anyopaque, memory: Guest, windows: CoreWindows) anyerror!void {
+    const self: *Board = @ptrCast(@alignCast(context));
+    return primeWindows(self, memory, windows);
+}
+
+fn resetThunk(context: *anyopaque) void {
+    const self: *Board = @ptrCast(@alignCast(context));
+    self.requestResetFrom(.software, .cpu1);
+}
 
 /// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
 /// at zero. Every one of these is a register the firmware reads before it

@@ -70,6 +70,7 @@ test {
     _ = @import("core/second_core_reset_test.zig");
     _ = @import("core/second_zig_test.zig");
     _ = @import("core/second_zig_run_test.zig");
+    _ = @import("core/second_wiring_test.zig");
     _ = @import("core/second_zig_exceptions_test.zig");
     _ = @import("core/cadence_test.zig");
     _ = @import("debug/all.zig");

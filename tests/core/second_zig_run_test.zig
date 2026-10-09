@@ -21,7 +21,7 @@ const stack: u32 = vectors + 0x800;
 /// builds it but from words in its own store instead of an ELF on disk.
 fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
-    driver.board = null;
+    driver.wiring = null;
     driver.cycle_remainder = 0;
     driver.store = try Store.init(null);
     errdefer driver.close();
@@ -34,7 +34,7 @@ fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
         try memory.write(code + @as(u32, @intCast(2 * i)), &bytes);
     }
     try driver.core.openOn(memory, Units.of(&driver.second), &board.bus);
-    driver.handTo(board);
+    driver.handTo(ra8.board.wiring.cpu1(board));
 }
 
 test "a round runs CPU1's share on its Zig core and counts it by core rate" {
@@ -184,7 +184,7 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     _ = try ra8.core.cpu.memory.load.image(memory, image);
 
     var driver: Driver = undefined;
-    try driver.open(std.testing.allocator, std.testing.io, &board, cpu1_path, memory);
+    try driver.open(std.testing.allocator, std.testing.io, ra8.board.wiring.cpu1(&board), cpu1_path, memory);
     defer driver.close();
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };
     var clock: ra8.board.zig_run.Clock = .{ .io = std.testing.io, .memory = memory, .board = &board, .timebase = &timebase, .cpu1 = &driver };

@@ -62,8 +62,6 @@ const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
 const second_wait = @import("second_wait.zig");
 
-const Board = @import("../board/board.zig").Board;
-const wiring = @import("../board/wiring.zig");
 const Guest = @import("cpu/memory/guest.zig").Guest;
 const guest_load = @import("cpu/memory/load.zig");
 
@@ -71,6 +69,9 @@ const guest_load = @import("cpu/memory/load.zig");
 pub const rate = @import("core_rate.zig");
 
 pub const State = @import("second_state.zig").State;
+
+/// What the board hands CPU1 at bring-up (RA8EMU-1012).
+pub const Wiring = @import("second_wiring.zig").Wiring;
 
 /// VTOR resets to the core's initial vector base (CPU1INITVTOR for CPU1), not
 /// to zero. The PPB is per-store RAM here, so the word written lands in this
@@ -128,7 +129,7 @@ pub const Second = struct {
     /// (RA8EMU-59). `memory` is CPU1's own, where its AIRCR lives.
     pub fn takeResetRequest(self: *Second, memory: Guest) void {
         const asked = self.control.poll(memory) catch false;
-        if (asked) if (self.state.board) |board| board.requestResetFrom(.software, .cpu1);
+        if (asked) if (self.state.wiring) |wiring| wiring.requestReset();
     }
 };
 

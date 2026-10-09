@@ -51,7 +51,7 @@ test "a reset CPU1 asks for latches SWRF and reboots the part, as CPU0's does" {
     cpu1.takeResetRequest(pair.second());
     try std.testing.expect(!pending.requested);
 
-    cpu1.state.board = &board;
+    cpu1.state.wiring = ra8.board.wiring.cpu1(&board);
     const keyed: u32 = scb.key.write << scb.key.shift;
     try pair.second().writeWord(memmap.scb.aircr, keyed | scb.field.sysresetreq);
     cpu1.takeResetRequest(pair.second());
@@ -69,7 +69,7 @@ test "a reset the board performs holds CPU1 until it is released" {
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
     board.reboot = &pending;
-    cpu1.state.board = &board;
+    cpu1.state.wiring = ra8.board.wiring.cpu1(&board);
     try std.testing.expect(!cpu1.state.heldInReset(pair.second()));
 
     pending.performed = 1;
@@ -86,7 +86,7 @@ test "a fresh release after a reset brings CPU1 up out of CPU1INITVTOR" {
     defer board.deinit();
     var pending: ra8.core.reboot.Reboot = .{};
     board.reboot = &pending;
-    cpu1.state.board = &board;
+    cpu1.state.wiring = ra8.board.wiring.cpu1(&board);
     const table: u32 = memmap.sram_base + 0x400;
 
     board.requestReset(.software);
