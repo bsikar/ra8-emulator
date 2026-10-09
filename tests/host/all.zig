@@ -9,6 +9,7 @@ test {
     _ = @import("camera/png_decode_test.zig");
     _ = @import("camera/image_file_test.zig");
     _ = @import("camera/video_file_test.zig");
+    _ = @import("camera/pipe_input_test.zig");
     _ = @import("camera/y4m_frame_test.zig");
     _ = @import("camera/pipe_frame_test.zig");
     _ = @import("camera/av_frame_test.zig");
