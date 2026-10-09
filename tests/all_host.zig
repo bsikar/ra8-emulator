@@ -144,6 +144,7 @@ test {
     _ = @import("interfaces/cli/report/undefined_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("interfaces/cli/camera_source_test.zig");
+    _ = @import("interfaces/cli/usb_disk_option_test.zig");
     _ = @import("interfaces/usbip/usbip_wire_test.zig");
     _ = @import("interfaces/usbip/usbip_export_test.zig");
     _ = @import("interfaces/cli/debug_front_test.zig");

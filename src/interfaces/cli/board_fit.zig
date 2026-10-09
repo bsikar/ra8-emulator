@@ -9,7 +9,7 @@ const cli = @import("cli.zig");
 const host_sock = @import("../host_sock.zig");
 const camera_source = @import("camera_source.zig");
 const Board = @import("../../board/board.zig").Board;
-const usb_plug = @import("../../board/usb_plug.zig");
+const usb_disk_option = @import("usb_disk_option.zig");
 const pacing = @import("../../periph/time/pacing.zig");
 const profile = @import("../../board/profile.zig");
 const request = @import("../../components/request.zig");
@@ -62,7 +62,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
         try board.input_script.parse(content);
     }
     try setBattery(board, options);
-    try usb_plug.apply(&board.usb, allocator, io, options.usb_disk);
+    try usb_disk_option.apply(&board.usb, allocator, io, options.usb_disk);
     try cli.usbip_export.run.install(&board.usb, allocator, io, options.usbip);
 }
 
