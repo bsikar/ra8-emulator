@@ -48,10 +48,15 @@ test "the report names each source: the gradient by default, a picture by its pa
     const gradient = try (registry.Spec{}).open(allocator, std.testing.io, &format_control);
     try std.testing.expectEqualStrings("synthetic gradient", gradient.label);
     try std.testing.expectEqualStrings("", gradient.detail);
-    const named = camera.still.labelled(camera.gradient.source(), "shots/frame.png");
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "frame.ppm", .data = "P6\n1 1\n255\n\xff\x00\x00" });
+    const path = try tmp.dir.realPathFileAlloc(std.testing.io, "frame.ppm", allocator);
+    defer allocator.free(path);
+    const named = try (registry.Spec{ .kind = .image, .arg = path }).open(allocator, std.testing.io, &format_control);
+    defer named.close();
     try std.testing.expectEqualStrings("still image", named.label);
-    try std.testing.expectEqualStrings("shots/frame.png", named.detail);
-    try std.testing.expectEqual(camera.gradient.source().vtable, named.vtable);
+    try std.testing.expectEqualStrings(path, named.detail);
 }
 
 test "video takes a path, optionally with loop, and is named by it" {

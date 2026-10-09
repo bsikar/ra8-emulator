@@ -1,12 +1,13 @@
-//! Covers src/periph/camera/image_source.zig: a picture on disk picked up by
-//! its magic bytes, converted to whatever FORMAT CONTROL says at each
-//! capture, and written by the CEU into the firmware's buffer pixel for pixel.
+//! Covers src/host/camera/image_file.zig: a picture on disk picked up by
+//! its magic bytes and shown at every capture, written through the camera's
+//! hosted source into the firmware's buffer pixel for pixel.
 const std = @import("std");
 const ra8 = @import("ra8");
 
+const image_file = ra8.host.camera.image_file;
 const ceu = ra8.periph.ceu;
-const camera = ceu.camera;
-const still = camera.still;
+const hosted = ceu.camera.hosted;
+const FrameSource = ceu.camera.frame_source.FrameSource;
 const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 const allocator = std.testing.allocator;
@@ -39,17 +40,28 @@ fn writeFile(dir: std.Io.Dir, name: []const u8, bytes: []const u8) !void {
     try dir.writeFile(std.testing.io, .{ .sub_path = name, .data = bytes });
 }
 
-fn loadFrom(dir: std.testing.TmpDir, name: []const u8, format_control: *const u8) !*still.ImageSource {
+fn load(dir: std.testing.TmpDir, name: []const u8) !*image_file.Still {
     const path = try dir.dir.realPathFileAlloc(std.testing.io, name, allocator);
     defer allocator.free(path);
-    return still.ImageSource.load(allocator, std.testing.io, path, format_control);
+    return image_file.Still.load(allocator, std.testing.io, path);
 }
 
-test "FORMAT CONTROL picks RGB565 for 0x6x and YUV422 otherwise" {
-    try std.testing.expectEqual(camera.convert.Format.rgb565, still.formatFor(0x6F));
-    try std.testing.expectEqual(camera.convert.Format.rgb565, still.formatFor(0x61));
-    try std.testing.expectEqual(camera.convert.Format.yuv422, still.formatFor(0x30));
-    try std.testing.expectEqual(camera.convert.Format.yuv422, still.formatFor(0x00));
+fn loadFrom(dir: std.testing.TmpDir, name: []const u8, format_control: *const u8) !FrameSource {
+    const still = try load(dir, name);
+    errdefer still.close();
+    return hosted.Hosted(image_file.Still).open(allocator, still, format_control, "still image", name);
+}
+
+test "every capture shows the same decoded picture" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try writeFile(tmp.dir, "a.ppm", ppm_bytes);
+    const still = try load(tmp, "a.ppm");
+    defer still.close();
+    const rgb = [_]u8{ 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255 };
+    try std.testing.expectEqualSlices(u8, &rgb, still.picture(0).pixels);
+    try std.testing.expectEqualSlices(u8, &rgb, still.picture(5_000_000_000).pixels);
+    try std.testing.expectEqual(@as(u32, 2), still.picture(0).width);
 }
 
 test "a PPM and a BMP of the same picture fill the same RGB565 bytes" {
@@ -60,8 +72,7 @@ test "a PPM and a BMP of the same picture fill the same RGB565 bytes" {
     try writeFile(tmp.dir, "b.dat", &bmp); // no extension: the magic bytes decide
     var format_control: u8 = 0x6F;
     for ([_][]const u8{ "a.ppm", "b.dat" }) |name| {
-        const loaded = try loadFrom(tmp, name, &format_control);
-        const source = loaded.source();
+        const source = try loadFrom(tmp, name, &format_control);
         defer source.close();
         source.frame(0, .{ .width = 4, .lines = 2 });
         for (rgb565_rows, 0..) |expected, row| {
@@ -72,30 +83,13 @@ test "a PPM and a BMP of the same picture fill the same RGB565 bytes" {
     }
 }
 
-test "the format is read again at each capture" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try writeFile(tmp.dir, "a.ppm", ppm_bytes);
-    var format_control: u8 = 0x6F;
-    const loaded = try loadFrom(tmp, "a.ppm", &format_control);
-    const source = loaded.source();
-    defer source.close();
-    format_control = 0x30;
-    source.frame(0, .{ .width = 4, .lines = 2 });
-    var line: [4]u8 = undefined;
-    source.fill(0, 0, &line);
-    const red = camera.convert.Rgb{ .r = 255, .g = 0, .b = 0 };
-    const green = camera.convert.Rgb{ .r = 0, .g = 255, .b = 0 };
-    try std.testing.expectEqualSlices(u8, &camera.convert.yuyv(red, green), &line);
-}
-
 test "a file no decoder claims and a missing file are refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try writeFile(tmp.dir, "x.txt", "hello");
     var format_control: u8 = 0x30;
     try std.testing.expectError(error.Unsupported, loadFrom(tmp, "x.txt", &format_control));
-    try std.testing.expectError(error.FileNotFound, still.ImageSource.load(allocator, std.testing.io, "/nonexistent/ra8.png", &format_control));
+    try std.testing.expectError(error.FileNotFound, image_file.Still.load(allocator, std.testing.io, "/nonexistent/ra8.png"));
 }
 
 test "an armed CEU capture writes the picture's pixels into the buffer" {
@@ -103,7 +97,7 @@ test "an armed CEU capture writes the picture's pixels into the buffer" {
     defer tmp.cleanup();
     try writeFile(tmp.dir, "a.ppm", ppm_bytes);
     var format_control: u8 = 0x6F;
-    const loaded = try loadFrom(tmp, "a.ppm", &format_control);
+    const source = try loadFrom(tmp, "a.ppm", &format_control);
     const store = try allocator.create(Store);
     defer allocator.destroy(store);
     store.* = try Store.init(null);
@@ -113,7 +107,7 @@ test "an armed CEU capture writes the picture's pixels into the buffer" {
     const base: u32 = 0x6800_0000;
     var unit = ceu.Ceu.init();
     unit.memory = core;
-    unit.source = loaded.source();
+    unit.source = source;
     defer unit.source.close();
     unit.write(ceu.win_base + ceu.off.capwr, 4, 4 | 2 << ceu.field.vertical_shift);
     unit.write(ceu.win_base + ceu.off.cdwdr, 4, 4);

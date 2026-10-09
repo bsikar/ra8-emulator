@@ -15,7 +15,7 @@ const posix = std.posix;
 const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
 const decoded = @import("../../host/camera/decoded_image.zig");
-const still = @import("image_source.zig");
+const hosted = @import("hosted.zig");
 const host_read = @import("../../host/host_read.zig");
 pub const raw = @import("../../host/camera/pipe_frame.zig");
 pub const pipe_windows = @import("../../host/camera/pipe_windows.zig");
@@ -147,7 +147,7 @@ pub const PipeSource = struct {
         self.drain();
         if (self.fresh) raw.toRgb(self.arg.format, self.latest, self.image.pixels);
         self.fresh = false;
-        self.converted.format = still.formatFor(self.format_control.*);
+        self.converted.format = hosted.formatFor(self.format_control.*);
         self.converted.source().frame(when, shape);
     }
 

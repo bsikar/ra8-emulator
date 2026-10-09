@@ -9,7 +9,8 @@
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const gradient = @import("gradient_source.zig");
-const image = @import("image_source.zig");
+const hosted = @import("hosted.zig");
+const image_file = @import("../../host/camera/image_file.zig");
 const video = @import("video_source.zig");
 const pipe = @import("pipe_source.zig");
 const webcam = @import("webcam_open.zig");
@@ -36,10 +37,14 @@ pub const Spec = struct {
     pub fn open(self: Spec, allocator: std.mem.Allocator, io: std.Io, format_control: *const u8) !frame_source.FrameSource {
         return switch (self.kind) {
             .gradient => gradient.source(),
-            .image => image.labelled((image.ImageSource.load(allocator, io, self.arg, format_control) catch |err| {
-                std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
-                return err;
-            }).source(), self.arg),
+            .image => blk: {
+                const still = image_file.Still.load(allocator, io, self.arg) catch |err| {
+                    std.debug.print("--camera-source image:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                    return err;
+                };
+                errdefer still.close();
+                break :blk try hosted.Hosted(image_file.Still).open(allocator, still, format_control, "still image", self.arg);
+            },
             .video => video.labelled((video.VideoSource.load(allocator, io, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;

@@ -175,6 +175,7 @@ pub const host = struct {
         pub const ppm = @import("host/camera/ppm_decode.zig");
         pub const bmp = @import("host/camera/bmp_decode.zig");
         pub const png = @import("host/camera/png_decode.zig");
+        pub const image_file = @import("host/camera/image_file.zig");
     };
 };
 pub const gui = @import("gui.zig");
