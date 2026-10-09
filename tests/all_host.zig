@@ -138,9 +138,10 @@ test {
     _ = @import("interfaces/cli/zig_run_test.zig");
     _ = @import("session/zig_watch_test.zig");
     _ = @import("session/itm_console_test.zig");
-    _ = @import("interfaces/cli/zig_stop_test.zig");
-    _ = @import("interfaces/cli/zig_break_test.zig");
-    _ = @import("interfaces/cli/zig_undefined_test.zig");
+    _ = @import("session/zig_stop_test.zig");
+    _ = @import("session/zig_stop_ns_test.zig");
+    _ = @import("session/zig_break_test.zig");
+    _ = @import("session/zig_undefined_test.zig");
     _ = @import("interfaces/cli/report/undefined_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("interfaces/cli/camera_source_test.zig");

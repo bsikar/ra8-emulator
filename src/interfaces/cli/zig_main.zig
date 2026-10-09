@@ -14,6 +14,8 @@ const cli = @import("cli.zig");
 const Parts = @import("parts.zig").Parts;
 const report = @import("report.zig");
 const zig_run = @import("zig_run.zig");
+const dumps = @import("report/dumps.zig");
+const Stop = @import("../../chip/core/stop.zig").Stop;
 const fault_file = @import("../../session/fault_file.zig");
 const window_main = @import("window_main.zig");
 const Cpu0 = @import("../../board/cpu0_store.zig").Cpu0;
@@ -44,10 +46,10 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var reboot = Reboot{ .vector_base = vector_base };
     board.reboot = &reboot;
     const table = if (parts.profile) |*one| one else null;
-    var stop = zig_run.stop_sym.resolve(image, io, options);
-    var point = zig_run.break_sym.resolve(image, options);
-    var timed = zig_run.stop_sym.deadline(options);
-    var swept = zig_run.undefined_sites.resolve(image, options);
+    var stop = stopOf(image, io, options);
+    var point = zig_run.break_sym.resolve(image, options.break_place, options.break_arrival);
+    var timed = zig_run.stop_sym.deadline(options.ms);
+    var swept = zig_run.undefined_sites.resolve(image, options.stop_on_undefined);
     var schedule: fault_file.Run = undefined;
     if (options.faults) |path| schedule.open(&board, io, path) catch return 2;
     defer if (options.faults != null) schedule.deinit();
@@ -107,4 +109,14 @@ pub fn announce(out: *std.Io.Writer, memory: Guest, written: u32, vector_base: u
     const sp = try memory.readWord(vector_base);
     const pc = (try memory.readWord(vector_base + 4)) & ~@as(u32, 1);
     try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, sp, pc });
+}
+
+/// The `--stop-sym` counter, with the `--ns` image read only when a name was
+/// asked for and dropped once it is looked up.
+fn stopOf(image: elf.Image, io: std.Io, options: cli.Options) ?Stop {
+    if (options.stop_symbol == null) return null;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const non_secure = dumps.nonSecure(arena.allocator(), io, options) catch null;
+    return zig_run.stop_sym.resolve(image, non_secure, options.stop_symbol, options.stop_at);
 }
