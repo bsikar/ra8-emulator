@@ -6,41 +6,55 @@ writing code here.
 
 ## Layout
 
-Source is grouped by job, not a flat folder of `.zig` files. Each top directory
-answers one question, and a file's path is the first thing that says what it is
-for:
+docs/adr/0004-library-and-application-layout.md is the layout. The chip is a
+standalone library, the board library uses the chip plus pluggable
+components, and the CLI and the GUI are separate applications over one
+embedding API. Each library is a named build module, and code in one library
+imports another by module name (`@import("ra8_chip")`), never by a relative
+path that leaves its own directory. Zig refuses a file import outside a
+module's root directory, so the compiler enforces these edges:
 
 ```
-src/main.zig          the program: argument in, run, report out
-src/root.zig          the module index, imported as "ra8"
-src/core/             the machine: engine, memmap, elf, session, the run
-                      loop, the hooks the machine itself installs, and
-                      src/core/c.zig
-src/debug/            the debugger surface: breakpoints, watchpoints, their
-                      hooks, disassembly, symbols, register and memory dumps
-src/interfaces/cli/   the command line; cli/report.zig and cli/report/ hold
-                      the report renderers that write its output, one file
-                      per report section
-src/board/            how the board is wired: which blocks exist and what
-                      they are connected to
-src/periph/           everything that answers on the peripheral bus
-tests/                one test file per source file, on the mirrored path
+ra8_host        src/host/             std only: sockets, console, camera backends, host files
+ra8_snapshot    src/snapshot/         std only: the snapshot format
+ra8_chip        src/chip/             ra8_snapshot
+ra8_components  src/components/       ra8_chip line interfaces, ra8_snapshot
+ra8_board       src/board/            ra8_chip, ra8_components, ra8_snapshot
+ra8_session     src/session/          ra8_board, ra8_chip, ra8_snapshot
+ra8_render      src/render/           ra8_session value types, ra8_widget
+ra8_rpc         src/interfaces/rpc/   ra8_session, ra8_host
+ra8_gdb         src/interfaces/gdb/   ra8_session, ra8_host
+ra8_usbip       src/interfaces/usbip/ ra8_board, ra8_host
+cli app         src/interfaces/cli/   the libraries, never the gui app
+gui app         src/interfaces/gui/   the libraries and gui_sdl, never the cli app
+tests/          one test file per source file, on the mirrored path
 ```
 
-`src/periph/` is one directory per peripheral block, named for the block:
-`src/periph/gpt/`, `src/periph/sci/`, `src/periph/glcdc/`, and so on. A block
-with several files (the register file, its channels, its FIFO, its frames)
-keeps them together. A genuine singleton stays flat at `src/periph/`: `nvic`,
-`clocks`, `registry`, `crc` and the rest are one file each and a one-file
-directory would say nothing. Give a block its own directory when it grows a
-second file, not before.
+Nothing below the applications opens host files or devices. A component that
+needs host data declares an interface, and the application fills it from
+`ra8_host`. `src/root.zig` is the `ra8` umbrella for tests and embedders, and it
+holds module-name re-exports only: no file paths, no CLI, no GUI. Scaffolding
+(hello windows, spikes) does not stay in the tree or the build.
 
-`tests/` mirrors `src/` on the same paths, all the way down:
+The tree moves to this layout in the order ADR 0004 gives, so during the
+migration some files still sit at their old paths (src/core, src/periph,
+src/debug, src/gui). New code goes where the ADR puts it.
+
+Inside a module, relative imports down or sideways in the same subtree are
+fine. A `../` that leaves the subtree goes through the module root instead.
+
+On-chip blocks keep one directory per block, named for the block
+(`periph/gpt/`, `periph/sci/`, `periph/glcdc/`). A genuine singleton stays one
+file (`nvic`, `clocks`, `registry`, `crc`), and a block gets its own directory
+when it grows a second file. An off-chip part never sits in a controller's
+directory: the GT911 is a component, not part of `i3c/`.
+
+`tests/` mirrors the source on the same paths, all the way down:
 `src/periph/gpt/gpt_channel.zig` is tested by
 `tests/periph/gpt/gpt_channel_test.zig`.
 
-`src/core/c.zig` is the only `@cImport` in the tree and the only place a C
-boundary is allowed to show.
+There is no `@cImport` in the tree. SDL3's C API reaches the GUI through the
+translate-c package in build.zig, and that is the only C boundary.
 
 ## One file, one purpose
 
@@ -69,7 +83,7 @@ file.
 ## Idiomatic Zig, not C habits
 
 Slices and fat pointers, never null-terminated strings or a pointer plus a
-length, unless a real C boundary needs them, and `src/core/c.zig` is the only
+length, unless a real C boundary needs them, and SDL3 through translate-c is the only
 such boundary. Constants are `pub const` grouped under a namespace struct, not
 `K_`-prefixed macro constants and not an enum standing in for a bag of
 unrelated numbers; enums are for real enumerations. Errors are error sets, not
@@ -91,7 +105,7 @@ a hardware manual's name is reworded rather than copied.
 
 ## Commits and pull requests
 
-One commit per slice, subject starting `#14 `, authored and committed as the
+One commit per slice, subject starting with the ticket key (`RA8EMU-N: `), authored and committed as the
 repository owner. Every slice gets its own branch and its own pull request,
 rebase-merged the same session with the head branch deleted. A pull request is
 indexable history, not a review queue, so nothing is left open. The pull
