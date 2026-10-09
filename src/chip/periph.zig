@@ -118,6 +118,7 @@ pub const iwdt = @import("periph/iwdt/iwdt.zig");
 pub const iwdt_ofs0 = @import("periph/iwdt/iwdt_ofs0.zig");
 pub const iwdt_refresh = @import("periph/iwdt/iwdt_refresh.zig");
 pub const iwdt_status = @import("periph/iwdt/iwdt_status.zig");
+pub const iwdt_option_memory = @import("periph/iwdt/iwdt_option_memory.zig");
 pub const ipc_sync = @import("periph/ipc/ipc_sync.zig");
 pub const ipc_attr = @import("periph/ipc/ipc_attr.zig");
 pub const lanes = @import("periph/lanes.zig");

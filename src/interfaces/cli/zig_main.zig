@@ -9,7 +9,7 @@ const elf = @import("../../board/loader/elf.zig");
 const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
 const Reboot = @import("../../chip/core/reboot.zig").Reboot;
 const Board = @import("../../board/board.zig").Board;
-const option_memory = @import("../../board/option_memory.zig");
+const option_memory = @import("../../chip/periph/iwdt/iwdt_option_memory.zig");
 const cli = @import("cli.zig");
 const Parts = @import("parts.zig").Parts;
 const report = @import("report.zig");
@@ -72,7 +72,7 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
     if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;
     cli.console_output.configure(&board.serial.line, &parts.tap);
     if (options.profile) try parts.prepareProfile(io, image, options.profile_folded != null, if (options.cpu == .zig) options.cpu1_path else null);
-    option_memory.apply(board, cpu0.own());
+    option_memory.apply(&board.heartbeat, cpu0.own());
     if (!options.ctl_cpu_load) _ = try report.frames_out.Armed.armForCli(std.heap.page_allocator, io, board, options.frames);
     return written;
 }

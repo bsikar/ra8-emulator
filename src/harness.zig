@@ -10,7 +10,7 @@ const Guest = @import("chip/core/cpu/memory/guest.zig").Guest;
 const memory_load = @import("chip/core/cpu/memory/load.zig");
 const read_image = @import("board/loader/image.zig");
 const Board = @import("board/board.zig").Board;
-const option_memory = @import("board/option_memory.zig");
+const option_memory = @import("chip/periph/iwdt/iwdt_option_memory.zig");
 const Reboot = @import("chip/core/reboot.zig").Reboot;
 const session_plug = @import("board/session_plug.zig");
 const session_faults = @import("board/session_faults.zig");
@@ -222,7 +222,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer state.cpu0.close();
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
-    option_memory.apply(&state.board, state.cpu0.own());
+    option_memory.apply(&state.board.heartbeat, state.cpu0.own());
     state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
     state.machine = .{};
     state.driver = .{ .machine = &state.machine };
