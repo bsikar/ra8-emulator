@@ -2,7 +2,7 @@
 //! `--report json` (RA8EMU-378): what the CPU model could not decode and
 //! this emulator stepped by hand, where the run spent itself by sampled pc
 //! and by function, and the per-function instruction and cycle counts, the
-//! same facts report/steps.zig, hotspots.zig and profile.zig print. These
+//! same facts report/hotspots.zig and profile.zig print. These
 //! read the run's own tables, not the board, so each is null when that run
 //! did not collect it (the Zig core feeds no step or sample hooks, and the
 //! profile exists only under --profile).
