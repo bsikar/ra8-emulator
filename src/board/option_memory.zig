@@ -3,7 +3,7 @@
 //! The boot ROM reads OFS0 before the first instruction runs, so the board
 //! reads it at the same point: after the image is loaded, before the core
 //! starts. An address the image left unwritten reads as an erased part.
-const iwdt = @import("../periph/iwdt/iwdt.zig");
+const iwdt = @import("../chip/periph/iwdt/iwdt.zig");
 
 const Board = @import("board.zig").Board;
 

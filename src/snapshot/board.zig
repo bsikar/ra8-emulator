@@ -11,7 +11,7 @@ const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
 const time = @import("time.zig");
-const Part = @import("../core/part.zig").Part;
+const Part = @import("../chip/core/part.zig").Part;
 
 pub const Error = file.Error || fields.Error || error{ Missing, WrongPart };
 

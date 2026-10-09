@@ -6,8 +6,8 @@
 //! register without popping a FIFO or clearing a status bit does, and it is
 //! read the way a load reads it only when its block keeps no peek. A range
 //! that touches no window is one access, as it always was.
-const bus = @import("../core/cpu/bus.zig");
-const registry = @import("../periph/registry.zig");
+const bus = @import("../chip/core/cpu/bus.zig");
+const registry = @import("../chip/periph/registry.zig");
 
 pub fn read(b: bus.Bus, address: u32, into: []u8) bus.Error!void {
     if (!touchesWindow(address, into.len)) return b.read(address, into);

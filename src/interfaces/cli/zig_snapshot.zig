@@ -10,9 +10,9 @@
 //! and its state is not in the file yet.
 const std = @import("std");
 const backing = @import("../../board/external_backing.zig");
-const boot = @import("../../core/cpu/boot.zig");
-const Cpu = @import("../../core/cpu/cpu.zig").Cpu;
-const Store = @import("../../core/cpu/memory/store.zig").Store;
+const boot = @import("../../chip/core/cpu/boot.zig");
+const Cpu = @import("../../chip/core/cpu/cpu.zig").Cpu;
+const Store = @import("../../chip/core/cpu/memory/store.zig").Store;
 const run_file = @import("../../snapshot/run.zig");
 const systick = @import("../../snapshot/systick.zig");
 const stretch = @import("../../snapshot/stretch.zig");

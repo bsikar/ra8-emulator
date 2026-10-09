@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const undefined_ops = ra8.core.undefined_ops;
 const report = ra8.board.zig_run.undefined_sites;
-const imageWith = @import("../../../core/undefined_image.zig").imageWith;
+const imageWith = @import("../../../chip/core/undefined_image.zig").imageWith;
 
 test "nothing found prints nothing" {
     var buffer: [256]u8 = undefined;

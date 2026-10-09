@@ -15,7 +15,7 @@ const thread_priority = @import("../../gui/thread_priority.zig");
 const console_feed = @import("../../gui/console_feed.zig");
 const console_keys = @import("../../gui/console_keys.zig");
 const console_log = @import("../../gui/console_log.zig");
-const sci = @import("../../periph/sci/sci.zig");
+const sci = @import("../../chip/periph/sci/sci.zig");
 const window_devices = @import("window_devices.zig");
 
 /// Finished lines each channel's console keeps.

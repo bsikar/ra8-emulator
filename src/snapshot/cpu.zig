@@ -10,8 +10,8 @@
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
-const Cpu = @import("../core/cpu/cpu.zig").Cpu;
-const Entry = @import("../core/cpu/exception/active.zig").Entry;
+const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
+const Entry = @import("../chip/core/cpu/exception/active.zig").Entry;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

@@ -24,7 +24,7 @@
 //! there are no heap symbols to read.
 const std = @import("std");
 const elf = @import("../board/loader/elf.zig");
-const memmap = @import("../core/memmap.zig");
+const memmap = @import("../chip/core/memmap.zig");
 const sections = @import("sections.zig");
 const symbols = @import("symbols.zig");
 

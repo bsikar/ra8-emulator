@@ -5,7 +5,7 @@
 //! and the window pacer see.
 const std = @import("std");
 const backing = @import("../../board/external_backing.zig");
-const clocks = @import("../../periph/clocks.zig");
+const clocks = @import("../../chip/periph/clocks.zig");
 const frames_out = @import("report.zig").frames_out;
 const Clock = @import("zig_run.zig").Clock;
 

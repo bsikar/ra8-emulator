@@ -1,5 +1,5 @@
 //! RA8EMU-292: the tracer's load clock is virtual time per
-//! instruction. The run loop's idle skip (src/core/idle.zig) charges a
+//! instruction. The run loop's idle skip (src/chip/core/idle.zig) charges a
 //! stretch to the clocks without executing it, so the per-instruction hook
 //! never sees it; the clock restarts from the run's elapsed count whenever
 //! a chunk moves it, and the skipped time lands on whoever owned the core.

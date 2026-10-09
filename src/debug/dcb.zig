@@ -7,7 +7,7 @@
 //! firmware write cannot change it. With C_DEBUGEN set, a write carrying
 //! DBGKEY may set C_HALT, which halts the core once the store retires, and
 //! C_STEP and C_MASKINTS. With C_STEP kept, the next resume runs one
-//! instruction and halts again. C_MASKINTS reads back, and src/periph/nvic.zig reads it to hold back
+//! instruction and halts again. C_MASKINTS reads back, and src/chip/periph/nvic.zig reads it to hold back
 //! PendSV, SysTick and external interrupts (`masksInterrupts`)
 //! yet. C_HALT is not
 //! kept: the core only runs again after the debugger resumes it, and a
@@ -18,7 +18,7 @@
 //! debug state, which firmware never runs in, so a DCRSR write from
 //! firmware is held but moves nothing. DCRDR is a plain data word, which
 //! debug monitors use to pass values to the debugger. DCRSR is write-only
-//! and reads zero. DEMCR at 0xE000_EDFC belongs to src/periph/clocks.zig;
+//! and reads zero. DEMCR at 0xE000_EDFC belongs to src/chip/periph/clocks.zig;
 //! this file only names the two monitor bits in it.
 //!
 //! DFSR at 0xE000_ED30 records why the core last took a debug event: a

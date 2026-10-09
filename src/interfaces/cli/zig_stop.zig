@@ -5,8 +5,8 @@
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
 const symbols = @import("../../debug/symbols.zig");
-const Stop = @import("../../core/stop.zig").Stop;
-const Deadline = @import("../../core/deadline.zig").Deadline;
+const Stop = @import("../../chip/core/stop.zig").Stop;
+const Deadline = @import("../../chip/core/deadline.zig").Deadline;
 const cli = @import("cli.zig");
 const dumps = @import("report/dumps.zig");
 

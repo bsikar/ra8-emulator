@@ -6,95 +6,95 @@
 //! held here so neither of the other two has to know the list. The end-of-run
 //! narration that reads this state lives next door in report.zig.
 const std = @import("std");
-const Tick = @import("../core/tick.zig").Tick;
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const Tick = @import("../chip/core/tick.zig").Tick;
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
 const construct = @import("construct.zig");
 const boundary = @import("boundary.zig");
-const part = @import("../core/part.zig");
-const reboot = @import("../core/reboot.zig");
-const periph = @import("../periph/registry.zig");
-const adc = @import("../periph/adc/adc.zig");
-const agt = @import("../periph/agt/agt.zig");
-const bkup = @import("../periph/bkup/bkup.zig");
-const acmphs = @import("../periph/acmphs/acmphs.zig");
-const cac = @import("../periph/cac.zig");
-const canfd = @import("../periph/canfd/canfd.zig");
-const ceu = @import("../periph/ceu.zig");
-const crc = @import("../periph/crc.zig");
-const dac = @import("../periph/dac/dac.zig");
-const dma_bank = @import("../periph/dma_bank.zig");
-const dmac = @import("../periph/dmac/dmac.zig");
-const doc = @import("../periph/doc/doc.zig");
-const dotf = @import("../periph/dotf/dotf.zig");
-const drw = @import("../periph/drw/drw.zig");
-const dtc = @import("../periph/dtc/dtc.zig");
+const part = @import("../chip/core/part.zig");
+const reboot = @import("../chip/core/reboot.zig");
+const periph = @import("../chip/periph/registry.zig");
+const adc = @import("../chip/periph/adc/adc.zig");
+const agt = @import("../chip/periph/agt/agt.zig");
+const bkup = @import("../chip/periph/bkup/bkup.zig");
+const acmphs = @import("../chip/periph/acmphs/acmphs.zig");
+const cac = @import("../chip/periph/cac.zig");
+const canfd = @import("../chip/periph/canfd/canfd.zig");
+const ceu = @import("../chip/periph/ceu.zig");
+const crc = @import("../chip/periph/crc.zig");
+const dac = @import("../chip/periph/dac/dac.zig");
+const dma_bank = @import("../chip/periph/dma_bank.zig");
+const dmac = @import("../chip/periph/dmac/dmac.zig");
+const doc = @import("../chip/periph/doc/doc.zig");
+const dotf = @import("../chip/periph/dotf/dotf.zig");
+const drw = @import("../chip/periph/drw/drw.zig");
+const dtc = @import("../chip/periph/dtc/dtc.zig");
 const eink = @import("../components/eink_it8951/panel.zig");
-const elc = @import("../periph/elc/elc.zig");
-const glcdc = @import("../periph/glcdc/glcdc.zig");
-const gpio = @import("../periph/gpio/gpio.zig");
-const clocks = @import("../periph/clocks.zig");
-const pfs = @import("../periph/pfs/pfs.zig");
-const gpt = @import("../periph/gpt/gpt.zig");
-const gptp = @import("../periph/gptp/gptp.zig");
-const icu = @import("../periph/icu/icu.zig");
-const ipc = @import("../periph/ipc/ipc.zig");
-const lvd = @import("../periph/lvd/lvd.zig");
-const mipi_csi = @import("../periph/mipi/mipi_csi.zig");
-const mipi_dsi = @import("../periph/mipi/mipi_dsi.zig");
-const mipi_phy = @import("../periph/mipi/mipi_phy.zig");
+const elc = @import("../chip/periph/elc/elc.zig");
+const glcdc = @import("../chip/periph/glcdc/glcdc.zig");
+const gpio = @import("../chip/periph/gpio/gpio.zig");
+const clocks = @import("../chip/periph/clocks.zig");
+const pfs = @import("../chip/periph/pfs/pfs.zig");
+const gpt = @import("../chip/periph/gpt/gpt.zig");
+const gptp = @import("../chip/periph/gptp/gptp.zig");
+const icu = @import("../chip/periph/icu/icu.zig");
+const ipc = @import("../chip/periph/ipc/ipc.zig");
+const lvd = @import("../chip/periph/lvd/lvd.zig");
+const mipi_csi = @import("../chip/periph/mipi/mipi_csi.zig");
+const mipi_dsi = @import("../chip/periph/mipi/mipi_dsi.zig");
+const mipi_phy = @import("../chip/periph/mipi/mipi_phy.zig");
 const modem = @import("../components/modem_at/modem.zig");
 const net = @import("net.zig");
-const mram = @import("../periph/mram/mram.zig");
-const sdramc = @import("../periph/sdramc.zig");
-const cpu_ctrl = @import("../periph/cpu_ctrl.zig");
-const mrms = @import("../periph/mrms.zig");
-const mstp = @import("../periph/mstp/mstp.zig");
-const octaclk = @import("../periph/octaclk.zig");
-const pscu = @import("../periph/pscu.zig");
-const cpscu = @import("../periph/cpscu.zig");
-const gtclkcr = @import("../periph/gtclkcr.zig");
-const npu = @import("../periph/npu/npu.zig");
-const ckcr = @import("../periph/ckcr.zig");
-const ckdiv = @import("../periph/ckdiv.zig");
-const oscsf = @import("../periph/oscsf.zig");
-const subclock = @import("../periph/subclock.zig");
-const sysclk = @import("../periph/sysclk/sysclk.zig");
-const lpm = @import("../periph/lpm/lpm.zig");
-const pll = @import("../periph/pll/pll.zig");
-const vscr = @import("../periph/vscr.zig");
-const voltage_hazard = @import("../periph/voltage_hazard.zig");
-const pdctr = @import("../periph/pdctr.zig");
-const pdm = @import("../periph/pdm.zig");
-const poeg = @import("../periph/poeg.zig");
-const prcr = @import("../periph/prcr.zig");
-const reset = @import("../periph/reset.zig");
-const rtc = @import("../periph/rtc/rtc.zig");
-const rtt = @import("../periph/rtt/rtt.zig");
-const cache = @import("../periph/cache/cache.zig");
-const mpu = @import("../periph/mpu/mpu.zig");
-const sau = @import("../periph/sau.zig");
-const mpu_guard = @import("../core/mpu_guard.zig");
-const scb = @import("../periph/scb.zig");
-const fault_clear = @import("../periph/fault_clear.zig");
-const sci = @import("../periph/sci/sci.zig");
+const mram = @import("../chip/periph/mram/mram.zig");
+const sdramc = @import("../chip/periph/sdramc.zig");
+const cpu_ctrl = @import("../chip/periph/cpu_ctrl.zig");
+const mrms = @import("../chip/periph/mrms.zig");
+const mstp = @import("../chip/periph/mstp/mstp.zig");
+const octaclk = @import("../chip/periph/octaclk.zig");
+const pscu = @import("../chip/periph/pscu.zig");
+const cpscu = @import("../chip/periph/cpscu.zig");
+const gtclkcr = @import("../chip/periph/gtclkcr.zig");
+const npu = @import("../chip/periph/npu/npu.zig");
+const ckcr = @import("../chip/periph/ckcr.zig");
+const ckdiv = @import("../chip/periph/ckdiv.zig");
+const oscsf = @import("../chip/periph/oscsf.zig");
+const subclock = @import("../chip/periph/subclock.zig");
+const sysclk = @import("../chip/periph/sysclk/sysclk.zig");
+const lpm = @import("../chip/periph/lpm/lpm.zig");
+const pll = @import("../chip/periph/pll/pll.zig");
+const vscr = @import("../chip/periph/vscr.zig");
+const voltage_hazard = @import("../chip/periph/voltage_hazard.zig");
+const pdctr = @import("../chip/periph/pdctr.zig");
+const pdm = @import("../chip/periph/pdm.zig");
+const poeg = @import("../chip/periph/poeg.zig");
+const prcr = @import("../chip/periph/prcr.zig");
+const reset = @import("../chip/periph/reset.zig");
+const rtc = @import("../chip/periph/rtc/rtc.zig");
+const rtt = @import("../chip/periph/rtt/rtt.zig");
+const cache = @import("../chip/periph/cache/cache.zig");
+const mpu = @import("../chip/periph/mpu/mpu.zig");
+const sau = @import("../chip/periph/sau.zig");
+const mpu_guard = @import("../chip/core/mpu_guard.zig");
+const scb = @import("../chip/periph/scb.zig");
+const fault_clear = @import("../chip/periph/fault_clear.zig");
+const sci = @import("../chip/periph/sci/sci.zig");
 const esp_hosted = @import("../components/esp32c6_hosted/esp_hosted.zig");
-const sci_input = @import("../periph/sci/sci_input.zig");
+const sci_input = @import("../chip/periph/sci/sci_input.zig");
 const gt911 = @import("../components/touch_gt911/gt911.zig");
 const sd_card = @import("../components/sd_card/card.zig");
 const sd_card_line = @import("../components/sd_card/card_line.zig");
 const sd_format = @import("../components/sd_card/format.zig");
 const bus_card = @import("../components/sd_card/bus_card.zig");
-const sdhi = @import("../periph/sdhi/sdhi.zig");
-const spi = @import("../periph/spi/spi.zig");
-const sram = @import("../periph/sram/sram.zig");
-const ssie = @import("../periph/ssie/ssie.zig");
-const ulpt = @import("../periph/ulpt/ulpt.zig");
+const sdhi = @import("../chip/periph/sdhi/sdhi.zig");
+const spi = @import("../chip/periph/spi/spi.zig");
+const sram = @import("../chip/periph/sram/sram.zig");
+const ssie = @import("../chip/periph/ssie/ssie.zig");
+const ulpt = @import("../chip/periph/ulpt/ulpt.zig");
 const usb = @import("usb.zig");
-const iwdt = @import("../periph/iwdt/iwdt.zig");
-const wdt = @import("../periph/wdt/wdt.zig");
-const xspi = @import("../periph/xspi/xspi.zig");
+const iwdt = @import("../chip/periph/iwdt/iwdt.zig");
+const wdt = @import("../chip/periph/wdt/wdt.zig");
+const xspi = @import("../chip/periph/xspi/xspi.zig");
 const nor_flash = @import("../components/nor_flash/flash.zig");
 
 pub const Board = struct {
@@ -175,9 +175,9 @@ pub const Board = struct {
     /// The code-MRAM frequency latches and the prefetch buffer. Keyed
     /// registers, so nothing lands here without the key the driver writes.
     memory_rates: mrms.Mrms = .{},
-    /// The MRAM ECC controls and program speed (src/periph/mrms_ecc.zig).
+    /// The MRAM ECC controls and program speed (src/chip/periph/mrms_ecc.zig).
     memory_ecc: mrms.ecc.Ecc = .{},
-    /// The SDRAM controller and SDCKOCR (src/periph/sdramc.zig).
+    /// The SDRAM controller and SDCKOCR (src/chip/periph/sdramc.zig).
     sdram: sdramc.Sdramc = .{},
     ratios: ckdiv.Ckdiv,
 
@@ -322,7 +322,7 @@ pub const Board = struct {
     host: mipi_dsi.MipiDsi,
     causes: reset.Reset,
     control: scb.Scb,
-    /// CPU0's owed CFSR/HFSR clears: src/periph/fault_clear.zig.
+    /// CPU0's owed CFSR/HFSR clears: src/chip/periph/fault_clear.zig.
     clears: fault_clear.Clears,
     /// The Arm cache window in the PPB: the geometry the firmware reads out
     /// of CTR before every by-address maintenance call, and the maintenance

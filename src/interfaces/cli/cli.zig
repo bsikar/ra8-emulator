@@ -1,6 +1,6 @@
 //! The command line: the flags the emulator takes and nothing else.
 const std = @import("std");
-const part = @import("../../core/part.zig");
+const part = @import("../../chip/core/part.zig");
 const place = @import("../../debug/place.zig");
 const pc_hits = @import("../../debug/pc_hits.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
@@ -8,7 +8,7 @@ const gt911 = @import("../../components/touch_gt911/gt911.zig");
 const world_flags = @import("world_flags.zig");
 const max17048 = @import("../../components/gauge_max17048/max17048.zig");
 const sd_format = @import("../../components/sd_card/format.zig");
-const cpu_choice = @import("../../core/cpu/choice.zig");
+const cpu_choice = @import("../../chip/core/cpu/choice.zig");
 const rtos_load = @import("../../debug/rtos_load.zig");
 const request = @import("../../components/request.zig");
 pub const ctl_args = @import("ctl_args.zig");
@@ -18,7 +18,7 @@ pub const card_setup = @import("card_setup.zig");
 pub const usbip_wire = @import("../usbip/usbip_wire.zig");
 pub const usbip_export = @import("../usbip/usbip_export.zig");
 pub const console_output = @import("console_output.zig");
-pub const console_input = @import("../../periph/sci/sci_input.zig");
+pub const console_input = @import("../../chip/periph/sci/sci_input.zig");
 pub const host_bytes = @import("host_bytes.zig");
 /// How many `--dump-sym` names one run will carry: the suite asks for at most
 /// two (progress and failure counters), so this is a little room above that.
@@ -88,7 +88,7 @@ pub const Options = struct {
     trace_sd: bool = false, // write one line per SD command to stderr
     state: @import("state_args.zig").Options = .{}, // `--save-state`, `--load-state` (RA8EMU-696)
     console: bool = false, // `--console`: stream finished SCI console lines to stdout
-    console_reply: @import("../../periph/sci/sci_reply.zig").Reply = .{}, // RA8EMU-626
+    console_reply: @import("../../chip/periph/sci/sci_reply.zig").Reply = .{}, // RA8EMU-626
     dump_sd: ?u32 = null, // print this card block back as hex once the run is over
     faults: ?[]const u8 = null, // `--faults FILE`: hardware changes at virtual times (RA8EMU-207)
     /// Contacts queued on the touch panel, one drained per frame read.
@@ -108,7 +108,7 @@ pub const Options = struct {
     attaches: [request.max]request.Request = undefined,
     attach_count: usize = 0,
     /// A refused access raises the precise BusFault it raises on silicon
-    /// instead of ending the run; src/core/cpu/exception/bus_fault.zig. On by default;
+    /// instead of ending the run; src/chip/core/cpu/exception/bus_fault.zig. On by default;
     /// `--no-bus-errors` brings back the old end-of-run fault report.
     bus_errors: bool = true,
     /// The Zig core runs from formed blocks (RA8EMU-408); `--no-blocks` steps.
@@ -169,13 +169,13 @@ pub const Options = struct {
     count_pc_len: usize = 0,
     /// `--chunk`: how many instructions between two boundaries, overriding
     /// the run's own cadence. For asking whether a result depends on where
-    /// the boundaries fall. src/core/cadence.zig carries the default.
+    /// the boundaries fall. src/chip/core/cadence.zig carries the default.
     chunk_instructions: ?u32 = null,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// `--ns`: the Non-Secure companion image, loaded beside the main one.
     ns_path: ?[]const u8 = null,
-    /// `--cpu`: which CPU runs the image; src/core/cpu/choice.zig.
+    /// `--cpu`: which CPU runs the image; src/chip/core/cpu/choice.zig.
     cpu: cpu_choice.Choice = .zig,
     /// Milliseconds of modelled time the run is allowed, counted in SysTick
     /// periods. Null is untimed and the run goes to its instruction budget.

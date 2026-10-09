@@ -26,7 +26,7 @@
 //! the next step for this front end.
 const std = @import("std");
 const cli = @import("cli.zig");
-const cpu_choice = @import("../../core/cpu/choice.zig");
+const cpu_choice = @import("../../chip/core/cpu/choice.zig");
 const zig_debug_front = @import("zig_debug_front.zig");
 const script = @import("../../debug/script.zig");
 

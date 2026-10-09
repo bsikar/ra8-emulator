@@ -7,8 +7,8 @@
 //! UsageFault it raises, and a configurable fault before the HardFault it
 //! escalated to. A handler that clears its fault inside the same stretch
 //! hides it from the soak; the report's faults line has the same view.
-const fault_status = @import("../fault_status.zig");
-const memmap = @import("../../core/memmap.zig");
+const fault_status = @import("../../chip/periph/fault_status.zig");
+const memmap = @import("../../chip/core/memmap.zig");
 const Kind = @import("soak.zig").Kind;
 
 /// SFSR, the SecureFault status word (DDI0553 D1.2.226).

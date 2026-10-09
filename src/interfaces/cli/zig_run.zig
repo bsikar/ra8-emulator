@@ -3,16 +3,16 @@
 //! same boundary, so a ThreadX image gets its tick and the peripherals that
 //! count time (the USB host script among them) move.
 const std = @import("std");
-const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
-const boot = @import("../../core/cpu/boot.zig");
+const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
+const boot = @import("../../chip/core/cpu/boot.zig");
 const elf = @import("../../board/loader/elf.zig");
-const clocks = @import("../../periph/clocks.zig");
+const clocks = @import("../../chip/periph/clocks.zig");
 const soak_fault = @import("../../periph/time/soak_fault.zig");
-const bus_fault = @import("../../periph/bus_fault.zig");
-const sysclk = @import("../../periph/sysclk/sysclk.zig");
-const systick_bank = @import("../../core/systick_bank.zig");
-const scs_route = @import("../../core/cpu/scs_route.zig");
-const sleep_pace = @import("../../core/sleep_pace.zig");
+const bus_fault = @import("../../chip/periph/bus_fault.zig");
+const sysclk = @import("../../chip/periph/sysclk/sysclk.zig");
+const systick_bank = @import("../../chip/core/systick_bank.zig");
+const scs_route = @import("../../chip/core/cpu/scs_route.zig");
+const sleep_pace = @import("../../chip/core/sleep_pace.zig");
 const board_edge = @import("../../board/boundary.zig");
 const core_clock = @import("../../board/core_clock.zig");
 const fault_file = @import("fault_file.zig");
@@ -30,18 +30,18 @@ const frames_out = @import("report.zig").frames_out;
 const eink_log = @import("eink_log.zig");
 const audio_out = @import("audio_out.zig");
 const rtos_hook = @import("../../debug/rtos_hook.zig");
-const second_core = @import("../../core/second_core.zig");
+const second_core = @import("../../chip/core/second_core.zig");
 const profile = @import("../../debug/profile.zig");
 pub const stack_profile = @import("stack_profile.zig");
 const mem_dump = @import("../../debug/mem_dump.zig");
 const watchpoint = @import("../../debug/watchpoint.zig");
 /// `--watch` on a Zig run: src/interfaces/cli/zig_watch.zig.
 pub const zig_watch = @import("zig_watch.zig");
-const cpu = @import("../../core/cpu/cpu.zig");
+const cpu = @import("../../chip/core/cpu/cpu.zig");
 const systick_cut = cpu.systick_cut;
-const Until = @import("../../core/until.zig").Until;
-const Stop = @import("../../core/stop.zig").Stop;
-const Deadline = @import("../../core/deadline.zig").Deadline;
+const Until = @import("../../chip/core/until.zig").Until;
+const Stop = @import("../../chip/core/stop.zig").Stop;
+const Deadline = @import("../../chip/core/deadline.zig").Deadline;
 /// The `--stop-sym` counter a Zig run watches: src/interfaces/cli/zig_stop.zig.
 pub const stop_sym = @import("zig_stop.zig");
 const soak_symbols = @import("soak_symbols.zig");
@@ -159,7 +159,7 @@ pub const Clock = struct {
 
     /// Has a soak event (a watchdog reset, or a fault latched since the last
     /// boundary) ended the run, or the watched counter climbed to its floor? An unreadable word is not a stop
-    /// (src/core/stop.zig).
+    /// (src/chip/core/stop.zig).
     pub fn done(self: *Clock) bool {
         self.soakFaults();
         if (self.paced_out) return true;
@@ -207,7 +207,7 @@ pub const Clock = struct {
     }
 };
 
-/// Where the Zig core keeps an SCB word, read as Secure (src/core/cpu/scs_route.zig).
+/// Where the Zig core keeps an SCB word, read as Secure (src/chip/core/cpu/scs_route.zig).
 fn landScs(address: u32) ?u32 {
     return switch (scs_route.land(null, address)) {
         .at => |at| at,

@@ -10,7 +10,7 @@
 //! and still sees every byte, so both read the same sends at the same time.
 const std = @import("std");
 const console_log = @import("console_log.zig");
-const Tap = @import("../periph/sci/sci_tap.zig").Tap;
+const Tap = @import("../chip/periph/sci/sci_tap.zig").Tap;
 
 pub const Byte = struct { channel: u8, byte: u8, at_ns: u64 };
 

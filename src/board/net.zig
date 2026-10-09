@@ -4,15 +4,15 @@
 //! Which ports exist and where their PHYs answer is a board fact, so the
 //! wiring lives here rather than in the port model: the PHYs and the far end
 //! of the wire are board parts (src/components/eth_phy) this connects.
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
-const eth = @import("../periph/eth/eth.zig");
-const eth_queue = @import("../periph/eth/eth_queue.zig");
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
+const eth = @import("../chip/periph/eth/eth.zig");
+const eth_queue = @import("../chip/periph/eth/eth_queue.zig");
 const eth_phy = @import("../components/eth_phy/phy.zig");
 const eth_peer = @import("../components/eth_phy/peer.zig");
-const gateway = @import("../periph/eth/eth_gateway.zig");
-const pdctr = @import("../periph/pdctr.zig");
-const periph = @import("../periph/registry.zig");
-const regs = @import("../periph/eth/eth_regs.zig");
+const gateway = @import("../chip/periph/eth/eth_gateway.zig");
+const pdctr = @import("../chip/periph/pdctr.zig");
+const periph = @import("../chip/periph/registry.zig");
+const regs = @import("../chip/periph/eth/eth_regs.zig");
 
 pub const Rswitch = struct {
     ports: [regs.cluster.port_count]eth.Port = .{

@@ -16,10 +16,10 @@ const Writer = @import("../report.zig").Writer;
 const report = @import("../report.zig");
 const report_timing = @import("timing.zig");
 const pacing = @import("../../../periph/time/pacing.zig");
-const idle = @import("../../../core/idle.zig");
+const idle = @import("../../../chip/core/idle.zig");
 const report_part = @import("part.zig");
-const clocks = @import("../../../periph/clocks.zig");
-const bus_fault = @import("../../../periph/bus_fault.zig");
+const clocks = @import("../../../chip/periph/clocks.zig");
+const bus_fault = @import("../../../chip/periph/bus_fault.zig");
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.
 pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {

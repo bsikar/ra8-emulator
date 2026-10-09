@@ -6,8 +6,8 @@
 //! or a NAK.
 const std = @import("std");
 const Device = @import("device.zig").Device;
-const setup = @import("../../periph/usbhs/usbhs_setup.zig");
-const usbhs_far = @import("../../periph/usbhs/usbhs_far.zig");
+const setup = @import("../../chip/periph/usbhs/usbhs_setup.zig");
+const usbhs_far = @import("../../chip/periph/usbhs/usbhs_far.zig");
 
 pub fn far(device: *Device) usbhs_far.Far {
     return .{ .context = device, .vtable = &vtable };

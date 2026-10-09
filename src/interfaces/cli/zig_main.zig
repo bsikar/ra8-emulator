@@ -6,8 +6,8 @@
 //! is read from it, and src/interfaces/cli/zig_run.zig gets no engine.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
-const Reboot = @import("../../core/reboot.zig").Reboot;
+const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
+const Reboot = @import("../../chip/core/reboot.zig").Reboot;
 const Board = @import("../../board/board.zig").Board;
 const option_memory = @import("../../board/option_memory.zig");
 const cli = @import("cli.zig");

@@ -38,8 +38,8 @@ no file paths, no CLI, no GUI. Scaffolding (hello windows, spikes) does not
 stay in the tree or the build.
 
 The tree moves to this layout in the order ADR 0004 gives (epic RA8EMU-985),
-so during the migration some files still sit at their old paths (`src/core`,
-`src/periph`, `src/debug`, `src/gui`). New code goes where the ADR puts it.
+so during the migration some files still sit at their old paths (`src/periph/time`,
+`src/debug`, `src/gui`). New code goes where the ADR puts it.
 A directory is renamed only after everything leaving it has left, so no file
 moves twice.
 
@@ -53,8 +53,8 @@ when it grows a second file. An off-chip part never sits in a controller's
 directory: the GT911 is a component, not part of `i3c/`.
 
 `tests/` mirrors the source on the same paths, all the way down:
-`src/periph/gpt/gpt_channel.zig` is tested by
-`tests/periph/gpt/gpt_channel_test.zig`.
+`src/chip/periph/gpt/gpt_channel.zig` is tested by
+`tests/chip/periph/gpt/gpt_channel_test.zig`.
 
 There is no `@cImport` in the tree. SDL3's C API reaches the GUI through the
 translate-c package in build.zig, and that is the only C boundary.
@@ -73,7 +73,7 @@ and articles by ID, never by URL or host.
 None of that belongs in the repository. It keeps only what code, tests or
 tools read: README.md, this file, fixture provenance READMEs under
 `tests/fixtures/`, and test goldens such as `tools/*_expected.md` and
-`tests/core/cpu/conformance/coverage.md`.
+`tests/chip/core/cpu/conformance/coverage.md`.
 
 ## One file, one purpose
 
@@ -89,7 +89,7 @@ A `test` block at the bottom of a source file is wrong here. Tests live in
 `tests/` mirroring the source path, one file per module:
 
 ```
-src/periph/crc.zig   ->  tests/periph/crc_test.zig
+src/chip/periph/crc.zig   ->  tests/chip/periph/crc_test.zig
 src/board/loader/elf.zig  ->  tests/board/loader/elf_test.zig
 ```
 

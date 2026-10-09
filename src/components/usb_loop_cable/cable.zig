@@ -9,9 +9,9 @@
 //! its own: every reply is a packet the firmware's own USBFS driver wrote.
 //! A control transfer is asynchronous here, because the device side answers
 //! only when its driver runs, so the host side polls `answer`.
-const usbfs = @import("../../periph/usbfs/usbfs.zig");
-const regs = @import("../../periph/usbhs/usbhs_regs.zig");
-const usbhs_far = @import("../../periph/usbhs/usbhs_far.zig");
+const usbfs = @import("../../chip/periph/usbfs/usbfs.zig");
+const regs = @import("../../chip/periph/usbhs/usbhs_regs.zig");
+const usbhs_far = @import("../../chip/periph/usbhs/usbhs_far.zig");
 
 /// How the device side has ended the control transfer so far.
 pub const Answer = usbhs_far.Answer;

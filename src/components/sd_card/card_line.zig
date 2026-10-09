@@ -1,6 +1,6 @@
 //! The Pmod2 microSD card as something on an SCI channel's line.
 //!
-//! The card model itself (src/periph/sd_card.zig) speaks one byte out, one
+//! The card model itself (src/chip/periph/sd_card.zig) speaks one byte out, one
 //! byte back, which is what an SPI_B channel drives it through. An SCI
 //! channel in Simple-SPI mode drives the same wire and wants the same
 //! exchange, but its device seam answers with a slice rather than a byte,
@@ -25,7 +25,7 @@
 //! lead bits instead, which is what sd_card.zig already documents. A card
 //! deselected mid-command is therefore not a state this model has.
 
-const sci = @import("../../periph/sci/sci.zig");
+const sci = @import("../../chip/periph/sci/sci.zig");
 const sd_card = @import("card.zig");
 
 /// Which SCI channel the card is wired to: Pmod2 (J25), which is SCI0

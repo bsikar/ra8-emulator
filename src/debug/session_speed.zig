@@ -1,7 +1,7 @@
 //! A speed change asked through the session (RA8EMU-184, slice 3): the
 //! factor as the debugger's run budget and as the pacer's thousandths.
 //!
-//! One range for both, the one `--speed` already takes (src/periph/time/
+//! One range for both, the one `--speed` already takes (src/chip/periph/time/
 //! speed.zig): 0.001x to 1000000x. A factor between thousandths rounds to
 //! the nearest one; one that rounds to zero is refused, not paused, since
 //! pause is Session.pause.

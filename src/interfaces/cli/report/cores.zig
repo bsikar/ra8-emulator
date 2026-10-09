@@ -3,14 +3,14 @@
 //! core's own MPU was asked to protect.
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;
-const ipc = @import("../../../periph/ipc/ipc.zig");
-const sync = @import("../../../periph/ipc/ipc_sync.zig");
-const ipc_attr = @import("../../../periph/ipc/ipc_attr.zig");
-const cpscu = @import("../../../periph/cpscu.zig");
-const cpu_ctrl = @import("../../../periph/cpu_ctrl.zig");
-const mpu = @import("../../../periph/mpu/mpu.zig");
-const sau = @import("../../../periph/sau.zig");
-const second_core = @import("../../../core/second_core.zig");
+const ipc = @import("../../../chip/periph/ipc/ipc.zig");
+const sync = @import("../../../chip/periph/ipc/ipc_sync.zig");
+const ipc_attr = @import("../../../chip/periph/ipc/ipc_attr.zig");
+const cpscu = @import("../../../chip/periph/cpscu.zig");
+const cpu_ctrl = @import("../../../chip/periph/cpu_ctrl.zig");
+const mpu = @import("../../../chip/periph/mpu/mpu.zig");
+const sau = @import("../../../chip/periph/sau.zig");
+const second_core = @import("../../../chip/core/second_core.zig");
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
 /// the handshake completed, never by itself that a second core is fetching:
@@ -137,7 +137,7 @@ fn partitions(board: *Board, out: Writer) !void {
 
 /// The same lines for any core's SAU, under the name that core answers to.
 /// Taken apart from `partitions` because the SAU is core-private: CPU1
-/// carries one of its own (src/core/second_core.zig), and its map is a
+/// carries one of its own (src/chip/core/second_core.zig), and its map is a
 /// different map, not a second opinion about CPU0's.
 pub fn partitionsOf(out: Writer, label: []const u8, unit: *const sau.Sau) !void {
     if (unit.quiet()) return;

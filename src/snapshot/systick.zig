@@ -8,7 +8,7 @@
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
-const Clocks = @import("../periph/clocks.zig").Clocks;
+const Clocks = @import("../chip/periph/clocks.zig").Clocks;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

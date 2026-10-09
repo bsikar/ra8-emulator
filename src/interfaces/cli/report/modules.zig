@@ -7,10 +7,10 @@
 //! purpose to prove it is dead, then clears the bit and carries on. Only the
 //! gate at the end of the run tells them apart, so that is what is asked
 //! here rather than the counters alone.
-const ckcr = @import("../../../periph/ckcr.zig");
-const ckdiv = @import("../../../periph/ckdiv.zig");
-const oscsf = @import("../../../periph/oscsf.zig");
-const mrms = @import("../../../periph/mrms.zig");
+const ckcr = @import("../../../chip/periph/ckcr.zig");
+const ckdiv = @import("../../../chip/periph/ckdiv.zig");
+const oscsf = @import("../../../chip/periph/oscsf.zig");
+const mrms = @import("../../../chip/periph/mrms.zig");
 const std = @import("std");
 
 const Board = @import("../../../board/board.zig").Board;

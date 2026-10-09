@@ -3,7 +3,7 @@
 //! With halting debug off, an FPB or DWT event does not stop the core: the
 //! stop machine holds it (Machine.takeMonitor), and it becomes DEMCR.MON_PEND and a DFSR latch for the
 //! interrupt controller to take at its next boundary
-//! (src/periph/debug_monitor.zig). zig_drive.zig does the same through
+//! (src/chip/periph/debug_monitor.zig). zig_drive.zig does the same through
 //! this, once per instruction, so firmware running a debug monitor sees
 //! the same pend on either core. With MON_EN clear the event is dropped.
 const std = @import("std");

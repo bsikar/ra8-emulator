@@ -1,4 +1,4 @@
-//! Tests for src/core/cli.zig.
+//! Tests for src/chip/core/cli.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const mod = ra8.core.cli;

@@ -1,7 +1,7 @@
 //! The EK-RA8D2's SPI peer: the idle frame and sideband lines of esp-hosted.
 const std = @import("std");
-const sci = @import("../../periph/sci/sci.zig");
-const gpio = @import("../../periph/gpio/gpio.zig");
+const sci = @import("../../chip/periph/sci/sci.zig");
+const gpio = @import("../../chip/periph/gpio/gpio.zig");
 
 pub const frame = @import("esp_frame.zig");
 pub const event = @import("esp_event.zig");

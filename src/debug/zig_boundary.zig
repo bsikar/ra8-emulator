@@ -10,7 +10,7 @@ const zig_cycles = @import("zig_cycles.zig");
 const zig_drive = @import("zig_drive.zig");
 const stop_machine = @import("stop_machine.zig");
 const watch_bus = @import("watch_bus.zig");
-const sleep_pace = @import("../core/sleep_pace.zig");
+const sleep_pace = @import("../chip/core/sleep_pace.zig");
 
 /// Instructions between boundaries when the board names none.
 pub const default_chunk: u32 = 1024;
@@ -51,7 +51,7 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, w
 
 /// The next chunk's width: `normal`, reached to the board's next edge by its
 /// `sleepFn` while the core sleeps with nothing to wake it, as a plain run's
-/// stretch is (src/core/cpu/boot.zig widthOf). Anything armed in the stop
+/// stretch is (src/chip/core/cpu/boot.zig widthOf). Anything armed in the stop
 /// machine keeps the normal width, so a stop lands where it always did.
 fn widthOf(core: zig_core.ZigCore, machine: *stop_machine.Machine, edge: Boundary, normal: u32) u64 {
     const reach = edge.sleepFn orelse return normal;

@@ -10,7 +10,7 @@
 //! ranges are handed over to be mapped.
 const std = @import("std");
 const elf = @import("elf.zig");
-const loaded_image = @import("../../core/loaded_image.zig");
+const loaded_image = @import("../../chip/core/loaded_image.zig");
 
 /// Bytes in a page. The CPU model maps at this granularity, so a range that
 /// is not a whole number of these cannot be asked for.

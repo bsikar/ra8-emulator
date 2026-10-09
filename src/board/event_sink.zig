@@ -1,6 +1,6 @@
 //! Board-to-session event sink contract (RA8EMU-192).
-const reset = @import("../periph/reset.zig");
-const registry = @import("../periph/registry.zig");
+const reset = @import("../chip/periph/reset.zig");
+const registry = @import("../chip/periph/registry.zig");
 
 pub const Rect = struct { x: u16 = 0, y: u16 = 0, width: u16 = 0, height: u16 = 0 };
 

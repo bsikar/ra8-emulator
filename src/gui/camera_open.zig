@@ -11,7 +11,7 @@
 const std = @import("std");
 const source_spec = @import("../host/camera/source_spec.zig");
 const source_open = @import("../host/camera/source_open.zig");
-const frame_source = @import("../periph/camera/frame_source.zig");
+const frame_source = @import("../chip/periph/camera/frame_source.zig");
 const hosted = @import("../components/camera_ov5640/hosted.zig");
 const Panel = @import("camera_panel.zig").Panel;
 
