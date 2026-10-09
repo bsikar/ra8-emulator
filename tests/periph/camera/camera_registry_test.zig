@@ -65,9 +65,17 @@ test "video takes a path, optionally with loop, and is named by it" {
     try std.testing.expectEqualStrings("clips/walk.y4m,loop", spec.arg);
     try std.testing.expectError(error.BadValue, registry.parse("video"));
     try std.testing.expectError(error.FileNotFound, (try registry.parse("video:/nonexistent/ra8.y4m")).open(allocator, std.testing.io, &format_control));
-    const named = camera.video.labelled(camera.gradient.source(), "clips/walk.y4m,loop");
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "walk.y4m", .data = "YUV4MPEG2 W2 H2 F25:1 Ip C420jpeg\nFRAME\n\x10\x10\x10\x10\x80\x80" });
+    const path = try tmp.dir.realPathFileAlloc(std.testing.io, "walk.y4m", allocator);
+    defer allocator.free(path);
+    const arg = try std.mem.concat(allocator, u8, &.{ path, ",loop" });
+    defer allocator.free(arg);
+    const named = try (registry.Spec{ .kind = .video, .arg = arg }).open(allocator, std.testing.io, &format_control);
+    defer named.close();
     try std.testing.expectEqualStrings("video", named.label);
-    try std.testing.expectEqualStrings("clips/walk.y4m,loop", named.detail);
+    try std.testing.expectEqualStrings(arg, named.detail);
 }
 
 test "webcam takes nothing, a device number or a path, and refuses anything else" {

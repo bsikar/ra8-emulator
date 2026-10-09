@@ -69,7 +69,6 @@ pub const camera = struct {
     pub const converted = @import("camera/converted_source.zig");
     pub const registry = @import("camera/camera_registry.zig");
     pub const hosted = @import("camera/hosted.zig");
-    pub const video = @import("camera/video_source.zig");
     pub const pipe = @import("camera/pipe_source.zig");
     pub const webcam = @import("camera/webcam.zig");
 };
