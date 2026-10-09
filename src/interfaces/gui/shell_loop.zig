@@ -9,9 +9,9 @@
 //! title changes what it shows (RA8EMU-800). Then it draws the shell frame (RA8EMU-764) and shows it
 //! through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const raster = @import("raster.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const raster = @import("../../render/raster.zig");
+const font = @import("../../render/font.zig");
 const platform = @import("platform.zig");
 const pane_layout = @import("pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");

@@ -8,8 +8,8 @@
 //! `capture` copies names into the snapshot, so `draw` holds no slice into
 //! the image and the shell can keep a snapshot past a reload.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const elf = @import("../../board/loader/elf.zig");
 const dwarf_line = @import("../../session/dwarf_line.zig");
 const session_api = @import("../../session/session_api.zig");

@@ -13,8 +13,8 @@
 //! its core's SP once they have been read, and a disassembly leaf the
 //! instructions from its core's PC.
 //! An empty leaf stays blank.
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const pane_layout = @import("pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
 const console_pane = @import("console_pane.zig");

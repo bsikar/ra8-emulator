@@ -3,8 +3,8 @@
 //! (connected, failed, running, halted); the text is cut to whole cells when
 //! the window is narrow, never drawn past the strip.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const status_bar = @import("status_bar.zig");
 const session_link = @import("session_link.zig");
 

@@ -6,8 +6,8 @@
 //! it shows the finished lines ending there and hides the unfinished one.
 //! Read-only: it draws what console_log.Log holds.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const console_log = @import("console_log.zig");
 
 const Color = draw_list.Color;

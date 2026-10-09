@@ -9,8 +9,8 @@
 //! Until the session can list a core's breakpoints (RA8EMU-765), `Marks`
 //! remembers the ones this gutter set, with the ids that clear them.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const elf = @import("../../board/loader/elf.zig");
 const dwarf_line = @import("../../session/dwarf_line.zig");
 const session_api = @import("../../session/session_api.zig");

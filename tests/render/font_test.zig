@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/font.zig: the atlas holds every printable glyph in its
+//! Covers src/render/font.zig: the atlas holds every printable glyph in its
 //! own cell, lookups fall back to '?', text fits by whole cells, and drawn
 //! text lands in the frame.
 const std = @import("std");

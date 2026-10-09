@@ -3,8 +3,8 @@
 //! session. The panes stay pure draw producers; the shell routes a button
 //! press to `registerAt`/`byteAt`, keys and text to `Edit`, and draws the
 //! field with `fieldOrigin`.
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const hex_entry = @import("hex_entry.zig");
 const memory_pane = @import("memory_pane.zig");
 const registers_pane = @import("registers_pane.zig");

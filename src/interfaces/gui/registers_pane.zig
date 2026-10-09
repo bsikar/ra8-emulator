@@ -7,8 +7,8 @@
 //! `capture` reads the session for CPU0 or CPU1; `draw` reads only the
 //! snapshot, so the shell redraws without touching a core.
 const std = @import("std");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const session_api = @import("../../session/session_api.zig");
 
 const Color = draw_list.Color;

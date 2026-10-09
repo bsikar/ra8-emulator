@@ -7,8 +7,8 @@
 const std = @import("std");
 const proto = @import("../rpc/session_rpc.zig");
 const gpio = @import("../../chip/periph/gpio/gpio.zig");
-const draw_list = @import("draw_list.zig");
-const font = @import("font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const shell_board = @import("shell_board.zig");
 
 const Color = draw_list.Color;
