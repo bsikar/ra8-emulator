@@ -2,6 +2,7 @@
 const std = @import("std");
 const io = std.testing.io;
 const image = @import("ra8").components.sd_image;
+const disk_file = @import("ra8").host.disk_file;
 
 fn unit() image.Image {
     return image.Image.init(std.testing.allocator);
@@ -143,7 +144,7 @@ fn patterned(allocator: std.mem.Allocator) ![]u8 {
     return bytes;
 }
 
-test "saveTo: a written block round-trips through the image file" {
+test "write back: a written block round-trips through the image file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const bytes = try patterned(std.testing.allocator);
@@ -154,7 +155,7 @@ test "saveTo: a written block round-trips through the image file" {
     try img.loadBytes(bytes);
     const written: image.Block = @splat(0xA5);
     try std.testing.expect(img.write(9, &written));
-    try img.saveTo(io, tmp.dir, "card.img");
+    try disk_file.replace(io, tmp.dir, "card.img", &img);
     const back = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqual(bytes.len, back.len);
@@ -162,7 +163,7 @@ test "saveTo: a written block round-trips through the image file" {
     try std.testing.expectEqualSlices(u8, bytes[0 .. 9 * 512], back[0 .. 9 * 512]);
 }
 
-test "saveTo: an unchanged card leaves the image byte-identical" {
+test "write back: an unchanged card leaves the image byte-identical" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const bytes = try patterned(std.testing.allocator);
@@ -171,13 +172,13 @@ test "saveTo: an unchanged card leaves the image byte-identical" {
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
-    try img.saveTo(io, tmp.dir, "card.img");
+    try disk_file.replace(io, tmp.dir, "card.img", &img);
     const back = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
 }
 
-test "saveTo: a write that fails leaves the original image intact" {
+test "write back: a write that fails leaves the original image intact" {
     if (@import("builtin").os.tag == .linux and std.os.linux.geteuid() == 0) return error.SkipZigTest;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -194,7 +195,7 @@ test "saveTo: a write that fails leaves the original image intact" {
     defer ro.close(io);
     try ro.setPermissions(io, .fromMode(0o555));
     defer ro.setPermissions(io, .fromMode(0o755)) catch {};
-    try std.testing.expectError(error.AccessDenied, img.saveTo(io, tmp.dir, "ro/card.img"));
+    try std.testing.expectError(error.AccessDenied, disk_file.replace(io, tmp.dir, "ro/card.img", &img));
     const back = try tmp.dir.readFileAlloc(io, "ro/card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
