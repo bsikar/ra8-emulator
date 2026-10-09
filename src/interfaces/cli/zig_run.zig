@@ -115,7 +115,7 @@ pub const Clock = struct {
     /// The window closed while the run was parked, so the run ends.
     paced_out: bool = false,
     /// `--save-state` / `--load-state` (RA8EMU-696): zig_snapshot.zig.
-    state: state_args.Options = .{},
+    state: @import("../../session/state_options.zig").Options = .{},
     resume_boundary: bool = false,
     resume_unscaled: bool = false,
     /// Rates selected when the current boundary opened.
