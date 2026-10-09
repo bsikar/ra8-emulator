@@ -20,8 +20,8 @@ const event_sink = @import("event_sink.zig");
 pub const quiet_due = @import("quiet_due.zig");
 
 /// Cycles at the time base's rate until the next event on the board's
-/// queue, zero when nothing is queued or it is already due. The pace reads
-/// this to close a boundary on it (src/core/queue_pace.zig).
+/// queue, zero when nothing is queued or it is already due. The run loop
+/// weighs this when it sizes a stretch (src/interfaces/cli/zig_run.zig).
 pub fn cyclesToDue(context: *anyopaque) u64 {
     const board: *const Board = @ptrCast(@alignCast(context));
     const at = board.time.queue.next() orelse return 0;
