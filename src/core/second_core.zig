@@ -61,8 +61,6 @@ const fault_clear = @import("../periph/fault_clear.zig");
 const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
 const second_wait = @import("second_wait.zig");
-const unmask = @import("unmask.zig");
-const pend_break = @import("pend_break.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
@@ -122,16 +120,6 @@ pub const Second = struct {
     control: scb.Scb = scb.Scb.init(),
     /// CPU1's own owed CFSR/HFSR clears, applied after each of its turns.
     clears: fault_clear.Clears = fault_clear.Clears.init(),
-    /// A PendSV CPU1's own firmware writes ends CPU1's stretch, as CPU0's
-    /// does: a suspend that lost its PendSV returned to the thread and
-    /// `tx_thread_sleep` gave up with TX_CALLER_ERROR (RA8EMU-302).
-    pend: pend_break.Pend = .{},
-    /// CPU1's own mask release: a pend held by PRIMASK at a boundary is
-    /// stepped to the instant the mask clears, as CPU0's is. Without it a
-    /// masked spin whose length divides the turn (the module port's
-    /// five-instruction `__tx_ts_wait`) meets every boundary masked and
-    /// never takes its SysTick. src/core/unmask.zig.
-    release: unmask.Release = .{},
 
     /// A SYSRESETREQ from CPU1 is the part's one software reset: R01AN7883
     /// Table 11 lists a per-core watchdog, lockup and local-memory reset but

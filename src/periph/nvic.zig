@@ -183,8 +183,7 @@ pub const Nvic = struct {
     /// exception at, so a pend that lands inside a masked region would be
     /// counted as held and not looked at again for a whole period. The
     /// architecture holds it in hardware and takes it the moment the mask
-    /// clears. src/core/unmask.zig is what the run loop does about it; this
-    /// is only the question, asked before `dispatch` so the held counter
+    /// clears. This is only that question, asked before `dispatch` so the held counter
     /// still means what it says.
     pub fn pendingMasked(self: *Nvic, core: anytype) !bool {
         if (!(try masked(core))) return false;

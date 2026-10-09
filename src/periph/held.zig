@@ -2,8 +2,7 @@
 //!
 //! `Nvic.held` counts them all together, which is enough to notice that
 //! something is being refused and not enough to act on. Four things refuse
-//! a candidate and they want different fixes: PRIMASK is a seam question
-//! (src/core/unmask.zig), a running handler of equal or better priority is
+//! a candidate and they want different fixes: PRIMASK is a seam question, a running handler of equal or better priority is
 //! the architecture working correctly, the nesting guard is a model limit,
 //! and a missing vector is the image's own business.
 //!
@@ -19,8 +18,7 @@ const std = @import("std");
 
 /// One counter per reason a candidate was refused.
 pub const Held = struct {
-    /// PRIMASK was set. src/core/unmask.zig steps out of short masked
-    /// regions; what lands here is the ones it could not.
+    /// PRIMASK was set.
     masked: u64 = 0,
     /// A handler of equal or better priority is already running, so the
     /// architecture would not take this one either.

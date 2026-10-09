@@ -11,8 +11,8 @@
 //! options, part, backup (report/json_system.zig, json_options.zig) and
 //! analog (report/json_analog.zig, RA8EMU-373), compute
 //! (report/json_compute.zig, RA8EMU-377), steps, hotspots, functions,
-//! profile (report/json_where.zig, RA8EMU-378), timing (report/json_timing.zig
-//! and json_pends.zig, RA8EMU-383), sites (report/json_sites.zig, RA8EMU-382),
+//! profile (report/json_where.zig, RA8EMU-378), timing (report/json_timing.zig,
+//! RA8EMU-383), sites (report/json_sites.zig, RA8EMU-382),
 //! dumps (report/json_dumps.zig, RA8EMU-381), cpu_load (report/json_load.zig,
 //! RA8EMU-266).
 //!

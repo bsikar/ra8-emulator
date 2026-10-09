@@ -170,19 +170,6 @@ pub const Options = struct {
     /// the run's own cadence. For asking whether a result depends on where
     /// the boundaries fall. src/core/cadence.zig carries the default.
     chunk_instructions: ?u32 = null,
-    /// `--drain-pends`: let a Thread-mode store that raises nothing still
-    /// end the stretch, so the controller gets another look at a pend it
-    /// still owes the firmware. Off by default; src/core/pend_break.zig
-    /// carries what it measures and why it is not the default yet.
-    drain_pends: bool = false,
-    /// `--look-per-rise`: the bounded form of `--drain-pends`, one look
-    /// per rise rather than one per store. src/core/pend_look.zig carries
-    /// why the bound does not bound anything in practice.
-    look_per_rise: bool = false,
-    /// `--pace-masked`: narrow the boundary while a masked pend keeps
-    /// coming back stuck. Off by default; src/core/mask_pace.zig carries
-    /// the measurement that says it recovers nothing.
-    pace_masked: bool = false,
     /// The second core's image, when the run is a two-core one.
     cpu1_path: ?[]const u8 = null,
     /// `--ns`: the Non-Secure companion image, loaded beside the main one.
@@ -378,12 +365,6 @@ fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool 
         options.chunk_instructions = width;
     } else if (std.mem.eql(u8, flag, "--cpu")) {
         options.cpu = cpu_choice.Choice.parse(try world_flags.next(argv, index)) orelse return error.BadValue;
-    } else if (std.mem.eql(u8, flag, "--drain-pends")) {
-        options.drain_pends = true;
-    } else if (std.mem.eql(u8, flag, "--look-per-rise")) {
-        options.look_per_rise = true;
-    } else if (std.mem.eql(u8, flag, "--pace-masked")) {
-        options.pace_masked = true;
     } else if (std.mem.eql(u8, flag, "--dump-regs")) {
         options.dump_regs = true;
     } else if (std.mem.eql(u8, flag, "--stop-on-undefined")) {

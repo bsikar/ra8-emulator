@@ -1,26 +1,15 @@
 //! The `timing` object of `--report json` (RA8EMU-383): the time base,
-//! the idle seam, what the interrupt controller did with its pends, and the
-//! PRIMASK waits, the same facts report/timing.zig prints in timing() and
-//! controller(). The PendSV pend ledger is in json_pends.zig. Nothing
-//! feeds it on the Zig core, so the object is null.
+//! the idle seam and what the interrupt controller did with its pends.
+//! Nothing feeds it on the Zig core, so the object is null.
 const clocks = @import("../../../periph/clocks.zig");
 const nvic = @import("../../../periph/nvic.zig");
 const idle = @import("../../../core/idle.zig");
-const unmask = @import("../../../core/unmask.zig");
-const pend_break = @import("../../../core/pend_break.zig");
-const pend_pace = @import("../../../core/pend_pace.zig");
-const mask_pace = @import("../../../core/mask_pace.zig");
-const json_pends = @import("json_pends.zig");
 
 /// What the run's timing hooks accumulated, copied off the report Tally.
 pub const Timing = struct {
     timebase: clocks.Clocks,
     seam: idle.Seam,
     interrupts: nvic.Nvic,
-    release: unmask.Release,
-    pending: pend_break.Pend,
-    pacing: pend_pace.Pace,
-    masking: mask_pace.Pace,
 };
 
 /// The `timing` object, or null when the run collected none of it.
@@ -40,8 +29,6 @@ pub fn section(j: anytype, found: ?*const Timing) !void {
     try j.field("boundaries", of.seam.boundaries);
     try j.close('}');
     try controller(j, &of.interrupts);
-    try masked(j, of.release, of.masking);
-    try json_pends.section(j, &of.pending, of.interrupts.standing.entries, of.pacing);
     try j.close('}');
 }
 
@@ -73,20 +60,5 @@ fn controller(j: anytype, interrupts: *const nvic.Nvic) !void {
     try j.field("starved", if (passed.quiet()) null else passed.starved);
     try j.field("longest", passed.longest);
     try j.close('}');
-    try j.close('}');
-}
-
-fn masked(j: anytype, release: unmask.Release, masking: mask_pace.Pace) !void {
-    try j.open("mask", '{');
-    try j.field("lifted", release.lifted);
-    try j.field("stepped", release.stepped);
-    try j.field("still_masked", release.stuck);
-    try j.field("abandoned", release.faulted);
-    try j.field("gave_up_booting", release.booting);
-    try j.field("longest_lifts", release.longest);
-    try j.field("longest_span", release.longest_held);
-    try j.field("longest_stepped", release.longest_stepped);
-    try j.field("paced_boundaries", masking.narrowed);
-    try j.field("paced_worst_run", masking.longest_run);
     try j.close('}');
 }

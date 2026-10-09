@@ -1,11 +1,10 @@
 //! The `sites` object of `--report json` (RA8EMU-382): the addresses behind
-//! the counters, the same facts report/timing.zig prints in pendStores(),
-//! pcHits(), takenFrom() and takenIn() and report/mask.zig in maskSites().
+//! the counters, the same facts report/timing.zig prints in pcHits(),
+//! takenFrom() and takenIn().
 //! Every kept row is listed, ranked as the text ranks it, each with the
 //! symbol around it; the text's top-N cut on taken-from is not applied.
 //! Nothing feeds it on the Zig core, so it is null.
 const elf = @import("../../../core/elf.zig");
-const pend_sites = @import("../../../core/pend_sites.zig");
 const pc_hits = @import("../../../debug/pc_hits.zig");
 const tally_mod = @import("../../../debug/tally.zig");
 const taken_in = @import("../../../debug/taken_in.zig");
@@ -14,8 +13,6 @@ const symbol = @import("json_where.zig").symbol;
 /// The run's site tables, borrowed from the report Tally.
 pub const Sites = struct {
     image: ?elf.Image = null,
-    pend: pend_sites.Sites = .{},
-    gave_up: pend_sites.Sites = .{},
     hits: ?*const pc_hits.Hits = null,
     taken: ?*const tally_mod.Tally = null,
     /// What `--taken-in` named, and the window it resolved to.
@@ -27,27 +24,9 @@ pub const Sites = struct {
 pub fn section(j: anytype, found: ?*const Sites) !void {
     const of = found orelse return j.field("sites", null);
     try j.open("sites", '{');
-    try stores(j, "pend_stores", of.image, of.pend);
-    try stores(j, "mask_give_ups", of.image, of.gave_up);
     try hitsOf(j, of.image, of.hits);
     try takenFrom(j, of.image, of.taken);
     try takenIn(j, of.image, of.taken_in_spec, of.taken_in);
-    try j.close('}');
-}
-
-fn stores(j: anytype, key: []const u8, image: ?elf.Image, table: pend_sites.Sites) !void {
-    var copy = table;
-    try j.open(key, '{');
-    try j.open("sites", '[');
-    for (copy.ranked()) |site| {
-        try j.open(null, '{');
-        try j.field("pc", site.pc);
-        try j.field("count", site.count);
-        try symbol(j, image, site.pc);
-        try j.close('}');
-    }
-    try j.close(']');
-    try j.field("overflowed", copy.overflowed);
     try j.close('}');
 }
 
