@@ -1,6 +1,6 @@
 const std = @import("std");
 const ra8 = @import("ra8");
-const coverage = ra8.core.conformance_coverage;
+const coverage = @import("coverage.zig");
 
 const claimed = [_][]const u8{ "VADD (floating-point)", "VSUB (floating-point)", "VMUL (floating-point)" };
 const covered = [_][]const u8{ "VADD (floating-point)", "VADD (floating-point)", "VMUL (floating-point)" };

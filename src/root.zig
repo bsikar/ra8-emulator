@@ -97,8 +97,7 @@ pub const core = struct {
     pub const deadline = @import("core/deadline.zig");
     pub const fault = @import("core/fault.zig");
     pub const conformance_vector = @import("core/cpu/conformance/vector.zig");
-    pub const conformance_coverage = @import("core/cpu/conformance/coverage.zig");
-    pub const conformance_suite = @import("core/cpu/conformance/suite.zig");
+    pub const conformance_base = @import("core/cpu/conformance/base/all.zig");
     pub const fpu = @import("core/cpu/fpu/all.zig");
     pub const mve = @import("core/cpu/mve/all.zig");
     /// The Zig CPU core (RA8EMU-10).

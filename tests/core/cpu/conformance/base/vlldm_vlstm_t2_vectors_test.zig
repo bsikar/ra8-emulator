@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.vlldm_vlstm_t2_vectors;
+const vectors = ra8.core.conformance_base.vlldm_vlstm_t2_vectors;
 const cpu_ns = ra8.core.cpu;
 const t1 = @import("vlldm_vlstm_vectors_test.zig");
 

@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.bxns_vectors;
+const vectors = ra8.core.conformance_base.bxns_vectors;
 const cpu_ns = ra8.core.cpu;
 
 fn fault(err: cpu_ns.op.Error) vectors.Fault {

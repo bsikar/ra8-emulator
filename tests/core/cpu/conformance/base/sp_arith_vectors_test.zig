@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const vector = ra8.core.conformance_vector;
-const vectors = ra8.core.conformance_suite.base.sp_arith_vectors;
+const vectors = ra8.core.conformance_base.sp_arith_vectors;
 const cpu_ns = ra8.core.cpu;
 
 fn run(in: vectors.In) vectors.Out {
