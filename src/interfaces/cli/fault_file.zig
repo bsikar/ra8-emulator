@@ -3,15 +3,15 @@
 //! fails in the first second rather than days in. A bad file says
 //! `--faults FILE:LINE: reason` and the run ends with status 2, as a bad
 //! flag does. A good one drives a session of its own over the board's
-//! plug and fault hooks (src/board/session_schedule.zig), and the run's
+//! plug and fault hooks (src/session/board_schedule.zig), and the run's
 //! boundary is wrapped so each event lands on its exact virtual time.
 const std = @import("std");
 const boot = @import("../../chip/core/cpu/boot.zig");
 const api = @import("../../session/session_api.zig");
 const Board = @import("../../board/board.zig").Board;
-const session_plug = @import("../../board/session_plug.zig");
-const session_faults = @import("../../board/session_faults.zig");
-const session_schedule = @import("../../board/session_schedule.zig");
+const session_plug = @import("../../session/board_plug.zig");
+const session_faults = @import("../../session/board_faults.zig");
+const session_schedule = @import("../../session/board_schedule.zig");
 const fault_schedule = @import("../../components/fault_schedule.zig");
 
 pub const Applier = session_schedule.Applier;

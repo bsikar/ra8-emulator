@@ -10,7 +10,7 @@
 //! a session restores one `--save-state` wrote. A second core is refused,
 //! as the CLI refuses it: its state is not in the file yet.
 const std = @import("std");
-const Board = @import("board.zig").Board;
+const Board = @import("../board/board.zig").Board;
 const BoardBoundary = @import("board_boundary.zig").BoardBoundary;
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 const Store = @import("../chip/core/cpu/memory/store.zig").Store;

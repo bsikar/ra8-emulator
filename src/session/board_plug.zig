@@ -18,9 +18,9 @@ const parts = @import("../components/parts.zig");
 const fault_lines = @import("../components/fault_lines.zig");
 const riic_bus = @import("../chip/periph/riic/riic_bus.zig");
 const spi = @import("../chip/periph/spi/spi.zig");
-const session_api = @import("../session/session_api.zig");
-const plug = @import("plug.zig");
-const Board = @import("board.zig").Board;
+const session_api = @import("session_api.zig");
+const plug = @import("../board/plug.zig");
+const Board = @import("../board/board.zig").Board;
 const eink = @import("../components/eink_it8951/panel.zig");
 
 pub const Error = error{NothingFitted};

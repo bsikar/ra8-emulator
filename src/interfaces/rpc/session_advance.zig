@@ -4,7 +4,7 @@
 //!
 //! Each round runs as many instructions as the time base says reach the
 //! target: under the debugger the board charges one cycle per instruction
-//! (src/board/board_boundary.zig). A rate the firmware changes mid-round
+//! (src/session/board_boundary.zig). A rate the firmware changes mid-round
 //! can leave the target short, so the next round runs the rest; a round
 //! that moves no time ends it. A sleeping core goes by in wide chunks
 //! (RA8EMU-767), so minutes of sleep cost about a host second.
