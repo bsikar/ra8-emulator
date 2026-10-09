@@ -24,7 +24,7 @@ test "a run with no site hooks writes null" {
     try std.testing.expect(doc.value.object.get("sites").? == .null);
 }
 
-test "quiet tables are empty lists and absent tables are null" {
+test "absent tables are null" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
@@ -34,24 +34,16 @@ test "quiet tables are empty lists and absent tables are null" {
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();
     const sites = doc.value.object.get("sites").?.object;
-    for ([_][]const u8{ "pend_stores", "mask_give_ups" }) |key| {
-        const table = sites.get(key).?.object;
-        try std.testing.expectEqual(@as(usize, 0), table.get("sites").?.array.items.len);
-        try std.testing.expectEqual(@as(i64, 0), table.get("overflowed").?.integer);
-    }
     for ([_][]const u8{ "pc_hits", "taken_from", "taken_in" }) |key| {
         try std.testing.expect(sites.get(key).? == .null);
     }
 }
 
-test "stores rank by count and taken-from lists every kept site" {
+test "taken-from lists every kept site" {
     var fix: Fixture = undefined;
     try fix.open();
     defer fix.close();
     var of = json_sites.Sites{};
-    of.pend.record(0x100);
-    of.pend.record(0x200);
-    of.pend.record(0x200);
     var taken: ra8.core.tally.Tally = .{};
     taken.record(0x300, 15);
     taken.record(0x300, 15);
@@ -62,11 +54,6 @@ test "stores rank by count and taken-from lists every kept site" {
     const doc = try render(&fix.board, &of, &buf);
     defer doc.deinit();
     const sites = doc.value.object.get("sites").?.object;
-    const stores = sites.get("pend_stores").?.object.get("sites").?.array.items;
-    try std.testing.expectEqual(@as(usize, 2), stores.len);
-    try std.testing.expectEqual(@as(i64, 0x200), stores[0].object.get("pc").?.integer);
-    try std.testing.expectEqual(@as(i64, 2), stores[0].object.get("count").?.integer);
-    try std.testing.expect(stores[0].object.get("symbol").? == .null);
     const from = sites.get("taken_from").?.object.get("sites").?.array.items;
     try std.testing.expectEqual(@as(usize, 2), from.len);
     try std.testing.expectEqual(@as(i64, 15), from[0].object.get("exception").?.integer);

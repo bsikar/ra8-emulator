@@ -166,8 +166,8 @@ pub const Seam = struct {
     /// the run to stop, and inside a one-instruction run that request buys
     /// nothing: the run was ending after that instruction regardless, and
     /// the loop here simply steps again. So a hook could ask 64 times and
-    /// be overridden 64 times. Measured on `threadx_blink` with
-    /// `--drain-pends`: 639936 pend stops asked for and 10002 honoured,
+    /// be overridden 64 times. Measured on `threadx_blink` with the old
+    /// `--drain-pends` flag: 639936 pend stops asked for and 10002 honoured,
     /// and 639936 is exactly 64 (this budget) times the 9999 stretches
     /// that carried any. The stop a hook asks for during a probe is now
     /// the end of the probe.
