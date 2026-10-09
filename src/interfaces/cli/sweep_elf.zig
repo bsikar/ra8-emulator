@@ -6,8 +6,8 @@
 //! on both regions, and the external_regions counters.
 const std = @import("std");
 const external = @import("../../core/external_memory.zig");
-const matrix = @import("../../sizing/matrix.zig");
-const sweep = @import("../../sizing/sweep.zig");
+const matrix = @import("../../board/sizing/matrix.zig");
+const sweep = @import("../../board/sizing/sweep.zig");
 
 const ek_profile = @embedFile("../../board/ek_ra8d2.board");
 const max_report_bytes = 64 * 1024 * 1024;

@@ -30,9 +30,9 @@ pub const core = struct {
     pub const sweep_cli = @import("interfaces/cli/sweep_cli.zig");
     pub const sweep_elf = @import("interfaces/cli/sweep_elf.zig");
     pub const sizing = struct {
-        pub const workload = @import("sizing/workload.zig");
-        pub const matrix = @import("sizing/matrix.zig");
-        pub const sweep = @import("sizing/sweep.zig");
+        pub const workload = @import("board/sizing/workload.zig");
+        pub const matrix = @import("board/sizing/matrix.zig");
+        pub const sweep = @import("board/sizing/sweep.zig");
     };
     pub const mpu_guard = @import("core/mpu_guard.zig");
     pub const pages = @import("core/pages.zig");
