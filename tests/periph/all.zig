@@ -228,8 +228,6 @@ test {
     _ = @import("rtt/rtt_block_test.zig");
     _ = @import("rtt/rtt_line_test.zig");
     _ = @import("rtt/rtt_test.zig");
-    _ = @import("sdhi/sdhi_card_test.zig");
-    _ = @import("sdhi/sdhi_card_image_test.zig");
     _ = @import("sdhi/sdhi_fifo_test.zig");
     _ = @import("sdhi/sdhi_test.zig");
     _ = @import("sdhi/sdhi_xfer_test.zig");

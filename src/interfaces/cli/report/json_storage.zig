@@ -66,7 +66,7 @@ fn card(j: anytype, board: *Board) !void {
     try j.field("refused_response_stores", host.faked);
     try j.field("starved_buffer", host.starved);
     try j.field("refused_narrow", host.narrow);
-    try j.field("refused_past_end", host.card.past_end);
+    try j.field("refused_past_end", board.host_card.past_end);
     try j.field("ended_on_refusal", host.lost);
     try j.close('}');
 }

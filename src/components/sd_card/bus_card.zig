@@ -1,13 +1,14 @@
 //! The SD card on the other side of the host controller: what it holds, and
 //! which state it is in when a command arrives.
 //!
-//! Split out of sdhi.zig because the two answer different questions. The
+//! The controller reaches it only through periph/sdhi/sdhi_line.zig (adapter
+//! in bus_line.zig). Split out of sdhi.zig because the two answer different questions. The
 //! controller owns a register window, a FIFO and a set of status flags; the
 //! card owns 512-byte blocks, a relative address, and the five-state walk
 //! the SD Physical Layer puts it through before a block command means
 //! anything: idle -> ready -> ident -> stby -> tran.
 //!
-//! The store is sparse, the same shape xspi_flash.zig takes: a block is held
+//! The store is sparse, the same shape nor_flash/flash.zig takes: a block is held
 //! from the first time something writes to it, and a block nobody has
 //! written reads as zeros, which is what a freshly formatted card gives.
 //! `--sd-image PATH` loads a raw host image into that store (RA8EMU-568), so
@@ -15,10 +16,11 @@
 //! file is only rewritten by `saveTo`, which `--sd-writable` asks for. With
 //! no image the capacity is the model's own choice, stated below.
 const std = @import("std");
+const sd_line = @import("../../periph/sdhi/sdhi_line.zig");
 
 pub const geometry = struct {
     /// The SD block size every command here works in.
-    pub const block_bytes: u32 = 512;
+    pub const block_bytes = sd_line.block_bytes;
     /// CSD v2 counts capacity in units of 1024 blocks.
     pub const csize_unit: u32 = 1024;
     /// The model's own capacity, 32 MiB, picked so C_SIZE is exact and a
@@ -26,26 +28,8 @@ pub const geometry = struct {
     pub const capacity_blocks: u32 = 64 * 1024;
 };
 
-/// What a card answers with. The controller drops these into SD_RSP10..76.
-pub const response = struct {
-    /// R1: TRAN state, ready for data.
-    pub const r1_ready: u32 = 0x0000_0900;
-    /// R1 bit 5, APP_CMD accepted, so the ACMD that follows is honoured.
-    pub const r1_app_cmd: u32 = 0x0000_0020;
-    /// R1 bit 22, ILLEGAL_COMMAND: the card understood the command and
-    /// refused it in this state.
-    pub const r1_illegal: u32 = 0x0040_0000;
-    /// R7 for CMD8: 2.7-3.6V plus the 0xAA check pattern echoed back.
-    pub const r7_if_cond: u32 = 0x0000_01AA;
-    /// R3 for ACMD41: power-up done, CCS set (SDHC/SDXC), voltage window.
-    pub const ocr_ready: u32 = 0xC0FF_8000;
-    /// The CID fill dev uses, "RA8D" packed, kept so a log reads the same.
-    pub const cid_word: u32 = 0x5241_3844;
-    /// CMD3 hands out RCA 1 in the top half of R6.
-    pub const rca_value: u32 = 0x0001_0000;
-    /// CSD structure version 2 in the top word.
-    pub const csd_v2: u32 = 0x4000_0000;
-};
+/// What a card answers with: the SD bus words the controller declares.
+pub const response = sd_line.response;
 
 /// The SD card state machine, as far as the identification sequence and a
 /// block transfer need it.

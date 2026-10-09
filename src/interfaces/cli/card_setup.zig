@@ -40,7 +40,7 @@ pub fn prepareSdhi(board: *Board, io: std.Io, sdhi: Sdhi) !void {
         return err;
     };
     defer std.heap.page_allocator.free(bytes);
-    board.card.card.loadBytes(bytes) catch |err| {
+    board.host_card.loadBytes(bytes) catch |err| {
         std.debug.print("--sd-image {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
@@ -66,7 +66,7 @@ fn fromDir(board: *Board, io: std.Io, path: []const u8) !void {
     while (index < img.capacity_blocks) : (index += 1) {
         _ = img.read(index, bytes[@as(usize, index) * 512 ..][0..512]);
     }
-    try board.card.card.loadBytes(bytes);
+    try board.host_card.loadBytes(bytes);
     std.debug.print("sd-dir: {s} -> FAT32 {d} MiB, {d} files, {d} dirs\n", .{ path, img.capacity_blocks / 2048, built.files, built.dirs });
 }
 
@@ -74,7 +74,7 @@ fn fromDir(board: *Board, io: std.Io, path: []const u8) !void {
 pub fn saveSdhi(board: *Board, io: std.Io, sdhi: Sdhi) void {
     if (!sdhi.writable) return;
     const path = sdhi.image orelse return;
-    board.card.card.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
+    board.host_card.saveTo(io, std.Io.Dir.cwd(), path) catch |err| {
         std.debug.print("--sd-image {s}: not saved: {s}\n", .{ path, @errorName(err) });
     };
 }

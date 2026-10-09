@@ -25,8 +25,8 @@ fn body(writer: anytype, board: anytype) !void {
     try fields.writeExcept(writer, board.sd.img, store_wiring);
     try blocks.write(writer, &board.sd.img.blocks);
     try fields.writeExcept(writer, board.card, .{"card"});
-    try fields.writeExcept(writer, board.card.card, store_wiring);
-    try blocks.write(writer, &board.card.card.blocks);
+    try fields.writeExcept(writer, board.host_card, store_wiring);
+    try blocks.write(writer, &board.host_card.blocks);
 }
 
 /// All or nothing: both cards change only once the whole section read
@@ -40,18 +40,20 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     const spi_list = try blocks.List.read(&cursor, spi.img.capacity_blocks);
     var host = board.card;
     try fields.readOver(&cursor, &host, .{"card"});
-    try fields.readOver(&cursor, &host.card, store_wiring);
-    const host_list = try blocks.List.read(&cursor, host.card.capacity_blocks);
+    var disk = board.host_card;
+    try fields.readOver(&cursor, &disk, store_wiring);
+    const host_list = try blocks.List.read(&cursor, disk.capacity_blocks);
     if (!cursor.done() or !fits(&spi, &host)) return Error.BadValue;
     var spi_map = try spi_list.build(spi.img.allocator);
     errdefer blocks.free(&spi_map);
-    const host_map = try host_list.build(host.card.allocator);
+    const host_map = try host_list.build(disk.allocator);
     blocks.free(&board.sd.img.blocks);
-    blocks.free(&board.card.card.blocks);
+    blocks.free(&board.host_card.blocks);
     spi.img.blocks = spi_map;
-    host.card.blocks = host_map;
+    disk.blocks = host_map;
     board.sd = spi;
     board.card = host;
+    board.host_card = disk;
 }
 
 fn fits(spi: anytype, host: anytype) bool {

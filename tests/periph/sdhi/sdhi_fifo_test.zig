@@ -3,7 +3,8 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const fifo = ra8.periph.sdhi_fifo;
-const card = ra8.periph.sdhi_card;
+const card = ra8.components.sd_bus_card;
+const bus_line = ra8.components.sd_bus_line;
 const xfer = ra8.periph.sdhi_xfer;
 
 /// The first block past the end of the card.
@@ -16,14 +17,14 @@ fn disk() card.Card {
 /// Drain a whole block a word at a time, answering what the last word came to.
 fn drain(transfer: *xfer.Transfer, on: *card.Card) fifo.Outcome {
     var last: fifo.Outcome = .word;
-    for (0..xfer.words_per_block) |_| last = fifo.read(transfer, on, 4).outcome;
+    for (0..xfer.words_per_block) |_| last = fifo.read(transfer, bus_line.line(on), 4).outcome;
     return last;
 }
 
 /// Fill a whole block a word at a time, answering what the last word came to.
 fn fill(transfer: *xfer.Transfer, on: *card.Card, value: u32) fifo.Outcome {
     var last: fifo.Outcome = .word;
-    for (0..xfer.words_per_block) |_| last = fifo.write(transfer, on, 4, value);
+    for (0..xfer.words_per_block) |_| last = fifo.write(transfer, bus_line.line(on), 4, value);
     return last;
 }
 
@@ -32,8 +33,8 @@ test "an access narrower than the port moves nothing" {
     defer on.deinit();
     var transfer = xfer.Transfer{};
     transfer.arm(.read, 0, 1);
-    try std.testing.expectEqual(fifo.Outcome.narrow, fifo.read(&transfer, &on, 2).outcome);
-    try std.testing.expectEqual(fifo.Outcome.narrow, fifo.write(&transfer, &on, 1, 0xAA));
+    try std.testing.expectEqual(fifo.Outcome.narrow, fifo.read(&transfer, bus_line.line(&on), 2).outcome);
+    try std.testing.expectEqual(fifo.Outcome.narrow, fifo.write(&transfer, bus_line.line(&on), 1, 0xAA));
     try std.testing.expectEqual(@as(u32, 0), transfer.word_idx);
 }
 
@@ -41,8 +42,8 @@ test "a FIFO with nothing armed behind it starves" {
     var on = disk();
     defer on.deinit();
     var transfer = xfer.Transfer{};
-    try std.testing.expectEqual(fifo.Outcome.starved, fifo.read(&transfer, &on, 4).outcome);
-    try std.testing.expectEqual(fifo.Outcome.starved, fifo.write(&transfer, &on, 4, 0xAA));
+    try std.testing.expectEqual(fifo.Outcome.starved, fifo.read(&transfer, bus_line.line(&on), 4).outcome);
+    try std.testing.expectEqual(fifo.Outcome.starved, fifo.write(&transfer, bus_line.line(&on), 4, 0xAA));
 }
 
 test "the last word of the last block ends the phase" {
@@ -96,9 +97,9 @@ test "loading a block the card refuses stops the phase" {
     defer on.deinit();
     var transfer = xfer.Transfer{};
     transfer.arm(.read, off_card, 1);
-    try std.testing.expect(!fifo.load(&transfer, &on));
+    try std.testing.expect(!fifo.load(&transfer, bus_line.line(&on)));
     try std.testing.expectEqual(xfer.Phase.none, transfer.phase);
     transfer.arm(.read, 0, 1);
-    try std.testing.expect(fifo.load(&transfer, &on));
+    try std.testing.expect(fifo.load(&transfer, bus_line.line(&on)));
     try std.testing.expectEqual(xfer.Phase.read, transfer.phase);
 }

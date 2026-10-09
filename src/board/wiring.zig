@@ -46,6 +46,7 @@ const vscr = @import("../periph/vscr.zig");
 const pdctr = @import("../periph/pdctr.zig");
 const sd_card = @import("../components/sd_card/card.zig");
 const sd_card_line = @import("../components/sd_card/card_line.zig");
+const bus_line = @import("../components/sd_card/bus_line.zig");
 
 /// The module-stop shadow, the attribution words that decide which of its
 /// bits a Secure store may move, and the gate the rest of the bus hangs off.
@@ -127,6 +128,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.memory_rates.block());
     try self.memory_ecc.attach(&self.bus);
     try self.sdram.attach(&self.bus);
+    self.card.card = bus_line.line(&self.host_card);
     try self.bus.add(self.card.block());
     try self.bus.add(self.ecc.block());
     try self.bus.add(self.audio.block());

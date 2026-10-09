@@ -159,6 +159,8 @@ pub const components = struct {
     pub const sd_reply = @import("components/sd_card/reply.zig");
     pub const sd_trace = @import("components/sd_card/trace.zig");
     pub const sd_write = @import("components/sd_card/write.zig");
+    pub const sd_bus_card = @import("components/sd_card/bus_card.zig");
+    pub const sd_bus_line = @import("components/sd_card/bus_line.zig");
 };
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {

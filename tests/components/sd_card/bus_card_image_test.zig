@@ -4,7 +4,7 @@
 const std = @import("std");
 const io = std.testing.io;
 const ra8 = @import("ra8");
-const card = ra8.periph.sdhi_card;
+const card = ra8.components.sd_bus_card;
 const sd_image = ra8.components.sd_image;
 const sd_format = ra8.components.sd_format;
 

@@ -5,7 +5,7 @@ const io = std.testing.io;
 const ra8 = @import("ra8");
 const mk = ra8.components.sd_mkimage;
 const sd_image = ra8.components.sd_image;
-const card = ra8.periph.sdhi_card;
+const card = ra8.components.sd_bus_card;
 const fat32 = @import("fat32_reader.zig");
 
 const A = std.testing.allocator;

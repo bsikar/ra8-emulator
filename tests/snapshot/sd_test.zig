@@ -10,15 +10,16 @@ const sd = ra8.snapshot.sd;
 const Stand = struct {
     sd: components.sd_card.Card,
     card: periph.sdhi.Sdhi,
+    host_card: components.sd_bus_card.Card,
 
     fn init() Stand {
         const allocator = std.testing.allocator;
-        return .{ .sd = components.sd_card.Card.init(allocator), .card = periph.sdhi.Sdhi.init(allocator) };
+        return .{ .sd = components.sd_card.Card.init(allocator), .card = periph.sdhi.Sdhi.init(), .host_card = components.sd_bus_card.Card.init(allocator) };
     }
 
     fn deinit(self: *Stand) void {
         self.sd.deinit();
-        self.card.deinit();
+        self.host_card.deinit();
     }
 };
 
@@ -34,8 +35,8 @@ fn busy() !Stand {
     board.sd.ready = true;
     board.sd.commands = 12;
     board.sd.erase_lo = 4;
-    try std.testing.expect(board.card.card.write(40, &filled(0x77)));
-    board.card.card.state = .tran;
+    try std.testing.expect(board.host_card.write(40, &filled(0x77)));
+    board.host_card.state = .tran;
     board.card.reads = 3;
     board.card.regs[2] = 0xDEAD;
     return board;
@@ -65,8 +66,8 @@ test "both cards round-trip byte for byte and read back their blocks" {
     try std.testing.expectEqual(@as(u8, 0xA5), out[511]);
     try std.testing.expect(fresh.sd.img.read(9, &out));
     try std.testing.expectEqual(@as(u8, 0), out[0]);
-    try std.testing.expectEqual(@as(u32, 1), fresh.card.card.held());
-    try std.testing.expect(fresh.card.card.read(40, &out));
+    try std.testing.expectEqual(@as(u32, 1), fresh.host_card.held());
+    try std.testing.expect(fresh.host_card.read(40, &out));
     try std.testing.expectEqual(@as(u8, 0x77), out[100]);
 }
 
@@ -106,5 +107,5 @@ test "a missing section or a cut payload leaves both cards untouched" {
     try saved(&board, &list);
     try std.testing.expect(std.meta.isError(sd.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.card.reads);
-    try std.testing.expectEqual(@as(u32, 0), fresh.card.card.held());
+    try std.testing.expectEqual(@as(u32, 0), fresh.host_card.held());
 }
