@@ -3,7 +3,7 @@
 //! DWT_CYCCNT one instruction at a time, as a Cycle Counter comparator
 //! sees it.
 //!
-//! src/periph/clocks.zig charges the counter once per run-loop chunk, so
+//! src/chip/periph/clocks.zig charges the counter once per run-loop chunk, so
 //! between two charges the word in memory stands still while instructions
 //! run. A MATCH 0b0001 comparator is checked each time the counter is
 //! written, directly or indirectly (DDI0553B.y D1.2.64), so a watch that

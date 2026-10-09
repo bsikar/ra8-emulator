@@ -3,7 +3,7 @@
 //! lands on the board's pacing at once, between commands. A shown run,
 //! whose engine has a thread of its own, goes through gui/speed_post.zig.
 const session_api = @import("../debug/session_api.zig");
-const clocks = @import("../periph/clocks.zig");
+const clocks = @import("../chip/periph/clocks.zig");
 const pacer = @import("../periph/time/pacer.zig");
 const pacing = @import("../periph/time/pacing.zig");
 

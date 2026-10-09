@@ -41,7 +41,7 @@ pub const shown = [_]Register{
     .s22,     .s23,   .s24, .s25, .s26,  .s27, .s28, .s29,    .s30,    .s31,     .vpr,
 };
 
-/// MVE's q0-q7 alias the FP bank (src/core/cpu/mve/qreg.zig): lane k of qN
+/// MVE's q0-q7 alias the FP bank (src/chip/core/cpu/mve/qreg.zig): lane k of qN
 /// is S[4N+k]. The MVE group draws each q as four lane cells from the S
 /// values already read, so a vector costs no extra read and its changed
 /// mark is per lane (RA8EMU-947).

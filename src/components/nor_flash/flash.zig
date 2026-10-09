@@ -1,8 +1,8 @@
 //! The octal NOR part behind XSPI0: a configurable array stored inverted so fresh erased flash
 //! is demand-zero host memory and mapped accesses allocate nothing.
 const std = @import("std");
-const xspi_nor = @import("../../periph/xspi/xspi_nor.zig");
-const mapped = @import("../../core/cpu/memory/mapped.zig");
+const xspi_nor = @import("../../chip/periph/xspi/xspi_nor.zig");
+const mapped = @import("../../chip/core/cpu/memory/mapped.zig");
 const lines = @import("lines.zig");
 
 pub const part = struct {

@@ -6,7 +6,7 @@
 //! the user LEDs as the pins left them (board_view.zig).
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
-const gpio = @import("../../periph/gpio/gpio.zig");
+const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const eink = @import("../../components/eink_it8951/panel.zig");
 const eink_wire = @import("../../components/eink_it8951/wire.zig");
 const png = @import("png.zig");

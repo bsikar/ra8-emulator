@@ -4,10 +4,10 @@
 //! it, so both cores share one SDRAM and one timing model.
 const std = @import("std");
 const external = @import("external_memory.zig");
-const external_port = @import("../core/cpu/memory/external_port.zig");
-const mapped = @import("../core/cpu/memory/mapped.zig");
-const Store = @import("../core/cpu/memory/store.zig").Store;
-const Initiator = @import("../core/cpu/memory/initiator.zig").Initiator;
+const external_port = @import("../chip/core/cpu/memory/external_port.zig");
+const mapped = @import("../chip/core/cpu/memory/mapped.zig");
+const Store = @import("../chip/core/cpu/memory/store.zig").Store;
+const Initiator = @import("../chip/core/cpu/memory/initiator.zig").Initiator;
 
 pub const Error = error{OutOfMemory};
 

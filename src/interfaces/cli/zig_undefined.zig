@@ -1,14 +1,14 @@
 //! `--stop-on-undefined` on a Zig run: the sites the undefined-instruction
-//! sweep found (src/core/undefined_ops.zig), counted as the core reaches
+//! sweep found (src/chip/core/undefined_ops.zig), counted as the core reaches
 //! them, and the run ended at the first one, before it executes.
 //!
-//! The core asks a fetch guard (src/core/cpu/fetch_guard.zig) before every
+//! The core asks a fetch guard (src/chip/core/cpu/fetch_guard.zig) before every
 //! instruction. The guard is only installed when the flag asks for it,
 //! because it turns off the trip skipping a plain run relies on.
 const elf = @import("../../board/loader/elf.zig");
-const undefined_ops = @import("../../core/undefined_ops.zig");
+const undefined_ops = @import("../../chip/core/undefined_ops.zig");
 const read_image = @import("../../board/loader/image.zig");
-const cpu = @import("../../core/cpu/cpu.zig");
+const cpu = @import("../../chip/core/cpu/cpu.zig");
 const cli = @import("cli.zig");
 
 pub const Found = undefined_ops.Found;

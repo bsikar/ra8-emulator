@@ -3,12 +3,12 @@
 //! the board until the run ends or the window closes.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
+const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
 const Board = @import("../../board/board.zig").Board;
-const clocks = @import("../../periph/clocks.zig");
+const clocks = @import("../../chip/periph/clocks.zig");
 const duration = @import("duration.zig");
 const profile = @import("../../debug/profile.zig");
-const Until = @import("../../core/until.zig").Until;
+const Until = @import("../../chip/core/until.zig").Until;
 const cli = @import("cli.zig");
 const zig_run = @import("zig_run.zig");
 const window_pace = @import("window_pace.zig");

@@ -5,7 +5,7 @@
 //! so they are wiring: not written, and a load keeps the ones the board
 //! already has. Host stdin and touch inputs are run options, not state.
 const std = @import("std");
-const sci = @import("../periph/sci/sci.zig");
+const sci = @import("../chip/periph/sci/sci.zig");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
 

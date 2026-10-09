@@ -11,7 +11,7 @@
 //! rather than the board decides, and src/board is where the words about a
 //! run live.
 const std = @import("std");
-const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
+const Guest = @import("../../../chip/core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../board/loader/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");

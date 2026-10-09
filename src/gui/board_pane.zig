@@ -6,7 +6,7 @@
 //! own aspect inside its slot. The shell (RA8EMU-201) places the pane.
 const std = @import("std");
 const proto = @import("../interfaces/rpc/session_rpc.zig");
-const gpio = @import("../periph/gpio/gpio.zig");
+const gpio = @import("../chip/periph/gpio/gpio.zig");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
 const shell_board = @import("shell_board.zig");

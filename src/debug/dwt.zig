@@ -12,7 +12,7 @@
 //! core sees when the firmware stores DEMCR.
 //!
 //! DWT_CTRL and DWT_CYCCNT at the bottom of the block belong to
-//! src/periph/clocks.zig and are not claimed here.
+//! src/chip/periph/clocks.zig and are not claimed here.
 //!
 //! FUNCTION.ID is read-only and says which MATCH kinds a comparator takes.
 //! DDI0553B.y D1.2.64 lists the legal encodings. Comparator 0 must take
@@ -39,7 +39,7 @@
 //!
 //! Not modelled yet: the Cycle Counter match itself.
 const watch_table = @import("watch_table.zig");
-const cpuid = @import("../periph/cpuid.zig");
+const cpuid = @import("../chip/periph/cpuid.zig");
 
 pub const Access = watch_table.Access;
 

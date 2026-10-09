@@ -14,7 +14,7 @@
 //! full scale, and 8-bit WAV (which is unsigned) never comes up.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
-const ssie = @import("../../periph/ssie/ssie.zig");
+const ssie = @import("../../chip/periph/ssie/ssie.zig");
 const wav = @import("wav.zig");
 const world_flags = @import("world_flags.zig");
 

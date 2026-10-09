@@ -4,12 +4,12 @@
 //! and unmodelled.zig print; every key is always present, and per-unit
 //! lists carry only the channels or operations that saw anything.
 const Board = @import("../../../board/board.zig").Board;
-const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
+const Guest = @import("../../../chip/core/cpu/memory/guest.zig").Guest;
 const external = @import("../../../board/external_memory.zig");
 const backing = @import("../../../board/external_backing.zig");
-const cache = @import("../../../periph/cache/cache.zig");
-const dmac = @import("../../../periph/dmac/dmac.zig");
-const dtc = @import("../../../periph/dtc/dtc.zig");
+const cache = @import("../../../chip/periph/cache/cache.zig");
+const dmac = @import("../../../chip/periph/dmac/dmac.zig");
+const dtc = @import("../../../chip/periph/dtc/dtc.zig");
 const dma = @import("dma.zig");
 const unmodelled = @import("unmodelled.zig");
 

@@ -1,9 +1,9 @@
 //! The `timing` object of `--report json` (RA8EMU-383): the time base,
 //! the idle seam and what the interrupt controller did with its pends.
 //! Nothing feeds it on the Zig core, so the object is null.
-const clocks = @import("../../../periph/clocks.zig");
-const nvic = @import("../../../periph/nvic.zig");
-const idle = @import("../../../core/idle.zig");
+const clocks = @import("../../../chip/periph/clocks.zig");
+const nvic = @import("../../../chip/periph/nvic.zig");
+const idle = @import("../../../chip/core/idle.zig");
 
 /// What the run's timing hooks accumulated, copied off the report Tally.
 pub const Timing = struct {

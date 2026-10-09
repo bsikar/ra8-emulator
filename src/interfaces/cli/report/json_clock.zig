@@ -4,9 +4,9 @@
 //! lowpower.zig and monitors.zig print. The clock-generation blocks from
 //! modules.zig follow in json_modules.zig. Every key is always present.
 const Board = @import("../../../board/board.zig").Board;
-const div = @import("../../../periph/sysclk/sysclk_div.zig");
-const lvd = @import("../../../periph/lvd/lvd.zig");
-const Config = @import("../../../periph/pll/pll_config.zig").Config;
+const div = @import("../../../chip/periph/sysclk/sysclk_div.zig");
+const lvd = @import("../../../chip/periph/lvd/lvd.zig");
+const Config = @import("../../../chip/periph/pll/pll_config.zig").Config;
 const json_modules = @import("json_modules.zig");
 
 /// The whole `clocks` object, keyed inside the document.

@@ -13,8 +13,8 @@
 //! this exists to settle exactly the questions a wrong value confuses.
 const std = @import("std");
 const elf = @import("../board/loader/elf.zig");
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
-const Bus = @import("../periph/registry.zig").Bus;
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
+const Bus = @import("../chip/periph/registry.zig").Bus;
 const place = @import("place.zig");
 const symbols = @import("symbols.zig");
 

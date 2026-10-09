@@ -1,0 +1,32 @@
+//! Covers src/chip/core/cpu/exception/all.zig.
+test {
+    _ = @import("exc_return_test.zig");
+    _ = @import("frame_test.zig");
+    _ = @import("callee_test.zig");
+    _ = @import("hidden_test.zig");
+    _ = @import("fp_frame_test.zig");
+    _ = @import("fp_ready_test.zig");
+    _ = @import("entry_test.zig");
+    _ = @import("ret_test.zig");
+    _ = @import("fnc_return_test.zig");
+    _ = @import("active_test.zig");
+    _ = @import("source_test.zig");
+    _ = @import("dispatch_test.zig");
+    _ = @import("fp_handler_test.zig");
+    _ = @import("nvic_source_test.zig");
+    _ = @import("fault_test.zig");
+    _ = @import("clronret_test.zig");
+    _ = @import("mem_manage_test.zig");
+    _ = @import("bus_fault_test.zig");
+    _ = @import("lazy_fault_test.zig");
+    _ = @import("stack_fault_test.zig");
+    _ = @import("secure_test.zig");
+    _ = @import("debug_event_test.zig");
+    _ = @import("sleep_test.zig");
+    _ = @import("quiet_source_test.zig");
+    _ = @import("target_test.zig");
+    _ = @import("cross_test.zig");
+    _ = @import("eci_test.zig");
+    _ = @import("fp_switch_test.zig");
+    _ = @import("ts_frame_test.zig");
+}

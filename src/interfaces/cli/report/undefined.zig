@@ -1,11 +1,11 @@
 //! The `--stop-on-undefined` lines of a Zig run's report: what the
-//! undefined-instruction sweep (src/core/undefined_ops.zig) found, each site
+//! undefined-instruction sweep (src/chip/core/undefined_ops.zig) found, each site
 //! named by the function it sits in, and what the run did with them.
 //!
 //! The chip only records the sites: address, encoding, arrivals. Naming
 //! them from the symbol table is the frontend's job, so it lives here.
 const elf = @import("../../../board/loader/elf.zig");
-const undefined_ops = @import("../../../core/undefined_ops.zig");
+const undefined_ops = @import("../../../chip/core/undefined_ops.zig");
 const symbols = @import("../../../debug/symbols.zig");
 
 const Found = undefined_ops.Found;

@@ -7,7 +7,7 @@
 //! into an engine: the run mode wraps whichever backend is running.
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
-const gpio = @import("../../periph/gpio/gpio.zig");
+const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const frame_out = @import("frame_out.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const board_snapshot = @import("../../gui/board_snapshot.zig");

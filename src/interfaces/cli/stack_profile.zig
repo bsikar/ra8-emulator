@@ -13,7 +13,7 @@
 //! and names its frames from CPU1's own image.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const cpu_mod = @import("../../core/cpu/cpu.zig");
+const cpu_mod = @import("../../chip/core/cpu/cpu.zig");
 const dwarf_line = @import("../../debug/dwarf_line.zig");
 const profile = @import("../../debug/profile.zig");
 const rtos_trace = @import("../../debug/rtos_trace.zig");

@@ -9,11 +9,11 @@
 //! is stamped by the next instruction to retire, and one still held when
 //! the run ends is stamped with the pc the run stopped at.
 const std = @import("std");
-const bus = @import("../../core/cpu/bus.zig");
-const boot = @import("../../core/cpu/boot.zig");
-const cpu = @import("../../core/cpu/cpu.zig");
+const bus = @import("../../chip/core/cpu/bus.zig");
+const boot = @import("../../chip/core/cpu/boot.zig");
+const cpu = @import("../../chip/core/cpu/cpu.zig");
 const elf = @import("../../board/loader/elf.zig");
-const Source = @import("../../core/cpu/exception/source.zig").Source;
+const Source = @import("../../chip/core/cpu/exception/source.zig").Source;
 const watchpoint = @import("../../debug/watchpoint.zig");
 
 pub const limits = struct {

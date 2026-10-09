@@ -8,7 +8,7 @@ const sci = ra8.periph.sci;
 const BoardBus = ra8.core.cpu.board_bus.BoardBus;
 const Banked = ra8.core.banked.Banked;
 const debug_read = ra8.core.step_hook.debug_read;
-const store_memory = @import("../periph/store_memory.zig");
+const store_memory = @import("../chip/periph/store_memory.zig");
 
 const channel: usize = 3;
 

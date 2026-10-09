@@ -9,8 +9,8 @@
 //! is a watched stack canary or heap guard word that changed (RA8EMU-619,
 //! src/periph/time/soak_watch.zig).
 const std = @import("std");
-const timebase = @import("timebase.zig");
-const Calendar = @import("../rtc/rtc_clock.zig").Calendar;
+const timebase = @import("../../chip/periph/time/timebase.zig");
+const Calendar = @import("../../chip/periph/rtc/rtc_clock.zig").Calendar;
 pub const soak_watch = @import("soak_watch.zig");
 pub const soak_threads = @import("soak_threads.zig");
 

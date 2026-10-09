@@ -10,8 +10,8 @@ const file = @import("file.zig");
 const memory = @import("memory.zig");
 const cpu = @import("cpu.zig");
 const board_snap = @import("board.zig");
-const Store = @import("../core/cpu/memory/store.zig").Store;
-const Cpu = @import("../core/cpu/cpu.zig").Cpu;
+const Store = @import("../chip/core/cpu/memory/store.zig").Store;
+const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 
 pub const Error = file.Error || memory.Error || cpu.Error || board_snap.Error;
 

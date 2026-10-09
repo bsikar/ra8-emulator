@@ -14,11 +14,11 @@
 //! there is no engine arm left here: every run is on the store.
 const elf = @import("loader/elf.zig");
 const read_image = @import("loader/image.zig");
-const Store = @import("../core/cpu/memory/store.zig").Store;
+const Store = @import("../chip/core/cpu/memory/store.zig").Store;
 const external = @import("external_memory.zig");
 const backing = @import("external_backing.zig");
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
-const loader = @import("../core/cpu/memory/load.zig");
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
+const loader = @import("../chip/core/cpu/memory/load.zig");
 const wiring = @import("wiring.zig");
 const Board = @import("board.zig").Board;
 

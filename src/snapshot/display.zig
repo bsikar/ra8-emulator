@@ -11,7 +11,7 @@
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
-const clut = @import("../periph/glcdc/glcdc_clut.zig");
+const clut = @import("../chip/periph/glcdc/glcdc_clut.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

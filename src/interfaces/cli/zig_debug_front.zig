@@ -4,7 +4,7 @@
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
 const cpu1_image = @import("cpu1_image.zig");
-const cpu_mod = @import("../../core/cpu/cpu.zig");
+const cpu_mod = @import("../../chip/core/cpu/cpu.zig");
 const Board = @import("../../board/board.zig").Board;
 const board_wiring = @import("../../board/wiring.zig");
 const board_speed = @import("../../board/board_speed.zig");
@@ -18,9 +18,9 @@ const watch_bus = @import("../../debug/watch_bus.zig");
 const debug_front = @import("debug_front.zig");
 const rsp_dispatch = @import("../../debug/rsp_dispatch.zig");
 const rsp_poll = @import("../../debug/rsp_poll.zig");
-const second_core = @import("../../core/second_core.zig");
-const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
-const exclusive_peer = @import("../../core/cpu/exclusive_peer.zig");
+const second_core = @import("../../chip/core/second_core.zig");
+const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
+const exclusive_peer = @import("../../chip/core/cpu/exclusive_peer.zig");
 const harness = @import("../../harness.zig");
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.

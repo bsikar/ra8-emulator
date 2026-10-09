@@ -8,42 +8,42 @@
 //! this part and has to answer regardless of MSTPCRx; and the blocks that
 //! paint into or read out of RAM need guest memory handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
-const tsn_cal = @import("../periph/adc/adc_tsn_cal.zig");
-const sau = @import("../periph/sau.zig");
-const mpu = @import("../periph/mpu/mpu.zig");
-const mpu_guard = @import("../core/mpu_guard.zig");
-const cpuid = @import("../periph/cpuid.zig");
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
+const tsn_cal = @import("../chip/periph/adc/adc_tsn_cal.zig");
+const sau = @import("../chip/periph/sau.zig");
+const mpu = @import("../chip/periph/mpu/mpu.zig");
+const mpu_guard = @import("../chip/core/mpu_guard.zig");
+const cpuid = @import("../chip/periph/cpuid.zig");
 const dwt = @import("../debug/dwt.zig");
-const scb = @import("../periph/scb.zig");
-const fault_clear = @import("../periph/fault_clear.zig");
+const scb = @import("../chip/periph/scb.zig");
+const fault_clear = @import("../chip/periph/fault_clear.zig");
 
 const Board = @import("board.zig").Board;
-const second_wiring = @import("../core/second_wiring.zig");
+const second_wiring = @import("../chip/core/second_wiring.zig");
 const plug = @import("plug.zig");
 
-const bkup = @import("../periph/bkup/bkup.zig");
-const dmac = @import("../periph/dmac/dmac.zig");
-const drw = @import("../periph/drw/drw.zig");
+const bkup = @import("../chip/periph/bkup/bkup.zig");
+const dmac = @import("../chip/periph/dmac/dmac.zig");
+const drw = @import("../chip/periph/drw/drw.zig");
 const eink = @import("../components/eink_it8951/panel.zig");
 const modem = @import("../components/modem_at/modem.zig");
-const ckcr = @import("../periph/ckcr.zig");
-const octaclk = @import("../periph/octaclk.zig");
-const mrms = @import("../periph/mrms.zig");
-const ckdiv = @import("../periph/ckdiv.zig");
-const oscsf = @import("../periph/oscsf.zig");
-const subclock = @import("../periph/subclock.zig");
-const reset = @import("../periph/reset.zig");
-const sysclk = @import("../periph/sysclk/sysclk.zig");
-const voltage_hazard = @import("../periph/voltage_hazard.zig");
-const lpm = @import("../periph/lpm/lpm.zig");
-const pll = @import("../periph/pll/pll.zig");
-const gtclkcr = @import("../periph/gtclkcr.zig");
-const pscu = @import("../periph/pscu.zig");
-const cpscu = @import("../periph/cpscu.zig");
-const dtc = @import("../periph/dtc/dtc.zig");
-const vscr = @import("../periph/vscr.zig");
-const pdctr = @import("../periph/pdctr.zig");
+const ckcr = @import("../chip/periph/ckcr.zig");
+const octaclk = @import("../chip/periph/octaclk.zig");
+const mrms = @import("../chip/periph/mrms.zig");
+const ckdiv = @import("../chip/periph/ckdiv.zig");
+const oscsf = @import("../chip/periph/oscsf.zig");
+const subclock = @import("../chip/periph/subclock.zig");
+const reset = @import("../chip/periph/reset.zig");
+const sysclk = @import("../chip/periph/sysclk/sysclk.zig");
+const voltage_hazard = @import("../chip/periph/voltage_hazard.zig");
+const lpm = @import("../chip/periph/lpm/lpm.zig");
+const pll = @import("../chip/periph/pll/pll.zig");
+const gtclkcr = @import("../chip/periph/gtclkcr.zig");
+const pscu = @import("../chip/periph/pscu.zig");
+const cpscu = @import("../chip/periph/cpscu.zig");
+const dtc = @import("../chip/periph/dtc/dtc.zig");
+const vscr = @import("../chip/periph/vscr.zig");
+const pdctr = @import("../chip/periph/pdctr.zig");
 const sd_card = @import("../components/sd_card/card.zig");
 const sd_card_line = @import("../components/sd_card/card_line.zig");
 const bus_line = @import("../components/sd_card/bus_line.zig");
@@ -190,7 +190,7 @@ pub fn cpu0Windows(self: *Board) CoreWindows {
 }
 
 /// The windows a core keeps to itself, declared by the chip (RA8EMU-1012).
-pub const CoreWindows = @import("../core/core_windows.zig").CoreWindows;
+pub const CoreWindows = @import("../chip/core/core_windows.zig").CoreWindows;
 
 /// The wiring CPU1's bring-up takes from this board (RA8EMU-1012). The chip
 /// owns bring-up; the board supplies its bus, divider, reboot latch,

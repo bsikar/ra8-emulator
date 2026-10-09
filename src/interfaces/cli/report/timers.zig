@@ -2,9 +2,9 @@
 //! and the writes a running channel refused. All three timer families live
 //! here: the low-power timer that counts through standby, the interval
 //! timers, and the PWM timers.
-const gpt = @import("../../../periph/gpt/gpt.zig");
-const gtclkcr = @import("../../../periph/gtclkcr.zig");
-const iwdt = @import("../../../periph/iwdt/iwdt.zig");
+const gpt = @import("../../../chip/periph/gpt/gpt.zig");
+const gtclkcr = @import("../../../chip/periph/gtclkcr.zig");
+const iwdt = @import("../../../chip/periph/iwdt/iwdt.zig");
 
 const Board = @import("../../../board/board.zig").Board;
 const Writer = @import("../report.zig").Writer;

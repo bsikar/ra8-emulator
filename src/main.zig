@@ -2,8 +2,8 @@
 //!
 //! This file opens the ELF and hands the run to the Zig core
 //! (src/interfaces/cli/zig_main.zig). A debugger command line goes to the
-//! debug front instead. The machine and its peripherals live in src/core
-//! and src/periph, reached through "ra8".
+//! debug front instead. The machine and its peripherals live in src/chip/core
+//! and src/chip/periph, reached through "ra8".
 const std = @import("std");
 const ra8 = @import("ra8");
 const build_options = @import("build_options");

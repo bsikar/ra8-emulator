@@ -1,10 +1,10 @@
 //! One core as the debugger reads it (RA8EMU-105): the Zig core behind
 //! src/debug/zig_core.zig. The session and its views read registers and
 //! memory through this. The union has one arm, so a second kind of core can join without touching the callers.
-const bus = @import("../core/cpu/bus.zig");
+const bus = @import("../chip/core/cpu/bus.zig");
 const zig_core = @import("zig_core.zig");
 
-pub const Cortex = @import("../core/cpu/cortex.zig").Cortex;
+pub const Cortex = @import("../chip/core/cpu/cortex.zig").Cortex;
 /// Only memory can fail: the Zig core's register file always answers.
 pub const Error = bus.Error;
 

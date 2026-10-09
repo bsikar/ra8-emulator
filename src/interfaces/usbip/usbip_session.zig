@@ -8,7 +8,7 @@
 const std = @import("std");
 const wire = @import("usbip_wire.zig");
 const urb = @import("usbip_urb.zig");
-const usbfs = @import("../../periph/usbfs/usbfs.zig");
+const usbfs = @import("../../chip/periph/usbfs/usbfs.zig");
 
 pub const slot_count = 8;
 /// The most data one URB moves here; cdc-acm asks for 1280 at most.

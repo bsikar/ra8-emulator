@@ -7,7 +7,7 @@ const zig_core = ra8.core.step_hook.zig_core;
 const zig_drive = ra8.core.step_hook.zig_drive;
 const Machine = ra8.core.stop_machine.Machine;
 const QuietSource = ra8.core.cpu.exception.quiet_source.QuietSource;
-const Fake = @import("../core/cpu/exception/fake_source.zig").Fake;
+const Fake = @import("../chip/core/cpu/exception/fake_source.zig").Fake;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {

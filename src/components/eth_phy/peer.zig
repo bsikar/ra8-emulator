@@ -1,6 +1,6 @@
 //! The far end of the wire: what the firmware has sent, and what is waiting
 //! to be delivered to it. A board part (RA8EMU-1042): the DMA reaches it
-//! through the wire line in src/periph/eth/eth_line.zig.
+//! through the wire line in src/chip/periph/eth/eth_line.zig.
 //!
 //! dev's peer is a state machine that answers ARP, pings back, and runs a TCP
 //! echo (board_net.c, 849 lines). None of that is here yet. What the
@@ -12,8 +12,8 @@
 //! pushes back. dev's TX sink swallows every frame, so a descriptor is
 //! completed whatever happened to it.
 const std = @import("std");
-const desc = @import("../../periph/eth/eth_desc.zig");
-const line = @import("../../periph/eth/eth_line.zig");
+const desc = @import("../../chip/periph/eth/eth_desc.zig");
+const line = @import("../../chip/periph/eth/eth_line.zig");
 
 /// Frames held in one direction. Enough for a request and its reply with
 /// room to spare, and it bounds what the board carries.

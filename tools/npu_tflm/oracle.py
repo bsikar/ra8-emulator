@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Brighton Sikarskie
 """Cross-check the NPU tests against host TensorFlow Lite Micro.
 
-Each Vela replay test under tests/periph/npu/ asserts that the emulator
+Each Vela replay test under tests/chip/periph/npu/ asserts that the emulator
 writes a committed OFM (a hexBytes constant) for a committed IFM. This tool
 runs the source .tflite model behind each test through the TFLM reference
 kernels on the same IFM and diffs TFLM's output against that OFM, so a zero

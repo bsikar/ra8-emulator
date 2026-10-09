@@ -1,5 +1,5 @@
-//! The digest each printer sweep in tests/core/cpu/text must reach (see
-//! tests/core/cpu/text/digest.zig). Captured from a sweep in which every
+//! The digest each printer sweep in tests/chip/core/cpu/text must reach (see
+//! tests/chip/core/cpu/text/digest.zig). Captured from a sweep in which every
 //! encoding printed exactly as the reference disassembler printed it. When a printer changes on
 //! purpose, the failing test prints the replacement line.
 const std = @import("std");

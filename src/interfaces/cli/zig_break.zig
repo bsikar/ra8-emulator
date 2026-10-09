@@ -8,7 +8,7 @@ const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
 const breakpoint = @import("../../debug/breakpoint.zig");
 const profile = @import("../../debug/profile.zig");
-const cpu = @import("../../core/cpu/cpu.zig");
+const cpu = @import("../../chip/core/cpu/cpu.zig");
 const cli = @import("cli.zig");
 
 pub const Break = breakpoint.Break;

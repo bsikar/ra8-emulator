@@ -13,8 +13,8 @@
 //!                     window (RA8EMU-646); SDL is a lazy dependency,
 //!                     fetched and built only with -Dgui
 //!
-//! Source is grouped, not flat: src/core/ is the machine (engine, elf,
-//! memmap and disasm), src/periph/ is everything that
+//! Source is grouped, not flat: src/chip/core/ is the machine (engine, elf,
+//! memmap and disasm), src/chip/periph/ is everything that
 //! answers on the peripheral bus, and src/main.zig sits on top. Tests live
 //! in tests/ on mirrored paths, never in a `test` block at the bottom of a
 //! source file, and tests/all.zig is the root that pulls them in.

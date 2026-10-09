@@ -5,7 +5,7 @@
 //! nothing measured. The `--dump-sd` block and the `--watch` log follow
 //! (RA8EMU-391, json_sd.zig and json_watched.zig).
 const std = @import("std");
-const Guest = @import("../../../core/cpu/memory/guest.zig").Guest;
+const Guest = @import("../../../chip/core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../board/loader/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../debug/symbols.zig");

@@ -10,7 +10,7 @@
 //! does not depend on the host. It does not check the signature: that is the
 //! firmware's verifier, running inside the emulated board.
 const std = @import("std");
-const module_place = @import("../../core/module_place.zig");
+const module_place = @import("../../chip/core/module_place.zig");
 
 pub const magic: u32 = 0x52413841; // "RA8A"
 pub const version: u32 = 1;
@@ -128,7 +128,7 @@ pub fn data(header: Header, bytes: []const u8) []const u8 {
     return bytes[header_len + header.code_size ..][0..header.data_size];
 }
 
-/// The module as the chip places it (src/core/module_place.zig).
+/// The module as the chip places it (src/chip/core/module_place.zig).
 pub fn module(header: Header, bytes: []const u8) module_place.Module {
     return .{ .code = code(header, bytes), .data = data(header, bytes), .entry_offset = header.entry_offset };
 }

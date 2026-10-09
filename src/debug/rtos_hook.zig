@@ -13,7 +13,7 @@
 //! The Zig core feeds the tracer through src/debug/rtos_zig.zig, and CPU1
 //! through src/debug/rtos_second.zig.
 const std = @import("std");
-const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const elf = @import("../board/loader/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
@@ -43,7 +43,7 @@ pub const Tracer = struct {
     /// `elapsed` is lent.
     steps: u64 = 0,
     /// The run's virtual-instruction count, which also moves through
-    /// stretches the idle skip charges without executing (src/core/idle.zig).
+    /// stretches the idle skip charges without executing (src/chip/core/idle.zig).
     /// Null keeps the load clock on `steps`.
     elapsed: ?*const u64 = null,
     /// `elapsed` when the current chunk began, and instructions hooked since.

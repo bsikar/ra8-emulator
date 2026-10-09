@@ -4,8 +4,8 @@
 //! straight out of a byte buffer. Zig reads the same layout as extern structs,
 //! so the offsets are the struct fields and the bounds checks are slices.
 const std = @import("std");
-const memmap = @import("../../core/memmap.zig");
-const loaded_image = @import("../../core/loaded_image.zig");
+const memmap = @import("../../chip/core/memmap.zig");
+const loaded_image = @import("../../chip/core/loaded_image.zig");
 
 pub const Error = error{
     NotElf32,

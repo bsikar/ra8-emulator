@@ -1,6 +1,6 @@
 //! The Ethernet PHY on the MDIO bus, and the management frame RMAC.MPSM
 //! carries to it. A board part (RA8EMU-1042): the port reaches it through
-//! the MDIO line in src/periph/eth/eth_line.zig.
+//! the MDIO line in src/chip/periph/eth/eth_line.zig.
 //!
 //! The PHY is a part on a two-wire bus like any other: it answers at its own
 //! address and nowhere else, and the registers it measures are its to write.
@@ -10,8 +10,8 @@
 //! into BMSR and read back a link that never negotiated. Both are refused
 //! here and counted.
 const std = @import("std");
-const regs = @import("../../periph/eth/eth_regs.zig");
-const line = @import("../../periph/eth/eth_line.zig");
+const regs = @import("../../chip/periph/eth/eth_regs.zig");
+const line = @import("../../chip/periph/eth/eth_line.zig");
 
 /// Where the board's PHY answers. One PHY, at the bottom of the address
 /// space, which is what the bring-up code reads.
