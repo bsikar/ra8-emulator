@@ -29,7 +29,7 @@ const Stand = struct {
 
     fn on(disk: []u8) Stand {
         var stand: Stand = .{};
-        stand.usb.host.xfer.device.storage.disk = disk;
+        stand.usb.stick.disk = disk;
         return stand;
     }
 };
@@ -42,7 +42,7 @@ fn fill(board: *Stand) void {
     board.usb.host.xfer.setups = 5;
     board.usb.device.status = 0x12;
     board.usb.script.waited = 7;
-    const storage = &board.usb.host.xfer.device.storage;
+    const storage = &board.usb.stick;
     storage.phase = .data_in;
     storage.tag = 0xCAFE;
     storage.commands = 4;
@@ -65,7 +65,7 @@ test "the USB side round-trips mid-command" {
     var target = Stand.on(&disk_a);
     try usb.load(&target, list.written());
     try std.testing.expectEqualDeep(board, target);
-    const storage = &target.usb.host.xfer.device.storage;
+    const storage = &target.usb.stick;
     try std.testing.expect(storage.data.ptr == @as([*]const u8, &storage.scratch) + 2);
     try std.testing.expect(storage.sink.ptr == @as([*]u8, &disk_a) + 512);
 }
@@ -79,7 +79,7 @@ test "a load keeps the target's wiring" {
     var target = Stand.on(&disk_b);
     target.usb.bridge = Hook{ .context = &context, .pollFn = poll };
     try usb.load(&target, list.written());
-    const storage = &target.usb.host.xfer.device.storage;
+    const storage = &target.usb.stick;
     try std.testing.expectEqual(@as(u32, 5), target.usb.host.xfer.setups);
     try std.testing.expect(storage.disk.ptr == @as([*]u8, &disk_b));
     try std.testing.expect(storage.sink.ptr == @as([*]u8, &disk_b) + 512);

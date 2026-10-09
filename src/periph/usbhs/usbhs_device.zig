@@ -8,7 +8,7 @@
 //! to cope with on a bench.
 const regs = @import("usbhs_regs.zig");
 const setup = @import("usbhs_setup.zig");
-const usbhs_msc = @import("usbhs_msc.zig");
+const usbhs_function = @import("usbhs_function.zig");
 
 /// Where enumeration has got to, per USB 2.0 chapter 9.
 pub const State = enum { default, address, configured };
@@ -45,10 +45,10 @@ pub const Device = struct {
     echo_len: u16 = 0,
     echo_ready: bool = false,
 
-    /// The mass-storage function behind the bulk endpoints. With a disk
-    /// plugged in (the board sets storage.disk) the endpoints speak BOT;
+    /// The function behind the bulk endpoints. With one plugged in (the
+    /// board plugs the USB stick here) the endpoints speak its protocol;
     /// without one they echo, as before.
-    storage: usbhs_msc.Target = .{},
+    storage: ?usbhs_function.Function = null,
 
     setups: u32 = 0,
     /// Requests answered with a stall, each for its own reason.
@@ -72,7 +72,7 @@ pub const Device = struct {
         self.reply_ready = false;
         self.echo_len = 0;
         self.echo_ready = false;
-        self.storage.reset();
+        if (self.storage) |function| function.reset();
     }
 
     /// Answer a SETUP. False means the device stalled it, which is what the
@@ -155,8 +155,8 @@ pub const Device = struct {
             self.out_of_order += 1;
             return false;
         }
-        if (self.hasDisk()) {
-            if (self.storage.command(bytes)) return true;
+        if (self.storage) |function| {
+            if (function.command(bytes)) return true;
             self.out_of_order += 1;
             return false;
         }
@@ -177,19 +177,19 @@ pub const Device = struct {
     }
 
     pub fn hasDisk(self: *const Device) bool {
-        return self.storage.disk.len != 0;
+        return self.storage != null;
     }
 
     /// Whether the bulk IN endpoint has a packet owed: the storage
     /// function's data or CSW, or the echo.
     pub fn bulkPending(self: *const Device) bool {
-        if (self.hasDisk()) return self.storage.phase != .command;
+        if (self.storage) |function| return function.pending();
         return self.echo_ready;
     }
 
     /// The next bulk IN packet, from whichever function owns the endpoint.
     pub fn takeIn(self: *Device, into: []u8) u16 {
-        if (self.hasDisk()) return @intCast(self.storage.reply(into));
+        if (self.storage) |function| return @intCast(function.reply(into));
         return self.takeEcho(into);
     }
 

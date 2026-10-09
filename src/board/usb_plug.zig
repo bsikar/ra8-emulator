@@ -7,7 +7,7 @@
 //! copy, never back to the file.
 const std = @import("std");
 const usb = @import("usb.zig");
-const usb_disk = @import("usb_disk.zig");
+const usb_disk = @import("../components/usb_stick/disk.zig");
 
 pub const blank_spec = "blank";
 /// 256 KiB: big enough for the host examples' files, and still FAT12.
@@ -34,9 +34,12 @@ pub fn load(allocator: std.mem.Allocator, io: std.Io, spec: []const u8) ![]u8 {
     return disk;
 }
 
-/// Put `disk` behind the far-end device's bulk endpoints.
+/// Put `disk` in the stick and the stick behind the far-end device's bulk
+/// endpoints. The board has to be at its final address: the device keeps a
+/// pointer to the stick.
 pub fn plug(board_usb: *usb.Usb, disk: []u8) void {
-    board_usb.host.xfer.device.storage.disk = disk;
+    board_usb.stick.disk = disk;
+    board_usb.host.xfer.device.storage = board_usb.stick.function();
 }
 
 /// What the --usb-disk option asked for, if anything: load it and plug it

@@ -1,7 +1,7 @@
 //! The mass-storage target: a CBW in, the data stage and a CSW back out.
 const std = @import("std");
 const ra8 = @import("ra8");
-const msc = ra8.periph.usbhs_msc;
+const msc = ra8.components.usb_stick;
 
 fn cbw(tag: u32, length: u32, cdb: []const u8) [msc.cbw_len]u8 {
     var packet = @as([msc.cbw_len]u8, @splat(0));

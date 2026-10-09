@@ -13,4 +13,6 @@ test {
     _ = @import("user_switch/user_switch_test.zig");
     _ = @import("eth_phy/phy_test.zig");
     _ = @import("eth_phy/peer_test.zig");
+    _ = @import("usb_stick/stick_test.zig");
+    _ = @import("usb_stick/disk_test.zig");
 }
