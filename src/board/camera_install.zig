@@ -1,15 +1,14 @@
 //! Changing where the CEU's pixels come from on a running board
-//! (RA8EMU-795): open the spec the way `--camera-source` does (RA8EMU-525),
-//! then close the old source and put the new one where the CEU reads. A
-//! spec that cannot be opened leaves the old source in place.
-const std = @import("std");
+//! (RA8EMU-795): the application opens the new source first (RA8EMU-1011),
+//! then this closes the old source and puts the new one where the CEU
+//! reads. A source that cannot be opened never gets here, so the old one
+//! stays in place.
 const Board = @import("board.zig").Board;
-const registry = @import("../periph/camera/camera_registry.zig");
+const frame_source = @import("../periph/camera/frame_source.zig");
 
-/// Open `spec` and install it as `board`'s camera source. Call it only on
-/// the thread that steps the board.
-pub fn install(board: *Board, allocator: std.mem.Allocator, io: std.Io, spec: registry.Spec) !void {
-    const next = try spec.open(allocator, io, &board.wire.sensor.format);
+/// Install `next` as `board`'s camera source; the board owns it from here.
+/// Call it only on the thread that steps the board.
+pub fn install(board: *Board, next: frame_source.FrameSource) void {
     board.capture.source.close();
     board.capture.source = next;
 }

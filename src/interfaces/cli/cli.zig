@@ -181,7 +181,7 @@ pub const Options = struct {
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
     /// `--camera-source KIND[:ARG]`: where the CEU's pixels come from (RA8EMU-525).
-    camera: @import("../../periph/camera/camera_registry.zig").Spec = .{},
+    camera: @import("../../host/camera/source_spec.zig").Spec = .{},
 
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {

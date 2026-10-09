@@ -9,6 +9,7 @@ pub const core = struct {
     pub const cli_fault_file = @import("interfaces/cli/fault_file.zig");
     pub const probe_ctl = @import("interfaces/cli/probe_ctl.zig");
     pub const serve_main = @import("interfaces/cli/serve_main.zig");
+    pub const cli_camera_source = @import("interfaces/cli/camera_source.zig");
     pub const map_main = @import("interfaces/cli/map_main.zig");
     pub const serve_listen = @import("interfaces/cli/serve_listen.zig");
     pub const session_ctl = @import("interfaces/cli/session_ctl.zig");
@@ -202,6 +203,8 @@ pub const host = struct {
         pub const video_file = @import("host/camera/video_file.zig");
         pub const pipe_input = @import("host/camera/pipe_input.zig");
         pub const webcam = @import("host/camera/webcam.zig");
+        pub const source_spec = @import("host/camera/source_spec.zig");
+        pub const source_open = @import("host/camera/source_open.zig");
     };
 };
 pub const gui = @import("gui.zig");

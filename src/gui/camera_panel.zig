@@ -8,9 +8,9 @@
 //! Always holds for the rest of the run. `changes` counts switches so the
 //! runner knows to reopen the CEU's source mid-run without a restart.
 //! Drawing the panel and persisting Always to the project are later slices.
-const registry = @import("../periph/camera/camera_registry.zig");
+const source_spec = @import("../host/camera/source_spec.zig");
 
-pub const Kind = registry.Kind;
+pub const Kind = source_spec.Kind;
 
 /// The three buttons of the webcam permission dialog.
 pub const Answer = enum { allow_once, always, cancel };

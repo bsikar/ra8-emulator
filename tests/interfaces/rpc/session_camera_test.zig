@@ -8,14 +8,14 @@ const ra8 = @import("ra8");
 const proto = ra8.interfaces.rpc.session;
 const handlers = ra8.interfaces.rpc.server;
 const camera = ra8.interfaces.rpc.camera;
-const registry = ra8.periph.ceu.camera.registry;
+const source_spec = ra8.host.camera.source_spec;
 
 const Hook = struct {
     calls: u32 = 0,
-    last: registry.Spec = .{},
+    last: source_spec.Spec = .{},
     fail: bool = false,
 
-    fn set(context: *anyopaque, spec: registry.Spec) anyerror!void {
+    fn set(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
         const self: *Hook = @ptrCast(@alignCast(context));
         if (self.fail) return error.FileNotFound;
         self.calls += 1;
@@ -42,7 +42,7 @@ test "a parsed spec reaches the hook and is acknowledged" {
     const outcome = camera.setCameraSource(&context, .{ .text = "video:clip.y4m,loop" });
     try std.testing.expectEqual(@as(u8, 1), outcome.ok.accepted);
     try std.testing.expectEqual(@as(u32, 1), hook.calls);
-    try std.testing.expectEqual(registry.Kind.video, hook.last.kind);
+    try std.testing.expectEqual(source_spec.Kind.video, hook.last.kind);
     try std.testing.expectEqualStrings("clip.y4m,loop", hook.last.arg);
     try std.testing.expect(!hook.last.allow_webcam);
 }

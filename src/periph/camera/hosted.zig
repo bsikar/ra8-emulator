@@ -8,6 +8,7 @@ const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const convert = @import("pixel_convert.zig");
 const converted = @import("converted_source.zig");
+const gradient = @import("gradient_source.zig");
 
 /// OV5640 FORMAT CONTROL (0x4300): bits 7:4 pick the output format. 0x6 is
 /// RGB565. 0x3 is YUV422, which the camera example writes (0x30), and the
@@ -15,6 +16,16 @@ const converted = @import("converted_source.zig");
 /// converter produces.
 pub fn formatFor(control: u8) convert.Format {
     return if (control >> 4 == 0x6) .rgb565 else .yuv422;
+}
+
+/// The FrameSource for a host input the application opened, or the
+/// gradient when there is none (`input` is null). `input` also has
+/// `label()` and `detail()`, which the report prints. The source owns the
+/// input, and on an error this closes it.
+pub fn wrap(allocator: std.mem.Allocator, input: anytype, format_control: *const u8) !frame_source.FrameSource {
+    const opened = input orelse return gradient.source();
+    errdefer opened.close();
+    return Hosted(@TypeOf(opened.*)).open(allocator, opened, format_control, opened.label(), opened.detail());
 }
 
 /// The FrameSource over `Input`: a host object with `picture(self, when)`,

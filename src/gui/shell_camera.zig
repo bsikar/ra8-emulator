@@ -16,7 +16,7 @@ const shell_frame = @import("shell_frame.zig");
 const camera_panel = @import("camera_panel.zig");
 const camera_view = @import("camera_view.zig");
 const camera_open = @import("camera_open.zig");
-const Spec = @import("../periph/camera/camera_registry.zig").Spec;
+const Spec = @import("../host/camera/source_spec.zig").Spec;
 
 const Kind = camera_panel.Kind;
 

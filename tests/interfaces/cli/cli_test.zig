@@ -291,17 +291,17 @@ test "--dump-mem repeats keep every place in order, each with its own count" {
 
 test "--camera-source picks the CEU's source; unknown kinds are refused" {
     const plain = try parse(&.{ "ra8", "app.elf" });
-    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.gradient, plain.camera.kind);
+    try std.testing.expectEqual(ra8.host.camera.source_spec.Kind.gradient, plain.camera.kind);
     const chosen = try parse(&.{ "ra8", "app.elf", "--camera-source", "gradient" });
-    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.gradient, chosen.camera.kind);
+    try std.testing.expectEqual(ra8.host.camera.source_spec.Kind.gradient, chosen.camera.kind);
     try std.testing.expectError(error.UnknownCameraSource, parse(&.{ "ra8", "app.elf", "--camera-source", "camera:0" }));
     const cam = try parse(&.{ "ra8", "app.elf", "--allow-webcam", "--camera-source", "webcam:2" });
-    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.webcam, cam.camera.kind);
+    try std.testing.expectEqual(ra8.host.camera.source_spec.Kind.webcam, cam.camera.kind);
     try std.testing.expect(cam.camera.allow_webcam);
     try std.testing.expect(!(try parse(&.{ "ra8", "app.elf", "--camera-source", "webcam" })).camera.allow_webcam);
     try std.testing.expectError(error.MissingValue, parse(&.{ "ra8", "app.elf", "--camera-source" }));
     const still = try parse(&.{ "ra8", "app.elf", "--camera-source", "image:pic.ppm" });
-    try std.testing.expectEqual(ra8.periph.ceu.camera.registry.Kind.image, still.camera.kind);
+    try std.testing.expectEqual(ra8.host.camera.source_spec.Kind.image, still.camera.kind);
     try std.testing.expectEqualStrings("pic.ppm", still.camera.arg);
     try std.testing.expectError(error.BadValue, parse(&.{ "ra8", "app.elf", "--camera-source", "image" }));
 }

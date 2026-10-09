@@ -13,7 +13,8 @@ const loop = @import("serve_loop.zig");
 const listen = @import("serve_listen.zig");
 const session_plug = @import("../../board/session_plug.zig");
 const camera_install = @import("../../board/camera_install.zig");
-const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
+const camera_source = @import("camera_source.zig");
 const Board = @import("../../board/board.zig").Board;
 const session_api = @import("../../debug/session_api.zig");
 const region_map = @import("../../debug/region_map.zig");
@@ -103,8 +104,9 @@ const Camera = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
 
-    fn set(context: *anyopaque, spec: camera_registry.Spec) anyerror!void {
+    fn set(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
         const self: *Camera = @ptrCast(@alignCast(context));
-        try camera_install.install(self.board, self.allocator, self.io, spec);
+        const next = try camera_source.open(self.allocator, self.io, spec, &self.board.wire.sensor.format);
+        camera_install.install(self.board, next);
     }
 };

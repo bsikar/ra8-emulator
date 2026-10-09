@@ -11,7 +11,7 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const platform = @import("platform.zig");
 const camera_panel = @import("camera_panel.zig");
-const registry = @import("../periph/camera/camera_registry.zig");
+const source_spec = @import("../host/camera/source_spec.zig");
 const camera_view = @import("camera_view.zig");
 const camera_open = @import("camera_open.zig");
 const camera_switch = @import("camera_switch.zig");
@@ -42,7 +42,7 @@ pub const Pane = struct {
     /// is open already, so nothing counts as a switch. A webcam the run
     /// opened was allowed on the terminal first, so it shows as allowed
     /// once: picking another source and coming back asks again.
-    pub fn seed(self: *Pane, given: registry.Spec) void {
+    pub fn seed(self: *Pane, given: source_spec.Spec) void {
         switch (given.kind) {
             .gradient => {},
             .image => self.args.image = given.arg,
