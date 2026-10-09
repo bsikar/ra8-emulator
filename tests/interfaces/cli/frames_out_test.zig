@@ -143,7 +143,7 @@ test "an armed run keeps one frame per period with its emulated time" {
 }
 
 test "an attached e-ink refresh records its grey glass plane once per refresh" {
-    const proto = ra8.periph.eink_wire;
+    const proto = ra8.components.eink_wire;
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     board.asks.attached_eink = &board.panel;
@@ -178,7 +178,7 @@ test "an attached e-ink refresh records its grey glass plane once per refresh" {
 }
 
 test "with no attach, the board's own e-ink refreshes become the sequence" {
-    const proto = ra8.periph.eink_wire;
+    const proto = ra8.components.eink_wire;
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     board.panel.planes.resize(.{ .width = 16, .height = 8 });
@@ -200,7 +200,7 @@ test "with no attach, the board's own e-ink refreshes become the sequence" {
     try std.testing.expect(board.panel.refresh_hook == null);
 }
 
-fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void {
+fn eInkRefresh(panel: *ra8.components.eink.Panel, proto: anytype, pixels: u16) void {
     panelWord(panel, proto.preamble.command);
     panelWord(panel, @backingInt(proto.Command.load_area));
     for ([_]u16{ 0x0030, 0, 0, 2, 1, pixels }) |value| {
@@ -215,7 +215,7 @@ fn eInkRefresh(panel: *ra8.periph.eink.Panel, proto: anytype, pixels: u16) void 
     }
 }
 
-fn panelWord(panel: *ra8.periph.eink.Panel, value: u16) void {
+fn panelWord(panel: *ra8.components.eink.Panel, value: u16) void {
     _ = panel.exchange(@intCast(value >> 8));
     _ = panel.exchange(@intCast(value & 0xFF));
 }

@@ -20,7 +20,7 @@ test "an SPI model on spi1 exchanges frames through the channel" {
     const made, const at = try make(arena.allocator(), "eink@spi:spi1@ssl0");
     try plug.one(&board, made.device, at);
     const line = board.spi.channels[1].device orelse return error.NotPlugged;
-    const panel: *ra8.periph.eink.Panel = @ptrCast(@alignCast(made.state));
+    const panel: *ra8.components.eink.Panel = @ptrCast(@alignCast(made.state));
     try std.testing.expectEqual(panel.exchange(0x00), line.exchange(0x00));
     try std.testing.expect(board.spi.channels[0].device == null);
 }

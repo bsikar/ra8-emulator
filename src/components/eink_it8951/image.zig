@@ -1,7 +1,7 @@
 //! The IT8951's host image plane and refreshed glass plane.
 
 const std = @import("std");
-const proto = @import("eink_wire.zig");
+const proto = @import("wire.zig");
 
 /// A grayscale plane at one panel geometry. Empty until sized, and a write
 /// outside it is dropped, so a load never runs past the reported panel.

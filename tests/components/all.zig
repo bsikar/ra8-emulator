@@ -31,4 +31,10 @@ test {
     _ = @import("sd_card/bus_card_image_test.zig");
     _ = @import("modem_at/modem_test.zig");
     _ = @import("modem_at/script_test.zig");
+    _ = @import("eink_it8951/panel_test.zig");
+    _ = @import("eink_it8951/busy_test.zig");
+    _ = @import("eink_it8951/full_load_test.zig");
+    _ = @import("eink_it8951/image_test.zig");
+    _ = @import("eink_it8951/ghost_test.zig");
+    _ = @import("eink_it8951/wire_test.zig");
 }

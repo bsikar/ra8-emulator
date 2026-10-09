@@ -60,11 +60,11 @@
 //! ready and stays there), and every register besides LUTAFSR, which are
 //! shadowed and never interpreted.
 const std = @import("std");
-const proto = @import("eink_wire.zig");
-const busy = @import("eink_busy.zig");
-const image = @import("eink_image.zig");
-const refresh = @import("eink_refresh.zig");
-const spi = @import("../spi/spi.zig");
+const proto = @import("wire.zig");
+const busy = @import("busy.zig");
+const image = @import("image.zig");
+const refresh = @import("refresh.zig");
+const spi = @import("../../periph/spi/spi.zig");
 /// The LUT busy model, re-exported so a caller reaches it through the
 /// panel rather than by a second import.
 pub const lut = busy;

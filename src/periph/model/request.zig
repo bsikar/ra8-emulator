@@ -8,7 +8,7 @@ const std = @import("std");
 const endpoint = @import("endpoint.zig");
 const parts = @import("parts.zig");
 const fault_spec = @import("fault_spec.zig");
-const eink_wire = @import("../eink/eink_wire.zig");
+const eink_wire = @import("../../components/eink_it8951/wire.zig");
 
 /// How many extra models one run may attach: the RIIC registry's own
 /// depth per line (riic_bus.max_devices).

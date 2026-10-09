@@ -21,7 +21,7 @@ const spi = @import("../periph/spi/spi.zig");
 const session_api = @import("../debug/session_api.zig");
 const plug = @import("plug.zig");
 const Board = @import("board.zig").Board;
-const eink = @import("../periph/eink/eink.zig");
+const eink = @import("../components/eink_it8951/panel.zig");
 
 pub const Error = error{NothingFitted};
 

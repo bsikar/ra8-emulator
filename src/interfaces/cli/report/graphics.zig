@@ -59,7 +59,7 @@ pub fn panel(board: *Board, out: Writer) !void {
 /// so every refresh was over the instant it was asked for: a driver's wait
 /// loop exited on its first pass and a second refresh clocked in on top of
 /// one still being driven looked like two clean ones. The dwell is counted
-/// in host polls, not wall time; see eink_busy.zig.
+/// in host polls, not wall time; see components/eink_it8951/busy.zig.
 fn film(unit: anytype, out: Writer) !void {
     const lut = &unit.film;
     if (lut.quiet()) return;

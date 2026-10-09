@@ -1,8 +1,8 @@
 //! RA8EMU-686: one image-load command covers the full IT8951 panel.
 const std = @import("std");
 const ra8 = @import("ra8");
-const eink = ra8.periph.eink;
-const proto = ra8.periph.eink_wire;
+const eink = ra8.components.eink;
+const proto = ra8.components.eink_wire;
 
 fn word(panel: *eink.Panel, value: u16) void {
     _ = panel.exchange(@intCast(value >> 8));

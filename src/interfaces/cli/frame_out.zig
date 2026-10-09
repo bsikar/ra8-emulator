@@ -7,8 +7,8 @@
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../periph/gpio/gpio.zig");
-const eink = @import("../../periph/eink/eink.zig");
-const eink_wire = @import("../../periph/eink/eink_wire.zig");
+const eink = @import("../../components/eink_it8951/panel.zig");
+const eink_wire = @import("../../components/eink_it8951/wire.zig");
 const png = @import("png.zig");
 const board_view = @import("../../render/board_view.zig");
 

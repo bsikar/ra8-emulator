@@ -2,7 +2,7 @@
 //! sector, and the first entries of the FAT itself.
 //!
 //! Vocabulary and serialisation only, the shape sd_reply.zig and
-//! eink_wire.zig take beside the protocol files they serve: what a field is
+//! eink_it8951/wire.zig take beside the protocol files they serve: what a field is
 //! called, where it sits in the sector, and how a value gets into it. Which
 //! geometry a card is given, and which volumes are refused outright, is
 //! sd_format.zig's business.
