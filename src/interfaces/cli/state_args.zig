@@ -3,22 +3,14 @@
 //! back right after reset, before the first instruction. `--snapshot-at
 //! TIME:PATH` writes the same file part way, at the first boundary at or past
 //! virtual time TIME, and the run keeps going; `--restore PATH` starts from
-//! one through `--load-state`'s path (RA8EMU-769).
+//! one through `--load-state`'s path (RA8EMU-769). The parsed options are
+//! the session's own type (src/session/state_options.zig).
 const std = @import("std");
 const world_flags = @import("world_flags.zig");
+const state_options = @import("../../session/state_options.zig");
 
-/// Where `--snapshot-at` writes, and whether it has yet.
-pub const At = struct { ns: u64, path: []const u8, written: bool = false };
-
-pub const Options = struct {
-    save: ?[]const u8 = null,
-    load: ?[]const u8 = null,
-    at: ?At = null,
-
-    pub fn wanted(self: Options) bool {
-        return self.save != null or self.load != null or self.at != null;
-    }
-};
+pub const At = state_options.At;
+pub const Options = state_options.Options;
 
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     const flag = argv[index.*];
