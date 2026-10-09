@@ -7,7 +7,7 @@ const nvic = @import("../periph/nvic.zig");
 const clocks = @import("../periph/clocks.zig");
 const second_wait = @import("second_wait.zig");
 const rate = @import("core_rate.zig");
-const Board = @import("../board/board.zig").Board;
+const Wiring = @import("second_wiring.zig").Wiring;
 const Guest = @import("cpu/memory/guest.zig").Guest;
 
 pub const State = struct {
@@ -25,8 +25,9 @@ pub const State = struct {
     timebase: clocks.Clocks = .{},
     /// CPU1 parked in WFE, and what woke it.
     wait: second_wait.Wait = .{},
-    /// The board, for a system reset that holds CPU1 until CPU0 releases it.
-    board: ?*Board = null,
+    /// The board's wiring, for a system reset that holds CPU1 until CPU0
+    /// releases it.
+    wiring: ?Wiring = null,
     resets_seen: u32 = 0,
     held: bool = false,
     restarts: u32 = 0,
@@ -48,13 +49,13 @@ pub const State = struct {
     /// Whether CPU1 sits in reset after a system reset. Once CPU0 releases
     /// it, its VTOR is primed through `memory` and it is marked unvectored.
     pub fn heldInReset(self: *State, memory: Guest) bool {
-        const board = self.board orelse return self.held;
-        const pending = board.reboot orelse return self.held;
+        const wiring = self.wiring orelse return self.held;
+        const pending = wiring.reboot.* orelse return self.held;
         if (pending.performed != self.resets_seen) {
             self.resets_seen = pending.performed;
             self.held = true;
         }
-        if (self.held and board.second_core.running()) self.leaveReset(memory, board.second_core.initvtor);
+        if (self.held and wiring.release.running()) self.leaveReset(memory, wiring.release.initvtor);
         return self.held;
     }
 

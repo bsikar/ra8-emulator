@@ -214,7 +214,7 @@ test "CPU1 on its own store shares CPU0's SRAM and answers as an M33" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var own: second_core.zig.Own = undefined;
-    try own.open(&lender, &board, try ra8.core.elf.Image.init(&file));
+    try own.open(&lender, ra8.board.wiring.cpu1(&board), try ra8.core.elf.Image.init(&file));
     defer own.close();
     const memory = own.core.memory;
     try std.testing.expectEqual(@as(u32, 0x5EED_CAFE), try memory.readWord(shared_word));
