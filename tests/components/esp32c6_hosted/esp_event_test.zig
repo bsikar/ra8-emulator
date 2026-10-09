@@ -1,7 +1,7 @@
-//! Tests for src/periph/esp_hosted/esp_event.zig.
+//! Tests for src/components/esp32c6_hosted/esp_event.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const hosted = ra8.periph.esp_hosted;
+const hosted = ra8.components.esp_hosted;
 const event = hosted.event;
 const frame = hosted.frame;
 

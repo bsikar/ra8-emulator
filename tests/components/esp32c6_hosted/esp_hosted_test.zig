@@ -1,7 +1,7 @@
 //! The ESP32-C6 link response and its chip-select sideband.
 const std = @import("std");
 const ra8 = @import("ra8");
-const c6 = ra8.periph.esp_hosted;
+const c6 = ra8.components.esp_hosted;
 const gpio = ra8.periph.gpio;
 const sci = ra8.periph.sci;
 const sci_spi = ra8.periph.sci_spi;
@@ -78,22 +78,22 @@ test "a board tick raises DATA_READY for an asynchronously queued frame" {
 }
 
 test {
-    _ = @import("esp_hosted/esp_frame_test.zig");
-    _ = @import("esp_hosted/esp_event_test.zig");
-    _ = @import("esp_hosted/esp_link_test.zig");
-    _ = @import("esp_hosted/esp_link_sci_test.zig");
-    _ = @import("esp_hosted/esp_rpc_test.zig");
-    _ = @import("esp_hosted/esp_station_test.zig");
-    _ = @import("esp_hosted/esp_queue_test.zig");
-    _ = @import("esp_hosted/esp_eth_test.zig");
-    _ = @import("esp_hosted/esp_dns_test.zig");
-    _ = @import("esp_hosted/esp_net_test.zig");
-    _ = @import("esp_hosted/esp_tape_test.zig");
-    _ = @import("esp_hosted/esp_host_net_test.zig");
-    _ = @import("esp_hosted/esp_replay_test.zig");
-    _ = @import("esp_hosted/esp_dhcp_test.zig");
-    _ = @import("esp_hosted/esp_gateway_test.zig");
-    _ = @import("esp_hosted/esp_scan_test.zig");
+    _ = @import("esp_frame_test.zig");
+    _ = @import("esp_event_test.zig");
+    _ = @import("esp_link_test.zig");
+    _ = @import("esp_link_sci_test.zig");
+    _ = @import("esp_rpc_test.zig");
+    _ = @import("esp_station_test.zig");
+    _ = @import("esp_queue_test.zig");
+    _ = @import("esp_eth_test.zig");
+    _ = @import("esp_dns_test.zig");
+    _ = @import("esp_net_test.zig");
+    _ = @import("esp_tape_test.zig");
+    _ = @import("esp_host_net_test.zig");
+    _ = @import("esp_replay_test.zig");
+    _ = @import("esp_dhcp_test.zig");
+    _ = @import("esp_gateway_test.zig");
+    _ = @import("esp_scan_test.zig");
 }
 
 test "the C6 companion hooks leave DATA_READY low with an empty queue" {

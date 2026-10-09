@@ -1,7 +1,7 @@
-//! Tests for src/periph/esp_hosted/esp_eth.zig.
+//! Tests for src/components/esp32c6_hosted/esp_eth.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const eth = ra8.periph.esp_hosted.eth;
+const eth = ra8.components.esp_hosted.eth;
 
 const route: eth.Route = .{
     .src_mac = .{ 1, 2, 3, 4, 5, 6 },
@@ -58,7 +58,7 @@ test "frames that are not UDP over IPv4 are not read" {
 }
 
 test "TCP frames round-trip fields and checksums" {
-    var buf: [ra8.periph.esp_hosted.frame.max_payload]u8 = undefined;
+    var buf: [ra8.components.esp_hosted.frame.max_payload]u8 = undefined;
     const len = eth.tcpFrame(
         &buf,
         route,
@@ -78,7 +78,7 @@ test "TCP frames round-trip fields and checksums" {
 }
 
 test "bad checksums fragments and oversize payloads are refused" {
-    var buf: [ra8.periph.esp_hosted.frame.max_payload]u8 = undefined;
+    var buf: [ra8.components.esp_hosted.frame.max_payload]u8 = undefined;
     const len = eth.tcpFrame(&buf, route, 1, 2, eth.TcpFlag.ack, 4, "x").?;
     var bad_ip = buf;
     bad_ip[eth.eth_header + 10] ^= 1;

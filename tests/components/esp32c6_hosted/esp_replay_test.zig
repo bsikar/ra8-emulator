@@ -2,7 +2,7 @@
 //! byte for byte, and an unrecorded request fails (RA8EMU-560).
 const std = @import("std");
 const ra8 = @import("ra8");
-const hosted = ra8.periph.esp_hosted;
+const hosted = ra8.components.esp_hosted;
 const eth = hosted.eth;
 const frame = hosted.frame;
 const tape = hosted.tape;

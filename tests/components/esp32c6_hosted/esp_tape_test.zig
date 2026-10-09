@@ -1,7 +1,7 @@
 //! Tape files for recorded C6 host traffic (RA8EMU-560).
 const std = @import("std");
 const ra8 = @import("ra8");
-const tape = ra8.periph.esp_hosted.tape;
+const tape = ra8.components.esp_hosted.tape;
 const tape_dir = ra8.host.tape_dir;
 
 const web = tape.Key{ .proto = .tcp, .ip = .{ 93, 184, 216, 34 }, .port = 80 };
