@@ -108,7 +108,6 @@ pub const Pend = struct {
     /// the instruction stream, so it is measured.
     ended_at: u32 = 0,
     /// Where the thread was put to resume, past the store at `ended_at`.
-    /// src/core/pend_resume.zig carries why.
     resume_at: ?u32 = null,
     ended: bool = false,
     /// Stops the hook asked for, counted where it asks.

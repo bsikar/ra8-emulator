@@ -11,9 +11,7 @@
 //!   it for exactly that, so this is a legal wake. It covers events the
 //!   model cannot see, such as a SEV CPU1 itself ran before its WFE.
 //!
-//! The run loop hands a WFE stop back instead of resuming it when the
-//! session asks it to (`Session.park_on_wfe`); src/core/second_core.zig
-//! routes the stop here.
+//! src/core/second_core.zig routes a WFE stop here.
 const core_event = @import("core_event.zig");
 
 pub const limits = struct {

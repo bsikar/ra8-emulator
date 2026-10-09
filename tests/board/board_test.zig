@@ -204,8 +204,7 @@ test "an AGT underflow is raised on the boundary that closes at its due time" {
     while (unit.interval.channels[0].underflows == 0) : (boundary += 1) {
         try std.testing.expect(boundary < 8);
         const due = unit.time.queue.next().?;
-        const pace = ra8.core.run_pace.forStretch(memory, .{ .per_boundary = 50_000 }, .{ .board = unit.ticker() });
-        try unit.tick(memory, pace.per_boundary);
+        try unit.tick(memory, toDue(unit.ticker(), 50_000));
         // Nothing before the due time underflows, and the boundary that
         // does is the one whose end is that time, not the next whole one.
         // The count rather than `pending`: the boundary hands that to the
@@ -237,12 +236,20 @@ test "a WDT underflow lands on the boundary that closes at its due time, carry i
     var boundary: usize = 0;
     while (unit.watchdog.underflows == 0) : (boundary += 1) {
         try std.testing.expect(boundary < 8);
-        const pace = ra8.core.run_pace.forStretch(memory, .{ .per_boundary = 50_000 }, .{ .board = unit.ticker() });
-        try unit.tick(memory, pace.per_boundary);
+        try unit.tick(memory, toDue(unit.ticker(), 50_000));
         if (unit.watchdog.underflows == 0) try std.testing.expect(unit.time.base.now() < 130_000);
     }
     try std.testing.expectEqual(@as(usize, 3), boundary);
     try std.testing.expectEqual(@as(u64, 130_000), unit.time.base.now());
+}
+
+/// `width`, narrowed to end on the board's next queued event when that is
+/// closer, as the run loop sizes a stretch.
+fn toDue(tick: ra8.core.tick.Tick, width: u32) u32 {
+    const cycles = tick.cyclesToDue();
+    if (cycles == 0 or cycles > std.math.maxInt(u32)) return width;
+    const configured: ra8.core.cadence.Cadence = .{ .per_boundary = width };
+    return configured.narrowedTo(@intCast(cycles)).per_boundary;
 }
 
 /// A bare board with its blocks attached, ready for one boundary.

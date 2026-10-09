@@ -20,18 +20,9 @@ const breakpoint = @import("../debug/breakpoint.zig");
 const stop = @import("stop.zig");
 const until = @import("until.zig");
 const undefined_ops = @import("undefined_ops.zig");
-const deadline = @import("deadline.zig");
 const fault = @import("fault.zig");
 const idle = @import("idle.zig");
-const unmask = @import("unmask.zig");
-const pend_break = @import("pend_break.zig");
 const bus_fault = @import("../periph/bus_fault.zig");
-const mask_pace = @import("mask_pace.zig");
-const pend_pace = @import("pend_pace.zig");
-const hotspots = @import("../debug/hotspots.zig");
-const tally = @import("../debug/tally.zig");
-const taken_in = @import("../debug/taken_in.zig");
-const functions = @import("../debug/functions.zig");
 
 /// Records the invalid access behind a fault.
 pub const Watch = fault.Watch;
@@ -75,72 +66,15 @@ pub const Session = struct {
     /// one of them caught. Null runs with the table captured but nothing
     /// checked against it, which is every test that does not program one.
     protection: ?*mpu_guard.Guard = null,
-    /// Modelled time the run is allowed, counted in the SysTick periods the
-    /// time base reports. Null is untimed. Needs `timebase` to have anything
-    /// to count, so an image with no clocks attached is never cut short by
-    /// a deadline it could not have reached.
-    deadline: ?*deadline.Deadline = null,
     /// Proves a stretch of execution cannot change anything, so it can be
     /// charged to the clocks without being run. Null executes every
     /// instruction, which is what every test that is not about the seam
     /// wants. src/core/idle.zig says what has to hold before one is
     /// skipped.
     idle: ?*idle.Seam = null,
-    /// Lets a pend that is ready but masked wait out the mask instead of
-    /// being dropped for a whole period. Null keeps the old behaviour, which
-    /// is what every test that is not about delivery timing wants.
-    /// src/core/unmask.zig says what it costs and what bounds it.
-    unmask: ?*unmask.Release = null,
-    /// Where the run spent itself: the program counter sampled once per
-    /// chunk boundary. Null samples nothing, which is what every test that
-    /// is not about the sampler wants. src/debug/hotspots.zig says what one
-    /// sample per boundary can and cannot answer.
-    pcs: ?*hotspots.Table = null,
-    /// Where the run went, by function. Coarser than `pcs` and the one
-    /// that survives a run touching thousands of addresses.
-    fns: ?*functions.Table = null,
 
-    /// Where the machine was when an exception was taken, tallied as the
-    /// pair (interrupted program counter, exception number).
-    ///
-    /// A count of entries says how busy the vectors are; it cannot say
-    /// whether a switch cut a sequence that had to run whole. ThreadX puts
-    /// a window like that in every sleep: `_tx_thread_sleep` increments
-    /// `_tx_thread_preempt_disable`, restores PRIMASK, and only then calls
-    /// `_tx_thread_system_suspend`, which decrements it again. A thread
-    /// stopped in there holds the flag up, and the timer handler refuses
-    /// to issue a PendSV while it is up. This is how to ask how often an
-    /// exception lands between the two.
-    taken_from: ?*tally.Tally = null,
-
-    /// Every exception taken inside one named function, kept whole. The
-    /// tally above displaces its rarest row, which is exactly the entry a
-    /// once-per-run fault is. src/debug/taken_in.zig carries the rest.
-    taken_in: ?*taken_in.Window = null,
     /// The swept undefined sites, when reaching one should end the run.
     /// Null runs past them and only counts, which is the default: the
     /// sweep reports, it does not decide.
     undefined_sites: ?*undefined_ops.Found = null,
-    /// A pend the firmware wrote inside a stretch, which ends that
-    /// stretch so the controller can take it straight away. Null leaves a
-    /// hand-written pend waiting for the next boundary, which is what
-    /// every test that is not about delivery timing wants.
-    /// src/core/pend_break.zig says what it costs.
-    pend: ?*pend_break.Pend = null,
-    /// Shortens the next stretch while a pend the firmware wrote is still
-    /// standing unserved, so the controller's next look is a couple of
-    /// thousand instructions away rather than a whole chunk. Null keeps
-    /// the full boundary, which is what every test that is not about
-    /// delivery timing wants. src/core/pend_pace.zig says why this is the
-    /// side of the seam worth shortening.
-    pend_pace: ?*pend_pace.Pace = null,
-    /// Narrows the boundary while a masked pend keeps coming back stuck,
-    /// so the mask is re-tested within a couple of thousand instructions
-    /// rather than a whole chunk. Null keeps the full boundary, which is
-    /// what every test that is not about delivery timing wants.
-    /// src/core/mask_pace.zig says what the seam's forgetting costs.
-    mask_pace: ?*mask_pace.Pace = null,
-    /// Leave a WFE stop for the caller instead of resuming past it. The
-    /// second core parks on it: src/core/second_wait.zig.
-    park_on_wfe: bool = false,
 };
