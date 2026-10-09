@@ -28,8 +28,8 @@
 //! alias was first mapped it was a region of its own with its own backing
 //! store, so a marker written through 0x3210_0200 was not there at
 //! 0x2210_0200 and cpu1_main.c's own description of the two views as "the
-//! same backing store" was false here. src/core/board_ram.zig now puts both
-//! views of a region over one host allocation, so the alias aliases.
+//! same backing store" was false here. src/core/cpu/memory/store.zig now puts
+//! both views of a region over one host allocation, so the alias aliases.
 //!
 //! DTCM's alias is deliberately not mapped. The rule would place it at
 //! 0x3000_0000, but the core's tightly coupled memory is reached over the
@@ -103,15 +103,15 @@ pub const ns_sdram_end: u32 = ns_sdram_base + (sdram_end - sdram_base);
 /// The Non-secure view of code MRAM, where the firmware links its Non-secure
 /// image: the IDAU keeps every bit-28-clear address Secure (RA8FW-510). Code
 /// MRAM is per engine rather than shared, so this view is not in `alias_of`;
-/// board_ram.zig maps it onto the engine's own MRAM pages (RA8EMU-412).
+/// the store maps it onto the engine's own MRAM pages (RA8EMU-412).
 pub const ns_mram_base: u32 = mram_base + ns_offset;
 pub const ns_mram_end: u32 = ns_mram_base + (mram_end - mram_base);
 
 /// A Non-secure view and the Secure region whose bytes it is. Both entries
 /// of a pair appear in `ram` as regions in their own right, because the CPU
 /// model maps guest addresses and there are two of them; this table is what
-/// says the two share one backing store, and src/core/board_ram.zig is what
-/// honours it.
+/// says the two share one backing store, and src/core/cpu/memory/store.zig
+/// is what honours it.
 pub const View = struct {
     view: u32,
     of: u32,
@@ -324,4 +324,16 @@ pub fn initiatorWindow(at: u32) ?Window {
         if (at >= window.base and at < window.end) return window;
     }
     return null;
+}
+
+/// The page size the part's regions are aligned to.
+pub const page: usize = 0x1000;
+
+/// Whether a span of `len` bytes at `base` lies wholly inside one of the
+/// part's RAM regions in `ram`. A span running off a region's end is not.
+pub fn coversRam(base: u32, len: u32) bool {
+    for (ram) |region| {
+        if (base >= region.base and @as(u64, base) + len <= region.end()) return true;
+    }
+    return false;
 }

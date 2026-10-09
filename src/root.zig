@@ -1,6 +1,5 @@
 //! The emulator module, imported as "ra8" by the build and tests.
 pub const core = struct {
-    pub const board_ram = @import("core/board_ram.zig");
     pub const session = @import("core/session.zig");
     pub const session_event_stream = @import("debug/session_event_stream.zig");
     pub const second_core = @import("core/second_core.zig");

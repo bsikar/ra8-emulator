@@ -3,6 +3,7 @@
 const std = @import("std");
 const memmap = @import("../../memmap.zig");
 const external = @import("../../external_memory.zig");
+const Initiator = @import("initiator.zig").Initiator;
 const nor = @import("../../../periph/xspi/xspi_flash.zig");
 const extra = @import("extra.zig");
 
@@ -114,7 +115,7 @@ pub const Store = struct {
         return self.extra.span(address, len);
     }
 
-    pub fn read(self: *Store, initiator: external.Initiator, address: u32, into: []u8) AccessError!void {
+    pub fn read(self: *Store, initiator: Initiator, address: u32, into: []u8) AccessError!void {
         if (into.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, into.len)) |hit| {
             switch (hit.kind) {
@@ -127,7 +128,7 @@ pub const Store = struct {
         @memcpy(into, self.span(address, into.len) orelse return AccessError.Unmapped);
     }
 
-    pub fn write(self: *Store, initiator: external.Initiator, address: u32, bytes: []const u8) AccessError!void {
+    pub fn write(self: *Store, initiator: Initiator, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
