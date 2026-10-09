@@ -48,7 +48,7 @@ fn expectedDocument(allocator: std.mem.Allocator) ![]u8 {
     return out.toOwnedSlice();
 }
 
-test "docs/conformance.md matches the suite, or is rewritten when blessed" {
+test "tests/core/cpu/conformance/coverage.md matches the suite, or is rewritten when blessed" {
     const allocator = std.testing.allocator;
     const want = try expectedDocument(allocator);
     defer allocator.free(want);

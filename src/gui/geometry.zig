@@ -1,5 +1,5 @@
 //! Batches a draw list into textured triangles for SDL's renderer geometry
-//! path (RA8EMU-734, docs/adr/0001-gui-stack.md step 4). Pure Zig: the SDL
+//! path (RA8EMU-734, ADR 0001 in the knowledge base, RA8EMU-A-8 step 4). Pure Zig: the SDL
 //! presenter sets each run's clip rect and texture, then draws its indices.
 //! Lines become 1 px quads per Bresenham row span, so the GPU covers the same
 //! pixels raster.zig does on every driver.

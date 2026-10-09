@@ -1,5 +1,5 @@
 //! Draws a DrawList into an RGBA framebuffer on the CPU (RA8EMU-617,
-//! docs/adr/0001-gui-stack.md). The board draws its panes this way, golden
+//! ADR 0001 in the knowledge base, RA8EMU-A-8). The board draws its panes this way, golden
 //! image tests compare these pixels, and the host backend presents them.
 //! Shapes blend source-over with straight alpha, rounded to nearest.
 const std = @import("std");

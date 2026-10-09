@@ -1,4 +1,4 @@
-//! Whether a frame needs presenting (RA8EMU-732, docs/adr/0001-gui-stack.md
+//! Whether a frame needs presenting (RA8EMU-732, ADR 0001 in the knowledge base, RA8EMU-A-8
 //! decision 3). The host loop builds its draw list every tick but presents
 //! only when the list differs from the last one presented, or a resize or
 //! expose forced a redraw, and never closer together than the platform's

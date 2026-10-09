@@ -6,7 +6,7 @@
 # scripts/emu/eil_all.sh discovers it, and print the count plus the HIL_MODE
 # histogram over exactly that set.
 #
-# docs/eil-parity.md quotes numbers produced by this script. Quoting a count
+# The EIL parity article in the knowledge base (RA8EMU-A-12) quotes numbers produced by this script. Quoting a count
 # that cannot be re-derived is how the "83 of 122" figure outlived the tree it
 # was measured on, so the numbers in that document carry this command.
 #

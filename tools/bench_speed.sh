@@ -7,7 +7,7 @@
 # virtual time, with idle fast-forward on (the default) and off, and prints
 # wall time, effective speed, and per-core retired instructions per wall second.
 # Use a ReleaseFast build; Debug numbers do not count. See
-# docs/throughput-benchmark.md.
+# the throughput benchmark article in the knowledge base (RA8EMU-A-14).
 #
 #   tools/bench_speed.sh EMULATOR RUN_FOR IMAGE...
 #

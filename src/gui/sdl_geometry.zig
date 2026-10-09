@@ -1,5 +1,5 @@
 //! Draws a geometry.Batch through SDL's renderer (RA8EMU-733,
-//! docs/adr/0001-gui-stack.md step 4). The glyph atlas is one RGBA texture
+//! ADR 0001 in the knowledge base, RA8EMU-A-8 step 4). The glyph atlas is one RGBA texture
 //! with the coverage in alpha. Each image gets its own texture, keyed by
 //! pixel pointer and size, refilled once per frame and dropped once a frame
 //! no longer draws it. Every run sets its clip rect and then draws its

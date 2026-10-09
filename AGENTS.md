@@ -42,6 +42,15 @@ second file, not before.
 `src/core/c.zig` is the only `@cImport` in the tree and the only place a C
 boundary is allowed to show.
 
+## Documentation
+
+Design docs, ADRs and engineering notes live in the project knowledge base
+(article RA8EMU-A-1 is the index), not in this repository. Cite one by article
+ID, never by URL. The repository keeps only what code, tests or tools read:
+README.md, this file, fixture provenance READMEs under `tests/fixtures/`, and
+test goldens such as `tools/*_expected.md` and
+`tests/core/cpu/conformance/coverage.md`.
+
 ## One file, one purpose
 
 A file holds one thing, the way a Kotlin class or a DTO gets its own file. A

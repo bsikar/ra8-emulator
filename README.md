@@ -62,7 +62,7 @@ Frames are native panel-resolution grayscale bytes and are owned by the caller.
 
 
 Linux builds as is. macOS and Windows each need a couple of open fixes, and
-Windows is cross-compiled from another host; [Platforms](docs/platforms.md)
+Windows is cross-compiled from another host; the Platforms article in the knowledge base (RA8EMU-A-9)
 has the details and the same image's speed on all three.
 
 ### Toolchain
@@ -163,10 +163,10 @@ src/periph/           everything that answers on the peripheral bus
 tests/                one test file per source file, on the mirrored path
 tools/gate.zig        the light build gate (file and function length)
 tools/eil_set.sh      re-derives the EIL app set from a ra8-firmware tree
-docs/                 documentation index: ADRs and engineering notes
 ```
 
-[Documentation index](docs/README.md)
+Design docs, ADRs and engineering notes live in the project knowledge base
+(article RA8EMU-A-1 is the index), not in this repository.
 
 `AGENTS.md` carries the conventions in full: one file one purpose, short files
 and functions, idiomatic Zig, and tests in `tests/`, never inline.
