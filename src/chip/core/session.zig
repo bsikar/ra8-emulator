@@ -2,8 +2,8 @@
 //!
 //! A run is not just a core and a budget. Modelled time has to be charged,
 //! a controller has to get its turn at each boundary, the board's blocks
-//! have to tick, and a handful of watches (a counter, a breakpoint, a
-//! deadline) have to be given the chance to end it. All of that is optional
+//! have to tick, and a handful of watches (a counter, a console line,
+//! a deadline) have to be given the chance to end it. All of that is optional
 //! and none of it belongs to the core, so it is gathered here and handed to
 //! `Engine.run` as one value rather than a growing argument list.
 //!
@@ -16,7 +16,6 @@ const clocks = @import("../periph/clocks.zig");
 const nvic = @import("../periph/nvic.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const reboot = @import("reboot.zig");
-const breakpoint = @import("../../debug/breakpoint.zig");
 const stop = @import("stop.zig");
 const until = @import("until.zig");
 const undefined_ops = @import("undefined_ops.zig");
@@ -57,11 +56,6 @@ pub const Session = struct {
     stop: ?*stop.Stop = null,
     /// A console line to wait for (`--until`). Null waits for none.
     until: ?*until.Until = null,
-    /// An instruction address to stop at the first time execution reaches
-    /// it. Null runs to the budget. Handed to the emulator as the point to
-    /// run until, so it costs nothing per instruction; a pointer rather
-    /// than a copy so the caller can ask afterwards whether it arrived.
-    brk: ?*breakpoint.Break = null,
     /// MPU enforcement: the traps over the read-only regions, and the store
     /// one of them caught. Null runs with the table captured but nothing
     /// checked against it, which is every test that does not program one.
