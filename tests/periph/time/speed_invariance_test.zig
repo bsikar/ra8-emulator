@@ -9,8 +9,8 @@ const idler = @import("../../interfaces/cli/idler.zig");
 
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
-const pacing = ra8.periph.clocks.pacing;
-const pacer = ra8.periph.clocks.pacer;
+const pacing = ra8.periph.time_policy.pacing;
+const pacer = ra8.periph.time_policy.pacer;
 const budget: u64 = 2_000_000;
 const most_entries = 16;
 
@@ -60,7 +60,7 @@ fn runAt(speed_milli: ?u64) !Run {
     defer board.deinit();
     try store_board.attach(&board, core);
     var wall: FakeWall = .{};
-    if (speed_milli) |factor| board.time.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), factor);
+    if (speed_milli) |factor| board.run.pacing = pacing.Pacing.start(wall.clock(), board.time.base.now(), factor);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = idler.chunk };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var timeline: Timeline = .{ .timebase = &timebase };

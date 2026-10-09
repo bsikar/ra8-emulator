@@ -10,7 +10,7 @@ const Board = ra8.board.Board;
 const Machine = ra8.core.stop_machine.Machine;
 const zig_boundary = ra8.core.step_hook.zig_boundary;
 const board_boundary = ra8.board.board_boundary;
-const pacing = ra8.periph.clocks.pacing;
+const pacing = ra8.periph.time_policy.pacing;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
@@ -48,7 +48,7 @@ fn ram() Ram {
 const FakeWall = struct {
     at: u64 = 0,
 
-    fn clock(self: *FakeWall) ra8.periph.clocks.pacer.Clock {
+    fn clock(self: *FakeWall) ra8.periph.time_policy.pacer.Clock {
         return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
     }
 
@@ -73,7 +73,7 @@ test "a debugger run moves board time by what retired and paces it, across a spe
     // One instruction is a microsecond, so a chunk of 1000 is a millisecond.
     unit.time.base.setRate(1_000_000);
     var wall = FakeWall{};
-    unit.time.pacing = pacing.Pacing.start(wall.clock(), unit.time.base.now(), 250);
+    unit.run.pacing = pacing.Pacing.start(wall.clock(), unit.time.base.now(), 250);
 
     var code = ram();
     var cpu: Cpu = .{ .bus = code.view() };
@@ -91,7 +91,7 @@ test "a debugger run moves board time by what retired and paces it, across a spe
     try std.testing.expectEqual(@as(u64, 32 * std.time.ns_per_ms), wall.at);
 
     const before = unit.time.base.now();
-    unit.time.pacing.?.setSpeed(before, 5000);
+    unit.run.pacing.?.setSpeed(before, 5000);
     try std.testing.expectEqual(before, unit.time.base.now());
     try std.testing.expect(try zig_boundary.run(.{ .cpu = &cpu }, &machine, 10_000, null, null, hook) == .count);
     try std.testing.expectEqual(cpu.retired, unit.time.base.retired);

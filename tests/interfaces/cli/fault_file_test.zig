@@ -63,7 +63,7 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     defer board.deinit();
     try store_board.attach(&board, core);
     _ = try loader.image(core, image);
-    board.time.soak.armed = true; // as `--run-for` arms it
+    board.run.soak.armed = true; // as `--run-for` arms it
 
     var run: fault_file.Run = undefined;
     try run.open(&board, std.testing.io, path);
@@ -87,7 +87,7 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     });
     try std.testing.expect(run.applier.finished());
     for (run.plan.events, applied) |event, at| try std.testing.expectEqual(event.at_ns, at);
-    try std.testing.expect(!board.time.soak.ended());
+    try std.testing.expect(!board.run.soak.ended());
     try std.testing.expect(try core.readWord(counts_at + 4) > 0);
     try std.testing.expect(try core.readWord(counts_at + 8) > 0);
 }

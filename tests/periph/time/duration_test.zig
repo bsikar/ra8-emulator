@@ -1,7 +1,7 @@
 //! Tests for src/periph/time/duration.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const duration = ra8.periph.clocks.duration;
+const duration = ra8.periph.time_policy.duration;
 
 const s: u64 = 1_000_000_000;
 

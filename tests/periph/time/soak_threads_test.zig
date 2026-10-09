@@ -1,7 +1,7 @@
 //! Tests for src/periph/time/soak_threads.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
-const soak = ra8.periph.clocks.soak;
+const soak = ra8.periph.time_policy.soak;
 const soak_threads = soak.soak_threads;
 
 const base: u32 = 0x2000_0000;

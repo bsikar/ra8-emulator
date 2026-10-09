@@ -40,7 +40,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     };
     defer opened.deinit();
     var target: zig_script.ZigScript = .{ .image = opened.image(), .session = opened.session() };
-    var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .clock = pacing.hostClock(io) };
+    var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .paced = &opened.board().run.pacing, .clock = pacing.hostClock(io) };
     target.session.speed = speed.hook();
     var pair: second_core.zig_run.Driver = undefined;
     var other: Other = .{};

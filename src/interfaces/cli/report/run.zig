@@ -37,8 +37,8 @@ pub fn zigCore(out: Writer, board: *Board, timebase: clocks.Clocks, retired: u64
     try report_part.print(out, board.part);
     try report.bus(board, out);
     try report_timing.clock(out, timebase);
-    try pacing.line(out, &board.time);
-    try board.time.soak.line(out);
+    try pacing.line(out, board.run.pacing, board.time.base.now());
+    try board.run.soak.line(out);
     try out.print("zig core: pend/idle seam counts and stepped-instruction counts are not reported\n", .{});
     try report.blocks(board, out, .{ .elapsed = retired });
     try busErrors(out, bus_errors);

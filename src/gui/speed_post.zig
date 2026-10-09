@@ -9,7 +9,8 @@
 //! run that was not paced starts pacing at that park, against `clock`.
 const std = @import("std");
 const session_api = @import("../debug/session_api.zig");
-const clocks = @import("../periph/clocks.zig");
+const pacer = @import("../periph/time/pacer.zig");
+const pacing = @import("../periph/time/pacing.zig");
 
 pub const SpeedPost = struct {
     /// Window and engine threads lock through it; neither cancels.
@@ -34,19 +35,19 @@ pub const SpeedPost = struct {
         self.pending = .{ .milli = milli };
     }
 
-    /// Engine side, at a park: move `time` to the waiting factor. Returns
-    /// the factor applied, or null when none was waiting.
-    pub fn apply(self: *SpeedPost, time: *clocks.Time, clock: clocks.pacer.Clock) ?Asked {
+    /// Engine side, at a park: move the run's pacing to the waiting factor
+    /// from virtual time `now_ns`. Returns the factor applied, or null when
+    /// none was waiting.
+    pub fn apply(self: *SpeedPost, paced: *?pacing.Pacing, now_ns: u64, clock: pacer.Clock) ?Asked {
         const asked = self.take() orelse return null;
         const milli = asked.milli orelse {
-            time.pacing = null;
+            paced.* = null;
             return asked;
         };
-        const now_ns = time.base.now();
-        if (time.pacing) |*pacing| {
-            pacing.setSpeed(now_ns, milli);
+        if (paced.*) |*running| {
+            running.setSpeed(now_ns, milli);
         } else {
-            time.pacing = clocks.pacing.Pacing.start(clock, now_ns, milli);
+            paced.* = pacing.Pacing.start(clock, now_ns, milli);
         }
         return asked;
     }

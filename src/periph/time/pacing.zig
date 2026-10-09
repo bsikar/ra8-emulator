@@ -65,16 +65,16 @@ pub fn hostClock(io: std.Io) pacer.Clock {
     return host.clock();
 }
 
-/// Pace `time` against the host's monotonic clock from where it stands.
-pub fn attachHost(time: anytype, io: std.Io, speed_milli: u64) void {
-    time.pacing = Pacing.start(hostClock(io), time.base.now(), speed_milli);
+/// Pace a run against the host's monotonic clock from virtual time `now_ns`.
+pub fn attachHost(paced: *?Pacing, now_ns: u64, io: std.Io, speed_milli: u64) void {
+    paced.* = Pacing.start(hostClock(io), now_ns, speed_milli);
 }
 
 /// The end-of-run line, only when the run was paced, so an unpaced run's
 /// report is unchanged.
-pub fn line(out: anytype, time: anytype) !void {
-    const paced = time.pacing orelse return;
-    try write(out, paced.report(time.base.now()));
+pub fn line(out: anytype, paced: ?Pacing, now_ns: u64) !void {
+    const running = paced orelse return;
+    try write(out, running.report(now_ns));
 }
 
 pub fn write(out: anytype, r: pacer.Report) !void {

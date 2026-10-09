@@ -3,7 +3,8 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const parse = ra8.core.cli.parse;
 const clocks = ra8.periph.clocks;
-const realtime = clocks.pacing;
+const time_policy = ra8.periph.time_policy;
+const realtime = time_policy.pacing;
 
 test "a run is unpaced unless it asks for --realtime" {
     const plain = try parse(&[_][]const u8{ "emu", "a.elf" });
@@ -15,8 +16,7 @@ test "a run is unpaced unless it asks for --realtime" {
 test "an unpaced run prints no pace line" {
     var buffer: [128]u8 = undefined;
     var stream: std.Io.Writer = .fixed(&buffer);
-    const time = clocks.Time{};
-    try realtime.line(&stream, &time);
+    try realtime.line(&stream, null, 0);
     try std.testing.expectEqualStrings("", stream.buffered());
 }
 
@@ -39,8 +39,9 @@ test "the pace line gives requested and achieved speed, drift and slips" {
 test "attaching paces the board's time from where it stands" {
     var time = clocks.Time{};
     time.base.advance(3_000);
-    realtime.attachHost(&time, std.testing.io, 1000);
-    const paced = time.pacing.?;
+    var attached: ?realtime.Pacing = null;
+    realtime.attachHost(&attached, time.base.now(), std.testing.io, 1000);
+    const paced = attached.?;
     try std.testing.expectEqual(@as(u64, 3_000), paced.last_ns);
     try std.testing.expectEqual(@as(u64, 1000), paced.pacer.speed_milli);
 }

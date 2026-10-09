@@ -105,10 +105,10 @@ pub const Board = struct {
     /// GTCLKCR, the GPT bank's clock domain, writable only while stopped.
     gpt_clock: gtclkcr.Unit,
     time: clocks.Time = .{}, // RA8EMU-179 virtual time and its event queue
+    run: @import("run_policy.zig").RunPolicy = .{}, // RA8EMU-1046 pacing and soak
     events: icu.Icu,
-    /// The event link controller: the other half of the event path, where a
-    /// source event drives a peripheral rather than an NVIC line, and the
-    /// only way firmware raises an event itself.
+    /// The event link controller: where a source event drives a peripheral
+    /// rather than an NVIC line, and the only way firmware raises an event.
     links: elc.Elc,
     /// The data transfer controller: the other consumer of an event, which
     /// moves bytes on an interrupt instead of letting the CPU take it.

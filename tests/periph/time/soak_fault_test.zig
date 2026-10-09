@@ -2,9 +2,10 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const clocks = ra8.periph.clocks;
-const soak_fault = clocks.soak_fault;
+const time_policy = ra8.periph.time_policy;
+const soak_fault = time_policy.soak_fault;
 const status = ra8.periph.fault_status;
-const Kind = clocks.soak.Kind;
+const Kind = time_policy.soak.Kind;
 
 test "clear words are no event" {
     try std.testing.expect(soak_fault.kind(.{}) == null);
@@ -53,7 +54,7 @@ test "the words fold in a Non-secure fault's banked bits and read the unreadable
 }
 
 test "an armed soak stops on a fault and names it" {
-    var state = clocks.soak.Soak{ .armed = true };
+    var state = time_policy.soak.Soak{ .armed = true };
     state.note(soak_fault.kind(.{ .cfsr = status.Cause.stkof.bit() }).?, 7_200_000_000_000);
     var buffer: [96]u8 = undefined;
     var stream: std.Io.Writer = .fixed(&buffer);

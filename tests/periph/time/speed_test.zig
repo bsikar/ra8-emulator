@@ -2,15 +2,16 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const clocks = ra8.periph.clocks;
+const time_policy = ra8.periph.time_policy;
 
-const speed = clocks.speed;
-const Pacer = clocks.pacer.Pacer;
+const speed = time_policy.speed;
+const Pacer = time_policy.pacer.Pacer;
 const ms = std.time.ns_per_ms;
 
 const Fake = struct {
     at: u64 = 0,
 
-    fn clock(self: *Fake) clocks.pacer.Clock {
+    fn clock(self: *Fake) time_policy.pacer.Clock {
         return .{ .ctx = self, .nowFn = now, .sleepFn = sleep };
     }
 
