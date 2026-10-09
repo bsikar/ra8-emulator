@@ -1,5 +1,8 @@
-//! The peripheral models, re-exported from root.zig as `ra8.periph`. Listed
-//! here so root.zig carries a single line for them (RA8EMU-63).
+//! The chip's on-chip blocks, re-exported from root.zig as `ra8.periph`.
+//! Every entry is a block inside the MCU or a contract one of them declares
+//! for a part; the parts themselves are in components/components.zig, and
+//! the host adapters in neither (ADR 0004, knowledge base article
+//! RA8EMU-A-2).
 pub const adc = @import("periph/adc/adc.zig");
 pub const adc_intr = @import("periph/adc/adc_intr.zig");
 pub const adc_scan = @import("periph/adc/adc_scan.zig");
