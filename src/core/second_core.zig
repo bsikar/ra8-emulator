@@ -66,7 +66,6 @@ const pend_break = @import("pend_break.zig");
 
 const Board = @import("../board/board.zig").Board;
 const wiring = @import("../board/wiring.zig");
-const report_cores = @import("../interfaces/cli/report/cores.zig");
 const Guest = @import("cpu/memory/guest.zig").Guest;
 const guest_load = @import("cpu/memory/load.zig");
 
@@ -153,28 +152,3 @@ pub const zig_run = @import("second_zig_run.zig");
 
 /// Parking in WFE, re-exported for the same reason.
 pub const parking = second_wait;
-
-/// What CPU1 did, printed under CPU0's own account of the run.
-pub fn report(out: anytype, second: ?*const Second) !void {
-    const other = second orelse return;
-    try out.print(
-        "CPU1: loaded {d} bytes, vectors at 0x{X:0>8}, ran {d} instructions over {d} turn(s), pc 0x{X:0>8}\n",
-        .{ other.state.written, other.state.vector_base, other.state.ran, other.state.turns, other.state.pc },
-    );
-    if (other.state.fault) |taken| {
-        try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
-    }
-    if (other.state.held) try out.writeAll("CPU1: held in reset since a system reset\n");
-    // Silent on a core that never waited, which is every image in the
-    // corpus today, so their reports stay as they were.
-    if (other.state.wait.parks > 0) {
-        const woke = other.state.wait.wakes;
-        try out.print(
-            "CPU1: parked in WFE {d} time(s), woken {d} by an exception, {d} by SEV, {d} spuriously\n",
-            .{ other.state.wait.parks, woke.interrupt, woke.event, woke.spurious },
-        );
-    }
-    // Under its own name, because this is a second map rather than more
-    // detail about CPU0's. Silent on a core that never programmed one.
-    try report_cores.partitionsOf(out, "CPU1 SAU", &other.partitions);
-}

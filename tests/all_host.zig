@@ -131,6 +131,7 @@ test {
     _ = @import("interfaces/cli/report/usb_test.zig");
     _ = @import("interfaces/cli/report/part_test.zig");
     _ = @import("interfaces/cli/report/run_test.zig");
+    _ = @import("interfaces/cli/report/cores_test.zig");
     _ = @import("interfaces/cli/report/dumps_test.zig");
     _ = @import("interfaces/cli/zig_run_test.zig");
     _ = @import("interfaces/cli/zig_watch_test.zig");

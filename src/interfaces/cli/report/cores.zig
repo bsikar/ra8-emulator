@@ -10,12 +10,13 @@ const cpscu = @import("../../../periph/cpscu.zig");
 const cpu_ctrl = @import("../../../periph/cpu_ctrl.zig");
 const mpu = @import("../../../periph/mpu/mpu.zig");
 const sau = @import("../../../periph/sau.zig");
+const second_core = @import("../../../core/second_core.zig");
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
 /// the handshake completed, never by itself that a second core is fetching:
 /// the release and the execution are two separate things and the lines are
 /// never allowed to blur. Whether anything actually ran on CPU1 is the
-/// second core's own line, printed by `src/core/second_core.zig`, because
+/// second core's own line, printed by `cpu1` below, because
 /// only the run knows whether an image was mapped onto it.
 fn secondCore(board: *Board, out: Writer) !void {
     const unit = &board.second_core;
@@ -303,4 +304,29 @@ fn locks(unit: *const sync.Sync, out: Writer) !void {
             );
         }
     }
+}
+
+/// What CPU1 did, printed under CPU0's own account of the run.
+pub fn cpu1(out: Writer, second: ?*const second_core.Second) !void {
+    const other = second orelse return;
+    try out.print(
+        "CPU1: loaded {d} bytes, vectors at 0x{X:0>8}, ran {d} instructions over {d} turn(s), pc 0x{X:0>8}\n",
+        .{ other.state.written, other.state.vector_base, other.state.ran, other.state.turns, other.state.pc },
+    );
+    if (other.state.fault) |taken| {
+        try out.print("CPU1: halted at 0x{X:0>8}: {s}\n", .{ taken.pc, taken.detail });
+    }
+    if (other.state.held) try out.writeAll("CPU1: held in reset since a system reset\n");
+    // Silent on a core that never waited, which is every image in the
+    // corpus today, so their reports stay as they were.
+    if (other.state.wait.parks > 0) {
+        const woke = other.state.wait.wakes;
+        try out.print(
+            "CPU1: parked in WFE {d} time(s), woken {d} by an exception, {d} by SEV, {d} spuriously\n",
+            .{ other.state.wait.parks, woke.interrupt, woke.event, woke.spurious },
+        );
+    }
+    // Under its own name, because this is a second map rather than more
+    // detail about CPU0's. Silent on a core that never programmed one.
+    try partitionsOf(out, "CPU1 SAU", &other.partitions);
 }

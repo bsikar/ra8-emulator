@@ -200,37 +200,3 @@ test "CCR, SHCSR and the fault status words are each core's own" {
         try std.testing.expectEqual(@as(u32, 0), try pair.second().readWord(address));
     }
 }
-
-/// Through a real file, because the SAU half of the report writes to a
-/// file writer rather than any writer.
-fn reported(second: *const mod.Second, buffer: []u8) ![]const u8 {
-    var dir = std.testing.tmpDir(.{});
-    defer dir.cleanup();
-    const file = try dir.dir.createFile(std.testing.io, "report.txt", .{ .read = true });
-    defer file.close(std.testing.io);
-    var held: [512]u8 = undefined;
-    var writer = file.writer(std.testing.io, &held);
-    try mod.report(&writer.interface, second);
-    try writer.interface.flush();
-    return buffer[0..try file.readPositionalAll(std.testing.io, buffer, 0)];
-}
-
-test "the report says how often CPU1 parked in WFE and what woke it" {
-    var second: mod.Second = .{};
-    second.state.wait.parks = 3;
-    second.state.wait.wakes = .{ .interrupt = 1, .event = 1, .spurious = 1 };
-    var buffer: [1024]u8 = undefined;
-    const text = try reported(&second, &buffer);
-    try std.testing.expect(std.mem.indexOf(
-        u8,
-        text,
-        "CPU1: parked in WFE 3 time(s), woken 1 by an exception, 1 by SEV, 1 spuriously\n",
-    ) != null);
-}
-
-test "a CPU1 that never waited reports no parking line" {
-    const second: mod.Second = .{};
-    var buffer: [1024]u8 = undefined;
-    const text = try reported(&second, &buffer);
-    try std.testing.expect(std.mem.indexOf(u8, text, "parked in WFE") == null);
-}
