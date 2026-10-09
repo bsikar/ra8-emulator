@@ -14,7 +14,7 @@ const session_report = @import("session_report.zig");
 const session_view = @import("session_view.zig");
 const watch_table = @import("watch_table.zig");
 const session_api = @import("session_api.zig");
-const endpoint = @import("../periph/model/endpoint.zig");
+const endpoint = @import("../components/endpoint.zig");
 
 pub const Error = error{ Unsupported, MissingPart };
 

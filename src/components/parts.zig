@@ -8,13 +8,13 @@
 const std = @import("std");
 const catalog = @import("catalog.zig");
 const endpoint = @import("endpoint.zig");
-const eink = @import("../../components/eink_it8951/panel.zig");
-const button = @import("../../components/button/button.zig");
-const led = @import("../../components/led/led.zig");
-const lsm6dso = @import("../../components/imu_lsm6dso/lsm6dso.zig");
-const max17048 = @import("../../components/gauge_max17048/max17048.zig");
-const modem = @import("../../components/modem_at/modem.zig");
-const esp_hosted = @import("../esp_hosted.zig");
+const eink = @import("eink_it8951/panel.zig");
+const button = @import("button/button.zig");
+const led = @import("led/led.zig");
+const lsm6dso = @import("imu_lsm6dso/lsm6dso.zig");
+const max17048 = @import("gauge_max17048/max17048.zig");
+const modem = @import("modem_at/modem.zig");
+const esp_hosted = @import("../periph/esp_hosted.zig");
 
 pub const imu_name = "lsm6dso";
 pub const gauge_name = "max17048";

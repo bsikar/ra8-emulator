@@ -11,7 +11,7 @@ const session_plug = ra8.board.session_plug;
 const devices = ra8.gui.devices_panel;
 const pane = ra8.gui.devices_pane;
 const draw_list = ra8.gui.draw_list;
-const endpoint = ra8.periph.registry.model.endpoint;
+const endpoint = ra8.components.model.endpoint;
 
 const gauge_at: devices.Endpoint = .{ .i2c = .{ .line = .riic, .address = 0x36 } };
 const area = draw_list.Rect{ .x = 10, .y = 20, .w = 200, .h = 2 * pane.pad + 2 * pane.row_h };

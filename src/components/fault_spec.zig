@@ -19,7 +19,7 @@ const request = @import("request.zig");
 const endpoint = @import("endpoint.zig");
 const fault = @import("fault.zig");
 const fault_lines = @import("fault_lines.zig");
-const timebase = @import("../time/timebase.zig");
+const timebase = @import("../periph/time/timebase.zig");
 
 pub const Mode = union(enum) {
     disconnected,

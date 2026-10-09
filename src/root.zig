@@ -150,6 +150,8 @@ pub const components = struct {
     pub const eink_busy = @import("components/eink_it8951/busy.zig");
     pub const eink_wire = @import("components/eink_it8951/wire.zig");
     pub const eink_image = @import("components/eink_it8951/image.zig");
+    /// The plug layer: endpoints, the catalog, parts, requests and faults.
+    pub const model = @import("components/model.zig");
     pub const sd_card = @import("components/sd_card/card.zig");
     pub const sd_card_line = @import("components/sd_card/card_line.zig");
     pub const sd_command = @import("components/sd_card/command.zig");

@@ -6,7 +6,7 @@ const ra8 = @import("ra8");
 
 const Board = ra8.board.Board;
 const window_devices = ra8.board.window_devices;
-const request = ra8.periph.registry.model.request;
+const request = ra8.components.model.request;
 
 test "click and an attach each give the pane a row" {
     var board = Board.init(std.testing.allocator);

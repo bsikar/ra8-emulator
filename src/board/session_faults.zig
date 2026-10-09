@@ -8,10 +8,10 @@
 //! part on that line lets it go. SPI and UART channels go through
 //! session_faults_lines.zig.
 const std = @import("std");
-const endpoint = @import("../periph/model/endpoint.zig");
-const fault = @import("../periph/model/fault.zig");
-const fault_spec = @import("../periph/model/fault_spec.zig");
-const fault_lines = @import("../periph/model/fault_lines.zig");
+const endpoint = @import("../components/endpoint.zig");
+const fault = @import("../components/fault.zig");
+const fault_spec = @import("../components/fault_spec.zig");
+const fault_lines = @import("../components/fault_lines.zig");
 const riic_bus = @import("../periph/riic/riic_bus.zig");
 const spi = @import("../periph/spi/spi.zig");
 const sci = @import("../periph/sci/sci.zig");

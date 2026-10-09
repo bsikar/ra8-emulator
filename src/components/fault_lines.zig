@@ -6,8 +6,8 @@
 //! idle-high CIPO (0xFF) and a UART line goes silent. Stuck and garbage let
 //! the part hear its bytes and rewrite what it sends back.
 const fault = @import("fault.zig");
-const spi = @import("../spi/spi.zig");
-const sci_device = @import("../sci/sci_device.zig");
+const spi = @import("../periph/spi/spi.zig");
+const sci_device = @import("../periph/sci/sci_device.zig");
 
 pub const LineMode = union(enum) {
     none,

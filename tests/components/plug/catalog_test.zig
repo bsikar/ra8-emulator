@@ -1,8 +1,8 @@
-//! Covers src/periph/model/catalog.zig: finding a model by name, refusing a
+//! Covers src/components/catalog.zig: finding a model by name, refusing a
 //! wrong endpoint, and making and destroying independent instances.
 const std = @import("std");
 const ra8 = @import("ra8");
-const model = ra8.periph.registry.model;
+const model = ra8.components.model;
 const catalog = model.catalog;
 const endpoint = model.endpoint;
 const riic_bus = ra8.periph.riic_bus;

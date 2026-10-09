@@ -20,8 +20,8 @@ const plug_post = @import("../../gui/plug_post.zig");
 const speed_post = @import("../../gui/speed_post.zig");
 const session_speed = @import("../../debug/session_speed.zig");
 const pacing = @import("../../periph/time/pacing.zig");
-const parts = @import("../../periph/model/parts.zig");
-const request = @import("../../periph/model/request.zig");
+const parts = @import("../../components/parts.zig");
+const request = @import("../../components/request.zig");
 
 /// Where `click` puts the module's parts (src/board/i2c.zig).
 pub const click_imu: session_api.Endpoint = .{ .i2c = .{ .line = .touch, .address = 0x6B } };
