@@ -8,6 +8,16 @@ pub const protocol_version: u16 = 1;
 pub const capabilities: u32 = 0x0000_01FF;
 pub const max_payload = 1_048_576;
 
+/// Refusal codes this message set adds above the library's own.
+pub const app_codes = struct {
+    /// The Session refused the call; the error name went to stderr.
+    pub const refused: u16 = 0x0100;
+    /// The call named a core this session has no image for.
+    pub const no_core: u16 = 0x0101;
+    /// A read asked for more bytes than one reply carries.
+    pub const too_long: u16 = 0x0102;
+};
+
 pub const Method = enum(u16) {
     load = 0x0100,
     run = 0x0101,

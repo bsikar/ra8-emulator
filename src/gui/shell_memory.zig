@@ -9,7 +9,7 @@
 //! the last values with a note. A load drops a batch in flight, since it
 //! read the old image.
 const proto = @import("../interfaces/rpc/session_rpc.zig");
-const app_codes = @import("../interfaces/rpc/session_handlers.zig").app_codes;
+const app_codes = proto.app_codes;
 const session_link = @import("session_link.zig");
 const memory_pane = @import("memory_pane.zig");
 const pane_layout = @import("pane_layout.zig");
