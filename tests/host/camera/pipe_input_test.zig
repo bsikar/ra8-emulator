@@ -191,11 +191,7 @@ test "pipe frames reach the CEU destination" {
     try std.testing.expectEqual(@as(u32, 4), bench.unit.frames);
 }
 
-test "pipe is a registered kind named after its argument" {
-    const spec = try camera.registry.parse("pipe:-,2x1,rgb24");
-    try std.testing.expectEqual(camera.registry.Kind.pipe, spec.kind);
-    try std.testing.expectError(error.BadValue, camera.registry.parse("pipe:-"));
-    try std.testing.expectError(error.BadValue, camera.registry.parse("pipe"));
+test "a pipe is named after its argument" {
     if (builtin.os.tag == .windows) return;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -204,7 +200,7 @@ test "pipe is a registered kind named after its argument" {
     defer allocator.free(path);
     const text = try std.mem.concat(allocator, u8, &.{ path, ",2x1,rgb24" });
     defer allocator.free(text);
-    const named = try (camera.registry.Spec{ .kind = .pipe, .arg = text }).open(allocator, std.testing.io, &rgb565);
+    const named = try ra8.core.cli_camera_source.open(allocator, std.testing.io, .{ .kind = .pipe, .arg = text }, &rgb565);
     defer named.close();
     try std.testing.expectEqualStrings("pipe", named.label);
     try std.testing.expectEqualStrings(text, named.detail);

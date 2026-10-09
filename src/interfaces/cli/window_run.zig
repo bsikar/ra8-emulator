@@ -10,7 +10,7 @@ const window_pace = @import("window_pace.zig");
 const host_loop = @import("../../gui/host_loop.zig");
 const platform = @import("../../gui/platform.zig");
 const camera_devices = @import("../../gui/camera_devices.zig");
-const registry = @import("../../periph/camera/camera_registry.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
 const thread_priority = @import("../../gui/thread_priority.zig");
 const console_feed = @import("../../gui/console_feed.zig");
 const console_keys = @import("../../gui/console_keys.zig");
@@ -47,7 +47,7 @@ pub const Shown = struct {
 /// starting on `camera`, the run's own source. The panel is scanned once
 /// before the engine starts, so the first frame never races it. The
 /// devices pane lists `devices` and plugs through it; null shows none.
-pub fn show(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: registry.Spec, devices: ?*window_devices.Devices) !Shown {
+pub fn show(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, board: *Board, pacer: *window_pace.Pacer, engine: Engine, camera: source_spec.Spec, devices: ?*window_devices.Devices) !Shown {
     var screen = try window_board.Screen.init(allocator, io, board, pacer.granter());
     defer screen.deinit();
     screen.on_engine = true;

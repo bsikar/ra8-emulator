@@ -18,6 +18,7 @@ test {
     _ = @import("camera/y4m_frame_test.zig");
     _ = @import("camera/pipe_frame_test.zig");
     _ = @import("camera/av_frame_test.zig");
+    _ = @import("camera/source_spec_test.zig");
     _ = @import("camera/av_info_plist_test.zig");
     _ = @import("camera/av_objc_test.zig");
     _ = @import("camera/av_permission_test.zig");

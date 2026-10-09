@@ -6,7 +6,7 @@ const proto = @import("session_rpc.zig");
 const api = @import("../../debug/session_api.zig");
 const stop_machine = @import("../../debug/stop_machine.zig");
 const region_map = @import("../../debug/region_map.zig");
-const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
 const session_rtc = @import("../../debug/session_rtc.zig");
 
 /// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
@@ -16,7 +16,7 @@ pub const app_codes = proto.app_codes;
 /// Installs a camera source for set_camera_source (RA8EMU-795).
 pub const Camera = struct {
     context: *anyopaque,
-    setFn: *const fn (*anyopaque, camera_registry.Spec) anyerror!void,
+    setFn: *const fn (*anyopaque, source_spec.Spec) anyerror!void,
 };
 
 /// Writes the memory map of a core's last loaded image (RA8EMU-794): the

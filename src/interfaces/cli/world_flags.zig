@@ -8,7 +8,7 @@ const cli = @import("cli.zig");
 const touch_spec = @import("touch_spec.zig");
 const request = @import("../../components/request.zig");
 const fault_spec = @import("../../components/fault_spec.zig");
-const camera_registry = @import("../../periph/camera/camera_registry.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
 const sci_reply = @import("../../periph/sci/sci_reply.zig");
 const rtc_start = @import("rtc_start.zig");
 const speed = @import("../../periph/time/speed.zig");
@@ -176,8 +176,8 @@ fn rtcStart(text: []const u8) !rtc_start.Start {
 }
 
 /// One `--camera-source` spec. A bad one says why before the run starts.
-fn camera(spec: []const u8) !camera_registry.Spec {
-    return camera_registry.parse(spec) catch |err| {
+fn camera(spec: []const u8) !source_spec.Spec {
+    return source_spec.parse(spec) catch |err| {
         std.debug.print("--camera-source {s}: {s}\n", .{ spec, @errorName(err) });
         return err;
     };
