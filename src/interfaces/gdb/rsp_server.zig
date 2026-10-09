@@ -5,9 +5,9 @@
 //! The connection ends on `D` (detach, answered OK), `k` (kill, which gets
 //! no reply) or the other end closing. Requests are answered one at a time.
 //! An interrupt (0x03) sent while a resume runs is picked up between run
-//! chunks by the session's poll (src/debug/rsp_poll.zig), not here.
+//! chunks by the session's poll (src/interfaces/gdb/rsp_poll.zig), not here.
 //! What firmware printed through ITM port 0 during a resume goes out as
-//! `O` packets just before its stop reply (src/debug/rsp_console.zig).
+//! `O` packets just before its stop reply (src/interfaces/gdb/rsp_console.zig).
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
 const rsp_dispatch = @import("rsp_dispatch.zig");

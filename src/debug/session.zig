@@ -3,7 +3,7 @@
 //! interrupt comes through.
 //!
 //! The session is src/debug/zig_session.zig, driven by src/debug/zig_script.zig
-//! for scripts and src/debug/rsp_zig.zig for gdb.
+//! for scripts and by the GDB server in src/interfaces/gdb for gdb.
 pub const Error = error{ AlreadyRunning, NoSymbols, Unresolved, CoreNotAttached };
 
 pub const limits = struct {

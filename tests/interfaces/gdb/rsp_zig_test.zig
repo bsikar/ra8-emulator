@@ -1,4 +1,4 @@
-//! Tests for src/debug/rsp_zig.zig and the Dispatch path that reaches it.
+//! Tests for src/interfaces/gdb/rsp_zig.zig and the Dispatch path that reaches it.
 const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.core.cpu.bus;
