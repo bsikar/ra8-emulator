@@ -47,7 +47,7 @@ pub const Run = struct {
         self.session = .{ .live = undefined };
         self.session.attachTimeBase(&board.time.base);
         self.session.attachPlugs(self.plugs.hook());
-        self.session.attachFaults(self.faults.hook());
+        self.session.attachFaults(&self.faults);
         // The run's own boundary is only known once it starts: `boundary`.
         self.applier = .{ .events = self.plan.events, .session = &self.session, .clock = &board.time.base, .inner = undefined };
     }

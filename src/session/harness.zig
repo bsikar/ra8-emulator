@@ -247,7 +247,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.plugs = session_plug.Plugs.init(&state.board, state.plugs_arena.allocator());
     state.session.attachPlugs(state.plugs.hook());
     state.faults = session_faults.Faults.init(&state.board, state.plugs_arena.allocator());
-    state.session.attachFaults(state.faults.hook());
+    state.session.attachFaults(&state.faults);
     state.reboot = .{ .vector_base = vector };
     state.board.reboot = &state.reboot;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index };

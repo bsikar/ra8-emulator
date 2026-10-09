@@ -16,6 +16,7 @@ const gt911 = @import("../components/touch_gt911/gt911.zig");
 const BoardTick = @import("../chip/core/tick.zig").Tick;
 const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const session_display = @import("session_display.zig");
+const board_faults = @import("board_faults.zig");
 const endpoint = @import("../components/endpoint.zig");
 const fault_spec = @import("../components/fault_spec.zig");
 const TimeBase = @import("../chip/periph/time/timebase.zig").TimeBase;
@@ -42,12 +43,6 @@ pub const Loader = struct {
     context: *anyopaque,
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
 };
-/// Sets or clears (null) a fault mode on a part the board has on `at`
-/// (RA8EMU-520). The board owns the parts, so it does the wrapping.
-pub const FaultHook = struct {
-    context: *anyopaque,
-    setFn: *const fn (*anyopaque, endpoint.Endpoint, ?fault_spec.Mode) anyerror!void,
-};
 /// Puts the catalog part `name` on `at`, or takes whatever is there off it
 /// when `name` is null (RA8EMU-212). The board owns the lines, so it plugs.
 pub const PlugHook = struct {
@@ -68,7 +63,9 @@ pub const Session = struct {
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
     display: ?session_display.Display = null,
-    faults: ?FaultHook = null,
+    /// Sets or clears a fault mode on a part the board has on an endpoint
+    /// (RA8EMU-520). The board owns the parts, so it does the wrapping.
+    faults: ?*board_faults.Faults = null,
     plugs: ?PlugHook = null,
     speed: ?SpeedHook = null,
     widget_tree_addresses: [2]?u32 = .{ null, null },
@@ -97,21 +94,21 @@ pub const Session = struct {
     pub fn attachDisplay(self: *Session, display: session_display.Display) void {
         self.display = display;
     }
-    pub fn attachFaults(self: *Session, hook: FaultHook) void {
-        self.faults = hook;
+    pub fn attachFaults(self: *Session, faults: *board_faults.Faults) void {
+        self.faults = faults;
     }
 
     /// Put the part on `at` into `mode` from now on, mid-run included.
     pub fn setFault(self: *Session, core: Core, at: Endpoint, mode: FaultMode) anyerror!void {
-        const hook = self.faults orelse return Error.NoFaults;
-        try hook.setFn(hook.context, at, mode);
+        const faults = self.faults orelse return Error.NoFaults;
+        try faults.set(at, mode);
         self.publish(.{ .core = core, .kind = .fault_set });
     }
 
     /// Let the part on `at` behave like the part again.
     pub fn clearFault(self: *Session, core: Core, at: Endpoint) anyerror!void {
-        const hook = self.faults orelse return Error.NoFaults;
-        try hook.setFn(hook.context, at, null);
+        const faults = self.faults orelse return Error.NoFaults;
+        try faults.set(at, null);
         self.publish(.{ .core = core, .kind = .fault_cleared });
     }
 

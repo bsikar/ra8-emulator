@@ -50,7 +50,7 @@ test "a fault schedule applies every event at its exact virtual time" {
     var faults = session_faults.Faults.init(&board, arena.allocator());
     var session: api.Session = .{ .live = undefined };
     session.attachPlugs(plugs.hook());
-    session.attachFaults(faults.hook());
+    session.attachFaults(&faults);
     session.attachTimeBase(&board.time.base);
     const subscription = try session.subscribe();
 

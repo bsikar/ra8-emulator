@@ -17,7 +17,6 @@ const spi = @import("../chip/periph/spi/spi.zig");
 const sci = @import("../chip/periph/sci/sci.zig");
 const sci_device = @import("../chip/periph/sci/sci_device.zig");
 const lines = @import("board_faults_lines.zig");
-const session_api = @import("session_api.zig");
 const Board = @import("../board/board.zig").Board;
 
 pub const Error = error{ WrongEndpoint, NothingFitted, TooManyFaults } || lines.Error;
@@ -34,10 +33,6 @@ pub const Faults = struct {
 
     pub fn init(board: *Board, arena: std.mem.Allocator) Faults {
         return .{ .board = board, .arena = arena };
-    }
-
-    pub fn hook(self: *Faults) session_api.FaultHook {
-        return .{ .context = self, .setFn = setErased };
     }
 
     /// Put the part on `at` into `mode`, or back to itself when null.
@@ -67,11 +62,6 @@ pub const Faults = struct {
         if (wanted == .bus_low) return registry.hold(true);
         const wrapper = try self.wrap(found);
         wrapper.set(fault_spec.i2cMode(wanted));
-    }
-
-    fn setErased(context: *anyopaque, at: endpoint.Endpoint, mode: ?fault_spec.Mode) anyerror!void {
-        const self: *Faults = @ptrCast(@alignCast(context));
-        try self.set(at, mode);
     }
 
     fn line(self: *Faults, which: endpoint.Line) *riic_bus.Registry {
