@@ -69,8 +69,8 @@ test "external region report exposes timed access counters" {
     var config = ra8.core.external_memory.Config{};
     config.ospi.size = 1024 * 1024;
     config.sdram.size = 1024 * 1024;
-    try fix.board.flash.flash.resize(config.ospi.size);
-    try fix.store.configureExternal(try ra8.core.external_memory.Layout.init(config), &fix.board.flash.flash);
+    try fix.board.nor.resize(config.ospi.size);
+    try fix.store.configureExternal(try ra8.core.external_memory.Layout.init(config), fix.board.nor.window());
     const cpu = fix.memory().asInitiator(.cpu0);
     var bytes: [4]u8 = undefined;
     try cpu.read(0x6800_0010, &bytes);

@@ -60,21 +60,21 @@ test "external fabric counters and pending contention survive a snapshot" {
     config.ospi.size = 1024 * 1024;
     config.sdram.size = 1024 * 1024;
     const layout = try ra8.core.external_memory.Layout.init(config);
-    var flash1 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    var flash1 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
     defer flash1.deinit();
     var first = try memory.Store.init(null);
     defer first.deinit();
-    try first.configureExternal(layout, &flash1);
+    try first.configureExternal(layout, flash1.window());
     first.fabric.?.note(.cpu0, layout.locate(0x6800_0040, 4).?, .read, 4);
     var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
 
-    var flash2 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    var flash2 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
     defer flash2.deinit();
     var second = try memory.Store.init(null);
     defer second.deinit();
-    try second.configureExternal(layout, &flash2);
+    try second.configureExternal(layout, flash2.window());
     const section = (try file.Reader.find(list.written(), .memory)).?;
     try memory.load(&second, section.payload);
     const counters = second.fabric.?.counters(.sdram, 0);
@@ -83,11 +83,11 @@ test "external fabric counters and pending contention survive a snapshot" {
 
     var changed = config;
     changed.sdram.width = 16;
-    var flash3 = ra8.periph.xspi_flash.Flash.init(std.testing.allocator);
+    var flash3 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
     defer flash3.deinit();
     var mismatched = try memory.Store.init(null);
     defer mismatched.deinit();
-    try mismatched.configureExternal(try ra8.core.external_memory.Layout.init(changed), &flash3);
+    try mismatched.configureExternal(try ra8.core.external_memory.Layout.init(changed), flash3.window());
     try std.testing.expectError(error.LayoutMismatch, memory.load(&mismatched, section.payload));
 }
 

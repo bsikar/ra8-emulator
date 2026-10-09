@@ -74,7 +74,7 @@ test "Ethos-U55 DMA is charged to shared external SDRAM" {
     var store = try ra8.core.cpu.memory.store.Store.init(null);
     defer store.deinit();
     const layout = try ra8.core.external_memory.Layout.init(config);
-    try store.configureExternal(layout, &board.flash.flash);
+    try store.configureExternal(layout, board.nor.window());
     const plain = ra8.core.cpu.memory.guest.Guest{ .store = &store };
     var source: [256]u8 = undefined;
     for (&source, 0..) |*byte_value, index| byte_value.* = @truncate(index);

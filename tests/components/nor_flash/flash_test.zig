@@ -1,8 +1,8 @@
-//! Covers src/periph/xspi_flash.zig: NOR semantics and the sparse store.
+//! Covers src/components/nor_flash/flash.zig: NOR semantics and the sparse store.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const flash = ra8.periph.xspi_flash;
+const flash = ra8.components.nor_flash;
 
 test "an untouched part reads erased everywhere and holds nothing" {
     var part = flash.Flash.init(std.testing.allocator);

@@ -15,4 +15,5 @@ test {
     _ = @import("eth_phy/peer_test.zig");
     _ = @import("usb_stick/stick_test.zig");
     _ = @import("usb_stick/disk_test.zig");
+    _ = @import("nor_flash/flash_test.zig");
 }

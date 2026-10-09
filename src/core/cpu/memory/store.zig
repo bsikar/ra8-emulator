@@ -4,7 +4,7 @@ const std = @import("std");
 const memmap = @import("../../memmap.zig");
 const external = @import("../../external_memory.zig");
 const Initiator = @import("initiator.zig").Initiator;
-const nor = @import("../../../periph/xspi/xspi_flash.zig");
+const mapped = @import("mapped.zig");
 const extra = @import("extra.zig");
 
 pub const Error = error{OutOfMemory};
@@ -16,7 +16,7 @@ pub const Store = struct {
     owned: [memmap.ram.len]bool = @splat(false),
     extra: extra.Extra = .{},
     layout: ?external.Layout = null,
-    flash: ?*nor.Flash = null,
+    flash: ?mapped.Mapped = null,
     fabric: ?*external.Fabric = null,
     owns_external: bool = false,
 
@@ -46,8 +46,8 @@ pub const Store = struct {
         return self;
     }
 
-    pub fn configureExternal(self: *Store, layout: external.Layout, flash: *nor.Flash) Error!void {
-        flash.resize(layout.size(.ospi)) catch return Error.OutOfMemory;
+    pub fn configureExternal(self: *Store, layout: external.Layout, flash: mapped.Mapped) Error!void {
+        try flash.resize(layout.size(.ospi));
         const bytes = try allocate(layout.size(.sdram));
         errdefer std.heap.page_allocator.free(bytes);
         const secure_index = indexOf(memmap.sdram_base).?;
@@ -119,7 +119,7 @@ pub const Store = struct {
         if (into.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, into.len)) |hit| {
             switch (hit.kind) {
-                .ospi => if (!self.flash.?.readMapped(hit.offset, into)) return AccessError.Unmapped,
+                .ospi => if (!self.flash.?.read(hit.offset, into)) return AccessError.Unmapped,
                 .sdram => @memcpy(into, self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..into.len]),
             }
             self.fabric.?.note(initiator, hit, .read, into.len);
@@ -132,7 +132,7 @@ pub const Store = struct {
         if (bytes.len == 0) return;
         if (self.layout) |layout| if (layout.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
-                .ospi => if (!(try self.flash.?.writeMapped(hit.offset, bytes))) return AccessError.Unmapped,
+                .ospi => if (!(try self.flash.?.write(hit.offset, bytes))) return AccessError.Unmapped,
                 .sdram => @memcpy(self.pages[indexOf(memmap.sdram_base).?].?[hit.offset..][0..bytes.len], bytes),
             }
             self.fabric.?.note(initiator, hit, .write, bytes.len);

@@ -61,6 +61,7 @@ const ssie = @import("../periph/ssie/ssie.zig");
 const ulpt = @import("../periph/ulpt/ulpt.zig");
 const wdt = @import("../periph/wdt/wdt.zig");
 const xspi = @import("../periph/xspi/xspi.zig");
+const nor_flash = @import("../components/nor_flash/flash.zig");
 
 /// A fresh board, with nothing on the bus yet.
 pub fn build(allocator: std.mem.Allocator) Board {
@@ -106,7 +107,8 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .serial = sci.Sci.init(),
         .spi = spi.Spi.init(),
         .sd = sd_card.Card.init(allocator),
-        .flash = xspi.Xspi.init(allocator),
+        .flash = .{},
+        .nor = nor_flash.Flash.init(allocator),
         .octa = undefined,
         .cipher = dotf.Dotf.init(),
         .card = sdhi.Sdhi.init(allocator),

@@ -264,4 +264,4 @@ pub const usbhs_xfer = @import("periph/usbhs/usbhs_xfer.zig");
 pub const wdt = @import("periph/wdt/wdt.zig");
 pub const wdt_write_once = @import("periph/wdt/wdt_write_once.zig");
 pub const xspi = @import("periph/xspi/xspi.zig");
-pub const xspi_flash = @import("periph/xspi/xspi_flash.zig");
+pub const xspi_nor = @import("periph/xspi/xspi_nor.zig");

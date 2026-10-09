@@ -144,6 +144,7 @@ pub const components = struct {
     pub const usb_loop_cable = @import("components/usb_loop_cable/cable.zig");
     pub const usb_stick = @import("components/usb_stick/stick.zig");
     pub const usb_stick_disk = @import("components/usb_stick/disk.zig");
+    pub const nor_flash = @import("components/nor_flash/flash.zig");
 };
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {

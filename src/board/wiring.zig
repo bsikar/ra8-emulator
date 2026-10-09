@@ -291,6 +291,7 @@ fn attachProtected(self: *Board) !void {
     self.octa = octaclk.Octa.init(&self.branches);
     self.modules.octa = &self.octa;
     self.flash.octa = &self.octa;
+    self.flash.part = self.nor.nor();
     // The dividers ask the selects whether the branch is gated, so they go
     // on after the selects they are paired with.
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);

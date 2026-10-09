@@ -1,6 +1,9 @@
-//! Configurable NOR array behind XSPI0, stored inverted so fresh erased flash
+//! The octal NOR part behind XSPI0: a configurable array stored inverted so fresh erased flash
 //! is demand-zero host memory and mapped accesses allocate nothing.
 const std = @import("std");
+const xspi_nor = @import("../../periph/xspi/xspi_nor.zig");
+const mapped = @import("../../core/cpu/memory/mapped.zig");
+const lines = @import("lines.zig");
 
 pub const part = struct {
     pub const size: u32 = 0x400_0000;
@@ -140,6 +143,17 @@ pub const Flash = struct {
         const first = index * part.sector_len;
         for (bytes, 0..) |value, offset| self.inverted[first + offset] = ~value;
         self.mark(index, true);
+    }
+
+    /// The command-engine contract XSPI0 calls. The board plugs this in
+    /// once the part is at its final address.
+    pub fn nor(self: *Flash) xspi_nor.Nor {
+        return lines.nor(self);
+    }
+
+    /// The mapped-window contract the memory store calls.
+    pub fn window(self: *Flash) mapped.Mapped {
+        return lines.window(self);
     }
 
     fn ensure(self: *Flash) !void {

@@ -147,13 +147,13 @@ test "configured external memory shares NOR and instruments SDRAM aliases" {
     var config = ra8.core.external_memory.Config{};
     config.ospi.size = 1024 * 1024;
     config.sdram.size = 1024 * 1024;
-    try board.flash.flash.resize(config.ospi.size);
+    try board.nor.resize(config.ospi.size);
     var store = try Store.init(null);
     defer store.deinit();
-    try store.configureExternal(try ra8.core.external_memory.Layout.init(config), &board.flash.flash);
+    try store.configureExternal(try ra8.core.external_memory.Layout.init(config), board.nor.window());
     const cpu = ra8.core.cpu.memory.guest.Guest{ .store = &store, .initiator = .cpu0 };
     try cpu.write(0x8000_0010, &.{0x0f});
-    try std.testing.expectEqual(@as(u8, 0x0f), board.flash.flash.byte(0x10));
+    try std.testing.expectEqual(@as(u8, 0x0f), board.nor.byte(0x10));
     var byte: [1]u8 = undefined;
     try cpu.read(0x7800_0020, &byte);
     try std.testing.expect(cpu.backed(0x8000_0000, 4));
