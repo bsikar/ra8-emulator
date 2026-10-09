@@ -6,6 +6,7 @@ const frame = @import("esp_frame.zig");
 const Queue = @import("esp_queue.zig").Queue;
 const tape = @import("esp_tape.zig");
 const Sock = @import("esp_sock.zig").Sock;
+const host_net = @import("esp_host_net.zig");
 const socket_flags = @import("../../interfaces/socket_flags.zig");
 
 pub const capacity: usize = 8;
@@ -52,9 +53,9 @@ pub const Bridge = struct {
         return false;
     }
 
-    pub fn forward(self: *Bridge, run: *tape.Tape, ip: eth.Ipv4, datagram: eth.Udp) void {
+    pub fn forward(self: *Bridge, run: *tape.Tape, net: ?host_net.Net, ip: eth.Ipv4, datagram: eth.Udp) void {
         const key = makeKey(ip, datagram.src_port, datagram.dst_port);
-        const index = self.find(key) orelse self.allocate(run, key, replyRoute(ip, datagram.src_port, datagram.dst_port)) orelse return;
+        const index = self.find(key) orelse self.allocate(run, net, key, replyRoute(ip, datagram.src_port, datagram.dst_port)) orelse return;
         const flow = &self.flows[index];
         if (flow.pending_len != 0 or datagram.data.len > flow.pending.len) return;
         const sent = flow.sock.send(datagram.data) catch |err| switch (err) {
@@ -112,7 +113,7 @@ pub const Bridge = struct {
         if (queueEthernet(queue, ethernet[0..len])) self.touch(flow);
     }
 
-    fn allocate(self: *Bridge, run: *tape.Tape, key: Key, route: eth.Route) ?usize {
+    fn allocate(self: *Bridge, run: *tape.Tape, net: ?host_net.Net, key: Key, route: eth.Route) ?usize {
         var index: usize = 0;
         var oldest: u64 = std.math.maxInt(u64);
         for (&self.flows, 0..) |*flow, i| {
@@ -129,7 +130,7 @@ pub const Bridge = struct {
         if (flow.used) flow.close();
         var sock: Sock = .{};
         const host = tape.Key{ .proto = .udp, .ip = key.dst_ip, .port = key.dst_port };
-        _ = sock.connect(run, host, hostAddress(key.dst_ip, key.dst_port)) catch return null;
+        _ = sock.connect(run, net, host, hostAddress(key.dst_ip, key.dst_port)) catch return null;
         flow.* = .{ .used = true, .sock = sock, .key = key, .route = route };
         self.touch(flow);
         return index;

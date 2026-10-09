@@ -288,6 +288,7 @@ pub const snapshot = struct {
 
 pub const interfaces = struct {
     pub const socket_flags = @import("interfaces/socket_flags.zig");
+    pub const host_sock = @import("interfaces/host_sock.zig");
     pub const host_sock_windows = @import("interfaces/host_sock_windows.zig");
     pub const sock_ready = @import("interfaces/sock_ready.zig");
     pub const win32 = @import("interfaces/win32.zig");

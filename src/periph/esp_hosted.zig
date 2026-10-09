@@ -17,6 +17,7 @@ pub const dns = @import("esp_hosted/esp_dns.zig");
 pub const net = @import("esp_hosted/esp_net.zig");
 pub const tape = @import("esp_hosted/esp_tape.zig");
 pub const sock = @import("esp_hosted/esp_sock.zig");
+pub const host_net = @import("esp_hosted/esp_host_net.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;
@@ -54,6 +55,11 @@ pub const C6 = struct {
     /// Hands the C6's DNS bridge the host Io it resolves names with.
     pub fn useIo(self: *C6, io: std.Io) void {
         self.wire.bridge.resolver.io = io;
+    }
+    /// Hands the C6's bridge the host network it opens sockets on
+    /// (RA8EMU-1010), filled by the application from its socket layer.
+    pub fn useNet(self: *C6, host: host_net.Net) void {
+        self.wire.bridge.net = host;
     }
     /// Records or replays the C6's host traffic (RA8EMU-560).
     pub fn useTape(self: *C6, run: tape.Tape) void {
