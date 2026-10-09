@@ -4,9 +4,9 @@
 //! each initiator. The longest of them is what the board, both SysTick banks
 //! and the window pacer see.
 const std = @import("std");
-const backing = @import("../../board/external_backing.zig");
-const clocks = @import("../../chip/periph/clocks.zig");
-const Clock = @import("zig_run.zig").Clock;
+const backing = @import("../board/external_backing.zig");
+const clocks = @import("../chip/periph/clocks.zig");
+const Clock = @import("run_clock.zig").Clock;
 
 /// Charge `instructions` retired by CPU0 to both cores and the board.
 pub fn close(clock: *Clock, instructions: u32) !void {
