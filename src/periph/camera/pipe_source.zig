@@ -14,10 +14,10 @@ const builtin = @import("builtin");
 const posix = std.posix;
 const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
-const decoded = @import("decoded_image.zig");
+const decoded = @import("../../host/camera/decoded_image.zig");
 const still = @import("image_source.zig");
 const host_read = @import("../../host/host_read.zig");
-pub const raw = @import("pipe_frame.zig");
+pub const raw = @import("../../host/camera/pipe_frame.zig");
 pub const pipe_windows = @import("../../host/camera/pipe_windows.zig");
 const win = pipe_windows;
 const is_windows = builtin.os.tag == .windows;
@@ -98,10 +98,10 @@ pub const PipeSource = struct {
             .image = image,
             // frame() reads the sensor register before each capture, on the
             // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = image.frame(), .format = .yuv422 },
+            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
             .format_control = format_control,
         };
-        @memset(image.pixels, .{ .r = 0, .g = 0, .b = 0 });
+        @memset(image.pixels, 0);
         return self;
     }
 

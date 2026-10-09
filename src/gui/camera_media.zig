@@ -4,9 +4,9 @@
 //! a PNG, BMP or PPM is a picture, a YUV4MPEG2 stream is a clip. Whatever
 //! else sits in the directory, and anything that will not open, is left out.
 const std = @import("std");
-const png = @import("../periph/camera/png_decode.zig");
-const bmp = @import("../periph/camera/bmp_decode.zig");
-const ppm = @import("../periph/camera/ppm_decode.zig");
+const png = @import("../host/camera/png_decode.zig");
+const bmp = @import("../host/camera/bmp_decode.zig");
+const ppm = @import("../host/camera/ppm_decode.zig");
 const y4m = @import("../host/camera/y4m_header.zig");
 
 /// How many leading bytes it takes to tell the kinds apart.

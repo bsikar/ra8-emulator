@@ -4,7 +4,6 @@
 //! standard library's zlib and the five scanline filters are undone in place.
 const std = @import("std");
 const decoded = @import("decoded_image.zig");
-const convert = @import("pixel_convert.zig");
 
 const Image = decoded.Image;
 const Error = decoded.DecodeError;
@@ -41,7 +40,7 @@ const Header = struct {
 /// payload joined in order.
 const Parts = struct {
     header: Header,
-    palette: [256]convert.Rgb = undefined,
+    palette: [256]decoded.Rgb = undefined,
     palette_len: usize = 0,
     data: std.ArrayListUnmanaged(u8) = .empty,
 };
@@ -76,8 +75,7 @@ fn walk(allocator: std.mem.Allocator, bytes: []const u8) Error!Parts {
             if (chunk.data.len % 3 != 0 or chunk.data.len > 768 or chunk.data.len == 0) return error.BadHeader;
             parts.palette_len = chunk.data.len / 3;
             for (parts.palette[0..parts.palette_len], 0..) |*entry, index| {
-                const rgb = chunk.data[index * 3 ..][0..3];
-                entry.* = .{ .r = rgb[0], .g = rgb[1], .b = rgb[2] };
+                entry.* = chunk.data[index * 3 ..][0..3].*;
             }
         }
     }
@@ -168,14 +166,14 @@ fn pixels(image: Image, raw: []const u8, parts: *const Parts) Error!void {
     const header = parts.header;
     const channels = header.channels();
     const stride = header.rowBytes() + 1;
-    for (image.pixels, 0..) |*pixel, index| {
+    for (0..@as(usize, image.width) * image.height) |index| {
         const row = index / header.width;
         const column = index % header.width;
         const s = raw[row * stride + 1 + column * channels ..][0..channels];
-        pixel.* = switch (header.colour) {
-            .grey, .grey_alpha => .{ .r = s[0], .g = s[0], .b = s[0] },
-            .rgb, .rgba => .{ .r = s[0], .g = s[1], .b = s[2] },
+        image.set(index, switch (header.colour) {
+            .grey, .grey_alpha => .{ s[0], s[0], s[0] },
+            .rgb, .rgba => s[0..3].*,
             .palette => if (s[0] < parts.palette_len) parts.palette[s[0]] else return error.BadHeader,
-        };
+        });
     }
 }

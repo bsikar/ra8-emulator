@@ -10,9 +10,9 @@
 const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const converted = @import("converted_source.zig");
-const decoded = @import("decoded_image.zig");
+const decoded = @import("../../host/camera/decoded_image.zig");
 const still = @import("image_source.zig");
-const raw = @import("pipe_frame.zig");
+const raw = @import("../../host/camera/pipe_frame.zig");
 const abi = @import("../../host/camera/v4l2_abi.zig");
 const negotiate = @import("../../host/camera/v4l2_negotiate.zig");
 
@@ -65,10 +65,10 @@ pub const WebcamSource = struct {
             .image = image,
             // frame() reads the sensor register before each capture, on the
             // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = image.frame(), .format = .yuv422 },
+            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
             .format_control = format_control,
         };
-        @memset(image.pixels, .{ .r = 0, .g = 0, .b = 0 });
+        @memset(image.pixels, 0);
         return self;
     }
 
@@ -86,9 +86,10 @@ pub const WebcamSource = struct {
         const width = self.agreed.width;
         const stride = self.agreed.bytesperline;
         const used = @as(usize, width) * self.format.bytesPerPixel();
+        const row = width * decoded.Image.bytes_per_pixel;
         for (0..self.agreed.height) |y| {
             const line = self.bytes[y * stride ..][0..used];
-            raw.toRgb(self.format, line, self.image.pixels[y * width ..][0..width]);
+            raw.toRgb(self.format, line, self.image.pixels[y * row ..][0..row]);
         }
         self.frames += 1;
     }

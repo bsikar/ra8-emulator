@@ -1,13 +1,12 @@
-//! Covers src/periph/camera/png_decode.zig: every colour type and all five
+//! Covers src/host/camera/png_decode.zig: every colour type and all five
 //! scanline filters pixel for pixel, a PNG written by another encoder, split
 //! IDAT data, and each refusal.
 const std = @import("std");
 const ra8 = @import("ra8");
 const fixture = @import("png_fixture.zig");
 
-const camera = ra8.periph.ceu.camera;
+const camera = ra8.host.camera;
 const png = camera.png;
-const Rgb = camera.convert.Rgb;
 const allocator = std.testing.allocator;
 
 /// A 2x2 RGB picture (red, green / blue, white) written by Python's zlib,
@@ -28,10 +27,10 @@ const rgb_rows = [_]u8{
     255, 254, 253, 60,  70, 80,  199, 3,   47,
 };
 
-fn expectRgb(image: camera.image.Image, samples: []const u8, step: usize) !void {
-    for (image.pixels, 0..) |pixel, index| {
+fn expectRgb(image: camera.decoded.Image, samples: []const u8, step: usize) !void {
+    for (0..image.pixels.len / 3) |index| {
         const s = samples[index * step ..];
-        try std.testing.expectEqual(Rgb{ .r = s[0], .g = s[1], .b = s[2] }, pixel);
+        try std.testing.expectEqual([3]u8{ s[0], s[1], s[2] }, image.get(index));
     }
 }
 
@@ -59,16 +58,16 @@ test "greyscale and grey+alpha spread the grey level over r, g and b" {
     defer allocator.free(bytes);
     const image = try png.decode(allocator, bytes);
     defer image.deinit(allocator);
-    for (image.pixels, grey) |pixel, level| try std.testing.expectEqual(Rgb{ .r = level, .g = level, .b = level }, pixel);
+    for (grey, 0..) |level, index| try std.testing.expectEqual([3]u8{ level, level, level }, image.get(index));
 
     const pairs = [_]u8{ 7, 0, 99, 255, 180, 1, 33, 128 };
     const ga = try fixture.build(allocator, .{ .width = 2, .height = 2, .colour = 4, .pixels = &pairs, .filters = &.{ 1, 3 } });
     defer allocator.free(ga);
     const second = try png.decode(allocator, ga);
     defer second.deinit(allocator);
-    for (second.pixels, 0..) |pixel, index| {
+    for (0..second.pixels.len / 3) |index| {
         const level = pairs[index * 2];
-        try std.testing.expectEqual(Rgb{ .r = level, .g = level, .b = level }, pixel);
+        try std.testing.expectEqual([3]u8{ level, level, level }, second.get(index));
     }
 }
 

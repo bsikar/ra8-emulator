@@ -309,13 +309,8 @@ test {
     _ = @import("camera/pixel_convert_test.zig");
     _ = @import("camera/converted_source_test.zig");
     _ = @import("camera/camera_registry_test.zig");
-    _ = @import("camera/ppm_decode_test.zig");
-    _ = @import("camera/bmp_decode_test.zig");
-    _ = @import("camera/png_decode_test.zig");
     _ = @import("camera/image_source_test.zig");
-    _ = @import("camera/y4m_frame_test.zig");
     _ = @import("camera/video_source_test.zig");
-    _ = @import("camera/pipe_frame_test.zig");
     _ = @import("camera/pipe_source_test.zig");
     _ = @import("camera/mf_capture_test.zig");
     _ = @import("camera/mf_webcam_test.zig");

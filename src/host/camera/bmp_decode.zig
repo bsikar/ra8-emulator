@@ -43,9 +43,9 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) decoded.DecodeErr
         // Bottom-up files store the last row first.
         const stored = if (height > 0) rows - 1 - row else row;
         const line = raster[stored * stride ..][0 .. image.width * step];
-        for (image.pixels[row * image.width ..][0..image.width], 0..) |*pixel, column| {
+        for (0..image.width) |column| {
             const p = line[column * step ..];
-            pixel.* = .{ .r = p[2], .g = p[1], .b = p[0] };
+            image.set(row * image.width + column, .{ p[2], p[1], p[0] });
         }
     }
     return image;

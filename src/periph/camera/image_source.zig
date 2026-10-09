@@ -10,10 +10,10 @@ const std = @import("std");
 const frame_source = @import("frame_source.zig");
 const convert = @import("pixel_convert.zig");
 const converted = @import("converted_source.zig");
-const decoded = @import("decoded_image.zig");
-const ppm = @import("ppm_decode.zig");
-const bmp = @import("bmp_decode.zig");
-const png = @import("png_decode.zig");
+const decoded = @import("../../host/camera/decoded_image.zig");
+const ppm = @import("../../host/camera/ppm_decode.zig");
+const bmp = @import("../../host/camera/bmp_decode.zig");
+const png = @import("../../host/camera/png_decode.zig");
 
 /// No picture worth capturing comes near this; a bigger file is refused
 /// rather than read into memory.
@@ -61,7 +61,7 @@ pub const ImageSource = struct {
             .image = image,
             // frame() reads the sensor register before each capture, on the
             // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = image.frame(), .format = .yuv422 },
+            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
             .format_control = format_control,
         };
         return self;

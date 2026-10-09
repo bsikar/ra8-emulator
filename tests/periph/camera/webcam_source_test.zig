@@ -45,10 +45,10 @@ test "a padded RGB565 frame decodes row by row and reaches the firmware as RGB56
     try std.testing.expectEqualStrings("/dev/video0", source.detail);
     source.frame(0, .{ .width = 4, .lines = 2 });
     try std.testing.expectEqual(@as(u64, 1), self.frames);
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[0].r);
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[1].g);
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[2].b);
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[3].r);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(0)[0]);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(1)[1]);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(2)[2]);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(3)[0]);
     source.close();
     try std.testing.expect(fake.closed);
 }
@@ -61,9 +61,10 @@ test "a YUYV frame decodes through the shared chroma pair" {
     const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_yuyv, 4), "/dev/video0", &control);
     defer self.source().close();
     self.pull();
-    for (self.image.pixels) |pixel| {
-        try std.testing.expectEqual(pixel.r, pixel.g);
-        try std.testing.expectEqual(pixel.g, pixel.b);
+    for (0..self.image.pixels.len / 3) |index| {
+        const pixel = self.image.get(index);
+        try std.testing.expectEqual(pixel[0], pixel[1]);
+        try std.testing.expectEqual(pixel[1], pixel[2]);
     }
 }
 
@@ -74,13 +75,13 @@ test "the capture is black before a frame and keeps the last frame after a faile
     const self = try ws.WebcamSource.open(std.testing.allocator, fake.capture(), agreed(abi.pix_rgb565, 4), "/dev/video0", &control);
     defer self.source().close();
     self.pull();
-    try std.testing.expectEqual(@as(u8, 0), self.image.pixels[0].r);
+    try std.testing.expectEqual(@as(u8, 0), self.image.get(0)[0]);
     fake.fail = false;
     self.pull();
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[0].r);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(0)[0]);
     fake.fail = true;
     self.pull();
-    try std.testing.expectEqual(@as(u8, 255), self.image.pixels[3].b);
+    try std.testing.expectEqual(@as(u8, 255), self.image.get(3)[2]);
     try std.testing.expectEqual(@as(u64, 1), self.frames);
 }
 
