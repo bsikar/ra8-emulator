@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const dispatch = ra8.core.rsp_dispatch;
-const Rig = @import("../../debug/view_ram.zig").Rig;
+const Rig = @import("../../session/view_ram.zig").Rig;
 
 const demcr: u32 = 0xE000_EDFC;
 const dwt_ctrl: u32 = 0xE000_1000;

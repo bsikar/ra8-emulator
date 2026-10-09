@@ -16,9 +16,9 @@ const camera_install = @import("../../board/camera_install.zig");
 const source_spec = @import("../../host/camera/source_spec.zig");
 const camera_source = @import("camera_source.zig");
 const Board = @import("../../board/board.zig").Board;
-const session_api = @import("../../debug/session_api.zig");
-const region_map = @import("../../debug/region_map.zig");
-const region_map_json = @import("../../debug/region_map_json.zig");
+const session_api = @import("../../session/session_api.zig");
+const region_map = @import("../../session/region_map.zig");
+const region_map_json = @import("../../session/region_map_json.zig");
 const map_main = @import("map_main.zig");
 
 pub const usage =

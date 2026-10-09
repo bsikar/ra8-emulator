@@ -3,9 +3,9 @@
 //! opening and closing stores, how many fell between, how they spaced out
 //! over periods, and who wrote what. Every tally row is listed (no top-N).
 const elf = @import("../../../board/loader/elf.zig");
-const symbols = @import("../../../debug/symbols.zig");
-const watchpoint = @import("../../../debug/watchpoint.zig");
-const tally_mod = @import("../../../debug/tally.zig");
+const symbols = @import("../../../session/symbols.zig");
+const watchpoint = @import("../../../session/watchpoint.zig");
+const tally_mod = @import("../../../session/tally.zig");
 const symbol = @import("json_where.zig").symbol;
 
 /// Null unless `--watch` named a place the image resolves.

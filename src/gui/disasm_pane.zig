@@ -11,9 +11,9 @@
 const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
-const disasm = @import("../debug/disasm.zig");
-const session_api = @import("../debug/session_api.zig");
-const session_view = @import("../debug/session_view.zig");
+const disasm = @import("../session/disasm.zig");
+const session_api = @import("../session/session_api.zig");
+const session_view = @import("../session/session_view.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;

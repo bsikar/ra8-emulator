@@ -18,7 +18,7 @@ const Context = handlers.Context;
 const Ack = rpc.Outcome(proto.Ack);
 const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
-fn core(of: proto.Core) @import("../../debug/session_api.zig").Core {
+fn core(of: proto.Core) @import("../../session/session_api.zig").Core {
     return @fromBackingInt(@intCast(@backingInt(of)));
 }
 

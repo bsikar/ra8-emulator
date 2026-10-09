@@ -1,5 +1,5 @@
 //! `--watch` on a `--cpu zig` run (RA8EMU-639). The Zig core owns no hooks, so this sits between the
-//! core and its bus the way src/debug/rtos_zig.zig does, and hands every
+//! core and its bus the way src/session/rtos_zig.zig does, and hands every
 //! store that starts in the watched word to watchpoint.Watched.
 //!
 //! The core moves pc past an instruction before running it, so a store
@@ -14,7 +14,7 @@ const boot = @import("../../chip/core/cpu/boot.zig");
 const cpu = @import("../../chip/core/cpu/cpu.zig");
 const elf = @import("../../board/loader/elf.zig");
 const Source = @import("../../chip/core/cpu/exception/source.zig").Source;
-const watchpoint = @import("../../debug/watchpoint.zig");
+const watchpoint = @import("../../session/watchpoint.zig");
 
 pub const limits = struct {
     /// Stores one instruction can land in a four-byte word: four byte

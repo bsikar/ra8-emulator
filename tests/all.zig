@@ -83,7 +83,7 @@ test {
     _ = @import("chip/core/second_wiring_test.zig");
     _ = @import("chip/core/second_zig_exceptions_test.zig");
     _ = @import("chip/core/cadence_test.zig");
-    _ = @import("debug/all.zig");
+    _ = @import("session/all.zig");
     _ = @import("interfaces/gdb/all.zig");
     _ = @import("board/loader/elf_test.zig");
     _ = @import("chip/core/idle_test.zig");

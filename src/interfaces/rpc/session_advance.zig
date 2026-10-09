@@ -12,7 +12,7 @@ const std = @import("std");
 const rpc = @import("ra8_rpc");
 const proto = @import("session_rpc.zig");
 const handlers = @import("session_handlers.zig");
-const api = @import("../../debug/session_api.zig");
+const api = @import("../../session/session_api.zig");
 
 const Outcome = rpc.Outcome(proto.Advanced);
 

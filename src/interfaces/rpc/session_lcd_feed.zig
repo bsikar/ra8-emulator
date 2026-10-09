@@ -7,7 +7,7 @@
 //! frames per core, so after a drop the whole panel goes out instead.
 const std = @import("std");
 const proto = @import("session_rpc.zig");
-const api = @import("../../debug/session_api.zig");
+const api = @import("../../session/session_api.zig");
 const Context = @import("session_handlers.zig").Context;
 
 /// Events read from the stream per pass.

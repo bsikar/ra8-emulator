@@ -7,7 +7,7 @@
 //! boundary is wrapped so each event lands on its exact virtual time.
 const std = @import("std");
 const boot = @import("../../chip/core/cpu/boot.zig");
-const api = @import("../../debug/session_api.zig");
+const api = @import("../../session/session_api.zig");
 const Board = @import("../../board/board.zig").Board;
 const session_plug = @import("../../board/session_plug.zig");
 const session_faults = @import("../../board/session_faults.zig");

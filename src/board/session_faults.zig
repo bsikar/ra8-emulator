@@ -17,7 +17,7 @@ const spi = @import("../chip/periph/spi/spi.zig");
 const sci = @import("../chip/periph/sci/sci.zig");
 const sci_device = @import("../chip/periph/sci/sci_device.zig");
 const lines = @import("session_faults_lines.zig");
-const session_api = @import("../debug/session_api.zig");
+const session_api = @import("../session/session_api.zig");
 const Board = @import("board.zig").Board;
 
 pub const Error = error{ WrongEndpoint, NothingFitted, TooManyFaults } || lines.Error;

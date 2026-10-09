@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const zig_break = ra8.board.zig_run.break_sym;
-const Builder = @import("../../debug/symbol_image.zig").Builder;
+const Builder = @import("../../session/symbol_image.zig").Builder;
 
 test "a --break-sym name resolves to its address and arrival" {
     var bytes: [4096]u8 align(4) = undefined;

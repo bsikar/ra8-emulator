@@ -101,7 +101,7 @@ test {
     _ = @import("gui/speed_field_test.zig");
     _ = @import("gui/time_readout_test.zig");
     _ = @import("gui/session_input_wire_test.zig");
-    _ = @import("debug/debug_read_wire_test.zig");
+    _ = @import("session/debug_read_wire_test.zig");
     _ = @import("gui/session_event_wire_test.zig");
     _ = @import("gui/session_led_wire_test.zig");
     _ = @import("gui/time_bar_test.zig");

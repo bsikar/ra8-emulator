@@ -1,15 +1,15 @@
 //! The command line: the flags the emulator takes and nothing else.
 const std = @import("std");
 const part = @import("../../chip/core/part.zig");
-const place = @import("../../debug/place.zig");
-const pc_hits = @import("../../debug/pc_hits.zig");
-const mem_dump = @import("../../debug/mem_dump.zig");
+const place = @import("../../session/place.zig");
+const pc_hits = @import("../../session/pc_hits.zig");
+const mem_dump = @import("../../session/mem_dump.zig");
 const gt911 = @import("../../components/touch_gt911/gt911.zig");
 const world_flags = @import("world_flags.zig");
 const max17048 = @import("../../components/gauge_max17048/max17048.zig");
 const sd_format = @import("../../components/sd_card/format.zig");
 const cpu_choice = @import("../../chip/core/cpu/choice.zig");
-const rtos_load = @import("../../debug/rtos_load.zig");
+const rtos_load = @import("../../session/rtos_load.zig");
 const request = @import("../../components/request.zig");
 pub const ctl_args = @import("ctl_args.zig");
 pub const rtc_start = @import("rtc_start.zig");
@@ -140,14 +140,14 @@ pub const Options = struct {
     /// A place whose stores to record, as the command line spelled it.
     /// Null watches nothing and costs the run nothing.
     watch_place: ?[]const u8 = null,
-    /// `--trace-rtos`: record ThreadX thread switches. src/debug/rtos_hook.zig.
+    /// `--trace-rtos`: record ThreadX thread switches. src/session/rtos_hook.zig.
     trace_rtos: bool = false,
     /// `--trace-rtos-out FILE`: also write the trace there (RA8EMU-345).
     trace_rtos_out: ?[]const u8 = null,
     /// `--report json`: the end-of-run report as one JSON line (RA8EMU-347).
     report_json: bool = false,
     /// `--cpu-load`: CPU load per thread and ISR, per core, from the same
-    /// hook. src/debug/rtos_report.zig.
+    /// hook. src/session/rtos_report.zig.
     cpu_load: bool = false,
     /// `ctl cpu-load`: print just the load object after a one-shot image run.
     ctl_cpu_load: bool = false,
@@ -159,10 +159,10 @@ pub const Options = struct {
     /// load is charged over. Either one turns `--cpu-load` on.
     cpu_load_window: rtos_load.Window = .{},
     /// `--taken-in`: a function to catch every exception taken inside.
-    /// src/debug/taken_in.zig says why a tally cannot answer that.
+    /// src/session/taken_in.zig says why a tally cannot answer that.
     taken_in_place: ?[]const u8 = null,
     /// `--count-pc`: instruction addresses to count executions of, in the
-    /// order they were given. src/debug/pc_hits.zig says why a counter
+    /// order they were given. src/session/pc_hits.zig says why a counter
     /// that measures nothing but the execution is worth having.
     count_pc: [pc_hits.limits.places]u32 = @splat(0),
     /// How many of `count_pc` were actually given.

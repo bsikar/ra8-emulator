@@ -8,7 +8,7 @@ const font = @import("font.zig");
 const hex_entry = @import("hex_entry.zig");
 const memory_pane = @import("memory_pane.zig");
 const registers_pane = @import("registers_pane.zig");
-const session_api = @import("../debug/session_api.zig");
+const session_api = @import("../session/session_api.zig");
 
 const Rect = draw_list.Rect;
 

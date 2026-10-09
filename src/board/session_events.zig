@@ -1,7 +1,7 @@
 //! Connect board observations to the core-addressed session event stream (RA8EMU-192).
 const Board = @import("board.zig").Board;
 const boundary = @import("boundary.zig");
-const api = @import("../debug/session_api.zig");
+const api = @import("../session/session_api.zig");
 
 /// Attach non-blocking sources; each callback reads the board bus issuer.
 pub fn attach(board: *Board, session: *api.Session) void {

@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const dispatch = ra8.core.rsp_dispatch;
 const memmap = ra8.core.memmap;
-const Rig = @import("../../debug/view_ram.zig").Rig;
+const Rig = @import("../../session/view_ram.zig").Rig;
 
 const base: u32 = memmap.sram_base;
 

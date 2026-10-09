@@ -12,9 +12,9 @@ const std = @import("std");
 const draw_list = @import("draw_list.zig");
 const font = @import("font.zig");
 const elf = @import("../board/loader/elf.zig");
-const dwarf_line = @import("../debug/dwarf_line.zig");
-const session_api = @import("../debug/session_api.zig");
-const session_source = @import("../debug/session_source.zig");
+const dwarf_line = @import("../session/dwarf_line.zig");
+const session_api = @import("../session/session_api.zig");
+const session_source = @import("../session/session_source.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;

@@ -6,8 +6,8 @@
 //! address.
 const std = @import("std");
 const elf = @import("../../board/loader/elf.zig");
-const breakpoint = @import("../../debug/breakpoint.zig");
-const profile = @import("../../debug/profile.zig");
+const breakpoint = @import("../../session/breakpoint.zig");
+const profile = @import("../../session/profile.zig");
 const cpu = @import("../../chip/core/cpu/cpu.zig");
 const cli = @import("cli.zig");
 

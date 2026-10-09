@@ -1,11 +1,11 @@
 //! Whether gdb sent an interrupt (0x03) while a resume runs.
 //!
-//! The session asks between run chunks (src/debug/session.zig, `Poll`).
+//! The session asks between run chunks (src/session/session.zig, `Poll`).
 //! The check peeks at the connection without waiting. An interrupt byte is
 //! taken; anything else is left for the packet reader once the run stops.
 const std = @import("std");
 const packet = @import("rsp_packet.zig");
-const debug_session = @import("../../debug/session.zig");
+const debug_session = @import("../../session/session.zig");
 const sock_ready = @import("../sock_ready.zig");
 
 /// Instructions per run chunk under gdb: small enough that an interrupt

@@ -29,12 +29,12 @@ const frame_out = @import("frame_out.zig");
 const frames_out = @import("report.zig").frames_out;
 const eink_log = @import("eink_log.zig");
 const audio_out = @import("audio_out.zig");
-const rtos_hook = @import("../../debug/rtos_hook.zig");
+const rtos_hook = @import("../../session/rtos_hook.zig");
 const second_core = @import("../../chip/core/second_core.zig");
-const profile = @import("../../debug/profile.zig");
+const profile = @import("../../session/profile.zig");
 pub const stack_profile = @import("stack_profile.zig");
-const mem_dump = @import("../../debug/mem_dump.zig");
-const watchpoint = @import("../../debug/watchpoint.zig");
+const mem_dump = @import("../../session/mem_dump.zig");
+const watchpoint = @import("../../session/watchpoint.zig");
 /// `--watch` on a Zig run: src/interfaces/cli/zig_watch.zig.
 pub const zig_watch = @import("zig_watch.zig");
 const cpu = @import("../../chip/core/cpu/cpu.zig");
@@ -256,7 +256,7 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     }
     defer if (clock.cpu1) |second| second.close();
     if (board.run.soak.armed) soak_symbols.resolve(image, &board.run.soak.threads);
-    // --trace-rtos listens in front of the core (src/debug/rtos_zig.zig).
+    // --trace-rtos listens in front of the core (src/session/rtos_zig.zig).
     var tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtosWanted()) else null;
     var listener: rtos_hook.zig.Listener = undefined;
     if (tracer) |*found| {

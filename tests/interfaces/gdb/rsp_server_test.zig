@@ -8,7 +8,7 @@ const dispatch = ra8.core.rsp_dispatch;
 const packet = ra8.core.rsp_packet;
 const server = dispatch.server;
 const memmap = ra8.core.memmap;
-const Rig = @import("../../debug/view_ram.zig").Rig;
+const Rig = @import("../../session/view_ram.zig").Rig;
 
 fn open(rig: *Rig) !void {
     rig.wire();

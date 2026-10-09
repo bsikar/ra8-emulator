@@ -14,10 +14,10 @@ const std = @import("std");
 const Guest = @import("../../../chip/core/cpu/memory/guest.zig").Guest;
 const elf = @import("../../../board/loader/elf.zig");
 const cli = @import("../cli.zig");
-const symbols = @import("../../../debug/symbols.zig");
+const symbols = @import("../../../session/symbols.zig");
 const sd_dump = @import("../../../components/sd_card/dump.zig");
 const sd_image = @import("../../../components/sd_card/image.zig");
-const registers = @import("../../../debug/registers.zig");
+const registers = @import("../../../session/registers.zig");
 const json_regs = @import("json_regs.zig");
 
 /// Read each `--dump-sym` global out of RAM and print it.
