@@ -29,10 +29,6 @@ pub const Sock = struct {
         return host.connect(self.fd, address);
     }
 
-    pub fn isOpen(self: *const Sock) bool {
-        return self.fd != invalid_socket or self.reader != null;
-    }
-
     /// True once a pending connect has finished; an error means it failed.
     pub fn ready(self: *Sock) !bool {
         if (self.reader != null) return true;

@@ -130,10 +130,6 @@ pub const Icu = struct {
     /// Take a slot's DTCE down. The controller does this when a descriptor
     /// runs out (HUM Ch 18 Figure 18.5 p 801), so the next time that event
     /// fires the CPU takes the interrupt instead of the DTC moving nothing.
-    pub fn clearDtce(self: *Icu, slot: usize) void {
-        self.clearDtceOn(.cpu0, slot);
-    }
-
     pub fn clearDtceOn(self: *Icu, issuer: periph.Issuer, slot: usize) void {
         self.tableFor(issuer)[slot] &= ~field.dtce;
     }
