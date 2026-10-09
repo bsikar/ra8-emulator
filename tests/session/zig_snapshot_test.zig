@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/zig_snapshot.zig: a run saved part way and
+//! Covers src/session/zig_snapshot.zig: a run saved part way and
 //! restored ends where the uninterrupted run ends (RA8EMU-696), wherever the
 //! split falls: a save holds the chunk it stopped in open instead of closing
 //! it short, and the load picks it up there (RA8EMU-700).
@@ -13,7 +13,7 @@ const Cpu0 = ra8.board.cpu0_store.Cpu0;
 const Parts = ra8.board.parts.Parts;
 const Options = ra8.core.cli.Options;
 
-const stkof = @embedFile("../../fixtures/threadx/threadx_stkof.elf");
+const stkof = @embedFile("../fixtures/threadx/threadx_stkof.elf");
 const page: usize = 0x1000;
 const vectors: u32 = memmap.mram_base;
 const stack: u32 = memmap.sram_base + 0x800;

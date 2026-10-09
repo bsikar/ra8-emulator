@@ -205,7 +205,6 @@ test "a Zig core run profiles retired function instructions and writes folded ou
 test {
     _ = @import("../../session/stack_profile_test.zig");
     _ = @import("zig_main_test.zig");
-    _ = @import("zig_snapshot_test.zig");
     _ = @import("idle_skip_equiv_test.zig");
     _ = @import("sleep_wake_test.zig");
     _ = @import("soak_done_test.zig");
