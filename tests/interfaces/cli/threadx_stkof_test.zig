@@ -23,7 +23,7 @@ test "a ThreadX thread overflowing its stack is caught by the stack limit" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
-    // As zig_memory.Cpu0.attachStore: the image goes in after the board, and
+    // As cpu0_store.Cpu0.attachStore: the image goes in after the board, and
     // the loader maps its option-setting windows too.
     _ = try loader.image(core, image);
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };

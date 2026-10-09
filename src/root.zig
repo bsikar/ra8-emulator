@@ -147,6 +147,7 @@ pub const board = struct {
     pub const session_rtc = @import("board/session_rtc.zig");
     pub const boundary = @import("board/boundary.zig");
     pub const wiring = @import("board/wiring.zig");
+    pub const cpu0_store = @import("board/cpu0_store.zig");
     pub const option_memory = @import("board/option_memory.zig");
     pub const i2c = @import("board/i2c.zig");
     pub const net = @import("board/net.zig");

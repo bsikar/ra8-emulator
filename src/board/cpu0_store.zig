@@ -1,6 +1,7 @@
 //! CPU0's memory for a single-core `--cpu zig` run: the Zig core's own
 //! store (RA8EMU-580, slice 4d-2 of
-//! RA8EMU-481).
+//! RA8EMU-481). Board code since RA8EMU-996: the harness and the CLI both put
+//! CPU0 on its store through here.
 //!
 //! The board's blocks attach over the store, CPU0's PPB windows are primed
 //! into it, and the image (and any `--ns` half) is loaded into it, in the
@@ -11,14 +12,13 @@
 //! A run with a second core goes on the store too: CPU1 gets a store of its
 //! own that borrows this one's shared SRAM (RA8EMU-588). Since RA8EMU-607
 //! there is no engine arm left here: every run is on the store.
-const elf = @import("../../core/elf.zig");
-const Store = @import("../../core/cpu/memory/store.zig").Store;
-const external = @import("../../core/external_memory.zig");
-const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
-const loader = @import("../../core/cpu/memory/load.zig");
-const wiring = @import("../../board/wiring.zig");
-const Board = @import("../../board/board.zig").Board;
-const cli = @import("cli.zig");
+const elf = @import("../core/elf.zig");
+const Store = @import("../core/cpu/memory/store.zig").Store;
+const external = @import("../core/external_memory.zig");
+const Guest = @import("../core/cpu/memory/guest.zig").Guest;
+const loader = @import("../core/cpu/memory/load.zig");
+const wiring = @import("wiring.zig");
+const Board = @import("board.zig").Board;
 
 pub const Cpu0 = struct {
     /// Null until `attachStore` makes it.

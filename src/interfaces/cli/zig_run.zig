@@ -68,8 +68,6 @@ pub const Ends = struct {
     /// The `--faults FILE` schedule, applied at its virtual times (RA8EMU-207).
     schedule: ?*fault_file.Applier = null,
 };
-/// CPU0's memory for a single-core run: src/interfaces/cli/zig_memory.zig.
-pub const cpu0_memory = @import("zig_memory.zig");
 /// A `--cpu zig` run from main, with no engine opened: RA8EMU-592.
 pub const main_path = @import("zig_main.zig");
 

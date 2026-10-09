@@ -25,7 +25,7 @@ const step_hook = @import("debug/step_hook.zig");
 const watch_bus = @import("debug/watch_bus.zig");
 const rtos_hook = step_hook.rtos_hook;
 const rtos_publish = step_hook.rtos_publish;
-const Cpu0 = @import("interfaces/cli/zig_memory.zig").Cpu0;
+const Cpu0 = @import("board/cpu0_store.zig").Cpu0;
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;

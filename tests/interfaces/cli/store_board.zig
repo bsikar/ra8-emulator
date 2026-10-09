@@ -1,6 +1,6 @@
 //! The board a `--cpu zig` run attaches, for tests that run CPU0 on its own
 //! store: every block over the store, then CPU0's windows primed into it,
-//! as zig_memory.Cpu0.attachStore does.
+//! as cpu0_store.Cpu0.attachStore does.
 const ra8 = @import("ra8");
 
 const wiring = ra8.board.wiring;
