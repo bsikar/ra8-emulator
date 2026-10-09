@@ -9,6 +9,7 @@ const Queue = @import("esp_queue.zig").Queue;
 const udp_net = @import("esp_udp.zig");
 const tape = @import("esp_tape.zig");
 const Sock = @import("esp_sock.zig").Sock;
+const host_net = @import("esp_host_net.zig");
 
 pub const tcp_capacity: usize = 8;
 const guest_window: u16 = eth.tcp_payload_max;
@@ -63,6 +64,8 @@ pub const Bridge = struct {
     tcp_cursor: usize = 0,
     dns_bridge: dns_host.Host = .{},
     tape: tape.Tape = .{},
+    /// The host network the application handed over; none opens no socket.
+    net: ?host_net.Net = null,
 
     pub fn deinit(self: *Bridge) void {
         for (&self.tcp_flows) |*flow| flow.close();
@@ -84,7 +87,7 @@ pub const Bridge = struct {
             const datagram = eth.udp(ethernet) orelse return .handled;
             if (datagram.dst_port == dns.port and std.mem.eql(u8, &ip.dst_ip, &dhcp.server_ip)) {
                 self.forwardDns(queue, ip, datagram);
-            } else self.udp_bridge.forward(&self.tape, ip, datagram);
+            } else self.udp_bridge.forward(&self.tape, self.net, ip, datagram);
             return .handled;
         }
         if (ip.protocol == eth.proto_tcp) {
@@ -197,7 +200,7 @@ pub const Bridge = struct {
             .receive_window = window,
         };
         const host = tape.Key{ .proto = .tcp, .ip = key.dst_ip, .port = key.dst_port };
-        const opened = flow.sock.connect(&self.tape, host, hostAddress(key.dst_ip, key.dst_port)) catch {
+        const opened = flow.sock.connect(&self.tape, self.net, host, hostAddress(key.dst_ip, key.dst_port)) catch {
             flow.state = .reset_pending;
             flow.control = .reset;
             self.queueControl(queue, index);

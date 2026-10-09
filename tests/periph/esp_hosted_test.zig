@@ -89,6 +89,7 @@ test {
     _ = @import("esp_hosted/esp_dns_test.zig");
     _ = @import("esp_hosted/esp_net_test.zig");
     _ = @import("esp_hosted/esp_tape_test.zig");
+    _ = @import("esp_hosted/esp_host_net_test.zig");
     _ = @import("esp_hosted/esp_replay_test.zig");
     _ = @import("esp_hosted/esp_dhcp_test.zig");
     _ = @import("esp_hosted/esp_gateway_test.zig");

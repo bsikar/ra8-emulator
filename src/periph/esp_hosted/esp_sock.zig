@@ -3,37 +3,40 @@
 const std = @import("std");
 const tape = @import("esp_tape.zig");
 const socket_flags = @import("../../interfaces/socket_flags.zig");
-const host = @import("../../interfaces/host_sock.zig");
+const host_net = @import("esp_host_net.zig");
 
-pub const invalid_socket = host.invalid;
-pub const Address = host.Address;
-
-pub const Connect = host.Connect;
+pub const Address = host_net.Address;
+pub const Connect = host_net.Connect;
 
 pub const Sock = struct {
-    fd: host.Fd = invalid_socket,
+    /// The host network the socket was opened on, and the socket.
+    net: ?host_net.Net = null,
+    socket: ?host_net.Handle = null,
     writer: ?tape.Writer = null,
     reader: ?tape.Reader = null,
     datagram: bool = false,
 
-    /// Opens a nonblocking socket to `address` (replay opens the tape instead).
-    pub fn connect(self: *Sock, run: *tape.Tape, key: tape.Key, address: Address) !Connect {
+    /// Opens a nonblocking socket on `net` to `address` (replay opens the
+    /// tape instead and needs no host network).
+    pub fn connect(self: *Sock, run: *tape.Tape, net: ?host_net.Net, key: tape.Key, address: Address) !Connect {
         self.datagram = key.proto == .udp;
         if (run.mode == .replay) {
             self.reader = try run.load(key);
             return .done;
         }
-        self.fd = try host.open(if (key.proto == .tcp) .stream else .datagram);
+        const host = net orelse return error.NoHostNetwork;
+        self.net = host;
+        self.socket = try host.open(if (key.proto == .tcp) .stream else .datagram);
         errdefer self.close();
         if (run.mode == .record) self.writer = try run.create(key);
-        return host.connect(self.fd, address);
+        return host.connect(self.socket.?, address);
     }
 
     /// True once a pending connect has finished; an error means it failed.
     pub fn ready(self: *Sock) !bool {
         if (self.reader != null) return true;
-        if (!try host.readyFor(self.fd, .writable)) return false;
-        try host.finished(self.fd);
+        if (!try self.net.?.writable(self.socket.?)) return false;
+        try self.net.?.finished(self.socket.?);
         return true;
     }
 
@@ -43,7 +46,7 @@ pub const Sock = struct {
             if (!reader.expect(bytes)) return error.ReplayDiverged;
             return bytes.len;
         }
-        const sent = try host.send(self.fd, bytes, socket_flags.nosignal);
+        const sent = try self.net.?.send(self.socket.?, bytes, socket_flags.nosignal);
         if (self.writer) |*writer| writer.put(.guest, bytes[0..sent]);
         return sent;
     }
@@ -56,7 +59,7 @@ pub const Sock = struct {
             if (got != 0 or (reader.closed() and !self.datagram)) return got;
             return error.WouldBlock;
         }
-        const got = try host.recv(self.fd, out, flags);
+        const got = try self.net.?.recv(self.socket.?, out, flags);
         if (self.writer) |*writer| {
             const dir: tape.Dir = if (got == 0 and !self.datagram) .closed else .host;
             writer.put(dir, out[0..@min(got, out.len)]);
@@ -65,11 +68,11 @@ pub const Sock = struct {
     }
 
     pub fn shutdownSend(self: *Sock) !void {
-        if (self.reader == null) try host.shutdownSend(self.fd);
+        if (self.reader == null) try self.net.?.shutdownSend(self.socket.?);
     }
 
     pub fn close(self: *Sock) void {
-        if (self.fd != invalid_socket) host.close(self.fd);
+        if (self.socket) |socket| self.net.?.close(socket);
         if (self.writer) |*writer| writer.close();
         if (self.reader) |*reader| reader.deinit();
         self.* = .{};

@@ -6,6 +6,7 @@
 const std = @import("std");
 const rtc_start = @import("rtc_start.zig");
 const cli = @import("cli.zig");
+const host_sock = @import("../host_sock.zig");
 const camera_source = @import("camera_source.zig");
 const Board = @import("../../board/board.zig").Board;
 const usb_plug = @import("../../board/usb_plug.zig");
@@ -48,6 +49,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     board.asks.keep(allocator, asks[0..count]);
     if (options.usb_loop) board.usb.loopBack();
     board.c6.useIo(io);
+    board.c6.useNet(.of(host_sock));
     if (options.net_tape) |spec| board.c6.useTape(try tape.Tape.open(io, spec.dir, spec.mode));
     board.capture.source = try camera_source.open(allocator, io, options.camera, &board.wire.sensor.format);
     try cli.card_setup.prepare(board, io, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);

@@ -96,7 +96,7 @@ fn record(path: []const u8, reply: []u8) !struct { port: u16, len: usize } {
     var host = Server{ .server = &server };
     var serving = try io.concurrent(Server.serve, .{&host});
     defer serving.cancel(io) catch {};
-    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .record) };
+    var bridge: Bridge = .{ .tape = try tape.Tape.open(std.testing.io, path, .record), .net = .of(ra8.interfaces.host_sock) };
     defer bridge.deinit();
     var queue: Queue = .{};
     const port = server.socket.address.getPort();
