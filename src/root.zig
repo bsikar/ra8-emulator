@@ -127,60 +127,7 @@ pub const core = struct {
 };
 pub const harness = @import("harness.zig");
 pub const periph = @import("periph.zig");
-pub const components = struct {
-    pub const ov5640 = @import("components/camera_ov5640/ov5640_sccb.zig");
-    /// The camera part's frame production: host inputs wrapped and converted
-    /// to what the CEU programmed (RA8EMU-1059).
-    pub const camera = struct {
-        pub const hosted = @import("components/camera_ov5640/hosted.zig");
-        pub const converted = @import("components/camera_ov5640/converted_source.zig");
-        pub const convert = @import("components/camera_ov5640/pixel_convert.zig");
-    };
-    pub const pi4ioe = @import("components/expander_pi4ioe/pi4ioe.zig");
-    pub const gt911 = @import("components/touch_gt911/gt911.zig");
-    pub const touch_input = @import("components/touch_gt911/touch_input.zig");
-    pub const user_switch = @import("components/user_switch/user_switch.zig");
-    pub const eth_phy = @import("components/eth_phy/phy.zig");
-    pub const eth_peer = @import("components/eth_phy/peer.zig");
-    pub const input_script = @import("components/touch_gt911/input_script.zig");
-    pub const lsm6dso = @import("components/imu_lsm6dso/lsm6dso.zig");
-    pub const max17048 = @import("components/gauge_max17048/max17048.zig");
-    pub const button = @import("components/button/button.zig");
-    pub const led = @import("components/led/led.zig");
-    pub const usb_echo = @import("components/usb_echo/device.zig");
-    pub const usb_echo_far = @import("components/usb_echo/far.zig");
-    pub const usb_loop_cable = @import("components/usb_loop_cable/cable.zig");
-    pub const usb_stick = @import("components/usb_stick/stick.zig");
-    pub const usb_stick_disk = @import("components/usb_stick/disk.zig");
-    pub const nor_flash = @import("components/nor_flash/flash.zig");
-    pub const modem_at = @import("components/modem_at/modem.zig");
-    pub const modem_at_script = @import("components/modem_at/script.zig");
-    pub const eink = @import("components/eink_it8951/panel.zig");
-    pub const eink_refresh = @import("components/eink_it8951/refresh.zig");
-    pub const eink_busy = @import("components/eink_it8951/busy.zig");
-    pub const eink_wire = @import("components/eink_it8951/wire.zig");
-    pub const eink_image = @import("components/eink_it8951/image.zig");
-    /// The plug layer: endpoints, the catalog, parts, requests and faults.
-    pub const model = @import("components/model.zig");
-    pub const sd_card = @import("components/sd_card/card.zig");
-    pub const sd_card_line = @import("components/sd_card/card_line.zig");
-    pub const sd_command = @import("components/sd_card/command.zig");
-    pub const sd_crc = @import("components/sd_card/crc.zig");
-    pub const sd_dump = @import("components/sd_card/dump.zig");
-    pub const sd_fat = @import("components/sd_card/fat.zig");
-    pub const sd_format = @import("components/sd_card/format.zig");
-    pub const sd_format_advice = @import("components/sd_card/format_advice.zig");
-    pub const sd_image = @import("components/sd_card/image.zig");
-    pub const sd_dirent = @import("components/sd_card/dirent.zig");
-    pub const sd_mkimage = @import("components/sd_card/mkimage.zig");
-    pub const sd_reply = @import("components/sd_card/reply.zig");
-    pub const sd_trace = @import("components/sd_card/trace.zig");
-    pub const sd_write = @import("components/sd_card/write.zig");
-    pub const sd_bus_card = @import("components/sd_card/bus_card.zig");
-    /// The ESP32-C6 on the EK-RA8D2, speaking esp-hosted over SPI or UART.
-    pub const esp_hosted = @import("components/esp32c6_hosted/esp_hosted.zig");
-    pub const sd_bus_line = @import("components/sd_card/bus_line.zig");
-};
+pub const components = @import("components/components.zig");
 /// Host OS adapters the applications fill model interfaces from (ADR 0004).
 pub const host = struct {
     pub const host_console = @import("host/host_console.zig");
