@@ -8,14 +8,15 @@
 //! the SD Physical Layer puts it through before a block command means
 //! anything: idle -> ready -> ident -> stby -> tran.
 //!
-//! The store is sparse, the same shape nor_flash/flash.zig takes: a block is held
-//! from the first time something writes to it, and a block nobody has
-//! written reads as zeros, which is what a freshly formatted card gives.
-//! `--sd-image PATH` loads a raw host image into that store (RA8EMU-568), so
-//! the store is the copy-on-write overlay: firmware writes land here and the
+//! The blocks themselves are the one card model both fronts share,
+//! image.zig (RA8EMU-1053): the SPI-mode front in card.zig and this SD-bus
+//! front each hold an `image.Image` and keep only their own protocol state.
+//! `--sd-image PATH` loads a raw host image into it (RA8EMU-568), so the
+//! store is the copy-on-write overlay: firmware writes land here and the
 //! file is only rewritten by `saveTo`, which `--sd-writable` asks for. With
 //! no image the capacity is the model's own choice, stated below.
 const std = @import("std");
+const image = @import("image.zig");
 const sd_line = @import("../../periph/sdhi/sdhi_line.zig");
 
 pub const geometry = struct {
@@ -41,37 +42,31 @@ pub const State = enum {
     tran,
 };
 
-const Block = [geometry.block_bytes]u8;
+const Block = image.Block;
 
-pub const LoadError = error{ BadImageSize, CardNotBlank, OutOfMemory };
+pub const LoadError = image.LoadError;
 
 pub const Card = struct {
-    allocator: std.mem.Allocator,
-    blocks: std.AutoHashMap(u32, *Block),
+    /// The card's blocks and size, shared with the SPI-mode front.
+    img: image.Image,
     state: State = .idle,
-    /// How big the card is: the model's default, or the loaded image's size.
-    capacity_blocks: u32 = geometry.capacity_blocks,
     /// Blocks written that were past the end of the card.
     past_end: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Card {
-        return .{
-            .allocator = allocator,
-            .blocks = std.AutoHashMap(u32, *Block).init(allocator),
-        };
+        var img = image.Image.init(allocator);
+        img.capacity_blocks = geometry.capacity_blocks;
+        return .{ .img = img };
     }
 
     pub fn deinit(self: *Card) void {
-        self.release();
-        self.blocks.deinit();
+        self.img.deinit();
     }
 
     /// Free every held block and put the card back in idle, which is where
     /// a power cycle leaves it.
     pub fn release(self: *Card) void {
-        var it = self.blocks.valueIterator();
-        while (it.next()) |block| self.allocator.destroy(block.*);
-        self.blocks.clearRetainingCapacity();
+        self.img.release();
         self.state = .idle;
         self.past_end = 0;
     }
@@ -79,51 +74,31 @@ pub const Card = struct {
     /// Blocks currently holding data. A run that only read the card holds
     /// none.
     pub fn held(self: *const Card) u32 {
-        return self.blocks.count();
+        return @intCast(self.img.held());
+    }
+
+    /// How big the card is: the model's default, or the loaded image's size.
+    pub fn capacity(self: *const Card) u32 {
+        return self.img.capacity_blocks;
     }
 
     pub fn holds(self: *const Card, lba: u32) bool {
-        return lba < self.capacity_blocks;
+        return self.img.inRange(lba);
     }
 
     /// Back the card with a raw image: whole C_SIZE units, so the CSD can
     /// state it exactly. Zero blocks stay sparse. Refused on a card that
     /// already holds data.
     pub fn loadBytes(self: *Card, bytes: []const u8) LoadError!void {
-        const unit: usize = geometry.block_bytes * geometry.csize_unit;
-        if (bytes.len == 0 or bytes.len % unit != 0) return error.BadImageSize;
-        if (bytes.len / geometry.block_bytes > std.math.maxInt(u32)) return error.BadImageSize;
-        if (self.held() != 0) return error.CardNotBlank;
-        const blocks: u32 = @intCast(bytes.len / geometry.block_bytes);
-        self.capacity_blocks = blocks;
-        var index: u32 = 0;
-        while (index < blocks) : (index += 1) {
-            const start = @as(usize, index) * geometry.block_bytes;
-            const source = bytes[start..][0..geometry.block_bytes];
-            if (std.mem.allEqual(u8, source, 0)) continue;
-            if (!self.write(index, source)) {
-                self.release();
-                self.capacity_blocks = geometry.capacity_blocks;
-                return error.OutOfMemory;
-            }
-        }
+        self.img.loadBytes(bytes) catch |err| {
+            if (err == error.OutOfMemory) self.img.capacity_blocks = geometry.capacity_blocks;
+            return err;
+        };
     }
 
     /// Write every block of the card over `path` (temp file, fsync, rename).
-    pub fn saveTo(self: *Card, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
-        var atomic = try dir.createFileAtomic(io, path, .{ .replace = true });
-        defer atomic.deinit(io);
-        var buffer: [4096]u8 = undefined;
-        var out = atomic.file.writer(io, &buffer);
-        var block: Block = undefined;
-        var index: u32 = 0;
-        while (index < self.capacity_blocks) : (index += 1) {
-            _ = self.read(index, &block);
-            try out.interface.writeAll(&block);
-        }
-        try out.interface.flush();
-        try atomic.file.sync(io);
-        try atomic.replace(io);
+    pub fn saveTo(self: *const Card, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
+        try self.img.saveTo(io, dir, path);
     }
 
     /// A block command is only legal from the transfer state, which is
@@ -135,12 +110,9 @@ pub const Card = struct {
     /// One block out of the card. A block nobody wrote reads as zeros.
     pub fn read(self: *Card, lba: u32, out: *Block) bool {
         @memset(out, 0);
-        if (!self.holds(lba)) {
-            self.past_end += 1;
-            return false;
-        }
-        if (self.blocks.get(lba)) |block| out.* = block.*;
-        return true;
+        if (self.img.read(lba, out)) return true;
+        self.past_end += 1;
+        return false;
     }
 
     /// One block into the card, held from here on.
@@ -149,15 +121,7 @@ pub const Card = struct {
             self.past_end += 1;
             return false;
         }
-        const entry = self.blocks.getOrPut(lba) catch return false;
-        if (!entry.found_existing) {
-            entry.value_ptr.* = self.allocator.create(Block) catch {
-                _ = self.blocks.remove(lba);
-                return false;
-            };
-        }
-        entry.value_ptr.*.* = data.*;
-        return true;
+        return self.img.write(lba, data);
     }
 
     /// CMD0: back to idle from wherever the card was.
@@ -193,7 +157,7 @@ pub const Card = struct {
 
     /// The CSD v2 response words for this card's capacity, low word first.
     pub fn csd(self: *const Card) [4]u32 {
-        const size = @max(self.capacity_blocks, geometry.csize_unit);
+        const size = @max(self.capacity(), geometry.csize_unit);
         const c_size = (size / geometry.csize_unit) - 1;
         return .{
             0,

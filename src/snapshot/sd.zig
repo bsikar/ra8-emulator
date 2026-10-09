@@ -25,8 +25,12 @@ fn body(writer: anytype, board: anytype) !void {
     try fields.writeExcept(writer, board.sd.img, store_wiring);
     try blocks.write(writer, &board.sd.img.blocks);
     try fields.writeExcept(writer, board.card, .{"card"});
-    try fields.writeExcept(writer, board.host_card, store_wiring);
-    try blocks.write(writer, &board.host_card.blocks);
+    // The SD-bus card in its pre-RA8EMU-1053 field order (state, capacity,
+    // past_end), so the bytes did not move when its store became an Image.
+    try fields.writeExcept(writer, board.host_card, .{ "img", "past_end" });
+    try fields.writeExcept(writer, board.host_card.img, store_wiring);
+    try fields.writeExcept(writer, board.host_card, .{ "img", "state" });
+    try blocks.write(writer, &board.host_card.img.blocks);
 }
 
 /// All or nothing: both cards change only once the whole section read
@@ -41,16 +45,18 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     var host = board.card;
     try fields.readOver(&cursor, &host, .{"card"});
     var disk = board.host_card;
-    try fields.readOver(&cursor, &disk, store_wiring);
-    const host_list = try blocks.List.read(&cursor, disk.capacity_blocks);
+    try fields.readOver(&cursor, &disk, .{ "img", "past_end" });
+    try fields.readOver(&cursor, &disk.img, store_wiring);
+    try fields.readOver(&cursor, &disk, .{ "img", "state" });
+    const host_list = try blocks.List.read(&cursor, disk.img.capacity_blocks);
     if (!cursor.done() or !fits(&spi, &host)) return Error.BadValue;
     var spi_map = try spi_list.build(spi.img.allocator);
     errdefer blocks.free(&spi_map);
-    const host_map = try host_list.build(disk.allocator);
+    const host_map = try host_list.build(disk.img.allocator);
     blocks.free(&board.sd.img.blocks);
-    blocks.free(&board.host_card.blocks);
+    blocks.free(&board.host_card.img.blocks);
     spi.img.blocks = spi_map;
-    disk.blocks = host_map;
+    disk.img.blocks = host_map;
     board.sd = spi;
     board.card = host;
     board.host_card = disk;

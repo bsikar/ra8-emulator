@@ -40,7 +40,7 @@ test "a loaded image is the card: boot sector, root entry and its size" {
     try std.testing.expectEqualSlices(u8, &.{ 0x55, 0xAA }, block[510..512]);
     try std.testing.expectEqualSlices(u8, bytes[0..512], &block);
     const blocks: u32 = @intCast(bytes.len / 512);
-    try std.testing.expectEqual(blocks, unit.capacity_blocks);
+    try std.testing.expectEqual(blocks, unit.capacity());
     const c_size = blocks / card.geometry.csize_unit - 1;
     try std.testing.expectEqual((c_size & 0xFFFF) << 16, unit.csd()[1]);
     try std.testing.expect(!unit.read(blocks, &block));
@@ -82,5 +82,5 @@ test "an image that is not whole C_SIZE units, or a card already holding data, i
     defer std.testing.allocator.free(whole);
     @memset(whole, 0);
     try std.testing.expectError(error.CardNotBlank, unit.loadBytes(whole));
-    try std.testing.expectEqual(card.geometry.capacity_blocks, unit.capacity_blocks);
+    try std.testing.expectEqual(card.geometry.capacity_blocks, unit.capacity());
 }
