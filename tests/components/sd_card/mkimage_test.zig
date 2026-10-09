@@ -6,6 +6,7 @@ const ra8 = @import("ra8");
 const mk = ra8.components.sd_mkimage;
 const sd_image = ra8.components.sd_image;
 const disk_file = ra8.host.disk_file;
+const Folder = ra8.host.folder.Folder;
 const card = ra8.components.sd_bus_card;
 const fat32 = @import("fat32_reader.zig");
 
@@ -40,7 +41,7 @@ fn fixture(dir: std.Io.Dir, reverse: bool) !void {
 fn buildBytes(dir: std.Io.Dir, out: std.Io.Dir, name: []const u8) ![]u8 {
     var img = sd_image.Image.init(A);
     defer img.deinit();
-    _ = try mk.build(A, io, &img, dir, "BOOKS");
+    _ = try mk.build(A, &img, Folder.of(io, dir), "BOOKS");
     try disk_file.replace(io, out, name, &img);
     return out.readFileAlloc(io, name, A, .unlimited);
 }
@@ -125,5 +126,5 @@ test "a symlink is refused rather than left out" {
     try tmp.dir.symLink(io, "A.TXT", "link", .{});
     var img = sd_image.Image.init(A);
     defer img.deinit();
-    try std.testing.expectError(error.UnsupportedEntry, mk.build(A, io, &img, tmp.dir, "X"));
+    try std.testing.expectError(error.UnsupportedEntry, mk.build(A, &img, Folder.of(io, tmp.dir), "X"));
 }

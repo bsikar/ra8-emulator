@@ -6,6 +6,7 @@ const sd_advice = @import("../../components/sd_card/format_advice.zig");
 const sd_image = @import("../../components/sd_card/image.zig");
 const sd_mkimage = @import("../../components/sd_card/mkimage.zig");
 const disk_file = @import("../../host/disk_file.zig");
+const host_folder = @import("../../host/folder.zig");
 
 /// The label a `--sd-new` format gives the card when the spec names none.
 pub const default_label = "RA8";
@@ -50,14 +51,14 @@ pub fn prepareSdhi(board: *Board, io: std.Io, sdhi: Sdhi) !void {
 /// Build the `--sd-dir` image and hand its bytes to the SDHI card.
 fn fromDir(board: *Board, io: std.Io, path: []const u8) !void {
     const allocator = std.heap.page_allocator;
-    var dir = std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| {
+    var folder = host_folder.Folder.open(io, path) catch |err| {
         std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };
-    defer dir.close(io);
+    defer folder.close();
     var img = sd_image.Image.init(allocator);
     defer img.deinit();
-    const built = sd_mkimage.build(allocator, io, &img, dir, default_label) catch |err| {
+    const built = sd_mkimage.build(allocator, &img, folder, default_label) catch |err| {
         std.debug.print("--sd-dir {s}: {s}\n", .{ path, @errorName(err) });
         return err;
     };

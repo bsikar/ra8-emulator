@@ -175,6 +175,7 @@ pub const host = struct {
     pub const host_console = @import("host/host_console.zig");
     pub const host_read = @import("host/host_read.zig");
     pub const disk_file = @import("host/disk_file.zig");
+    pub const folder = @import("host/folder.zig");
     pub const pipe_windows = @import("host/camera/pipe_windows.zig");
     /// Host camera capture backends and file formats (RA8EMU-1011).
     pub const camera = struct {
