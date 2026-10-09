@@ -6,4 +6,5 @@ test {
     _ = @import("guest_bus_test.zig");
     _ = @import("load_test.zig");
     _ = @import("extra_test.zig");
+    _ = @import("initiator_test.zig");
 }

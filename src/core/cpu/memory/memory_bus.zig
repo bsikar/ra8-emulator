@@ -2,12 +2,12 @@
 //! external-memory timing and instrumentation.
 const bus = @import("../bus.zig");
 const memmap = @import("../../memmap.zig");
-const external = @import("../../external_memory.zig");
+const Initiator = @import("initiator.zig").Initiator;
 const Store = @import("store.zig").Store;
 
 pub const MemoryBus = struct {
     store: *Store,
-    initiator: external.Initiator = .none,
+    initiator: Initiator = .none,
     fast_enabled: bool = false,
     direct: bus.DirectMemory = .{},
 

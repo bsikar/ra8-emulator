@@ -5,3 +5,4 @@ pub const guest = @import("guest.zig");
 pub const guest_bus = @import("guest_bus.zig");
 pub const load = @import("load.zig");
 pub const extra = @import("extra.zig");
+pub const initiator = @import("initiator.zig");

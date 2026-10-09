@@ -159,3 +159,15 @@ test "the Non-secure MRAM view is code MRAM one IDAU bit up (RA8EMU-412)" {
     try std.testing.expectEqual(mod.mram_end - mod.mram_base, mod.ns_mram_end - mod.ns_mram_base);
     try std.testing.expect(mod.ns_mram_end <= mod.dtcm_base);
 }
+
+test "coversRam answers for the part's RAM regions and nothing else" {
+    try std.testing.expect(mod.coversRam(mod.sram_base, 4));
+    try std.testing.expect(mod.coversRam(mod.ns_sram_base, 4));
+    try std.testing.expect(mod.coversRam(mod.ppb_base, 4));
+    // The whole code MRAM is RAM, so a page an image never loads
+    // still answers.
+    try std.testing.expect(mod.coversRam(mod.mram_base + 0x8_1000, 4));
+    try std.testing.expect(!mod.coversRam(mod.mram_end - 2, 4));
+    // A span running off the end of a region is not covered by it.
+    try std.testing.expect(!mod.coversRam(mod.sram_end - 2, 4));
+}

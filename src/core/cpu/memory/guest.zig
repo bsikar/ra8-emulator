@@ -2,7 +2,7 @@
 //! shared external-memory fabric.
 const std = @import("std");
 const code_lines = @import("../code_lines.zig");
-const external = @import("../../external_memory.zig");
+const Initiator = @import("initiator.zig").Initiator;
 const Store = @import("store.zig").Store;
 
 pub const Error = error{Unmapped};
@@ -10,9 +10,9 @@ pub const MapError = error{ Mapped, Full, OutOfMemory };
 
 pub const Guest = struct {
     store: *Store,
-    initiator: external.Initiator = .none,
+    initiator: Initiator = .none,
 
-    pub fn asInitiator(self: Guest, initiator: external.Initiator) Guest {
+    pub fn asInitiator(self: Guest, initiator: Initiator) Guest {
         return .{ .store = self.store, .initiator = initiator };
     }
 

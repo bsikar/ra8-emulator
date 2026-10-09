@@ -42,7 +42,7 @@
 //! import cycle, and nothing here touches C.
 const std = @import("std");
 const fault = @import("fault.zig");
-const board_ram = @import("board_ram.zig");
+const memmap = @import("memmap.zig");
 
 pub const limits = struct {
     /// Instructions a closure probe may step before giving up. Small on
@@ -107,7 +107,7 @@ pub fn plainMemory(address: u64, size: u32) bool {
     if (address > std.math.maxInt(u32)) return false;
     const base: u32 = @truncate(address);
     if (base >= 0xE000_0000) return false;
-    return board_ram.covers(base, size);
+    return memmap.coversRam(base, size);
 }
 
 /// The seam itself: what it has proved, and what it saved.

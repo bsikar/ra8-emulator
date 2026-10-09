@@ -1,5 +1,8 @@
 //! Profile-selected external memory geometry, timing and usage accounting.
 const std = @import("std");
+const initiator_mod = @import("cpu/memory/initiator.zig");
+
+pub const Initiator = initiator_mod.Initiator;
 
 pub const wall_hz: u64 = 1_000_000_000;
 pub const default_window_cycles: u32 = 1_000_000;
@@ -175,22 +178,6 @@ pub fn supportedOverlap(address: u32, len: usize) bool {
         overlap(Kind.sdram.base(), 128 * 1024 * 1024, address, len) or
         overlap(sdram_alias_base, 128 * 1024 * 1024, address, len);
 }
-
-pub const Initiator = enum(u2) {
-    none,
-    cpu0,
-    cpu1,
-    ethos_u55,
-
-    fn timedIndex(self: Initiator) ?usize {
-        return switch (self) {
-            .none => null,
-            .cpu0 => 0,
-            .cpu1 => 1,
-            .ethos_u55 => 2,
-        };
-    }
-};
 
 pub const Direction = enum { read, write };
 
