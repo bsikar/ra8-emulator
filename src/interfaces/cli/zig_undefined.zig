@@ -11,7 +11,7 @@ const cpu = @import("../../core/cpu/cpu.zig");
 const cli = @import("cli.zig");
 
 pub const Found = undefined_ops.Found;
-pub const print = undefined_ops.print;
+pub const print = @import("report/undefined.zig").print;
 
 /// The swept sites, each asked to end the run, or none without the flag.
 pub fn resolve(image: elf.Image, options: cli.Options) ?Found {
