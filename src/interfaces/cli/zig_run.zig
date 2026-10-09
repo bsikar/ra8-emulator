@@ -5,7 +5,7 @@
 const std = @import("std");
 const Guest = @import("../../core/cpu/memory/guest.zig").Guest;
 const boot = @import("../../core/cpu/boot.zig");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const clocks = @import("../../periph/clocks.zig");
 const soak_fault = @import("../../periph/time/soak_fault.zig");
 const bus_fault = @import("../../periph/bus_fault.zig");
@@ -345,7 +345,7 @@ fn finishEinkLog(out: *std.Io.Writer, io: std.Io, options: cli.Options, recorder
 /// Bring CPU1 up from `named`, with its block cache when asked; false once
 /// the reason it could not is printed.
 fn openSecond(pair: *second_core.zig_run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool) bool {
-    pair.open(std.heap.page_allocator, io, board_wiring.cpu1(board), named, memory) catch |err| {
+    @import("cpu1_image.zig").open(pair, std.heap.page_allocator, io, board_wiring.cpu1(board), named, memory) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return false;
     };

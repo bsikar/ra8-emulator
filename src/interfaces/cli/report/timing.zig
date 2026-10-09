@@ -18,7 +18,7 @@
 const clocks = @import("../../../periph/clocks.zig");
 const tally_mod = @import("../../../debug/tally.zig");
 const taken_in_mod = @import("../../../debug/taken_in.zig");
-const elf = @import("../../../core/elf.zig");
+const elf = @import("../../../board/loader/elf.zig");
 const symbols = @import("../../../debug/symbols.zig");
 const pc_hits = @import("../../../debug/pc_hits.zig");
 

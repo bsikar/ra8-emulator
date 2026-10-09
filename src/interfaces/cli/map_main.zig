@@ -9,7 +9,7 @@
 //! fits no region. The numbers are region_map.zig's; this file only lays
 //! them out.
 const std = @import("std");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const sections = @import("../../debug/sections.zig");
 const region_map = @import("../../debug/region_map.zig");
 

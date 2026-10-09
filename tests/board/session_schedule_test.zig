@@ -9,7 +9,7 @@ const store_board = @import("../interfaces/cli/store_board.zig");
 
 const api = ra8.core.session_api;
 const boot = ra8.core.cpu.boot;
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const loader = ra8.core.cpu.memory.load;
 const zig_run = ra8.board.zig_run;
 const session_plug = ra8.board.session_plug;
@@ -43,7 +43,8 @@ test "a fault schedule applies every event at its exact virtual time" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
-    _ = try loader.image(core, image);
+    const loaded = try ra8.board.loader.read(image);
+    _ = try loader.image(core, loaded.image());
 
     var plugs = session_plug.Plugs.init(&board, arena.allocator());
     var faults = session_faults.Faults.init(&board, arena.allocator());

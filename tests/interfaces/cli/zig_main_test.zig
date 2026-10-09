@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const memmap = ra8.core.memmap;
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const main_path = ra8.board.zig_run.main_path;
 const Cpu0 = ra8.board.cpu0_store.Cpu0;
 const Parts = ra8.board.parts.Parts;

@@ -14,7 +14,7 @@
 //! through src/debug/rtos_second.zig.
 const std = @import("std");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
-const elf = @import("../core/elf.zig");
+const elf = @import("../board/loader/elf.zig");
 const symbols = @import("symbols.zig");
 const rtos_trace = @import("rtos_trace.zig");
 pub const names = @import("rtos_names.zig");

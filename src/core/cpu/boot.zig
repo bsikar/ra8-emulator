@@ -12,7 +12,6 @@ const BoardBus = @import("board_bus.zig").BoardBus;
 const registry = @import("../../periph/registry.zig");
 const cpu_mod = @import("cpu.zig");
 const sleep_pace = @import("../sleep_pace.zig");
-const elf = @import("../elf.zig");
 const Choice = @import("choice.zig").Choice;
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;

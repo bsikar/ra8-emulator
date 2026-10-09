@@ -2,7 +2,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const undefined_ops = ra8.core.undefined_ops;
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const imageWith = @import("undefined_image.zig").imageWith;
 
 /// The program counter shifted into an AND: and.w r3, r2, pc, lsl #2.
@@ -61,7 +61,7 @@ test "a sweep names the site at its own address" {
     // mov r0, r2 ; and.w r3, r2, pc, lsl #2 ; mov r1, r3
     const code = [_]u8{ 0x10, 0x46, 0x02, 0xEA, 0x8F, 0x03, 0x19, 0x46 };
     var buffer: [256]u8 = undefined;
-    const found = undefined_ops.sweep(imageWith(&buffer, &code, 0x02007000));
+    const found = sweep(imageWith(&buffer, &code, 0x02007000));
     try std.testing.expectEqual(@as(usize, 1), found.count);
     try std.testing.expectEqual(@as(u32, 0x02007002), found.listed()[0].address);
     try std.testing.expectEqual(@as(u32, 0xEA02038F), found.listed()[0].encoding);
@@ -70,7 +70,7 @@ test "a sweep names the site at its own address" {
 test "a clean image sweeps to nothing" {
     const code = [_]u8{ 0x10, 0x46, 0x43, 0xEA, 0x92, 0x73, 0x19, 0x46 };
     var buffer: [256]u8 = undefined;
-    const found = undefined_ops.sweep(imageWith(&buffer, &code, 0x02007000));
+    const found = sweep(imageWith(&buffer, &code, 0x02007000));
     try std.testing.expectEqual(@as(usize, 0), found.count);
 }
 
@@ -82,7 +82,7 @@ test "a non executable segment is not swept" {
     const ph = std.mem.bytesAsValue(elf.ProgramHeader, buffer[at..][0..@sizeOf(elf.ProgramHeader)]);
     ph.p_flags = 4;
     image = elf.Image.init(&buffer) catch unreachable;
-    try std.testing.expectEqual(@as(usize, 0), undefined_ops.sweep(image).count);
+    try std.testing.expectEqual(@as(usize, 0), sweep(image).count);
 }
 
 test "a site starts with no arrivals" {
@@ -164,4 +164,9 @@ test "a site past the watch limit can neither be armed nor stop anything" {
     found.stopOnRun();
     try std.testing.expectEqual(undefined_ops.limits.watched, found.kept().len);
     try std.testing.expect(found.stoppedAt() == null);
+}
+
+fn sweep(image: elf.Image) undefined_ops.Found {
+    const loaded = ra8.board.loader.read(image) catch unreachable;
+    return undefined_ops.sweep(loaded.image());
 }

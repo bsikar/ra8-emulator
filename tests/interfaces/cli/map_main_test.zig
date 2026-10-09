@@ -3,7 +3,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const map_main = ra8.core.map_main;
 const region_map = ra8.core.region_map;
 

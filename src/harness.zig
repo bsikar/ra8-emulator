@@ -1,6 +1,6 @@
 //! Public owner for a firmware image, its Zig core, board, and debug session.
 const std = @import("std");
-const elf = @import("core/elf.zig");
+const elf = @import("board/loader/elf.zig");
 const part = @import("core/part.zig");
 const BoardBus = @import("core/cpu/board_bus.zig").BoardBus;
 const cpu_mod = @import("core/cpu/cpu.zig");
@@ -8,6 +8,7 @@ const NvicSource = @import("core/cpu/exception/nvic_source.zig").NvicSource;
 const QuietSource = @import("core/cpu/exception/quiet_source.zig").QuietSource;
 const Guest = @import("core/cpu/memory/guest.zig").Guest;
 const memory_load = @import("core/cpu/memory/load.zig");
+const read_image = @import("board/loader/image.zig");
 const Board = @import("board/board.zig").Board;
 const option_memory = @import("board/option_memory.zig");
 const Reboot = @import("core/reboot.zig").Reboot;
@@ -55,7 +56,8 @@ const LoaderState = struct {
         const memory = self.memory[index] orelse return error.CoreNotAttached;
         // The same map, option-window claim and write a `--cpu zig` run
         // loads with, so option-setting segments land (RA8EMU-760).
-        _ = try memory_load.image(memory, image);
+        const loaded = try read_image.read(image);
+        _ = try memory_load.image(memory, loaded.image());
         try cpu.reset(image.vectorBase() orelse return error.NoVectorTable);
         const copy = try self.allocator.dupe(u8, bytes);
         if (self.loaded[index]) |old| self.allocator.free(old);

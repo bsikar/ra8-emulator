@@ -2,7 +2,7 @@
 //! checked against `arm-none-eabi-objdump -h` of the same file.
 const std = @import("std");
 const ra8 = @import("ra8");
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const sections = ra8.core.sections;
 
 const image_bytes = @embedFile("../fixtures/sections/fault_crashlog_hil.elf");

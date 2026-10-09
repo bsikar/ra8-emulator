@@ -3,7 +3,7 @@
 //! and by the report tests that resolve a global through it.
 const std = @import("std");
 const ra8 = @import("ra8");
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const symbols = ra8.core.symbols;
 
 /// A minimal ELF32 ARM image with one symbol table and one string table,

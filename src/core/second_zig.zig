@@ -30,7 +30,7 @@ const fault_clear = @import("../periph/fault_clear.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const scb = @import("../periph/scb.zig");
 const cpuid = @import("../periph/cpuid.zig");
-const elf = @import("elf.zig");
+const loaded_image = @import("loaded_image.zig");
 const Store = @import("cpu/memory/store.zig").Store;
 const Wiring = @import("second_wiring.zig").Wiring;
 const second_core = @import("second_core.zig");
@@ -125,7 +125,7 @@ pub const Own = struct {
 
     /// Prime CPU1's PPB windows as an M33, load `image`, and reset the core
     /// from the image's vector table.
-    pub fn open(self: *Own, lender: *const Store, wiring: Wiring, image: elf.Image) !void {
+    pub fn open(self: *Own, lender: *const Store, wiring: Wiring, image: loaded_image.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
         _ = try bringUp(&self.core, .{ .store = &self.store, .initiator = .cpu1 }, wiring, .{
@@ -155,7 +155,7 @@ pub const Parts = struct {
 /// Prime CPU1's PPB windows into `memory` as an M33, load `image` there,
 /// and open `core` over it reset from the image's vector table
 /// (RA8EMU-574, shared with the run path by RA8EMU-588).
-pub fn bringUp(core: *SecondZig, memory: Guest, wiring: Wiring, parts: Parts, image: elf.Image) !second_core.Seeded {
+pub fn bringUp(core: *SecondZig, memory: Guest, wiring: Wiring, parts: Parts, image: loaded_image.Image) !second_core.Seeded {
     const setup = memory.asInitiator(.none);
     try wiring.prime(setup, .{
         .partitions = parts.partitions,

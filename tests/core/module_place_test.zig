@@ -1,7 +1,7 @@
 //! A parsed module is placed on granule boundaries and copied into its region.
 const std = @import("std");
 const ra8 = @import("ra8");
-const appimg = ra8.core.appimg;
+const appimg = ra8.board.appimg;
 const place = ra8.core.module_place;
 
 const code_len = 40;
@@ -37,7 +37,8 @@ const Memory = struct {
 test "code starts the region and data starts on the next granule" {
     const bytes = sample();
     const header = try appimg.parse(&bytes);
-    const at = try place.plan(header, .{ .base = 0x2210_0000, .size = 0x100 });
+    const unit = appimg.module(header, &bytes);
+    const at = try place.plan(unit, .{ .base = 0x2210_0000, .size = 0x100 });
     try std.testing.expectEqual(@as(u32, 0x2210_0000), at.code_base);
     try std.testing.expectEqual(@as(u32, 0x2210_0040), at.data_base);
     try std.testing.expectEqual(@as(u32, 0x2210_0060), at.end);
@@ -47,23 +48,26 @@ test "code starts the region and data starts on the next granule" {
 test "a misaligned base or a region too small is refused before any copy" {
     const bytes = sample();
     const header = try appimg.parse(&bytes);
-    try std.testing.expectError(error.Misaligned, place.plan(header, .{ .base = 0x2210_0010, .size = 0x100 }));
-    try std.testing.expectError(error.TooBig, place.plan(header, .{ .base = 0x2210_0000, .size = 0x5F }));
-    _ = try place.plan(header, .{ .base = 0x2210_0000, .size = 0x60 });
+    const unit = appimg.module(header, &bytes);
+    try std.testing.expectError(error.Misaligned, place.plan(unit, .{ .base = 0x2210_0010, .size = 0x100 }));
+    try std.testing.expectError(error.TooBig, place.plan(unit, .{ .base = 0x2210_0000, .size = 0x5F }));
+    _ = try place.plan(unit, .{ .base = 0x2210_0000, .size = 0x60 });
 }
 
 test "a region at the top of the address space does not wrap" {
     const bytes = sample();
     const header = try appimg.parse(&bytes);
-    try std.testing.expectError(error.TooBig, place.plan(header, .{ .base = 0xFFFF_FFE0, .size = 0xFFFF_FFFF }));
+    const unit = appimg.module(header, &bytes);
+    try std.testing.expectError(error.TooBig, place.plan(unit, .{ .base = 0xFFFF_FFE0, .size = 0xFFFF_FFFF }));
 }
 
 test "load copies code and data to their planned addresses" {
     const bytes = sample();
     const header = try appimg.parse(&bytes);
+    const unit = appimg.module(header, &bytes);
     var memory: Memory = .{ .base = 0x2210_0000 };
-    const at = try place.plan(header, .{ .base = memory.base, .size = 0x100 });
-    try place.load(&memory, header, &bytes, at);
+    const at = try place.plan(unit, .{ .base = memory.base, .size = 0x100 });
+    try place.load(&memory, unit, at);
     try std.testing.expectEqual(@as(usize, 2), memory.writes);
     try std.testing.expectEqualSlices(u8, appimg.code(header, &bytes), memory.cells[0..code_len]);
     try std.testing.expectEqualSlices(u8, appimg.data(header, &bytes), memory.cells[0x40..][0..data_len]);

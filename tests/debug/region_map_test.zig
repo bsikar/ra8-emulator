@@ -3,7 +3,7 @@
 //! directly under NOINIT at the top of SRAM.
 const std = @import("std");
 const ra8 = @import("ra8");
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const sections = ra8.core.sections;
 const region_map = ra8.core.region_map;
 

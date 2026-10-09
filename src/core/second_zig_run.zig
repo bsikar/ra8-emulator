@@ -7,7 +7,7 @@
 //! (src/core/second_zig.zig), which takes one turn per CPU0 round. Turns
 //! are sized by CPUCLK1 against CPUCLK0 (src/core/core_rate.zig). CPU1's own timebase (its SysTick) advances by what it ran.
 const std = @import("std");
-const elf = @import("elf.zig");
+const loaded_image = @import("loaded_image.zig");
 const second_core = @import("second_core.zig");
 const SecondZig = @import("second_zig.zig").SecondZig;
 const Wiring = @import("second_wiring.zig").Wiring;
@@ -36,14 +36,12 @@ pub const Driver = struct {
     /// (RA8EMU-643).
     last_ran: u64 = 0,
 
-    /// CPU1 from the image at `path`, on `wiring`'s board, ready to take
-    /// turns. `memory` is CPU0's store; CPU1 borrows its shared SRAM. Built
-    /// in storage the caller holds: both halves keep pointers into it.
-    pub fn open(self: *Driver, allocator: std.mem.Allocator, io: std.Io, wiring: Wiring, path: []const u8, memory: Guest) !void {
+    /// CPU1 from `image`, which the board's loader read, on `wiring`'s board,
+    /// ready to take turns. `memory` is CPU0's store; CPU1 borrows its shared
+    /// SRAM. Built in storage the caller holds: both halves keep pointers
+    /// into it.
+    pub fn open(self: *Driver, wiring: Wiring, image: loaded_image.Image, memory: Guest) !void {
         const lender = memory.store;
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
-        defer allocator.free(bytes);
-        const image = try elf.Image.init(bytes);
         self.ns_timebase = .{ .words = systick_bank.non_secure_words };
         self.store = null;
         self.wiring = null;
@@ -51,7 +49,7 @@ pub const Driver = struct {
         return self.openOwn(lender, wiring, image);
     }
 
-    fn openOwn(self: *Driver, lender: *const Store, wiring: Wiring, image: elf.Image) !void {
+    fn openOwn(self: *Driver, lender: *const Store, wiring: Wiring, image: loaded_image.Image) !void {
         self.second = .{};
         self.store = try Store.init(lender);
         errdefer self.dropStore();

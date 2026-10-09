@@ -90,7 +90,7 @@ A `test` block at the bottom of a source file is wrong here. Tests live in
 
 ```
 src/periph/crc.zig   ->  tests/periph/crc_test.zig
-src/core/elf.zig     ->  tests/core/elf_test.zig
+src/board/loader/elf.zig  ->  tests/board/loader/elf_test.zig
 ```
 
 `tests/all.zig` is the test root and lists every test file, so `zig build test`

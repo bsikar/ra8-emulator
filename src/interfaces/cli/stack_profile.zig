@@ -12,7 +12,7 @@
 //! armed when the run lends CPU0, in front of whatever listened on CPU1,
 //! and names its frames from CPU1's own image.
 const std = @import("std");
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const cpu_mod = @import("../../core/cpu/cpu.zig");
 const dwarf_line = @import("../../debug/dwarf_line.zig");
 const profile = @import("../../debug/profile.zig");

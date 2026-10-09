@@ -7,7 +7,7 @@ const memmap = ra8.core.memmap;
 const Board = ra8.board.Board;
 const scb = ra8.periph.scb;
 const cpu_ctrl = ra8.periph.cpu_ctrl;
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const Store = ra8.core.cpu.memory.store.Store;
 const Guest = ra8.core.cpu.memory.guest.Guest;
 
@@ -154,7 +154,8 @@ test "CPU1's image and VTOR are seeded into a store with no engine open" {
     var store = try Store.init(null);
     defer store.deinit();
     const memory: Guest = .{ .store = &store };
-    const seeded = try mod.seedImage(memory, image);
+    const loaded = try ra8.board.loader.read(image);
+    const seeded = try mod.seedImage(memory, loaded.image());
     try std.testing.expectEqual(@as(u32, 8), seeded.written);
     try std.testing.expectEqual(memmap.mram_base, seeded.vector_base);
     try std.testing.expectEqual(memmap.mram_base, try memory.readWord(memmap.scb.vtor));

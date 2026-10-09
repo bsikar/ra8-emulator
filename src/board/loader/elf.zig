@@ -4,7 +4,8 @@
 //! straight out of a byte buffer. Zig reads the same layout as extern structs,
 //! so the offsets are the struct fields and the bounds checks are slices.
 const std = @import("std");
-const memmap = @import("memmap.zig");
+const memmap = @import("../../core/memmap.zig");
+const loaded_image = @import("../../core/loaded_image.zig");
 
 pub const Error = error{
     NotElf32,
@@ -52,17 +53,8 @@ pub const ProgramHeader = extern struct {
     p_align: u32,
 };
 
-pub const Segment = struct {
-    vaddr: u32,
-    paddr: u32,
-    flags: u32,
-    bytes: []const u8,
-    memsz: u32,
-
-    pub fn executable(self: Segment) bool {
-        return (self.flags & pf_x) != 0;
-    }
-};
+/// A load segment, in the chip's own shape (RA8EMU-1039).
+pub const Segment = loaded_image.Segment;
 
 /// An immutable view of a firmware image, the Zig shape of emu_elf_source_t.
 pub const Image = struct {

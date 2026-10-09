@@ -7,7 +7,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
 
-const elf = ra8.core.elf;
+const elf = ra8.board.elf;
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
 const loader = ra8.core.cpu.memory.load;
@@ -25,7 +25,8 @@ test "a ThreadX thread overflowing its stack is caught by the stack limit" {
     try store_board.attach(&board, core);
     // As cpu0_store.Cpu0.attachStore: the image goes in after the board, and
     // the loader maps its option-setting windows too.
-    _ = try loader.image(core, image);
+    const loaded = try ra8.board.loader.read(image);
+    _ = try loader.image(core, loaded.image());
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
     var ran: u64 = 0;

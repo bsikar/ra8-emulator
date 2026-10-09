@@ -5,8 +5,9 @@
 //! The core asks a fetch guard (src/core/cpu/fetch_guard.zig) before every
 //! instruction. The guard is only installed when the flag asks for it,
 //! because it turns off the trip skipping a plain run relies on.
-const elf = @import("../../core/elf.zig");
+const elf = @import("../../board/loader/elf.zig");
 const undefined_ops = @import("../../core/undefined_ops.zig");
+const read_image = @import("../../board/loader/image.zig");
 const cpu = @import("../../core/cpu/cpu.zig");
 const cli = @import("cli.zig");
 
@@ -16,7 +17,8 @@ pub const print = @import("report/undefined.zig").print;
 /// The swept sites, each asked to end the run, or none without the flag.
 pub fn resolve(image: elf.Image, options: cli.Options) ?Found {
     if (!options.stop_on_undefined) return null;
-    var found = undefined_ops.sweep(image);
+    const loaded = read_image.read(image) catch return null;
+    var found = undefined_ops.sweep(loaded.image());
     found.stopOnRun();
     return found;
 }

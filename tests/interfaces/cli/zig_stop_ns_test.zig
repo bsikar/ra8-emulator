@@ -15,7 +15,7 @@ test "a --stop-sym name only the --ns image carries resolves there" {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "ns.elf", .data = ns_bytes });
     const ns_path = try tmp.dir.realPathFileAlloc(std.testing.io, "ns.elf", std.testing.allocator);
     defer std.testing.allocator.free(ns_path);
-    const image = try ra8.core.elf.Image.init(secure_bytes);
+    const image = try ra8.board.elf.Image.init(secure_bytes);
     const options: ra8.core.cli.Options = .{ .path = "s.elf", .ns_path = ns_path, .stop_symbol = counter, .stop_at = 50 };
     const watch = zig_stop.resolve(image, std.testing.io, options) orelse return error.TestExpectedStop;
     try std.testing.expectEqual(@as(u32, 0x3210_DE10), watch.address);
@@ -23,7 +23,7 @@ test "a --stop-sym name only the --ns image carries resolves there" {
 }
 
 test "without --ns a Non-secure name stays unresolved" {
-    const image = try ra8.core.elf.Image.init(secure_bytes);
+    const image = try ra8.board.elf.Image.init(secure_bytes);
     const options: ra8.core.cli.Options = .{ .path = "s.elf", .stop_symbol = counter, .stop_at = 50 };
     try std.testing.expect(zig_stop.resolve(image, std.testing.io, options) == null);
 }

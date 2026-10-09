@@ -12,7 +12,8 @@
 //! A run with a second core goes on the store too: CPU1 gets a store of its
 //! own that borrows this one's shared SRAM (RA8EMU-588). Since RA8EMU-607
 //! there is no engine arm left here: every run is on the store.
-const elf = @import("../core/elf.zig");
+const elf = @import("loader/elf.zig");
+const read_image = @import("loader/image.zig");
 const Store = @import("../core/cpu/memory/store.zig").Store;
 const external = @import("../core/external_memory.zig");
 const Guest = @import("../core/cpu/memory/guest.zig").Guest;
@@ -33,7 +34,8 @@ pub const Cpu0 = struct {
         const memory = self.own();
         try wiring.attachBlocks(board, memory);
         try wiring.primeWindows(board, memory, wiring.cpu0Windows(board));
-        return loader.image(memory, image);
+        const loaded = try read_image.read(image);
+        return loader.image(memory, loaded.image());
     }
 
     /// The store, once `attachStore` has made it.
@@ -43,7 +45,9 @@ pub const Cpu0 = struct {
 
     /// Load a second image (the `--ns` half) into the store, if there is one.
     pub fn load(self: *Cpu0, image: elf.Image) !void {
-        if (self.store) |*held| _ = try loader.image(.{ .store = held }, image);
+        if (self.store == null) return;
+        const loaded = try read_image.read(image);
+        _ = try loader.image(.{ .store = &self.store.? }, loaded.image());
     }
 
     pub fn close(self: *Cpu0) void {

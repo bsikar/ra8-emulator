@@ -31,7 +31,7 @@
 //! is a run whose results downstream of it mean nothing, and the report no
 //! longer calls such a run clean without qualification.
 const std = @import("std");
-const elf = @import("elf.zig");
+const loaded_image = @import("loaded_image.zig");
 const long_shift = @import("long_shift.zig");
 
 pub const limits = struct {
@@ -157,11 +157,9 @@ pub fn shiftedPc(first: u16, second: u16) bool {
 }
 
 /// Sweep every executable segment of an image for undefined encodings.
-pub fn sweep(image: elf.Image) Found {
+pub fn sweep(image: loaded_image.Image) Found {
     var found = Found{};
-    var index: u16 = 0;
-    while (index < image.segmentCount()) : (index += 1) {
-        const segment = image.loadSegment(index) orelse continue;
+    for (image.segments) |segment| {
         if (!segment.executable()) continue;
         sweepSegment(segment, &found);
     }
@@ -170,7 +168,7 @@ pub fn sweep(image: elf.Image) Found {
 
 /// One segment, stepped the way the core steps it: a wide encoding takes
 /// four bytes and everything else takes two.
-fn sweepSegment(segment: elf.Segment, found: *Found) void {
+fn sweepSegment(segment: loaded_image.Segment, found: *Found) void {
     var at: usize = 0;
     while (at + 2 <= segment.bytes.len) {
         const first = std.mem.readInt(u16, segment.bytes[at..][0..2], .little);
