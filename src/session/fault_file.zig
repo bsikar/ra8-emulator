@@ -6,13 +6,13 @@
 //! plug and fault hooks (src/session/board_schedule.zig), and the run's
 //! boundary is wrapped so each event lands on its exact virtual time.
 const std = @import("std");
-const boot = @import("../../chip/core/cpu/boot.zig");
-const api = @import("../../session/session_api.zig");
-const Board = @import("../../board/board.zig").Board;
-const session_plug = @import("../../session/board_plug.zig");
-const session_faults = @import("../../session/board_faults.zig");
-const session_schedule = @import("../../session/board_schedule.zig");
-const fault_schedule = @import("../../components/fault_schedule.zig");
+const boot = @import("../chip/core/cpu/boot.zig");
+const api = @import("session_api.zig");
+const Board = @import("../board/board.zig").Board;
+const session_plug = @import("board_plug.zig");
+const session_faults = @import("board_faults.zig");
+const session_schedule = @import("board_schedule.zig");
+const fault_schedule = @import("../components/fault_schedule.zig");
 
 pub const Applier = session_schedule.Applier;
 

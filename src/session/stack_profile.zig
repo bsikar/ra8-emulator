@@ -12,15 +12,15 @@
 //! armed when the run lends CPU0, in front of whatever listened on CPU1,
 //! and names its frames from CPU1's own image.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
-const cpu_mod = @import("../../chip/core/cpu/cpu.zig");
-const dwarf_line = @import("../../session/dwarf_line.zig");
-const profile = @import("../../session/profile.zig");
-const rtos_trace = @import("../../session/rtos_trace.zig");
-const stack_samples = @import("../../session/stack_samples.zig");
-const stack_sampler = @import("../../session/stack_sampler.zig");
-const stack_walk = @import("../../session/stack_walk.zig");
-const symbols = @import("../../session/symbols.zig");
+const elf = @import("../board/loader/elf.zig");
+const cpu_mod = @import("../chip/core/cpu/cpu.zig");
+const dwarf_line = @import("dwarf_line.zig");
+const profile = @import("profile.zig");
+const rtos_trace = @import("rtos_trace.zig");
+const stack_samples = @import("stack_samples.zig");
+const stack_sampler = @import("stack_sampler.zig");
+const stack_walk = @import("stack_walk.zig");
+const symbols = @import("symbols.zig");
 
 pub const Run = struct {
     image: elf.Image,

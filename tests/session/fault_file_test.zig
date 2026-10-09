@@ -4,7 +4,7 @@
 //! style run of tests/fixtures/plug/gauge_poll.elf.
 const std = @import("std");
 const ra8 = @import("ra8");
-const store_board = @import("store_board.zig");
+const store_board = @import("../interfaces/cli/store_board.zig");
 
 const parse = ra8.core.cli.parse;
 const fault_file = ra8.core.cli_fault_file;
@@ -13,7 +13,7 @@ const elf = ra8.board.elf;
 const loader = ra8.core.cpu.memory.load;
 const zig_run = ra8.board.zig_run;
 
-const image_bytes = @embedFile("../../fixtures/plug/gauge_poll.elf");
+const image_bytes = @embedFile("../fixtures/plug/gauge_poll.elf");
 const counts_at: u32 = 0x2200_0100;
 
 const good =

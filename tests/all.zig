@@ -7,7 +7,7 @@ const std = @import("std");
 test {
     _ = @import("periph/time/all.zig");
     _ = @import("chip/core/systick_bank_test.zig");
-    _ = @import("harness_test.zig");
+    _ = @import("session/harness_test.zig");
     _ = @import("harness_files_test.zig");
     _ = @import("board/profile_test.zig");
     _ = @import("board/external_memory_test.zig");

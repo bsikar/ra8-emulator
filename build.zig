@@ -150,7 +150,7 @@ fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     test_step.dependOn(&consumer.step);
     test_step.dependOn(exe_step);
     const harness_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("tests/harness_test.zig"),
+        .root_source_file = b.path("tests/session/harness_test.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,

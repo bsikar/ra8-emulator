@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/itm_console.zig.
+//! Covers src/session/itm_console.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const itm = ra8.core.itm;

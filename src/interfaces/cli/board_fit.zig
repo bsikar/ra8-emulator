@@ -4,7 +4,7 @@
 //! it). Each piece refuses on its own terms and says so; this only puts them
 //! in order.
 const std = @import("std");
-const rtc_start = @import("rtc_start.zig");
+const rtc_start = @import("../../session/rtc_start.zig");
 const cli = @import("cli.zig");
 const host_sock = @import("../host_sock.zig");
 const host_worker = @import("../../host/worker.zig");

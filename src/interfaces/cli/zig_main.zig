@@ -14,7 +14,7 @@ const cli = @import("cli.zig");
 const Parts = @import("parts.zig").Parts;
 const report = @import("report.zig");
 const zig_run = @import("zig_run.zig");
-const fault_file = @import("fault_file.zig");
+const fault_file = @import("../../session/fault_file.zig");
 const window_main = @import("window_main.zig");
 const Cpu0 = @import("../../board/cpu0_store.zig").Cpu0;
 

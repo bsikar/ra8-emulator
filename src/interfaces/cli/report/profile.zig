@@ -4,7 +4,7 @@ const elf = @import("../../../board/loader/elf.zig");
 const profile = @import("../../../session/profile.zig");
 const symbols = @import("../../../session/symbols.zig");
 const stack_samples = @import("../../../session/stack_samples.zig");
-const stack_profile = @import("../stack_profile.zig");
+const stack_profile = @import("../../../session/stack_profile.zig");
 const Writer = @import("../report.zig").Writer;
 
 pub fn write(out: Writer, io: std.Io, image: elf.Image, table: profile.Table, path: ?[]const u8) !void {
