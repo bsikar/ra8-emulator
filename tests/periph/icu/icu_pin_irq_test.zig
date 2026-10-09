@@ -8,6 +8,8 @@ const pin_irq = icu.pin_irq;
 const pfs = ra8.periph.pfs;
 const gpio = ra8.periph.gpio;
 const gt911 = ra8.components.gt911;
+const switches = ra8.board.switches;
+const sw1 = switches.user[0];
 const memmap = ra8.core.memmap;
 
 /// The ICU only reaches the NVIC pending words, so a word map is enough.
@@ -32,15 +34,15 @@ const FakeCore = struct {
 };
 
 const Rig = struct {
-    input: gt911.host.Input = .{},
+    input: gt911.host.Input = .{ .switches = &switches.user },
     panel: gt911.Panel = .{},
-    pins: gpio.Gpio = gpio.Gpio.init(),
+    pins: gpio.Gpio = switches.pulled(),
     pinfunc: pfs.Pfs = pfs.Pfs.init(),
     events: icu.Icu = icu.Icu.init(),
 
     /// Mark SW1's pin as an IRQ input, or not.
     fn sw1Isel(self: *Rig, on: bool) void {
-        const at = pfs.Pfs.indexOf(gpio.sw_port, gpio.sw1_pin);
+        const at = pfs.Pfs.indexOf(sw1.port, sw1.pin);
         self.pinfunc.entries[at] = if (on) pin_irq.isel else 0;
     }
 

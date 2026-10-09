@@ -10,4 +10,5 @@ test {
     _ = @import("gauge_max17048/max17048_test.zig");
     _ = @import("usb_loop_cable/cable_test.zig");
     _ = @import("usb_loop_cable/cable_bulk_test.zig");
+    _ = @import("user_switch/user_switch_test.zig");
 }

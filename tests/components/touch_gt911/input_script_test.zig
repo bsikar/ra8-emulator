@@ -3,6 +3,8 @@ const script = @import("ra8").components.input_script;
 const gt911 = @import("ra8").components.gt911;
 const gpio = @import("ra8").periph.gpio;
 const host = @import("ra8").components.touch_input;
+const switches = @import("ra8").board.switches;
+const sw1 = switches.user[0];
 
 test "timed tap dispatches when virtual time reaches it" {
     var events = script.Script{};
@@ -59,12 +61,12 @@ test "power button maps to active-low SW1" {
     var events = script.Script{};
     try events.parse("at 0s button power\n");
     var panel = gt911.Panel{};
-    var pins = gpio.Gpio.init();
-    var input = host.Input{};
+    var pins = switches.pulled();
+    var input = host.Input{ .switches = &switches.user };
     events.dispatch(0, &panel, &pins, &input);
-    try std.testing.expect(!pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(!pins.pinLevel(sw1.port, sw1.pin));
     events.dispatch(100_000_000, &panel, &pins, &input);
-    try std.testing.expect(pins.pinLevel(gpio.sw_port, gpio.sw1_pin));
+    try std.testing.expect(pins.pinLevel(sw1.port, sw1.pin));
 }
 
 test "script rejects out-of-order event times" {

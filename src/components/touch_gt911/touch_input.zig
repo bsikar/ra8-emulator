@@ -9,25 +9,19 @@
 //! nothing: this panel model reports single contacts, so a release is
 //! simply the next frame with nothing armed.
 //!
-//! The same stream carries the two user switches (RA8EMU-344): "sw1 down",
-//! "sw1 up", "sw2 down" and "sw2 up" drive P009 and P008 through the GPIO
-//! model, active-low as the board wires them, so the firmware's PIDR reads
-//! see the press for as long as it is held. Each real level change is also
-//! queued as an edge on the switch's IRQ channel (SW1 IRQ13, SW2 IRQ12, as
-//! the board code wires them), and the boundary raises it when PFS ISEL and
-//! IRQCR say the part would (RA8EMU-375).
+//! The same stream carries the board's user switches (RA8EMU-344): "NAME
+//! down" and "NAME up" for each switch the board hands over in `switches`
+//! (sw1 and sw2 on the EK-RA8D2, src/board/switches.zig), driven active-low
+//! so the firmware's PIDR reads see the press for as long as it is held.
+//! Each real level change is also queued as an edge on the switch's IRQ
+//! channel, and the boundary raises it when PFS ISEL and IRQCR say the part
+//! would (RA8EMU-375).
 const std = @import("std");
 const gt911 = @import("gt911.zig");
 const gpio = @import("../../periph/gpio/gpio.zig");
 const pin_irq = @import("../../periph/icu/icu_pin_irq.zig");
 const ByteSource = @import("../../periph/byte_source.zig").ByteSource;
-
-/// The host-side name of each user switch, the pin it drives and the IRQ
-/// channel that pin feeds.
-pub const switches = [_]struct { name: []const u8, pin: u4, irq: u8 }{
-    .{ .name = "sw1", .pin = gpio.sw1_pin, .irq = 13 },
-    .{ .name = "sw2", .pin = gpio.sw2_pin, .irq = 12 },
-};
+const user_switch = @import("../user_switch/user_switch.zig");
 
 /// Longest line kept. A longer one is dropped whole and counted.
 pub const line_bytes: usize = 32;
@@ -35,6 +29,8 @@ pub const line_bytes: usize = 32;
 pub const Input = struct {
     /// The host touch stream, filled by the application. Null reads nothing.
     source: ?ByteSource = null,
+    /// The user switches the stream may name, from the board.
+    switches: []const user_switch.Switch = &.{},
     line: [line_bytes]u8 = undefined,
     len: usize = 0,
     /// The current line ran past line_bytes and is being skipped.
@@ -106,7 +102,7 @@ pub const Input = struct {
 
     /// "swN down" or "swN up": true when the line named a switch at all.
     fn feedSwitch(self: *Input, pins: *gpio.Gpio, text: []const u8) bool {
-        for (switches) |one| {
+        for (self.switches) |one| {
             if (!std.mem.startsWith(u8, text, one.name)) continue;
             const verb = std.mem.trim(u8, text[one.name.len..], " ");
             const pressed = std.mem.eql(u8, verb, "down");
@@ -114,16 +110,8 @@ pub const Input = struct {
                 self.refused += 1;
                 return true;
             }
-            // Active-low with a pull-up: a held button reads low.
-            const was_low = !pins.pinLevel(gpio.sw_port, one.pin);
-            pins.setInput(gpio.sw_port, one.pin, !pressed);
             self.switched += 1;
-            if (was_low != pressed) self.edges.push(.{
-                .channel = one.irq,
-                .port = gpio.sw_port,
-                .pin = one.pin,
-                .falling = pressed,
-            });
+            if (user_switch.set(pins, one, pressed)) |edge| self.edges.push(edge);
             return true;
         }
         return false;
