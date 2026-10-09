@@ -1,4 +1,6 @@
-//! A Y4M clip as the camera (RA8EMU-499): `--camera-source video:PATH[,loop]`.
+//! A Y4M clip on disk for `--camera-source video:PATH[,loop]` (RA8EMU-499),
+//! read here in ra8_host so the camera model never opens a file
+//! (RA8EMU-1011).
 //!
 //! The header is read and every frame's offset indexed when the run starts,
 //! so a missing, empty or unsupported clip stops the run before the firmware
@@ -8,12 +10,9 @@
 //! the last frame the clip wraps with `,loop` and holds its last frame
 //! otherwise. A trailing frame cut short by the end of the file is dropped.
 const std = @import("std");
-const frame_source = @import("frame_source.zig");
-const converted = @import("converted_source.zig");
-const decoded = @import("../../host/camera/decoded_image.zig");
-const hosted = @import("hosted.zig");
-pub const y4m = @import("../../host/camera/y4m_header.zig");
-pub const yuv = @import("../../host/camera/y4m_frame.zig");
+const decoded = @import("decoded_image.zig");
+pub const y4m = @import("y4m_header.zig");
+pub const yuv = @import("y4m_frame.zig");
 
 /// The longest header or FRAME line read before the line is refused.
 const max_line: usize = 256;
@@ -35,15 +34,7 @@ pub fn frameAt(fps_num: u32, fps_den: u32, count: usize, loop: bool, when: u64) 
     return count - 1;
 }
 
-/// Name a clip source after its argument for the end-of-run report.
-pub fn labelled(source: frame_source.FrameSource, arg: []const u8) frame_source.FrameSource {
-    var named = source;
-    named.label = "video";
-    named.detail = arg;
-    return named;
-}
-
-pub const VideoSource = struct {
+pub const Clip = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
     file: std.Io.File,
@@ -54,10 +45,8 @@ pub const VideoSource = struct {
     planes: []u8,
     image: decoded.Image,
     shown: ?usize = null,
-    converted: converted.Converted,
-    format_control: *const u8,
 
-    pub fn load(allocator: std.mem.Allocator, io: std.Io, arg: []const u8, format_control: *const u8) !*VideoSource {
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, arg: []const u8) !*Clip {
         const parsed = parseArg(arg);
         const file = try std.Io.Dir.cwd().openFile(io, parsed.path, .{});
         errdefer file.close(io);
@@ -70,7 +59,7 @@ pub const VideoSource = struct {
         errdefer image.deinit(allocator);
         const planes = try allocator.alloc(u8, @intCast(header.frameBytes()));
         errdefer allocator.free(planes);
-        const self = try allocator.create(VideoSource);
+        const self = try allocator.create(Clip);
         self.* = .{
             .allocator = allocator,
             .io = io,
@@ -80,27 +69,19 @@ pub const VideoSource = struct {
             .offsets = offsets,
             .planes = planes,
             .image = image,
-            // frame() reads the sensor register before each capture, on the
-            // engine thread; opening never touches the board (RA8EMU-227).
-            .converted = .{ .input = .{ .width = image.width, .height = image.height, .pixels = image.pixels }, .format = .yuv422 },
-            .format_control = format_control,
         };
         @memset(image.pixels, 0);
         return self;
     }
 
-    pub fn source(self: *VideoSource) frame_source.FrameSource {
-        return .{ .context = self, .vtable = &vtable };
-    }
-
     /// The frame a capture at `when` shows.
-    pub fn pick(self: *const VideoSource, when: u64) usize {
+    pub fn pick(self: *const Clip, when: u64) usize {
         return frameAt(self.header.fps_num, self.header.fps_den, self.offsets.len, self.loop, when);
     }
 
     /// Decode frame `at` unless it is already the one shown. A read that
     /// comes back short keeps the previous picture rather than half a frame.
-    fn show(self: *VideoSource, at: usize) void {
+    fn show(self: *Clip, at: usize) void {
         if (self.shown == at) return;
         const got = self.file.readPositionalAll(self.io, self.planes, self.offsets[at]) catch return;
         if (got != self.planes.len) return;
@@ -108,22 +89,13 @@ pub const VideoSource = struct {
         self.shown = at;
     }
 
-    const vtable = frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
-
-    fn frame(context: *anyopaque, when: u64, shape: frame_source.Shape) void {
-        const self: *VideoSource = @ptrCast(@alignCast(context));
+    /// The frame a capture armed at `when` emulated ns shows.
+    pub fn picture(self: *Clip, when: u64) decoded.Image {
         self.show(self.pick(when));
-        self.converted.format = hosted.formatFor(self.format_control.*);
-        self.converted.source().frame(when, shape);
+        return self.image;
     }
 
-    fn fill(context: *anyopaque, row: u32, column: u32, out: []u8) void {
-        const self: *VideoSource = @ptrCast(@alignCast(context));
-        self.converted.source().fill(row, column, out);
-    }
-
-    fn close(context: *anyopaque) void {
-        const self: *VideoSource = @ptrCast(@alignCast(context));
+    pub fn close(self: *Clip) void {
         const allocator = self.allocator;
         self.file.close(self.io);
         allocator.free(self.offsets);

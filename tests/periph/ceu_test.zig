@@ -310,7 +310,6 @@ test {
     _ = @import("camera/converted_source_test.zig");
     _ = @import("camera/camera_registry_test.zig");
     _ = @import("camera/hosted_test.zig");
-    _ = @import("camera/video_source_test.zig");
     _ = @import("camera/pipe_source_test.zig");
     _ = @import("camera/mf_capture_test.zig");
     _ = @import("camera/mf_webcam_test.zig");

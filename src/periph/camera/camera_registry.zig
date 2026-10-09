@@ -11,7 +11,7 @@ const frame_source = @import("frame_source.zig");
 const gradient = @import("gradient_source.zig");
 const hosted = @import("hosted.zig");
 const image_file = @import("../../host/camera/image_file.zig");
-const video = @import("video_source.zig");
+const video_file = @import("../../host/camera/video_file.zig");
 const pipe = @import("pipe_source.zig");
 const webcam = @import("webcam_open.zig");
 
@@ -45,10 +45,14 @@ pub const Spec = struct {
                 errdefer still.close();
                 break :blk try hosted.Hosted(image_file.Still).open(allocator, still, format_control, "still image", self.arg);
             },
-            .video => video.labelled((video.VideoSource.load(allocator, io, self.arg, format_control) catch |err| {
-                std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
-                return err;
-            }).source(), self.arg),
+            .video => blk: {
+                const clip = video_file.Clip.load(allocator, io, self.arg) catch |err| {
+                    std.debug.print("--camera-source video:{s}: {s}\n", .{ self.arg, @errorName(err) });
+                    return err;
+                };
+                errdefer clip.close();
+                break :blk try hosted.Hosted(video_file.Clip).open(allocator, clip, format_control, "video", self.arg);
+            },
             .pipe => pipe.labelled((pipe.PipeSource.load(allocator, io, self.arg, format_control) catch |err| {
                 std.debug.print("--camera-source pipe:{s}: {s}\n", .{ self.arg, @errorName(err) });
                 return err;
