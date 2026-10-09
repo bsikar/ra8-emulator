@@ -23,6 +23,7 @@ pub const status_strip = @import("gui/status_strip.zig");
 pub const speed_field = @import("gui/speed_field.zig");
 pub const time_readout = @import("gui/time_readout.zig");
 pub const time_bar = @import("gui/time_bar.zig");
+pub const menu = @import("gui/menu.zig");
 pub const board_pane = @import("gui/board_pane.zig");
 pub const board_input = @import("gui/board_input.zig");
 pub const board_touch = @import("gui/board_touch.zig");
