@@ -7,7 +7,13 @@
 //! for the stretch, for callers that read the board themselves. Neither
 //! backend's run loop has to be rebuilt to yield.
 const std = @import("std");
-const window_board = @import("window_board.zig");
+
+/// Window side: advances the run one window frame, for the window to read
+/// the board afterwards. False once the run has ended.
+pub const Stepper = struct {
+    ctx: *anyopaque,
+    step: *const fn (ctx: *anyopaque) bool,
+};
 
 /// Engine side, run where the engine stops: just before it parks for the
 /// next grant and once the run has ended (RA8EMU-227). The window reads
@@ -104,7 +110,7 @@ pub const Pacer = struct {
         if (self.at_park) |hook| hook.call(hook.ctx);
     }
 
-    pub fn stepper(self: *Pacer) window_board.Stepper {
+    pub fn stepper(self: *Pacer) Stepper {
         return .{ .ctx = self, .step = stepThunk };
     }
 
@@ -115,7 +121,7 @@ pub const Pacer = struct {
 
     /// A stepper that grants without waiting, for a window that only reads
     /// what the engine published.
-    pub fn granter(self: *Pacer) window_board.Stepper {
+    pub fn granter(self: *Pacer) Stepper {
         return .{ .ctx = self, .step = grantThunk };
     }
 
