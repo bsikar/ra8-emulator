@@ -59,13 +59,20 @@ directory: the GT911 is a component, not part of `i3c/`.
 There is no `@cImport` in the tree. SDL3's C API reaches the GUI through the
 translate-c package in build.zig, and that is the only C boundary.
 
-## Documentation
+## Documentation and tickets
 
-Design docs, ADRs and engineering notes live in the project knowledge base
-(article RA8EMU-A-1 is the index), not in this repository. Cite one by article
-ID, never by URL. The repository keeps only what code, tests or tools read:
-README.md, this file, fixture provenance READMEs under `tests/fixtures/`, and
-test goldens such as `tools/*_expected.md` and
+Tickets (`RA8EMU-N`) and the knowledge base (`RA8EMU-A-N`: design docs, ADRs
+and engineering notes, with RA8EMU-A-1 as the index) live on the maintainer's
+internal YouTrack instance. It is private: cloning this repository gives no
+access to it. An agent without access treats those IDs as plain references.
+It never tries to reach the maintainer's instance, guess its address, or look
+the IDs up on some other YouTrack. It works from the code, the tests and this
+file, and asks the maintainer when it needs a ticket's context. Cite tickets
+and articles by ID, never by URL or host.
+
+None of that belongs in the repository. It keeps only what code, tests or
+tools read: README.md, this file, fixture provenance READMEs under
+`tests/fixtures/`, and test goldens such as `tools/*_expected.md` and
 `tests/core/cpu/conformance/coverage.md`.
 
 ## One file, one purpose
