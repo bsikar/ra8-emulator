@@ -1,6 +1,7 @@
 //! ra8_emulator: the RA8D2 board emulator's command line (#14, the Zig
 //! rewrite; moved here from src/main.zig by RA8EMU-1087, ADR 0004 step 6).
-//! It never links SDL: the window is ra8_gui (src/interfaces/gui/main.zig).
+//! It never links SDL and imports nothing from the GUI: the window, the
+//! live run and the `shell` debugger are ra8_gui (src/interfaces/gui/main.zig).
 //!
 //! This file opens the ELF and hands the run to the Zig core
 //! (src/interfaces/cli/zig_main.zig). A debugger command line goes to the
@@ -25,14 +26,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return ra8.core.map_main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return ra8.core.sweep_cli.run(io, init.environ_map, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return shell(allocator, io, init.environ_map, argv);
     const options = cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, io, argv);
     const image = ra8.image.file.open(io, allocator, options.path) catch return 1;
     return ra8.board.zig_run.main_path.run(allocator, io, image, options);
-}
-
-/// The docked debugger shell. This executable has no window, so the shell
-/// says to run ra8_gui; RA8EMU-1032 part 2 takes the subcommand off the CLI.
-fn shell(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
-    return ra8.core.shell_main.run(allocator, io, env, argv);
 }

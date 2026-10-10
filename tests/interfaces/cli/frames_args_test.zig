@@ -25,18 +25,15 @@ test "frame-on-settle captures to its own directory with a virtual stability win
     try std.testing.expectEqual(@as(u64, 75_000_000), parsed.frames.settle_window_ns);
 }
 
-test "--gui asks for the run to be shown live" {
-    const defaults = try cli.parse(&.{ "emu", "a.elf" });
-    try std.testing.expect(!defaults.frames.live);
-    const asked = try cli.parse(&.{ "emu", "a.elf", "--gui" });
-    try std.testing.expect(asked.frames.live);
+test "--gui is not a command-line flag: the live window is ra8_gui" {
+    try std.testing.expectError(error.UnknownFlag, cli.parse(&.{ "emu", "a.elf", "--gui" }));
 }
 
 test "--window-stills names a directory and how often to keep a frame" {
     const defaults = try cli.parse(&.{ "emu", "a.elf" });
     try std.testing.expect(defaults.frames.window_stills == null);
     try std.testing.expectEqual(@as(u32, 1), defaults.frames.window_stills_every);
-    const asked = try cli.parse(&.{ "emu", "a.elf", "--gui", "--window-stills", "shots", "--window-stills-every", "30" });
+    const asked = try cli.parse(&.{ "emu", "a.elf", "--window-stills", "shots", "--window-stills-every", "30" });
     try std.testing.expectEqualStrings("shots", asked.frames.window_stills.?);
     try std.testing.expectEqual(@as(u32, 30), asked.frames.window_stills_every);
     try std.testing.expectError(error.BadValue, cli.parse(&.{ "emu", "a.elf", "--window-stills-every", "0" }));

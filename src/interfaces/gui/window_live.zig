@@ -1,32 +1,14 @@
-//! `--gui` from the command line (RA8EMU-1074): zig_run.run as the
-//! window's runner, its clock charging the window's pacer, with the
-//! window's settings read from the parsed options.
+//! ra8_gui's live run (RA8EMU-1074, moved out of the command line by
+//! RA8EMU-1088): zig_run.run as the window's runner, its clock charging the
+//! window's pacer, with the window's settings read from the parsed options.
+//! ra8_gui hands `show` to zig_main.window; ra8_emulator never sets it.
 const std = @import("std");
-const elf = @import("../../image/elf.zig");
-const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
-const Board = @import("../../board/board.zig").Board;
-const clocks = @import("../../chip/periph/clocks.zig");
-const profile = @import("../../session/profile.zig");
-const Until = @import("../../chip/core/until.zig").Until;
 const window_pace = @import("../../session/window_pace.zig");
-const cli = @import("cli.zig");
-const zig_run = @import("zig_run.zig");
-const window_main = @import("../gui/window_main.zig");
+const zig_run = @import("../cli/zig_run.zig");
+const run_args = @import("../cli/run_args.zig");
+const window_main = @import("window_main.zig");
 
-/// What zig_run.run takes, gathered by zig_main.
-pub const Args = struct {
-    io: std.Io,
-    out: *std.Io.Writer,
-    memory: Guest,
-    board: *Board,
-    timebase: *clocks.Clocks,
-    image: elf.Image,
-    options: cli.Options,
-    vector_base: u32,
-    profile_table: ?*profile.Table,
-    until: ?*Until,
-    ends: zig_run.Ends,
-};
+pub const Args = run_args.Args;
 
 /// Runs `args` in the window; 2 when there is no window to open.
 pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {

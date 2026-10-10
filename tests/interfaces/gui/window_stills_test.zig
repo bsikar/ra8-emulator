@@ -2,7 +2,7 @@
 //! window through untouched and keeps every n-th frame as a numbered PNG.
 const std = @import("std");
 const ra8 = @import("ra8");
-const stills = ra8.board.report.window_stills;
+const stills = ra8.board.window_stills;
 const png = ra8.board.report.png;
 const raster = ra8.gui.raster;
 const Headless = ra8.gui.headless.Headless;
