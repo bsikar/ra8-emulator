@@ -37,7 +37,7 @@ pub fn deadline(ms: ?u64) ?Deadline {
 }
 
 /// The line saying which of the counter, the deadline or the budget ended
-/// the run, worded as src/main.zig words it. Nothing is said when neither
+/// the run, worded as src/interfaces/cli/main.zig words it. Nothing is said when neither
 /// was asked for: the core's own line already gave the budget.
 pub fn verdict(out: anytype, wanted: ?[]const u8, stop: ?Stop, timed: ?Deadline, pc: u32, budget: usize) !void {
     const spent = if (timed) |due| due.reached else false;

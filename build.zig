@@ -15,7 +15,9 @@
 //!
 //! Source is grouped, not flat: src/chip/core/ is the machine (engine, elf,
 //! memmap and disasm), src/chip/periph/ is everything that
-//! answers on the peripheral bus, and src/main.zig sits on top. Tests live
+//! answers on the peripheral bus, and two apps sit on top:
+//! src/interfaces/cli/main.zig (ra8_emulator, never links SDL) and
+//! src/interfaces/gui/main.zig (ra8_gui, built under -Dgui). Tests live
 //! in tests/ on mirrored paths, never in a `test` block at the bottom of a
 //! source file, and tests/all.zig is the root that pulls them in.
 //!
@@ -30,7 +32,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     _ = b.option([]const u8, "deps-prefix", "Ignored; kept so existing invocations still build");
-    const gui = b.option(bool, "gui", "Fetch and build SDL3 for the GUI steps and `--gui`") orelse false;
+    const gui = b.option(bool, "gui", "Fetch SDL3 and build ra8_gui and the GUI tests") orelse false;
 
     // One library module, reached as "ra8" by the executable and by the
     // tests, so neither has to walk relative paths into src/.
@@ -48,16 +50,13 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "ra8_emulator",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/interfaces/cli/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
         }),
     });
     exe.root_module.addImport("ra8", emu);
-    const build_options = b.addOptions();
-    build_options.addOption(bool, "gui", gui);
-    exe.root_module.addOptions("build_options", build_options);
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
@@ -82,7 +81,7 @@ pub fn build(b: *std.Build) void {
     usbipAttach(b, target, optimize);
     const bench_mod = handoffBench(b, target, optimize, emu);
     const sdl_mod = sdlModule(b, target, optimize, emu, gui);
-    if (sdl_mod) |mod| exe.root_module.addImport("gui_sdl", mod);
+    if (sdl_mod) |mod| guiExe(b, target, optimize, emu, mod);
     guiTest(b, target, optimize, emu, gui, sdl_mod);
 
     const imports: TestImports = .{ .emu = emu, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod, .bench = bench_mod };
@@ -253,6 +252,23 @@ fn sdlTranslation(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
     const translator: Translator = .init(b.dependency("translate_c", .{}), .{ .c_source_file = header, .target = target, .optimize = optimize });
     translator.linkLibrary(sdl);
     return translator.mod;
+}
+
+/// ra8_gui (RA8EMU-1087, ADR 0004 step 6): the emulator with its SDL window,
+/// installed next to ra8_emulator in a -Dgui build.
+fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, sdl: *std.Build.Module) void {
+    const exe = b.addExecutable(.{
+        .name = "ra8_gui",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/interfaces/gui/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+    exe.root_module.addImport("ra8", emu);
+    exe.root_module.addImport("gui_sdl", sdl);
+    b.installArtifact(exe);
 }
 
 /// The SDL-backed GUI tests (RA8EMU-733): the geometry presenter against
