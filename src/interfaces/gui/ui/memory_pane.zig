@@ -9,13 +9,14 @@
 const std = @import("std");
 const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 
-pub const background = Color.rgb(0x21, 0x25, 0x2B);
-pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
-pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
+pub const background = colors.background;
+pub const muted = colors.muted;
+pub const ink = colors.ink;
 pub const pad: i32 = 4;
 /// A row is one text line with a pixel of air above and below.
 pub const row_h: i32 = @as(i32, @intCast(font.cell_h)) + 4;

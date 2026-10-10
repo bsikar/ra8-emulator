@@ -4,13 +4,14 @@
 const std = @import("std");
 const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 
-pub const band = Color.rgb(0x2F, 0x3B, 0x4C);
-pub const ink = Color.rgb(0xE5, 0xC0, 0x7B);
-pub const caret = Color.rgb(0xD8, 0xDE, 0xE9);
+pub const band = colors.band;
+pub const ink = colors.highlight;
+pub const caret = colors.ink;
 pub const max_digits: usize = 8;
 
 pub const codes = struct {

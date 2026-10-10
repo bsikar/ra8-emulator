@@ -9,19 +9,20 @@
 const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
 const fit = @import("fit.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 
-pub const background = Color.rgb(0x21, 0x25, 0x2B);
-pub const pcb = Color.rgb(0x1B, 0x1F, 0x24);
-pub const border = Color.rgb(0x4A, 0x51, 0x5C);
-pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
-pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
-pub const face = Color.rgb(0x2C, 0x31, 0x3A);
-pub const pressed_face = Color.rgb(0x5C, 0x63, 0x70);
-pub const dark = Color.rgb(0x00, 0x00, 0x00);
-pub const off = Color.rgb(0x3A, 0x40, 0x4A);
+pub const background = colors.background;
+pub const pcb = colors.well;
+pub const border = colors.border;
+pub const ink = colors.ink;
+pub const muted = colors.muted;
+pub const face = colors.face;
+pub const pressed_face = colors.pressed_face;
+pub const dark = colors.black;
+pub const off = colors.led_off;
 
 /// Below this the board would be unreadable, so nothing is drawn.
 pub const min_w: i32 = 160;

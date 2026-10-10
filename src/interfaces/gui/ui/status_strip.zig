@@ -5,13 +5,14 @@
 //! reads the session's status into a `Strip`; this file never imports it.
 const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 
-pub const background = Color.rgb(0x21, 0x25, 0x2B);
-pub const border = Color.rgb(0x4A, 0x51, 0x5C);
-pub const ink = Color.rgb(0xD8, 0xDE, 0xE9);
+pub const background = colors.background;
+pub const border = colors.border;
+pub const ink = colors.ink;
 pub const pad: i32 = 4;
 pub const dot: i32 = 6;
 /// One text line with two pixels of air above and below, plus the border.
@@ -26,11 +27,11 @@ pub const Tone = enum {
 
     pub fn color(self: Tone) Color {
         return switch (self) {
-            .waiting => Color.rgb(0x9A, 0xA5, 0xB4),
-            .good => Color.rgb(0x98, 0xC3, 0x79),
-            .bad => Color.rgb(0xE0, 0x6C, 0x75),
-            .running => Color.rgb(0x61, 0xAF, 0xEF),
-            .halted => Color.rgb(0xE5, 0xC0, 0x7B),
+            .waiting => colors.tone.waiting,
+            .good => colors.tone.good,
+            .bad => colors.tone.bad,
+            .running => colors.tone.running,
+            .halted => colors.tone.halted,
         };
     }
 };
