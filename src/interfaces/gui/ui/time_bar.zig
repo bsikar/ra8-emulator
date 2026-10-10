@@ -1,22 +1,15 @@
 //! The time bar (RA8EMU-807): run, pause and step buttons, the speed field
 //! and the clock readout as one row of draw-list commands, plus the hit test
-//! that maps a click to a control. Run, pause and step go through the status
-//! bar's go and pause (RA8EMU-752); the field and the readout are their own
-//! models (RA8EMU-808, RA8EMU-806). The shell (RA8EMU-201) places the bar;
-//! this file only lays it out, paints it and answers clicks.
-const std = @import("std");
-const proto = @import("../rpc/session_rpc.zig");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const status_bar = @import("status_bar.zig");
-const speed_field = @import("speed_field.zig");
-const time_readout = @import("time_readout.zig");
-const session_link = @import("session_link.zig");
+//! that maps a click to a control. It paints plain values; the status, the
+//! speed field and the readout models fill them in gui/time_bar_capture.zig,
+//! which also turns a click into a run, step or pause (RA8EMU-1086). The shell
+//! (RA8EMU-201) places the bar; this file only lays it out, paints it and
+//! answers clicks.
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
-const Status = status_bar.Status;
-const Link = session_link.Link;
 
 pub const background = Color.rgb(0x21, 0x25, 0x2B);
 pub const border = Color.rgb(0x4A, 0x51, 0x5C);
@@ -32,8 +25,9 @@ pub const gap: i32 = 4;
 pub const control_h: i32 = font.glyph_h + 6;
 /// The controls, a pixel of border on top, and air around them.
 pub const height: i32 = control_h + 7;
-/// A step is one instruction; the session takes no budget for it.
-pub const step_budget: u64 = 0;
+/// The longest speed text the field shows; gui/time_bar_capture.zig pins it
+/// to the speed field's own limit.
+pub const field_chars: usize = 12;
 
 pub const Control = enum {
     run,
@@ -91,17 +85,23 @@ pub const Layout = struct {
 
 /// A button fits its label with a pad each side; the field fits its longest text.
 pub fn width(control: Control) i32 {
-    const chars = if (control == .field) speed_field.max_chars else control.label().len;
+    const chars = if (control == .field) field_chars else control.label().len;
     return @as(i32, @intCast(font.textWidth(chars))) + 2 * pad;
 }
 
-/// What the bar paints, borrowed from the models that own it.
+/// What the bar paints, as plain values filled from the models that own them.
 pub const View = struct {
-    status: *const Status,
-    field: *const speed_field.Field,
-    readout: *const time_readout.Readout,
+    /// Run lights while the core runs; Pause lights while it is halted.
+    run_lit: bool = false,
+    pause_lit: bool = false,
+    /// What the speed field shows.
+    field: []const u8 = "",
+    /// The session refused the last speed sent.
+    field_refused: bool = false,
     /// The field has the keyboard: it reads what is typed and shows a caret.
     editing: bool = false,
+    /// The clock readout line.
+    clock: []const u8 = "",
 };
 
 pub fn draw(list: *draw_list.DrawList, bar: Rect, view: View) !void {
@@ -112,19 +112,16 @@ pub fn draw(list: *draw_list.DrawList, bar: Rect, view: View) !void {
     try list.fill(.{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, border);
     const layout = Layout.of(bar);
     for ([_]Control{ .run, .pause, .step }) |control| {
-        try button(list, layout.rect(control), control.label(), lights(control, view.status));
+        try button(list, layout.rect(control), control.label(), lights(control, view));
     }
     try fieldBox(list, layout.field, view);
-    var buf: [96]u8 = undefined;
-    const clock = view.readout.text(view.field.applied, &buf) catch buf[0..0];
-    try text(list, layout.clock, clock, muted);
+    try text(list, layout.clock, view.clock, muted);
 }
 
-/// Run lights while the core runs; Pause lights while it is halted.
-fn lights(control: Control, status: *const Status) bool {
+fn lights(control: Control, view: View) bool {
     return switch (control) {
-        .run => status.run == .running,
-        .pause => status.run == .halted,
+        .run => view.run_lit,
+        .pause => view.pause_lit,
         .step, .field => false,
     };
 }
@@ -138,9 +135,8 @@ fn button(list: *draw_list.DrawList, area: Rect, label: []const u8, on: bool) !v
 fn fieldBox(list: *draw_list.DrawList, area: Rect, view: View) !void {
     if (area.empty()) return;
     try list.fill(area, well);
-    try outline(list, area, if (view.field.refused != null) refused else if (view.editing) lit else border);
-    var buf: [speed_field.max_chars + 4]u8 = undefined;
-    const shown = view.field.shown(&buf) catch buf[0..0];
+    try outline(list, area, if (view.field_refused) refused else if (view.editing) lit else border);
+    const shown = view.field;
     try text(list, area, shown, ink);
     if (!view.editing) return;
     const caret_x = area.x + pad + @as(i32, @intCast(font.textWidth(shown.len)));
@@ -170,17 +166,4 @@ pub fn hit(bar: Rect, x: i32, y: i32) ?Control {
         if (layout.rect(control).contains(x, y)) return control;
     }
     return null;
-}
-
-/// A click on `control`. Run continues from wherever the core stopped (the
-/// session refuses a fresh run once started) for `run_budget` instructions;
-/// Step runs one; Pause asks the session to stop. The field takes the
-/// keyboard in the shell, so a click on it sends nothing.
-pub fn press(control: Control, status: *Status, link: *Link, run_budget: u64) !void {
-    switch (control) {
-        .run => try status.go(link, proto.RunMode.cont, run_budget),
-        .step => try status.go(link, proto.RunMode.step, step_budget),
-        .pause => try status.pause(link),
-        .field => {},
-    }
 }

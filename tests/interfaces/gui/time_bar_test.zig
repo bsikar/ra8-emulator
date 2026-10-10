@@ -13,6 +13,7 @@ const speed_field = ra8.gui.speed_field;
 const time_readout = ra8.gui.time_readout;
 const session_link = ra8.gui.session_link;
 const bar = ra8.gui.time_bar;
+const capture = ra8.gui.time_bar_capture;
 const proto = ra8.interfaces.rpc.session;
 const Link = session_link.Link;
 const Status = status_bar.Status;
@@ -25,6 +26,7 @@ const Models = struct {
     status: Status = .{},
     field: speed_field.Field = .{},
     readout: time_readout.Readout = .{},
+    texts: capture.Texts = .{},
 
     fn sample() Models {
         var models: Models = .{};
@@ -35,8 +37,8 @@ const Models = struct {
         return models;
     }
 
-    fn view(self: *const Models, editing: bool) bar.View {
-        return .{ .status = &self.status, .field = &self.field, .readout = &self.readout, .editing = editing };
+    fn view(self: *Models, editing: bool) bar.View {
+        return capture.view(&self.texts, &self.status, &self.field, &self.readout, editing);
     }
 };
 
@@ -74,7 +76,7 @@ test "the controls sit left to right and the clock takes what is left" {
     try std.testing.expectEqual(layout.run.x + layout.run.w + bar.gap, layout.pause.x);
     try std.testing.expectEqual(layout.pause.x + layout.pause.w + bar.gap, layout.step.x);
     try std.testing.expectEqual(layout.step.x + layout.step.w + bar.gap, layout.field.x);
-    try std.testing.expectEqual(@as(i32, @intCast(font.textWidth(speed_field.max_chars))) + 2 * bar.pad, layout.field.w);
+    try std.testing.expectEqual(@as(i32, @intCast(font.textWidth(bar.field_chars))) + 2 * bar.pad, layout.field.w);
     try std.testing.expectEqual(area.w - bar.pad, layout.clock.x + layout.clock.w);
     try std.testing.expectEqual(@as(i32, bar.control_h), layout.run.h);
 }
@@ -95,7 +97,7 @@ test "a click lands on the control under it, and nothing in the gaps or the cloc
 test "the bar rasterises to the pinned golden frame" {
     var scene = try Scene.init(480, bar.height);
     defer scene.deinit();
-    const models = Models.sample();
+    var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
     try std.testing.expectEqual(@as(u64, 14583060995985428246), scene.digest());
 }
@@ -122,7 +124,7 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
 test "a bar too narrow for its controls paints nothing past its area" {
     var scene = try Scene.init(200, 40);
     defer scene.deinit();
-    const models = Models.sample();
+    var models = Models.sample();
     const area: Rect = .{ .x = 30, .y = 10, .w = 70, .h = bar.height };
     try scene.render(area, models.view(true));
     const clear: draw_list.Color = .{ .r = 0, .g = 0, .b = 0, .a = 0 };
@@ -143,7 +145,7 @@ test "a bar too narrow for its controls paints nothing past its area" {
 test "an empty bar draws nothing" {
     var list = draw_list.DrawList.init(std.testing.allocator, 8, 8);
     defer list.deinit();
-    const models = Models.sample();
+    var models = Models.sample();
     try bar.draw(&list, .{ .x = 0, .y = 0, .w = 0, .h = bar.height }, models.view(false));
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
@@ -176,7 +178,7 @@ fn click(area: Rect, control: bar.Control, status: *Status, link: *Link) !void {
     const at = middle(bar.Layout.of(area).rect(control));
     const found = bar.hit(area, at[0], at[1]) orelse return error.Missed;
     try std.testing.expectEqual(control, found);
-    try bar.press(found, status, link, 1000);
+    try capture.press(found, status, link, 1000);
 }
 
 test "clicks on step, run and pause drive a served session" {
