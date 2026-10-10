@@ -6,8 +6,8 @@
 //! `click` (which parts the board was built with). A registry's `held_low`
 //! is the bus's own state, so it is.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

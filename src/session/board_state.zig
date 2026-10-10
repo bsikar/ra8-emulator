@@ -1,5 +1,5 @@
 //! Snapshot and restore for a served session (RA8EMU-768): the file
-//! `--save-state` writes (src/snapshot/run.zig, the two SysTick bases and
+//! `--save-state` writes (src/board/snapshot/run.zig, the two SysTick bases and
 //! a stretch section), written from and read back into a live harness.
 //!
 //! This file encodes and decodes it; the harness opens the file on the
@@ -14,9 +14,9 @@ const Board = @import("../board/board.zig").Board;
 const BoardBoundary = @import("board_boundary.zig").BoardBoundary;
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 const Store = @import("../chip/core/cpu/memory/store.zig").Store;
-const run_file = @import("../snapshot/run.zig");
+const run_file = @import("../board/snapshot/run.zig");
 const systick = @import("../chip/snapshot/systick.zig");
-const stretch = @import("../snapshot/stretch.zig");
+const stretch = @import("../board/snapshot/stretch.zig");
 
 pub const Error = error{SecondCoreNotSaved};
 

@@ -1,10 +1,10 @@
 //! Option MRAM and the configured OSPI NOR contents in a snapshot.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
-const sparse = @import("sparse.zig");
-const otp = @import("../chip/periph/mram/mram_otp.zig");
-const nor = @import("../components/nor_flash/flash.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
+const sparse = @import("../../snapshot/sparse.zig");
+const otp = @import("../../chip/periph/mram/mram_otp.zig");
+const nor = @import("../../components/nor_flash/flash.zig");
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 const options_wiring = .{ "otp", "memory" };

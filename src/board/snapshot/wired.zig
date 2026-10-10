@@ -9,8 +9,8 @@
 //! wiring sits inside channel arrays or hooks (SSIE, SPI, USB, the Ethernet
 //! switch, the NPU) are a separate section.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

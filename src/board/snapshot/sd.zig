@@ -5,9 +5,9 @@
 //! through blocks.zig. Not saved: the card's line on SCI0 (a pointer to the
 //! card, wiring) and the volume `--sd-new` formatted (run report only).
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
-const blocks = @import("blocks.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
+const blocks = @import("../../snapshot/blocks.zig");
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 

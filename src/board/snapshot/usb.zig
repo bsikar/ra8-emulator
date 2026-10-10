@@ -12,9 +12,9 @@
 //! reply or the constant INQUIRY data, so they are saved as where, offset
 //! and length, and rebuilt over the target's own buffers.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
-const msc = @import("../components/usb_stick/stick.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
+const msc = @import("../../components/usb_stick/stick.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

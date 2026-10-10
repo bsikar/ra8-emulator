@@ -10,8 +10,8 @@
 //! saved as board parts in their own right.
 //! A load keeps the target's.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
