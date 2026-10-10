@@ -4,8 +4,8 @@
 //! SysTick needs nothing here: its CSR, RVR and CVR live in the PPB words
 //! of guest memory, which the memory section already carries. Board wiring
 //! (which board owns these units) is RA8EMU-660's.
-const file = @import("file.zig");
-const units = @import("units.zig");
+const file = @import("../../snapshot/file.zig");
+const units = @import("../../snapshot/units.zig");
 
 pub const Error = units.Error;
 

@@ -5,10 +5,10 @@
 //! Load into a freshly built run: a fresh store, fresh cores and a freshly
 //! attached board. A file from another part is refused before anything
 //! changes; any later error leaves the run partly loaded, so drop it, the
-//! same rule as cpu.zig and board.zig.
+//! same rule as cpu_snapshot.zig and board.zig.
 const file = @import("file.zig");
 const memory = @import("memory.zig");
-const cpu = @import("cpu.zig");
+const cpu = @import("../chip/core/cpu/cpu_snapshot.zig");
 const board_snap = @import("board.zig");
 const Store = @import("../chip/core/cpu/memory/store.zig").Store;
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;

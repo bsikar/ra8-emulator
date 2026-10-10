@@ -1,6 +1,6 @@
 //! The `--save-state` / `--load-state` hook on a Zig run (RA8EMU-696): the
 //! run file (src/snapshot/run.zig: board, CPU0's store, the core), the two
-//! SysTick bases the run keeps beside the board (src/snapshot/systick.zig)
+//! SysTick bases the run keeps beside the board (src/chip/snapshot/systick.zig)
 //! and what the run owed its clocks (src/snapshot/stretch.zig, RA8EMU-700).
 //!
 //! `--snapshot-at` writes the same file at the first closed stretch at or
@@ -14,7 +14,7 @@ const boot = @import("../chip/core/cpu/boot.zig");
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 const Store = @import("../chip/core/cpu/memory/store.zig").Store;
 const run_file = @import("../snapshot/run.zig");
-const systick = @import("../snapshot/systick.zig");
+const systick = @import("../chip/snapshot/systick.zig");
 const stretch = @import("../snapshot/stretch.zig");
 const Clock = @import("run_clock.zig").Clock;
 

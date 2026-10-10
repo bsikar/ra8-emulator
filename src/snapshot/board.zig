@@ -5,12 +5,12 @@
 //! them saves them beside this (RA8EMU-660). Each section loads all or
 //! nothing on its own, but a failure in a later section leaves the earlier
 //! ones loaded: load into a freshly built board and drop it on error, the
-//! same rule as cpu.zig. A file from another part is refused before any
+//! same rule as cpu_snapshot.zig. A file from another part is refused before any
 //! section is touched.
 const std = @import("std");
 const file = @import("file.zig");
 const fields = @import("fields.zig");
-const time = @import("time.zig");
+const time = @import("../chip/snapshot/time.zig");
 const Part = @import("../chip/core/part.zig").Part;
 
 pub const Error = file.Error || fields.Error || error{ Missing, WrongPart };
@@ -18,13 +18,13 @@ pub const Error = file.Error || fields.Error || error{ Missing, WrongPart };
 /// The board-shaped sections after time, in kind order. Appending is a
 /// format change.
 const sections = .{
-    @import("timers.zig"),      @import("serial.zig"),  @import("sd.zig"),
-    @import("wire.zig"),        @import("raster.zig"),  @import("display.zig"),
-    @import("panel.zig"),       @import("clocks.zig"),  @import("security.zig"),
-    @import("controllers.zig"), @import("storage.zig"), @import("signals.zig"),
-    @import("datapath.zig"),    @import("media.zig"),   @import("wired.zig"),
-    @import("channels.zig"),    @import("usb.zig"),     @import("rswitch.zig"),
-    @import("npu.zig"),         @import("c6.zig"),
+    @import("../chip/snapshot/timers.zig"),         @import("../chip/periph/sci/sci_snapshot.zig"), @import("sd.zig"),
+    @import("wire.zig"),                            @import("../chip/periph/drw/drw_snapshot.zig"), @import("../chip/periph/glcdc/glcdc_snapshot.zig"),
+    @import("panel.zig"),                           @import("../chip/snapshot/clocks.zig"),         @import("../chip/snapshot/security.zig"),
+    @import("../chip/snapshot/controllers.zig"),    @import("storage.zig"),                         @import("../chip/snapshot/signals.zig"),
+    @import("../chip/snapshot/datapath.zig"),       @import("../chip/snapshot/media.zig"),          @import("wired.zig"),
+    @import("../chip/snapshot/channels.zig"),       @import("usb.zig"),                             @import("rswitch.zig"),
+    @import("../chip/periph/npu/npu_snapshot.zig"), @import("c6.zig"),
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
