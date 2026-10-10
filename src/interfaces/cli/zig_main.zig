@@ -17,7 +17,7 @@ const zig_run = @import("zig_run.zig");
 const dumps = @import("report/dumps.zig");
 const Stop = @import("../../chip/core/stop.zig").Stop;
 const fault_file = @import("../../session/fault_file.zig");
-const window_main = @import("window_main.zig");
+const window_live = @import("window_live.zig");
 const Cpu0 = @import("../../board/cpu0_store.zig").Cpu0;
 
 /// Fitting the board is shared with main's engine path.
@@ -60,7 +60,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
         .undefined_sites = if (swept) |*found| found else null,
         .schedule = if (options.faults != null) &schedule.applier else null,
     };
-    if (options.frames.live) return fit_verdict(&board, try window_main.show(allocator, .{ .io = io, .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
+    if (options.frames.live) return fit_verdict(&board, try window_live.show(allocator, .{ .io = io, .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
     return fit_verdict(&board, try zig_run.run(out, io, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends));
 }
 
