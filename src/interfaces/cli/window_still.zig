@@ -3,7 +3,7 @@
 //! this is how the camera panel's layout is checked on a machine with no
 //! display: numbered stills, one per state, that can be diffed or viewed.
 const std = @import("std");
-const png = @import("png.zig");
+const png = @import("../../render/png.zig");
 const raster = @import("../../render/raster.zig");
 const Color = @import("../../render/draw_list.zig").Color;
 

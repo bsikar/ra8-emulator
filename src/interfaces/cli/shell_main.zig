@@ -4,7 +4,7 @@
 //! greets, and runs the shell loop (RA8EMU-763) until the window closes.
 //! Only the local host connects so far; SSH profiles join with RA8EMU-761.
 const std = @import("std");
-const host_profiles = @import("host_profiles.zig");
+const host_profiles = @import("../../host/host_profiles.zig");
 const window_main = @import("window_main.zig");
 const platform = @import("../gui/platform.zig");
 const pane_layout = @import("../gui/pane_layout.zig");

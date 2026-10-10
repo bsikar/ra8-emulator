@@ -9,7 +9,7 @@ const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const eink = @import("../../components/eink_it8951/panel.zig");
 const eink_wire = @import("../../components/eink_it8951/wire.zig");
-const png = @import("png.zig");
+const png = @import("../../render/png.zig");
 const board_view = @import("../../render/board_view.zig");
 
 /// The panel's size, the size of the view that was written, and whether

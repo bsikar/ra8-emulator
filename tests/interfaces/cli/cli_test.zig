@@ -105,9 +105,9 @@ test {
     _ = @import("../../session/touch_spec_test.zig");
     _ = @import("../../session/rtc_start_test.zig");
     _ = @import("realtime_test.zig");
-    _ = @import("duration_test.zig");
+    _ = @import("../../session/duration_test.zig");
     _ = @import("../../session/fault_file_test.zig");
-    _ = @import("png_test.zig");
+    _ = @import("../../render/png_test.zig");
     _ = @import("frame_out_test.zig");
     _ = @import("window_still_test.zig");
     _ = @import("window_stills_test.zig");
