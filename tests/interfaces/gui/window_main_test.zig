@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/window_main.zig: what `--gui` paces a frame
+//! Covers src/interfaces/gui/window_main.zig: what `--gui` paces a frame
 //! at, and that a build with no window says so instead of running blind.
 const std = @import("std");
 const ra8 = @import("ra8");

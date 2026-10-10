@@ -1,11 +1,11 @@
-//! Covers src/interfaces/cli/window_run.zig: a Zig-core run shown in a
+//! Covers src/interfaces/gui/window_run.zig: a Zig-core run shown in a
 //! headless window advances one frame per tick, ends the loop when the run
 //! ends, ends the run when the window closes, and lets a click on the
 //! camera pane swap the CEU source while the run goes on.
 const std = @import("std");
 const ra8 = @import("ra8");
-const store_board = @import("store_board.zig");
-const soaker = @import("soaker.zig");
+const store_board = @import("../cli/store_board.zig");
+const soaker = @import("../cli/soaker.zig");
 
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;

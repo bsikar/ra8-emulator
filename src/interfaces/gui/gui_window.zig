@@ -1,5 +1,5 @@
 //! The SDL window `--gui` opens in a -Dgui build (RA8EMU-646). src/main.zig
-//! hands this opener to src/interfaces/cli/window_main.zig; nothing else
+//! hands this opener to src/interfaces/gui/window_main.zig; nothing else
 //! imports it, so a build without -Dgui never compiles it or links SDL.
 //! It has no unit test: `zig build test` has no SDL.
 //! The board it draws is covered through the headless platform.

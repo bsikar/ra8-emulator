@@ -11,7 +11,7 @@ const Until = @import("../../chip/core/until.zig").Until;
 const window_pace = @import("../../session/window_pace.zig");
 const cli = @import("cli.zig");
 const zig_run = @import("zig_run.zig");
-const window_main = @import("window_main.zig");
+const window_main = @import("../gui/window_main.zig");
 
 /// What zig_run.run takes, gathered by zig_main.
 pub const Args = struct {

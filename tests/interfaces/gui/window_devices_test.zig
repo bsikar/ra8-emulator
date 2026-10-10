@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/window_devices.zig: the shown run lists the
+//! Covers src/interfaces/gui/window_devices.zig: the shown run lists the
 //! Click module's parts and each `--attach`, and a pane click waits for
 //! the park before it reaches the board (RA8EMU-703).
 const std = @import("std");

@@ -109,15 +109,10 @@ test {
     _ = @import("../../session/fault_file_test.zig");
     _ = @import("../../render/png_test.zig");
     _ = @import("frame_out_test.zig");
-    _ = @import("window_still_test.zig");
-    _ = @import("window_stills_test.zig");
     _ = @import("frames_args_test.zig");
     _ = @import("state_args_test.zig");
     _ = @import("frames_out_test.zig");
-    _ = @import("window_board_test.zig");
     _ = @import("paced_clock_test.zig");
-    _ = @import("window_run_test.zig");
-    _ = @import("window_main_test.zig");
     _ = @import("gif_test.zig");
     _ = @import("video_out_test.zig");
     _ = @import("gif_lzw_test.zig");
