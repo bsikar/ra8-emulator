@@ -42,6 +42,7 @@ test {
     _ = @import("boot_slots_dfu_test.zig");
     _ = @import("sections_test.zig");
     _ = @import("region_map_test.zig");
+    _ = @import("region_map_text_test.zig");
     _ = @import("stack_low_test.zig");
     _ = @import("session_rtc_test.zig");
     _ = @import("pc_hits_test.zig");

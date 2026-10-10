@@ -165,6 +165,7 @@ test {
     _ = @import("interfaces/rpc/session_rpc_test.zig");
     _ = @import("interfaces/rpc/stdio_transport_test.zig");
     _ = @import("interfaces/rpc/session_server_test.zig");
+    _ = @import("interfaces/rpc/served_setup_test.zig");
     _ = @import("interfaces/rpc/session_list_parts_test.zig");
     _ = @import("interfaces/rpc/session_camera_test.zig");
     _ = @import("interfaces/rpc/session_lcd_feed_test.zig");
