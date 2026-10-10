@@ -1,6 +1,6 @@
 //! The shell's local session (RA8EMU-1092, ADR 0004 step 6): the image's
 //! session served in-process over the RPC library's loopback, so
-//! `ra8_gui shell IMAGE` starts no second process. The shell's Link talks to
+//! `ra8_gui IMAGE` starts no second process. The shell's Link talks to
 //! `transport()`, and `answer` serves what it sent, once per frame. RPC over
 //! a pipe or socket is only for a remote session.
 const std = @import("std");

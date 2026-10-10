@@ -74,13 +74,8 @@ test {
     _ = @import("interfaces/gui/pane_edit_test.zig");
     _ = @import("interfaces/gui/plug_post_test.zig");
     _ = @import("interfaces/gui/speed_post_test.zig");
-    _ = @import("interfaces/gui/window_devices_test.zig");
     _ = @import("interfaces/gui/window_still_test.zig");
     _ = @import("interfaces/gui/window_stills_test.zig");
-    _ = @import("interfaces/gui/gui_args_test.zig");
-    _ = @import("interfaces/gui/window_board_test.zig");
-    _ = @import("interfaces/gui/window_run_test.zig");
-    _ = @import("interfaces/gui/window_main_test.zig");
     _ = @import("interfaces/gui/camera_switch_test.zig");
     _ = @import("interfaces/gui/camera_open_test.zig");
     _ = @import("interfaces/gui/camera_devices_test.zig");

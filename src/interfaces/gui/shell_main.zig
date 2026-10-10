@@ -1,11 +1,12 @@
-//! `ra8_gui shell` (RA8EMU-770): the docked debugger shell in a window.
-//! It picks the host (the local one unless --host names a profile in the
-//! hosts file), serves the local session in-process (local_session.zig),
-//! loads the image once the session greets, and runs the shell loop (RA8EMU-763) until the window closes.
+//! ra8_gui's command line and its one window (RA8EMU-770, RA8EMU-1097): the
+//! docked debugger shell on an image, `ra8_gui [flags] IMAGE`. It picks the
+//! host (the local one unless --host names a profile in the hosts file),
+//! serves the local session in-process (local_session.zig), loads the image
+//! once the session greets, and runs the shell loop (RA8EMU-763) until the
+//! window closes. The image stays halted at reset until the shell runs it.
 //! Only the local host connects so far; SSH profiles join with RA8EMU-761.
 const std = @import("std");
 const host_profiles = @import("../../host/host_profiles.zig");
-const window_main = @import("window_main.zig");
 const platform = @import("platform.zig");
 const pane_layout = @import("ui/pane_layout.zig");
 const shell_loop = @import("shell_loop.zig");
@@ -27,8 +28,12 @@ const local_session = @import("local_session.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
 const Env = proto.Client.Env;
-const usage = "usage: ra8_gui shell [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
+const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
     "    [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]] IMAGE\n";
+
+/// The word `ra8_gui shell IMAGE` carried while ra8_gui also had a live
+/// window; still taken in front of the flags, and it changes nothing.
+const shell_word = "shell";
 
 /// Largest image the shell reads, as main does for a run.
 const max_image: usize = 64 * 1024 * 1024;
@@ -49,12 +54,12 @@ pub const Args = struct {
     stills_every: u32 = 1,
 };
 
-/// Parse `ra8_gui shell [flags] IMAGE`; see `usage`.
+/// Parse `ra8_gui [flags] IMAGE`; see `usage`.
 pub fn parse(argv: []const []const u8) error{Usage}!Args {
-    if (argv.len < 2 or !std.mem.eql(u8, argv[1], "shell")) return error.Usage;
+    if (argv.len < 2) return error.Usage;
     var args: Args = .{ .image = "" };
     var image: ?[]const u8 = null;
-    var i: usize = 2;
+    var i: usize = if (std.mem.eql(u8, argv[1], shell_word)) 2 else 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
         if (std.mem.eql(u8, arg, "--click")) {
@@ -104,9 +109,9 @@ pub fn pick(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.En
     return host_profiles.load(allocator, io, env, args.hosts, name);
 }
 
-/// Run the shell; 2 when the command line, host, or window is unusable.
-/// `allocator` is main's arena.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
+/// Run the shell in the window `opener` opens; 2 when the command line,
+/// host, or window is unusable. `allocator` is main's arena.
+pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8, opener: platform.Opener) !u8 {
     const args = parse(argv) catch {
         std.debug.print(usage, .{});
         return 2;
@@ -123,11 +128,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         std.debug.print("cannot read {s}: {s}\n", .{ args.image, @errorName(err) });
         return 1;
     };
-    const window = window_main.open() orelse {
-        std.debug.print("shell needs a window: build the emulator with -Dgui\n", .{});
+    const window = opener.open() orelse {
+        std.debug.print("ra8_gui could not open a window\n", .{});
         return 2;
     };
-    defer if (window_main.opener) |how| how.close();
+    defer opener.close();
     const stills_dir = try window_stills.openDir(io, args.stills);
     defer if (stills_dir) |dir| dir.close(io);
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };

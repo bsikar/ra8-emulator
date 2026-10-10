@@ -17,7 +17,6 @@ const zig_run = @import("zig_run.zig");
 const dumps = @import("report/dumps.zig");
 const Stop = @import("../../chip/core/stop.zig").Stop;
 const fault_file = @import("../../session/fault_file.zig");
-const run_args = @import("run_args.zig");
 const Cpu0 = @import("../../board/cpu0_store.zig").Cpu0;
 
 /// Fitting the board is shared with main's engine path.
@@ -26,10 +25,6 @@ const fit_verdict = @import("board_fit.zig").tapeVerdict;
 
 /// The whole run, in the order main's engine path takes it: fit the board,
 /// load, announce, then run on the Zig core.
-/// The live window ra8_gui hands in (RA8EMU-1088). It stays null in
-/// ra8_emulator, so the command line never reaches the GUI.
-pub var window: ?*const fn (std.mem.Allocator, run_args.Args) anyerror!u8 = null;
-
 pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: cli.Options) !u8 {
     var board = Board.init(allocator);
     defer board.deinit();
@@ -64,7 +59,6 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
         .undefined_sites = if (swept) |*found| found else null,
         .schedule = if (options.faults != null) &schedule.applier else null,
     };
-    if (window) |show| return fit_verdict(&board, try show(allocator, .{ .io = io, .out = out, .memory = memory, .board = &board, .timebase = &parts.timebase, .image = image, .options = options, .vector_base = vector_base, .profile_table = table, .until = parts.tap.waiting(), .ends = ends }));
     return fit_verdict(&board, try zig_run.run(out, io, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends));
 }
 

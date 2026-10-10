@@ -25,7 +25,7 @@ test "frame-on-settle captures to its own directory with a virtual stability win
     try std.testing.expectEqual(@as(u64, 75_000_000), parsed.frames.settle_window_ns);
 }
 
-test "--gui is not a command-line flag: the live window is ra8_gui" {
+test "--gui is not a command-line flag: the window is ra8_gui" {
     try std.testing.expectError(error.UnknownFlag, cli.parse(&.{ "emu", "a.elf", "--gui" }));
 }
 

@@ -1,7 +1,7 @@
 //! ra8_emulator: the RA8D2 board emulator's command line (#14, the Zig
 //! rewrite; moved here from src/main.zig by RA8EMU-1087, ADR 0004 step 6).
-//! It never links SDL and imports nothing from the GUI: the window, the
-//! live run and the `shell` debugger are ra8_gui (src/interfaces/gui/main.zig).
+//! It never links SDL and imports nothing from the GUI: the window and its
+//! debugger shell are ra8_gui (src/interfaces/gui/main.zig).
 //!
 //! This file opens the ELF and hands the run to the Zig core
 //! (src/interfaces/cli/zig_main.zig). A debugger command line goes to the

@@ -1,6 +1,6 @@
-//! What `ra8_gui shell` asks the session for once the image is loaded
+//! What ra8_gui asks the session for once the image is loaded
 //! (RA8EMU-1095): one plug per `--attach`, and the Click module's IMU and
-//! gauge for `--click`, the parts the live window fitted before its run.
+//! gauge for `--click`.
 //! Each goes out as the plug the plug picker sends on Enter, one at a time.
 //! A refusal says so on stderr and the rest still go.
 const std = @import("std");

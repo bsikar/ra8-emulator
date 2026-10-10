@@ -96,7 +96,7 @@ const Settled = struct {
 };
 
 /// Run the shell on an in-process session of `image` until `startup` has
-/// sent everything, as `ra8_gui shell` does, and leave the list in `devices`.
+/// sent everything, as ra8_gui does, and leave the list in `devices`.
 fn settle(startup: *shell_startup.Startup, devices: *shell_devices.Devices) !void {
     const gpa = std.testing.allocator;
     const io = std.testing.io;

@@ -9,9 +9,9 @@
 //!   zig build test    the unit tests under tests/
 //!   zig build gate    zig fmt --check, then the file and function length
 //!                     checks in tools/gate.zig
-//!   zig build -Dgui   also ra8_gui, the emulator with its SDL window and
-//!                     the shell debugger; SDL is a lazy dependency,
-//!                     fetched and built only with -Dgui
+//!   zig build -Dgui   also ra8_gui, the debugger shell in an SDL window;
+//!                     SDL is a lazy dependency, fetched and built only
+//!                     with -Dgui
 //!
 //! Source is grouped, not flat: src/chip/core/ is the machine (engine, elf,
 //! memmap and disasm), src/chip/periph/ is everything that
@@ -254,8 +254,8 @@ fn sdlTranslation(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
     return translator.mod;
 }
 
-/// ra8_gui (RA8EMU-1087, ADR 0004 step 6): the emulator with its SDL window,
-/// installed next to ra8_emulator in a -Dgui build.
+/// ra8_gui (RA8EMU-1087, ADR 0004 step 6): the debugger shell in its SDL
+/// window, installed next to ra8_emulator in a -Dgui build.
 fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, sdl: *std.Build.Module) void {
     const exe = b.addExecutable(.{
         .name = "ra8_gui",
