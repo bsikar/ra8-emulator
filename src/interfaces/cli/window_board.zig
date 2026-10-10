@@ -8,7 +8,7 @@
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const gpio = @import("../../chip/periph/gpio/gpio.zig");
-const frame_out = @import("frame_out.zig");
+const board_leds = @import("../../session/board_leds.zig");
 const host_loop = @import("../gui/host_loop.zig");
 const board_snapshot = @import("../gui/board_snapshot.zig");
 const window_pace = @import("../../session/window_pace.zig");
@@ -109,7 +109,7 @@ pub const Screen = struct {
         self.frame = scanned and self.scan();
         if (!self.frame) @memset(self.pixels, 0);
         for (self.pixels) |*pixel| pixel.* |= 0xFF000000;
-        self.leds = frame_out.ledsOf(self.board);
+        self.leds = board_leds.of(self.board);
     }
 
     /// The window looks at the panel; it is not a frame the guest made.

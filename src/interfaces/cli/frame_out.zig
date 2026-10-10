@@ -6,11 +6,11 @@
 //! the user LEDs as the pins left them (board_view.zig).
 const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
-const gpio = @import("../../chip/periph/gpio/gpio.zig");
 const eink = @import("../../components/eink_it8951/panel.zig");
 const eink_wire = @import("../../components/eink_it8951/wire.zig");
 const png = @import("../../render/png.zig");
 const board_view = @import("../../render/board_view.zig");
+const board_leds = @import("../../session/board_leds.zig");
 
 /// The panel's size, the size of the view that was written, and whether
 /// the GLCDC gave a frame (when it did not, the panel is drawn dark).
@@ -46,7 +46,7 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: []con
     } else {
         const canvas = try allocator.alloc(u32, @as(usize, view.width) * view.height);
         defer allocator.free(canvas);
-        board_view.compose(canvas, pixels, width, height, &ledsOf(board));
+        board_view.compose(canvas, pixels, width, height, &board_leds.of(board));
         try write(allocator, io, canvas, view, path);
     }
     return .{ .width = width, .height = height, .view = view, .frame = frame };
@@ -88,13 +88,6 @@ pub fn grayRgba(pixels: []const u8, rgba: []u8) png.Error!void {
         rgba[at + 2] = gray;
         rgba[at + 3] = 0xFF;
     }
-}
-
-/// The user LEDs as the pins left them at the end of the run.
-pub fn ledsOf(board: *Board) [gpio.led_count]board_view.Led {
-    var lit: [gpio.led_count]board_view.Led = undefined;
-    for (gpio.leds, 0..) |led, i| lit[i] = .{ .rgb565 = led.rgb565, .on = board.pins.ledLevel(i) == 1 };
-    return lit;
 }
 
 fn write(allocator: std.mem.Allocator, io: std.Io, canvas: []const u32, view: board_view.Size, path: []const u8) !void {

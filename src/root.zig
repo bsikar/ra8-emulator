@@ -194,6 +194,7 @@ pub const board = struct {
     pub const usb = @import("board/usb.zig");
     pub const usb_plug = @import("board/usb_plug.zig");
     pub const session_faults = @import("session/board_faults.zig");
+    pub const board_leds = @import("session/board_leds.zig");
     pub const session_plug = @import("session/board_plug.zig");
     pub const camera_install = @import("board/camera_install.zig");
     pub const board_speed = @import("session/board_speed.zig");
