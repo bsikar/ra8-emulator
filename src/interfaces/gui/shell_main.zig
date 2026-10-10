@@ -1,7 +1,7 @@
 //! `ra8_gui shell` (RA8EMU-770): the docked debugger shell in a window.
 //! It picks the host (the local one unless --host names a profile in the
-//! hosts file), starts that host's session, loads the image once the session
-//! greets, and runs the shell loop (RA8EMU-763) until the window closes.
+//! hosts file), serves the local session in-process (local_session.zig),
+//! loads the image once the session greets, and runs the shell loop (RA8EMU-763) until the window closes.
 //! Only the local host connects so far; SSH profiles join with RA8EMU-761.
 const std = @import("std");
 const host_profiles = @import("../../host/host_profiles.zig");
@@ -20,6 +20,7 @@ const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
 const shell_memory = @import("shell_memory.zig");
 const session_link = @import("session_link.zig");
+const local_session = @import("local_session.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
 const Env = proto.Client.Env;
@@ -94,15 +95,15 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     return 0;
 }
 
-/// Start a local `serve --stdio` on this executable and run the shell on it.
+/// Serve the image in-process and run the shell on it.
 fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
-    const exe = try std.process.executablePathAlloc(io, allocator);
-    var child: session_link.Local = undefined;
-    try child.spawn(io, exe, path);
+    var session: local_session.LocalSession = undefined;
+    try session.open(allocator, io, path);
+    defer session.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
     const tx = try allocator.alloc(u8, Env.max_frame);
     var link: session_link.Link = undefined;
-    link.open(child.transport(), rx, tx);
+    link.open(session.transport(), rx, tx);
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     defer shell.deinit();
     shell.link = &link;
@@ -132,17 +133,16 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     shell.code = &code;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code };
     shell.painter = panes.painter();
-    try drive(io, &shell, window, path, bytes);
+    try drive(io, &shell, window, path, bytes, &session);
     link.close();
-    child.end();
-    _ = try child.reap();
 }
 
 /// Step `shell` until its window closes, loading the image once its session
-/// has greeted.
-pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
+/// has greeted. A local session answers what the shell sent after each step.
+pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, session: ?*local_session.LocalSession) !void {
     var sent = false;
     while (try shell.step(window)) {
+        if (session) |served| try served.answer();
         if (!sent and shell.state() == .connected) {
             const link = shell.link orelse return;
             try shell.status.load(link, path, bytes);

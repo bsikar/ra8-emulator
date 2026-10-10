@@ -131,8 +131,9 @@ pub const Link = struct {
     }
 };
 
-/// A local `ra8_gui serve --stdio` child (the shell's own executable),
-/// spoken to over its pipes.
+/// A `serve --stdio` child of `exe` (ra8_emulator), spoken to over its
+/// pipes. The shell itself serves a local image in-process
+/// (local_session.zig).
 pub const Local = struct {
     child: std.process.Child,
     io: std.Io,
