@@ -22,7 +22,12 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "shell")) return ra8.core.shell_main.run(allocator, io, init.environ_map, argv);
     // The shell starts its local session as `<this exe> serve --stdio IMAGE`.
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return ra8.core.serve_main.run(allocator, io, argv);
-    const options = ra8.core.cli.parse(argv) catch return ra8.core.debug_front.refused(allocator, io, argv);
+    const taken = ra8.board.gui_args.take(allocator, argv) catch |err| {
+        std.debug.print("ra8_gui: {s}\n", .{@errorName(err)});
+        return 2;
+    };
+    ra8.board.window_live.window = taken.window;
+    const options = ra8.core.cli.parse(taken.rest) catch return ra8.core.debug_front.refused(allocator, io, taken.rest);
     const image = ra8.image.file.open(io, allocator, options.path) catch return 1;
     return ra8.board.zig_run.main_path.run(allocator, io, image, options);
 }
