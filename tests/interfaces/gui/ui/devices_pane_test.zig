@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/devices_pane.zig: endpoints are labelled the way
+//! Covers src/interfaces/gui/ui/devices_pane.zig: endpoints are labelled the way
 //! endpoint.parse reads them, rows that fit are drawn, and a click on the
 //! gauge row unplugs it and a second click plugs it back through a real
 //! session, with the event stream recording both (RA8EMU-703).

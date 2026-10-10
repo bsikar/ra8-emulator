@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/console_pick.zig: the strip takes one row off the top of
+//! Covers src/interfaces/gui/ui/console_pick.zig: the strip takes one row off the top of
 //! the pane, a click lands on the tab under it and nowhere else, and the
 //! strip draws one label per channel with the shown one lit, plus a SAVE
 //! tab at its right end when it fits.

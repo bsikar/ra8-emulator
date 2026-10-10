@@ -3,9 +3,9 @@
 //! spell it, the part on it (or "empty") on the right, and a click on a
 //! row toggling it through the session. It draws nothing when no row fits.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const devices_panel = @import("devices_panel.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
+const devices_panel = @import("../devices_panel.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;

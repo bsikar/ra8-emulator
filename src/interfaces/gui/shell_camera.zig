@@ -11,10 +11,10 @@ const proto = @import("../rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
 const draw_list = @import("../../render/draw_list.zig");
 const font = @import("../../render/font.zig");
-const pane_layout = @import("pane_layout.zig");
+const pane_layout = @import("ui/pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
 const camera_panel = @import("camera_panel.zig");
-const camera_view = @import("camera_view.zig");
+const camera_view = @import("ui/camera_view.zig");
 const camera_open = @import("camera_open.zig");
 const Spec = @import("../../host/camera/source_spec.zig").Spec;
 

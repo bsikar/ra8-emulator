@@ -4,7 +4,7 @@
 //! bound to, so any leaf can become the camera picker (RA8EMU-796) or any
 //! other pane without a new layout.
 const std = @import("std");
-const pane_layout = @import("pane_layout.zig");
+const pane_layout = @import("ui/pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
 
 const Kind = pane_layout.Kind;

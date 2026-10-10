@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/pane_layout.zig: solved panes and gutters tile the window
+//! Covers src/interfaces/gui/ui/pane_layout.zig: solved panes and gutters tile the window
 //! exactly at several sizes, a gutter drag moves its split and clamps to
 //! the minimum pane size, split and close keep the tree valid, a pane's
 //! core can be rebound, and the two-core seed layout has both cores.

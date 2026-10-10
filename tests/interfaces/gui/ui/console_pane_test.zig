@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/console_pane.zig: the newest lines that fit are drawn
+//! Covers src/interfaces/gui/ui/console_pane.zig: the newest lines that fit are drawn
 //! with their stamps, the unfinished line shows last without one, a strip
 //! too short for a row draws nothing, and the strip sits under the board.
 const std = @import("std");
