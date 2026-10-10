@@ -1,4 +1,6 @@
-//! Covers src/interfaces/gui/stack_pane.zig (RA8EMU-744) on the uart_irq_echo fixture,
+//! Covers src/interfaces/gui/ui/stack_pane.zig (RA8EMU-744) and the capture
+//! file that fills it, src/interfaces/gui/stack_capture.zig (RA8EMU-1079),
+//! on the uart_irq_echo fixture,
 //! the one image with .debug_frame, .debug_line and .symtab: a core stopped
 //! inside ra8_sci_init walks out through its callers with names and lines,
 //! a capture with no image still has the pcs, a click maps to its frame, a
@@ -11,6 +13,7 @@ const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
 const pane = ra8.gui.stack_pane;
+const capture = ra8.gui.stack_capture;
 
 const Rect = draw_list.Rect;
 /// Room for 64 characters past the pc and six rows.
@@ -69,7 +72,7 @@ test "the gutter, number, pc and function columns line up" {
 test "a stop inside ra8_sci_init walks out through its callers with lines" {
     var opened = try stopped();
     defer opened.deinit();
-    const snapshot = try pane.capture(opened.session(), .cpu0, opened.image());
+    const snapshot = try capture.capture(opened.session(), .cpu0, opened.image());
     try std.testing.expectEqual(@as(usize, 4), snapshot.count);
     const top = &snapshot.frames[0];
     try std.testing.expectEqual(sci_init, top.pc);
@@ -93,8 +96,8 @@ test "a stop inside ra8_sci_init walks out through its callers with lines" {
 test "with no image the frames carry only their pcs" {
     var opened = try stopped();
     defer opened.deinit();
-    const named = try pane.capture(opened.session(), .cpu0, opened.image());
-    const bare = try pane.capture(opened.session(), .cpu0, null);
+    const named = try capture.capture(opened.session(), .cpu0, opened.image());
+    const bare = try capture.capture(opened.session(), .cpu0, null);
     try std.testing.expect(bare.count >= 1);
     try std.testing.expectEqual(named.frames[0].pc, bare.frames[0].pc);
     for (bare.frames[0..bare.count]) |*frame| {
@@ -122,7 +125,7 @@ test "a pane too narrow draws nothing" {
 test "the stop rasterises to the pinned golden frame" {
     var opened = try stopped();
     defer opened.deinit();
-    const snapshot = try pane.capture(opened.session(), .cpu0, opened.image());
+    const snapshot = try capture.capture(opened.session(), .cpu0, opened.image());
     var scene = try Scene.init();
     defer scene.deinit();
     try scene.render(&snapshot, 1);
