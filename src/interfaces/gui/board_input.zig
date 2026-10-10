@@ -4,7 +4,7 @@
 //! the switch itself after its fixed press length. A release anywhere else
 //! cancels the click.
 const proto = @import("../rpc/session_rpc.zig");
-const board_pane = @import("board_pane.zig");
+const board_pane = @import("ui/board_pane.zig");
 const session_link = @import("session_link.zig");
 
 pub const Press = struct {

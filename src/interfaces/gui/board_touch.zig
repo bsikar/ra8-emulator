@@ -7,8 +7,8 @@
 //! request per release.
 const proto = @import("../rpc/session_rpc.zig");
 const draw_list = @import("../../render/draw_list.zig");
-const board_pane = @import("board_pane.zig");
-const shell_board = @import("shell_board.zig");
+const board_pane = @import("ui/board_pane.zig");
+const fit = @import("ui/fit.zig");
 const session_link = @import("session_link.zig");
 
 const Rect = draw_list.Rect;
@@ -22,7 +22,7 @@ pub const Point = struct { x: u16, y: u16 };
 
 /// Where a panel of `width` x `height` pixels is drawn inside the pane.
 pub fn shownIn(layout: board_pane.Layout, width: u32, height: u32) Rect {
-    return shell_board.fitIn(layout.panel, width, height);
+    return fit.fitIn(layout.panel, width, height);
 }
 
 /// The panel pixel under window pixel (x, y), clamped to the panel.

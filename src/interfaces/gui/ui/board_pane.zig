@@ -4,12 +4,11 @@
 //! session's led_changed events (RA8EMU-811) and the two user switches as hit
 //! rects. Layout is a pure function of the area; the panel image keeps its
 //! own aspect inside its slot. The shell (RA8EMU-201) places the pane.
-const std = @import("std");
-const proto = @import("../rpc/session_rpc.zig");
-const gpio = @import("../../chip/periph/gpio/gpio.zig");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const shell_board = @import("shell_board.zig");
+//! gui/board_capture.zig folds the session's events into `Leds`; this pane
+//! never imports the session or the chip.
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
+const fit = @import("fit.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -32,35 +31,33 @@ const shape_w: u32 = 3;
 const shape_h: u32 = 2;
 const pad: i32 = 4;
 
+/// The board's user LEDs and their lit RGB565 words, in the chip's order;
+/// gui/board_capture.zig checks both against the chip at comptime.
+pub const led_count: usize = 3;
+pub const led_rgb565 = [led_count]u16{ 0x001F, 0x07E0, 0xF800 };
+
 pub const switch_count: usize = 2;
 pub const switch_names = [switch_count][]const u8{ "SW1", "SW2" };
-pub const led_names = [gpio.led_count][]const u8{ "LED1", "LED2", "LED3" };
+pub const led_names = [led_count][]const u8{ "LED1", "LED2", "LED3" };
 
-/// What the LEDs show, folded from the session's led_changed events.
+/// What the LEDs show; gui/board_capture.zig folds the session's
+/// led_changed events into it.
 pub const Leds = struct {
-    on: [gpio.led_count]bool = @splat(false),
-
-    /// Takes one session event; anything but a known LED's change is ignored.
-    pub fn observe(self: *Leds, event: proto.SessionEvent) void {
-        if (event.kind != .led_changed) return;
-        const index = event.address & 0xFF;
-        if (index >= gpio.led_count) return;
-        self.on[index] = event.address & 0x100 != 0;
-    }
+    on: [led_count]bool = @splat(false),
 };
 
 /// Where each part sits. Every rect is empty when the area is too small.
 pub const Layout = struct {
     board: Rect,
     panel: Rect,
-    leds: [gpio.led_count]Rect,
+    leds: [led_count]Rect,
     switches: [switch_count]Rect,
 
     pub fn of(area: Rect) Layout {
         var layout: Layout = .{ .board = none(area), .panel = none(area), .leds = @splat(none(area)), .switches = @splat(none(area)) };
         if (area.w < min_w or area.h < min_h) return layout;
         const inner: Rect = .{ .x = area.x + pad, .y = area.y + pad, .w = area.w - 2 * pad, .h = area.h - 2 * pad };
-        const board = shell_board.fitIn(inner, shape_w, shape_h);
+        const board = fit.fitIn(inner, shape_w, shape_h);
         const margin = @max(pad, @divTrunc(board.w, 24));
         const column = @divTrunc(board.w, 4);
         layout.board = board;
@@ -110,9 +107,9 @@ pub fn draw(list: *draw_list.DrawList, area: Rect, view: View) !void {
     try list.fill(layout.board, border);
     try list.fill(inset(layout.board), pcb);
     try list.fill(layout.panel, dark);
-    if (view.panel) |image| try list.image(shell_board.fitIn(layout.panel, image.width, image.height), image);
+    if (view.panel) |image| try list.image(fit.fitIn(layout.panel, image.width, image.height), image);
     for (layout.leds, 0..) |led, index| {
-        try list.fill(led, if (view.leds.on[index]) lampOf(gpio.leds[index].rgb565) else off);
+        try list.fill(led, if (view.leds.on[index]) lampOf(led_rgb565[index]) else off);
         try label(list, led, led_names[index], muted);
     }
     for (layout.switches, 0..) |button, index| {

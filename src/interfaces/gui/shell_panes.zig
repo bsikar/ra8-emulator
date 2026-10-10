@@ -20,6 +20,7 @@ const shell_frame = @import("shell_frame.zig");
 const console_pane = @import("ui/console_pane.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
+const fit = @import("ui/fit.zig");
 const shell_devices = @import("shell_devices.zig");
 const shell_fault = @import("shell_fault.zig");
 const shell_camera = @import("shell_camera.zig");
@@ -108,7 +109,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, pane: pane_layout.Pane,
         if (model.now) |*read| return drawCode(list, body, model.from, read);
     };
     if (pane.kind == .board) if (self.board) |board| {
-        if (board.hasFrame()) return list.image(shell_board.fitIn(body, board.width, board.height), board.image());
+        if (board.hasFrame()) return list.image(fit.fitIn(body, board.width, board.height), board.image());
     };
     const note = noteFor(self, pane) orelse return;
     const at = noteAt(body) orelse return;
