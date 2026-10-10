@@ -1,26 +1,29 @@
-//! The board's fixed-size memory controllers in a snapshot (RA8EMU-672):
-//! the code-MRAM frequency latches and prefetch buffer, the MRAM ECC
-//! controls, the SDRAM controller, the decryption-on-the-fly channels and
-//! the SRAM controller's ECC side, as one `controllers` section.
+//! The board's self-contained data path units in a snapshot (RA8EMU-675):
+//! the event link controller, pin functions, CRC, data operation circuit,
+//! clock accuracy check, comparators, DAC, ADC, port output enable and the
+//! DMA module bank, as one `signals` section.
 //!
 //! None of these units point at anything, so every field is saved. The
-//! sparse parts (the option MRAM cells and the xSPI flash sectors) need a
-//! variable-length encoding and are a separate section.
+//! units holding wiring (ICU, DTC, DMAC, GPIO, backup) are a separate
+//! section.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
 /// Format order. Appending is a format change.
-const parts = [_][]const u8{ "memory_rates", "memory_ecc", "sdram", "cipher", "ecc" };
+const parts = [_][]const u8{
+    "links",       "pinfunc", "checksum", "dataops", "accuracy",
+    "comparators", "analog",  "adc",      "shutoff", "dma_module",
+};
 
 const none: []const []const u8 = &.{};
 
 pub fn save(board: anytype, writer: anytype) !void {
     var counter: std.Io.Writer.Discarding = .init(&.{});
     try body(&counter.writer, board);
-    try file.writeSectionHeader(writer, .controllers, counter.fullCount());
+    try file.writeSectionHeader(writer, .signals, counter.fullCount());
     try body(writer, board);
 }
 
@@ -31,7 +34,7 @@ fn body(writer: anytype, board: anytype) !void {
 /// All or nothing: every part is read over a copy of itself, and the board
 /// changes only once the whole section read cleanly.
 pub fn load(board: anytype, bytes: []const u8) Error!void {
-    const section = try file.Reader.find(bytes, .controllers) orelse return Error.Missing;
+    const section = try file.Reader.find(bytes, .signals) orelse return Error.Missing;
     var cursor: fields.Cursor = .{ .bytes = section.payload };
     var copies: Copies(@TypeOf(board)) = undefined;
     inline for (parts, 0..) |name, i| {

@@ -5,8 +5,8 @@
 //! Not saved, because it is wiring: `memory` (the guest memory handle the
 //! board attaches). A load keeps the target board's own.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const file = @import("../../../snapshot/file.zig");
+const fields = @import("../../../snapshot/fields.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

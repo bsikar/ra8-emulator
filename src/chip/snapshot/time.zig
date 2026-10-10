@@ -6,9 +6,9 @@
 //! Host pacing and the soak watch are run options, not board state: they
 //! stay as the run that loads the snapshot configured them.
 const std = @import("std");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
-const clocks = @import("../chip/periph/clocks.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
+const clocks = @import("../periph/clocks.zig");
 const Event = clocks.event_queue.Event;
 
 pub const Error = file.Error || fields.Error || error{Missing};

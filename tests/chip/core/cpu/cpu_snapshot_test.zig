@@ -2,8 +2,8 @@
 //! fresh core, runs the next M exactly as the original does.
 const std = @import("std");
 const ra8 = @import("ra8");
-const fixture = @import("../chip/core/cpu/exception/ram.zig");
-const Fake = @import("../chip/core/cpu/exception/fake_source.zig").Fake;
+const fixture = @import("exception/ram.zig");
+const Fake = @import("exception/fake_source.zig").Fake;
 const file = ra8.snapshot.file;
 const snap = ra8.snapshot.cpu;
 const Cpu = ra8.core.cpu.cpu.Cpu;

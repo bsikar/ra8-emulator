@@ -15,7 +15,7 @@ const BoardBoundary = @import("board_boundary.zig").BoardBoundary;
 const Cpu = @import("../chip/core/cpu/cpu.zig").Cpu;
 const Store = @import("../chip/core/cpu/memory/store.zig").Store;
 const run_file = @import("../snapshot/run.zig");
-const systick = @import("../snapshot/systick.zig");
+const systick = @import("../chip/snapshot/systick.zig");
 const stretch = @import("../snapshot/stretch.zig");
 
 pub const Error = error{SecondCoreNotSaved};
