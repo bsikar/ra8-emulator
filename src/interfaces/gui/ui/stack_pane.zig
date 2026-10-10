@@ -5,16 +5,12 @@
 //! it. The innermost frame is amber; the shell's selected frame sits on a
 //! band. A frame an exception interrupted carries a muted '~' in its gutter.
 //!
-//! `capture` copies names into the snapshot, so `draw` holds no slice into
-//! the image and the shell can keep a snapshot past a reload.
+//! gui/stack_capture.zig copies names into the snapshot, so `draw` holds no
+//! slice into the image and the shell can keep a snapshot past a reload.
+//! The pane never imports the session.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const elf = @import("../../board/loader/elf.zig");
-const dwarf_line = @import("../../session/dwarf_line.zig");
-const session_api = @import("../../session/session_api.zig");
-const symbols = @import("../../session/symbols.zig");
-const unwind = @import("../../session/unwind.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -26,7 +22,9 @@ pub const band = Color.rgb(0x2F, 0x3B, 0x4C);
 pub const top_ink = Color.rgb(0xE5, 0xC0, 0x7B);
 pub const pad: i32 = 4;
 pub const row_h: i32 = @as(i32, @intCast(font.cell_h)) + 4;
-pub const max_frames: usize = unwind.limits.frames;
+/// The most frames a backtrace walks; gui/stack_capture.zig checks it
+/// against the unwinder's limit at comptime.
+pub const max_frames: usize = 32;
 /// Characters a function name and a file name keep.
 pub const name_cap: usize = 40;
 pub const file_cap: usize = 32;
@@ -62,46 +60,6 @@ pub const Snapshot = struct {
     count: usize = 0,
     frames: [max_frames]Frame = @splat(.{}),
 };
-
-/// Walks `core`'s call chain. Without CFI for the stop the chain is pc and,
-/// when it holds a code address, lr, as `backtrace` falls back to. With no
-/// image the frames carry only their pcs.
-pub fn capture(session: *session_api.Session, core: session_api.Core, image: ?elf.Image) anyerror!Snapshot {
-    const view = try session.view(core);
-    var walked: [max_frames]unwind.Frame = undefined;
-    const cfi = if (image) |found| dwarf_line.section(found, ".debug_frame") else &.{};
-    var count = unwind.walk(cfi, try unwind.registersOf(view), try view.register(.psp), view, &walked);
-    const lr = try view.register(.lr);
-    if (count < 2 and lr != 0 and lr < unwind.limits.exc_return) {
-        walked[count] = .{ .pc = lr & ~@as(u32, 1) };
-        count += 1;
-    }
-    var snapshot: Snapshot = .{ .count = count };
-    const lines = if (image) |found| dwarf_line.ofImage(found) else dwarf_line.Sections{};
-    for (walked[0..count], snapshot.frames[0..count], 0..) |found, *frame, index| {
-        frame.* = .{ .pc = found.pc, .interrupted = index > 0 and found.exact };
-        // A return address is the instruction after the call; name the call.
-        const at = if (index == 0 or found.exact) found.pc else found.pc -% 1;
-        if (image) |loaded| nameFrame(frame, loaded, at);
-        placeFrame(frame, lines, at);
-    }
-    return snapshot;
-}
-
-fn nameFrame(frame: *Frame, image: elf.Image, at: u32) void {
-    const found = symbols.inside(image, at) orelse return;
-    frame.name_len = @min(found.name.len, name_cap);
-    @memcpy(frame.name_buf[0..frame.name_len], found.name[0..frame.name_len]);
-    frame.offset = found.offset +% (frame.pc -% at);
-}
-
-fn placeFrame(frame: *Frame, lines: dwarf_line.Sections, at: u32) void {
-    const found = (dwarf_line.lookup(lines, at) catch null) orelse return;
-    const base = std.fs.path.basename(found.file.name);
-    frame.file_len = @min(base.len, file_cap);
-    @memcpy(frame.file_buf[0..frame.file_len], base[0..frame.file_len]);
-    frame.line = found.line;
-}
 
 /// How many rows fit down `area`.
 pub fn rows(area: Rect) usize {

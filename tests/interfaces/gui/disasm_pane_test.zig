@@ -1,4 +1,6 @@
-//! Covers src/interfaces/gui/disasm_pane.zig (RA8EMU-743): the columns line up, a
+//! Covers src/interfaces/gui/ui/disasm_pane.zig (RA8EMU-743) and the
+//! capture file that fills it, src/interfaces/gui/disasm_capture.zig
+//! (RA8EMU-1079): the columns line up, a
 //! corpus-like run decodes forward through a real session (a wide bl takes
 //! four bytes), unreadable and straddling reads take two bytes each, the pc
 //! band and the breakpoint square land only on their rows, a pane too narrow
@@ -16,6 +18,7 @@ const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
 const pane = ra8.gui.disasm_pane;
+const capture = ra8.gui.disasm_capture;
 
 const Rect = draw_list.Rect;
 /// Room for 24 characters of text and eight rows.
@@ -82,7 +85,7 @@ const Rig = struct {
 
     fn snapshot(self: *Rig) !pane.Snapshot {
         try self.session.setRegister(.cpu0, .pc, pc);
-        return pane.capture(&self.session, .cpu0, code_at, 8);
+        return capture.capture(&self.session, .cpu0, code_at, 8);
     }
 };
 
@@ -144,7 +147,7 @@ test "unreadable and straddling instructions take two bytes each" {
     var rig: Rig = undefined;
     try rig.init();
     try rig.session.write(.cpu0, 0xFE, &.{ 0x00, 0xF0 });
-    const snapshot = try pane.capture(&rig.session, .cpu0, 0xFC, 3);
+    const snapshot = try capture.capture(&rig.session, .cpu0, 0xFC, 3);
     try std.testing.expectEqual(@as(u8, 2), snapshot.lines[0].size);
     try std.testing.expectEqual(@as(u32, 0xFE), snapshot.lines[1].address);
     try std.testing.expectEqual(@as(u8, 0), snapshot.lines[1].size);
@@ -203,7 +206,7 @@ fn readCode() Read {
 
 test "decodeRead decodes forward from pc out of bytes read from a row base" {
     const read = readCode();
-    const snapshot = pane.decodeRead(pc, code_at, &read.bytes, &read.readable, 4);
+    const snapshot = capture.decodeRead(pc, code_at, &read.bytes, &read.readable, 4);
     try std.testing.expectEqual(pc, snapshot.pc);
     try std.testing.expectEqual(@as(usize, 4), snapshot.count);
     try std.testing.expectEqual(@as(u8, 4), snapshot.lines[0].size);
@@ -218,12 +221,12 @@ test "decodeRead decodes forward from pc out of bytes read from a row base" {
 test "decodeRead marks a halfword not read, or past the read, unreadable" {
     var read = readCode();
     read.readable[0x2A - code_at + 1] = false;
-    const snapshot = pane.decodeRead(pc, code_at, &read.bytes, &read.readable, 6);
+    const snapshot = capture.decodeRead(pc, code_at, &read.bytes, &read.readable, 6);
     try std.testing.expectEqual(@as(u8, 0), snapshot.lines[1].size);
     try std.testing.expectEqual(@as(u32, 0x2C), snapshot.lines[2].address);
     try std.testing.expect(snapshot.lines[2].decoded);
     try std.testing.expectEqual(@as(u32, 0x30), snapshot.lines[4].address);
     try std.testing.expectEqual(@as(u8, 0), snapshot.lines[4].size);
-    const before = pane.decodeRead(code_at - 2, code_at, &read.bytes, &read.readable, 1);
+    const before = capture.decodeRead(code_at - 2, code_at, &read.bytes, &read.readable, 1);
     try std.testing.expectEqual(@as(u8, 0), before.lines[0].size);
 }

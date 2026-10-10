@@ -29,7 +29,8 @@ const shell_registers = @import("shell_registers.zig");
 const registers_pane = @import("ui/registers_pane.zig");
 const shell_memory = @import("shell_memory.zig");
 const memory_pane = @import("ui/memory_pane.zig");
-const disasm_pane = @import("disasm_pane.zig");
+const disasm_pane = @import("ui/disasm_pane.zig");
+const disasm_capture = @import("disasm_capture.zig");
 
 const Rect = draw_list.Rect;
 
@@ -125,7 +126,7 @@ fn drawFaults(self: *const Panes, list: *draw_list.DrawList, rows: Rect, devices
 /// The link carries no breakpoint list yet, so none are marked.
 fn drawCode(list: *draw_list.DrawList, body: Rect, pc: u32, read: *const shell_memory.Snapshot) !void {
     const length = read.count * memory_pane.per_row;
-    const lines = disasm_pane.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
+    const lines = disasm_capture.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
     return disasm_pane.draw(list, body, &lines, &.{});
 }
 
