@@ -102,6 +102,21 @@ pub const Camera = struct {
     }
 };
 
+/// Start the panel on `spec`, the `--camera-source` flag (RA8EMU-1095):
+/// its argument goes where the panel looks for that kind's file, and the
+/// pick goes to the session like any other once the shell connects. The
+/// webcam still passes the panel's consent dialog.
+pub fn start(camera: *Camera, spec: Spec) void {
+    switch (spec.kind) {
+        .gradient, .webcam => {},
+        .image => camera.args.image = spec.arg,
+        .video => camera.args.video = spec.arg,
+        .pipe => camera.args.pipe = spec.arg,
+    }
+    if (spec.kind == .webcam) camera.args.webcam = spec.arg;
+    camera.panel.pick(spec.kind);
+}
+
 /// The text set_camera_source takes: `KIND` or `KIND:ARG`, as on the
 /// command line.
 pub fn specText(buffer: []u8, spec: Spec) ![]const u8 {

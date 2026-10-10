@@ -16,6 +16,7 @@ test {
     _ = @import("host/host_profiles_test.zig");
     _ = @import("interfaces/gui/shell_main_test.zig");
     _ = @import("interfaces/gui/local_session_test.zig");
+    _ = @import("interfaces/gui/shell_startup_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("interfaces/cli/map_main_test.zig");

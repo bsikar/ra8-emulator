@@ -17,6 +17,9 @@ const shell_fault = @import("shell_fault.zig");
 const shell_camera = @import("shell_camera.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
+const shell_startup = @import("shell_startup.zig");
+const window_stills = @import("window_stills.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
 const shell_registers = @import("shell_registers.zig");
 const shell_memory = @import("shell_memory.zig");
 const session_link = @import("session_link.zig");
@@ -24,7 +27,8 @@ const local_session = @import("local_session.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
 const Env = proto.Client.Env;
-const usage = "usage: ra8_gui shell [--host NAME] [--hosts FILE] IMAGE\n";
+const usage = "usage: ra8_gui shell [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
+    "    [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]] IMAGE\n";
 
 /// Largest image the shell reads, as main does for a run.
 const max_image: usize = 64 * 1024 * 1024;
@@ -36,9 +40,16 @@ pub const Args = struct {
     image: []const u8,
     host: ?[]const u8 = null,
     hosts: ?[]const u8 = null,
+    /// The `--attach` and `--click` plugs (RA8EMU-1095).
+    startup: shell_startup.Startup = .{},
+    /// `--camera-source`: the camera panel starts on this source.
+    camera: ?source_spec.Spec = null,
+    /// `--window-stills DIR` keeps every `stills_every`-th frame as a PNG.
+    stills: ?[]const u8 = null,
+    stills_every: u32 = 1,
 };
 
-/// Parse `ra8_gui shell [--host NAME] [--hosts FILE] IMAGE`.
+/// Parse `ra8_gui shell [flags] IMAGE`; see `usage`.
 pub fn parse(argv: []const []const u8) error{Usage}!Args {
     if (argv.len < 2 or !std.mem.eql(u8, argv[1], "shell")) return error.Usage;
     var args: Args = .{ .image = "" };
@@ -46,17 +57,43 @@ pub fn parse(argv: []const []const u8) error{Usage}!Args {
     var i: usize = 2;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
-        const host = std.mem.eql(u8, arg, "--host");
-        if (host or std.mem.eql(u8, arg, "--hosts")) {
+        if (std.mem.eql(u8, arg, "--click")) {
+            args.startup.addClick() catch return error.Usage;
+        } else if (valued(arg)) {
             i += 1;
             if (i >= argv.len) return error.Usage;
-            if (host) args.host = argv[i] else args.hosts = argv[i];
+            take(&args, arg, argv[i]) catch return error.Usage;
         } else if (std.mem.startsWith(u8, arg, "-") or image != null) {
             return error.Usage;
         } else image = arg;
     }
     args.image = image orelse return error.Usage;
     return args;
+}
+
+const valued_flags = [_][]const u8{ "--host", "--hosts", "--attach", "--camera-source", "--window-stills", "--window-stills-every" };
+
+fn valued(arg: []const u8) bool {
+    for (valued_flags) |flag| if (std.mem.eql(u8, arg, flag)) return true;
+    return false;
+}
+
+/// Set the flag `flag` from its value.
+fn take(args: *Args, flag: []const u8, value: []const u8) !void {
+    if (std.mem.eql(u8, flag, "--host")) {
+        args.host = value;
+    } else if (std.mem.eql(u8, flag, "--hosts")) {
+        args.hosts = value;
+    } else if (std.mem.eql(u8, flag, "--attach")) {
+        try args.startup.add(value);
+    } else if (std.mem.eql(u8, flag, "--camera-source")) {
+        args.camera = try source_spec.parse(value);
+    } else if (std.mem.eql(u8, flag, "--window-stills")) {
+        args.stills = value;
+    } else {
+        args.stills_every = try std.fmt.parseInt(u32, value, 10);
+        if (args.stills_every == 0) return error.BadValue;
+    }
 }
 
 /// The host the shell connects to: the local one unless --host names a
@@ -91,12 +128,18 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         return 2;
     };
     defer if (window_main.opener) |how| how.close();
-    try local(allocator, io, window, args.image, bytes);
+    const stills_dir = try window_stills.openDir(io, args.stills);
+    defer if (stills_dir) |dir| dir.close(io);
+    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
+    const shown = if (stills_dir != null) recorder.platform() else window;
+    var startup = args.startup;
+    try local(allocator, io, shown, args, &startup, bytes);
     return 0;
 }
 
 /// Serve the image in-process and run the shell on it.
-fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, path: []const u8, bytes: []const u8) !void {
+fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8) !void {
+    const path = args.image;
     var session: local_session.LocalSession = undefined;
     try session.open(allocator, io, path);
     defer session.deinit();
@@ -118,7 +161,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, pa
     var faults: shell_fault.Faults = .{};
     shell.faults = &faults;
     var camera: shell_camera.Camera = .{};
+    if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
+    shell.startup = startup;
     var plug: shell_plug.Plug = .{};
     try plug.init();
     shell.plug = &plug;

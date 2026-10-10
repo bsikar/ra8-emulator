@@ -26,6 +26,7 @@ const shell_camera = @import("shell_camera.zig");
 const shell_titles = @import("shell_titles.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
+const shell_startup = @import("shell_startup.zig");
 const shell_registers = @import("shell_registers.zig");
 const shell_memory = @import("shell_memory.zig");
 
@@ -47,6 +48,10 @@ pub const Shell = struct {
     camera: ?*shell_camera.Camera = null,
     plug: ?*shell_plug.Plug = null,
     camera_file: ?*shell_camera_file.CameraFile = null,
+    /// The `--attach` and `--click` plugs, sent once the image is loaded.
+    startup: ?*shell_startup.Startup = null,
+    /// Whether the session has answered the image load.
+    loaded: bool = false,
     registers: ?*shell_registers.Pair = null,
     memory: ?*shell_memory.Pair = null,
     code: ?*shell_memory.Pair = null,
@@ -149,6 +154,7 @@ pub const Shell = struct {
             camera.attach(link);
         }
         if (self.plug) |plug| _ = plug.attach(link);
+        if (self.startup) |startup| if (self.loaded) startup.attach(link);
         if (self.registers) |registers| registers.attach(link);
         if (self.memory) |memory| memory.attach(link);
         if (self.code) |code| code.attach(link);
@@ -157,7 +163,9 @@ pub const Shell = struct {
             const arrival = link.pump() orelse return;
             const loading = self.status.load_id;
             self.status.observe(link, arrival);
-            self.observeCore(loading != null and self.status.load_id == null, arrival);
+            const answered = loading != null and self.status.load_id == null;
+            if (answered) self.loaded = true;
+            self.observeCore(answered, arrival);
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);
@@ -166,6 +174,9 @@ pub const Shell = struct {
             };
             if (self.camera) |camera| camera.observe(arrival);
             if (self.plug) |plug| if (plug.observe(arrival)) if (self.devices) |devices| {
+                devices.want = true;
+            };
+            if (self.startup) |startup| if (startup.observe(arrival)) if (self.devices) |devices| {
                 devices.want = true;
             };
         }
