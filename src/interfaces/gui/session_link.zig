@@ -131,7 +131,8 @@ pub const Link = struct {
     }
 };
 
-/// A local `ra8_emulator serve --stdio` child, spoken to over its pipes.
+/// A local `ra8_gui serve --stdio` child (the shell's own executable),
+/// spoken to over its pipes.
 pub const Local = struct {
     child: std.process.Child,
     io: std.Io,

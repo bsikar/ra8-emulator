@@ -1,4 +1,4 @@
-//! `shell` from main (RA8EMU-770): the docked debugger shell in a window.
+//! `ra8_gui shell` (RA8EMU-770): the docked debugger shell in a window.
 //! It picks the host (the local one unless --host names a profile in the
 //! hosts file), starts that host's session, loads the image once the session
 //! greets, and runs the shell loop (RA8EMU-763) until the window closes.
@@ -23,7 +23,7 @@ const session_link = @import("session_link.zig");
 const proto = @import("../rpc/session_rpc.zig");
 
 const Env = proto.Client.Env;
-const usage = "usage: ra8_emulator shell [--host NAME] [--hosts FILE] IMAGE\n";
+const usage = "usage: ra8_gui shell [--host NAME] [--hosts FILE] IMAGE\n";
 
 /// Largest image the shell reads, as main does for a run.
 const max_image: usize = 64 * 1024 * 1024;
@@ -37,7 +37,7 @@ pub const Args = struct {
     hosts: ?[]const u8 = null,
 };
 
-/// Parse `ra8_emulator shell [--host NAME] [--hosts FILE] IMAGE`.
+/// Parse `ra8_gui shell [--host NAME] [--hosts FILE] IMAGE`.
 pub fn parse(argv: []const []const u8) error{Usage}!Args {
     if (argv.len < 2 or !std.mem.eql(u8, argv[1], "shell")) return error.Usage;
     var args: Args = .{ .image = "" };
