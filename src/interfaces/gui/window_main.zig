@@ -38,8 +38,9 @@ pub const Args = struct {
     camera: source_spec.Spec = .{},
 };
 
-/// How the executable opens and closes its window. src/main.zig sets it
-/// in a -Dgui build (src/interfaces/gui/gui_window.zig, SDL); otherwise there is none.
+/// How the executable opens and closes its window. ra8_gui
+/// (src/interfaces/gui/main.zig) sets it to gui_window.zig's SDL window;
+/// ra8_emulator has none.
 pub const Opener = struct {
     open: *const fn () ?platform.Platform,
     close: *const fn () void,

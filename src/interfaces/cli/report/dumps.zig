@@ -6,7 +6,7 @@
 //! they answer to a flag, so a run that passed none of those flags prints
 //! nothing from this file at all.
 //!
-//! Its own file rather than four more functions in src/main.zig, which is
+//! Its own file rather than four more functions in src/interfaces/cli/main.zig, which is
 //! wiring: this is output, it is the only part of the output that a flag
 //! rather than the board decides, and src/board is where the words about a
 //! run live.

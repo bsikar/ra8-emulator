@@ -2,7 +2,7 @@
 //!
 //! These are the counters and tables the hooks write into as the run goes,
 //! kept together so `main` wires them once and the report reads them once.
-//! Lifted out of src/main.zig when the file passed the gate's 400 lines:
+//! Lifted out of src/interfaces/cli/main.zig when the file passed the gate's 400 lines:
 //! holding the run's state is its own purpose, and it grows by a field
 //! every time a slice adds a counter.
 const csel = @import("../../chip/core/csel.zig");

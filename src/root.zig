@@ -179,6 +179,7 @@ pub const image = struct {
     pub const pages = @import("image/pages.zig");
     pub const load = @import("image/load.zig");
     pub const ra8app = @import("image/ra8app.zig");
+    pub const file = @import("image/file.zig");
 };
 pub const board = struct {
     pub const external_memory = @import("board/external_memory.zig");
