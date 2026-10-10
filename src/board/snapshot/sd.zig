@@ -1,17 +1,19 @@
 //! The board's two SD cards in a snapshot (RA8EMU-664): the SPI-mode card
 //! on SCI0 and the SD host controller with its card, as one `sd` section.
 //!
-//! Each card's plain state goes through fields.zig and its written blocks
-//! through blocks.zig. Not saved: the card's line on SCI0 (a pointer to the
-//! card, wiring) and the volume `--sd-new` formatted (run report only).
+//! This file only keeps the order, which is the format: the SPI-mode card,
+//! the host controller, the SD-bus card. Each model saves its own half
+//! (components/sd_card/card_snapshot.zig, chip/periph/sdhi/sdhi_snapshot.zig,
+//! RA8EMU-1104). Not saved: the card's line on SCI0 (a pointer to the card,
+//! wiring) and the volume `--sd-new` formatted (run report only).
 const std = @import("std");
 const file = @import("../../snapshot/file.zig");
 const fields = @import("../../snapshot/fields.zig");
 const blocks = @import("../../snapshot/blocks.zig");
+const cards = @import("../../components/sd_card/card_snapshot.zig");
+const host = @import("../../chip/periph/sdhi/sdhi_snapshot.zig");
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
-
-const store_wiring = .{ "allocator", "blocks" };
 
 pub fn save(board: anytype, writer: anytype) !void {
     var counter: std.Io.Writer.Discarding = .init(&.{});
@@ -21,51 +23,25 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, board: anytype) !void {
-    try fields.writeExcept(writer, board.sd, .{"img"});
-    try fields.writeExcept(writer, board.sd.img, store_wiring);
-    try blocks.write(writer, &board.sd.img.blocks);
-    try fields.writeExcept(writer, board.card, .{"card"});
-    // The SD-bus card in its pre-RA8EMU-1053 field order (state, capacity,
-    // past_end), so the bytes did not move when its store became an Image.
-    try fields.writeExcept(writer, board.host_card, .{ "img", "past_end" });
-    try fields.writeExcept(writer, board.host_card.img, store_wiring);
-    try fields.writeExcept(writer, board.host_card, .{ "img", "state" });
-    try blocks.write(writer, &board.host_card.img.blocks);
+    try cards.writeSpi(writer, &board.sd);
+    try host.write(writer, &board.card);
+    try cards.writeBus(writer, &board.host_card);
 }
 
-/// All or nothing: both cards change only once the whole section read
-/// cleanly, every index is inside its buffer and both block maps are built.
+/// All or nothing: both cards and the controller change only once the whole
+/// section read cleanly, every index is inside its buffer and both block
+/// maps are built.
 pub fn load(board: anytype, bytes: []const u8) Error!void {
     const section = try file.Reader.find(bytes, .sd) orelse return Error.Missing;
     var cursor: fields.Cursor = .{ .bytes = section.payload };
-    var spi = board.sd;
-    try fields.readOver(&cursor, &spi, .{"img"});
-    try fields.readOver(&cursor, &spi.img, store_wiring);
-    const spi_list = try blocks.List.read(&cursor, spi.img.capacity_blocks);
-    var host = board.card;
-    try fields.readOver(&cursor, &host, .{"card"});
-    var disk = board.host_card;
-    try fields.readOver(&cursor, &disk, .{ "img", "past_end" });
-    try fields.readOver(&cursor, &disk.img, store_wiring);
-    try fields.readOver(&cursor, &disk, .{ "img", "state" });
-    const host_list = try blocks.List.read(&cursor, disk.img.capacity_blocks);
-    if (!cursor.done() or !fits(&spi, &host)) return Error.BadValue;
-    var spi_map = try spi_list.build(spi.img.allocator);
+    var spi = try cards.readSpi(&cursor, &board.sd);
+    const controller = try host.read(&cursor, &board.card);
+    var bus = try cards.readBus(&cursor, &board.host_card);
+    if (!cursor.done() or !cards.spiFits(&spi.card) or !host.fits(&controller)) return Error.BadValue;
+    var spi_map = try spi.build();
     errdefer blocks.free(&spi_map);
-    const host_map = try host_list.build(disk.img.allocator);
-    blocks.free(&board.sd.img.blocks);
-    blocks.free(&board.host_card.img.blocks);
-    spi.img.blocks = spi_map;
-    disk.img.blocks = host_map;
-    board.sd = spi;
-    board.card = host;
-    board.host_card = disk;
+    const bus_map = try bus.build();
+    spi.install(&board.sd, spi_map);
+    board.card = controller;
+    bus.install(&board.host_card, bus_map);
 }
-
-fn fits(spi: anytype, host: anytype) bool {
-    const reply = spi.reply;
-    return spi.cmd_len <= spi.cmd.len and reply.len <= reply.buf.len and
-        reply.pos <= reply.len and host.data.word_idx <= block_bytes_words;
-}
-
-const block_bytes_words = blocks.block_bytes / 4;

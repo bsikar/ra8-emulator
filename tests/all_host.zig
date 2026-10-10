@@ -29,6 +29,11 @@ test {
     _ = @import("chip/snapshot/timers_test.zig");
     _ = @import("chip/periph/sci/sci_snapshot_test.zig");
     _ = @import("board/snapshot/sd_test.zig");
+    _ = @import("components/sd_card/card_snapshot_test.zig");
+    _ = @import("chip/periph/sdhi/sdhi_snapshot_test.zig");
+    _ = @import("chip/periph/mram/mram_snapshot_test.zig");
+    _ = @import("components/nor_flash/flash_snapshot_test.zig");
+    _ = @import("components/usb_stick/stick_snapshot_test.zig");
     _ = @import("board/snapshot/wire_test.zig");
     _ = @import("chip/periph/drw/drw_snapshot_test.zig");
     _ = @import("chip/periph/glcdc/glcdc_snapshot_test.zig");
