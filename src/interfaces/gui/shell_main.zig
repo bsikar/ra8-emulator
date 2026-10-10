@@ -29,7 +29,8 @@ const proto = @import("../rpc/session_rpc.zig");
 
 const Env = proto.Client.Env;
 const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
-    "    [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]] IMAGE\n";
+    "    [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]]\n" ++
+    "    [--frames N] IMAGE\n";
 
 /// The word `ra8_gui shell IMAGE` carried while ra8_gui also had a live
 /// window; still taken in front of the flags, and it changes nothing.
@@ -52,6 +53,9 @@ pub const Args = struct {
     /// `--window-stills DIR` keeps every `stills_every`-th frame as a PNG.
     stills: ?[]const u8 = null,
     stills_every: u32 = 1,
+    /// `--frames N`: close the window after N frames drawn with the image
+    /// loaded, for a smoke run with nobody to close it (RA8EMU-1089).
+    frames: ?u32 = null,
 };
 
 /// Parse `ra8_gui [flags] IMAGE`; see `usage`.
@@ -76,7 +80,7 @@ pub fn parse(argv: []const []const u8) error{Usage}!Args {
     return args;
 }
 
-const valued_flags = [_][]const u8{ "--host", "--hosts", "--attach", "--camera-source", "--window-stills", "--window-stills-every" };
+const valued_flags = [_][]const u8{ "--host", "--hosts", "--attach", "--camera-source", "--window-stills", "--window-stills-every", "--frames" };
 
 fn valued(arg: []const u8) bool {
     for (valued_flags) |flag| if (std.mem.eql(u8, arg, flag)) return true;
@@ -95,10 +99,18 @@ fn take(args: *Args, flag: []const u8, value: []const u8) !void {
         args.camera = try source_spec.parse(value);
     } else if (std.mem.eql(u8, flag, "--window-stills")) {
         args.stills = value;
+    } else if (std.mem.eql(u8, flag, "--window-stills-every")) {
+        args.stills_every = try count(value);
     } else {
-        args.stills_every = try std.fmt.parseInt(u32, value, 10);
-        if (args.stills_every == 0) return error.BadValue;
+        args.frames = try count(value);
     }
+}
+
+/// A count on the command line: a decimal above zero.
+fn count(text: []const u8) !u32 {
+    const value = try std.fmt.parseInt(u32, text, 10);
+    if (value == 0) return error.BadValue;
+    return value;
 }
 
 /// The host the shell connects to: the local one unless --host names a
@@ -138,7 +150,13 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
     var startup = args.startup;
-    try local(allocator, io, shown, args, &startup, bytes);
+    local(allocator, io, shown, args, &startup, bytes) catch |err| switch (err) {
+        error.ImageNotLoaded => {
+            std.debug.print("ra8_gui: the session did not load {s}\n", .{args.image});
+            return 1;
+        },
+        else => return err,
+    };
     return 0;
 }
 
@@ -183,14 +201,18 @@ fn local(allocator: std.mem.Allocator, io: std.Io, window: platform.Platform, ar
     shell.code = &code;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code };
     shell.painter = panes.painter();
-    try drive(io, &shell, window, path, bytes, &session);
+    try drive(io, &shell, window, path, bytes, &session, args.frames);
     link.close();
 }
 
 /// Step `shell` until its window closes, loading the image once its session
 /// has greeted. A local session answers what the shell sent after each step.
-pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, session: ?*local_session.LocalSession) !void {
+/// With `frames` it also ends after that many frames drawn with the image
+/// loaded, and fails once the image can no longer load, so a run with
+/// nobody at the window always ends.
+pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, session: ?*local_session.LocalSession, frames: ?u32) !void {
     var sent = false;
+    var drawn: u32 = 0;
     while (try shell.step(window)) {
         if (session) |served| try served.answer();
         if (!sent and shell.state() == .connected) {
@@ -198,6 +220,19 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
             try shell.status.load(link, path, bytes);
             sent = true;
         }
+        if (frames) |wanted| {
+            if (lost(shell)) return error.ImageNotLoaded;
+            if (shell.status.image != null) drawn += 1;
+            if (drawn == wanted) return;
+        }
         try io.sleep(.fromNanoseconds(frame_gap_ns), .awake);
     }
+}
+
+/// Whether the image can no longer load: the session is gone or refused it.
+fn lost(shell: *const shell_loop.Shell) bool {
+    return switch (shell.state()) {
+        .failed, .closed => true,
+        .connecting, .connected => shell.status.refused == .load,
+    };
 }

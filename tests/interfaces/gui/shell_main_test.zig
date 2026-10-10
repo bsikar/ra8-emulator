@@ -50,6 +50,14 @@ test "the command line's run flags are not ra8_gui's" {
     for (run_flags) |flag| try std.testing.expectError(error.Usage, shell_main.parse(&.{ "ra8_gui", "app.elf", flag, "1" }));
 }
 
+test "--frames keeps a count above zero" {
+    const args = try shell_main.parse(&.{ "ra8_gui", "--frames", "5", "app.elf" });
+    try std.testing.expectEqual(@as(?u32, 5), args.frames);
+    try std.testing.expectEqual(@as(?u32, null), (try shell_main.parse(&.{ "ra8_gui", "app.elf" })).frames);
+    try std.testing.expectError(error.Usage, shell_main.parse(&.{ "ra8_gui", "--frames", "0", "app.elf" }));
+    try std.testing.expectError(error.Usage, shell_main.parse(&.{ "ra8_gui", "--frames", "many", "app.elf" }));
+}
+
 test "the host named local needs no hosts file" {
     const args = try shell_main.parse(&.{ "ra8_gui", "--host", "local", "--hosts", "/nonexistent/hosts", "app.elf" });
     try std.testing.expectEqual(Profile.local, try shell_main.pick(std.testing.allocator, std.testing.io, &empty_env, args));
@@ -70,21 +78,22 @@ test "any other host comes from the hosts file" {
 }
 
 /// The window a test hands to `run`: headless, asking to close after
-/// `frames_wanted` presented frames. An opener has no context, so it is one
-/// per test binary.
+/// `quit_after` presented frames, or never. An opener has no context, so it
+/// is one per test binary.
 const Window = struct {
     var inner: ?Headless = null;
     var opens: u32 = 0;
     var closes: u32 = 0;
     var presents: u32 = 0;
     var asked_to_close = false;
-    const frames_wanted: u32 = 3;
+    var quit_after: ?u32 = null;
 
-    fn reset() void {
+    fn reset(quit: ?u32) void {
         opens = 0;
         closes = 0;
         presents = 0;
         asked_to_close = false;
+        quit_after = quit;
     }
 
     fn open() ?platform.Platform {
@@ -105,7 +114,8 @@ const Window = struct {
     }
 
     fn poll(_: *anyopaque) ?platform.Event {
-        if (asked_to_close or presents < frames_wanted) return null;
+        const wanted = quit_after orelse return null;
+        if (asked_to_close or presents < wanted) return null;
         asked_to_close = true;
         return .quit;
     }
@@ -127,18 +137,49 @@ const Window = struct {
 test "ra8_gui IMAGE opens the shell on the image in-process and ends when the window closes" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    Window.reset();
+    Window.reset(3);
     const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.open, .close = Window.close });
     try std.testing.expectEqual(@as(u8, 0), code);
-    try std.testing.expectEqual(Window.frames_wanted, Window.presents);
+    try std.testing.expectEqual(@as(u32, 3), Window.presents);
     try std.testing.expectEqual(@as(u32, 1), Window.opens);
     try std.testing.expectEqual(@as(u32, 1), Window.closes);
+}
+
+test "--frames ends a window nobody closes, after that many frames with the image loaded" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    Window.reset(null);
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "--frames", "4", image }, .{ .open = Window.open, .close = Window.close });
+    try std.testing.expectEqual(@as(u8, 0), code);
+    try std.testing.expect(Window.presents >= 4);
+    try std.testing.expectEqual(@as(u32, 1), Window.closes);
+}
+
+test "--frames fails once the session is gone instead of waiting for a load" {
+    const gpa = std.testing.allocator;
+    var session: ra8.core.local_session.LocalSession = undefined;
+    try session.open(gpa, std.testing.io, image);
+    defer session.deinit();
+    const Env = ra8.interfaces.rpc.session.Client.Env;
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: ra8.gui.session_link.Link = undefined;
+    link.open(session.transport(), rx, tx);
+    link.close();
+    var shell = ra8.gui.shell_loop.Shell.init(gpa, try ra8.gui.pane_layout.twoCore(gpa));
+    defer shell.deinit();
+    shell.link = &link;
+    var window = Headless.init(gpa, 480, 320);
+    defer window.deinit();
+    try std.testing.expectError(error.ImageNotLoaded, shell_main.drive(std.testing.io, &shell, window.platform(), image, "", &session, 4));
 }
 
 test "a bad command line or an unreadable image never opens the window" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    Window.reset();
+    Window.reset(null);
     const opener: platform.Opener = .{ .open = Window.open, .close = Window.close };
     try std.testing.expectEqual(@as(u8, 2), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image, "--instructions", "5" }, opener));
     try std.testing.expectEqual(@as(u8, 1), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "tests/fixtures/no-such.elf" }, opener));
@@ -148,7 +189,7 @@ test "a bad command line or an unreadable image never opens the window" {
 test "with no window to open the shell says 2 and loads nothing" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    Window.reset();
+    Window.reset(null);
     const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.none, .close = Window.close });
     try std.testing.expectEqual(@as(u8, 2), code);
     try std.testing.expectEqual(@as(u32, 1), Window.opens);
