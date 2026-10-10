@@ -5,6 +5,7 @@
 //! is pinned as a golden.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const draw_list = ra8.gui.draw_list;
@@ -185,7 +186,7 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
     defer list.deinit();
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .devices = &devices, .faults = &faults };
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = width, .height = height, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, .closed), .width = width, .height = height, .painter = painter.painter() });
     var pixels = try raster.Framebuffer.init(gpa, width, height);
     defer pixels.deinit(gpa);
     raster.draw(&pixels, &list, font.atlas);

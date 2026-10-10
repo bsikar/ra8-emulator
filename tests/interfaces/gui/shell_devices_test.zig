@@ -5,6 +5,7 @@
 //! re-list after the session answers, and the refusal note.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const proto = ra8.interfaces.rpc.session;
 const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
@@ -101,7 +102,7 @@ fn drawShell(gpa: std.mem.Allocator, devices: *const Devices, pixels: *raster.Fr
     defer list.deinit();
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .devices = devices };
-    try frame.draw(&list, .{ .layout = layout, .solved = solved, .status = &status, .state = .closed, .width = 480, .height = 320, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = layout, .solved = solved, .strip = status_capture.strip(&status, .closed), .width = 480, .height = 320, .painter = painter.painter() });
     raster.draw(pixels, &list, font.atlas);
 }
 

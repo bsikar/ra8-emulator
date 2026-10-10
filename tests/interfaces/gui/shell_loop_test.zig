@@ -4,6 +4,7 @@
 //! with the status strip following.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const pane_layout = ra8.gui.pane_layout;
@@ -113,7 +114,7 @@ test "a local session connects and loads a corpus image through the shell" {
     const line = try s.status.text(s.state(), &buf);
     try std.testing.expect(std.mem.indexOf(u8, line, "fp_basic.elf") != null);
     try std.testing.expect(std.mem.indexOf(u8, line, "| halted at 0x") != null);
-    try std.testing.expectEqual(strip.Tone.halted, strip.tone(&s.status, s.state()));
+    try std.testing.expectEqual(strip.Tone.halted, status_capture.tone(&s.status, s.state()));
 
     link.close();
     local.end();

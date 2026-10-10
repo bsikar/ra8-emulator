@@ -7,6 +7,7 @@
 //! wrote marked (RA8EMU-947).
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const draw_list = ra8.gui.draw_list;
@@ -123,7 +124,7 @@ fn expectFrame(gpa: std.mem.Allocator, leaves: *const Leaves, state: session_lin
     defer list.deinit();
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .registers = &leaves.registers, .memory = &leaves.memory, .code = &leaves.code };
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = state, .width = width, .height = height, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, state), .width = width, .height = height, .painter = painter.painter() });
     raster.draw(&pixels, &list, font.atlas);
     var drawn: usize = 0;
     var waiting: usize = 0;

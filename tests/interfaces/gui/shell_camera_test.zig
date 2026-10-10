@@ -4,6 +4,7 @@
 //! the leaf painting the panel.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const proto = ra8.interfaces.rpc.session;
 const Stdio = ra8.interfaces.rpc.stdio.Stdio;
 const draw_list = ra8.gui.draw_list;
@@ -159,7 +160,7 @@ test "the camera leaf paints the panel and its note in place of the wait note" {
     defer list.deinit();
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .camera = &camera };
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = 480, .height = 320, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, .closed), .width = 480, .height = 320, .painter = painter.painter() });
     var pixels = try raster.Framebuffer.init(gpa, 480, 320);
     defer pixels.deinit(gpa);
     raster.draw(&pixels, &list, font.atlas);

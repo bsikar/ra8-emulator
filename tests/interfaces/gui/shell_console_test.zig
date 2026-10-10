@@ -3,6 +3,7 @@
 //! arrives stamped, and the console leaf draws the log in place of its note.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const draw_list = ra8.gui.draw_list;
@@ -131,7 +132,7 @@ test "the console leaf draws the log in place of its note" {
     defer pixels.deinit(gpa);
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .console = &console };
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = 480, .height = 320, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, .closed), .width = 480, .height = 320, .painter = painter.painter() });
     raster.draw(&pixels, &list, font.atlas);
     var consoles: usize = 0;
     for (solved.panes.items) |leaf| {

@@ -11,7 +11,7 @@ const session_link = @import("session_link.zig");
 const draw_list = @import("../../render/draw_list.zig");
 const font = @import("../../render/font.zig");
 const platform = @import("platform.zig");
-const shell_frame = @import("shell_frame.zig");
+const shell_frame = @import("ui/shell_frame.zig");
 const shell_field = @import("ui/shell_field.zig");
 const shell_devices = @import("shell_devices.zig");
 

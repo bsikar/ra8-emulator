@@ -1,17 +1,13 @@
 //! The status strip (RA8EMU-759): the status bar's line painted along the
 //! bottom of the shell window. A dot at the left carries the state's tone
 //! (connected, failed, running, halted); the text is cut to whole cells when
-//! the window is narrow, never drawn past the strip.
-const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const status_bar = @import("status_bar.zig");
-const session_link = @import("session_link.zig");
+//! the window is narrow, never drawn past the strip. gui/status_capture.zig
+//! reads the session's status into a `Strip`; this file never imports it.
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
-const Status = status_bar.Status;
-const State = session_link.State;
 
 pub const background = Color.rgb(0x21, 0x25, 0x2B);
 pub const border = Color.rgb(0x4A, 0x51, 0x5C);
@@ -39,36 +35,31 @@ pub const Tone = enum {
     }
 };
 
-/// The worst news wins: a failure or refusal, then the run state.
-pub fn tone(status: *const Status, state: State) Tone {
-    switch (state) {
-        .failed => return .bad,
-        .connecting, .closed => return .waiting,
-        .connected => {},
+/// What one frame of the strip shows: the dot's tone and the status line.
+pub const Strip = struct {
+    tone: Tone = .waiting,
+    line_buf: [256]u8 = undefined,
+    line_len: usize = 0,
+
+    pub fn line(self: *const Strip) []const u8 {
+        return self.line_buf[0..self.line_len];
     }
-    if (status.refused != null) return .bad;
-    return switch (status.run) {
-        .unknown => .good,
-        .running => .running,
-        .halted => .halted,
-    };
-}
+};
 
 /// The strip's place in a window of `width` by `window_h` pixels.
 pub fn area(width: i32, window_h: i32) Rect {
     return .{ .x = 0, .y = window_h - height, .w = width, .h = height };
 }
 
-pub fn draw(list: *draw_list.DrawList, strip: Rect, status: *const Status, state: State) !void {
+pub fn draw(list: *draw_list.DrawList, strip: Rect, view: *const Strip) !void {
     if (strip.empty()) return;
     try list.fill(strip, background);
     try list.fill(.{ .x = strip.x, .y = strip.y, .w = strip.w, .h = 1 }, border);
     try list.pushClip(strip);
     defer list.popClip();
     const middle = strip.y + 1 + @divTrunc(strip.h - 1 - dot, 2);
-    try list.fill(.{ .x = strip.x + pad, .y = middle, .w = dot, .h = dot }, tone(status, state).color());
-    var buf: [256]u8 = undefined;
-    const line = status.text(state, &buf) catch buf[0..];
+    try list.fill(.{ .x = strip.x + pad, .y = middle, .w = dot, .h = dot }, view.tone.color());
+    const line = view.line();
     const left = strip.x + pad + dot + pad;
     const room = strip.x + strip.w - pad - left;
     if (room <= 0) return;
