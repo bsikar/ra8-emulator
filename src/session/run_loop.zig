@@ -25,7 +25,6 @@ const soak_symbols = @import("soak_symbols.zig");
 const itm_console = @import("itm_console.zig");
 const break_sym = @import("zig_break.zig");
 const undefined_sites = @import("zig_undefined.zig");
-const window_pace = @import("window_pace.zig");
 const zig_snapshot = @import("zig_snapshot.zig");
 const state_options = @import("state_options.zig");
 const run_clock = @import("run_clock.zig");
@@ -42,8 +41,6 @@ pub const Ends = struct {
     timed: ?*Deadline = null,
     /// The swept sites `--stop-on-undefined` ends the run on.
     undefined_sites: ?*undefined_sites.Found = null,
-    /// The host window's pacer, when the run is shown live (RA8EMU-646).
-    pace: ?*window_pace.Pacer = null,
     /// The `--faults FILE` schedule, applied at its virtual times (RA8EMU-207).
     schedule: ?*fault_file.Applier = null,
 };
@@ -75,7 +72,7 @@ pub const Loop = struct {
     /// `said` takes the boot lines and `out` the ITM console. `cpu1` is the
     /// second core the application brought up, or null.
     pub fn run(self: *Loop, said: anytype, out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, cpu1: ?*second_core.zig_run.Driver, ends: Ends) !void {
-        self.clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .pace = ends.pace, .state = options.state, .cpu1 = cpu1 };
+        self.clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .state = options.state, .cpu1 = cpu1 };
         const clock = &self.clock;
         var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
         if (board.run.soak.armed) soak_symbols.resolve(image, &board.run.soak.threads);

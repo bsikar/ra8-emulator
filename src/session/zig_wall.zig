@@ -41,7 +41,6 @@ pub fn close(clock: *Clock, instructions: u32) !void {
     clock.resume_boundary = false;
     clock.resume_unscaled = false;
     if (clock.board.display.output.vsync) |*vsync| try vsync.settle(clock.board.time.base.now());
-    if (clock.pace) |pace| clock.paced_out = !pace.charge(duration);
     clock.boundary_hz = null;
 }
 

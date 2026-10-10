@@ -21,7 +21,6 @@ const Deadline = @import("../chip/core/deadline.zig").Deadline;
 const clock_rate = @import("zig_clock_rate.zig");
 const break_sym = @import("zig_break.zig");
 const undefined_sites = @import("zig_undefined.zig");
-const window_pace = @import("window_pace.zig");
 const state_options = @import("state_options.zig");
 const wall = @import("zig_wall.zig");
 
@@ -48,11 +47,6 @@ pub const Clock = struct {
     bus_tally: bus_fault.Tally = .{},
     /// `--idle-skip`: a sleeping CPU0 runs straight to the next edge (RA8EMU-185).
     idle_skip: bool = false,
-    /// The host window's pacer: each stretch is charged to it at close,
-    /// parking there between frames (RA8EMU-646).
-    pace: ?*window_pace.Pacer = null,
-    /// The window closed while the run was parked, so the run ends.
-    paced_out: bool = false,
     /// `--save-state` / `--load-state` (RA8EMU-696): zig_snapshot.zig.
     state: state_options.Options = .{},
     resume_boundary: bool = false,
@@ -101,7 +95,6 @@ pub const Clock = struct {
     /// (src/chip/core/stop.zig).
     pub fn done(self: *Clock) bool {
         self.soakFaults();
-        if (self.paced_out) return true;
         if (self.board.run.soak.ended()) return true;
         if (self.point) |point| if (point.reached) return true;
         if (self.timed) |due| if (due.met(self.timebase.ticks)) return true;
