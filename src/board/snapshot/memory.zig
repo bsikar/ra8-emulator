@@ -11,12 +11,12 @@
 //! Layout: a region count, then per region its base, length, how many pages
 //! follow, and each page as its offset and bytes.
 const std = @import("std");
-const memmap = @import("../chip/core/memmap.zig");
-const store_mod = @import("../chip/core/cpu/memory/store.zig");
-const external = @import("../board/external_memory.zig");
-const external_backing = @import("../board/external_backing.zig");
-const file = @import("file.zig");
-const fields = @import("fields.zig");
+const memmap = @import("../../chip/core/memmap.zig");
+const store_mod = @import("../../chip/core/cpu/memory/store.zig");
+const external = @import("../external_memory.zig");
+const external_backing = @import("../external_backing.zig");
+const file = @import("../../snapshot/file.zig");
+const fields = @import("../../snapshot/fields.zig");
 
 pub const Store = store_mod.Store;
 pub const page: u32 = 0x1000;

@@ -1,4 +1,4 @@
-//! Covers src/snapshot/stretch.zig (RA8EMU-700).
+//! Covers src/board/snapshot/stretch.zig (RA8EMU-700).
 const std = @import("std");
 const ra8 = @import("ra8");
 const file = ra8.snapshot.file;

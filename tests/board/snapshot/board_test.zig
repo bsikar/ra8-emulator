@@ -3,7 +3,7 @@
 //! without a part section, is refused before anything changes.
 const std = @import("std");
 const ra8 = @import("ra8");
-const store_board = @import("../interfaces/cli/store_board.zig");
+const store_board = @import("../../interfaces/cli/store_board.zig");
 const Board = ra8.board.Board;
 const file = ra8.snapshot.file;
 const section = ra8.snapshot.board;

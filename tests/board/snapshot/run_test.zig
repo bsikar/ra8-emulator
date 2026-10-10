@@ -3,8 +3,8 @@
 //! anything changes, and a file without a core it is asked for is refused.
 const std = @import("std");
 const ra8 = @import("ra8");
-const store_board = @import("../interfaces/cli/store_board.zig");
-const fixture = @import("../chip/core/cpu/exception/ram.zig");
+const store_board = @import("../../interfaces/cli/store_board.zig");
+const fixture = @import("../../chip/core/cpu/exception/ram.zig");
 const Board = ra8.board.Board;
 const Cpu = ra8.core.cpu.cpu.Cpu;
 const run = ra8.snapshot.run;
