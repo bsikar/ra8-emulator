@@ -234,7 +234,7 @@ pub const snapshot = struct {
     pub const wire = @import("snapshot/wire.zig");
     pub const raster = @import("chip/periph/drw/drw_snapshot.zig");
     pub const display = @import("chip/periph/glcdc/glcdc_snapshot.zig");
-    pub const panel = @import("snapshot/panel.zig");
+    pub const panel = @import("components/eink_it8951/panel_snapshot.zig");
     pub const clocks = @import("chip/snapshot/clocks.zig");
     pub const security = @import("chip/snapshot/security.zig");
     pub const controllers = @import("chip/snapshot/controllers.zig");
@@ -249,7 +249,7 @@ pub const snapshot = struct {
     pub const npu = @import("chip/periph/npu/npu_snapshot.zig");
     pub const systick = @import("chip/snapshot/systick.zig");
     pub const stretch = @import("snapshot/stretch.zig");
-    pub const c6 = @import("snapshot/c6.zig");
+    pub const c6 = @import("components/esp32c6_hosted/c6_snapshot.zig");
     pub const board = @import("snapshot/board.zig");
     pub const run = @import("snapshot/run.zig");
 };

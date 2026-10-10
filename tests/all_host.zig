@@ -32,7 +32,7 @@ test {
     _ = @import("snapshot/wire_test.zig");
     _ = @import("chip/periph/drw/drw_snapshot_test.zig");
     _ = @import("chip/periph/glcdc/glcdc_snapshot_test.zig");
-    _ = @import("snapshot/panel_test.zig");
+    _ = @import("components/eink_it8951/panel_snapshot_test.zig");
     _ = @import("chip/snapshot/clocks_test.zig");
     _ = @import("chip/snapshot/security_test.zig");
     _ = @import("chip/snapshot/controllers_test.zig");
@@ -47,7 +47,7 @@ test {
     _ = @import("chip/periph/npu/npu_snapshot_test.zig");
     _ = @import("chip/snapshot/systick_test.zig");
     _ = @import("snapshot/stretch_test.zig");
-    _ = @import("snapshot/c6_test.zig");
+    _ = @import("components/esp32c6_hosted/c6_snapshot_test.zig");
     _ = @import("snapshot/board_test.zig");
     _ = @import("snapshot/run_test.zig");
     _ = @import("interfaces/render/draw_list_test.zig");
