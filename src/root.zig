@@ -213,6 +213,7 @@ pub const board = struct {
     pub const window_devices = @import("interfaces/gui/window_devices.zig");
     pub const window_main = @import("interfaces/gui/window_main.zig");
     pub const window_live = @import("interfaces/gui/window_live.zig");
+    pub const gui_args = @import("interfaces/gui/gui_args.zig");
     pub const window_still = @import("interfaces/gui/window_still.zig");
     pub const window_stills = @import("interfaces/gui/window_stills.zig");
     pub const report_dma = @import("interfaces/cli/report/dma.zig");
