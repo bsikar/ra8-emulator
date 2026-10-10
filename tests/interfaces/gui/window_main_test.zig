@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/window_main.zig: what `--gui` paces a frame
+//! Covers src/interfaces/gui/window_main.zig: what ra8_gui's live window paces a frame
 //! at, and that a build with no window says so instead of running blind.
 const std = @import("std");
 const ra8 = @import("ra8");
@@ -22,7 +22,7 @@ fn fakeOpen() ?ra8.gui.platform.Platform {
 
 fn fakeClose() void {}
 
-test "an opener set by the executable is the window --gui opens" {
+test "an opener set by the executable is the window ra8_gui opens" {
     window_main.opener = .{ .open = fakeOpen, .close = fakeClose };
     defer window_main.opener = null;
     const window = window_main.open() orelse return error.NoWindow;
@@ -37,7 +37,7 @@ fn neverRun(ctx: *anyopaque, pacer: *ra8.board.window_pace.Pacer) u8 {
     return 0;
 }
 
-test "with no window the run is never started and --gui says 2" {
+test "with no window the run is never started and the window says 2" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     var ran = false;

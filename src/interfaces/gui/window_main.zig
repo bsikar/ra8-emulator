@@ -1,4 +1,4 @@
-//! `--gui` from main (RA8EMU-646): the run goes on its own thread, paced
+//! ra8_gui's live window (RA8EMU-646): the run goes on its own thread, paced
 //! one 60 Hz frame of core time per window tick, and the window shows the
 //! board until the run ends or the window closes. The caller hands in the
 //! run as a `Runner` (RA8EMU-1074), so the window never reaches into an
@@ -57,11 +57,11 @@ pub fn open() ?platform.Platform {
 /// Runs `args` in the window; 2 when there is no window to open.
 pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     const how = opener orelse {
-        std.debug.print("--gui needs a window: build the emulator with -Dgui\n", .{});
+        std.debug.print("the live window needs ra8_gui (a -Dgui build)\n", .{});
         return 2;
     };
     const window = how.open() orelse {
-        std.debug.print("--gui could not open a window\n", .{});
+        std.debug.print("ra8_gui could not open a window\n", .{});
         return 2;
     };
     defer how.close();

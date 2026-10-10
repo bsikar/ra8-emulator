@@ -9,8 +9,8 @@
 //!   zig build test    the unit tests under tests/
 //!   zig build gate    zig fmt --check, then the file and function length
 //!                     checks in tools/gate.zig
-//!   zig build -Dgui   the emulator with SDL linked, so `--gui` opens a
-//!                     window (RA8EMU-646); SDL is a lazy dependency,
+//!   zig build -Dgui   also ra8_gui, the emulator with its SDL window and
+//!                     the shell debugger; SDL is a lazy dependency,
 //!                     fetched and built only with -Dgui
 //!
 //! Source is grouped, not flat: src/chip/core/ is the machine (engine, elf,

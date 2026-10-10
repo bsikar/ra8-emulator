@@ -2,7 +2,7 @@
 //! an opaque PNG of its own size, and stills are numbered in order.
 const std = @import("std");
 const ra8 = @import("ra8");
-const still = ra8.board.report.window_still;
+const still = ra8.board.window_still;
 const png = ra8.board.report.png;
 const raster = ra8.gui.raster;
 const Color = ra8.gui.draw_list.Color;
