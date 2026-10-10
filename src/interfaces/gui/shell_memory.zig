@@ -11,7 +11,7 @@
 const proto = @import("../rpc/session_rpc.zig");
 const app_codes = proto.app_codes;
 const session_link = @import("session_link.zig");
-const memory_pane = @import("memory_pane.zig");
+const memory_pane = @import("ui/memory_pane.zig");
 const pane_layout = @import("ui/pane_layout.zig");
 const shell_registers = @import("shell_registers.zig");
 

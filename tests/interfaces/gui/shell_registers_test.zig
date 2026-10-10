@@ -15,13 +15,14 @@ const frame = ra8.gui.shell_frame;
 const panes = ra8.gui.shell_panes;
 const status_bar = ra8.gui.status_bar;
 const registers_pane = ra8.gui.registers_pane;
+const registers_capture = ra8.gui.registers_capture;
 const shell_registers = ra8.gui.shell_registers;
 const Registers = shell_registers.Registers;
 const Stdio = ra8.interfaces.rpc.stdio.Stdio;
 const session_link = ra8.gui.session_link;
 const Env = proto.Client.Env;
 
-const count = registers_pane.shown.len;
+const count = registers_capture.shown.len;
 
 /// A link that has finished its greeting, writing into a pipe nobody answers.
 const Wire = struct {
@@ -66,7 +67,7 @@ fn stop(model: *Registers, core: proto.Core) !void {
 }
 
 test "the wire names follow the pane's order" {
-    for (registers_pane.shown, shell_registers.wire) |which, register| {
+    for (registers_capture.shown, shell_registers.wire) |which, register| {
         try std.testing.expectEqualStrings(@tagName(which), @tagName(register));
     }
 }

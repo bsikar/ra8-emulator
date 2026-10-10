@@ -10,6 +10,7 @@ const font = ra8.gui.font;
 const hex_entry = ra8.gui.hex_entry;
 const memory_pane = ra8.gui.memory_pane;
 const registers_pane = ra8.gui.registers_pane;
+const registers_capture = ra8.gui.registers_capture;
 const edit = ra8.gui.pane_edit;
 const memmap = ra8.core.memmap;
 
@@ -34,7 +35,7 @@ test "a click on r4's value and DEADBEEF then Enter writes r4" {
     const at = edit.registerOrigin(registers_area, r4).?;
     const picked = edit.registerAt(registers_area, at.x + 1, at.y + 1).?;
     try std.testing.expectEqual(r4, picked);
-    try std.testing.expectEqual(ra8.core.session_api.Register.r4, registers_pane.shown[picked]);
+    try std.testing.expectEqual(ra8.core.session_api.Register.r4, registers_capture.shown[picked]);
     var e = edit.Edit.begin(.{ .register = picked });
     e.typed("deadbeef");
     try std.testing.expectEqual(edit.State.written, try press(&e, hex_entry.codes.enter, session));
@@ -45,7 +46,7 @@ test "a click on an SRAM byte and A5 then Enter writes that byte" {
     var opened = try ra8.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
     defer opened.deinit();
     const session = opened.session();
-    const snapshot = try memory_pane.capture(session, .cpu0, spare, 2);
+    const snapshot = try ra8.gui.memory_capture.capture(session, .cpu0, spare, 2);
     const row = memory_pane.rowOrigin(memory_area, 1);
     const x = row.x + @as(i32, @intCast(font.textWidth(memory_pane.hexColumn(3)))) + 1;
     const address = edit.byteAt(memory_area, &snapshot, x, row.y + 1).?;

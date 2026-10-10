@@ -1,20 +1,15 @@
-//! Covers src/interfaces/gui/registers_pane.zig (RA8EMU-741, groups RA8EMU-945):
+//! Covers src/interfaces/gui/ui/registers_pane.zig (RA8EMU-741, groups RA8EMU-945):
 //! headers and cells run down a column and then across, a folded group
 //! keeps only its header, the pane rasterises to pinned golden frames open
 //! with the system group folded and with
 //! the fpu group folded to its header, an MVE core draws q0-q7 as lanes of
 //! the S bank after VPR, expanded and folded (RA8EMU-947), a changed
 //! register is the only text
-//! drawn in the changed colour, a pane too small for one cell draws
-//! nothing, and capture reads CPU0 and CPU1 separately through a real
-//! session.
+//! drawn in the changed colour, and a pane too small for one cell draws
+//! nothing.
 const std = @import("std");
 const ra8 = @import("ra8");
 
-const bus = ra8.core.cpu.bus;
-const Cpu = ra8.core.cpu.cpu.Cpu;
-const Machine = ra8.core.stop_machine.Machine;
-const zig_session = ra8.core.step_hook.zig_session;
 const api = ra8.core.session_api;
 const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
@@ -30,6 +25,14 @@ const wide = Rect{ .x = 0, .y = 0, .w = 2 * pane.pad + 12 * 120, .h = area.h };
 const system_folded: pane.Fold = .{ false, true, false, false };
 const fpu_folded: pane.Fold = .{ false, false, true, false };
 const mve_folded: pane.Fold = .{ false, false, false, true };
+
+/// Where register `name` sits in the pane.
+fn named(name: []const u8) usize {
+    for (pane.names, 0..) |each, index| {
+        if (std.mem.eql(u8, each, name)) return index;
+    }
+    unreachable;
+}
 
 fn sample() pane.Snapshot {
     var snapshot: pane.Snapshot = .{};
@@ -135,14 +138,14 @@ test "the pane rasterises to the pinned golden frame with the fpu group folded t
 }
 
 test "the MVE group is VPR, then q0-q7 as four lanes each, read from the S bank" {
-    const s0 = std.mem.indexOfScalar(api.Register, &pane.shown, .s0).?;
-    const vpr = std.mem.indexOfScalar(api.Register, &pane.shown, .vpr).?;
+    const s0 = named("s0");
+    const vpr = named("vpr");
     try std.testing.expectEqual(pane.groups[3].first, vpr);
     try std.testing.expectEqualStrings("vpr", pane.label(vpr));
-    try std.testing.expectEqualStrings("q0[0]", pane.label(pane.shown.len));
-    try std.testing.expectEqualStrings("q1[0]", pane.label(pane.shown.len + 4));
+    try std.testing.expectEqualStrings("q0[0]", pane.label(pane.names.len));
+    try std.testing.expectEqualStrings("q1[0]", pane.label(pane.names.len + 4));
     try std.testing.expectEqualStrings("q7[3]", pane.label(pane.cells - 1));
-    try std.testing.expectEqual(s0 + 4, pane.valueIndex(pane.shown.len + 4));
+    try std.testing.expectEqual(s0 + 4, pane.valueIndex(pane.names.len + 4));
     try std.testing.expectEqual(s0 + 31, pane.valueIndex(pane.cells - 1));
     try std.testing.expect(pane.hasMve(api.Core.cpu0));
     try std.testing.expect(!pane.hasMve(api.Core.cpu1));
@@ -178,10 +181,10 @@ test "a changed S register marks its q lane too" {
     var before = sample();
     before.mve = true;
     var now = before;
-    const s5 = std.mem.indexOfScalar(api.Register, &pane.shown, .s5).?;
+    const s5 = named("s5");
     now.values[s5] +%= 1;
     try scene.renderIn(wide, now, before, pane.open);
-    const lane = pane.cellRect(wide, pane.open, pane.shown.len + 5).?;
+    const lane = pane.cellRect(wide, pane.open, pane.names.len + 5).?;
     const at = pane.valueOrigin(lane);
     var hits: usize = 0;
     for (0..@intCast(font.cell_h)) |dy| for (0..@intCast(font.textWidth(8))) |dx| {
@@ -226,56 +229,4 @@ test "no earlier snapshot marks nothing, and a pane too small draws nothing" {
     scene.list.clear();
     try pane.draw(&scene.list, .{ .x = 0, .y = 0, .w = 60, .h = 200 }, sample(), null, pane.open);
     try std.testing.expectEqual(@as(usize, 0), scene.list.commands.items.len);
-}
-
-/// A RAM image holding a vector table: initial sp 0x40, reset at 0x08.
-const Ram = struct {
-    bytes: [256]u8 = @splat(0),
-
-    fn init() Ram {
-        var memory: Ram = .{};
-        @memcpy(memory.bytes[0..8], &[_]u8{ 0x40, 0, 0, 0, 0x09, 0, 0, 0 });
-        return memory;
-    }
-
-    fn view(self: *Ram) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write } };
-    }
-
-    fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
-        const self: *Ram = @ptrCast(@alignCast(ctx));
-        if (address + into.len > self.bytes.len) return error.Unmapped;
-        @memcpy(into, self.bytes[address..][0..into.len]);
-    }
-
-    fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
-        const self: *Ram = @ptrCast(@alignCast(ctx));
-        if (address + bytes.len > self.bytes.len) return error.Unmapped;
-        @memcpy(self.bytes[address..][0..bytes.len], bytes);
-    }
-};
-
-test "capture reads each core's registers through the session" {
-    var memory0 = Ram.init();
-    var memory1 = Ram.init();
-    var cpu0: Cpu = .{ .bus = memory0.view() };
-    var cpu1: Cpu = .{ .bus = memory1.view() };
-    try cpu0.reset(0);
-    try cpu1.reset(0);
-    var machine0 = Machine{};
-    var machine1 = Machine{};
-    var live: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100 };
-    live.other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1, .budget = 100, .index = 1 };
-    var session: api.Session = .{ .live = live };
-    try session.setRegister(.cpu0, .r0, 0xCAFE_0000);
-    try session.setRegister(.cpu1, .r0, 0x0000_BEEF);
-    const zero = try pane.capture(&session, .cpu0);
-    const one = try pane.capture(&session, .cpu1);
-    try std.testing.expectEqual(@as(u32, 0xCAFE_0000), zero.values[0]);
-    try std.testing.expectEqual(@as(u32, 0x0000_BEEF), one.values[0]);
-    try std.testing.expectEqual(@as(u32, 0x40), zero.values[13]);
-    try std.testing.expect(one.changedAt(zero, 0));
-    try std.testing.expect(!one.changedAt(zero, 13));
-    try std.testing.expect(zero.mve);
-    try std.testing.expect(!one.mve);
 }

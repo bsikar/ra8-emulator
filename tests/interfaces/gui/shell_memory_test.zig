@@ -18,6 +18,7 @@ const status_bar = ra8.gui.status_bar;
 const memory_pane = ra8.gui.memory_pane;
 const disasm_pane = ra8.gui.disasm_pane;
 const registers_pane = ra8.gui.registers_pane;
+const registers_capture = ra8.gui.registers_capture;
 const shell_registers = ra8.gui.shell_registers;
 const shell_memory = ra8.gui.shell_memory;
 const Memory = shell_memory.Memory;
@@ -74,7 +75,7 @@ fn refuse(model: *Memory, id: u32, code: u16) void {
 fn published(core: usize, which: shell_registers.Register, value: u32) shell_registers.Pair {
     var pair: shell_registers.Pair = .{};
     var snapshot: shell_registers.Snapshot = .{};
-    for (registers_pane.shown, 0..) |shown, index| {
+    for (registers_capture.shown, 0..) |shown, index| {
         if (shown == which) snapshot.values[index] = value;
     }
     pair.cores[core].now = snapshot;
