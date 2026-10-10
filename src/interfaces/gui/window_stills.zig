@@ -6,7 +6,7 @@
 //! states on disk to view or diff.
 const std = @import("std");
 const raster = @import("../../render/raster.zig");
-const platform_mod = @import("../gui/platform.zig");
+const platform_mod = @import("platform.zig");
 const window_still = @import("window_still.zig");
 
 /// The directory `--window-stills` named, made if missing; null when the

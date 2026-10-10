@@ -1,4 +1,4 @@
-//! Covers src/interfaces/cli/window_board.zig: the real board through the
+//! Covers src/interfaces/gui/window_board.zig: the real board through the
 //! host window loop shows what `--frame-out` would and hands the camera
 //! pane the CEU's own source.
 const std = @import("std");

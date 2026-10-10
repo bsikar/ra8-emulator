@@ -14,7 +14,7 @@ test {
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/host_profiles_test.zig");
-    _ = @import("interfaces/cli/shell_main_test.zig");
+    _ = @import("interfaces/gui/shell_main_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("interfaces/cli/map_main_test.zig");
@@ -69,7 +69,12 @@ test {
     _ = @import("interfaces/gui/pane_edit_test.zig");
     _ = @import("interfaces/gui/plug_post_test.zig");
     _ = @import("interfaces/gui/speed_post_test.zig");
-    _ = @import("interfaces/cli/window_devices_test.zig");
+    _ = @import("interfaces/gui/window_devices_test.zig");
+    _ = @import("interfaces/gui/window_still_test.zig");
+    _ = @import("interfaces/gui/window_stills_test.zig");
+    _ = @import("interfaces/gui/window_board_test.zig");
+    _ = @import("interfaces/gui/window_run_test.zig");
+    _ = @import("interfaces/gui/window_main_test.zig");
     _ = @import("interfaces/gui/camera_switch_test.zig");
     _ = @import("interfaces/gui/camera_open_test.zig");
     _ = @import("interfaces/gui/camera_devices_test.zig");
