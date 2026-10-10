@@ -18,13 +18,13 @@ pub const Error = file.Error || fields.Error || error{ Missing, WrongPart };
 /// The board-shaped sections after time, in kind order. Appending is a
 /// format change.
 const sections = .{
-    @import("../chip/snapshot/timers.zig"),         @import("../chip/periph/sci/sci_snapshot.zig"), @import("sd.zig"),
-    @import("wire.zig"),                            @import("../chip/periph/drw/drw_snapshot.zig"), @import("../chip/periph/glcdc/glcdc_snapshot.zig"),
-    @import("panel.zig"),                           @import("../chip/snapshot/clocks.zig"),         @import("../chip/snapshot/security.zig"),
-    @import("../chip/snapshot/controllers.zig"),    @import("storage.zig"),                         @import("../chip/snapshot/signals.zig"),
-    @import("../chip/snapshot/datapath.zig"),       @import("../chip/snapshot/media.zig"),          @import("wired.zig"),
-    @import("../chip/snapshot/channels.zig"),       @import("usb.zig"),                             @import("rswitch.zig"),
-    @import("../chip/periph/npu/npu_snapshot.zig"), @import("c6.zig"),
+    @import("../chip/snapshot/timers.zig"),                  @import("../chip/periph/sci/sci_snapshot.zig"),          @import("sd.zig"),
+    @import("wire.zig"),                                     @import("../chip/periph/drw/drw_snapshot.zig"),          @import("../chip/periph/glcdc/glcdc_snapshot.zig"),
+    @import("../components/eink_it8951/panel_snapshot.zig"), @import("../chip/snapshot/clocks.zig"),                  @import("../chip/snapshot/security.zig"),
+    @import("../chip/snapshot/controllers.zig"),             @import("storage.zig"),                                  @import("../chip/snapshot/signals.zig"),
+    @import("../chip/snapshot/datapath.zig"),                @import("../chip/snapshot/media.zig"),                   @import("wired.zig"),
+    @import("../chip/snapshot/channels.zig"),                @import("usb.zig"),                                      @import("rswitch.zig"),
+    @import("../chip/periph/npu/npu_snapshot.zig"),          @import("../components/esp32c6_hosted/c6_snapshot.zig"),
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
